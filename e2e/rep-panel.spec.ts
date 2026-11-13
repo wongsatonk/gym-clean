@@ -140,6 +140,30 @@ test('Settings: "Count reps out loud" toggles and persists', async ({ page }) =>
   await expect(sw).toHaveAttribute('aria-checked', 'false');
   await expect(sw).toContainText('Off');
 
+  // The save is fire-and-forget; wait for the row so the reload can't race the IndexedDB write.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          new Promise<unknown>((resolve, reject) => {
+            const open = indexedDB.open('gym-clean');
+            open.onerror = () => reject(open.error);
+            open.onsuccess = () => {
+              const req = open.result
+                .transaction('settings')
+                .objectStore('settings')
+                .get('spokenCount');
+              req.onsuccess = () => {
+                open.result.close();
+                resolve((req.result as { value?: unknown } | undefined)?.value);
+              };
+              req.onerror = () => reject(req.error);
+            };
+          }),
+      ),
+    )
+    .toBe(false);
+
   await page.reload();
   await page.getByRole('button', { name: 'Settings' }).click();
   await expect(page.getByRole('switch', { name: /Count reps out loud/ })).toHaveAttribute(

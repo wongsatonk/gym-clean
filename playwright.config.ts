@@ -42,6 +42,9 @@ export default defineConfig({
     {
       // Same phone, but the fake camera plays the synthetic mannequin clip (a "person").
       name: 'mobile-person-camera',
+      // Live pose inference is CPU-heavy: in parallel, pages drop to 3–6 fps and miss the curl
+      // bottom (reps read as partials). One at a time they run at ~20 fps.
+      workers: 1,
       testMatch: /(camera-person|rep-count)\.spec\.ts/,
       use: {
         browserName: 'chromium',
