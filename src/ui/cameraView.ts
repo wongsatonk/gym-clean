@@ -92,6 +92,8 @@ export type RepPanel = {
   /** Feed one detector result (null = no person found). */
   update(frame: LandmarkFrame | null): void;
   reset(): void;
+  /** Stops a count word still speaking or queued (closing the sheet, Set done). */
+  silence(): void;
 };
 
 /**
@@ -108,7 +110,11 @@ export function createRepPanel(
   const label = h('p', { class: 'rep-label' }, 'reps');
   const side = h('p', { class: 'rep-side', 'data-side': '' });
   const partials = h('p', { class: 'rep-partials', 'data-partials': '0' }, '');
-  const hint = h('p', { class: 'rep-hint', 'data-hint': 'frame' }, 'Step into frame');
+  const hint = h(
+    'p',
+    { class: 'rep-hint', 'data-hint': 'frame', 'aria-live': 'polite' },
+    'Step into frame',
+  );
   const el = h(
     'section',
     { class: 'rep-panel', 'aria-label': 'Rep counter' },
@@ -139,7 +145,6 @@ export function createRepPanel(
       shownPartials = p;
       num.textContent = String(reps);
       num.dataset.reps = String(reps);
-      num.setAttribute('aria-label', `${reps} ${reps === 1 ? 'rep' : 'reps'}`);
       label.textContent = reps === 1 ? 'rep' : 'reps';
       partials.dataset.partials = String(p);
       partials.textContent = p > 0 ? `${p} partial${p === 1 ? '' : 's'}` : '';
@@ -164,6 +169,22 @@ export function createRepPanel(
     }
   }
 
+  // The count word in flight, so closing the sheet only cancels speech this panel started.
+  let pending: SpeechSynthesisUtterance | null = null;
+  function say(text: string): void {
+    // Cancel-then-speak: a count must never lag behind queued speech.
+    if (pending) voice.cancel();
+    const u = voice.speak(text);
+    pending = u;
+    if (u) {
+      const done = () => {
+        if (pending === u) pending = null;
+      };
+      u.addEventListener('end', done);
+      u.addEventListener('error', done);
+    }
+  }
+
   render(false);
   return {
     el,
@@ -172,7 +193,7 @@ export function createRepPanel(
         const before = { reps: counter.reps, partials: counter.partials };
         for (const ev of counter.push(frame)) {
           // Partials are not spoken here: that cue belongs to the focus coach (M5).
-          if (ev.type === 'rep' && opts.spokenCount !== false) voice.speak(repWord(ev.index));
+          if (ev.type === 'rep' && opts.spokenCount !== false) say(repWord(ev.index));
         }
         if (counter.reps !== before.reps || counter.partials !== before.partials) {
           opts.onCount?.(counter.reps, counter.partials);
@@ -183,6 +204,10 @@ export function createRepPanel(
     reset() {
       counter.reset();
       render(false);
+    },
+    silence() {
+      if (pending) voice.cancel();
+      pending = null;
     },
   };
 }
@@ -233,7 +258,17 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       'header',
       { class: 'top-bar' },
       h('p', { class: 'page-title small-title' }, opts.title),
-      h('button', { class: 'ghost-btn', onclick: () => opts.onClose() }, 'Close'),
+      h(
+        'button',
+        {
+          class: 'ghost-btn',
+          onclick: () => {
+            counter?.silence();
+            opts.onClose();
+          },
+        },
+        'Close',
+      ),
     ),
     counter?.el,
     stage,
@@ -251,7 +286,18 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       h(
         'div',
         { class: 'sticky-bottom' },
-        h('button', { class: 'primary-btn', onclick: () => opts.onSetDone?.() }, 'Set done'),
+        h(
+          'button',
+          {
+            class: 'primary-btn',
+            onclick: () => {
+              // Silence first so a late count word can't cut off the rest cue that follows.
+              counter?.silence();
+              opts.onSetDone?.();
+            },
+          },
+          'Set done',
+        ),
       ),
   );
 
@@ -299,9 +345,9 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   async function switchCamera(): Promise<void> {
     facing = facing === 'user' ? 'environment' : 'user';
     stage.dataset.facing = facing;
-    // New stream: frame times and the tracked side may no longer line up, start the count over.
-    counter?.reset();
-    opts.onCount?.(0, 0);
+    // Counted reps survive a camera switch: the counter itself handles a re-zeroed or jumping
+    // frame clock (t backwards → back to setup, counts kept; > 500 ms gap → reseed), so we just
+    // keep feeding it frames. Only start() resets, before the first frame of the sheet.
     stopStream(stream);
     try {
       stream = await openCamera(video, facing);
@@ -344,12 +390,14 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       }
       if (!running) return;
       t0 = performance.now();
+      // Fresh sheet: nothing counted yet, so no onCount(0, 0). Camera switches don't reset.
       counter?.reset();
       setStatus(`Tracking · ${tracker.delegate}`, { delegate: tracker.delegate });
       schedule();
     },
     stop() {
       running = false;
+      counter?.silence();
       if ('cancelVideoFrameCallback' in video) video.cancelVideoFrameCallback(loopHandle);
       cancelAnimationFrame(loopHandle);
       stopStream(stream);

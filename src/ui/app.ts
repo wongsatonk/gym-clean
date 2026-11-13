@@ -149,9 +149,27 @@ export function mountApp(root: HTMLElement): void {
 
   let camera: CameraView | null = null;
 
-  function openCameraView(title: string): void {
+  /** `exerciseId` turns on rep counting (M4); leave it out for Settings → Camera test. */
+  function openCameraView(title: string, exerciseId?: string): void {
     if (camera) return;
-    camera = createCameraView({ title, onClose: closeCameraView });
+    voice.unlock(); // inside the tap, so iOS lets the count be spoken
+    camera = createCameraView({
+      title,
+      onClose: closeCameraView,
+      ...(exerciseId === undefined
+        ? {}
+        : {
+            exerciseId,
+            spokenCount,
+            // The reducer ignores this outside an active, unpaused set.
+            onCount: (reps: number, partials: number) =>
+              dispatch({ type: 'SET_COUNTED', reps, partials }),
+            onSetDone: () => {
+              closeCameraView();
+              dispatch({ type: 'SET_DONE', now: now() });
+            },
+          }),
+    });
     root.append(camera.el);
     void camera.start();
   }
@@ -163,8 +181,15 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function render(): void {
-    root.replaceChildren(screenFor(view));
-    if (camera) root.append(camera.el);
+    const screen = screenFor(view);
+    if (camera && camera.el.parentNode === root) {
+      // Camera sheet open: swap only the screen under it, so the sheet keeps focus and scroll.
+      for (const el of [...root.children]) if (el !== camera.el) el.remove();
+      root.prepend(screen);
+    } else {
+      root.replaceChildren(screen);
+      if (camera) root.append(camera.el);
+    }
     if (view.screen === 'session') {
       ensureBody3d();
       placeBody3d();
@@ -510,7 +535,10 @@ export function mountApp(root: HTMLElement): void {
             'button',
             {
               class: 'ghost-btn',
-              onclick: () => openCameraView(exerciseName(currentPlanned(s).exerciseId)),
+              onclick: () => {
+                const id = currentPlanned(s).exerciseId;
+                openCameraView(exerciseName(id), id);
+              },
             },
             'Camera',
           )

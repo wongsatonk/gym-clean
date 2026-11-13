@@ -19,7 +19,7 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile',
-      testIgnore: /camera-person\.spec\.ts/,
+      testIgnore: /(camera-person|rep-count)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -42,7 +42,7 @@ export default defineConfig({
     {
       // Same phone, but the fake camera plays the synthetic mannequin clip (a "person").
       name: 'mobile-person-camera',
-      testMatch: /camera-person\.spec\.ts/,
+      testMatch: /(camera-person|rep-count)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },

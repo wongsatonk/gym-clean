@@ -16,12 +16,19 @@ export const voice = {
     s.speak(u);
   },
 
-  speak(text: string): void {
+  /** Queues `text` after anything already speaking. Returns the utterance (null if unsupported). */
+  speak(text: string): SpeechSynthesisUtterance | null {
     const s = synth();
-    if (!s) return;
+    if (!s) return null;
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'en-US';
     u.rate = 1;
     s.speak(u);
+    return u;
+  },
+
+  /** Drops whatever is speaking or queued. */
+  cancel(): void {
+    synth()?.cancel();
   },
 };
