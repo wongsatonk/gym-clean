@@ -1,7 +1,8 @@
 import { defineConfig, type PlaywrightTestConfig } from '@playwright/test';
 import { FAKE_PERSON_VIDEO } from './e2e/fake-camera.setup';
 
-const PORT = 5174;
+// E2E_PORT lets several checkouts/worktrees run e2e side by side.
+const PORT = Number(process.env.E2E_PORT ?? 5174);
 
 export default defineConfig({
   testDir: 'e2e',
@@ -63,6 +64,7 @@ export default defineConfig({
     command: `npx vite --port ${PORT} --strictPort`,
     url: `https://localhost:${PORT}`,
     ignoreHTTPSErrors: true,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse: a server left on this port by another checkout would silently test its code.
+    reuseExistingServer: false,
   },
 });
