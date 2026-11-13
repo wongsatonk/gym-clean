@@ -236,3 +236,81 @@ describe('extendedGatePasses', () => {
     expect(extendedGatePasses(curl, { t: 0, landmarks: [] }, 'left')).toBe(true);
   });
 });
+
+// M4c: coaching hints and phone placement are data on each rule (SPEC §1 coaching principle).
+const BANNED = /\b(pain\w*|injur\w*|hurt\w*|damage\w*|safe\w*|risk\w*|strain\w*|tear\w*)\b/i;
+const words = (s: string) => s.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
+
+describe.each(RULES.map((r) => [r.folder, r] as const))('rule %s coaching data', (_f, r) => {
+  it('has a hint for both partial reasons: ≤ 6 words, a sentence, coaching language only', () => {
+    for (const reason of ['far', 'start'] as const) {
+      const hint = r.hints[reason];
+      expect(hint, reason).toMatch(/^[A-Z].*\.$/);
+      expect(words(hint).length, hint).toBeGreaterThan(0);
+      expect(words(hint).length, hint).toBeLessThanOrEqual(6);
+      expect(hint).not.toMatch(BANNED);
+    }
+    expect(r.hints.far).not.toBe(r.hints.start);
+  });
+
+  it('has phone placement matching its view: 1–3 lines ≤ 8 words, one spoken sentence', () => {
+    const p = r.placement;
+    expect(p.view).toBe(r.view);
+    expect(p.lines.length).toBeGreaterThanOrEqual(1);
+    expect(p.lines.length).toBeLessThanOrEqual(3);
+    for (const line of p.lines) {
+      expect(words(line).length, line).toBeGreaterThan(0);
+      expect(words(line).length, line).toBeLessThanOrEqual(8);
+      expect(line).not.toMatch(BANNED);
+    }
+    const [near, far] = p.distanceM;
+    expect(near).toBeGreaterThan(0);
+    expect(far).toBeGreaterThanOrEqual(near);
+    expect(far).toBeLessThanOrEqual(4);
+    expect(p.heightHint.length).toBeGreaterThan(0);
+    expect(p.facing.length).toBeGreaterThan(0);
+    // One sentence: capitalised, a single full stop at the end, short enough to say in ~5 s.
+    expect(p.spoken).toMatch(/^[A-Z](?:[^.!?]|\.\d)*\.$/); // decimals like 2.5 allowed
+    expect(words(p.spoken).length).toBeLessThanOrEqual(20);
+    expect(p.spoken).not.toMatch(BANNED);
+  });
+});
+
+describe('coaching data per exercise', () => {
+  const get = (folder: string): ExerciseRule => {
+    const r = ruleForFolder(folder);
+    if (!r) throw new Error(folder);
+    return r;
+  };
+
+  it.each([
+    ['curl', 'Curl higher.', 'Straighten your arm at the bottom.'],
+    ['push-up', 'Go lower.', 'Push all the way up.'],
+    ['shoulder-press', 'Press all the way up.', 'Lower the weights to your shoulders.'],
+    ['lateral-raise', 'Raise to shoulder height.', 'Lower your arms fully.'],
+    ['row', 'Pull your elbow higher.', 'Let the arm hang straight.'],
+    ['goblet-squat', 'Sit deeper.', 'Stand all the way up.'],
+  ] as const)('%s: far "%s", start "%s"', (folder, far, start) => {
+    expect(get(folder).hints).toEqual({ far, start });
+  });
+
+  it('push-up placement puts the phone on the floor, 2.5–3 m away (a lying body fits a portrait frame)', () => {
+    const p = get('push-up').placement;
+    expect(p.heightHint).toMatch(/floor/i);
+    expect(p.distanceM).toEqual([2.5, 3]);
+    expect(p.lines.join(' ')).toContain('2.5–3 m');
+    expect(p.spoken).toContain('2.5 to 3 metres');
+  });
+
+  it('every spoken placement says the distance range', () => {
+    for (const r of RULES) {
+      const [near, far] = r.placement.distanceM;
+      expect(r.placement.spoken, r.folder).toContain(`${String(near)} to ${String(far)} metres`);
+    }
+  });
+
+  it('front views ask for both arms in frame', () => {
+    for (const r of RULES.filter((x) => x.view === 'front'))
+      expect(r.placement.lines.join(' ')).toMatch(/both arms/i);
+  });
+});

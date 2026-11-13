@@ -949,3 +949,326 @@ describe('createRepCounter: events', () => {
     expect(counter.reps).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// M4c: partial reasons, shortByDeg, the `start` partial and the coaching getters.
+// ---------------------------------------------------------------------------------------------
+
+describe('createRepCounter: partial reasons (M4c)', () => {
+  it('a turnaround before the far threshold is reason far, shortByDeg = smoothed degrees short', () => {
+    const keys = curve(170, [
+      [600, 170],
+      [600, 100], // contracted is 70°: ~30° short
+      [700, 170],
+      [500, 170],
+    ]);
+    const { events } = runAll(CURL, sample(CURL, keys));
+    expect(events).toHaveLength(1);
+    const p = events[0];
+    expect(p?.type).toBe('partial');
+    expect(p?.reason).toBe('far');
+    expect(p?.shortByDeg).toBeCloseTo((p?.minAngle ?? 0) - CURL.contracted, 0);
+    expect(p?.shortByDeg).toBeGreaterThan(28);
+    expect(p?.shortByDeg).toBeLessThan(38); // EMA lag: the smoothed turn is a few degrees above 100°
+  });
+
+  it('far reason on an inverted lateral raise: shortByDeg below the contracted threshold', () => {
+    const keys = curve(10, [
+      [600, 10],
+      [700, 55],
+      [800, 10],
+      [500, 10],
+    ]);
+    const { events } = runAll(RAISE, sample(RAISE, keys, { anchor: 'below' }));
+    expect(events.map((e) => e.reason)).toEqual(['far']);
+    const p = events[0];
+    expect(p?.shortByDeg).toBeCloseTo(RAISE.contracted - (p?.maxAngle ?? 0), 0);
+    expect(p?.shortByDeg).toBeGreaterThan(18);
+    expect(p?.shortByDeg).toBeLessThan(23);
+  });
+
+  it('counted reps carry no reason or shortByDeg', () => {
+    const { events } = runAll(CURL, sample(CURL, curlReps(2)));
+    expect(events).toHaveLength(2);
+    for (const e of events) {
+      expect(e.reason).toBeUndefined();
+      expect(e.shortByDeg).toBeUndefined();
+    }
+  });
+});
+
+describe('createRepCounter: start partial (incomplete return, M4c)', () => {
+  /** Curl rep down to 35°, back only to `back`, down to 35° again, then a full return. */
+  const incompleteCurl = (back: number, upMs = 900, againMs = 800) =>
+    curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [upMs, back], // doesn't straighten (extended threshold is 150°)
+      [200, back],
+      [againMs, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+    ]);
+
+  it('reports a start partial, then counts the next rep in progress', () => {
+    const { counter, events } = runAll(CURL, sample(CURL, incompleteCurl(120)));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['partial:start', 'rep:']);
+    expect(counter.reps).toBe(1);
+    expect(counter.partials).toBe(1);
+    const p = events[0];
+    // Turned at ~120° smoothed: ~30° short of the 150° extended threshold.
+    expect(p?.shortByDeg).toBeGreaterThan(27);
+    expect(p?.shortByDeg).toBeLessThan(33);
+    expect(p?.index).toBe(1);
+    expect(p?.minAngle).toBeLessThan(40); // it did reach the far end
+    expect(p?.eccentricMs).toBeGreaterThan(0);
+    expect(p?.concentricMs).toBeGreaterThan(0);
+    // The rep after it is timed from the turnaround, not from the original start.
+    const rep = events[1];
+    expect(rep?.concentricMs).toBeGreaterThan(150);
+    expect(rep?.concentricMs).toBeLessThan(700);
+  });
+
+  it('several incomplete returns in a row: one start partial each, no rep until a full return', () => {
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [900, 115],
+      [800, 35],
+      [300, 35],
+      [900, 115],
+      [800, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+    ]);
+    const { events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual([
+      'partial:start',
+      'partial:start',
+      'rep:',
+    ]);
+  });
+
+  it('start partial on a press (starts contracted): dumbbells not back to the shoulders', () => {
+    const keys = curve(80, [
+      [600, 80],
+      [900, 175],
+      [300, 175],
+      [900, 125], // contracted (start) threshold is 100°
+      [200, 125],
+      [800, 175],
+      [300, 175],
+      [1300, 80],
+      [500, 80],
+    ]);
+    const { counter, events } = runAll(PRESS, sample(PRESS, keys, { anchor: 'below' }));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['partial:start', 'rep:']);
+    expect(counter.reps).toBe(1);
+    expect(events[0]?.shortByDeg).toBeGreaterThan(22);
+    expect(events[0]?.shortByDeg).toBeLessThan(28);
+  });
+
+  it('start partial on an inverted lateral raise: arms not lowered fully', () => {
+    const keys = curve(10, [
+      [600, 10],
+      [800, 90],
+      [300, 90],
+      [900, 50], // extended (start) threshold is 25°
+      [200, 50],
+      [800, 90],
+      [300, 90],
+      [1200, 10],
+      [500, 10],
+    ]);
+    const { events } = runAll(RAISE, sample(RAISE, keys, { anchor: 'below' }));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['partial:start', 'rep:']);
+    expect(events[0]?.shortByDeg).toBeGreaterThan(22);
+    expect(events[0]?.shortByDeg).toBeLessThan(28);
+  });
+
+  it('no start partial from ±8° jitter at the far end (centred on, and just inside, the threshold)', () => {
+    for (const centre of [CURL.contracted, CURL.contracted - 5, CURL.contracted + 5]) {
+      const keys = curve(170, [
+        [600, 170],
+        [800, centre],
+        [3000, centre],
+        [1200, 170],
+        [500, 170],
+      ]);
+      const noise = (i: number) => (Math.floor(i / 3) % 2 === 0 ? 8 : -8);
+      const { counter, events } = runAll(CURL, sample(CURL, keys, { noise }));
+      expect(
+        events.map((e) => e.type),
+        `centre ${String(centre)}`,
+      ).toEqual(['rep']);
+      expect(counter.partials).toBe(0);
+    }
+  });
+
+  it('a slow wobble near the far end (less than the partial depth back) is not a start partial', () => {
+    // Up to contracted + hysteresis + 3 (out of the far band, but under minPartialDepth back).
+    const wobble = CURL.contracted + CURL.hysteresisDeg + 3;
+    expect(wobble - CURL.contracted).toBeLessThan(CURL.minPartialDepthDeg);
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [900, wobble],
+      [200, wobble],
+      [800, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => e.type)).toEqual(['rep']);
+    expect(counter.partials).toBe(0);
+  });
+
+  it('a rushed bob at the far end is not a start partial and keeps the rep timing', () => {
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [100, 110], // fast bob up and down (~100 ms each way)
+      [100, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => e.type)).toEqual(['rep']);
+    expect(counter.partials).toBe(0);
+    // Out leg still measured from the start (concentric = curling up, 800 ms → ~475 ms).
+    expect(events[0]?.concentricMs).toBeGreaterThan(380);
+  });
+
+  it('one attempt gives at most one partial: a sag after the start partial is not also a far partial', () => {
+    // Down to 35°, back only to 100°, sags toward the far end (held 300 ms), then straightens.
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [700, 100],
+      [200, 100],
+      [200, 80],
+      [300, 80],
+      [800, 170],
+      [500, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['partial:start']);
+    expect(counter.partials).toBe(1);
+    expect(counter.lastMiss).toBe('start');
+  });
+
+  it('after a start partial, the next attempt that reaches far and returns is a rep', () => {
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [700, 100],
+      [200, 100],
+      [200, 80],
+      [300, 80],
+      [800, 170],
+      [500, 170],
+      [800, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+      [600, 100], // a genuine far miss later still reports far
+      [700, 170],
+      [500, 170],
+    ]);
+    const { events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual([
+      'partial:start',
+      'rep:',
+      'partial:far',
+    ]);
+  });
+
+  it('a glitch spike toward the far end during the return (under one minimum leg) is ignored', () => {
+    // Pose glitch while lowering (seen in the shoulder-press-02 / lateral-raise-01 clips): the
+    // raw angle jumps back toward the far end for 2 frames (~67 ms), then the return continues.
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [500, 100],
+      [33, 60], // spike: raw angle 40° the wrong way for two frames
+      [33, 60],
+      [33, 100],
+      [600, 170],
+      [500, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['rep:']);
+    expect(counter.partials).toBe(0);
+  });
+
+  it('a returning arm that reaches the start band is a rep, never a start partial', () => {
+    const { events } = runAll(CURL, sample(CURL, curlReps(3)));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['rep:', 'rep:', 'rep:']);
+  });
+});
+
+describe('createRepCounter: coaching getters (M4c)', () => {
+  it('exposes the rule it counts with (thresholds and hints for the UI)', () => {
+    const counter = createRepCounter(CURL);
+    expect(counter.rule).toBe(CURL);
+  });
+
+  it('reachedFar: false at the start, true from the far band until the rep ends', () => {
+    const counter = createRepCounter(CURL);
+    const seen: { t: number; phase: string; reachedFar: boolean }[] = [];
+    for (const f of sample(CURL, curlReps(1))) {
+      counter.push(f);
+      seen.push({ t: f.t, phase: counter.phase, reachedFar: counter.reachedFar });
+    }
+    for (const s of seen) {
+      expect(s.reachedFar, `${s.phase} @${String(s.t)}`).toBe(
+        s.phase === 'bottom' || s.phase === 'up',
+      );
+    }
+    expect(seen.some((s) => s.reachedFar)).toBe(true);
+    expect(counter.reachedFar).toBe(false); // back at the top after the rep
+  });
+
+  it('lastMiss / lastPartial follow the latest event; a clean rep clears lastMiss', () => {
+    const counter = createRepCounter(CURL);
+    expect(counter.lastMiss).toBeNull();
+    expect(counter.lastPartial).toBeNull();
+    const keys = curve(170, [
+      [600, 170],
+      [600, 100], // far partial
+      [700, 170],
+      [500, 170],
+      [800, 35],
+      [300, 35],
+      [900, 120], // start partial
+      [200, 120],
+      [800, 35],
+      [300, 35],
+      [1200, 170], // rep
+      [500, 170],
+    ]);
+    const log: (string | null)[] = [];
+    for (const f of sample(CURL, keys)) {
+      for (const e of counter.push(f)) {
+        log.push(counter.lastMiss);
+        if (e.type === 'partial') expect(counter.lastPartial).toBe(e);
+      }
+    }
+    expect(log).toEqual(['far', 'start', null]);
+    expect(counter.lastPartial?.reason).toBe('start'); // kept after the rep
+    counter.reset();
+    expect(counter.lastMiss).toBeNull();
+    expect(counter.lastPartial).toBeNull();
+    expect(counter.reachedFar).toBe(false);
+  });
+});

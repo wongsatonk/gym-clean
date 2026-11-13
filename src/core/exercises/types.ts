@@ -4,6 +4,28 @@ import type { Side, SidePair, Triplet } from '../angles';
 
 export type { Side, SidePair, Triplet };
 
+/** Why a partial missed (RepEvent.reason): the far end or the return to the start. */
+export type MissReason = 'far' | 'start';
+
+/** Short coaching hint per partial reason (≤ 6 words, shown and spoken; never medical). */
+export type CoachHints = Record<MissReason, string>;
+
+/** Where to put the phone so the camera sees the joints this rule measures (M4c). */
+export type PhonePlacement = {
+  /** Same as the rule's view. */
+  view: 'side' | 'front';
+  /** How the body faces the phone, e.g. "Side-on" / "Facing the phone". */
+  facing: string;
+  /** Phone-to-body distance range in metres. */
+  distanceM: readonly [min: number, max: number];
+  /** Phone height, e.g. "Floor" / "Chest height". */
+  heightHint: string;
+  /** 1–3 short lines (≤ 8 words each) shown on the camera page. */
+  lines: readonly string[];
+  /** One sentence spoken when the camera opens. */
+  spoken: string;
+};
+
 export type ExerciseRule = {
   /** Id in exercises.json / program.json. */
   exerciseId: string;
@@ -55,9 +77,15 @@ export type ExerciseRule = {
   minVisibility: number;
   /**
    * A turnaround counts as a partial only if the smoothed angle got at least this far (deg)
-   * past the start threshold, toward the far end, without reaching the far threshold.
+   * past the start threshold, toward the far end, without reaching the far threshold. The same
+   * depth applies to a `start` partial: the return must get at least this far back from the far
+   * threshold before it turns toward the far end again.
    */
   minPartialDepthDeg: number;
+  /** Coaching hint per partial reason (M4c). */
+  hints: CoachHints;
+  /** Phone placement guidance for this exercise's view (M4c). */
+  placement: PhonePlacement;
 };
 
 /** SPEC §3 counter defaults shared by every rule; a rule may override any of them. */

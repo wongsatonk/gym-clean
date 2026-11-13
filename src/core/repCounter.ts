@@ -6,8 +6,14 @@
 // Bands: extended = o > E (and the rule's extended gate holds), contracted = o < C, with E > C.
 // A band is left only once past its threshold by the hysteresis (o < E - h / o > C + h).
 // TOP is the rule's start band, BOTTOM the far band (named after SPEC's state names).
+//
+// Partials (M4c) carry a reason: `far` = turned around before the far band; `start` = came back
+// from the far band but turned toward it again before re-entering the start band. Both need the
+// turnaround at least minPartialDepthDeg past the threshold it left, and the minimum leg times.
+// One attempt gives at most one partial: after a `start` partial, a return to the start band
+// without reaching far finishes that attempt (no extra `far` partial).
 import { frameAngle, pickSide, tripletVisibility, type Side } from './angles';
-import { extendedGatePasses, type ExerciseRule } from './exercises';
+import { extendedGatePasses, type ExerciseRule, type MissReason } from './exercises';
 import type { LandmarkFrame, RepEvent } from './types';
 
 /**
@@ -32,7 +38,18 @@ export type RepCounter = {
   readonly tracking: boolean;
   /** Smoothed joint angle in degrees; null before the first tracked frame. */
   readonly angle: number | null;
-  /** Back to the initial state (counts 0, phase setup, side unlocked). */
+  /** The rule this counter uses (thresholds for the gauge, hints, placement). */
+  readonly rule: ExerciseRule;
+  /** The current rep has reached the far band (phase bottom/up): the gauge target is met. */
+  readonly reachedFar: boolean;
+  /**
+   * Which end the latest event missed: the reason of the last partial, or null once a rep is
+   * counted (and before any event). Drives the amber gauge line.
+   */
+  readonly lastMiss: MissReason | null;
+  /** The most recent partial event (kept across later reps); null before any. */
+  readonly lastPartial: RepEvent | null;
+  /** Back to the initial state (counts 0, phase setup, side unlocked, no last miss). */
   reset(): void;
 };
 
@@ -52,6 +69,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   // Progress toward the far end: +1 means growing o goes toward far (start contracted).
   const farSign = startExtended ? -1 : 1;
   const startThresholdProgress = farSign * (startExtended ? E : C);
+  const farThresholdProgress = farSign * (startExtended ? C : E);
   // The out leg (start → far) moves toward `far`; is that the lowering?
   const far = startExtended ? 'contracted' : 'extended';
   const eccentricIsOut = (rule.eccentric === 'toExtended' ? 'extended' : 'contracted') === far;
@@ -100,6 +118,18 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   let maxAngle = -Infinity;
   /** Reached the far angle while the extended gate failed (press: arms hanging), so no partial. */
   let offPath = false;
+  /** In 'up': most start-ward progress of this return and when (movement clock). */
+  let returnProgress = Infinity;
+  let returnT = 0;
+  /** In 'up': when (movement clock) the angle last went past the hysteresis back toward far. */
+  let turnSince: number | null = null;
+  /**
+   * The rep in progress started at a `start` partial's turnaround. If it goes back to the start
+   * band without reaching far, that is the same attempt finishing, not a second (`far`) miss.
+   */
+  let fromStartPartial = false;
+  let lastMiss: MissReason | null = null;
+  let lastPartial: RepEvent | null = null;
 
   /** Forget the limb's position (back to setup, side unlocked) but keep the counts. */
   function restartTracking(): void {
@@ -118,6 +148,8 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   function reset(): void {
     reps = 0;
     partials = 0;
+    lastMiss = null;
+    lastPartial = null;
     restartTracking();
   }
 
@@ -161,6 +193,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
 
   function enterStart(t: number, a: number): void {
     phase = 'top';
+    fromStartPartial = false;
     lastInStartT = t;
     startExtremeAngle = a;
   }
@@ -183,6 +216,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
 
   function emit(type: RepEvent['type'], outMs: number, backMs: number, t: number): RepEvent {
     const index = type === 'rep' ? ++reps : ++partials;
+    if (type === 'rep') lastMiss = null;
     return {
       type,
       index,
@@ -192,6 +226,43 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
       maxAngle,
       t,
     };
+  }
+
+  /** A partial with its reason and how far (smoothed degrees, ≥ 0, 0.1° steps) it fell short. */
+  function emitPartial(
+    reason: MissReason,
+    shortBy: number,
+    outMs: number,
+    backMs: number,
+    t: number,
+  ): RepEvent {
+    const ev: RepEvent = {
+      ...emit('partial', outMs, backMs, t),
+      reason,
+      shortByDeg: Math.round(Math.max(0, shortBy) * 10) / 10,
+    };
+    lastMiss = reason;
+    lastPartial = ev;
+    return ev;
+  }
+
+  /** Start a rep in progress from the current point, heading to the far end (phase 'down'). */
+  function startDown(departT: number, ct: number, a: number, startAngle: number): void {
+    phase = 'down';
+    departStartT = departT;
+    minAngle = Math.min(startAngle, a);
+    maxAngle = Math.max(startAngle, a);
+    extremeProgress = farSign * sign * a;
+    extremeT = ct;
+    offPath = false;
+  }
+
+  function startUp(ct: number, o: number): void {
+    phase = 'up';
+    departFarT = lastInFarT;
+    returnProgress = farSign * o;
+    returnT = ct;
+    turnSince = null;
   }
 
   function push(frame: LandmarkFrame): RepEvent[] {
@@ -239,13 +310,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
           lastInStartT = ct;
           if (farSign * sign * (a - startExtremeAngle) < 0) startExtremeAngle = a;
         } else if (leftStart(o)) {
-          phase = 'down';
-          departStartT = lastInStartT;
-          minAngle = Math.min(startExtremeAngle, a);
-          maxAngle = Math.max(startExtremeAngle, a);
-          extremeProgress = farSign * o;
-          extremeT = ct;
-          offPath = false;
+          startDown(lastInStartT, ct, a, startExtremeAngle);
         }
         break;
       }
@@ -257,6 +322,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
         }
         if (inFar(o, r.gate)) {
           phase = 'bottom';
+          fromStartPartial = false;
           arriveFarT = ct;
           lastInFarT = ct;
         } else if (inFar(o, true)) {
@@ -266,8 +332,15 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
           const depth = extremeProgress - startThresholdProgress;
           const outMs = extremeT - departStartT;
           const backMs = ct - extremeT;
-          if (!offPath && depth >= rule.minPartialDepthDeg && !rushed(outMs, backMs))
-            events.push(emit('partial', outMs, backMs, t));
+          if (
+            !fromStartPartial &&
+            !offPath &&
+            depth >= rule.minPartialDepthDeg &&
+            !rushed(outMs, backMs)
+          )
+            events.push(
+              emitPartial('far', farThresholdProgress - extremeProgress, outMs, backMs, t),
+            );
           enterStart(ct, a);
         }
         break;
@@ -275,10 +348,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
       case 'bottom': {
         track(a);
         if (inFar(o, r.gate)) lastInFarT = ct;
-        else if (leftFar(o)) {
-          phase = 'up';
-          departFarT = lastInFarT;
-        }
+        else if (leftFar(o)) startUp(ct, o);
         break;
       }
       case 'up': {
@@ -291,6 +361,38 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
           const backMs = ct - departFarT;
           if (!rushed(outMs, backMs)) events.push(emit('rep', outMs, backMs, t));
           enterStart(ct, a);
+        } else {
+          const p = farSign * o;
+          if (p < returnProgress) {
+            returnProgress = p;
+            returnT = ct;
+            turnSince = null;
+          } else if (p <= returnProgress + h) {
+            turnSince = null;
+          } else {
+            // Turned toward the far end again without reaching the start band. Confirmed once the
+            // turn has held past the hysteresis for one minimum leg (rejects 1–2 frame pose
+            // glitches). A `start` partial if the return came far enough back and wasn't rushed;
+            // otherwise ignore the wobble (stay in 'up', keeping the rep's timing).
+            turnSince ??= ct;
+            const back = farThresholdProgress - returnProgress;
+            const outMs = arriveFarT - departStartT;
+            const backMs = returnT - departFarT;
+            if (
+              ct - turnSince >= rule.minPhaseMs / 2 &&
+              back >= rule.minPartialDepthDeg &&
+              !rushed(outMs, backMs)
+            ) {
+              events.push(
+                emitPartial('start', returnProgress - startThresholdProgress, outMs, backMs, t),
+              );
+              // Tracking continues as a new rep in progress, departing from the turnaround.
+              const turnAngle = farSign * sign * returnProgress;
+              startDown(returnT, ct, a, turnAngle);
+              extremeProgress = p;
+              fromStartPartial = true;
+            }
+          }
         }
         break;
       }
@@ -318,6 +420,16 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     },
     get angle() {
       return ema;
+    },
+    rule,
+    get reachedFar() {
+      return phase === 'bottom' || phase === 'up';
+    },
+    get lastMiss() {
+      return lastMiss;
+    },
+    get lastPartial() {
+      return lastPartial;
     },
   };
 }

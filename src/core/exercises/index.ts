@@ -8,7 +8,15 @@ import { row } from './row';
 import { shoulderPress } from './shoulderPress';
 import type { ExerciseRule, Side } from './types';
 
-export type { ExerciseRule, Side, SidePair, Triplet } from './types';
+export type {
+  CoachHints,
+  ExerciseRule,
+  MissReason,
+  PhonePlacement,
+  Side,
+  SidePair,
+  Triplet,
+} from './types';
 export { COUNTER_DEFAULTS } from './types';
 
 export const RULES: readonly ExerciseRule[] = [
