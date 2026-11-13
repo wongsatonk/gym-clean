@@ -4,11 +4,11 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Current milestone:** M4 — Rep counter (on synthetic fixtures; real clips not recorded yet)
-- **Branch:** `m4-rep-counter` (created from main). M3 is merged and pushed: origin/main == main, so the earlier "approval to push" item is resolved.
-- **Remote:** https://github.com/wongsatonk/gym-clean (live: https://wongsatonk.github.io/gym-clean/)
-- **Next step:** M4 task 1 (`[main]` RepEvent type in `src/core/types.ts`). Tasks 2, 3, 5, 8 and 9 can run in parallel with it.
-- **Waiting on human:** no. Fixture videos (Checkpoint B) are still outstanding and will be recorded at the next gym visit; M4 proceeds on synthetic fixtures until then.
+- **Current milestone:** M4 — Rep counter: **provisionally done** (verified on synthetic fixtures, 12/12) → 🧍 Checkpoint B real clips still pending (task 15)
+- **Branch:** m4-rep-counter (all tasks 1–13 committed). Not merged into main yet: the main checkout has uncommitted edits (CLAUDE.md, .gitignore, .claude/agents/core-engineer.md, .claude/commands/build.md) and the branch also changes .gitignore.
+- **Remote:** https://github.com/wongsatonk/gym-clean (live: https://wongsatonk.github.io/gym-clean/). main == origin/main; M4 not pushed.
+- **Next step:** Wongsaton commits or sets aside the main-checkout edits → merge m4-rep-counter into main (--no-ff) → push on approval. Then real fixture clips (SPEC §5) → `npm run landmarks -- fixtures/videos` → re-run task 7 + 13 on real + synthetic. M4b only after that.
+- **Waiting on human:** yes. Main-checkout edits before the merge, approval to push, and the Checkpoint B videos at the next gym visit.
 
 ## Milestone checklist
 
@@ -17,7 +17,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [x] M1b Lists, notes, units → 🧍 Checkpoint A (gym test)
 - [x] M2 Anatomy map (3D + 2D fallback) + focus cues
 - [x] M3 Pose pipeline (+ 3D live skeleton) → 🧍 Checkpoint B (record fixtures)
-- [ ] M4 Rep counter
+- [~] M4 Rep counter: provisionally done on synthetic fixtures; real clips pending (Checkpoint B)
 - [ ] M5 Focus & form cues → 🧍 Checkpoint C (gym test with camera)
 - [ ] M6 Polish & install
 
@@ -40,7 +40,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 10. [ui-engineer] Live counting on the camera sheet. Files: src/ui/cameraView.ts, src/ui/voice.ts (if needed), src/styles.css. `createCameraView` takes an optional `exerciseId` plus `onCount(reps, partials)` and `onSetDone()` callbacks. When `ruleFor(exerciseId)` exists, it feeds every frame to a rep counter and shows a big rep number (≥ 64px, `data-reps` attribute) with a smaller partials line, the tracked side ("Right arm"), and a "Step into frame" status while the visibility gate fails. Each rep is spoken by number ("One", "Two"…) when the setting is on, and a partial is not spoken (that cue belongs to M5). A big "Set done" button (≥ 56px) is added. Camera test from Settings shows no counter. The Settings screen gets a "Count reps out loud" toggle (persisted via task 9). Done when: a 390×844 screenshot shows the number legible and nothing overflowing, and typecheck and lint are clean. Depends on: 1, 4, 9.
 - [x] 11. [main] Wiring and config. Files: src/ui/app.ts, playwright.config.ts. app.ts passes the current exerciseId and callbacks into the camera view: `onCount` → dispatch `SET_COUNTED`, `onSetDone` → dispatch `SET_DONE`, close the camera and go to Rest. It also loads the spoken-count setting. playwright.config.ts widens the `mobile-person-camera` project's `testMatch` (and the `mobile` project's `testIgnore`) to include `rep-count.spec.ts`. Done when: by hand, Pull day → Dumbbell Bicep Curl → camera → the count appears → Set done logs the counted reps. Depends on: 8, 10.
 - [x] 12. [ui-engineer] E2E `e2e/rep-count.spec.ts` (fake camera = synthetic curl clip, which loops). Files: e2e/rep-count.spec.ts. Flow: start Pull day, go to Dumbbell Bicep Curl, open the camera, and wait until `data-reps` ≥ 3 and partials ≥ 1 (the clip has 3 reps + 1 partial per loop). Mocked speechSynthesis receives "One", "Two", "Three" with the toggle on and nothing with it off. Set done → the IndexedDB set row has reps == the on-screen count and partials ≥ 1. A manual exercise has no counter, and no third-party request is made. Done when: it passes 5× with `--repeat-each=5`. Depends on: 11.
-- [ ] 13. [verifier] Verify the milestone against the SPEC M4 acceptance criteria: `npm run check` (fixture suite listed by name, all synthetic fixtures green), `npm run e2e`, `npm run build`, and 390×844 screenshots (`docs/screenshots/m4-camera-counting.png`, `m4-settings-spoken-count.png`, `m4-rest-after-counted-set.png`) with the console clean. State explicitly in the evidence that acceptance holds on synthetic fixtures only. Depends on: 7, 12.
+- [x] 13. [verifier] Verify the milestone against the SPEC M4 acceptance criteria: `npm run check` (fixture suite listed by name, all synthetic fixtures green), `npm run e2e`, `npm run build`, and 390×844 screenshots (`docs/screenshots/m4-camera-counting.png`, `m4-settings-spoken-count.png`, `m4-rest-after-counted-set.png`) with the console clean. State explicitly in the evidence that acceptance holds on synthetic fixtures only. Depends on: 7, 12.
 - [ ] 14. [main] Mark M4 **provisionally done (synthetic fixtures)** in the checklist, merge `m4-rep-counter` into main locally, and ask Wongsaton before pushing. Depends on: 13.
 - [ ] 15. 🧍 **Checkpoint B (still open):** Wongsaton records the real clips (SPEC §5). Then: `npm run landmarks`, commit the JSON, re-run task 7 on real plus synthetic fixtures, re-tune thresholds (logged as Decisions), and re-run task 13. M4 is fully done only after that, and it should happen before M5 relies on the counter's tempo and range numbers.
 
@@ -165,6 +165,27 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - `npm run landmarks -- fixtures/synthetic`: 311/316 frames → `fixtures/landmarks/curl/synthetic-01__reps-3__partials-1.json` in 11 s.
 - `npm run build`: main 168 kB / 52 kB gzip; lazy chunks: three 132 kB gzip, landmarker 46 kB gzip; model + wasm in `dist/` (21 MB total, loaded only when the camera opens).
 - Screenshots 390×844: `docs/screenshots/m3-exercise-camera-btn.png`, `m3-camera-front.png`, `m3-camera-side.png`. scrollWidth 390. Page errors: none. 12–20 fps (GPU) in headless Chrome.
+
+### M4 (2026-11-13) — provisional, synthetic fixtures
+- **Acceptance holds on SYNTHETIC fixtures only** (our own mannequin clips). No real clip exists yet: Checkpoint B (task 15) is still open, and M4 is not fully done until the real clips pass too.
+- Verified at e3c8bd9 on `m4-rep-counter`, clean tree.
+- `npm run check`: typecheck (both projects) + lint clean. Vitest **14 files / 222 tests passed**: repCounter 51, exercises/index 47, session 42, angles 19, repCounter.fixtures 13, db 9, restCues 8, catalog 6, bodyMap 6, body3d/parts 5, focusCue 4, format 4, poseTopology 4, units 4.
+- Fixture suite `src/core/repCounter.fixtures.test.ts` (13 tests: "finds the fixture folder" + 12 fixtures). Each asserts `{reps, partials}` equals the filename, and all passed:
+  - curl/synthetic-01 (3 reps / 1 partial), curl/synthetic-02 (3/2)
+  - goblet-squat/synthetic-01 (4/0), goblet-squat/synthetic-02 (3/2)
+  - lateral-raise/synthetic-01 (4/0), lateral-raise/synthetic-02 (3/2)
+  - push-up/synthetic-01 (4/0), push-up/synthetic-02 (3/2)
+  - row/synthetic-01 (4/0), row/synthetic-02 (3/2)
+  - shoulder-press/synthetic-01 (4/0), shoulder-press/synthetic-02 (3/2)
+  - Every committed JSON frame has `landmarks` and `world` (311–431 frames per file).
+- `E2E_PORT=5199 npm run e2e`: **17 passed** (1.1 min). `mobile-person-camera` runs with workers: 1 by design. `E2E_PORT=5199 npx playwright test e2e/rep-count.spec.ts --repeat-each=5`: **10/10 passed**, 0 flaky (3.8 min). Live annotation fps: 16.3–21.4 in 9 runs, and 10.2 in one "spoken count off" run, which still passed.
+  - Non-blocking: in one passing run, partials were 4 by the time reps reached ≥ 3. The clip has 1 partial per loop, so at least one full curl was read as a partial in headless Chrome (fps 21.1). This is the headless-fps sensitivity noted in the Decisions. Watch it on the phone.
+- `npm run build`: main `index` 176.19 kB / 54.87 kB gzip, CSS 9.23 kB / 2.69 kB gzip. Lazy chunks: three.module 534.80 kB / 132.32 kB gzip, landmarker 154.42 kB / 45.63 kB gzip, viewer 5.42 kB / 2.42 kB gzip, skeleton3d 2.31 kB / 1.23 kB gzip.
+- Screenshots 390×844 (DPR 2, `node scripts/screenshots.mjs m4`, fake camera = synthetic curl clip):
+  - `docs/screenshots/m4-camera-counting.png`: shows "3" reps (96px), "Right arm" and 21 fps GPU tracking. The sheet is scrollHeight 844 = clientHeight 844 (no scrolling), with the rep number at y 82–188 and Set done at y 728–816 (88px tall), so both are visible without scrolling. At capture time partials were 0, so the partials line was hidden.
+  - `docs/screenshots/m4-settings-spoken-count.png`: the "Count reps out loud" switch is On by default and 56px tall.
+  - `docs/screenshots/m4-rest-after-counted-set.png`: after Set done, the screen goes to Rest (1:00). "Today: 3×10 kg" matches the 3 counted reps, and the next set defaults to 3 reps.
+  - scrollWidth 390 on all three. Page errors: none. Console errors: only the expected CSP block of `odml.pa.googleapis.com/v1/log` (2 lines). Console warnings: only headless GPU/MediaPipe internals ("GPU stall due to ReadPixels", "OpenGL error checking is disabled", "NORM_RECT without IMAGE_DIMENSIONS").
 
 ## Blockers / questions for Wongsaton
 - **🧍 Checkpoint B: fixture videos still outstanding. Next gym visit.** Not blocking M4 day to day (it runs on synthetic fixtures), but M4 isn't fully done until these pass (M4 task 15). Record per SPEC §5 into `fixtures/videos/<folder>/<label>__reps-<n>__partials-<m>.mp4` (gitignored, never committed). Folders: `curl`, `push-up`, `shoulder-press`, `row`, `goblet-squat`, `lateral-raise`. For each: one clean clip, plus one with 2–3 partial reps and fast lowering, 10–30 s. Then tell me and I'll run `npm run landmarks`.
