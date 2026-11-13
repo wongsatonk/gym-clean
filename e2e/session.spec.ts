@@ -12,12 +12,14 @@ async function installMocks(page: Page) {
   await page.addInitScript(() => {
     window.__spoken = [];
     window.__wake = [];
-    class FakeUtterance {
+    // EventTarget: voice.ts listens for end/error on each utterance.
+    class FakeUtterance extends EventTarget {
       text: string;
       lang = '';
       rate = 1;
       volume = 1;
       constructor(text: string) {
+        super();
         this.text = text;
       }
     }
