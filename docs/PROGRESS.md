@@ -4,15 +4,15 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Current milestone:** M0 — Scaffold (done locally; "CI green" not verified yet because there's no GitHub remote)
+- **Current milestone:** M1 — Guided workout flow (not started). M0 done 2026-11-13.
 - **Branch:** main (m0-scaffold merged)
 - **Remote:** https://github.com/wongsatonk/gym-clean (Pages URL will be https://wongsatonk.github.io/gym-clean/)
-- **Next step:** After Pages is enabled, re-run the CI deploy job, confirm the site loads, tick M0, then start M1.
-- **Waiting on human:** yes. Set Settings → Pages → Source to "GitHub Actions" (see Blockers)
+- **Next step:** Write the M1 task plan below, create branch `m1-guided-flow`, then implement.
+- **Waiting on human:** no
 
 ## Milestone checklist
 
-- [ ] M0 Scaffold
+- [x] M0 Scaffold
 - [ ] M1 Guided workout flow → 🧍 Checkpoint A (gym test)
 - [ ] M2 Anatomy map + focus cues
 - [ ] M3 Pose pipeline → 🧍 Checkpoint B (record fixtures)
@@ -42,6 +42,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - 2026-11-13 — Pages base path comes from the `BASE_PATH` env var, which CI sets to `/<repo-name>/`. Locally it is `/`.
 - 2026-11-13 — The Playwright e2e project uses chromium only (390×844, isMobile, hasTouch) and runs against the HTTPS dev server with `ignoreHTTPSErrors`.
 - 2026-11-13 — The Playwright **MCP** browser rejects the self-signed dev cert (ERR_CERT_AUTHORITY_INVALID), so phone-size screenshots are taken with a Playwright script using `ignoreHTTPSErrors` instead.
+- 2026-11-13 — The repo is public (Wongsaton's choice) so GitHub Pages works on the free plan. Raw videos stay gitignored. Landmark JSON (M3+) will be public.
 - 2026-11-13 — Prettier ignores `*.md` so hand-written docs keep their formatting.
 - 2026-11-13 — `npm audit`: 10 moderate advisories, all in the dev-only ESLint toolchain (minimatch / config-array). Nothing ships to the browser. Left as-is; recheck when ESLint updates.
 
@@ -53,8 +54,9 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - `npm run build`: OK (index.html 0.50 kB, JS 1.00 kB, CSS 0.85 kB). `BASE_PATH=/focusrep/` build emits `/focusrep/assets/...` URLs.
 - Screenshot 390×844: `docs/screenshots/m0-home-390x844.png`. Console errors: none.
 - CI run 43485291125 (push to main, 706ae53): `test` ✓ (check + e2e, 1 passed), `build` ✓, `deploy` ✗. The deploy failed with "Ensure GitHub Pages has been enabled" (404). Pages isn't turned on in the repo settings yet.
+- Repo made public (Pages on the free plan needs it). The deploy re-run passed: run 43485291125 is all green (test ✓, build ✓, deploy ✓).
+- Live: https://wongsatonk.github.io/gym-clean/ loads with title "FocusRep" and 0 console errors/warnings. Screenshot: `docs/screenshots/m0-pages-desktop.png`.
 - CI warnings (not failures): actions v4 run on Node 20, which is deprecated. Bump action majors in a later milestone.
 
 ## Blockers / questions for Wongsaton
 
-- **M0 blocker:** `main` is pushed. In https://github.com/wongsatonk/gym-clean/settings/pages set Source = **GitHub Actions**, then re-run the failed deploy (`gh run rerun 43485291125 --failed -R wongsatonk/gym-clean`).
