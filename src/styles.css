@@ -626,29 +626,56 @@ textarea:focus-visible {
   width: 100%;
 }
 
+/* M4c camera-first layout: slim top band, the video fills the rest, slim bottom band. */
 .camera-sheet {
   z-index: 10;
+  max-width: none;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.cam-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+}
+
+.cam-title {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cam-3d-btn {
+  min-width: var(--tap-min);
+  font-weight: 800;
+}
+
+.cam-3d-btn[aria-expanded='true'] {
+  background: var(--surface-2);
+  border-color: var(--accent);
 }
 
 .cam-stage {
   position: relative;
-  height: 44dvh;
-  width: auto;
-  max-width: 100%;
-  margin: 0 auto;
-  aspect-ratio: 3 / 4;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
   background: #000;
-  border-radius: 14px;
   overflow: hidden;
 }
 
+/* Same box + same cover crop for both, so the skeleton lines up with the person. */
 .cam-video,
 .cam-overlay {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .cam-stage[data-facing='user'] .cam-video,
@@ -656,14 +683,197 @@ textarea:focus-visible {
   transform: scaleX(-1);
 }
 
-.cam-status {
-  font-variant-numeric: tabular-nums;
+/* Count + target, top-left on the video. Right edge is left free for the ROM gauge. */
+.cam-hud {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 72px;
+  display: flex;
+  pointer-events: none;
 }
 
-.cam-controls {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr;
+.cam-gauge-slot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 80px;
+  width: 56px;
+}
+
+.cam-gauge-slot:empty {
+  display: none;
+}
+
+.cam-stage-bottom {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
   gap: 8px;
+  pointer-events: none;
+}
+
+.cam-stage-bottom > * {
+  pointer-events: auto;
+}
+
+.cam-icon-btn,
+.cam-chip {
+  min-height: var(--tap-min);
+  border-radius: 14px;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  background: rgb(0 0 0 / 0.8);
+  color: var(--text);
+}
+
+.cam-icon-btn {
+  width: var(--tap-min);
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.cam-switch {
+  margin-left: auto;
+}
+
+.cam-icon-btn .icon {
+  width: 32px;
+  height: 32px;
+}
+
+.cam-chip {
+  padding: 0 16px;
+  font-weight: 700;
+}
+
+.cam-chip[hidden] {
+  display: none;
+}
+
+/* "Set up your phone": low on the video, clear of the count, above the stage buttons. */
+.cam-setup {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 72px;
+  /* Never over the count: stage minus the HUD (measured, --hud-h) and the gaps around it. */
+  max-height: calc(100% - 72px - 16px - var(--hud-h, 200px));
+  overflow-y: auto;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: rgb(11 13 16 / 0.92);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cam-setup[hidden] {
+  display: none;
+}
+
+.setup-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.setup-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.setup-line {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.3;
+}
+
+.setup-hide {
+  align-self: flex-end;
+  min-width: 120px;
+}
+
+.setup-pic {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 64px;
+}
+
+.setup-pic .pic-phone {
+  fill: var(--surface-2);
+  stroke: var(--text);
+  stroke-width: 2;
+}
+
+.setup-pic .pic-lens {
+  fill: var(--accent);
+}
+
+.setup-pic .pic-sight {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 4 4;
+}
+
+.setup-pic .pic-person {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 3D live skeleton: collapsed until "3D" is tapped; then it takes room from the video. */
+.cam-3d {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 0;
+}
+
+.cam-3d[hidden] {
+  display: none;
+}
+
+.cam-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cam-bottom {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+}
+
+.cam-bottom .primary-btn {
+  width: 100%;
+  margin-top: 0;
+}
+
+.cam-status,
+.cam-privacy {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cam-status {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .small-seg {
@@ -673,7 +883,7 @@ textarea:focus-visible {
 
 .skeleton-slot {
   width: 100%;
-  height: 230px;
+  height: 200px;
   background: var(--surface);
   border-radius: 14px;
   overflow: hidden;
@@ -686,16 +896,15 @@ textarea:focus-visible {
   display: block;
 }
 
-/* ---------- M4: live rep counter + spoken-count switch ---------- */
+/* ---------- M4: live rep counter (on the video since M4c) ---------- */
 
 .rep-panel {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 16px;
-  padding: 8px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 100%;
+  padding: 6px 14px 8px;
+  background: rgb(0 0 0 / 0.8);
   border-radius: 14px;
 }
 
@@ -715,11 +924,37 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+/* With a target the count is white until the target is reached, then green. */
+.rep-panel.has-target .rep-num {
+  color: var(--text);
+}
+
+.rep-panel.at-target .rep-num,
+.rep-panel.at-target .rep-target {
+  color: var(--accent);
+}
+
+.rep-target {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .rep-label {
   margin: 0;
   font-size: 24px;
   font-weight: 700;
   color: var(--muted);
+}
+
+.rep-set {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .rep-info {
@@ -735,11 +970,12 @@ textarea:focus-visible {
 }
 
 .rep-side {
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
 }
 
-.rep-hint {
+.rep-hint,
+.rep-coach {
   font-size: 22px;
   font-weight: 700;
   color: var(--warn);
@@ -752,12 +988,9 @@ textarea:focus-visible {
 
 .rep-side:empty,
 .rep-hint:empty,
+.rep-coach:empty,
 .rep-partials:empty {
   display: none;
-}
-
-.camera-sheet.counting .cam-stage {
-  height: 40dvh;
 }
 
 .rep-num.bump {

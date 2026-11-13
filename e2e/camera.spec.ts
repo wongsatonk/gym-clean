@@ -21,6 +21,12 @@ test('camera test runs on-device pose inference on the live stream', async ({ pa
     .poll(async () => Number(await cam.getAttribute('data-fps')), { timeout: 15_000 })
     .toBeGreaterThan(1);
   await expect(cam).toHaveAttribute('data-person', 'false');
+  // The 3D skeleton starts collapsed behind the "3D" toggle
+  const toggle3d = cam.getByRole('button', { name: '3D skeleton' });
+  await expect(toggle3d).toHaveAttribute('aria-expanded', 'false');
+  await expect(cam.locator('.skeleton3d')).toHaveCount(0);
+  await toggle3d.click();
+  await expect(toggle3d).toHaveAttribute('aria-expanded', 'true');
   await expect(cam.locator('.skeleton3d canvas')).toBeVisible();
 
   // 3D presets

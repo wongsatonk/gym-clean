@@ -11,6 +11,9 @@ test('tracks a person on the live camera and drives the 3D skeleton', async ({ p
   const cam = page.getByRole('dialog', { name: 'Camera' });
   await expect(cam).toHaveAttribute('data-person', 'true', { timeout: 30_000 });
   await expect(cam.locator('.cam-status')).toContainText('tracking');
+  // The 3D skeleton is collapsed behind "3D" (M4c) and loads on first open.
+  await expect(cam.locator('.skeleton3d')).toHaveCount(0);
+  await cam.getByRole('button', { name: '3D skeleton' }).click();
   const skel = cam.locator('.skeleton3d');
   await expect(skel).toHaveAttribute('data-live', 'true');
 
@@ -28,5 +31,77 @@ test('tracks a person on the live camera and drives the 3D skeleton', async ({ p
     return n;
   });
   expect(drawn).toBeGreaterThan(50);
+  expect(errors).toEqual([]);
+});
+
+test('dev-log recorder: person frames, rep events and the count speech are logged', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const load = (p: string) => import(p) as Promise<Record<string, unknown>>;
+    const ui = await load('/src/ui/cameraView.ts');
+    const log = {
+      frames: 0,
+      personFrames: 0,
+      angles: 0,
+      camera: {} as Record<string, unknown>,
+      events: [] as { type: string }[],
+      speech: [] as { t: number; text: string; kind: string }[],
+    };
+    (window as unknown as { __rec: typeof log }).__rec = log;
+    type View = { el: HTMLElement; start(): Promise<void> };
+    const view = (ui.createCameraView as (o: unknown) => View)({
+      title: 'Dumbbell Bicep Curl',
+      exerciseId: 'Dumbbell_Bicep_Curl',
+      onClose() {},
+      onSetDone() {},
+      recorder: {
+        active: true,
+        sessionId: 'test',
+        camera: (m: Record<string, unknown>) => Object.assign(log.camera, m),
+        frame: (f: unknown) => {
+          log.frames++;
+          if (f !== null) log.personFrames++;
+        },
+        angle: (_t: number, a: number | null) => {
+          if (a !== null) log.angles++;
+        },
+        repEvent: (ev: { type: string }) => log.events.push(ev),
+        speech: (s: { t: number; text: string; kind: string }) => log.speech.push(s),
+        fps: () => {},
+      },
+    });
+    document.body.append(view.el);
+    void view.start();
+  });
+  type Log = {
+    frames: number;
+    personFrames: number;
+    angles: number;
+    camera: Record<string, unknown>;
+    events: { type: string }[];
+    speech: { t: number; text: string; kind: string }[];
+  };
+  const rec = () => page.evaluate(() => (window as unknown as { __rec: Log }).__rec);
+  await expect
+    .poll(async () => (await rec()).events.filter((e) => e.type === 'rep').length, {
+      timeout: 75_000,
+    })
+    .toBeGreaterThanOrEqual(1);
+  const log = await rec();
+  expect(log.camera).toMatchObject({ folder: 'curl', side: 'right' });
+  expect(log.personFrames).toBeGreaterThan(10);
+  expect(log.angles).toBeGreaterThan(10);
+  // The count word is logged on the frame clock (ms since the camera started).
+  const one = log.speech.find((s) => s.text === 'One');
+  expect(one?.kind).toBe('count');
+  expect(one?.t ?? -1).toBeGreaterThan(0);
+  const placement = log.speech.find((s) => s.kind === 'placement'); // logged too, on the frame clock
+  expect(placement?.t ?? -1).toBeGreaterThanOrEqual(0);
+  expect(Number(log.camera.wallT0)).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
