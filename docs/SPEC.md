@@ -14,6 +14,15 @@ I lose focus during workouts. It shows up in three ways, and v1 targets all thre
 some machines/cables). Training split: 6 days/week push/pull/legs. Priority muscles: chest,
 arms, back. Goal: build muscle and gain weight.
 
+**Coaching principle (Wongsaton, 2026-11-13): the app works like a personal trainer and recommends
+what it sees.** Mid-set (camera): every hint is about something the camera actually measures, said like
+a trainer: short, spoken, actionable, one at a time, never over the rep count, never medical ("Curl
+higher.", "Slow the lowering.", "Straighten your arm at the bottom.", "Both arms together."). If the
+camera can't judge something reliably from the view used, the app doesn't pretend to. After a set and
+for the next session: plain, explainable recommendations from the logged data ("12 clean reps at full
+range: add 2.5 kg next time"). These are shown and spoken, never applied automatically. Everything stays
+on the phone.
+
 **Success for v1:** I can run a full session from my phone without touching it mid-set, the
 app counts my reps on the supported exercises accurately, and it tells me (by voice) when my
 reps start slipping or my rest runs long.
@@ -121,29 +130,207 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
   partial reps detected == the partial count. A fixture test suite runs in `npm run check`.
   Met on synthetic fixtures first; the real fixtures from Checkpoint B must also pass before M5.
 
-### M4b — 3D exercise demo (added 2026-11-13)
-- A simple original 3D mannequin (same style as the M2 body) loops each supported exercise's movement,
-  driven by our own joint-angle keyframes (reusing the M4 per-exercise angle data). Shown on the
-  Exercise screen on demand, to show the full range of motion and tempo.
-- **Accept:** a demo for every pose-tracked exercise; the angles in the demo stay within that exercise's
-  extended and contracted thresholds.
+### M4b — 3D exercise demo (added 2026-11-13; pulled forward 2026-11-13 after the phone test, built together with M4c)
+Wongsaton's feedback: "the 3D model should SHOW HOW THE EXERCISE IS DONE: animated, like a GIF or an
+example video, easy to understand, e.g. what a One-Arm Dumbbell Row is and which part of my body to focus on."
+- A simple original 3D mannequin (our own capsules, same look as the synthetic-fixture mannequin and the
+  M2 body colours; no downloaded models or art) loops the exercise's movement, driven by our own
+  joint-angle keyframes (ported from `tools/synthetic.ts` into `src/ui/demo3d/`).
+- **Tempo:** lift ~1 s, short hold at the top/far end, lowering ~2 s, short pause at the start. The
+  demo shows the controlled lowering that M5 coaches. Shown as text too ("Lift 1 s · Lower 2 s").
+- **Muscles:** the mannequin's body parts that carry the exercise's primary muscles are lit strongly and
+  secondary ones lightly (same colours as M2), from the M2 muscle data via a muscle → body-part map.
+- **"How to" sheet** (opened from the Exercise screen with a ≥ 56px "How to" button): the looping demo,
+  2–3 short how-to lines, and the focus line (the M2 cue). Drag rotates the demo, with Front/Side presets.
+  It renders only while the sheet is open. Under `prefers-reduced-motion` it doesn't autoplay: it shows
+  the start pose with a Play button.
+- **Scope (re-prioritised 2026-11-13 for the Push A gym test):** animated demos now for the **six Push A
+  exercises**: Dumbbell Bench Press, Incline Dumbbell Press, Standing Dumbbell Triceps Extension (manual
+  count; a demo doesn't need tracking), Pushups, Seated Dumbbell Press, Side Lateral Raise (pose-tracked).
+  Written how-to lines now for **all 30 program exercises**. Exercises without a demo show the how-to
+  lines plus the M2 muscle body in the same sheet. Demos for every other exercise (including the
+  pose-tracked curl, row and goblet squat) come in **M4d**, after Wongsaton's Push A gym report.
+- **Demo/Info badges** (Wongsaton, 2026-11-13: "mark the exercises that have a 3D example, and which ones
+  need information"): the day preview list, the in-session exercise list sheet and the Exercise screen
+  header show a small badge on each exercise. It says **"3D demo"** when an animated demo exists and
+  **"Info"** otherwise (written how-to + muscle map only). Pose-tracked exercises also show **"Camera"**.
+  Badges are computed from data (`hasDemo(exerciseId)`, `tracking`), never from a hard-coded list, so they
+  update as M4d adds demos. Badge text ≥ 20px, high contrast.
+- **Accept:** a demo for each of the six Push A exercises. Unit test, measured on the demo's own joint
+  positions: a pose-tracked demo's full rep goes past both of that exercise's thresholds (extended and
+  contracted) by ≥ 10°; a manual exercise's demo reaches the start and end angles declared in its demo
+  data; bone lengths stay constant through the loop; the lowering takes longer than the lift. Every
+  program exercise has 2–3 how-to lines. Every primary/secondary muscle of a demo exercise maps to at
+  least one mannequin part. E2E: the How to sheet opens with a running demo for a Push A exercise and
+  with text + muscle map for an exercise without a demo (e.g. a Pull day exercise); on Push A, Pushups
+  shows "3D demo" + "Camera" and Dumbbell Bench Press shows "3D demo" only; a Pull exercise without a
+  demo shows "Info" — in the preview, the list sheet and the header. 390×844 screenshots of all 6 demos.
 
-### M5 — Focus & form cues
-- `src/core/focus.ts` consumes rep events and produces cues. Baseline = first 2 reps of the set.
+### M4c — Coaching on the camera page + developer log (added 2026-11-13, phone-test feedback)
+**Push A slice (2026-11-13):** Wongsaton's next gym session is Push A. The first shippable slice is
+(1) the developer log and the set correction below, (2) this camera page for Push A's pose exercises
+(push-up, seated DB press, lateral raise; the code is generic, so all six rules get it), and (3) the M4b
+demos for the six Push A exercises plus the badges. Deploy, then 🧍 Push A gym session, then he exports
+the log and we analyse it. Everything else (M4d, M5, M5b, other days) waits for that report.
+Feedback from the first live phone test (iPhone, 30 fps, side label right, every counted rep spoken):
+**"It counts only sometimes."** Likely cause (until real clips exist): world-landmark angles compress the
+bent end, and the row/push-up start positions sit only ~5–10° past the extended threshold. A lifter who
+doesn't straighten fully never re-enters the start band, so nothing is counted, not even a partial.
+- **Range-of-motion gauge:** a vertical bar on the video that shows the live smoothed joint angle between
+  the start end and the far end, with a **start line** (start threshold) and a **target line** (far
+  threshold). The fill turns green once the current rep reaches the target, and the line for the end the
+  last rep missed is marked in amber. The current angle in degrees is shown next to it (≥ 20px), so a
+  miscount can be diagnosed on the phone without video. The gauge is pure math in `src/core/` (angle →
+  0–1 position, both marks).
+- **Why a partial, spoken:** every partial carries a reason:
+  - `far`: turned around before the far threshold (didn't curl high / sit deep enough).
+  - `start`: came back from the far end but turned toward it again without reaching the start band
+    (didn't straighten). This is new: until now such reps vanished silently.
+  Each exercise rule has a short coaching hint per reason, as data (≤ 6 words), e.g. curl: "Curl higher."
+  / "Straighten your arm at the bottom."; row: "Pull your elbow higher." / "Let the arm hang straight.";
+  squat: "Sit deeper." / "Stand all the way up.". The hint is **spoken** and shown for a few seconds. It is
+  never spoken over a count word: a count interrupts a hint, and a hint waits until the count has finished
+  (it's dropped if it would start more than 1.5 s late). At most one hint every 6 s. Coaching language
+  only, never medical.
+- **Target on the camera page:** "3 / 12" next to the big rep number (the target is the top of the
+  planned range, like the default reps), plus "Set 2 of 3 · 8–12 reps". The count turns green when the
+  target is reached.
+- **Camera-first layout:** the video fills the space between a slim top band (title, Close) and a slim
+  bottom band (big Set done, ≥ 56px). It's shown full width with `object-fit: cover`: only the display is
+  cropped, inference still sees the whole frame, and the skeleton overlay uses the same crop. The rep
+  count, target, gauge and hint sit on the video on dark, high-contrast backings. The 3D live skeleton and
+  the Front/Side presets are collapsed behind a "3D" button (loaded only when opened). Switch camera is a
+  ≥ 56px icon button. CLAUDE.md readability rules hold (count ≥ 64px, text ≥ 20px).
+- **Correct the last set (ground truth):** the camera's Set done logs the counted numbers and goes to
+  Rest. The Rest screen then shows "Last set: 10 reps · 1 partial" with ± steppers (≥ 56px) for reps
+  and partials. A change updates that set's log row. This fixes miscounts and gives the developer log
+  its true labels.
+- **Developer log (Wongsaton's request, 2026-11-13: "log everything helpful for developing the app"):**
+  - **On the phone only, numbers only:** no video or image ever, never uploaded; exported only when
+    Wongsaton taps Export. Stored in IndexedDB.
+  - **Per session:** app version (git sha + build time), user agent, settings (unit, spoken count),
+    program day, and every session event with a timestamp (set done, start set, skip, jump, pause,
+    adjust, correction).
+  - **Per set (manual and camera):** exerciseId, set index, target range, counted reps/partials, logged
+    reps/partials (after correction = ground truth), weight, set start/end, rest taken.
+  - **Camera sets also get:** delegate, fps samples (1/s), tracked side, every counter event (rep/partial
+    with angles, leg times, partial reason, shortByDeg), every spoken count/hint (text + time, and
+    whether it was dropped), the smoothed-angle trace, and the raw `LandmarkFrame` stream while the
+    camera sheet is open (frames with no person are kept as time stamps).
+  - **Size:** frames are stored quantised (int16, 1e-4 units): 33 × 4 + 33 × 3 = 231 numbers ≈ 0.46 kB
+    per frame, ≈ 14 kB/s at 30 fps, ≈ 0.6 MB for a 45 s set, ≈ 5–8 MB for a Push A session (3 pose
+    exercises × 3–4 sets). The log keeps the newest sessions up to 150 MB (default) and deletes the
+    oldest beyond that; it asks the browser for persistent storage. The data is flushed to IndexedDB
+    every 10 s and at Set done, so a killed tab loses at most 10 s.
+  - **Settings → Developer log:** on by default for now; shows the stored size and session count;
+    "Export last session", "Export all" (a gzip-compressed JSON file via the share sheet on iOS, else a
+    download), and "Clear" (two taps). Recording only happens while the toggle is on.
+  - **Converter:** `npm run devlog -- <export file>` turns each camera set into
+    `fixtures/landmarks/<folder>/devlog-<date>-s<n>__reps-<logged>__partials-<logged>.json` plus a
+    report (counted vs logged per set). Exported logs are never committed; landmark fixtures from them
+    are committed only after Wongsaton's OK.
+- This pulls M5's "Partial — finish the rep" cue forward; M5 no longer owns partial cues (see M5).
+- **Accept:** unit tests, written first, for the developer-log codec (quantise round-trip within 1e-4,
+  null frames), its rotation (oldest sessions dropped over the cap) and export shape, the
+  last-set correction (reducer + DB row), the gauge math (every rule, both directions, contracted
+  start), the partial reasons and `shortByDeg` (including the new `start` partial on an
+  incomplete return, and no `start` partial from ±8° jitter at the far end), the hints as data (every rule
+  has both, ≤ 6 words, no banned medical words), and the speech policy (rate limit, count priority,
+  stale drop). The synthetic fixture suite still passes 12/12 with unchanged counts. E2E (fake camera,
+  synthetic curl): stage ≥ 70% of the 844px viewport height, "/ 12" target shown, gauge marks present
+  and the live angle changes, the partial in each loop speaks "Curl higher." without cutting off a count
+  word, and the 3D skeleton is collapsed by default and opens on tap. E2E developer log: a camera set
+  then a correction on Rest leaves a log with frames, events, spoken words and the corrected numbers;
+  Export produces a file; Clear empties it; no request leaves the device. The converter turns an
+  exported synthetic-curl session into a fixture JSON that the fixture suite counts correctly.
+  390×844 screenshots.
+- 🧍 **Checkpoint B2 (Push A gym session):** Wongsaton trains Push A with the deployed app, corrects any
+  miscounted set on Rest, watches the gauge (does the fill reach both lines?), then exports the developer
+  log and sends it. We analyse it (counted vs true per set, which line was missed, fps, spoken hints),
+  turn the agreed sets into real fixtures (his OK first), and retune. These real sets also count toward
+  Checkpoint B / M4 being fully done.
 
-| Signal | Rule (starting values) | Spoken cue |
-|---|---|---|
-| Rushed lowering | eccentric time < 50% of baseline, 2 reps in a row | "Slow the lowering." |
-| Shrinking range | range of motion < 85% of baseline, 2 reps in a row | "Full range." |
-| Partial rep | turnaround before reaching contracted threshold | "Partial — finish the rep." |
-| Stalled mid-set | no phase change for 8 s, reps < target | "Stay with it. N to go." |
-| Out of frame | visibility < 0.5 for 2 s | "Step back into frame." |
+### M4d — 3D demos for the remaining exercises (planned 2026-11-13, follow-up to M4b)
+- Demos (same mannequin, keyframes and muscle lighting as M4b) for the 24 exercises outside the Push A
+  slice, in priority order: the pose-tracked curl, one-arm row and goblet squat first (their mannequin
+  poses already exist in `tools/synthetic.ts`), then chest/arms/back (flyes, hammer curl, triceps
+  pushdown, rows, pulldown, …), then legs. Machine/cable exercises get simple box props.
+- Each new demo flips its badge from "Info" to "3D demo" automatically.
+- Doesn't gate M5: can be built any time after M4b.
+- **Accept:** as M4b, for every exercise that gets a demo (thresholds don't exist for manual exercises,
+  so the range test uses each demo's own start/end angles from the exercise notes in the data).
 
-- Rate limit: max one cue per 6 s; never speak over the rep count.
-- Per-set **focus score** (0–100) = simple, explainable: start 100, subtract per cue fired;
-  show which cues fired on the Summary screen. Store it with the set.
-- **Accept:** unit tests for every rule using fixture landmark JSON + synthetic sequences.
+### M4e — Visual redesign (added 2026-11-13, after the Push A slice)
+Wongsaton: "Redesign the UX/UI to be user-friendly. The first impression should make the user want to go
+to the gym and work out: clean, visual, sporty. Themes are OK if needed." Owner: ui-engineer (using the
+`ui-ux-pro-max` skill); anatomy-3d-engineer aligns the 3D body/demo/skeleton colours with the tokens.
+1. **Design direction:** 2–3 directions (palette, type, original imagery/illustration style, motion) as
+   390×844 mockups. 🧍 **Wongsaton picks one** (his taste call; doesn't block other milestones).
+2. **Design tokens + themes** in `src/styles.css` (CSS variables): dark sporty default, optional
+   accent colours/themes in Settings, so screens restyle in one place.
+3. **First impression:** Today/home redesign: a motivating hero (next workout, streak/consistency, last
+   session), a clear Start button, visual day cards. Then Exercise, Rest, Summary, Settings, camera.
+- Hard rules win: readable at 2 m (≥ 64px main numbers, ≥ 20px body, ≥ 56px targets, high contrast,
+  dark default), self-hosted fonts only (CSP, no third-party requests), original art only,
+  `prefers-reduced-motion` respected.
+- **Accept:** tokens are the only colour/size source in `styles.css` (lint/grep check), theme switch
+  persists, every screen screenshotted at 390×844 in each theme, existing e2e green, Lighthouse
+  accessibility ≥ 95 on Today.
+
+### M5 — Live trainer: focus & form cues
+- `src/core/focus.ts` consumes rep events (and per-frame landmarks where a rule needs them) and produces
+  cues, following the coaching principle in §1. Baseline = first 2 reps of the set.
+- **Partial-rep cues moved to M4c (2026-11-13).** M4c already speaks a per-reason hint for every partial
+  ("Curl higher.", "Straighten your arm at the bottom."), with the speech policy (one hint per 6 s,
+  count first, stale hints dropped). M5 reuses that policy and those events; it doesn't add a second
+  partial cue. Partials still count toward the focus score.
+
+| Signal | Rule (starting values) | Spoken cue | Reliable from |
+|---|---|---|---|
+| Rushed lowering | eccentric time < 50% of baseline, 2 reps in a row | "Slow the lowering." | all 6 (timing only) |
+| Shrinking range | range of motion < 85% of baseline, 2 reps in a row | "Full range." | all 6 |
+| Stalled mid-set | no phase change for 8 s, reps < target | "Stay with it. N to go." | all 6 |
+| Out of frame | visibility < 0.5 for 2 s | "Step back into frame." | all 6 |
+| Arms out of sync | 'both'-arm front views: left/right angle differ > 20° for 0.5 s mid-rep, 2 reps in a row | "Both arms together." | press, lateral raise (front view) |
+| Raise too high | lateral raise: shoulder angle > 100° on 2 reps | "Stop at shoulder height." | lateral raise (front) |
+| Elbow drifting | curl: upper arm swings forward > 25° from vertical during the lift, 2 reps | "Keep your elbow still." | curl (side) |
+| Swinging the body | curl/row: torso angle changes > 15° during the lift, 2 reps | "Keep your body still." | curl, row (side) |
+| Hips sagging | push-up: shoulder–hip–ankle line bends > 20°, 2 reps | "Keep your body straight." | push-up (side) |
+| Low frame rate | fps < 15 for 3 s | "Move closer to the light." (shown + spoken once) | all |
+
+  Candidates that need checking on real clips first: everything below "Arms out of sync" is a
+  starting value and is only switched on for an exercise once real fixtures show it's stable.
+  **Not judged from a phone camera** (the app never comments on these): grip and wrist position,
+  back rounding or neck position from a front view, knee tracking over the toes from a side view,
+  breathing, the weight on the bar, muscle "feel", and anything on lying exercises (manual count).
+- Rate limit and priority: the M4c speech policy (max one cue per 6 s, never over the rep count).
+- Per-set **focus score** (0–100) = simple, explainable: start 100, subtract per cue fired and per
+  partial; show which cues fired on the Summary screen. Store it with the set.
+- **Accept:** unit tests for every rule using fixture landmark JSON + synthetic sequences; each new form
+  rule is enabled only for the exercises whose real fixtures show it fires correctly.
 - 🧍 **Checkpoint C:** I do a full camera session at the gym and report.
+
+### M5b — Trainer recommendations after the set (added 2026-11-13)
+- `src/core/advice.ts`: pure, explainable rules (tests first) over the logged sets (reps, partials,
+  target range, weight, rest taken, M5 cues/focus score once they exist). Starting rules:
+
+| Situation | Recommendation |
+|---|---|
+| Every set this exercise hit the top of the target range, 0 partials | "12 clean reps at full range: add 2.5 kg next time." (5 lb in lb mode) |
+| Hit the top on this set, 0 partials, sets remain | "Strong set. Try +2.5 kg next set." |
+| Below the bottom of the range, with partials | "Keep the weight. Focus on full range." |
+| Below the bottom of the range two sessions running | "Drop 2.5 kg and own every rep." |
+| Rest overran by > 60 s on 2+ sets | "Rest ran long. Start the next set when the timer says go." |
+| Many "Slow the lowering." cues (M5) | "Lower for 2 seconds next time." |
+
+- Shown on Rest (after the set just done) and on Summary / the next session's Exercise screen
+  ("Last time: … → Coach: add 2.5 kg"). Spoken once at the start of Rest (short). Never applied
+  automatically: Accept sets the weight stepper, Dismiss hides it.
+- Every message says why (the numbers it's based on). Coaching language only, no medical words.
+- **Accept:** unit tests for every rule, kg and lb steps, and that "no data" gives no advice; e2e:
+  a set at the top of the range shows the "add" advice on Rest and Accept changes the next weight.
+- Order: after M5 (uses its cues), but the reps/partials/rest rules only need M1–M4 data and may ship
+  earlier if Wongsaton wants. Planned after the Push A gym report.
 
 ### M6 — Polish & install
 - PWA (installable, offline after first load, model + wasm cached).
@@ -300,8 +487,16 @@ States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per e
   landmark has visibility < 0.5.
 - A rep counts on return to TOP after reaching BOTTOM. Turning around before BOTTOM =
   partial rep event (counted separately, not as a rep), if it went at least 15° past the
-  start threshold.
-- Emit events: `{type: 'rep' | 'partial', index, eccentricMs, concentricMs, minAngle, maxAngle, t}`.
+  start threshold. Reason `far`.
+- (M4c) After BOTTOM, if the limb turns back toward the far end (by more than the hysteresis) without
+  re-entering the start band, that is a partial with reason `start` (didn't return to the start
+  position); tracking continues from there as a new rep in progress. It needs the same minimum leg
+  times as a rep.
+- Emit events: `{type: 'rep' | 'partial', index, eccentricMs, concentricMs, minAngle, maxAngle, t,
+  reason?: 'far' | 'start', shortByDeg?: number}`. `reason` and `shortByDeg` (how far the turnaround
+  stopped short of the missed threshold, smoothed degrees) are set on partials only.
+- (M4c) Gauge: `position = (startThreshold − angle) / (startThreshold − farThreshold)` on the
+  oriented scale, so 0 = start line and 1 = target line, clamped to [−0.25, 1.25] for display.
 - Use the side with higher average visibility (left vs right) for unilateral views.
 
 ## 4. Data model
@@ -326,6 +521,24 @@ type SetLog = {
   reps: number; partials?: number; weightKg: number;
   restTakenSec: number; focusScore?: number; cues?: string[];
   startedAt: number; endedAt: number;
+};
+// M4c — developer log (on device only; numbers, never images)
+type DevLogSession = {
+  id: string; startedAt: number; appVersion: string; userAgent: string;
+  settings: Record<string, unknown>; dayId: string;
+  events: { t: number; type: string; data?: unknown }[];        // session events, corrections
+};
+type DevLogSet = {
+  sessionId: string; exerciseId: string; setIndex: number; targetReps: [number, number];
+  counted?: { reps: number; partials: number }; logged: { reps: number; partials: number };
+  weightKg: number; startedAt: number; endedAt: number; restTakenSec?: number;
+  camera?: {
+    folder: string;                                           // the rule's fixture folder
+    delegate: string; side: string | null; fps: { t: number; fps: number }[];
+    repEvents: RepEvent[]; speech: { t: number; text: string; kind: 'count' | 'hint'; dropped?: boolean }[];
+    angles: { t: number; angle: number | null }[];
+    frames: Blob;                                             // quantised LandmarkFrame stream (int16)
+  };
 };
 // M7 — nutrition (all stored on device only)
 type MacroSet = { kcal: number; proteinG: number; carbsG?: number; fatG?: number };
@@ -369,4 +582,5 @@ type NutritionSettings = {
 
 Accounts, cloud sync (Google Calendar sync parked for later, 2026-11-13), sharing, AI food photo recognition (M7b, later),
 AI-generated programs, photoreal/medical 3D anatomy, multi-person
-tracking, recording/saving video, Apple Watch / heart rate.
+tracking, recording/saving video (the M4c developer log stores pose numbers only, never images),
+Apple Watch / heart rate.
