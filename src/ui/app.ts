@@ -29,12 +29,18 @@ import {
   setSpokenCount,
   setUnit,
   startSessionRow,
+  updateSet,
   type ExerciseNoteRow,
   type SetRow,
 } from '../data/db';
+import { startDevLogSession, type DevLogRecorder } from '../data/devlog';
 import { bodyMapSvg, pickView } from './bodyMap';
 import type { Body3D } from './body3d/viewer';
-import { createCameraView, type CameraView } from './cameraView';
+import { badgesFor } from './badges';
+import { createCameraView, type CameraTarget, type CameraView } from './cameraView';
+import { createHowToSheet } from './howToSheet';
+import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
+import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
 import { h } from './dom';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
@@ -61,6 +67,44 @@ export function mountApp(root: HTMLElement): void {
   let spokenCount = true;
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
+
+  // Developer log (M4c): numbers only, stays on the phone. Calls queue until the recorder exists.
+  let recorder: DevLogRecorder | null = null;
+  let recorderReady: Promise<DevLogRecorder | null> = Promise.resolve(null);
+  const rec = (f: (r: DevLogRecorder) => unknown) => {
+    void recorderReady.then((r) => {
+      if (r) f(r);
+    });
+  };
+  let lastCounted: { reps: number; partials: number } | null = null;
+  // A camera set that never counted a rep still logs counted {0, 0} (vs a manual set: none).
+  let cameraThisSet = false;
+  let pendingSet: Parameters<DevLogRecorder['beginSet']>[0] | null = null;
+  // Exercises whose phone-placement sentence was already spoken this workout.
+  let placementSpoken = new Set<string>();
+  let devLogPanel: DevLogPanelHandle | null = null;
+  let howTo: { el: HTMLElement; dispose(): void } | null = null;
+
+  /** M4b: full-screen "How to" sheet with the 3D demo (or the muscle map when there's none). */
+  function openHowTo(p: PlannedExercise, opener: HTMLElement | null): void {
+    if (howTo) return;
+    const sheet = createHowToSheet({
+      exerciseId: p.exerciseId,
+      tracking: p.tracking,
+      onClose: () => {
+        if (howTo !== sheet) return; // Close and Escape may both fire
+        sheet.dispose();
+        sheet.el.remove();
+        howTo = null;
+        root.inert = false;
+        opener?.focus();
+      },
+    });
+    howTo = sheet;
+    root.inert = true; // nothing behind the sheet takes focus or taps
+    document.body.append(sheet.el); // same task as create, so focus lands on Close
+  }
+  let correction: { key: string; handle: LastSetCorrectionHandle } | null = null;
 
   // Per-day caches, loaded on the preview screen and kept for the session.
   let lastTime: Record<string, SetRow[]> = {};
@@ -161,6 +205,9 @@ export function mountApp(root: HTMLElement): void {
         : {
             exerciseId,
             spokenCount,
+            ...cameraTarget(),
+            speakPlacement: !placementSpoken.has(exerciseId),
+            recorder,
             // The reducer ignores this outside an active, unpaused set.
             onCount: (reps: number, partials: number) =>
               dispatch({ type: 'SET_COUNTED', reps, partials }),
@@ -170,8 +217,28 @@ export function mountApp(root: HTMLElement): void {
             },
           }),
     });
+    if (exerciseId !== undefined) {
+      placementSpoken.add(exerciseId);
+      cameraThisSet = true;
+      openLoggedSet(); // before the camera writes frames
+    }
     root.append(camera.el);
     void camera.start();
+  }
+
+  /** "3 / 12" and "Set 2 of 3 · 8–12 reps" on the camera page, from the current set. */
+  function cameraTarget(): { target?: CameraTarget } {
+    if (view.screen !== 'session') return {};
+    const s = view.s;
+    const p = currentPlanned(s);
+    return {
+      target: {
+        setNumber: s.setIndex + 1,
+        sets: p.sets,
+        targetReps: p.targetReps[1],
+        minReps: p.targetReps[0],
+      },
+    };
   }
 
   function closeCameraView(): void {
@@ -210,6 +277,9 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function goToday(): void {
+    if (view.screen === 'session') finishDevLog();
+    devLogPanel?.destroy();
+    devLogPanel = null;
     view = { screen: 'today', upNextDayId: null };
     render();
     void loadUpNext();
@@ -277,6 +347,8 @@ export function mountApp(root: HTMLElement): void {
   // ---------- Settings ----------
 
   function settingsScreen(): HTMLElement {
+    devLogPanel?.destroy();
+    devLogPanel = createDevLogPanel({ db });
     const unitBtn = (u: Unit, label: string) =>
       h(
         'button',
@@ -337,6 +409,8 @@ export function mountApp(root: HTMLElement): void {
           ? 'Weights step by 2.5 kg.'
           : 'Weights step by 5 lb. Saved weights are converted, nothing is lost if you switch back.',
       ),
+      h('p', { class: 'field-label' }, 'Developer log'),
+      devLogPanel.el,
     );
   }
 
@@ -388,6 +462,7 @@ export function mountApp(root: HTMLElement): void {
             'li',
             { class: 'ex-row' },
             h('strong', {}, exerciseName(p.exerciseId)),
+            badgesFor({ exerciseId: p.exerciseId, tracking: p.tracking }),
             h(
               'span',
               { class: 'muted' },
@@ -424,6 +499,9 @@ export function mountApp(root: HTMLElement): void {
     view = { screen: 'session', s, sheet: null };
     todayNotes = {};
     lastCueElapsedMs = 0;
+    placementSpoken = new Set();
+    correction = null;
+    startDevLog(s, day.id);
     void wakeLock.hold();
     void startSessionRow(db, { sessionId: s.sessionId, dayId: day.id, startedAt: t }).catch(
       logDbError,
@@ -431,6 +509,77 @@ export function mountApp(root: HTMLElement): void {
     startTicker();
     render();
     speakFocusCue(null, s);
+  }
+
+  function startDevLog(s: SessionState, dayId: string): void {
+    const old = recorder;
+    if (old) void old.dispose();
+    recorder = null;
+    recorderReady = startDevLogSession(db, {
+      id: s.sessionId,
+      dayId,
+      // App state only: never notes or other free text.
+      settings: { unit, spokenCount },
+    }).then((r) => {
+      recorder = r.active ? r : null;
+      return recorder;
+    });
+    // Ask iOS not to evict the workout data and the log under storage pressure.
+    void navigator.storage?.persist?.().catch(() => undefined);
+    beginLoggedSet(s);
+  }
+
+  /** Dev-log set boundaries: a set starts when an exercise phase starts, ends when it's logged. */
+  /**
+   * Remember the set that just started. It is only opened in the dev log once it's used
+   * (camera opened, or the set logged), so sets skipped or jumped over leave no empty rows.
+   */
+  function beginLoggedSet(s: SessionState): void {
+    lastCounted = null;
+    cameraThisSet = false;
+    if (s.phase !== 'exercise') {
+      pendingSet = null;
+      return;
+    }
+    const p = currentPlanned(s);
+    pendingSet = {
+      exerciseId: p.exerciseId,
+      setIndex: s.setIndex,
+      targetReps: p.targetReps,
+      weightKg: s.weightKg,
+      startedAt: now(),
+    };
+  }
+
+  function openLoggedSet(): void {
+    const info = pendingSet;
+    if (!info) return;
+    pendingSet = null;
+    rec((r) => r.beginSet(info));
+  }
+
+  function logToDevLog(prev: SessionState, s: SessionState, e: SessionEvent): void {
+    rec((r) => r.logEvent(e.type, e));
+    if (e.type === 'SET_COUNTED') lastCounted = { reps: e.reps, partials: e.partials };
+    const newLog = s.logs.length > prev.logs.length ? s.logs.at(-1) : undefined;
+    if (newLog) {
+      openLoggedSet();
+      const counted = lastCounted ?? (cameraThisSet ? { reps: 0, partials: 0 } : undefined);
+      rec(
+        (r) =>
+          void r.endSet({
+            ...(counted ? { counted } : {}),
+            logged: { reps: newLog.reps, partials: newLog.partials ?? 0 },
+            weightKg: newLog.weightKg,
+            endedAt: newLog.endedAt,
+            restTakenSec: newLog.restTakenSec,
+          }),
+      );
+    }
+    const newSet =
+      s.phase === 'exercise' &&
+      (prev.phase !== 'exercise' || prev.exIndex !== s.exIndex || prev.setIndex !== s.setIndex);
+    if (newSet) beginLoggedSet(s);
   }
 
   function speakFocusCue(prev: SessionState | null, s: SessionState): void {
@@ -453,8 +602,9 @@ export function mountApp(root: HTMLElement): void {
     view = { screen: 'session', s, sheet: null };
 
     for (const log of s.logs.slice(prev.logs.length)) void saveSet(db, log).catch(logDbError);
+    logToDevLog(prev, s, e);
     if (prev.phase !== 'rest' && s.phase === 'rest') lastCueElapsedMs = 0;
-    if (s.phase === 'summary') onFinished(s);
+    if (s.phase === 'summary' && prev.phase !== 'summary') onFinished(s);
     render();
     speakFocusCue(prev, s);
   }
@@ -462,12 +612,56 @@ export function mountApp(root: HTMLElement): void {
   function onFinished(s: SessionState): void {
     stopTicker();
     void wakeLock.release();
+    saveTotals(s);
+    // Keep the dev log open on Summary so a last-set fix there still reaches it;
+    // it is finished when leaving Summary (goToday). Flush now in case the app is closed here.
+    rec((r) => void r.flush());
+  }
+
+  function finishDevLog(): void {
+    const endedAt = view.screen === 'session' ? (view.s.endedAt ?? now()) : now();
+    rec((r) => void r.finish(endedAt));
+    recorder = null;
+    recorderReady = Promise.resolve(null);
+  }
+
+  function saveTotals(s: SessionState): void {
     const { setsDone, totalVolumeKg, restOverruns } = summarize(s);
     void finishSession(db, s.sessionId, s.endedAt ?? now(), {
       setsDone,
       totalVolumeKg,
       restOverruns,
     }).catch(logDbError);
+  }
+
+  /** Rest + Summary: fix the last set's count (the true numbers for the dev log). */
+  function lastSetFix(s: SessionState): HTMLElement | null {
+    const last = s.logs.at(-1);
+    if (!last || s.paused) return null;
+    const key = `${s.sessionId}:${s.logs.length}`;
+    if (correction?.key !== key) {
+      correction = {
+        key,
+        handle: createLastSetCorrection({
+          reps: last.reps,
+          partials: last.partials ?? 0,
+          onCorrect: (reps, partials) => correctLastSet(reps, partials),
+        }),
+      };
+    }
+    return correction.handle.el;
+  }
+
+  function correctLastSet(reps: number, partials: number): void {
+    dispatch({ type: 'CORRECT_LAST_SET', reps, partials });
+    if (view.screen !== 'session') return;
+    const s = view.s;
+    const last = s.logs.at(-1);
+    if (!last) return;
+    const counts = { reps: last.reps, partials: last.partials ?? 0 };
+    void updateSet(db, last, counts).catch(logDbError);
+    rec((r) => void r.correctSet(counts));
+    if (s.phase === 'summary') saveTotals(s);
   }
 
   function startTicker(): void {
@@ -667,8 +861,18 @@ export function mountApp(root: HTMLElement): void {
           'div',
           { class: 'exercise-head-text' },
           h('h1', { class: 'exercise-name' }, exerciseName(p.exerciseId)),
+          badgesFor({ exerciseId: p.exerciseId, tracking: p.tracking }),
           h('p', { class: 'muted' }, `Target ${repsRange(p)} reps`),
           h('p', { class: 'focus-cue' }, cueFor(p.exerciseId)),
+          h(
+            'button',
+            {
+              class: 'ghost-btn',
+              'data-howto-open': true,
+              onclick: (ev: Event) => openHowTo(p, ev.currentTarget as HTMLElement),
+            },
+            'How to',
+          ),
         ),
         muscleSlot(p.exerciseId, 'inline'),
       ),
@@ -706,6 +910,7 @@ export function mountApp(root: HTMLElement): void {
         },
         formatRest(remaining),
       ),
+      lastSetFix(s),
       h(
         'div',
         { class: 'rest-next' },
@@ -798,6 +1003,7 @@ export function mountApp(root: HTMLElement): void {
                 onclick: () => dispatch({ type: 'GO_TO_EXERCISE', exIndex: i, now: now() }),
               },
               h('strong', {}, exerciseName(p.exerciseId)),
+              badgesFor({ exerciseId: p.exerciseId, tracking: p.tracking }),
               h('span', { class: 'muted' }, `${done}/${p.sets} sets · ${repsRange(p)} reps`),
               label ? h('span', { class: `status ${status}` }, label) : null,
             ),
@@ -899,6 +1105,7 @@ export function mountApp(root: HTMLElement): void {
         stat(`${unit} volume`, w(sum.totalVolumeKg), 'volume'),
         stat('rest overruns', String(sum.restOverruns), 'overruns'),
       ),
+      lastSetFix(s),
       h(
         'ul',
         { class: 'set-list' },

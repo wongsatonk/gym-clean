@@ -94,7 +94,7 @@ async function cameraSet(r: DevLogRecorder, frames = 30) {
   r.repEvent(rep());
   r.repEvent(rep({ type: 'partial', index: 1, reason: 'far', shortByDeg: 12.5, t: 2500 }));
   r.speech({ t: 2000, text: 'One', kind: 'count' });
-  r.speech({ t: 2600, text: 'Go lower.', kind: 'hint', dropped: true });
+  r.speech({ t: 2600, text: 'Go lower.', kind: 'hint', dropped: 'rate' });
   r.fps(1000, 29.8);
   clock += 45_000;
   await r.endSet({
@@ -181,7 +181,7 @@ describe('developer log recorder', () => {
     expect(cam.repEvents[1]).toMatchObject({ reason: 'far', shortByDeg: 12.5 });
     expect(cam.speech).toEqual([
       { t: 2000, text: 'One', kind: 'count' },
-      { t: 2600, text: 'Go lower.', kind: 'hint', dropped: true },
+      { t: 2600, text: 'Go lower.', kind: 'hint', dropped: 'rate' },
     ]);
     expect(cam.angles).toHaveLength(30);
     expect(cam.angles[5]).toEqual({ t: 166.5, angle: null });

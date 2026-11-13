@@ -611,6 +611,7 @@ async function setExport(db: GymDb, row: DevLogSetRow): Promise<DevLogSetExport>
       folder: camera?.folder ?? '',
       delegate: camera?.delegate ?? '',
       side: camera?.side ?? null,
+      ...(camera?.wallT0 !== undefined ? { wallT0: camera.wallT0 } : {}),
       fps: chunks.flatMap((c) => c.fps ?? []),
       repEvents: chunks.flatMap((c) => c.repEvents ?? []),
       speech: chunks.flatMap((c) => c.speech ?? []),

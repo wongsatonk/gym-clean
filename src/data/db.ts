@@ -36,8 +36,20 @@ export type SettingRow = { key: string; value: unknown };
 
 export type DevLogCount = { reps: number; partials: number };
 export type DevLogEvent = { t: number; type: string; data?: unknown };
-export type DevLogSpeech = { t: number; text: string; kind: 'count' | 'hint'; dropped?: boolean };
-export type DevLogCameraMeta = { folder: string; delegate: string; side: string | null };
+/** `dropped` = why the speech policy skipped a hint (see src/core/coachSpeech.ts DropReason). */
+export type DevLogSpeech = {
+  t: number;
+  text: string;
+  kind: 'count' | 'hint' | 'placement';
+  dropped?: 'rate' | 'stale' | 'superseded' | 'interrupted';
+};
+/** `wallT0` = Date.now() when the camera's frame clock started, to line frames up with events. */
+export type DevLogCameraMeta = {
+  folder: string;
+  delegate: string;
+  side: string | null;
+  wallT0?: number;
+};
 
 /** One logged workout session. `bytes` is the approximate stored size of its log. */
 export type DevLogSessionRow = {
