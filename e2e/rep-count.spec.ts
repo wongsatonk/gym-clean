@@ -125,6 +125,9 @@ async function openCurlCamera(page: Page) {
   return cam;
 }
 
+/** Below this the counter can't see the curl bottom (local headless ≈ 20 fps, phone 30). */
+const MIN_LIVE_FPS = 8;
+
 /** Waits (bounded) until the live counter shows ≥ 3 reps and ≥ 1 partial. */
 async function waitForCounts(cam: ReturnType<Page['getByRole']>) {
   const reps = cam.locator('[data-reps]');
@@ -136,6 +139,21 @@ async function waitForCounts(cam: ReturnType<Page['getByRole']>) {
     )} delegate=${await cam.getAttribute('data-delegate')} hint="${await cam
       .locator('.rep-hint')
       .textContent()}" partials=${await partials.getAttribute('data-partials')}`;
+  // GitHub's runners have no GPU: pose inference runs at ~2.5 fps there, which can't catch the
+  // bottom of a curl (every rep reads as a partial). Counting logic is still covered in CI by the
+  // fixture suite; this live test needs a real rate, so CI skips it when the rate is too low.
+  // Locally it always runs, so a real slowdown still fails.
+  if (process.env.CI) {
+    await expect
+      .poll(async () => Number(await cam.getAttribute('data-fps')), { timeout: 30_000 })
+      .toBeGreaterThan(0);
+    await cam.page().waitForTimeout(3_000); // let the rolling fps meter settle
+    const measured = Number(await cam.getAttribute('data-fps'));
+    test.skip(
+      measured < MIN_LIVE_FPS,
+      `live inference at ${measured} fps (< ${MIN_LIVE_FPS}) on this CI runner`,
+    );
+  }
   try {
     // Model load (≤ ~15 s) + up to two ~10 s loops of the clip.
     await expect
