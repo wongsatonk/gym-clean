@@ -164,7 +164,7 @@ export function lateralRaisePose(theta: number): DemoPose {
 /** Bench layout shared by the flat and incline presses (figure frame, metres). */
 export const BENCH = {
   /** Pelvis centre, sitting on the bench. */
-  hip: v(0, 0.6),
+  hip: v(0, 0.56),
   /** Top surface of the flat bench / seat. */
   top: 0.45,
   /** Incline of the back pad (deg from horizontal) for the incline press. */
@@ -223,7 +223,7 @@ export const FLAT_BENCH: readonly DemoProp[] = [
 export const INCLINE_BENCH: readonly DemoProp[] = (() => {
   const u = dir(BENCH.incline);
   const n = dir(BENCH.incline + 90);
-  const pad = addS(addS(BENCH.hip, u, 0.4), n, -0.2);
+  const pad = addS(addS(BENCH.hip, u, 0.4), n, -0.165);
   return [
     { at: v(-0.05, BENCH.top / 2), size: v(0.5, BENCH.top, 0.3) },
     { at: pad, size: v(0.9, 0.1, 0.3), rotZ: rad(BENCH.incline) },

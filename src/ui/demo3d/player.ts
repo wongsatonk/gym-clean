@@ -27,7 +27,10 @@ export type DemoPlayerOptions = {
   controls?: boolean;
   /** Draw the phase text over the canvas. Default true. */
   phaseOverlay?: boolean;
-  /** Abort while three.js is loading (sheet closed): the promise resolves to null. */
+  /**
+   * Abort while three.js is loading (sheet closed): the promise resolves to null. Aborting after
+   * it resolved does nothing; the caller must dispose() the player.
+   */
   signal?: AbortSignal;
 };
 
@@ -92,10 +95,6 @@ export async function createDemoPlayer(
     console.warn('3D demo unavailable, using the muscle map', err);
     return null;
   }
-  if (opts.signal?.aborted) {
-    scene.dispose();
-    return null;
-  }
 
   // --- DOM ------------------------------------------------------------------------------------
   const el = document.createElement('div');
@@ -156,7 +155,8 @@ export async function createDemoPlayer(
 
   function updatePhase(): void {
     const phase = phaseAt(move, t);
-    const next = phaseLabel(move, phase);
+    // The untouched start pose (reduced motion, before Play) says "Start", not "Hold".
+    const next = !playing && t === 0 ? 'Start' : phaseLabel(move, phase);
     if (next === label) return;
     label = next;
     phaseEl.textContent = next;
@@ -201,8 +201,8 @@ export async function createDemoPlayer(
     playing = on;
     el.dataset.demoPlaying = String(on);
     playBtn.textContent = on ? 'Pause' : 'Play';
-    playBtn.setAttribute('aria-pressed', String(on));
     lastTs = 0;
+    updatePhase();
     kick();
   }
 
@@ -271,7 +271,6 @@ export async function createDemoPlayer(
   io?.observe(el);
 
   // --- start ----------------------------------------------------------------------------------
-  updatePhase();
   setView(view);
   yaw = targetYaw;
   setPlaying(!reducedMotion);

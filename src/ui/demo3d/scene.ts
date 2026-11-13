@@ -268,6 +268,8 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
       const spec = p.bells[i];
       b.visible = !!spec;
       if (!spec) return;
+      // A single two-handed bell (triceps extension) is drawn bigger so it reads at 2 m.
+      b.scale.setScalar(p.bells.length === 1 ? 1.6 : 1);
       set(b.position, spec.pos);
       set(vd, spec.axis).normalize();
       b.quaternion.setFromUnitVectors(UP, vd);

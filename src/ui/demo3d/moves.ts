@@ -1,6 +1,7 @@
 // M4b exercise demos as data: which exercises have a demo, each demo's angle keyframes and tempo,
 // and the mannequin pose at any time in the loop. Pure, no three.js import: badges call hasDemo()
-// without loading the 3D chunk. The player (player.ts) maps DemoPose onto capsules.
+// without loading the 3D chunk. The player (player.ts, scene.ts) draws DemoPose as
+// spheres, ellipsoids and tapered cylinders.
 import {
   FLAT_BENCH,
   INCLINE_BENCH,
@@ -14,7 +15,6 @@ import {
   type DemoProp,
   type MeasuredJoint,
   type SideKey,
-  type V3,
 } from './poses';
 
 export type { DemoPose, DemoProp, DemoSide, MeasuredJoint, SideKey, V3 } from './poses';
@@ -40,8 +40,6 @@ export type DemoMove = {
   pose: (theta: number) => DemoPose;
   /** Static props (bench, seat). */
   props: readonly DemoProp[];
-  /** Camera hint in the figure frame: point to look at and distance for the whole body to fit. */
-  camera: { look: V3; distance: number };
 };
 
 export type Key = { t: number; angle: number };
@@ -59,7 +57,6 @@ export const DEMOS: readonly DemoMove[] = [
     outward: 'lower',
     pose: pushUpPose,
     props: [],
-    camera: { look: [-0.15, 0.38, 0], distance: 3.3 },
   },
   {
     exerciseId: 'Seated_Dumbbell_Press',
@@ -70,7 +67,6 @@ export const DEMOS: readonly DemoMove[] = [
     outward: 'lift',
     pose: seatedPressPose,
     props: [{ at: [-0.02, 0.24, 0], size: [0.46, 0.48, 0.42] }],
-    camera: { look: [0, 0.85, 0], distance: 3.8 },
   },
   {
     exerciseId: 'Side_Lateral_Raise',
@@ -81,7 +77,6 @@ export const DEMOS: readonly DemoMove[] = [
     outward: 'lift',
     pose: lateralRaisePose,
     props: [],
-    camera: { look: [0, 0.95, 0], distance: 4.3 },
   },
   // Manual-count Push A exercises (no rep-counter rule): original poses, declared start/far angles.
   {
@@ -93,7 +88,6 @@ export const DEMOS: readonly DemoMove[] = [
     outward: 'lift',
     pose: benchPressPose,
     props: FLAT_BENCH,
-    camera: { look: [0.15, 0.7, 0], distance: 3.4 },
   },
   {
     exerciseId: 'Incline_Dumbbell_Press',
@@ -104,7 +98,6 @@ export const DEMOS: readonly DemoMove[] = [
     outward: 'lift',
     pose: inclinePressPose,
     props: INCLINE_BENCH,
-    camera: { look: [0.15, 0.85, 0], distance: 3.5 },
   },
   {
     exerciseId: 'Standing_Dumbbell_Triceps_Extension',
@@ -115,7 +108,6 @@ export const DEMOS: readonly DemoMove[] = [
     outward: 'lower',
     pose: tricepsExtensionPose,
     props: [],
-    camera: { look: [0, 1.05, 0], distance: 4.6 },
   },
 ];
 
