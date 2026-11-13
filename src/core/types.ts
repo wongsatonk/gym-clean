@@ -45,3 +45,16 @@ export type SetLog = {
   startedAt: number;
   endedAt: number;
 };
+
+/** Emitted by the rep counter (SPEC §3). Angles in degrees, times in ms (frame clock). */
+export type RepEvent = {
+  type: 'rep' | 'partial';
+  /** 1-based count within its type (rep 1, 2, … / partial 1, 2, …). */
+  index: number;
+  eccentricMs: number;
+  concentricMs: number;
+  minAngle: number;
+  maxAngle: number;
+  /** Frame time when the event fired. */
+  t: number;
+};
