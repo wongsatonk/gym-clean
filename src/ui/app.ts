@@ -13,7 +13,8 @@ import {
 } from '../core/session';
 import type { PlannedExercise, ProgramDay, SetLog } from '../core/types';
 import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
-import { cueFor, exerciseName, program } from '../data/catalog';
+import { shouldSpeakFocusCue } from '../core/focusCue';
+import { cueFor, exerciseById, exerciseName, program } from '../data/catalog';
 import {
   GymDb,
   finishSession,
@@ -29,6 +30,8 @@ import {
   type ExerciseNoteRow,
   type SetRow,
 } from '../data/db';
+import { bodyMapSvg, pickView } from './bodyMap';
+import type { Body3D } from './body3d/viewer';
 import { h } from './dom';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
@@ -36,7 +39,11 @@ import { wakeLock } from './wakeLock';
 const TICK_MS = 250;
 const END_CONFIRM_MS = 3000;
 
-type Sheet = null | { kind: 'list' } | { kind: 'notes'; exerciseId: string };
+type Sheet =
+  | null
+  | { kind: 'list' }
+  | { kind: 'notes'; exerciseId: string }
+  | { kind: 'body'; exerciseId: string };
 
 type View =
   | { screen: 'today'; upNextDayId: string | null }
@@ -67,8 +74,79 @@ export function mountApp(root: HTMLElement): void {
   const noteFor = (id: string): ExerciseNoteRow =>
     exerciseNotes[id] ?? { exerciseId: id, machineSetting: '', note: '' };
 
+  // ---------- 3D body (lazy, one WebGL context for the whole app) ----------
+
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let body3d: Body3D | null = null;
+  let body3dState: 'idle' | 'loading' | 'ready' | 'failed' = 'idle';
+
+  function ensureBody3d(): void {
+    if (body3dState !== 'idle') return;
+    body3dState = 'loading';
+    import('./body3d/viewer')
+      .then((m) => {
+        if (!m.webglAvailable()) {
+          body3dState = 'failed';
+          return;
+        }
+        body3d = m.createBody3D({ reducedMotion });
+        body3dState = 'ready';
+        placeBody3d();
+      })
+      .catch((err: unknown) => {
+        body3dState = 'failed';
+        console.warn('3D body unavailable, using the 2D map', err);
+      });
+  }
+
+  const musclesOf = (exerciseId: string) => {
+    const ex = exerciseById(exerciseId);
+    return { primary: ex?.primaryMuscles ?? [], secondary: ex?.secondaryMuscles ?? [] };
+  };
+
+  /** Slot showing the 2D map until the 3D body is ready; the 3D canvas is moved into it. */
+  function muscleSlot(exerciseId: string, variant: 'inline' | 'rest' | 'full'): HTMLElement {
+    const { primary, secondary } = musclesOf(exerciseId);
+    const slot = h('div', {
+      class: `muscle-slot ${variant}`,
+      'data-muscle-slot': exerciseId,
+      'data-interactive': variant === 'full' ? 'true' : 'false',
+    });
+    slot.innerHTML = bodyMapSvg({ view: pickView(primary), primary, secondary });
+    if (variant === 'full') return slot;
+    return h(
+      'button',
+      {
+        class: 'muscle-btn',
+        'aria-label': 'Show target muscles in 3D',
+        onclick: () => setSheet({ kind: 'body', exerciseId }),
+      },
+      slot,
+    );
+  }
+
+  function placeBody3d(): void {
+    if (!body3d) return;
+    const slot =
+      root.querySelector<HTMLElement>('.sheet [data-muscle-slot]') ??
+      root.querySelector<HTMLElement>('[data-muscle-slot]');
+    if (!slot) {
+      body3d.el.remove();
+      return;
+    }
+    const { primary, secondary } = musclesOf(slot.dataset.muscleSlot ?? '');
+    slot.classList.add('has-3d');
+    slot.append(body3d.el);
+    body3d.setInteractive(slot.dataset.interactive === 'true');
+    body3d.setMuscles(primary, secondary);
+  }
+
   function render(): void {
     root.replaceChildren(screenFor(view));
+    if (view.screen === 'session') {
+      ensureBody3d();
+      placeBody3d();
+    }
   }
 
   function screenFor(v: View): HTMLElement {
@@ -282,6 +360,11 @@ export function mountApp(root: HTMLElement): void {
     );
     startTicker();
     render();
+    speakFocusCue(null, s);
+  }
+
+  function speakFocusCue(prev: SessionState | null, s: SessionState): void {
+    if (shouldSpeakFocusCue(prev, s)) voice.speak(cueFor(currentPlanned(s).exerciseId));
   }
 
   // ---------- Session ----------
@@ -303,6 +386,7 @@ export function mountApp(root: HTMLElement): void {
     if (prev.phase !== 'rest' && s.phase === 'rest') lastCueElapsedMs = 0;
     if (s.phase === 'summary') onFinished(s);
     render();
+    speakFocusCue(prev, s);
   }
 
   function onFinished(s: SessionState): void {
@@ -358,6 +442,8 @@ export function mountApp(root: HTMLElement): void {
     if (sheet?.kind === 'list') return h('div', { class: 'stack' }, body, listSheet(s));
     if (sheet?.kind === 'notes')
       return h('div', { class: 'stack' }, body, notesSheet(s, sheet.exerciseId));
+    if (sheet?.kind === 'body')
+      return h('div', { class: 'stack' }, body, bodySheet(sheet.exerciseId));
     return body;
   }
 
@@ -433,7 +519,11 @@ export function mountApp(root: HTMLElement): void {
         },
         '−',
       ),
-      h('output', { class: 'stepper-value', 'aria-label': label }, value),
+      h(
+        'output',
+        { class: `stepper-value${value.length >= 5 ? ' long' : ''}`, 'aria-label': label },
+        value,
+      ),
       h(
         'button',
         {
@@ -487,14 +577,23 @@ export function mountApp(root: HTMLElement): void {
       'main',
       { class: 'screen exercise', 'data-screen': 'exercise' },
       topBar(s),
-      h('h1', { class: 'exercise-name' }, exerciseName(p.exerciseId)),
+      h(
+        'div',
+        { class: 'exercise-head' },
+        h(
+          'div',
+          { class: 'exercise-head-text' },
+          h('h1', { class: 'exercise-name' }, exerciseName(p.exerciseId)),
+          h('p', { class: 'muted' }, `Target ${repsRange(p)} reps`),
+          h('p', { class: 'focus-cue' }, cueFor(p.exerciseId)),
+        ),
+        muscleSlot(p.exerciseId, 'inline'),
+      ),
       h(
         'p',
         { class: 'set-counter', 'data-set-counter': true },
         `Set ${s.setIndex + 1} of ${p.sets}`,
       ),
-      h('p', { class: 'muted' }, `Target ${repsRange(p)} reps`),
-      h('p', { class: 'focus-cue' }, cueFor(p.exerciseId)),
       ...exerciseInfo(s, p.exerciseId),
       stepper('Reps', String(s.reps), 'reps', 1),
       stepper(unit, w(s.weightKg), 'weight', stepFor(s.unit)),
@@ -525,14 +624,22 @@ export function mountApp(root: HTMLElement): void {
         formatRest(remaining),
       ),
       h(
-        'p',
-        { class: 'next-up' },
-        'Next: ',
-        h('strong', {}, exerciseName(p.exerciseId)),
-        ' — ',
-        h('span', { class: 'nowrap' }, `set ${s.setIndex + 1} of ${p.sets}`),
-        h('br'),
-        h('span', { class: 'muted' }, `${s.reps} reps × ${w(s.weightKg)} ${unit}`),
+        'div',
+        { class: 'rest-next' },
+        muscleSlot(p.exerciseId, 'rest'),
+        h(
+          'p',
+          { class: 'next-up' },
+          h('span', { class: 'muted' }, 'Next'),
+          h('br'),
+          h('strong', {}, exerciseName(p.exerciseId)),
+          h('br'),
+          h('span', { class: 'nowrap' }, `Set ${s.setIndex + 1} of ${p.sets}`),
+          h('br'),
+          h('span', { class: 'muted' }, `${s.reps} reps × ${w(s.weightKg)} ${unit}`),
+          h('br'),
+          h('span', { class: 'focus-cue' }, cueFor(p.exerciseId)),
+        ),
       ),
       ...exerciseInfo(s, p.exerciseId),
       h(
@@ -541,6 +648,30 @@ export function mountApp(root: HTMLElement): void {
         'Start set',
       ),
       footer(),
+    );
+  }
+
+  function bodySheet(exerciseId: string): HTMLElement {
+    const { primary, secondary } = musclesOf(exerciseId);
+    return h(
+      'div',
+      { class: 'overlay sheet body-sheet', role: 'dialog', 'aria-label': 'Target muscles' },
+      h(
+        'header',
+        { class: 'top-bar' },
+        h('p', { class: 'page-title small-title' }, exerciseName(exerciseId)),
+        h('button', { class: 'ghost-btn', onclick: () => setSheet(null) }, 'Close'),
+      ),
+      muscleSlot(exerciseId, 'full'),
+      h(
+        'p',
+        { class: 'legend' },
+        h('span', { class: 'swatch primary' }),
+        ` ${primary.join(', ') || '—'}`,
+        secondary.length ? h('span', { class: 'swatch secondary' }) : null,
+        secondary.length ? ` ${secondary.join(', ')}` : null,
+      ),
+      h('p', { class: 'muted small' }, body3d ? 'Drag to rotate.' : ''),
     );
   }
 

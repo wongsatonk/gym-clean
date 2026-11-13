@@ -19,6 +19,7 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
     "@vitejs/plugin-basic-ssl": "^2.3.0",
     "eslint": "^10.14.0",
     "eslint-config-prettier": "^10.1.8",
@@ -35,6 +36,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "dexie": "^4.4.7"
+    "dexie": "^4.4.7",
+    "three": "^0.187.0"
   }
 }
