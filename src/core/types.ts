@@ -55,6 +55,13 @@ export type RepEvent = {
   concentricMs: number;
   minAngle: number;
   maxAngle: number;
+  /**
+   * Partials only: which end was missed. 'far' = turned around before the far threshold
+   * (not deep / high enough); 'start' = went to the far end but didn't return to the start.
+   */
+  reason?: 'far' | 'start';
+  /** Partials only: degrees short of the missed threshold (≥ 0). */
+  shortByDeg?: number;
   /** Frame time when the event fired. */
   t: number;
 };
