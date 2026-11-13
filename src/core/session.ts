@@ -18,6 +18,8 @@ export type SessionState = {
   readonly setIndex: number;
   /** Editable values for the current/upcoming set. */
   readonly reps: number;
+  /** Partial reps the rep counter saw in the current set (M4); logged only when > 0. */
+  readonly partials: number;
   readonly weightKg: number;
   readonly setStartedAt: number;
   /** Rest before the current set, logged with it. */
@@ -41,6 +43,8 @@ export type StartOptions = { unit?: Unit; lastWeightKg?: Record<string, number> 
 export type SessionEvent =
   | { type: 'ADJUST'; field: 'reps' | 'weight'; delta: number }
   | { type: 'SET_DONE'; now: number }
+  /** Live count from the rep counter: overwrites reps/partials of the current set. */
+  | { type: 'SET_COUNTED'; reps: number; partials: number }
   | { type: 'START_SET'; now: number }
   | { type: 'SKIP_EXERCISE'; now: number }
   | { type: 'PAUSE'; now: number }
@@ -70,9 +74,9 @@ const loggedFor = (s: Pick<SessionState, 'logs'>, exerciseId: string) =>
 /** Values for the next set of exercise `exIndex`: today's last set, else last time, else the plan. */
 function defaultsFor(s: Pick<SessionState, 'logs' | 'unit' | 'lastWeightKg'>, p: PlannedExercise) {
   const last = loggedFor(s, p.exerciseId).at(-1);
-  if (last) return { reps: last.reps, weightKg: last.weightKg };
+  if (last) return { reps: last.reps, partials: 0, weightKg: last.weightKg };
   const weightKg = s.lastWeightKg[p.exerciseId] ?? snapToStep(p.startWeightKg ?? 0, s.unit);
-  return { reps: p.targetReps[1], weightKg };
+  return { reps: p.targetReps[1], partials: 0, weightKg };
 }
 
 function isFinished(s: SessionState, exIndex: number): boolean {
@@ -180,6 +184,15 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
           };
     }
 
+    case 'SET_COUNTED': {
+      if (s.phase !== 'exercise') return s;
+      return {
+        ...s,
+        reps: Math.max(0, Math.round(e.reps)),
+        partials: Math.max(0, Math.round(e.partials)),
+      };
+    }
+
     case 'SET_DONE': {
       if (s.phase !== 'exercise') return s;
       const p = currentPlanned(s);
@@ -188,6 +201,7 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
         exerciseId: p.exerciseId,
         setIndex: s.setIndex,
         reps: s.reps,
+        ...(s.partials > 0 ? { partials: s.partials } : {}),
         weightKg: s.weightKg,
         restTakenSec: s.lastRestTakenSec,
         startedAt: s.setStartedAt,
@@ -196,7 +210,7 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       const logged = { ...s, logs: [...s.logs, log] };
       const moved =
         s.setIndex + 1 < p.sets
-          ? { ...logged, setIndex: s.setIndex + 1 } // keep reps/weight for the next set
+          ? { ...logged, setIndex: s.setIndex + 1, partials: 0 } // keep reps/weight for the next set
           : goToExercise(logged, nextUnfinished(logged, s.exIndex), e.now);
       if (moved.phase === 'summary') return moved;
       return {

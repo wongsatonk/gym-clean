@@ -396,3 +396,82 @@ describe('GO_TO_EXERCISE and wrap-around (M1b)', () => {
     expect(s.phase).toBe('summary');
   });
 });
+
+describe('SET_COUNTED from the rep counter (M4)', () => {
+  const counted = (reps: number, partials: number): SessionEvent => ({
+    type: 'SET_COUNTED',
+    reps,
+    partials,
+  });
+
+  it('starts every session with 0 partials', () => {
+    expect(fresh().partials).toBe(0);
+  });
+
+  it('overwrites reps and partials during a set', () => {
+    const s = run(fresh(), counted(3, 1), counted(5, 2));
+    expect(s.reps).toBe(5);
+    expect(s.partials).toBe(2);
+  });
+
+  it('rounds and clamps counts to whole non-negative numbers', () => {
+    const s = run(fresh(), counted(-2, -1));
+    expect(s.reps).toBe(0);
+    expect(s.partials).toBe(0);
+  });
+
+  it('is ignored during rest', () => {
+    const resting = run(fresh(), { type: 'SET_DONE', now: sec(30) });
+    expect(run(resting, counted(4, 2))).toBe(resting);
+  });
+
+  it('is ignored while paused, in either phase', () => {
+    const paused = run(fresh(), { type: 'PAUSE', now: sec(5) });
+    expect(run(paused, counted(4, 2))).toBe(paused);
+    const pausedRest = run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(30) },
+      { type: 'PAUSE', now: sec(35) },
+    );
+    expect(run(pausedRest, counted(4, 2))).toBe(pausedRest);
+  });
+
+  it('is ignored after summary', () => {
+    const done = run(fresh(), { type: 'FINISH', now: sec(5) });
+    expect(run(done, counted(4, 2))).toBe(done);
+  });
+
+  it('still lets the stepper correct the counted reps', () => {
+    const s = run(fresh(), counted(9, 0), { type: 'ADJUST', field: 'reps', delta: 1 });
+    expect(s.reps).toBe(10);
+    const logged = run(s, { type: 'SET_DONE', now: sec(30) });
+    expect(logged.logs[0]?.reps).toBe(10);
+  });
+
+  it('logs partials with the set when there were any', () => {
+    const s = run(fresh(), counted(8, 2), { type: 'SET_DONE', now: sec(30) });
+    expect(s.logs[0]).toMatchObject({ reps: 8, partials: 2 });
+  });
+
+  it('leaves partials out of the log when there were none', () => {
+    const s = run(fresh(), counted(8, 0), { type: 'SET_DONE', now: sec(30) });
+    expect(s.logs[0]).not.toHaveProperty('partials');
+  });
+
+  it('resets partials for the next set but keeps the counted reps as its default', () => {
+    const s = run(fresh(), counted(8, 2), { type: 'SET_DONE', now: sec(30) });
+    expect(s.partials).toBe(0);
+    expect(s.reps).toBe(8);
+    const nextSet = run(s, { type: 'START_SET', now: sec(90) });
+    expect(nextSet.partials).toBe(0);
+    const logged = run(nextSet, { type: 'SET_DONE', now: sec(120) });
+    expect(logged.logs[1]).not.toHaveProperty('partials');
+  });
+
+  it('resets partials when moving to another exercise by skip or jump', () => {
+    const skipped = run(fresh(), counted(3, 1), { type: 'SKIP_EXERCISE', now: sec(10) });
+    expect(skipped.partials).toBe(0);
+    const jumped = run(fresh(), counted(3, 1), { type: 'GO_TO_EXERCISE', exIndex: 2, now: sec(10) });
+    expect(jumped.partials).toBe(0);
+  });
+});
