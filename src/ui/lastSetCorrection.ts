@@ -40,11 +40,14 @@ export function clampCount(n: number, max = CORRECTION_MAX): number {
 
 // ---------- component ----------
 
+let instances = 0;
+
 export function createLastSetCorrection(opts: LastSetCorrectionOptions): LastSetCorrectionHandle {
   const max = opts.max ?? CORRECTION_MAX;
   let saved = { reps: clampCount(opts.reps, max), partials: clampCount(opts.partials, max) };
   let draft = { ...saved };
   let open = false;
+  const editorId = `lsc-editor-${++instances}`;
 
   const summary = h('span', { class: 'lsc-summary', 'data-lsc': 'summary' });
   const fixBtn = h(
@@ -52,7 +55,7 @@ export function createLastSetCorrection(opts: LastSetCorrectionOptions): LastSet
     {
       class: 'lsc-fix',
       'aria-expanded': 'false',
-      'aria-controls': 'lsc-editor',
+      'aria-controls': editorId,
       'data-lsc': 'fix',
       onclick: () => setOpen(!open),
     },
@@ -103,12 +106,12 @@ export function createLastSetCorrection(opts: LastSetCorrectionOptions): LastSet
   );
   const cancelBtn = h(
     'button',
-    { class: 'lsc-cancel', 'data-lsc': 'cancel', onclick: () => setOpen(false) },
+    { class: 'lsc-cancel', 'data-lsc': 'cancel', onclick: () => close() },
     'Cancel',
   );
   const editor = h(
     'div',
-    { class: 'lsc-editor', id: 'lsc-editor', hidden: true, 'data-lsc': 'editor' },
+    { class: 'lsc-editor', id: editorId, hidden: true, 'data-lsc': 'editor' },
     h('div', { class: 'lsc-steppers' }, reps.row, partials.row),
     h('div', { class: 'lsc-buttons' }, cancelBtn, saveBtn),
   );
@@ -156,6 +159,12 @@ export function createLastSetCorrection(opts: LastSetCorrectionOptions): LastSet
     render();
   }
 
+  /** Closes from inside the editor and returns focus to Fix (the focused button is hidden). */
+  function close(): void {
+    setOpen(false);
+    fixBtn.focus();
+  }
+
   function bump(field: 'reps' | 'partials', delta: number): void {
     draft[field] = clampCount(draft[field] + delta, max);
     render();
@@ -168,7 +177,7 @@ export function createLastSetCorrection(opts: LastSetCorrectionOptions): LastSet
       opts.onCorrect(saved.reps, saved.partials);
       status.textContent = `Saved: ${lastSetText(saved.reps, saved.partials)}`;
     }
-    setOpen(false);
+    close();
   }
 
   render();

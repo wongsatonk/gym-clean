@@ -35,7 +35,7 @@ export type DevLogPanelOptions = {
   /** Overrides for tests/harness; defaults call src/data/devlog.ts with `db`. */
   api?: Partial<DevLogPanelApi>;
   /** Overrides how a file leaves the phone; default `deliverFile`. */
-  deliver?: (file: File) => Promise<DeliverResult>;
+  deliver?: (file: File, secondTry: boolean) => Promise<DeliverResult>;
 };
 
 export type DevLogPanelHandle = {
@@ -70,9 +70,19 @@ export function devLogSummary(stats: { bytes: number; sessions: number }): strin
 /**
  * Share sheet when the browser can share this file (iOS), else a download.
  * Safari may refuse `share()` after a long await (lost user activation): that returns
- * 'needs-tap' and the caller asks for one more tap that shares synchronously.
+ * 'needs-tap' and the caller asks for one more tap that shares synchronously. On that
+ * second try (`secondTry`), a repeated refusal downloads instead.
  */
-export async function deliverFile(file: File, nav: Navigator = navigator): Promise<DeliverResult> {
+export async function deliverFile(
+  file: File,
+  opts: {
+    nav?: Navigator;
+    download?: (file: File) => void;
+    secondTry?: boolean;
+  } = {},
+): Promise<DeliverResult> {
+  const nav = opts.nav ?? navigator;
+  const download = opts.download ?? downloadFile;
   const data: ShareData = { files: [file], title: file.name };
   if (typeof nav.canShare === 'function' && typeof nav.share === 'function' && nav.canShare(data)) {
     try {
@@ -81,15 +91,15 @@ export async function deliverFile(file: File, nav: Navigator = navigator): Promi
     } catch (err) {
       const name = err instanceof DOMException ? err.name : '';
       if (name === 'AbortError') return 'cancelled';
-      if (name === 'NotAllowedError') return 'needs-tap';
-      // Any other share failure: fall back to a download.
+      if (name === 'NotAllowedError' && !opts.secondTry) return 'needs-tap';
+      // Any other share failure (or a second refusal): fall back to a download.
     }
   }
-  downloadFile(file);
+  download(file);
   return 'downloaded';
 }
 
-function downloadFile(file: File): void {
+export function downloadFile(file: File): void {
   const url = URL.createObjectURL(file);
   const a = h('a', { href: url, download: file.name, hidden: true });
   document.body.append(a);
@@ -111,10 +121,12 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
     clear: () => clearDevLog(db),
     ...opts.api,
   };
-  const deliver = opts.deliver ?? ((file: File) => deliverFile(file));
+  const deliver =
+    opts.deliver ?? ((file: File, secondTry: boolean) => deliverFile(file, { secondTry }));
 
   let enabled = true;
   let busy = false;
+  let saving = false;
   let clearTimer: number | undefined;
   /** A prepared file waiting for the "Tap to share" tap. */
   let pending: { file: File; scope: 'last' | 'all' } | undefined;
@@ -210,6 +222,8 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
   }
 
   async function onToggle(): Promise<void> {
+    if (saving) return; // a second tap while saving would race the rollback
+    saving = true;
     const next = !enabled;
     enabled = next;
     renderToggle();
@@ -222,6 +236,8 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
       enabled = !next;
       renderToggle();
       setStatus('Could not save. Try again.');
+    } finally {
+      saving = false;
     }
   }
 
@@ -247,13 +263,12 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
     // Second tap after Safari refused the share: share right away, inside the tap.
     if (pending && pending.scope === scope) {
       const { file } = pending;
-      report(await deliver(file), file, scope);
+      report(await deliver(file, true), file, scope);
       return;
     }
     pending = undefined;
     resetExportLabels();
     busy = true;
-    el.setAttribute('aria-busy', 'true');
     const btn = scope === 'last' ? exportLast : exportAll;
     btn.textContent = 'Preparing…';
     for (const b of [exportLast, exportAll, clearBtn]) b.disabled = true;
@@ -261,7 +276,7 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
     try {
       const { blob, filename } = await api.exportFile(scope);
       const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
-      report(await deliver(file), file, scope);
+      report(await deliver(file, false), file, scope);
     } catch (err) {
       console.error('[devlog] export failed', err);
       resetExportLabels();
@@ -270,7 +285,6 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
       setStatus(`Export failed.${why}`);
     } finally {
       busy = false;
-      el.removeAttribute('aria-busy');
       if (!exportLast.dataset.ready && !exportAll.dataset.ready) resetExportLabels();
       await refresh();
     }
@@ -300,6 +314,9 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
   return {
     el,
     refresh,
-    destroy: () => disarmClear(),
+    destroy: () => {
+      disarmClear();
+      pending = undefined; // let the prepared File be garbage-collected
+    },
   };
 }

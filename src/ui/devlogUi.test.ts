@@ -21,18 +21,56 @@ describe('deliverFile', () => {
   const file = new File(['{}'], 'log.json.gz');
   const nav = (share: () => Promise<void>, canShare = true) =>
     ({ canShare: () => canShare, share }) as unknown as Navigator;
+  const reject = (name: string) => () => Promise.reject(new DOMException('x', name));
 
   it('uses the share sheet when the browser can share files', async () => {
     const share = vi.fn(() => Promise.resolve());
-    expect(await deliverFile(file, nav(share))).toBe('shared');
+    const download = vi.fn();
+    expect(await deliverFile(file, { nav: nav(share), download })).toBe('shared');
     expect(share).toHaveBeenCalledWith({ files: [file], title: 'log.json.gz' });
+    expect(download).not.toHaveBeenCalled();
   });
 
   it('reports a cancelled share and a share that needs a fresh tap', async () => {
-    const abort = () => Promise.reject(new DOMException('x', 'AbortError'));
-    const notAllowed = () => Promise.reject(new DOMException('x', 'NotAllowedError'));
-    expect(await deliverFile(file, nav(abort))).toBe('cancelled');
-    expect(await deliverFile(file, nav(notAllowed))).toBe('needs-tap');
+    const download = vi.fn();
+    expect(await deliverFile(file, { nav: nav(reject('AbortError')), download })).toBe('cancelled');
+    expect(await deliverFile(file, { nav: nav(reject('NotAllowedError')), download })).toBe(
+      'needs-tap',
+    );
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  it('downloads when the browser cannot share files', async () => {
+    const share = vi.fn(() => Promise.resolve());
+    const download = vi.fn();
+    expect(await deliverFile(file, { nav: nav(share, false), download })).toBe('downloaded');
+    expect(share).not.toHaveBeenCalled();
+    expect(download).toHaveBeenCalledWith(file);
+  });
+
+  it('downloads when there is no share API at all', async () => {
+    const download = vi.fn();
+    expect(await deliverFile(file, { nav: {} as Navigator, download })).toBe('downloaded');
+    expect(download).toHaveBeenCalledWith(file);
+  });
+
+  it('downloads on any other share error', async () => {
+    const download = vi.fn();
+    const typeError = () => Promise.reject(new TypeError('bad'));
+    expect(await deliverFile(file, { nav: nav(reject('DataError')), download })).toBe('downloaded');
+    expect(await deliverFile(file, { nav: nav(typeError), download })).toBe('downloaded');
+    expect(download).toHaveBeenCalledTimes(2);
+  });
+
+  it('downloads when the second "Tap to share" is refused again', async () => {
+    const download = vi.fn();
+    const result = await deliverFile(file, {
+      nav: nav(reject('NotAllowedError')),
+      download,
+      secondTry: true,
+    });
+    expect(result).toBe('downloaded');
+    expect(download).toHaveBeenCalledWith(file);
   });
 });
 
