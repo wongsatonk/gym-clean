@@ -1,0 +1,44 @@
+<!doctype html>
+<!-- Dev-only visual check for the M4b demo player (not part of the build). Open
+     /src/ui/demo3d/harness.html?id=Pushups&t=1.2 on the dev server. `t` freezes the loop at that
+     time (screenshots); without it the demo loops. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demo player harness</title>
+    <style>
+      body { margin: 0; background: #0b0d10; color: #f4f6f8; font: 20px system-ui, sans-serif; }
+      .wrap { padding: 16px; display: flex; flex-direction: column; gap: 12px; height: 100vh; box-sizing: border-box; }
+      #slot { height: 420px; background: #14181d; border-radius: 16px; padding: 8px; }
+      .demo3d-btn { background: #252c35; color: #f4f6f8; border: 1px solid #3b4652; }
+      .demo3d-btn[aria-pressed='true'] { background: #4ade80; color: #0b0d10; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1 id="title" style="font-size: 24px; margin: 0"></h1>
+      <div id="tempo"></div>
+      <div id="slot"></div>
+      <div id="phase" style="font-size: 28px"></div>
+    </div>
+    <script type="module">
+      import { createDemoPlayer } from './player.ts';
+      const q = new URLSearchParams(location.search);
+      const id = q.get('id') ?? 'Pushups';
+      const t = q.get('t');
+      document.getElementById('title').textContent = id.replace(/_/g, ' ');
+      const player = await createDemoPlayer(document.getElementById('slot'), id, {
+        reducedMotion: q.has('rm') || t !== null,
+        onPhase: (l) => (document.getElementById('phase').textContent = `Phase (callback): ${l}`),
+      });
+      window.__player = player;
+      if (player) {
+        document.getElementById('tempo').textContent = player.tempo;
+        if (q.get('view')) player.setView(q.get('view'));
+        if (t !== null) player.seek(Number(t));
+      }
+      document.body.dataset.ready = player ? 'true' : 'null';
+    </script>
+  </body>
+</html>
