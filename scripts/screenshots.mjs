@@ -3,6 +3,9 @@
 // directly with ignoreHTTPSErrors. It starts its own Vite dev server on SHOT_PORT (default 5197).
 //
 //   node scripts/screenshots.mjs m4          # M4 screens
+//   node scripts/screenshots.mjs m4c         # M4c + M4b Push A slice screens
+//   node scripts/screenshots.mjs m4c-flow    # Push A click-through (JSON report, export saved
+//                                            #   under test-results/), no docs screenshots
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -153,6 +156,359 @@ async function m4(browser) {
   }
 }
 
+// ---------------------------------------------------------------- M4c + M4b (Push A slice)
+
+/** Records spoken text (with kind order) instead of speaking; wake lock stubbed. */
+async function installSpeechSpy(page) {
+  await page.addInitScript(() => {
+    window.__spoken = [];
+    class FakeUtterance extends EventTarget {
+      constructor(text) {
+        super();
+        this.text = text;
+        this.lang = '';
+        this.rate = 1;
+        this.volume = 1;
+      }
+    }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: FakeUtterance, configurable: true });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => {
+          window.__spoken.push(u.text);
+          setTimeout(() => u.dispatchEvent(new Event('end')), 300);
+        },
+        cancel: () => undefined,
+        getVoices: () => [],
+        speaking: false,
+        pending: false,
+      },
+    });
+  });
+}
+
+async function pollUntil(fn, ms, step = 250) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    const v = await fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, step));
+  }
+  return null;
+}
+
+async function textSizes(page, root) {
+  // Smallest visible text font-size and smallest visible button height under root.
+  return page.evaluate((sel) => {
+    const r = document.querySelector(sel) ?? document.body;
+    let minFont = 999;
+    let minFontText = '';
+    for (const el of r.querySelectorAll('*')) {
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      if (!own) continue;
+      const b = el.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      const f = parseFloat(getComputedStyle(el).fontSize);
+      if (f < minFont) {
+        minFont = f;
+        minFontText = el.textContent.trim().slice(0, 40);
+      }
+    }
+    let minBtn = 999;
+    let minBtnText = '';
+    for (const b of r.querySelectorAll('button')) {
+      const rc = b.getBoundingClientRect();
+      if (!rc.width || !rc.height) continue;
+      if (rc.height < minBtn) {
+        minBtn = rc.height;
+        minBtnText = (b.textContent || b.getAttribute('aria-label') || '').trim().slice(0, 30);
+      }
+    }
+    return { minFont, minFontText, minBtn: Math.round(minBtn), minBtnText };
+  }, root);
+}
+
+async function openFromList(page, name) {
+  await page.getByRole('button', { name: 'Exercise list' }).click();
+  const list = page.getByRole('dialog', { name: 'Exercise list' });
+  await list.locator('.ex-row-btn', { hasText: name }).first().click();
+  await page.getByRole('heading', { name }).waitFor();
+}
+
+async function m4c(browser) {
+  // 1. Push A preview with badges.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    await page.goto(BASE);
+    await page.getByRole('button', { name: /Push A/ }).click();
+    await page.locator('.ex-row').first().waitFor();
+    const rows = await page.locator('.ex-row').evaluateAll((els) =>
+      els.map((e) => ({
+        text: e.querySelector('.ex-name, h3, strong')?.textContent?.trim() ?? e.textContent.trim().slice(0, 40),
+        badges: [...e.querySelectorAll('[data-badge]')].map((b) => ({
+          t: b.textContent,
+          font: parseFloat(getComputedStyle(b).fontSize),
+        })),
+      })),
+    );
+    await shot(page, log, 'm4c-preview-badges', { rows, sizes: await textSizes(page, 'main') });
+    await ctx.close();
+  }
+  // 2. How-to sheet: Pushups (3D demo), then an Info exercise (Hammer Curls, Pull A).
+  for (const [day, name, file] of [
+    [/Push A/, 'Pushups', 'm4c-howto-pushups'],
+    [/Pull A/, 'Hammer Curls', 'm4c-howto-info'],
+  ]) {
+    const { ctx, page, log } = await newPhone(browser);
+    await page.goto(BASE);
+    await page.getByRole('button', { name: day }).click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.locator('[data-howto-open]').waitFor();
+    await openFromList(page, name);
+    const headBadges = await page.locator('.exercise-head-text [data-badge]').allTextContents();
+    const howBtn = await page.locator('[data-howto-open]').boundingBox();
+    await page.locator('[data-howto-open]').click();
+    const sheet = page.locator('[data-howto=sheet]');
+    await sheet.waitFor();
+    const stage = sheet.locator('[data-howto=stage]');
+    if (name === 'Pushups') {
+      await pollUntil(async () => (await stage.getAttribute('data-mode')) === '3d', 15_000);
+      await page.waitForTimeout(1600); // mid-rep
+    } else {
+      await page.waitForTimeout(800);
+    }
+    const info = {
+      headBadges,
+      howBtnHeight: howBtn?.height,
+      mode: await stage.getAttribute('data-mode'),
+      playing: await sheet.locator('[data-demo-playing]').first().getAttribute('data-demo-playing').catch(() => null),
+      tempo: await sheet.locator('[data-howto=tempo]').textContent().catch(() => null),
+      lines: await sheet.locator('[data-howto=lines] li').allTextContents(),
+      focus: await sheet.locator('[data-howto=focus]').textContent().catch(() => null),
+      sheetScroll: await sheet.evaluate((e) => ({ sh: e.scrollHeight, ch: e.clientHeight })),
+      sizes: await textSizes(page, '[data-howto=sheet]'),
+    };
+    await shot(page, log, file, info);
+    await ctx.close();
+  }
+  // 2b. The other five Push A demos mid-rep (SPEC M4b: screenshots of all 6 demos).
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    await page.goto(BASE);
+    await page.getByRole('button', { name: /Push A/ }).click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.locator('[data-howto-open]').waitFor();
+    for (const [name, slug] of [
+      ['Dumbbell Bench Press', 'bench-press'],
+      ['Incline Dumbbell Press', 'incline-press'],
+      ['Seated Dumbbell Press', 'seated-press'],
+      ['Side Lateral Raise', 'lateral-raise'],
+      ['Standing Dumbbell Triceps Extension', 'triceps-extension'],
+    ]) {
+      if (name !== 'Dumbbell Bench Press') await openFromList(page, name);
+      await page.locator('[data-howto-open]').click();
+      const sheet = page.locator('[data-howto=sheet]');
+      const stage = sheet.locator('[data-howto=stage]');
+      await pollUntil(async () => (await stage.getAttribute('data-mode')) === '3d', 15_000);
+      await page.waitForTimeout(1600);
+      await shot(page, log, `m4b-demo-${slug}`, {
+        mode: await stage.getAttribute('data-mode'),
+        headBadges: await page.locator('.exercise-head-text [data-badge]').allTextContents(),
+      });
+      await sheet.locator('[data-howto=close]').click();
+      await sheet.waitFor({ state: 'detached' });
+    }
+    await ctx.close();
+  }
+  // 3. Camera (curl clip on Pull A curl): set-up card, counting, hint; then Rest, Summary, Settings.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    await installSpeechSpy(page);
+    await page.goto(BASE);
+    await page.getByRole('button', { name: /Pull A/ }).click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.getByRole('heading', { name: 'One-Arm Dumbbell Row' }).waitFor();
+    await openFromList(page, 'Dumbbell Bicep Curl');
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    await cam.locator('.rep-panel').waitFor();
+    const card = cam.locator('[data-setup]');
+    await card.waitFor();
+    await page.waitForTimeout(900); // video frames up
+    await shot(page, log, 'm4c-camera-setup-card', {
+      setup: await card.getAttribute('data-setup'),
+      cardText: await card.innerText(),
+      spoken: await page.evaluate(() => window.__spoken.slice()),
+      geom: await cameraGeometry(page),
+    });
+    const reps = cam.locator('[data-reps]');
+    await pollUntil(async () => Number(await reps.getAttribute('data-reps')) >= 2, 60_000);
+    const stageBox = await cam.locator('.cam-stage').boundingBox();
+    await shot(page, log, 'm4c-camera-counting', {
+      geom: await cameraGeometry(page),
+      stageHeight: stageBox?.height,
+      target: await cam.locator('[data-target]').textContent(),
+      setLine: await cam.locator('[data-set]').textContent(),
+      repsColor: await reps.evaluate((e) => getComputedStyle(e).color),
+      targetFont: await cam.locator('[data-target]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize)),
+      setFont: await cam.locator('[data-set]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize)),
+      setup: await card.getAttribute('data-setup'),
+      sizes: await textSizes(page, '[role="dialog"][aria-label="Camera"]'),
+    });
+    const coach = cam.locator('.rep-coach');
+    const hinted = await pollUntil(async () => ((await coach.textContent()) ?? '').trim().length > 0, 60_000, 100);
+    await shot(page, log, 'm4c-camera-hint', {
+      hinted: Boolean(hinted),
+      hint: await coach.textContent(),
+      reason: await coach.getAttribute('data-hint-reason'),
+      hintFont: await coach.evaluate((e) => parseFloat(getComputedStyle(e).fontSize)),
+      spoken: await page.evaluate(() => window.__spoken.slice()),
+      geom: await cameraGeometry(page),
+    });
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await page.locator('[data-rest-clock]').waitFor();
+    const fix = page.locator('[data-lsc=panel]');
+    await fix.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm4c-rest-fix-last-set', {
+      summary: await fix.locator('[data-lsc=summary]').textContent(),
+      fixBtn: await fix.locator('[data-lsc=fix]').boundingBox(),
+    });
+    await fix.locator('[data-lsc=fix]').click();
+    await fix.locator('[data-lsc=reps-plus]').click();
+    await fix.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    const stepBtns = await fix.locator('button').evaluateAll((bs) =>
+      bs.filter((b) => b.offsetParent).map((b) => [b.textContent.trim() || b.getAttribute('aria-label'), Math.round(b.getBoundingClientRect().height), Math.round(b.getBoundingClientRect().width)]),
+    );
+    const valueFont = await fix.locator('[data-lsc=reps-value]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
+    await shot(page, log, 'm4c-rest-fix-last-set-open', { stepBtns, valueFont });
+    await fix.locator('[data-lsc=save]').click();
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('button', { name: 'Tap again to end' }).click();
+    await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+    const sfix = page.locator('[data-lsc=panel]');
+    await sfix.locator('[data-lsc=fix]').click();
+    await sfix.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm4c-summary-fix', {
+      summary: await sfix.locator('[data-lsc=summary]').textContent(),
+    });
+    await sfix.locator('[data-lsc=save]').click();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const panel = page.locator('[data-devlog=panel]');
+    await panel.waitFor();
+    await panel.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm4c-settings-devlog', {
+      summary: await panel.locator('[data-devlog=summary]').textContent(),
+      sessions: await panel.getAttribute('data-sessions'),
+      sizes: await textSizes(page, '[data-devlog=panel]'),
+    });
+    await ctx.close();
+  }
+}
+
+/** Push A click-through: placement cards + sentences, Set done, Rest Fix, Summary Fix, export. */
+async function m4cFlow(browser) {
+  const { ctx, page, log } = await newPhone(browser);
+  await installSpeechSpy(page);
+  const offsite = [];
+  page.on('request', (r) => {
+    const u = new URL(r.url());
+    if (!['localhost', '127.0.0.1'].includes(u.hostname) && !/^(data|blob):/.test(r.url())) offsite.push(r.url());
+  });
+  const out = {};
+  await page.goto(BASE);
+  await page.getByRole('button', { name: /Push A/ }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await page.getByRole('heading', { name: 'Dumbbell Bench Press' }).waitFor();
+  // A note with a sentinel, which must not reach the export.
+  await page.getByRole('button', { name: 'Notes and machine setting' }).click();
+  await page.locator('textarea').last().fill('SENTINEL-free-text-xyz');
+  await page.locator('input[placeholder="e.g. Seat 4, pad 2"]').fill('SENTINEL-machine-xyz');
+  await page.getByRole('button', { name: 'Save' }).click();
+  out.cams = [];
+  for (const name of ['Seated Dumbbell Press', 'Side Lateral Raise', 'Pushups']) {
+    await openFromList(page, name);
+    const before = await page.evaluate(() => window.__spoken.length);
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    const card = cam.locator('[data-setup]');
+    await card.waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(4000);
+    const spokenNew = await page.evaluate((n) => window.__spoken.slice(n), before);
+    const entry = {
+      name,
+      cardText: (await card.innerText()).replace(/\n+/g, ' | '),
+      setupState: await card.getAttribute('data-setup'),
+      target: await cam.locator('[data-target]').textContent().catch(() => null),
+      setLine: await cam.locator('[data-set]').textContent().catch(() => null),
+      reps: await cam.locator('[data-reps]').getAttribute('data-reps'),
+      fps: await cam.getAttribute('data-fps'),
+      spokenNew,
+    };
+    out.cams.push(entry);
+    if (name !== 'Pushups') await cam.getByRole('button', { name: 'Close' }).click();
+    else {
+      await page.screenshot({ path: 'test-results/m4c-flow-pushups-camera.png' });
+      await cam.getByRole('button', { name: 'Set done' }).click();
+    }
+  }
+  await page.locator('[data-rest-clock]').waitFor();
+  const fix = page.locator('[data-lsc=panel]');
+  out.restSummaryBefore = await fix.locator('[data-lsc=summary]').textContent();
+  await fix.locator('[data-lsc=fix]').click();
+  await fix.locator('[data-lsc=reps-plus]').click();
+  await fix.locator('[data-lsc=reps-plus]').click();
+  await fix.locator('[data-lsc=save]').click();
+  out.restSummaryAfter = await fix.locator('[data-lsc=summary]').textContent();
+  // Second Pushups set: Start set → camera → spoken placement only once per exercise?
+  await page.getByRole('button', { name: 'Start set' }).click();
+  const before2 = await page.evaluate(() => window.__spoken.length);
+  await page.getByRole('button', { name: 'Camera', exact: true }).click();
+  const cam2 = page.getByRole('dialog', { name: 'Camera' });
+  await cam2.locator('.rep-panel').waitFor();
+  await page.waitForTimeout(3000);
+  out.secondOpenSpoken = await page.evaluate((n) => window.__spoken.slice(n), before2);
+  out.secondTarget = [await cam2.locator('[data-target]').textContent(), await cam2.locator('[data-set]').textContent()];
+  await cam2.getByRole('button', { name: 'Set done' }).click();
+  // Pushups was the last set planned? Either Rest or Summary follows; end explicitly if needed.
+  if (!(await page.getByRole('heading', { name: 'Workout done' }).isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('button', { name: 'Tap again to end' }).click();
+  }
+  await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+  const sfix = page.locator('[data-lsc=panel]');
+  out.summaryFixBefore = await sfix.locator('[data-lsc=summary]').textContent();
+  await sfix.locator('[data-lsc=fix]').click();
+  await sfix.locator('[data-lsc=partials-plus]').click();
+  await sfix.locator('[data-lsc=save]').click();
+  out.summaryFixAfter = await sfix.locator('[data-lsc=summary]').textContent();
+  out.summaryText = (await page.locator('main').innerText()).slice(0, 600);
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const panel = page.locator('[data-devlog=panel]');
+  out.devlogSummary = await panel.locator('[data-devlog=summary]').textContent();
+  // Real export path (no share mock): headless Chromium has no file share → download.
+  const dl = page.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
+  await panel.locator('[data-devlog=export-last]').click();
+  const d = await dl;
+  out.exportStatus = await panel.locator('[data-devlog=status]').textContent();
+  if (d) {
+    const path = `test-results/m4c-export-${Date.now()}.json.gz`;
+    await d.saveAs(path);
+    out.exportFile = { name: d.suggestedFilename(), path };
+  }
+  out.offsite = offsite;
+  out.console = log;
+  out.allSpoken = await page.evaluate(() => window.__spoken.slice());
+  await ctx.close();
+  console.log(JSON.stringify(out, null, 2));
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -169,6 +525,8 @@ try {
     ],
   });
   if (milestone === 'm4') await m4(browser);
+  else if (milestone === 'm4c') await m4c(browser);
+  else if (milestone === 'm4c-flow') await m4cFlow(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
