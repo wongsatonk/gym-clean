@@ -685,3 +685,122 @@ textarea:focus-visible {
   height: 100%;
   display: block;
 }
+
+/* ---------- M4: live rep counter + spoken-count switch ---------- */
+
+.rep-panel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.rep-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rep-num {
+  margin: 0;
+  min-width: 1.2ch;
+  font-size: 96px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.rep-label {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.rep-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.rep-info p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.rep-side {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.rep-hint {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.rep-partials {
+  font-size: 20px;
+  color: var(--muted);
+}
+
+.rep-side:empty,
+.rep-hint:empty,
+.rep-partials:empty {
+  display: none;
+}
+
+.camera-sheet.counting .cam-stage {
+  height: 40dvh;
+}
+
+.rep-num.bump {
+  animation: rep-bump 260ms ease-out;
+}
+
+@keyframes rep-bump {
+  from {
+    transform: scale(1.18);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rep-num.bump {
+    animation: none;
+  }
+}
+
+.switch-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 0 18px;
+  text-align: left;
+}
+
+.switch-state {
+  min-width: 64px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  text-align: center;
+  font-weight: 800;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.switch-btn.on .switch-state {
+  background: var(--accent);
+  color: var(--accent-ink);
+}

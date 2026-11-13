@@ -19,12 +19,14 @@ import {
   GymDb,
   finishSession,
   getExerciseNote,
+  getSpokenCount,
   getUnit,
   lastSessionSets,
   lastWeights,
   saveExerciseNote,
   saveSessionNote,
   saveSet,
+  setSpokenCount,
   setUnit,
   startSessionRow,
   type ExerciseNoteRow,
@@ -56,6 +58,7 @@ export function mountApp(root: HTMLElement): void {
   const db = new GymDb();
   let view: View = { screen: 'today', upNextDayId: null };
   let unit: Unit = 'kg';
+  let spokenCount = true;
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
 
@@ -277,6 +280,23 @@ export function mountApp(root: HTMLElement): void {
         'button',
         { class: 'ghost-btn wide-btn', onclick: () => openCameraView('Camera test') },
         'Camera test',
+      ),
+      h('p', { class: 'field-label' }, 'Voice'),
+      h(
+        'button',
+        {
+          class: `switch-btn${spokenCount ? ' on' : ''}`,
+          role: 'switch',
+          'aria-checked': spokenCount ? 'true' : 'false',
+          'data-setting': 'spoken-count',
+          onclick: () => {
+            spokenCount = !spokenCount;
+            void setSpokenCount(db, spokenCount).catch(logDbError);
+            render();
+          },
+        },
+        h('span', { class: 'switch-label' }, 'Count reps out loud'),
+        h('span', { class: 'switch-state', 'aria-hidden': 'true' }, spokenCount ? 'On' : 'Off'),
       ),
       h('p', { class: 'field-label' }, 'Weight unit'),
       h(
@@ -892,6 +912,12 @@ export function mountApp(root: HTMLElement): void {
     .then((u) => {
       unit = u;
       if (view.screen !== 'session') render();
+    })
+    .catch(logDbError);
+  void getSpokenCount(db)
+    .then((on) => {
+      spokenCount = on;
+      if (view.screen === 'settings') render();
     })
     .catch(logDbError);
   void loadUpNext();
