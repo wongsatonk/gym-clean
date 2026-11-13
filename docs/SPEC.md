@@ -49,6 +49,24 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
   all transitions; voice calls are verified via a mocked `speechSynthesis`.
 - 🧍 **Checkpoint A:** I run one real session at the gym from the deployed URL and report back.
 
+### M1b — Lists, notes, units (Wongsaton's feedback, 2026-11-13)
+- **Day preview:** tapping a day shows its exercise list (sets × target reps, weight, last time) with a
+  "Start workout" button, before anything starts.
+- **Exercise list during the workout:** opened from the top bar. Each exercise shows sets done / planned,
+  and done, current and skipped states. Tap an unfinished exercise to jump to it. After an exercise
+  finishes, the workout continues with the next unfinished one, wrapping around to any that were jumped over.
+- **On the Exercise screen:** "Today" (sets already logged for this exercise) and "Last time" (that
+  exercise's sets from the most recent previous session). The default weight is last time's weight.
+- **Notes:** per exercise, a lasting **machine setting** (e.g. "Seat 4, pad 2") and a lasting **exercise
+  note**, both shown again every time. Per workout, an optional **today's note** for each exercise,
+  shown on the Summary. Typing only happens in the notes sheet, never mid-set.
+- **Units:** Settings on the Today screen: kg or lb. Weights are stored in kg and converted for display.
+  Steps are 2.5 kg / 5 lb. Default weights snap to the step in the chosen unit.
+- **Accept:** reducer tests for jump / wrap-around / last-time defaults / unit steps; DB tests for notes
+  and last-time queries; e2e for preview → list jump → notes persist → lb display.
+- Later (requested): a **history view of the last week**. This is folded into the M6 History screen
+  unless it's wanted sooner.
+
 ### M2 — Anatomy map + focus cues
 - Original SVG body map, front and back views, each muscle group its own `<path>` with an id
   matching free-exercise-db muscle names (e.g. `chest`, `lats`, `middle back`, `biceps`,
@@ -113,7 +131,8 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
 
 ### M6 — Polish & install
 - PWA (installable, offline after first load, model + wasm cached).
-- History screen: last 4 weeks per exercise (weight × reps, focus score trend).
+- History screen: last 4 weeks per exercise (weight × reps, focus score trend), including a
+  "last 7 days" view of every session (requested at M1b).
 - Lighthouse pass on accessibility; respect `prefers-reduced-motion`.
 - **Accept:** installs on my phone home screen and works in airplane mode after first load.
 

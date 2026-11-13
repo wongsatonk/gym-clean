@@ -1,6 +1,6 @@
 // App controller: owns the session state, renders screens, runs side effects
 // (voice, wake lock, IndexedDB). All workout rules live in src/core/.
-import { formatDuration, formatKg, formatRest } from '../core/format';
+import { formatDuration, formatRest } from '../core/format';
 import { restCueText, restCuesBetween } from '../core/restCues';
 import {
   currentPlanned,
@@ -11,32 +11,83 @@ import {
   type SessionEvent,
   type SessionState,
 } from '../core/session';
-import type { ProgramDay } from '../core/types';
+import type { PlannedExercise, ProgramDay, SetLog } from '../core/types';
+import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
 import { cueFor, exerciseName, program } from '../data/catalog';
-import { GymDb, finishSession, saveSet, startSessionRow } from '../data/db';
+import {
+  GymDb,
+  finishSession,
+  getExerciseNote,
+  getUnit,
+  lastSessionSets,
+  lastWeights,
+  saveExerciseNote,
+  saveSessionNote,
+  saveSet,
+  setUnit,
+  startSessionRow,
+  type ExerciseNoteRow,
+  type SetRow,
+} from '../data/db';
 import { h } from './dom';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
 
-export const WEIGHT_STEP_KG = 2.5;
 const TICK_MS = 250;
 const END_CONFIRM_MS = 3000;
 
+type Sheet = null | { kind: 'list' } | { kind: 'notes'; exerciseId: string };
+
 type View =
-  { screen: 'today'; upNextDayId: string | null } | { screen: 'session'; s: SessionState };
+  | { screen: 'today'; upNextDayId: string | null }
+  | { screen: 'settings' }
+  | { screen: 'preview'; day: ProgramDay; loading: boolean }
+  | { screen: 'session'; s: SessionState; sheet: Sheet };
 
 export function mountApp(root: HTMLElement): void {
   const db = new GymDb();
   let view: View = { screen: 'today', upNextDayId: null };
+  let unit: Unit = 'kg';
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
 
+  // Per-day caches, loaded on the preview screen and kept for the session.
+  let lastTime: Record<string, SetRow[]> = {};
+  let exerciseNotes: Record<string, ExerciseNoteRow> = {};
+  let todayNotes: Record<string, string> = {};
+
   const now = () => Date.now();
+  const w = (kg: number) => formatWeight(kg, unit);
+  const setsText = (sets: Pick<SetLog, 'reps' | 'weightKg'>[]) =>
+    sets.length ? `${sets.map((l) => `${l.reps}×${w(l.weightKg)}`).join(', ')} ${unit}` : '';
+  const repsRange = (p: PlannedExercise) =>
+    p.targetReps[0] === p.targetReps[1]
+      ? `${p.targetReps[0]}`
+      : `${p.targetReps[0]}–${p.targetReps[1]}`;
+  const noteFor = (id: string): ExerciseNoteRow =>
+    exerciseNotes[id] ?? { exerciseId: id, machineSetting: '', note: '' };
 
   function render(): void {
-    root.replaceChildren(
-      view.screen === 'today' ? todayScreen(view.upNextDayId) : sessionScreen(view.s),
-    );
+    root.replaceChildren(screenFor(view));
+  }
+
+  function screenFor(v: View): HTMLElement {
+    switch (v.screen) {
+      case 'today':
+        return todayScreen(v.upNextDayId);
+      case 'settings':
+        return settingsScreen();
+      case 'preview':
+        return previewScreen(v.day, v.loading);
+      case 'session':
+        return sessionScreen(v.s, v.sheet);
+    }
+  }
+
+  function goToday(): void {
+    view = { screen: 'today', upNextDayId: null };
+    render();
+    void loadUpNext();
   }
 
   // ---------- Today ----------
@@ -59,6 +110,21 @@ export function mountApp(root: HTMLElement): void {
     return h(
       'main',
       { class: 'screen today' },
+      h(
+        'header',
+        { class: 'top-bar end' },
+        h(
+          'button',
+          {
+            class: 'ghost-btn',
+            onclick: () => {
+              view = { screen: 'settings' };
+              render();
+            },
+          },
+          'Settings',
+        ),
+      ),
       h('h1', { class: 'app-title' }, 'Gym Clean'),
       h('p', { class: 'muted' }, 'Pick today’s workout'),
       h(
@@ -72,7 +138,7 @@ export function mountApp(root: HTMLElement): void {
             {
               class: `day-btn${upNext ? ' up-next' : ''}`,
               'data-day': day.id,
-              onclick: () => startDay(day),
+              onclick: () => void openPreview(day),
             },
             h('span', { class: 'day-name' }, day.name),
             h('span', { class: 'day-meta' }, `${day.exercises.length} exercises · ${sets} sets`),
@@ -83,11 +149,132 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
+  // ---------- Settings ----------
+
+  function settingsScreen(): HTMLElement {
+    const unitBtn = (u: Unit, label: string) =>
+      h(
+        'button',
+        {
+          class: `seg-btn${unit === u ? ' active' : ''}`,
+          'aria-pressed': unit === u ? 'true' : 'false',
+          onclick: () => {
+            unit = u;
+            void setUnit(db, u).catch(logDbError);
+            render();
+          },
+        },
+        label,
+      );
+    return h(
+      'main',
+      { class: 'screen settings' },
+      h(
+        'header',
+        { class: 'top-bar' },
+        h('button', { class: 'ghost-btn', onclick: goToday }, '‹ Back'),
+      ),
+      h('h1', { class: 'page-title' }, 'Settings'),
+      h('p', { class: 'field-label' }, 'Weight unit'),
+      h(
+        'div',
+        { class: 'segmented', role: 'group', 'aria-label': 'Weight unit' },
+        unitBtn('kg', 'kg'),
+        unitBtn('lb', 'lb'),
+      ),
+      h(
+        'p',
+        { class: 'muted' },
+        unit === 'kg'
+          ? 'Weights step by 2.5 kg.'
+          : 'Weights step by 5 lb. Saved weights are converted, nothing is lost if you switch back.',
+      ),
+    );
+  }
+
+  // ---------- Day preview ----------
+
+  async function openPreview(day: ProgramDay): Promise<void> {
+    view = { screen: 'preview', day, loading: true };
+    render();
+    const ids = day.exercises.map((e) => e.exerciseId);
+    try {
+      const [last, notes] = await Promise.all([
+        lastSessionSets(db, ids),
+        Promise.all(ids.map((id) => getExerciseNote(db, id))),
+      ]);
+      lastTime = last;
+      exerciseNotes = Object.fromEntries(notes.map((n) => [n.exerciseId, n]));
+    } catch (err) {
+      logDbError(err);
+      lastTime = {};
+      exerciseNotes = {};
+    }
+    if (view.screen === 'preview' && view.day === day) {
+      view = { screen: 'preview', day, loading: false };
+      render();
+    }
+  }
+
+  function defaultWeightKg(p: PlannedExercise): number {
+    return lastTime[p.exerciseId]?.at(-1)?.weightKg ?? snapToStep(p.startWeightKg ?? 0, unit);
+  }
+
+  function previewScreen(day: ProgramDay, loading: boolean): HTMLElement {
+    return h(
+      'main',
+      { class: 'screen preview', 'data-screen': 'preview' },
+      h(
+        'header',
+        { class: 'top-bar' },
+        h('button', { class: 'ghost-btn', onclick: goToday }, '‹ Back'),
+      ),
+      h('h1', { class: 'page-title' }, day.name),
+      h(
+        'ol',
+        { class: 'ex-list' },
+        ...day.exercises.map((p) => {
+          const note = noteFor(p.exerciseId);
+          const last = setsText(lastTime[p.exerciseId] ?? []);
+          return h(
+            'li',
+            { class: 'ex-row' },
+            h('strong', {}, exerciseName(p.exerciseId)),
+            h(
+              'span',
+              { class: 'muted' },
+              `${p.sets} × ${repsRange(p)} reps · ${
+                defaultWeightKg(p) > 0 ? `${w(defaultWeightKg(p))} ${unit}` : 'bodyweight'
+              }`,
+            ),
+            note.machineSetting
+              ? h('span', { class: 'machine' }, `Machine: ${note.machineSetting}`)
+              : null,
+            last ? h('span', { class: 'muted small' }, `Last time: ${last}`) : null,
+          );
+        }),
+      ),
+      h(
+        'div',
+        { class: 'sticky-bottom' },
+        h(
+          'button',
+          { class: 'primary-btn', disabled: loading, onclick: () => startDay(day) },
+          loading ? 'Loading…' : 'Start workout',
+        ),
+      ),
+    );
+  }
+
   function startDay(day: ProgramDay): void {
     voice.unlock(); // must happen inside the tap
     const t = now();
-    const s = startSession(day, crypto.randomUUID(), t);
-    view = { screen: 'session', s };
+    const s = startSession(day, crypto.randomUUID(), t, {
+      unit,
+      lastWeightKg: lastWeights(lastTime),
+    });
+    view = { screen: 'session', s, sheet: null };
+    todayNotes = {};
     lastCueElapsedMs = 0;
     void wakeLock.hold();
     void startSessionRow(db, { sessionId: s.sessionId, dayId: day.id, startedAt: t }).catch(
@@ -99,12 +286,18 @@ export function mountApp(root: HTMLElement): void {
 
   // ---------- Session ----------
 
+  function setSheet(sheet: Sheet): void {
+    if (view.screen !== 'session') return;
+    view = { ...view, sheet };
+    render();
+  }
+
   function dispatch(e: SessionEvent): void {
     if (view.screen !== 'session') return;
     const prev = view.s;
     const s = next(prev, e);
     if (s === prev) return;
-    view = { screen: 'session', s };
+    view = { screen: 'session', s, sheet: null };
 
     for (const log of s.logs.slice(prev.logs.length)) void saveSet(db, log).catch(logDbError);
     if (prev.phase !== 'rest' && s.phase === 'rest') lastCueElapsedMs = 0;
@@ -158,17 +351,29 @@ export function mountApp(root: HTMLElement): void {
     el.classList.toggle('overtime', remaining < 0);
   }
 
-  function sessionScreen(s: SessionState): HTMLElement {
+  function sessionScreen(s: SessionState, sheet: Sheet): HTMLElement {
     if (s.phase === 'summary') return summaryScreen(s);
     const body = s.phase === 'rest' ? restScreen(s) : exerciseScreen(s);
-    return s.paused ? h('div', { class: 'stack' }, body, pausedOverlay()) : body;
+    if (s.paused) return h('div', { class: 'stack' }, body, pausedOverlay());
+    if (sheet?.kind === 'list') return h('div', { class: 'stack' }, body, listSheet(s));
+    if (sheet?.kind === 'notes')
+      return h('div', { class: 'stack' }, body, notesSheet(s, sheet.exerciseId));
+    return body;
   }
 
   function topBar(s: SessionState): HTMLElement {
     return h(
       'header',
       { class: 'top-bar' },
-      h('span', { class: 'muted' }, `${s.day.name} · ${s.exIndex + 1}/${s.day.exercises.length}`),
+      h(
+        'button',
+        {
+          class: 'ghost-btn list-btn',
+          'aria-label': 'Exercise list',
+          onclick: () => setSheet({ kind: 'list' }),
+        },
+        `☰ ${s.day.name} · ${s.exIndex + 1}/${s.day.exercises.length}`,
+      ),
       h(
         'button',
         { class: 'ghost-btn', onclick: () => dispatch({ type: 'PAUSE', now: now() }) },
@@ -241,9 +446,43 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
+  /** Machine setting + notes button and the Today / Last time lines for one exercise. */
+  function exerciseInfo(s: SessionState, exerciseId: string): HTMLElement[] {
+    const note = noteFor(exerciseId);
+    const today = setsText(s.logs.filter((l) => l.exerciseId === exerciseId));
+    const last = setsText(lastTime[exerciseId] ?? []);
+    const hasToday = Boolean(todayNotes[exerciseId]);
+    return [
+      h(
+        'button',
+        {
+          class: 'notes-btn',
+          'aria-label': 'Notes and machine setting',
+          onclick: () => setSheet({ kind: 'notes', exerciseId }),
+        },
+        h(
+          'span',
+          { class: note.machineSetting ? 'machine' : 'muted' },
+          note.machineSetting ? `Machine: ${note.machineSetting}` : 'Machine setting',
+        ),
+        h('span', { class: 'notes-tag' }, note.note || hasToday ? 'Notes •' : 'Notes'),
+      ),
+      ...(note.note ? [h('p', { class: 'lasting-note small' }, note.note)] : []),
+      h(
+        'div',
+        { class: 'history small' },
+        today
+          ? h('p', { 'data-today': true }, h('span', { class: 'muted' }, 'Today: '), today)
+          : null,
+        last
+          ? h('p', { 'data-last': true }, h('span', { class: 'muted' }, 'Last time: '), last)
+          : null,
+      ),
+    ];
+  }
+
   function exerciseScreen(s: SessionState): HTMLElement {
     const p = currentPlanned(s);
-    const [min, max] = p.targetReps;
     return h(
       'main',
       { class: 'screen exercise', 'data-screen': 'exercise' },
@@ -254,10 +493,11 @@ export function mountApp(root: HTMLElement): void {
         { class: 'set-counter', 'data-set-counter': true },
         `Set ${s.setIndex + 1} of ${p.sets}`,
       ),
-      h('p', { class: 'muted' }, `Target ${min === max ? min : `${min}–${max}`} reps`),
+      h('p', { class: 'muted' }, `Target ${repsRange(p)} reps`),
       h('p', { class: 'focus-cue' }, cueFor(p.exerciseId)),
+      ...exerciseInfo(s, p.exerciseId),
       stepper('Reps', String(s.reps), 'reps', 1),
-      stepper('kg', formatKg(s.weightKg), 'weight', WEIGHT_STEP_KG),
+      stepper(unit, w(s.weightKg), 'weight', stepFor(s.unit)),
       h(
         'button',
         { class: 'primary-btn', onclick: () => dispatch({ type: 'SET_DONE', now: now() }) },
@@ -292,14 +532,116 @@ export function mountApp(root: HTMLElement): void {
         ' — ',
         h('span', { class: 'nowrap' }, `set ${s.setIndex + 1} of ${p.sets}`),
         h('br'),
-        h('span', { class: 'muted' }, `${s.reps} reps × ${formatKg(s.weightKg)} kg`),
+        h('span', { class: 'muted' }, `${s.reps} reps × ${w(s.weightKg)} ${unit}`),
       ),
+      ...exerciseInfo(s, p.exerciseId),
       h(
         'button',
         { class: 'primary-btn', onclick: () => dispatch({ type: 'START_SET', now: now() }) },
         'Start set',
       ),
       footer(),
+    );
+  }
+
+  function listSheet(s: SessionState): HTMLElement {
+    return h(
+      'div',
+      { class: 'overlay sheet', role: 'dialog', 'aria-label': 'Exercise list' },
+      h(
+        'header',
+        { class: 'top-bar' },
+        h('p', { class: 'page-title' }, s.day.name),
+        h('button', { class: 'ghost-btn', onclick: () => setSheet(null) }, 'Close'),
+      ),
+      h(
+        'ol',
+        { class: 'ex-list' },
+        ...s.day.exercises.map((p, i) => {
+          const done = s.logs.filter((l) => l.exerciseId === p.exerciseId).length;
+          const finished = done >= p.sets;
+          const skipped = s.skipped.includes(p.exerciseId);
+          const current = i === s.exIndex;
+          const status = finished ? 'done' : current ? 'current' : skipped ? 'skipped' : 'todo';
+          const label = finished
+            ? '✓ done'
+            : current
+              ? s.phase === 'rest'
+                ? 'up next'
+                : 'now'
+              : skipped
+                ? 'skipped'
+                : '';
+          return h(
+            'li',
+            {},
+            h(
+              'button',
+              {
+                class: `ex-row-btn ${status}`,
+                'data-ex-index': i,
+                disabled: finished || current,
+                onclick: () => dispatch({ type: 'GO_TO_EXERCISE', exIndex: i, now: now() }),
+              },
+              h('strong', {}, exerciseName(p.exerciseId)),
+              h('span', { class: 'muted' }, `${done}/${p.sets} sets · ${repsRange(p)} reps`),
+              label ? h('span', { class: `status ${status}` }, label) : null,
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  function notesSheet(s: SessionState, exerciseId: string): HTMLElement {
+    const note = noteFor(exerciseId);
+    const machine = h('input', {
+      id: 'machine-input',
+      type: 'text',
+      value: note.machineSetting,
+      placeholder: 'e.g. Seat 4, pad 2',
+      autocomplete: 'off',
+      enterkeyhint: 'done',
+    });
+    const lasting = h('textarea', {
+      id: 'note-input',
+      rows: 2,
+      placeholder: 'Shows every time you do this exercise',
+    });
+    lasting.value = note.note;
+    const today = h('textarea', {
+      id: 'today-input',
+      rows: 2,
+      placeholder: 'Only for this workout',
+    });
+    today.value = todayNotes[exerciseId] ?? '';
+
+    const save = () => {
+      const row = { exerciseId, machineSetting: machine.value.trim(), note: lasting.value.trim() };
+      exerciseNotes[exerciseId] = row;
+      const todayText = today.value.trim();
+      todayNotes[exerciseId] = todayText;
+      void saveExerciseNote(db, row).catch(logDbError);
+      void saveSessionNote(db, s.sessionId, exerciseId, todayText).catch(logDbError);
+      setSheet(null);
+    };
+
+    return h(
+      'div',
+      { class: 'overlay sheet', role: 'dialog', 'aria-label': 'Notes' },
+      h(
+        'header',
+        { class: 'top-bar' },
+        h('p', { class: 'page-title small-title' }, exerciseName(exerciseId)),
+        h('button', { class: 'ghost-btn', onclick: () => setSheet(null) }, 'Cancel'),
+      ),
+      h('label', { class: 'field-label', for: 'machine-input' }, 'Machine setting'),
+      machine,
+      h('label', { class: 'field-label', for: 'note-input' }, 'Exercise note'),
+      lasting,
+      h('label', { class: 'field-label', for: 'today-input' }, 'Today’s note'),
+      today,
+      h('button', { class: 'primary-btn', onclick: save }, 'Save'),
     );
   }
 
@@ -319,12 +661,9 @@ export function mountApp(root: HTMLElement): void {
 
   function summaryScreen(s: SessionState): HTMLElement {
     const sum = summarize(s);
-    const byExercise = new Map<string, string[]>();
-    for (const l of s.logs) {
-      const list = byExercise.get(l.exerciseId) ?? [];
-      list.push(`${l.reps}×${formatKg(l.weightKg)}`);
-      byExercise.set(l.exerciseId, list);
-    }
+    const byExercise = new Map<string, SetLog[]>();
+    for (const l of s.logs)
+      byExercise.set(l.exerciseId, [...(byExercise.get(l.exerciseId) ?? []), l]);
     const stat = (label: string, value: string, key: string) =>
       h(
         'div',
@@ -332,6 +671,8 @@ export function mountApp(root: HTMLElement): void {
         h('span', { class: 'stat-value' }, value),
         h('span', { class: 'muted' }, label),
       );
+    const todayNote = (id: string) =>
+      todayNotes[id] ? h('span', { class: 'today-note' }, `“${todayNotes[id]}”`) : null;
     return h(
       'main',
       { class: 'screen summary', 'data-screen': 'summary' },
@@ -341,7 +682,7 @@ export function mountApp(root: HTMLElement): void {
         'div',
         { class: 'stats' },
         stat('sets', String(sum.setsDone), 'sets'),
-        stat('kg volume', formatKg(sum.totalVolumeKg), 'volume'),
+        stat(`${unit} volume`, w(sum.totalVolumeKg), 'volume'),
         stat('rest overruns', String(sum.restOverruns), 'overruns'),
       ),
       h(
@@ -355,8 +696,9 @@ export function mountApp(root: HTMLElement): void {
             h(
               'span',
               { class: 'muted' },
-              sets.join(', ') + (sum.skipped.includes(id) ? ' · rest skipped' : ''),
+              setsText(sets) + (sum.skipped.includes(id) ? ' · rest skipped' : ''),
             ),
+            todayNote(id),
           ),
         ),
         ...sum.skipped
@@ -367,21 +709,11 @@ export function mountApp(root: HTMLElement): void {
               { class: 'skipped' },
               h('strong', {}, exerciseName(id)),
               h('span', { class: 'muted' }, 'skipped'),
+              todayNote(id),
             ),
           ),
       ),
-      h(
-        'button',
-        {
-          class: 'primary-btn',
-          onclick: () => {
-            view = { screen: 'today', upNextDayId: null };
-            render();
-            void loadUpNext();
-          },
-        },
-        'Done',
-      ),
+      h('button', { class: 'primary-btn', onclick: goToday }, 'Done'),
     );
   }
 
@@ -390,5 +722,11 @@ export function mountApp(root: HTMLElement): void {
   }
 
   render();
+  void getUnit(db)
+    .then((u) => {
+      unit = u;
+      if (view.screen !== 'session') render();
+    })
+    .catch(logDbError);
   void loadUpNext();
 }

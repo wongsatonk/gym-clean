@@ -75,7 +75,6 @@ h1 {
 
 .today {
   gap: 12px;
-  padding-top: max(28px, env(safe-area-inset-top));
 }
 
 .app-title {
@@ -317,4 +316,189 @@ h1 {
 
 .nowrap {
   white-space: nowrap;
+}
+
+/* ---------- M1b: lists, notes, settings ---------- */
+
+.top-bar.end {
+  justify-content: flex-end;
+}
+
+.list-btn {
+  font-weight: 600;
+}
+
+.page-title {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.small-title {
+  font-size: 26px;
+}
+
+.small {
+  font-size: 18px;
+}
+
+.field-label {
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.seg-btn {
+  min-height: 72px;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.seg-btn.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+.ex-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.ex-row,
+.ex-row-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  text-align: left;
+  width: 100%;
+}
+
+.ex-row-btn {
+  position: relative;
+  padding-right: 96px;
+}
+
+.ex-row-btn.current {
+  border-color: var(--accent);
+}
+
+.ex-row-btn.done {
+  opacity: 0.6;
+}
+
+.ex-row-btn:disabled {
+  cursor: default;
+}
+
+.status {
+  position: absolute;
+  right: 14px;
+  top: 12px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.status.done,
+.status.current {
+  color: var(--accent);
+}
+
+.status.skipped {
+  color: var(--warn);
+}
+
+.machine {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.notes-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  text-align: left;
+}
+
+.notes-tag {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.lasting-note {
+  color: var(--text);
+  border-left: 3px solid var(--accent);
+  padding-left: 10px;
+  white-space: pre-wrap;
+}
+
+.history p {
+  margin: 0;
+}
+
+.today-note {
+  font-style: italic;
+  color: var(--text);
+}
+
+.sticky-bottom {
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  padding: 12px 0 max(4px, env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, var(--bg) 24%);
+}
+
+.sticky-bottom .primary-btn {
+  width: 100%;
+}
+
+.primary-btn:disabled {
+  opacity: 0.6;
+}
+
+.sheet {
+  justify-content: flex-start;
+  gap: 10px;
+  overflow-y: auto;
+  padding-top: max(12px, env(safe-area-inset-top));
+  max-width: 560px;
+  margin: 0 auto;
+  background: var(--bg);
+}
+
+.sheet .primary-btn {
+  margin-top: 8px;
+}
+
+input[type='text'],
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  min-height: var(--tap-min);
+  width: 100%;
+}
+
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
 }

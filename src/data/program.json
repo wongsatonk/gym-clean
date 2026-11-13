@@ -19,7 +19,7 @@
           "sets": 3,
           "targetReps": [8, 12],
           "restSec": 90,
-          "startWeightKg": 16,
+          "startWeightKg": 15,
           "tracking": "manual"
         },
         {
@@ -27,7 +27,7 @@
           "sets": 3,
           "targetReps": [8, 12],
           "restSec": 90,
-          "startWeightKg": 14,
+          "startWeightKg": 15,
           "tracking": "pose"
         },
         {
@@ -35,7 +35,7 @@
           "sets": 3,
           "targetReps": [12, 15],
           "restSec": 60,
-          "startWeightKg": 6,
+          "startWeightKg": 5,
           "tracking": "pose"
         },
         {
@@ -43,7 +43,7 @@
           "sets": 3,
           "targetReps": [10, 12],
           "restSec": 60,
-          "startWeightKg": 12,
+          "startWeightKg": 12.5,
           "tracking": "manual"
         },
         {
@@ -65,7 +65,7 @@
           "sets": 4,
           "targetReps": [8, 12],
           "restSec": 90,
-          "startWeightKg": 22,
+          "startWeightKg": 22.5,
           "tracking": "pose"
         },
         {
@@ -81,7 +81,7 @@
           "sets": 3,
           "targetReps": [12, 15],
           "restSec": 60,
-          "startWeightKg": 6,
+          "startWeightKg": 5,
           "tracking": "manual"
         },
         {
@@ -119,7 +119,7 @@
           "sets": 3,
           "targetReps": [8, 12],
           "restSec": 90,
-          "startWeightKg": 18,
+          "startWeightKg": 17.5,
           "tracking": "manual"
         },
         {
@@ -127,7 +127,7 @@
           "sets": 3,
           "targetReps": [10, 12],
           "restSec": 90,
-          "startWeightKg": 12,
+          "startWeightKg": 12.5,
           "tracking": "manual"
         },
         {
@@ -157,7 +157,7 @@
           "sets": 4,
           "targetReps": [6, 10],
           "restSec": 120,
-          "startWeightKg": 18,
+          "startWeightKg": 17.5,
           "tracking": "manual"
         },
         {
@@ -173,7 +173,7 @@
           "sets": 3,
           "targetReps": [8, 12],
           "restSec": 90,
-          "startWeightKg": 14,
+          "startWeightKg": 15,
           "tracking": "manual"
         },
         {
@@ -211,7 +211,7 @@
           "sets": 4,
           "targetReps": [8, 12],
           "restSec": 90,
-          "startWeightKg": 18,
+          "startWeightKg": 17.5,
           "tracking": "manual"
         },
         {
@@ -235,7 +235,7 @@
           "sets": 3,
           "targetReps": [8, 12],
           "restSec": 60,
-          "startWeightKg": 8,
+          "startWeightKg": 7.5,
           "tracking": "manual"
         },
         {
@@ -243,7 +243,7 @@
           "sets": 2,
           "targetReps": [10, 12],
           "restSec": 60,
-          "startWeightKg": 8,
+          "startWeightKg": 7.5,
           "tracking": "manual"
         }
       ]
@@ -289,7 +289,7 @@
           "sets": 3,
           "targetReps": [12, 15],
           "restSec": 60,
-          "startWeightKg": 12,
+          "startWeightKg": 12.5,
           "tracking": "manual"
         }
       ]
