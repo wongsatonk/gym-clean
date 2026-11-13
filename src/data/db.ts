@@ -110,6 +110,16 @@ export async function setUnit(db: GymDb, unit: Unit): Promise<void> {
   await db.settings.put({ key: 'unit', value: unit });
 }
 
+/** M4: speak each counted rep ("One", "Two"…). Default on; only an explicit false turns it off. */
+export async function getSpokenCount(db: GymDb): Promise<boolean> {
+  const row = await db.settings.get('spokenCount');
+  return row?.value !== false;
+}
+
+export async function setSpokenCount(db: GymDb, on: boolean): Promise<void> {
+  await db.settings.put({ key: 'spokenCount', value: on });
+}
+
 /** For each exercise, the sets from the most recent session other than `excludeSessionId`. */
 export async function lastSessionSets(
   db: GymDb,

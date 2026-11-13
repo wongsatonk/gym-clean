@@ -1,12 +1,15 @@
 // Camera screen: live video, 2D skeleton overlay, fps, camera switch, 3D live skeleton.
 // Privacy: frames are only passed to on-device inference; nothing is recorded or uploaded.
+import { ruleFor } from '../core/exercises';
 import { FpsMeter } from '../core/fps';
+import { createRepCounter, type RepCounter } from '../core/repCounter';
 import { JOINTS, SKELETON } from '../core/poseTopology';
 import type { LandmarkFrame } from '../core/types';
 import { openCamera, stopStream, type Facing } from '../pose/camera';
 import type { PoseTracker } from '../pose/landmarker';
 import { h } from './dom';
 import type { Skeleton3D, SkeletonPreset } from './skeleton3d';
+import { voice } from './voice';
 
 export type CameraView = { readonly el: HTMLElement; start(): Promise<void>; stop(): void };
 
@@ -42,7 +45,174 @@ function drawOverlay(canvas: HTMLCanvasElement, frame: LandmarkFrame | null): vo
   }
 }
 
-export function createCameraView(opts: { onClose: () => void; title: string }): CameraView {
+export type CameraViewOptions = {
+  onClose: () => void;
+  title: string;
+  /** Exercise being trained. With a counting rule the sheet shows the live rep counter. */
+  exerciseId?: string;
+  /** Speak each counted rep ("One", "Two", …). Default true. */
+  spokenCount?: boolean;
+  /** Called whenever the rep or partial count changes. */
+  onCount?: (reps: number, partials: number) => void;
+  /** "Set done" tapped. Only shown when the counter is active. */
+  onSetDone?: () => void;
+};
+
+const WORDS = [
+  'Zero',
+  'One',
+  'Two',
+  'Three',
+  'Four',
+  'Five',
+  'Six',
+  'Seven',
+  'Eight',
+  'Nine',
+  'Ten',
+  'Eleven',
+  'Twelve',
+  'Thirteen',
+  'Fourteen',
+  'Fifteen',
+  'Sixteen',
+  'Seventeen',
+  'Eighteen',
+  'Nineteen',
+  'Twenty',
+];
+
+/** "One", "Two", … for spoken counts; digits past twenty (speech reads them fine). */
+function repWord(n: number): string {
+  return WORDS[n] ?? String(n);
+}
+
+export type RepPanel = {
+  readonly el: HTMLElement;
+  /** Feed one detector result (null = no person found). */
+  update(frame: LandmarkFrame | null): void;
+  reset(): void;
+  /** Stops a count word still speaking or queued (closing the sheet, Set done). */
+  silence(): void;
+};
+
+/**
+ * Live rep counter panel. The side label comes from the counter's landmark side, which is the
+ * person's own anatomical side (MediaPipe reads the raw, un-mirrored video). Only the video and
+ * skeleton canvas are CSS-mirrored, never this text, so "Right arm" means their right arm.
+ */
+export function createRepPanel(
+  counter: RepCounter,
+  limb: 'arm' | 'leg',
+  opts: Pick<CameraViewOptions, 'spokenCount' | 'onCount'>,
+): RepPanel {
+  const num = h('p', { class: 'rep-num', 'data-reps': '0' }, '0');
+  const label = h('p', { class: 'rep-label' }, 'reps');
+  const side = h('p', { class: 'rep-side', 'data-side': '' });
+  const partials = h('p', { class: 'rep-partials', 'data-partials': '0' }, '');
+  const hint = h(
+    'p',
+    { class: 'rep-hint', 'data-hint': 'frame', 'aria-live': 'polite' },
+    'Step into frame',
+  );
+  const el = h(
+    'section',
+    { class: 'rep-panel', 'aria-label': 'Rep counter' },
+    h('div', { class: 'rep-count' }, num, label),
+    h('div', { class: 'rep-info' }, side, hint, partials),
+  );
+  let shownReps = -1;
+  let shownPartials = -1;
+  let shownSide = '';
+  let shownHint = '';
+
+  const sideText = (s: RepCounter['side']): string => {
+    if (!s) return '';
+    const part = limb === 'arm' ? 'arm' : 'leg';
+    if (s === 'both') return `Both ${part}s`;
+    return `${s === 'left' ? 'Left' : 'Right'} ${part}`;
+  };
+
+  function render(present: boolean): void {
+    const { reps, partials: p } = counter;
+    if (reps !== shownReps || p !== shownPartials) {
+      if (reps !== shownReps && shownReps >= 0) {
+        num.classList.remove('bump');
+        void num.offsetWidth; // restart the animation
+        num.classList.add('bump');
+      }
+      shownReps = reps;
+      shownPartials = p;
+      num.textContent = String(reps);
+      num.dataset.reps = String(reps);
+      label.textContent = reps === 1 ? 'rep' : 'reps';
+      partials.dataset.partials = String(p);
+      partials.textContent = p > 0 ? `${p} partial${p === 1 ? '' : 's'}` : '';
+    }
+    const s = sideText(counter.side);
+    if (s !== shownSide) {
+      shownSide = s;
+      side.textContent = s;
+      side.dataset.side = counter.side ?? '';
+    }
+    const hintKey =
+      !present || !counter.tracking ? 'frame' : counter.phase === 'setup' ? 'start' : '';
+    if (hintKey !== shownHint) {
+      shownHint = hintKey;
+      hint.dataset.hint = hintKey;
+      hint.textContent =
+        hintKey === 'frame'
+          ? 'Step into frame'
+          : hintKey === 'start'
+            ? 'Get into start position'
+            : '';
+    }
+  }
+
+  // The count word in flight, so closing the sheet only cancels speech this panel started.
+  let pending: SpeechSynthesisUtterance | null = null;
+  function say(text: string): void {
+    // Cancel-then-speak: a count must never lag behind queued speech.
+    if (pending) voice.cancel();
+    const u = voice.speak(text);
+    pending = u;
+    if (u) {
+      const done = () => {
+        if (pending === u) pending = null;
+      };
+      u.addEventListener('end', done);
+      u.addEventListener('error', done);
+    }
+  }
+
+  render(false);
+  return {
+    el,
+    update(frame) {
+      if (frame) {
+        const before = { reps: counter.reps, partials: counter.partials };
+        for (const ev of counter.push(frame)) {
+          // Partials are not spoken here: that cue belongs to the focus coach (M5).
+          if (ev.type === 'rep' && opts.spokenCount !== false) say(repWord(ev.index));
+        }
+        if (counter.reps !== before.reps || counter.partials !== before.partials) {
+          opts.onCount?.(counter.reps, counter.partials);
+        }
+      }
+      render(frame !== null);
+    },
+    reset() {
+      counter.reset();
+      render(false);
+    },
+    silence() {
+      if (pending) voice.cancel();
+      pending = null;
+    },
+  };
+}
+
+export function createCameraView(opts: CameraViewOptions): CameraView {
   let facing: Facing = 'user';
   let stream: MediaStream | null = null;
   let tracker: PoseTracker | null = null;
@@ -58,6 +228,8 @@ export function createCameraView(opts: { onClose: () => void; title: string }): 
   const stage = h('div', { class: 'cam-stage', 'data-facing': facing }, video, overlay);
   const status = h('p', { class: 'cam-status', 'aria-live': 'polite' }, 'Starting camera…');
   const skelSlot = h('div', { class: 'skeleton-slot' });
+  const rule = opts.exerciseId ? ruleFor(opts.exerciseId) : undefined;
+  const counter = rule ? createRepPanel(createRepCounter(rule), rule.limb, opts) : null;
 
   const presetBtn = (p: SkeletonPreset, label: string) =>
     h(
@@ -77,13 +249,28 @@ export function createCameraView(opts: { onClose: () => void; title: string }): 
 
   const el = h(
     'div',
-    { class: 'overlay sheet camera-sheet', role: 'dialog', 'aria-label': 'Camera' },
+    {
+      class: `overlay sheet camera-sheet${counter ? ' counting' : ''}`,
+      role: 'dialog',
+      'aria-label': 'Camera',
+    },
     h(
       'header',
       { class: 'top-bar' },
       h('p', { class: 'page-title small-title' }, opts.title),
-      h('button', { class: 'ghost-btn', onclick: () => opts.onClose() }, 'Close'),
+      h(
+        'button',
+        {
+          class: 'ghost-btn',
+          onclick: () => {
+            counter?.silence();
+            opts.onClose();
+          },
+        },
+        'Close',
+      ),
     ),
+    counter?.el,
     stage,
     status,
     h(
@@ -95,6 +282,23 @@ export function createCameraView(opts: { onClose: () => void; title: string }): 
     ),
     skelSlot,
     h('p', { class: 'muted small' }, 'On-device only. Nothing is recorded or uploaded.'),
+    counter &&
+      h(
+        'div',
+        { class: 'sticky-bottom' },
+        h(
+          'button',
+          {
+            class: 'primary-btn',
+            onclick: () => {
+              // Silence first so a late count word can't cut off the rest cue that follows.
+              counter?.silence();
+              opts.onSetDone?.();
+            },
+          },
+          'Set done',
+        ),
+      ),
   );
 
   function setStatus(text: string, data: Record<string, string> = {}): void {
@@ -115,6 +319,7 @@ export function createCameraView(opts: { onClose: () => void; title: string }): 
       const frame = tracker.detect(video, now - t0);
       fps.tick(now);
       drawOverlay(overlay, frame);
+      counter?.update(frame);
       skeleton?.update(frame?.world, facing === 'user');
       if (now - lastStatus > 250) {
         lastStatus = now;
@@ -140,6 +345,9 @@ export function createCameraView(opts: { onClose: () => void; title: string }): 
   async function switchCamera(): Promise<void> {
     facing = facing === 'user' ? 'environment' : 'user';
     stage.dataset.facing = facing;
+    // Counted reps survive a camera switch: the counter itself handles a re-zeroed or jumping
+    // frame clock (t backwards → back to setup, counts kept; > 500 ms gap → reseed), so we just
+    // keep feeding it frames. Only start() resets, before the first frame of the sheet.
     stopStream(stream);
     try {
       stream = await openCamera(video, facing);
@@ -182,11 +390,14 @@ export function createCameraView(opts: { onClose: () => void; title: string }): 
       }
       if (!running) return;
       t0 = performance.now();
+      // Fresh sheet: nothing counted yet, so no onCount(0, 0). Camera switches don't reset.
+      counter?.reset();
       setStatus(`Tracking · ${tracker.delegate}`, { delegate: tracker.delegate });
       schedule();
     },
     stop() {
       running = false;
+      counter?.silence();
       if ('cancelVideoFrameCallback' in video) video.cancelVideoFrameCallback(loopHandle);
       cancelAnimationFrame(loopHandle);
       stopStream(stream);

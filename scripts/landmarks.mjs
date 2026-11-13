@@ -1,5 +1,8 @@
-// npm run landmarks [-- <dir>]  (default dir: fixtures/videos)
-// Extracts pose landmarks from every video under <dir> into fixtures/landmarks/<same path>.json.
+// npm run landmarks [-- <dir>] [--force]  (default dir: fixtures/videos)
+// Extracts pose landmarks from every video under <dir> into
+// fixtures/landmarks/<path relative to fixtures/videos or fixtures/synthetic>.json, so
+// `npm run landmarks -- fixtures/videos/curl` writes fixtures/landmarks/curl/<clip>.json.
+// Clips whose JSON already exists are skipped unless --force.
 // Raw videos never leave this machine; only the landmark JSON is committed (CLAUDE.md).
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -10,8 +13,17 @@ import { createServer } from 'vite';
 
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.m4v', '.webm']);
 const root = process.cwd();
-const inputDir = resolve(process.argv[2] ?? 'fixtures/videos');
+const args = process.argv.slice(2);
+const force = args.includes('--force');
+const inputDir = resolve(args.find((a) => !a.startsWith('--')) ?? 'fixtures/videos');
 const outDir = resolve('fixtures/landmarks');
+const SOURCE_ROOTS = ['fixtures/videos', 'fixtures/synthetic'].map((d) => resolve(d));
+
+/** Path of `file` relative to the fixtures/videos or fixtures/synthetic folder that holds it. */
+function fixturePath(file) {
+  const base = SOURCE_ROOTS.find((r) => file.startsWith(r + '/')) ?? inputDir;
+  return relative(base, file);
+}
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
@@ -48,8 +60,12 @@ const toUrl = (abs) => '/' + relative(root, abs).split('/').map(encodeURICompone
 
 let failures = 0;
 for (const file of videos) {
-  const rel = relative(inputDir, file);
+  const rel = fixturePath(file);
   const out = join(outDir, rel.replace(/\.[^.]+$/, '.json'));
+  if (!force && existsSync(out)) {
+    console.log(`${rel} … kept existing ${relative(root, out)} (--force to redo)`);
+    continue;
+  }
   process.stdout.write(`${rel} … `);
   let result = await page.evaluate((u) => window.__extract(u), toUrl(file));
   if (result.error) {

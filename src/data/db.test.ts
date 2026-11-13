@@ -5,6 +5,7 @@ import {
   GymDb,
   finishSession,
   getExerciseNote,
+  getSpokenCount,
   getUnit,
   lastSessionSets,
   lastWeights,
@@ -12,6 +13,7 @@ import {
   saveSessionNote,
   saveSet,
   sessionNotes,
+  setSpokenCount,
   setUnit,
   setsForSession,
   startSessionRow,
@@ -115,5 +117,31 @@ describe('GymDb v2 (M1b)', () => {
     expect(last['Other']).toHaveLength(1);
     expect(last['Never']).toBeUndefined();
     expect(lastWeights(last)).toEqual({ Dumbbell_Bench_Press: 22.5, Other: 20 });
+  });
+});
+
+describe('GymDb settings (M4)', () => {
+  it('counts reps out loud by default, and remembers when turned off and on', async () => {
+    expect(await getSpokenCount(db)).toBe(true);
+    await setSpokenCount(db, false);
+    expect(await getSpokenCount(db)).toBe(false);
+    await setSpokenCount(db, true);
+    expect(await getSpokenCount(db)).toBe(true);
+  });
+
+  it('keeps the spoken-count setting separate from the unit', async () => {
+    await setSpokenCount(db, false);
+    await setUnit(db, 'lb');
+    expect(await getSpokenCount(db)).toBe(false);
+    expect(await getUnit(db)).toBe('lb');
+  });
+
+  it('survives reopening the database', async () => {
+    await setSpokenCount(db, false);
+    db.close();
+    const again = new GymDb(db.name);
+    await again.open();
+    expect(await getSpokenCount(again)).toBe(false);
+    again.close();
   });
 });

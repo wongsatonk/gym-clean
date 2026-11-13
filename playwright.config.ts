@@ -1,7 +1,8 @@
 import { defineConfig, type PlaywrightTestConfig } from '@playwright/test';
 import { FAKE_PERSON_VIDEO } from './e2e/fake-camera.setup';
 
-const PORT = 5174;
+// E2E_PORT lets several checkouts/worktrees run e2e side by side.
+const PORT = Number(process.env.E2E_PORT ?? 5174);
 
 export default defineConfig({
   testDir: 'e2e',
@@ -18,7 +19,7 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile',
-      testIgnore: /camera-person\.spec\.ts/,
+      testIgnore: /(camera-person|rep-count)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -41,7 +42,10 @@ export default defineConfig({
     {
       // Same phone, but the fake camera plays the synthetic mannequin clip (a "person").
       name: 'mobile-person-camera',
-      testMatch: /camera-person\.spec\.ts/,
+      // Live pose inference is CPU-heavy: in parallel, pages drop to 3–6 fps and miss the curl
+      // bottom (reps read as partials). One at a time they run at ~20 fps.
+      workers: 1,
+      testMatch: /(camera-person|rep-count)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -63,6 +67,7 @@ export default defineConfig({
     command: `npx vite --port ${PORT} --strictPort`,
     url: `https://localhost:${PORT}`,
     ignoreHTTPSErrors: true,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse: a server left on this port by another checkout would silently test its code.
+    reuseExistingServer: false,
   },
 });
