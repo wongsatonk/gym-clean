@@ -19,3 +19,8 @@ focusrep-starter.zip
 
 # MediaPipe wasm runtime, copied from node_modules on install
 public/mediapipe/
+
+# Synthetic clips are reproducible with `npm run synthetic`; only their landmark JSON is committed.
+# Exception: the M3 curl clip feeds the e2e fake camera.
+fixtures/synthetic/**/*.webm
+!fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm
