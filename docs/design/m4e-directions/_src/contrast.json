@@ -1,0 +1,368 @@
+{
+  "energy": [
+    {
+      "pair": "text on bg",
+      "fg": "#FFF7F0",
+      "bg": "#121014",
+      "ratio": 17.85,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text on surface-2",
+      "fg": "#FFF7F0",
+      "bg": "#2B2530",
+      "ratio": 14.05,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text-2 on bg",
+      "fg": "#D2C6C0",
+      "bg": "#121014",
+      "ratio": 11.33,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text-2 on surface-2",
+      "fg": "#D2C6C0",
+      "bg": "#2B2530",
+      "ratio": 8.92,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "on-cta on cta (button label)",
+      "fg": "#1A0B00",
+      "bg": "#FF7A1A",
+      "ratio": 7.37,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "cta on bg (accent text/icons)",
+      "fg": "#FF7A1A",
+      "bg": "#121014",
+      "ratio": 7.25,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "on-success on success",
+      "fg": "#06210F",
+      "bg": "#3BE38B",
+      "ratio": 10.18,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "success on surface",
+      "fg": "#3BE38B",
+      "bg": "#1E1A20",
+      "ratio": 10.25,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "cue on surface",
+      "fg": "#FFD84D",
+      "bg": "#1E1A20",
+      "ratio": 12.41,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "info on surface",
+      "fg": "#8EC9FF",
+      "bg": "#1E1A20",
+      "ratio": 9.76,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "danger on bg",
+      "fg": "#FF6B6B",
+      "bg": "#121014",
+      "ratio": 6.82,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "muscle on body (3D/2D highlight)",
+      "fg": "#FF5FA2",
+      "bg": "#45404A",
+      "ratio": 3.55,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "figure rim (edge) on stage",
+      "fg": "#9A90A0",
+      "bg": "#1E1A20",
+      "ratio": 5.61,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "figure rim (edge) on lit stage",
+      "fg": "#9A90A0",
+      "bg": "#3A3240",
+      "ratio": 4.02,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "text on stage light",
+      "fg": "#FFF7F0",
+      "bg": "#3A3240",
+      "ratio": 11.59,
+      "need": "≥ 4.5",
+      "pass": true
+    }
+  ],
+  "pro": [
+    {
+      "pair": "text on bg",
+      "fg": "#F2F4F7",
+      "bg": "#0D0F12",
+      "ratio": 17.42,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text on surface-2",
+      "fg": "#F2F4F7",
+      "bg": "#20242B",
+      "ratio": 14.13,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text-2 on bg",
+      "fg": "#A9B1BC",
+      "bg": "#0D0F12",
+      "ratio": 8.87,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text-2 on surface-2",
+      "fg": "#A9B1BC",
+      "bg": "#20242B",
+      "ratio": 7.19,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "on-cta on cta (button label)",
+      "fg": "#12160A",
+      "bg": "#C8F31D",
+      "ratio": 14.23,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "cta on bg (accent text/icons)",
+      "fg": "#C8F31D",
+      "bg": "#0D0F12",
+      "ratio": 14.89,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "on-success on success",
+      "fg": "#221800",
+      "bg": "#FFC94D",
+      "ratio": 11.44,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "success on surface",
+      "fg": "#FFC94D",
+      "bg": "#16191E",
+      "ratio": 11.51,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "cue on surface",
+      "fg": "#C5B3FF",
+      "bg": "#16191E",
+      "ratio": 9.45,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "info on surface",
+      "fg": "#A9B1BC",
+      "bg": "#16191E",
+      "ratio": 8.14,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "danger on bg",
+      "fg": "#FF7A7A",
+      "bg": "#0D0F12",
+      "ratio": 7.6,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "muscle on body (3D/2D highlight)",
+      "fg": "#35C8FF",
+      "bg": "#3A424D",
+      "ratio": 5.25,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "figure rim (edge) on stage",
+      "fg": "#8D98A6",
+      "bg": "#16191E",
+      "ratio": 6.02,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "figure rim (edge) on lit stage",
+      "fg": "#8D98A6",
+      "bg": "#2A313B",
+      "ratio": 4.48,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "text on stage light",
+      "fg": "#F2F4F7",
+      "bg": "#2A313B",
+      "ratio": 11.9,
+      "need": "≥ 4.5",
+      "pass": true
+    }
+  ],
+  "track": [
+    {
+      "pair": "text on bg",
+      "fg": "#FFFFFF",
+      "bg": "#000000",
+      "ratio": 21,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text on surface-2",
+      "fg": "#FFFFFF",
+      "bg": "#1D1D1D",
+      "ratio": 16.86,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text-2 on bg",
+      "fg": "#B8B8B8",
+      "bg": "#000000",
+      "ratio": 10.59,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "text-2 on surface-2",
+      "fg": "#B8B8B8",
+      "bg": "#1D1D1D",
+      "ratio": 8.5,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "on-cta on cta (button label)",
+      "fg": "#000000",
+      "bg": "#FFD60A",
+      "ratio": 14.88,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "cta on bg (accent text/icons)",
+      "fg": "#FFD60A",
+      "bg": "#000000",
+      "ratio": 14.88,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "on-success on success",
+      "fg": "#00261A",
+      "bg": "#2EE6A6",
+      "ratio": 10.05,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "success on surface",
+      "fg": "#2EE6A6",
+      "bg": "#111111",
+      "ratio": 11.68,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "cue on surface",
+      "fg": "#7FD8FF",
+      "bg": "#111111",
+      "ratio": 11.84,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "info on surface",
+      "fg": "#B8B8B8",
+      "bg": "#111111",
+      "ratio": 9.52,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "danger on bg",
+      "fg": "#FF6B6B",
+      "bg": "#000000",
+      "ratio": 7.57,
+      "need": "≥ 4.5",
+      "pass": true
+    },
+    {
+      "pair": "muscle on body (3D/2D highlight)",
+      "fg": "#FF5A1F",
+      "bg": "#3D3D3D",
+      "ratio": 3.48,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "figure rim (edge) on stage",
+      "fg": "#9A9A9A",
+      "bg": "#111111",
+      "ratio": 6.71,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "figure rim (edge) on lit stage",
+      "fg": "#9A9A9A",
+      "bg": "#2A2A2A",
+      "ratio": 5.1,
+      "need": "≥ 3",
+      "pass": true
+    },
+    {
+      "pair": "text on stage light",
+      "fg": "#FFFFFF",
+      "bg": "#2A2A2A",
+      "ratio": 14.35,
+      "need": "≥ 4.5",
+      "pass": true
+    }
+  ]
+}
