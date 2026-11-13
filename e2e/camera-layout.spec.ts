@@ -191,6 +191,9 @@ test('Camera test from Settings: big video, no counter, no set-up card', async (
   expect(stage.height).toBeGreaterThanOrEqual(600);
   expect(stage.width).toBe(390);
   await expect(cam.locator('.rep-panel')).toHaveCount(0);
+  // No counter → no range-of-motion gauge.
+  await expect(cam.locator('[data-gauge]')).toHaveCount(0);
+  await expect(cam.locator('.cam-gauge-slot')).toBeHidden();
   await expect(cam.locator('.cam-setup')).toHaveCount(0);
   await expect(cam.getByRole('button', { name: 'Phone position' })).toHaveCount(0);
   await expect(cam.locator('.skeleton3d')).toHaveCount(0);
@@ -309,3 +312,246 @@ test('a failing recorder never stops the camera loop', async ({ page }) => {
     .toBeGreaterThan(1);
   expect(warnings).toHaveLength(1); // warned once, not per frame
 });
+
+// ---- S2: range-of-motion gauge on the video ----
+
+/**
+ * Feeds a fixture through a real counter + panel (synchronously) with the gauge mounted in a
+ * 400px column, and samples the gauge after every frame.
+ */
+async function runGaugeFixture(page: Page, exerciseId: string, fixture: string) {
+  return page.evaluate(
+    async ({ exerciseId, fixture }) => {
+      const load = (p: string) => import(p) as Promise<Record<string, unknown>>;
+      const [ui, rc, ex, rg] = await Promise.all([
+        load('/src/ui/cameraView.ts'),
+        load('/src/core/repCounter.ts'),
+        load('/src/core/exercises/index.ts'),
+        load('/src/core/romGauge.ts'),
+      ]);
+      type Rule = { limb: 'arm' | 'leg' };
+      type Counter = { angle: number | null; lastMiss: string | null; reachedFar: boolean };
+      type Panel = {
+        el: HTMLElement;
+        gauge: HTMLElement;
+        update(f: unknown): void;
+        silence(): void;
+      };
+      const rule = (ex.ruleFor as (id: string) => Rule)(exerciseId);
+      const counter = (rc.createRepCounter as (r: Rule) => Counter)(rule);
+      const panel = (ui.createRepPanel as (c: unknown, l: string, o: unknown) => Panel)(
+        counter,
+        rule.limb,
+        { spokenCount: false },
+      );
+      const slot = document.createElement('div');
+      slot.className = 'cam-gauge-slot';
+      slot.style.cssText = 'position:fixed;top:100px;right:8px;height:400px;bottom:auto';
+      slot.append(panel.gauge);
+      document.body.replaceChildren(panel.el, slot);
+      const g = panel.gauge;
+      const q = (s: string) => g.querySelector(s) as HTMLElement;
+      const readGauge = rg.readGauge as (
+        r: unknown,
+        a: number | null,
+      ) => { position: number } | null;
+      const frames = (await (await fetch(fixture)).json()) as unknown[];
+      const steps = [];
+      for (const f of frames) {
+        panel.update(f);
+        const missedEl = g.querySelector('.gauge-mark[data-missed]') as HTMLElement | null;
+        steps.push({
+          angle: g.dataset.angle ?? '',
+          zone: g.dataset.gaugeZone ?? '',
+          reached: g.dataset.gaugeReached ?? '',
+          missed: g.dataset.gaugeMissed ?? '',
+          lastMiss: counter.lastMiss,
+          reachedFar: counter.reachedFar,
+          hidden: g.hidden,
+          fillColour: getComputedStyle(q('.gauge-fill')).backgroundColor,
+          missedColour: missedEl
+            ? `${missedEl.dataset.mark}:${getComputedStyle(missedEl).backgroundImage}`
+            : null,
+          nowTop: q('.gauge-now').getBoundingClientRect().top,
+          targetTop: q('.gauge-target').getBoundingClientRect().top,
+          startTop: q('.gauge-start').getBoundingClientRect().top,
+          position: readGauge(rule, counter.angle)?.position ?? null,
+        });
+      }
+      const px = (s: string) => parseFloat(getComputedStyle(q(s)).fontSize);
+      const labels = [...g.querySelectorAll('.gauge-label')].map((l) => l.textContent);
+      const sizes = { label: px('.gauge-label'), angle: px('.gauge-angle') };
+      const angleText = q('.gauge-angle').textContent;
+      panel.silence();
+      return { steps, labels, sizes, angleText };
+    },
+    { exerciseId, fixture },
+  );
+}
+
+const GREEN = 'rgb(74, 222, 128)';
+const AMBER = 'rgb(251, 191, 36)';
+
+for (const [exerciseId, fixture] of [
+  ['Dumbbell_Bicep_Curl', '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json'],
+  ['Side_Lateral_Raise', '/fixtures/landmarks/lateral-raise/synthetic-02__reps-3__partials-2.json'],
+  [
+    'Seated_Dumbbell_Press',
+    '/fixtures/landmarks/shoulder-press/synthetic-02__reps-3__partials-2.json',
+  ],
+] as const) {
+  test(`gauge (${exerciseId}): marks, live angle, green when reached, amber on the missed mark`, async ({
+    page,
+  }) => {
+    await page.goto('/');
+    const { steps, labels, sizes, angleText } = await runGaugeFixture(page, exerciseId, fixture);
+    expect(labels).toEqual(['Target', 'Start']);
+    expect(sizes.label).toBeGreaterThanOrEqual(20);
+    expect(sizes.angle).toBeGreaterThanOrEqual(20);
+    expect(angleText).toMatch(/^\d+°$/);
+
+    const live = steps.filter((s) => !s.hidden);
+    expect(live.length).toBeGreaterThan(100);
+    // The angle changes (≥ 30 different whole degrees over the set).
+    expect(new Set(live.map((s) => s.angle)).size).toBeGreaterThan(30);
+    expect(new Set(live.map((s) => s.zone))).toEqual(new Set(['start', 'moving', 'target']));
+    for (const s of live) {
+      // Target at the top for every exercise (inverted raise, contracted-start press included).
+      expect(s.targetTop).toBeLessThan(s.startTop);
+      // The live marker is above the target line exactly when the position is past it.
+      if (s.position !== null && s.position > 1.02) expect(s.nowTop).toBeLessThan(s.targetTop);
+      if (s.position !== null && s.position < -0.02) expect(s.nowTop).toBeGreaterThan(s.startTop);
+      // Green fill exactly while this rep has reached the target.
+      expect(s.reached).toBe(String(s.reachedFar));
+      expect(s.fillColour === GREEN).toBe(s.reachedFar);
+      // Amber line on the mark the last partial missed (far → target, start → start).
+      const want = s.lastMiss === 'far' ? 'target' : s.lastMiss === 'start' ? 'start' : '';
+      expect(s.missed).toBe(want);
+      if (want) {
+        expect(s.missedColour).toContain(`${want}:`);
+        // Reaching the target in the next rep turns that line green (the miss is being fixed).
+        if (want === 'target' && s.reachedFar) expect(s.missedColour).not.toContain(AMBER);
+        else expect(s.missedColour).toContain(AMBER);
+      } else {
+        expect(s.missedColour).toBeNull();
+      }
+    }
+    // Reached → green, then back to the start → reset (latched per rep, not per set).
+    const firstGreen = live.findIndex((s) => s.reached === 'true');
+    expect(firstGreen).toBeGreaterThan(0);
+    expect(live.slice(firstGreen).some((s) => s.reached === 'false')).toBe(true);
+    // At least one partial lit a missed mark.
+    expect(live.some((s) => s.missed !== '')).toBe(true);
+  });
+}
+
+/**
+ * Replaces the pose model with a fixture player (served in place of src/pose/landmarker.ts), so
+ * the real camera view tracks a "person" on the fake camera: frame i = elapsed time / 33 ms.
+ */
+async function fakeTrackerFromFixture(page: Page, fixture: string): Promise<void> {
+  await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export async function createPoseTracker() {
+          const frames = await (await fetch(${JSON.stringify(fixture)})).json();
+          let first = null;
+          return {
+            delegate: 'CPU',
+            detect(_video, t) {
+              first ??= t;
+              const i = Math.floor((t - first) / 33.333);
+              window.__gaugeIdx = i % frames.length;
+              if (window.__gaugeFreezeAt != null && i >= window.__gaugeFreezeAt)
+                return { ...frames[window.__gaugeFreezeAt], t };
+              return { ...frames[i % frames.length], t };
+            },
+            close() {},
+          };
+        }`,
+    }),
+  );
+}
+
+type Box = { x: number; y: number; width: number; height: number };
+const overlaps = (a: Box, b: Box) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+
+for (const vp of [
+  { width: 390, height: 844 },
+  { width: 375, height: 667 },
+]) {
+  test(`gauge on the live camera view (${vp.width}×${vp.height}): shown when tracking, clear of the count and buttons`, async ({
+    page,
+  }, info) => {
+    test.setTimeout(60_000);
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.setViewportSize(vp);
+    await mockSpeech(page);
+    await fakeTrackerFromFixture(page, FIXTURE);
+    // __gaugeFreezeAt holds one fixture frame (for a stable mid-rep screenshot).
+    await page.addInitScript(() => {
+      (window as unknown as { __gaugeFreezeAt: number | null }).__gaugeFreezeAt = null;
+    });
+    await page.goto('/');
+    await mountCurlCamera(page, false);
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    const gauge = cam.locator('[data-gauge]');
+    // Set-up card up first (no stable tracking yet): the gauge stays out of its way.
+    await expect(cam.getByRole('region', { name: 'Set up your phone' })).toBeHidden({
+      timeout: 30_000,
+    });
+    await expect(gauge).toBeVisible();
+    await expect(gauge.locator('.gauge-target .gauge-label')).toHaveText('Target');
+    await expect(gauge.locator('.gauge-start .gauge-label')).toHaveText('Start');
+    // The live angle changes.
+    const first = await gauge.getAttribute('data-angle');
+    await expect.poll(() => gauge.getAttribute('data-angle'), { timeout: 5_000 }).not.toBe(first);
+    await expect(gauge.locator('.gauge-angle')).toHaveText(/^\d+°$/);
+
+    // Not over the count panel, the stage buttons, or the middle of the video (the person).
+    const g = (await gauge.boundingBox()) as Box;
+    const stage = (await cam.locator('.cam-stage').boundingBox()) as Box;
+    const panel = (await cam.locator('.rep-panel').boundingBox()) as Box;
+    const sw = (await cam.getByRole('button', { name: 'Switch camera' }).boundingBox()) as Box;
+    const phone = (await cam.getByRole('button', { name: 'Phone position' }).boundingBox()) as Box;
+    expect(overlaps(g, panel)).toBe(false);
+    expect(overlaps(g, sw)).toBe(false);
+    expect(overlaps(g, phone)).toBe(false);
+    expect(g.x + g.width).toBeLessThanOrEqual(stage.x + stage.width);
+    expect(g.y + g.height).toBeLessThanOrEqual(stage.y + stage.height);
+    expect(g.x).toBeGreaterThanOrEqual(stage.x + stage.width - 84); // right edge only
+    expect(g.height).toBeGreaterThanOrEqual(200);
+
+    // "Phone position" brings the card back over the width of the video: the gauge steps aside.
+    await cam.getByRole('button', { name: 'Phone position' }).click();
+    await expect(cam.getByRole('region', { name: 'Set up your phone' })).toBeVisible();
+    await expect(gauge).toBeHidden();
+    await cam.getByRole('button', { name: 'Got it' }).click();
+    await expect(gauge).toBeVisible();
+
+    if (vp.height === 844) {
+      // Mid-rep screenshot: wait for the arm part-way up, then hold that frame.
+      await expect
+        .poll(
+          async () => {
+            const zone = await gauge.getAttribute('data-gauge-zone');
+            const deg = Number(await gauge.getAttribute('data-angle'));
+            return zone === 'moving' && deg < 110 && deg > 80;
+          },
+          { timeout: 20_000, intervals: [20] },
+        )
+        .toBe(true);
+      await page.evaluate(() => {
+        const w = window as unknown as { __gaugeFreezeAt: number; __gaugeIdx: number };
+        w.__gaugeFreezeAt = w.__gaugeIdx;
+      });
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: info.outputPath('gauge-390x844.png') });
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(vp.width);
+    expect(errors).toEqual([]);
+  });
+}

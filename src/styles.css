@@ -688,21 +688,149 @@ textarea:focus-visible {
   position: absolute;
   top: 8px;
   left: 8px;
-  right: 72px;
+  right: 88px;
   display: flex;
   pointer-events: none;
 }
 
+/* Range-of-motion gauge column: right edge, clear of the count (left), the stage buttons
+   (bottom 8–64px) and the person (centre). */
 .cam-gauge-slot {
   position: absolute;
   top: 8px;
   right: 8px;
   bottom: 80px;
-  width: 56px;
+  width: 72px;
+  pointer-events: none;
 }
 
-.cam-gauge-slot:empty {
+.cam-gauge-slot:empty,
+.cam-stage.setup-open .cam-gauge-slot {
   display: none;
+}
+
+/* Vertical bar: target line at the top, start line at the bottom, for every exercise. Dark
+   backing so it reads on bright gym walls. No transitions: it follows the live angle. */
+.rom-gauge {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 4px;
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.8);
+}
+
+.rom-gauge[hidden] {
+  display: none;
+}
+
+.gauge-track {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The empty channel the fill runs in. */
+.gauge-track::before {
+  content: '';
+  position: absolute;
+  inset: 0 12px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.14);
+}
+
+/* Box from the start line (bottom) to the target line (top): scale 1 = the full range. */
+.gauge-range {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+}
+
+.gauge-fill {
+  position: absolute;
+  inset: 0;
+  transform: scaleY(0);
+  transform-origin: bottom;
+  background: #7dd3fc;
+  will-change: transform;
+}
+
+.rom-gauge[data-gauge-reached='true'] .gauge-fill {
+  background: var(--accent);
+}
+
+/* Current position: a white cap at the end of the fill. */
+.gauge-now {
+  position: absolute;
+  inset: 0 -6px;
+  transform: translateY(100%);
+  border-top: 5px solid var(--text);
+  will-change: transform;
+}
+
+.gauge-mark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--text);
+}
+
+.gauge-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 3px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 0.85);
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.gauge-target .gauge-label {
+  bottom: calc(100% + 3px);
+}
+
+.gauge-start .gauge-label {
+  top: calc(100% + 3px);
+}
+
+/* Reached this rep: the target line turns green and thicker (not colour alone). */
+.rom-gauge[data-gauge-reached='true'] .gauge-target {
+  height: 8px;
+  background: var(--accent);
+}
+
+.rom-gauge[data-gauge-reached='true'] .gauge-target .gauge-label {
+  color: var(--accent);
+}
+
+/* The mark the last partial missed: amber, thicker, dashed (not colour alone). Reaching the
+   target in the next rep turns that line green instead (rule above is more specific). */
+.gauge-mark[data-missed] {
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--warn) 0 10px, transparent 10px 14px);
+}
+
+.gauge-mark[data-missed] .gauge-label {
+  color: var(--warn);
+}
+
+.gauge-angle {
+  flex: 0 0 auto;
+  margin: 0;
+  text-align: center;
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .cam-stage-bottom {

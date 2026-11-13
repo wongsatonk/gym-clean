@@ -10,6 +10,7 @@ import {
   type SpeechDecision,
 } from '../core/coachSpeech';
 import { createRepCounter, type RepCounter } from '../core/repCounter';
+import { GAUGE_MAX, GAUGE_MIN, missedMark, readGauge } from '../core/romGauge';
 import { JOINTS, SKELETON } from '../core/poseTopology';
 import type { LandmarkFrame, RepEvent } from '../core/types';
 import type { DevLogRecorder } from '../data/devlog';
@@ -147,7 +148,113 @@ export type RepPanel = {
   silence(): void;
   /** Speaks the phone-placement sentence (not rate-limited); the next count word cuts it off. */
   speakPlacement(text: string): void;
+  /**
+   * Range-of-motion gauge (vertical bar), updated with the panel. The camera view puts it on the
+   * video's right edge; hidden while the person isn't tracked.
+   */
+  readonly gauge: HTMLElement;
 };
+
+/** Gauge scale: −0.25 (bottom) … 1.25 (top). The start/target lines sit at these % from the top. */
+const GAUGE_SPAN = GAUGE_MAX - GAUGE_MIN;
+const TARGET_TOP_PCT = ((GAUGE_MAX - 1) / GAUGE_SPAN) * 100;
+const START_TOP_PCT = ((GAUGE_MAX - 0) / GAUGE_SPAN) * 100;
+
+type Gauge = { readonly el: HTMLElement; update(counter: RepCounter, present: boolean): void };
+
+/**
+ * Vertical range-of-motion bar: start line (bottom), target line (top) for every exercise (the
+ * core formula orients it), a fill from the start line to the live smoothed angle, green once
+ * this rep reached the target, and an amber line on the mark the last partial missed. Per frame
+ * it only writes two transforms; text and data attributes change only when their value does.
+ */
+function createGauge(): Gauge {
+  const fill = h('div', { class: 'gauge-fill' });
+  const now = h('div', { class: 'gauge-now' });
+  const mark = (which: 'start' | 'target', text: string, topPct: number) =>
+    h(
+      'div',
+      { class: `gauge-mark gauge-${which}`, 'data-mark': which, style: `top: ${topPct}%` },
+      h('span', { class: 'gauge-label' }, text),
+    );
+  const targetMark = mark('target', 'Target', TARGET_TOP_PCT);
+  const startMark = mark('start', 'Start', START_TOP_PCT);
+  // The 0…1 range box (start line to target line); fill and marker scale/move inside it.
+  const range = h(
+    'div',
+    {
+      class: 'gauge-range',
+      style: `top: ${TARGET_TOP_PCT}%; height: ${START_TOP_PCT - TARGET_TOP_PCT}%`,
+    },
+    fill,
+    now,
+  );
+  const track = h('div', { class: 'gauge-track' }, range, targetMark, startMark);
+  const angleText = h('p', { class: 'gauge-angle', 'data-angle': '' }, '');
+  const el = h(
+    'div',
+    {
+      class: 'rom-gauge',
+      'data-gauge': '',
+      'data-angle': '',
+      'data-gauge-zone': '',
+      'data-gauge-reached': 'false',
+      'data-gauge-missed': '',
+      hidden: true,
+    },
+    track,
+    angleText,
+  );
+  let shown = false;
+  let shownPos = NaN;
+  let shownAngle = '';
+  let shownZone = '';
+  let shownReached: boolean | null = null;
+  let shownMissed: string | null = null;
+
+  return {
+    el,
+    update(counter, present) {
+      const reading = present && counter.tracking ? readGauge(counter.rule, counter.angle) : null;
+      const visible = reading !== null;
+      if (visible !== shown) {
+        shown = visible;
+        el.hidden = !visible;
+      }
+      if (!reading) return;
+      // Position rounded to 0.1% of the range: skips style writes for sub-pixel jitter.
+      const pos = Math.round(reading.position * 1000) / 1000;
+      if (pos !== shownPos) {
+        shownPos = pos;
+        fill.style.transform = `scaleY(${pos})`;
+        now.style.transform = `translateY(${(1 - pos) * 100}%)`;
+      }
+      const deg = String(Math.round(reading.angle));
+      if (deg !== shownAngle) {
+        shownAngle = deg;
+        el.dataset.angle = deg;
+        angleText.dataset.angle = deg;
+        angleText.textContent = `${deg}°`;
+      }
+      if (reading.zone !== shownZone) {
+        shownZone = reading.zone;
+        el.dataset.gaugeZone = reading.zone;
+      }
+      const reached = counter.reachedFar;
+      if (reached !== shownReached) {
+        shownReached = reached;
+        el.dataset.gaugeReached = String(reached);
+      }
+      const missed = missedMark(counter.lastMiss ?? undefined) ?? '';
+      if (missed !== shownMissed) {
+        shownMissed = missed;
+        el.dataset.gaugeMissed = missed;
+        targetMark.toggleAttribute('data-missed', missed === 'target');
+        startMark.toggleAttribute('data-missed', missed === 'start');
+      }
+    },
+  };
+}
 
 /**
  * Live rep counter panel. The side label comes from the counter's landmark side, which is the
@@ -199,6 +306,7 @@ export function createRepPanel(
     setLine,
     h('div', { class: 'rep-info' }, side, hint, coach, partials),
   );
+  const gauge = createGauge();
   let shownReps = -1;
   let shownPartials = -1;
   let shownSide = '';
@@ -248,6 +356,7 @@ export function createRepPanel(
             ? 'Get into start position'
             : '';
     }
+    gauge.update(counter, present);
   }
 
   // ---- Speech: counts and hints go through the coachSpeech policy (counts win, ≤ 1 hint / 6 s,
@@ -301,6 +410,7 @@ export function createRepPanel(
   render(false);
   return {
     el,
+    gauge: gauge.el,
     get inFrame() {
       return inFrame;
     },
@@ -509,6 +619,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   function showSetup(open: boolean): void {
     if (!setupCard || !setupBtn) return;
     setupOpen = open;
+    stage.classList.toggle('setup-open', open);
     setupCard.hidden = !open;
     setupCard.dataset.setup = open ? 'open' : 'closed';
     setupBtn.hidden = open;
@@ -597,8 +708,9 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     switchIcon(),
   );
 
-  // Gauge slot (range-of-motion bar, STRETCH S2) sits on the right edge of the video.
-  const gaugeSlot = h('div', { class: 'cam-gauge-slot', 'aria-hidden': 'true' });
+  // Range-of-motion gauge on the right edge of the video (counting exercises only; the Settings
+  // camera test leaves the slot empty). Hidden while the set-up card is up (it spans the width).
+  const gaugeSlot = h('div', { class: 'cam-gauge-slot', 'aria-hidden': 'true' }, counter?.gauge);
 
   // Count + target on the video. Its height feeds --hud-h so the set-up card never covers it.
   const hud = counter ? h('div', { class: 'cam-hud' }, counter.el) : null;
@@ -610,7 +722,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
 
   const stage = h(
     'div',
-    { class: 'cam-stage', 'data-facing': facing },
+    { class: `cam-stage${setupOpen ? ' setup-open' : ''}`, 'data-facing': facing },
     video,
     overlay,
     hud,
