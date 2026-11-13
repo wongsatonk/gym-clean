@@ -10,6 +10,7 @@ import {
   type SessionEvent,
   type SessionState,
 } from './session';
+import { formatWeight, toUnit } from './units';
 
 const exA: PlannedExercise = {
   exerciseId: 'A',
@@ -296,5 +297,102 @@ describe('FINISH and summary', () => {
       skipped: ['B'],
       durationSec: 300,
     });
+  });
+});
+
+describe('units and defaults (M1b)', () => {
+  it('uses last time’s weight as the default, exactly', () => {
+    const s = startSession(day, 's', T0, { lastWeightKg: { A: 23.75 } });
+    expect(s.weightKg).toBe(23.75);
+  });
+
+  it('snaps planned start weights to the step of the chosen unit', () => {
+    const s = startSession(day, 's', T0, { unit: 'lb' });
+    expect(s.unit).toBe('lb');
+    expect(toUnit(s.weightKg, 'lb')).toBeCloseTo(45, 6); // 20 kg -> 45 lb
+  });
+
+  it('steps weight in the display unit without drift', () => {
+    let s = startSession(day, 's', T0, { unit: 'lb' });
+    for (let i = 0; i < 20; i++) s = next(s, { type: 'ADJUST', field: 'weight', delta: 5 });
+    expect(toUnit(s.weightKg, 'lb')).toBeCloseTo(145, 6);
+    expect(formatWeight(s.weightKg, 'lb')).toBe('145');
+  });
+});
+
+describe('GO_TO_EXERCISE and wrap-around (M1b)', () => {
+  it('jumps to another exercise mid-set with its defaults', () => {
+    const s = run(fresh(), { type: 'GO_TO_EXERCISE', exIndex: 2, now: sec(10) });
+    expect(s.phase).toBe('exercise');
+    expect(currentPlanned(s).exerciseId).toBe('C');
+    expect(s.setIndex).toBe(0);
+    expect(s.reps).toBe(5);
+    expect(s.setStartedAt).toBe(sec(10));
+  });
+
+  it('during rest, changes the upcoming exercise and keeps resting', () => {
+    const s = run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(0) },
+      { type: 'GO_TO_EXERCISE', exIndex: 1, now: sec(5) },
+    );
+    expect(s.phase).toBe('rest');
+    expect(currentPlanned(s).exerciseId).toBe('B');
+    expect(restElapsedMs(s, sec(20))).toBe(20_000);
+  });
+
+  it('ignores jumps to the current, a finished or a missing exercise', () => {
+    const s = fresh();
+    expect(next(s, { type: 'GO_TO_EXERCISE', exIndex: 0, now: sec(1) })).toBe(s);
+    expect(next(s, { type: 'GO_TO_EXERCISE', exIndex: 9, now: sec(1) })).toBe(s);
+    const bDone = run(
+      s,
+      { type: 'GO_TO_EXERCISE', exIndex: 1, now: sec(1) },
+      { type: 'SET_DONE', now: sec(2) },
+      { type: 'START_SET', now: sec(3) },
+    );
+    expect(next(bDone, { type: 'GO_TO_EXERCISE', exIndex: 1, now: sec(4) })).toBe(bDone);
+  });
+
+  it('wraps around to unfinished exercises and resumes at the next set, with today’s values', () => {
+    let s = run(
+      fresh(),
+      { type: 'ADJUST', field: 'reps', delta: -3 }, // A set 1: 9 reps
+      { type: 'SET_DONE', now: sec(10) }, // A 1/2 done
+      { type: 'GO_TO_EXERCISE', exIndex: 1, now: sec(20) }, // upcoming B
+      { type: 'START_SET', now: sec(60) },
+      { type: 'SET_DONE', now: sec(90) }, // B done -> next unfinished after B is C
+    );
+    expect(currentPlanned(s).exerciseId).toBe('C');
+    s = run(s, { type: 'START_SET', now: sec(150) }, { type: 'SET_DONE', now: sec(170) }); // C done -> wrap to A
+    expect(s.phase).toBe('rest');
+    expect(currentPlanned(s).exerciseId).toBe('A');
+    expect(s.setIndex).toBe(1);
+    expect(s.reps).toBe(9);
+    expect(s.weightKg).toBe(20);
+    s = run(s, { type: 'START_SET', now: sec(250) }, { type: 'SET_DONE', now: sec(280) });
+    expect(s.phase).toBe('summary');
+    expect(s.logs.map((l) => `${l.exerciseId}${l.setIndex}`)).toEqual(['A0', 'B0', 'C0', 'A1']);
+  });
+
+  it('a jump un-skips an exercise', () => {
+    const s = run(
+      fresh(),
+      { type: 'SKIP_EXERCISE', now: sec(1) },
+      { type: 'GO_TO_EXERCISE', exIndex: 0, now: sec(2) },
+    );
+    expect(s.skipped).toEqual([]);
+    expect(currentPlanned(s).exerciseId).toBe('A');
+  });
+
+  it('skipped exercises are not wrapped back to', () => {
+    const s = run(
+      fresh(),
+      { type: 'SKIP_EXERCISE', now: sec(1) }, // skip A -> B
+      { type: 'SET_DONE', now: sec(2) }, // B done -> C
+      { type: 'START_SET', now: sec(3) },
+      { type: 'SET_DONE', now: sec(4) }, // C done -> nothing unfinished except skipped A
+    );
+    expect(s.phase).toBe('summary');
   });
 });

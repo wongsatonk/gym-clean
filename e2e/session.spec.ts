@@ -91,6 +91,8 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   // Today
   await expect(page.locator('.day-btn')).toHaveCount(6);
   await page.getByRole('button', { name: /Push A/ }).click();
+  await expect(page.locator('.ex-row')).toHaveCount(6);
+  await page.getByRole('button', { name: 'Start workout' }).click();
 
   // Exercise: set 1 of bench press, adjust reps 10 -> 8 and weight 20 -> 22.5
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
@@ -153,7 +155,7 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await expect(page.getByRole('heading', { name: 'Incline Dumbbell Press' })).toBeVisible();
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 3');
   await expect(reps).toHaveText('12');
-  await expect(kg).toHaveText('16');
+  await expect(kg).toHaveText('15');
 
   await page.clock.runFor(40_000);
   await page.getByRole('button', { name: 'Set done' }).click();
@@ -165,10 +167,10 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await expect(page.getByRole('button', { name: 'Tap again to end' })).toBeVisible();
   await page.getByRole('button', { name: 'Tap again to end' }).click();
 
-  // Summary: 8×22.5 + 12×16 = 372 kg, one overrun (155 s > 150 s)
+  // Summary: 8×22.5 + 12×15 = 360 kg, one overrun (155 s > 150 s)
   await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
   await expect(page.locator('[data-stat="sets"] .stat-value')).toHaveText('2');
-  await expect(page.locator('[data-stat="volume"] .stat-value')).toHaveText('372');
+  await expect(page.locator('[data-stat="volume"] .stat-value')).toHaveText('360');
   await expect(page.locator('[data-stat="overruns"] .stat-value')).toHaveText('1');
   await expect(page.getByText('skipped')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__wake)).toEqual(['request', 'release']);
@@ -186,7 +188,7 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
     })),
   ).toEqual([
     { exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 8, weightKg: 22.5, restTakenSec: 0 },
-    { exerciseId: 'Incline_Dumbbell_Press', setIndex: 0, reps: 12, weightKg: 16, restTakenSec: 0 },
+    { exerciseId: 'Incline_Dumbbell_Press', setIndex: 0, reps: 12, weightKg: 15, restTakenSec: 0 },
   ]);
 
   // Back to Today, Pull A is suggested next

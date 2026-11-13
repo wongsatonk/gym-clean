@@ -32,6 +32,7 @@ describe('program data', () => {
       expect(max).toBeGreaterThanOrEqual(min);
       expect(p.restSec).toBeGreaterThanOrEqual(30);
       expect(p.startWeightKg ?? 0).toBeGreaterThanOrEqual(0);
+      expect((p.startWeightKg ?? 0) % 2.5, `${p.exerciseId} weight on a 2.5 kg step`).toBe(0);
       expect(['pose', 'manual']).toContain(p.tracking);
     }
   });
@@ -44,6 +45,13 @@ describe('program data', () => {
     const upperPriority = muscleSets(['chest', 'biceps', 'triceps', 'lats', 'middle back']);
     const legs = muscleSets(['quadriceps', 'hamstrings', 'calves']);
     expect(upperPriority).toBeGreaterThan(legs);
+  });
+
+  it('never repeats an exercise within a day (logs are keyed by exerciseId)', () => {
+    for (const d of program.days) {
+      const ids = d.exercises.map((e) => e.exerciseId);
+      expect(new Set(ids).size, d.id).toBe(ids.length);
+    }
   });
 
   it('looks up a day by id', () => {
