@@ -110,6 +110,17 @@ test('camera set → dev log has frames, rep events, spoken counts and the corre
   await page.getByRole('button', { name: 'Camera', exact: true }).click();
   const cam = page.getByRole('dialog', { name: 'Camera' });
 
+  // GitHub's runners have no GPU (~2.5 fps): too slow to catch a curl's bottom, so CI skips this
+  // live test below 8 fps (same rule as rep-count.spec.ts). Locally it always runs.
+  if (process.env.CI) {
+    await expect
+      .poll(async () => Number(await cam.getAttribute('data-fps')), { timeout: 30_000 })
+      .toBeGreaterThan(0);
+    await page.waitForTimeout(3_000); // let the rolling fps meter settle
+    const measured = Number(await cam.getAttribute('data-fps'));
+    test.skip(measured < 8, `live inference at ${measured} fps (< 8) on this CI runner`);
+  }
+
   // At least one counted rep (bounded wait).
   await expect
     .poll(async () => Number((await cam.locator('[data-reps]').getAttribute('data-reps')) ?? 0), {

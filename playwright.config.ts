@@ -8,6 +8,9 @@ export default defineConfig({
   testDir: 'e2e',
   globalSetup: './e2e/fake-camera.setup.ts',
   fullyParallel: true,
+  // CI runners have 2 cores and no GPU: software WebGL (3D demos) in parallel starves the live
+  // camera tests. Run one at a time there; locally stay parallel.
+  ...(process.env.CI ? { workers: 1 } : {}),
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
