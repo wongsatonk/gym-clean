@@ -241,7 +241,7 @@ describe('createRepCounter: clean reps', () => {
     expect(counter.reps).toBe(2);
     expect(counter.partials).toBe(0);
     // Eccentric = lowering back to the shoulders (toward contracted, 1300 ms) — timed
-    // threshold to threshold (155° → 95° = 60/95 of each leg).
+    // threshold to threshold (155° → 100° = 55/95 of each leg).
     const first = events[0];
     expect(first?.eccentricMs).toBeGreaterThan(first?.concentricMs ?? Infinity);
     expect(first?.eccentricMs).toBeGreaterThan(700);
@@ -337,6 +337,19 @@ describe('createRepCounter: jitter and hysteresis', () => {
     expect(events).toHaveLength(0);
     expect(counter.phase).toBe('top');
   });
+  it('±8° jitter centred exactly on the extended threshold never makes a partial', () => {
+    const keys = curve(170, [
+      [1000, 170],
+      [300, CURL.extended],
+      [5000, CURL.extended],
+      [300, 170],
+      [1000, 170],
+    ]);
+    const noise = (i: number) => (Math.floor(i / 3) % 2 === 0 ? 8 : -8);
+    const { counter, events } = runAll(CURL, sample(CURL, keys, { noise }));
+    expect(events).toHaveLength(0);
+    expect(counter.partials).toBe(0);
+  });
 });
 
 describe('createRepCounter: partials', () => {
@@ -347,7 +360,7 @@ describe('createRepCounter: partials', () => {
       [300, 35],
       [1200, 170],
       [500, 170],
-      [600, 100], // turns around at 100° (curl contracted threshold is 55°)
+      [600, 100], // turns around at 100° (curl contracted threshold is 70°)
       [700, 170],
       [500, 170],
       [800, 35],
@@ -369,15 +382,26 @@ describe('createRepCounter: partials', () => {
   });
 
   it('ignores a shallow dip that is less than the minimum partial depth', () => {
-    // Leaves the top band (below 140°) but only ~17° past the 150° threshold.
+    // Holds just past the exit of the top band (E − hysteresis − 1), but less than the minimum
+    // partial depth past the extended threshold.
+    const dip = CURL.extended - CURL.hysteresisDeg - 1;
+    expect(CURL.extended - dip).toBeLessThan(CURL.minPartialDepthDeg);
     const keys = curve(170, [
       [600, 170],
-      [600, 133],
+      [600, dip],
+      [400, dip],
       [600, 170],
       [600, 170],
     ]);
-    const { counter, events } = runAll(CURL, sample(CURL, keys));
-    expect(events).toHaveLength(0);
+    const counter = createRepCounter(CURL);
+    const events: RepEvent[] = [];
+    let left = false;
+    for (const f of sample(CURL, keys)) {
+      events.push(...counter.push(f));
+      if (counter.phase === 'down') left = true;
+    }
+    expect(left).toBe(true); // it did leave the top band…
+    expect(events).toHaveLength(0); // …but not deep enough for a partial
     expect(counter.partials).toBe(0);
   });
 
@@ -395,29 +419,50 @@ describe('createRepCounter: partials', () => {
 });
 
 describe('createRepCounter: minimum phase time', () => {
-  it('rejects reps whose phases are faster than 250 ms', () => {
+  // The floor applies to the out-and-back pair: the two moving legs together (dwell at the far
+  // end excluded) must take at least 2 × minPhaseMs. One fast leg alone (a dropped lowering)
+  // still counts; M5 coaches the tempo instead of dropping the rep.
+  it('rejects reps whose out-and-back movement is jitter-fast (both legs ~120 ms)', () => {
     const { counter, events } = runAll(CURL, sample(CURL, curlReps(3, 120, 120)));
     expect(events).toHaveLength(0);
     expect(counter.reps).toBe(0);
     expect(counter.partials).toBe(0);
   });
 
-  it('rejects a rep whose lowering alone is faster than 250 ms', () => {
-    const { counter, events } = runAll(CURL, sample(CURL, curlReps(2, 800, 120)));
+  it('counts full reps with a deliberately fast lowering (~0.45 s)', () => {
+    const { counter, events } = runAll(CURL, sample(CURL, curlReps(2, 800, 450)));
+    expect(counter.reps).toBe(2);
+    for (const e of events) {
+      expect(e.eccentricMs).toBeLessThan(450);
+      expect(e.concentricMs).toBeGreaterThan(e.eccentricMs);
+    }
+  });
+
+  it('counts a full rep with a fast lift and a slow lowering', () => {
+    const { counter } = runAll(CURL, sample(CURL, curlReps(2, 120, 1200)));
+    expect(counter.reps).toBe(2);
+  });
+
+  it('a long pause at the far end does not make rushed legs count', () => {
+    // 120 ms down, 1 s hold, 120 ms up: the hold is not movement time.
+    const keys = curve(170, [
+      [600, 170],
+      [120, 35],
+      [1000, 35],
+      [120, 170],
+      [600, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
     expect(events).toHaveLength(0);
     expect(counter.reps).toBe(0);
   });
 
-  it('rejects a rep whose lifting alone is faster than 250 ms', () => {
-    const { counter } = runAll(CURL, sample(CURL, curlReps(2, 120, 1200)));
-    expect(counter.reps).toBe(0);
-  });
-
-  it('rejects a deep but rushed partial (each leg under 250 ms)', () => {
-    // Dips to 65° (deep, but above the 55° contracted threshold) and back in 150 ms each way.
+  it('rejects a deep but rushed partial (each leg ~150 ms)', () => {
+    // Dips to 85° (deep, but above the curl contracted threshold) and back in 150 ms each way.
+    const dip = CURL.contracted + 15;
     const keys = curve(170, [
       [600, 170],
-      [150, 65],
+      [150, dip],
       [150, 170],
       [600, 170],
     ]);
@@ -427,11 +472,85 @@ describe('createRepCounter: minimum phase time', () => {
     // The same dip at a normal pace is a partial.
     const slow = curve(170, [
       [600, 170],
-      [600, 65],
+      [600, dip],
       [600, 170],
       [600, 170],
     ]);
     expect(runAll(CURL, sample(CURL, slow)).counter.partials).toBe(1);
+  });
+
+  it.each([300, 450, 600])(
+    'a visible glitch to the far band, then %d ms hidden, then back at the top is not a rep',
+    (gapMs) => {
+      // 150 ms of garbage at 35° (smoothed reaches the far band), the arm is hidden, and it
+      // reappears at the top. Hidden time is not movement, so neither leg is long enough.
+      const glitchEnd = 1000 + 150;
+      const keys = curve(170, [
+        [1000, 170],
+        [1, 35],
+        [149, 35],
+        [gapMs, 35],
+        [1, 170],
+        [1500, 170],
+      ]);
+      const visibility = (t: number) => (t >= glitchEnd && t < glitchEnd + gapMs ? 0.1 : 0.95);
+      const counter = createRepCounter(CURL);
+      const events: RepEvent[] = [];
+      let reachedFar = false;
+      for (const f of sample(CURL, keys, { visibility })) {
+        events.push(...counter.push(f));
+        if (counter.phase === 'bottom') reachedFar = true;
+      }
+      expect(reachedFar).toBe(true);
+      expect(events).toHaveLength(0);
+      expect(counter.reps).toBe(0);
+      expect(counter.partials).toBe(0);
+    },
+  );
+
+  it('the same glitch without a gap is not a rep either', () => {
+    const keys = curve(170, [
+      [1000, 170],
+      [1, 35],
+      [149, 35],
+      [1, 170],
+      [1500, 170],
+    ]);
+    const { counter } = runAll(CURL, sample(CURL, keys));
+    expect(counter.reps).toBe(0);
+    expect(counter.partials).toBe(0);
+  });
+
+  it('a short occlusion mid-lowering is left out of the measured leg time', () => {
+    // Lowering 1200 ms with 400 ms of it hidden: the eccentric leg is timed on visible frames.
+    const keys = curlReps(1);
+    const gapStart = 600 + 800 + 300 + 400;
+    const visibility = (t: number) => (t >= gapStart && t < gapStart + 400 ? 0.1 : 0.95);
+    const hidden = runAll(CURL, sample(CURL, keys, { visibility })).events[0];
+    const seen = runAll(CURL, sample(CURL, keys)).events[0];
+    expect(hidden?.type).toBe('rep');
+    expect(seen?.type).toBe('rep');
+    expect(seen?.eccentricMs ?? 0).toBeGreaterThan((hidden?.eccentricMs ?? 0) + 250);
+    expect(hidden?.concentricMs).toBeCloseTo(seen?.concentricMs ?? 0, -1);
+  });
+
+  it('rejects a single leg under minPhaseMs / 2 even when the pair is long enough', () => {
+    // Lift in ~70 ms threshold to threshold, lower in ~1.5 s: pair > 500 ms, lift leg < 125 ms.
+    const { counter } = runAll(CURL, sample(CURL, curlReps(2, 100, 2500)));
+    expect(counter.reps).toBe(0);
+  });
+
+  it('pins the pair boundary: just under 2 × minPhaseMs is rejected, just over counts', () => {
+    // Legs timed threshold to threshold (70° ↔ 150° = 80/135 of each leg) at 30 fps: 360 ms
+    // legs measure 534 ms as a pair; 350 ms legs fall one frame short of 500 ms.
+    const over = runAll(CURL, sample(CURL, curlReps(1, 360, 360)));
+    expect(over.counter.reps).toBe(1);
+    const e = over.events[0];
+    const pair = (e?.eccentricMs ?? 0) + (e?.concentricMs ?? 0);
+    expect(pair).toBeGreaterThanOrEqual(2 * CURL.minPhaseMs);
+    expect(pair).toBeLessThan(2 * CURL.minPhaseMs + 60);
+    const under = runAll(CURL, sample(CURL, curlReps(1, 350, 350)));
+    expect(under.counter.reps).toBe(0);
   });
 
   it('still counts later normal reps after a rejected fast one', () => {
@@ -444,11 +563,12 @@ describe('createRepCounter: minimum phase time', () => {
     const { counter, events } = runAll(CURL, sample(CURL, curlReps(2, 3000, 4000)));
     expect(counter.reps).toBe(2);
     for (const e of events) {
-      // Lowering 4 s, lifting 3 s, timed between thresholds (95/135): ≈ 2815 / 2110 ms.
-      expect(e.eccentricMs).toBeGreaterThan(2600);
-      expect(e.eccentricMs).toBeLessThan(3100);
-      expect(e.concentricMs).toBeGreaterThan(1900);
-      expect(e.concentricMs).toBeLessThan(2400);
+      // Lowering 4 s, lifting 3 s, timed between thresholds (70° ↔ 150° = 80/135 of each
+      // leg): ≈ 2370 / 1780 ms.
+      expect(e.eccentricMs).toBeGreaterThan(2200);
+      expect(e.eccentricMs).toBeLessThan(2600);
+      expect(e.concentricMs).toBeGreaterThan(1600);
+      expect(e.concentricMs).toBeLessThan(2000);
       expect(e.eccentricMs).toBeGreaterThan(e.concentricMs);
     }
   });
@@ -779,11 +899,11 @@ describe('createRepCounter: events', () => {
       expect(e.type).toBe('rep');
       expect(e.t).toBe(eventFrameT[i]);
       // Curl: eccentric = lowering toward extended (1200 ms), concentric = curling up (800 ms).
-      // Legs are timed between thresholds (55° ↔ 150° = 95/135 of each leg): ≈ 845 / 565 ms.
-      expect(e.eccentricMs).toBeGreaterThan(750);
-      expect(e.eccentricMs).toBeLessThan(1050);
-      expect(e.concentricMs).toBeGreaterThan(450);
-      expect(e.concentricMs).toBeLessThan(750);
+      // Legs are timed between thresholds (70° ↔ 150° = 80/135 of each leg): ≈ 710 / 475 ms.
+      expect(e.eccentricMs).toBeGreaterThan(620);
+      expect(e.eccentricMs).toBeLessThan(850);
+      expect(e.concentricMs).toBeGreaterThan(380);
+      expect(e.concentricMs).toBeLessThan(600);
       expect(e.minAngle).toBeGreaterThan(33);
       expect(e.minAngle).toBeLessThan(40);
       expect(e.maxAngle).toBeGreaterThan(160);

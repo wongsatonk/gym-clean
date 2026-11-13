@@ -9,7 +9,7 @@ export const curl: ExerciseRule = {
   limb: 'arm',
   triplets: ELBOW,
   extended: 150,
-  contracted: 55,
+  contracted: 70,
   direction: 'decreasing',
   start: 'extended',
   eccentric: 'toExtended',

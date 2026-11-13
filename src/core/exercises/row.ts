@@ -8,7 +8,7 @@ export const row: ExerciseRule = {
   view: 'side',
   limb: 'arm',
   triplets: ELBOW,
-  extended: 150,
+  extended: 145,
   contracted: 90,
   direction: 'decreasing',
   start: 'extended',

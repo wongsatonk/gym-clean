@@ -103,14 +103,14 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
 - `src/core/repCounter.ts`: angle-based state machine per exercise (see §3), with smoothing
   (EMA), hysteresis, minimum phase duration, and a visibility gate.
 - Supported v1 exercises and the joint angle each uses — thresholds are starting values,
-  tune them against fixtures:
+  tune them against fixtures (tuned 2026-11-13 on synthetic fixtures; retune on real clips at Checkpoint B):
 
 | Exercise | View | Angle (landmarks) | "Extended" | "Contracted" |
 |---|---|---|---|---|
-| Dumbbell curl | side | elbow (shoulder–elbow–wrist) | > 150° | < 55° |
-| Push-up | side | elbow | > 155° | < 95° |
-| Seated DB shoulder press | front | elbow + wrist above shoulder | > 155° | < 95° |
-| One-arm DB row | side | elbow | > 150° | < 90° |
+| Dumbbell curl | side | elbow (shoulder–elbow–wrist) | > 150° | < 70° |
+| Push-up | side | elbow | > 150° | < 95° |
+| Seated DB shoulder press | front | elbow + wrist above shoulder | > 155° | < 100° |
+| One-arm DB row | side | elbow | > 145° | < 90° |
 | Goblet squat | side | knee (hip–knee–ankle) | > 160° | < 100° |
 | Lateral raise | front | shoulder (hip–shoulder–elbow) | < 25° | > 75° |
 
@@ -119,6 +119,7 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
 - Live: big rep number, spoken count ("one… two…") optional toggle; auto-fill reps into the set log.
 - **Accept:** on every committed landmark fixture, counted reps == the count in the filename,
   partial reps detected == the partial count. A fixture test suite runs in `npm run check`.
+  Met on synthetic fixtures first; the real fixtures from Checkpoint B must also pass before M5.
 
 ### M4b — 3D exercise demo (added 2026-11-13)
 - A simple original 3D mannequin (same style as the M2 body) loops each supported exercise's movement,
@@ -154,12 +155,19 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).
+- Joint angles use the 3D `world` landmarks when the frame has them, else 2D x/y;
+  visibility always comes from the normalized landmarks.
 - Smooth the joint angle with an EMA (α ≈ 0.4) before thresholds.
 - Hysteresis: enter BOTTOM only below the contracted threshold, leave only above
   threshold + 10°; same idea at TOP. Prevents double counts from jitter.
-- Minimum 250 ms per phase; ignore frames where any used landmark has visibility < 0.5.
+- Minimum time: the out-and-back legs together must take ≥ 2 × 250 ms and each leg
+  ≥ 125 ms (dwell at the far end not counted; legs are timed on visible frames only, so
+  time hidden from the camera never counts as movement); the initial settle needs
+  ≥ 250 ms. Ignore frames where any used
+  landmark has visibility < 0.5.
 - A rep counts on return to TOP after reaching BOTTOM. Turning around before BOTTOM =
-  partial rep event (counted separately, not as a rep).
+  partial rep event (counted separately, not as a rep), if it went at least 15° past the
+  start threshold.
 - Emit events: `{type: 'rep' | 'partial', index, eccentricMs, concentricMs, minAngle, maxAngle, t}`.
 - Use the side with higher average visibility (left vs right) for unilateral views.
 

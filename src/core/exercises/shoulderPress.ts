@@ -11,7 +11,7 @@ export const shoulderPress: ExerciseRule = {
   limb: 'arm',
   triplets: ELBOW,
   extended: 155,
-  contracted: 95,
+  contracted: 100,
   direction: 'decreasing',
   start: 'contracted',
   eccentric: 'toContracted',

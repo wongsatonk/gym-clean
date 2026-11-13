@@ -103,6 +103,7 @@ describe.each(RULES.map((r) => [r.folder, r] as const))('rule %s', (_folder, r: 
   });
 });
 
+// SPEC §2 M4 table as tuned on the fixtures in M4 task 7 (see the 2026-11-13 Decision).
 describe('per-exercise data (SPEC §2 M4 table)', () => {
   const get = (folder: string): ExerciseRule => {
     const r = ruleForFolder(folder);
@@ -111,10 +112,10 @@ describe('per-exercise data (SPEC §2 M4 table)', () => {
   };
 
   it.each([
-    ['curl', 'Dumbbell_Bicep_Curl', 'side', 150, 55],
-    ['push-up', 'Pushups', 'side', 155, 95],
-    ['shoulder-press', 'Seated_Dumbbell_Press', 'front', 155, 95],
-    ['row', 'One-Arm_Dumbbell_Row', 'side', 150, 90],
+    ['curl', 'Dumbbell_Bicep_Curl', 'side', 150, 70],
+    ['push-up', 'Pushups', 'side', 150, 95],
+    ['shoulder-press', 'Seated_Dumbbell_Press', 'front', 155, 100],
+    ['row', 'One-Arm_Dumbbell_Row', 'side', 145, 90],
     ['goblet-squat', 'Goblet_Squat', 'side', 160, 100],
     ['lateral-raise', 'Side_Lateral_Raise', 'front', 25, 75],
   ] as const)('%s → %s, %s view, extended %d, contracted %d', (folder, id, view, ext, con) => {

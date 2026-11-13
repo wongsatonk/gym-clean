@@ -79,7 +79,14 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   /** Time of the last frame pushed (tracked or not), to detect a stream restart. */
   let lastFrameT = -Infinity;
   let settleSince: number | null = null;
-  // Rep bookkeeping (times in ms, angles smoothed degrees).
+  /**
+   * Movement clock (ms): advances only between consecutive tracked frames, so hidden time
+   * (gated frames, or a stall over RESEED_GAP_MS) never counts as movement. Leg times use it.
+   */
+  let clock = 0;
+  /** Whether the previous frame pushed was tracked (no gap since lastTrackedT). */
+  let prevTracked = false;
+  // Rep bookkeeping (leg times on the movement clock in ms, angles smoothed degrees).
   let lastInStartT = 0;
   /** Most start-ward smoothed angle of the current stay in the start band (range of motion). */
   let startExtremeAngle = 0;
@@ -105,6 +112,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     lastTrackedT = -Infinity;
     lastFrameT = -Infinity;
     settleSince = null;
+    prevTracked = false;
   }
 
   function reset(): void {
@@ -162,6 +170,17 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     if (a > maxAngle) maxAngle = a;
   }
 
+  /**
+   * Minimum time check (legs on the movement clock): each leg must take at least minPhaseMs / 2
+   * and the out-and-back pair at least 2 × minPhaseMs (dwell at the far end is not movement).
+   * Rejects glitches and jitter-fast swings, but keeps a real rep with a fast (~0.45 s) lowering,
+   * which M5 coaches instead.
+   */
+  function rushed(outMs: number, backMs: number): boolean {
+    const leg = rule.minPhaseMs / 2;
+    return outMs < leg || backMs < leg || outMs + backMs < 2 * rule.minPhaseMs;
+  }
+
   function emit(type: RepEvent['type'], outMs: number, backMs: number, t: number): RepEvent {
     const index = type === 'rep' ? ++reps : ++partials;
     return {
@@ -183,9 +202,13 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     const r = read(frame);
     if (r === null) {
       tracking = false;
+      prevTracked = false;
       settleSince = null; // settling needs an unbroken run of tracked frames
       return [];
     }
+    const gap = !prevTracked || t - lastTrackedT > RESEED_GAP_MS;
+    if (!gap) clock += t - lastTrackedT;
+    prevTracked = true;
     tracking = true;
     side = r.side;
     if (ema === null || t - lastTrackedT > RESEED_GAP_MS) {
@@ -194,6 +217,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     } else ema += rule.emaAlpha * (r.angle - ema);
     lastTrackedT = t;
     const a = ema;
+    const ct = clock;
     const o = sign * a;
     const events: RepEvent[] = [];
 
@@ -203,7 +227,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
           settleSince ??= t;
           if (t - settleSince >= rule.minPhaseMs) {
             if (r.side !== 'both') lockedSide = r.side;
-            enterStart(t, a);
+            enterStart(ct, a);
           }
         } else if (leftStart(o)) {
           settleSince = null;
@@ -212,7 +236,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
       }
       case 'top': {
         if (inStart(o, r.gate)) {
-          lastInStartT = t;
+          lastInStartT = ct;
           if (farSign * sign * (a - startExtremeAngle) < 0) startExtremeAngle = a;
         } else if (leftStart(o)) {
           phase = 'down';
@@ -220,7 +244,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
           minAngle = Math.min(startExtremeAngle, a);
           maxAngle = Math.max(startExtremeAngle, a);
           extremeProgress = farSign * o;
-          extremeT = t;
+          extremeT = ct;
           offPath = false;
         }
         break;
@@ -229,33 +253,28 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
         track(a);
         if (farSign * o > extremeProgress) {
           extremeProgress = farSign * o;
-          extremeT = t;
+          extremeT = ct;
         }
         if (inFar(o, r.gate)) {
           phase = 'bottom';
-          arriveFarT = t;
-          lastInFarT = t;
+          arriveFarT = ct;
+          lastInFarT = ct;
         } else if (inFar(o, true)) {
           offPath = true;
         } else if (inStart(o, r.gate)) {
           // Turned around before the far band: a partial if it went deep enough and wasn't rushed.
           const depth = extremeProgress - startThresholdProgress;
           const outMs = extremeT - departStartT;
-          const backMs = t - extremeT;
-          if (
-            !offPath &&
-            depth >= rule.minPartialDepthDeg &&
-            outMs >= rule.minPhaseMs &&
-            backMs >= rule.minPhaseMs
-          )
+          const backMs = ct - extremeT;
+          if (!offPath && depth >= rule.minPartialDepthDeg && !rushed(outMs, backMs))
             events.push(emit('partial', outMs, backMs, t));
-          enterStart(t, a);
+          enterStart(ct, a);
         }
         break;
       }
       case 'bottom': {
         track(a);
-        if (inFar(o, r.gate)) lastInFarT = t;
+        if (inFar(o, r.gate)) lastInFarT = ct;
         else if (leftFar(o)) {
           phase = 'up';
           departFarT = lastInFarT;
@@ -266,13 +285,12 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
         track(a);
         if (inFar(o, r.gate)) {
           phase = 'bottom';
-          lastInFarT = t;
+          lastInFarT = ct;
         } else if (inStart(o, r.gate)) {
           const outMs = arriveFarT - departStartT;
-          const backMs = t - departFarT;
-          if (outMs >= rule.minPhaseMs && backMs >= rule.minPhaseMs)
-            events.push(emit('rep', outMs, backMs, t));
-          enterStart(t, a);
+          const backMs = ct - departFarT;
+          if (!rushed(outMs, backMs)) events.push(emit('rep', outMs, backMs, t));
+          enterStart(ct, a);
         }
         break;
       }

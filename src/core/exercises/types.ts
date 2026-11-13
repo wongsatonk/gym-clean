@@ -44,7 +44,12 @@ export type ExerciseRule = {
   emaAlpha: number;
   /** Hysteresis (deg): leave a band only once past its threshold by this much (SPEC §3: 10). */
   hysteresisDeg: number;
-  /** Minimum time in each phase (SPEC §3: 250 ms). */
+  /**
+   * Minimum movement time per phase (SPEC §3: 250 ms). Legs are timed on visible frames only
+   * (hidden time is not movement): each moving leg must take at least half of this and the
+   * out-and-back pair at least 2 × this (dwell at the far end excluded). The initial settle at
+   * the start position needs at least this.
+   */
   minPhaseMs: number;
   /** Frames where any used landmark is below this visibility are ignored (SPEC §3: 0.5). */
   minVisibility: number;
@@ -61,5 +66,5 @@ export const COUNTER_DEFAULTS = {
   hysteresisDeg: 10,
   minPhaseMs: 250,
   minVisibility: 0.5,
-  minPartialDepthDeg: 20,
+  minPartialDepthDeg: 15,
 } as const satisfies Partial<ExerciseRule>;

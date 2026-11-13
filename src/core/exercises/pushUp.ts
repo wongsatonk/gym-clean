@@ -8,7 +8,7 @@ export const pushUp: ExerciseRule = {
   view: 'side',
   limb: 'arm',
   triplets: ELBOW,
-  extended: 155,
+  extended: 150,
   contracted: 95,
   direction: 'decreasing',
   start: 'extended',
