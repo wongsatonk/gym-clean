@@ -10,6 +10,9 @@ current milestone in docs/PROGRESS.md).
 ## 0. Orient
 Read `CLAUDE.md`, `docs/SPEC.md`, `docs/PROGRESS.md`. Run `git status` and `git branch`.
 - If PROGRESS says **Waiting on human: yes**, stop and print exactly what's needed from Wongsaton.
+  Exception: if $ARGUMENTS names a different milestone that doesn't depend on the blocked one
+  (e.g. M7 nutrition while waiting on Checkpoint B), work on that one on its own branch and leave
+  the waiting note in place.
 - If the working tree has uncommitted work from an earlier session, review it against the plan
   (dispatch **reviewer**), then commit it in logical chunks before starting new tasks.
 - Make sure you're on the milestone branch (`m<N>-<slug>`); create it from `main` if needed.

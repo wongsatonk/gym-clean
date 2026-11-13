@@ -19,3 +19,9 @@ focusrep-starter.zip
 
 # MediaPipe wasm runtime, copied from node_modules on install
 public/mediapipe/
+
+# M7b: datasets (non-commercial), personal meal photos and trained models stay private
+ml/data/
+ml/runs/
+ml/models/
+*.tflite

@@ -20,6 +20,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M4 Rep counter
 - [ ] M5 Focus & form cues → 🧍 Checkpoint C (gym test with camera)
 - [ ] M6 Polish & install
+- [ ] M7 Fuel: food & nutrition (independent of the camera; can be built while waiting on Checkpoint B with `/build M7`)
+- [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
 
 ## Current milestone plan
 
@@ -60,6 +62,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Decisions
 
+- 2026-11-13 — M7b design (Wongsaton): photo recognition is local first: a small Thai food image classifier on the phone (MediaPipe Image Classifier, top 3 + confirm), with Claude Haiku as an optional, off-by-default backup for unsure/unknown dishes. Wongsaton uses an **iPhone** (Safari/PWA), so no WebGPU vision models or Chrome built-in AI. Datasets (THFOOD-50/100 are non-commercial), his photos and the trained model never go in the public repo; the model is imported into the app on the phone. Open: API key handling for the Claude backup (proxy vs key stored on the phone).
+- 2026-11-13 — Wongsaton wants food & nutrition in the app → M7 "Fuel". Quick tracking (kcal + protein + weight) is the default, Full (carbs + fat) is an option. Main food is home-cooked Thai, sometimes restaurant/takeout at work → recipes, a Thai dish estimate list and quick estimates come first. AI photo recognition is later (M7b). All nutrition data stays on the phone; no personal numbers in the public repo.
 - 2026-11-13 — Vite 8, TS 6, Vitest 5, ESLint 10 (flat config + typescript-eslint strict), Playwright 1.65 — latest stable at scaffold time.
 - 2026-11-13 — Two tsconfigs: `tsconfig.json` (src, DOM only, no Node types) and `tsconfig.node.json` (configs + e2e). Keeps Node globals out of app code.
 - 2026-11-13 — ESLint `no-restricted-imports` on `src/core/**` blocks `@mediapipe/*`, `dexie`, `../ui`, `../pose`. Enforces the "pure core" architecture rule.
