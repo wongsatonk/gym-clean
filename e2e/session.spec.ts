@@ -53,6 +53,8 @@ async function installMocks(page: Page) {
 }
 
 const spoken = (page: Page) => page.evaluate(() => window.__spoken);
+const BENCH_CUE = 'Squeeze your chest, slow on the way down.';
+const INCLINE_CUE = 'Upper chest drives it, slow lowering.';
 
 async function readSets(page: Page) {
   return page.evaluate(
@@ -117,12 +119,12 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await expect(clock).toHaveText('2:00');
   await page.clock.runFor(109_000);
   await expect(clock).toHaveText('0:11');
-  expect(await spoken(page)).toEqual([]);
+  expect(await spoken(page)).toEqual([BENCH_CUE]); // focus cue at set start
 
   await page.clock.runFor(1_000);
   await expect
     .poll(() => spoken(page))
-    .toEqual(['Ten seconds. Next: Dumbbell Bench Press, set 2.']);
+    .toEqual([BENCH_CUE, 'Ten seconds. Next: Dumbbell Bench Press, set 2.']);
 
   await page.clock.runFor(10_000);
   await expect.poll(() => spoken(page)).toContain('Go.');
@@ -141,11 +143,13 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   expect((await spoken(page)).length).toBe(before);
   await page.getByRole('button', { name: 'Resume' }).click();
   await expect(clock).toHaveText('+0:30');
+  expect((await spoken(page)).length).toBe(before); // resume is silent
 
   await page.clock.runFor(5_000);
   await page.getByRole('button', { name: 'Start set' }).click();
 
-  // Set 2 carries reps/weight forward
+  // Set 2 starts with the focus cue and carries reps/weight forward
+  await expect.poll(async () => (await spoken(page)).at(-1)).toBe(BENCH_CUE);
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 2 of 4');
   await expect(reps).toHaveText('8');
   await expect(kg).toHaveText('22.5');
@@ -154,6 +158,7 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await page.getByRole('button', { name: 'Skip exercise' }).click();
   await expect(page.getByRole('heading', { name: 'Incline Dumbbell Press' })).toBeVisible();
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 3');
+  await expect.poll(async () => (await spoken(page)).at(-1)).toBe(INCLINE_CUE);
   await expect(reps).toHaveText('12');
   await expect(kg).toHaveText('15');
 

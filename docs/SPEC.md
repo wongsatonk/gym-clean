@@ -75,6 +75,11 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
   Auto-pick front/back view based on where the primary muscle is.
 - Each exercise has a short focus cue (≤ 8 words) in `src/data/cues.json`, e.g.
   "Squeeze your chest, slow on the way down." Spoken at set start.
+- **3D muscle body (added 2026-11-13, Wongsaton's request):** an original 3D body built from our own
+  shapes with Three.js (no downloaded models), target muscles lit (primary strong, secondary light).
+  It turns automatically to face the working muscles, can be dragged to rotate, and a tap opens a
+  full-screen viewer. Three.js is lazy-loaded. The 2D SVG map is the fallback when WebGL is missing
+  (and shows while 3D loads). Under `prefers-reduced-motion` the body snaps instead of easing. Render on demand only (no idle loop).
 - Vendor the needed exercises from free-exercise-db into `src/data/exercises.json`
   (include instructions + muscles; images optional).
 - **Accept:** every exercise in program.json has data + cue; unit test asserts every muscle
@@ -87,6 +92,9 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
 - Landmark extraction tool: `npm run landmarks` uses Playwright to open a dev-only page that runs
   the landmarker over each video in `fixtures/videos/**` (`runningMode: "VIDEO"`) and writes
   `fixtures/landmarks/<same-name>.json` (array of LandmarkFrame).
+- **3D live skeleton (added 2026-11-13):** draw the pose landmarker's `world` landmarks as a 3D
+  skeleton next to the camera view, rotatable, with a side-view preset to check form even when the phone
+  faces you.
 - **Accept:** pipeline runs in the browser at phone size; extraction tool works on a sample
   public-domain/synthetic clip or on my fixtures once provided.
 - 🧍 **Checkpoint B:** stop and ask me to record fixture videos (guide in §5).
@@ -111,6 +119,13 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
 - Live: big rep number, spoken count ("one… two…") optional toggle; auto-fill reps into the set log.
 - **Accept:** on every committed landmark fixture, counted reps == the count in the filename,
   partial reps detected == the partial count. A fixture test suite runs in `npm run check`.
+
+### M4b — 3D exercise demo (added 2026-11-13)
+- A simple original 3D mannequin (same style as the M2 body) loops each supported exercise's movement,
+  driven by our own joint-angle keyframes (reusing the M4 per-exercise angle data). Shown on the
+  Exercise screen on demand, to show the full range of motion and tempo.
+- **Accept:** a demo for every pose-tracked exercise; the angles in the demo stay within that exercise's
+  extended and contracted thresholds.
 
 ### M5 — Focus & form cues
 - `src/core/focus.ts` consumes rep events and produces cues. Baseline = first 2 reps of the set.
@@ -185,5 +200,6 @@ type SetLog = {
 
 ## 6. Out of scope for v1
 
-Accounts, cloud sync, sharing, nutrition, AI-generated programs, 3D anatomy, multi-person
+Accounts, cloud sync (Google Calendar sync parked for later, 2026-11-13), sharing, nutrition,
+AI-generated programs, photoreal/medical 3D anatomy, multi-person
 tracking, recording/saving video, Apple Watch / heart rate.
