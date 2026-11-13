@@ -138,6 +138,45 @@ describe('patchesFor', () => {
     expect(lats[0]?.centre[2]).toBeCloseTo(-(lats[1]?.centre[2] ?? 0));
   });
 
+  const lit = (id: string) => {
+    const m = demo(id);
+    const { primary, secondary } = muscles(id);
+    const patches = patchesFor(
+      segmentFrames(poseAt(m, 0), armTwist(m)),
+      highlightFor(primary, secondary),
+    );
+    const level = (muscle: string) => [
+      ...new Set(patches.filter((p) => p.muscle === muscle).map((p) => p.level)),
+    ];
+    return { patches, level };
+  };
+
+  it('curl lights the biceps (primary) on both arms, facing forward at the bottom', () => {
+    const { patches, level } = lit('Dumbbell_Bicep_Curl');
+    const bi = patches.filter((p) => p.muscle === 'biceps');
+    expect(bi).toHaveLength(2);
+    expect(level('biceps')).toEqual(['primary']);
+    for (const x of bi) expect(x.normal[0]).toBeGreaterThan(0.5);
+    expect(level('forearms')).toEqual(['secondary']);
+  });
+
+  it('row lights the middle back (primary), lats and biceps (secondary)', () => {
+    const { level } = lit('One-Arm_Dumbbell_Row');
+    expect(level('middle back')).toEqual(['primary']);
+    expect(level('lats')).toEqual(['secondary']);
+    expect(level('biceps')).toEqual(['secondary']);
+  });
+
+  it('goblet squat lights the quads (primary) and glutes (secondary)', () => {
+    const { patches, level } = lit('Goblet_Squat');
+    expect(level('quadriceps')).toEqual(['primary']);
+    expect(level('glutes')).toEqual(['secondary']);
+    // Quads on the front of both thighs.
+    const q = patches.filter((p) => p.muscle === 'quadriceps');
+    expect(q).toHaveLength(2);
+    for (const x of q) expect(x.normal[0]).toBeGreaterThan(0.5);
+  });
+
   it('patch sizes are positive and finite for every demo', () => {
     for (const m of DEMOS) {
       const { primary, secondary } = muscles(m.exerciseId);

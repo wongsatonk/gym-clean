@@ -18,7 +18,9 @@ import {
 } from './moves';
 import { boneLengths, measuredAngle, type DemoPose } from './poses';
 
-const POSE_TRACKED = ['Pushups', 'Seated_Dumbbell_Press', 'Side_Lateral_Raise'];
+const PUSH_A_TRACKED = ['Pushups', 'Seated_Dumbbell_Press', 'Side_Lateral_Raise'];
+const M4D_TRACKED = ['Dumbbell_Bicep_Curl', 'One-Arm_Dumbbell_Row', 'Goblet_Squat'];
+const POSE_TRACKED = [...PUSH_A_TRACKED, ...M4D_TRACKED];
 const MANUAL = [
   'Dumbbell_Bench_Press',
   'Incline_Dumbbell_Press',
@@ -51,7 +53,7 @@ const flatPose = (p: DemoPose): number[] => [
 ];
 
 describe('demo registry', () => {
-  it('has demos for the three pose-tracked Push A exercises', () => {
+  it('has demos for all six pose-tracked exercises (Push A + curl, row, goblet squat)', () => {
     for (const id of POSE_TRACKED) {
       expect(hasDemo(id), id).toBe(true);
       expect(DEMO_IDS).toContain(id);
@@ -60,7 +62,7 @@ describe('demo registry', () => {
   });
 
   it('has demos for all six Push A exercises, and none of the manual ones has a counter rule', () => {
-    for (const id of [...POSE_TRACKED, ...MANUAL]) expect(hasDemo(id), id).toBe(true);
+    for (const id of [...PUSH_A_TRACKED, ...MANUAL]) expect(hasDemo(id), id).toBe(true);
     for (const id of MANUAL) expect(ruleFor(id), id).toBeUndefined();
   });
 
@@ -93,6 +95,9 @@ describe('tempo', () => {
     expect(tempoLabel(must(demoFor('Standing_Dumbbell_Triceps_Extension')))).toBe(
       'Down 2 s · Up 1 s',
     );
+    expect(tempoLabel(must(demoFor('Dumbbell_Bicep_Curl')))).toBe('Lift 1 s · Lower 2 s');
+    expect(tempoLabel(must(demoFor('One-Arm_Dumbbell_Row')))).toBe('Lift 1 s · Lower 2 s');
+    expect(tempoLabel(must(demoFor('Goblet_Squat')))).toBe('Down 2 s · Up 1 s');
   });
 
   for (const id of POSE_TRACKED) {
@@ -292,5 +297,87 @@ describe('manual-count demos (original poses)', () => {
     expect(top.pos[1]).toBeGreaterThan(ref.neck[1] + 0.5); // overhead
     expect(low.pos[0]).toBeLessThan(-0.12); // behind the head (head centre x = 0)
     expect(low.pos[1]).toBeGreaterThan(ref.neck[1]); // still above the shoulders
+  });
+});
+
+describe('M4d pose-tracked demos (curl, row, goblet squat)', () => {
+  const close = (a: readonly number[], b: readonly number[], what: string, digits = 9) =>
+    a.forEach((x, i) => expect(x, what).toBeCloseTo(b[i] ?? NaN, digits));
+
+  it('Dumbbell_Bicep_Curl: the upper arms stay still, the dumbbells rise to the shoulders', () => {
+    const m = must(demoFor('Dumbbell_Bicep_Curl'));
+    const ref = m.pose(m.start);
+    for (const { pose } of sampleLoop(m))
+      for (const k of ['r', 'l'] as const) {
+        close(pose[k].s, ref[k].s, `${k}.s`);
+        close(pose[k].e, ref[k].e, `${k}.e`);
+        expect(pose.bells).toHaveLength(2);
+      }
+    const top = m.pose(m.far);
+    // Bottom: hands below the hips' height of the elbows; top: near shoulder height, in front.
+    expect(ref.r.h[1]).toBeLessThan(ref.r.e[1] - 0.2);
+    expect(top.r.h[1]).toBeGreaterThan(top.r.e[1] + 0.15);
+    expect(top.r.h[0]).toBeGreaterThan(top.r.e[0]);
+  });
+
+  it('One-Arm_Dumbbell_Row: torso stays roughly horizontal and still, the support arm does not move', () => {
+    const m = must(demoFor('One-Arm_Dumbbell_Row'));
+    const ref = m.pose(m.start);
+    const bench = must(m.props[0], 'bench');
+    const benchTop = bench.at[1] + bench.size[1] / 2;
+    for (const { pose } of sampleLoop(m)) {
+      // Within 25 deg of horizontal (hinged 70 deg from vertical).
+      const dy = pose.neck[1] - pose.hip[1];
+      const dx = pose.neck[0] - pose.hip[0];
+      expect(Math.abs((Math.atan2(dy, dx) * 180) / Math.PI)).toBeLessThan(25);
+      close(pose.hip, ref.hip, 'hip');
+      close(pose.neck, ref.neck, 'neck');
+      for (const j of ['s', 'e', 'w', 'h', 'k', 'a', 'toe'] as const)
+        close(pose.l[j], ref.l[j], `l.${j}`);
+      // Feet on the floor; one dumbbell, in the rowing (right) hand, never through the floor.
+      for (const k of ['r', 'l'] as const) expect(pose[k].toe[1]).toBeLessThan(0.05);
+      expect(pose.bells).toHaveLength(1);
+      expect(must(pose.bells[0]).pos[2]).toBeGreaterThan(0);
+      expect(must(pose.bells[0]).pos[1]).toBeGreaterThan(0.1);
+    }
+    // The support hand rests on the bench top, inside its footprint.
+    const hand = ref.l.w;
+    expect(Math.abs(hand[1] - benchTop)).toBeLessThan(0.06);
+    expect(Math.abs(hand[0] - bench.at[0])).toBeLessThan(bench.size[0] / 2);
+    expect(Math.abs(hand[2] - bench.at[2])).toBeLessThan(bench.size[2] / 2);
+    // Rowing: the elbow goes up and back past the torso line.
+    const top = m.pose(m.far);
+    expect(top.r.e[1]).toBeGreaterThan(ref.r.e[1] + 0.15);
+    expect(top.r.e[0]).toBeLessThan(ref.r.e[0] - 0.15);
+  });
+
+  it('Goblet_Squat: feet stay flat on the floor, the dumbbell stays at the chest', () => {
+    const m = must(demoFor('Goblet_Squat'));
+    const ref = m.pose(m.start);
+    let lowestHip = Infinity;
+    for (const { pose } of sampleLoop(m)) {
+      for (const k of ['r', 'l'] as const) {
+        close(pose[k].a, ref[k].a, `${k}.a`);
+        close(pose[k].toe, ref[k].toe, `${k}.toe`);
+        expect(pose[k].toe[1]).toBeLessThan(0.05);
+      }
+      expect(pose.bells).toHaveLength(1);
+      const bell = must(pose.bells[0]);
+      // Chest height: up to 25 cm below the shoulder line along the spine, within 40 cm of it.
+      const ux = (pose.neck[0] - pose.hip[0]) / 0.5;
+      const uy = (pose.neck[1] - pose.hip[1]) / 0.5;
+      const rx = bell.pos[0] - pose.neck[0];
+      const ry = bell.pos[1] - pose.neck[1];
+      const along = rx * ux + ry * uy;
+      expect(along).toBeGreaterThan(-0.25);
+      expect(along).toBeLessThan(0);
+      expect(Math.hypot(rx, ry)).toBeLessThan(0.4);
+      // In front of the chest (the side the face points to).
+      expect(rx * pose.face[0] + ry * pose.face[1]).toBeGreaterThan(0.2);
+      expect(bell.pos[2]).toBe(0);
+      lowestHip = Math.min(lowestHip, pose.hip[1]);
+    }
+    // A real squat: hips drop at least 25 cm.
+    expect(ref.hip[1] - lowestHip).toBeGreaterThan(0.25);
   });
 });

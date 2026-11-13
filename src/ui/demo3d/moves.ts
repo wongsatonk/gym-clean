@@ -5,7 +5,11 @@
 import {
   FLAT_BENCH,
   INCLINE_BENCH,
+  ROW_BENCH,
   benchPressPose,
+  curlPose,
+  gobletSquatPose,
+  rowPose,
   inclinePressPose,
   lateralRaisePose,
   tricepsExtensionPose,
@@ -76,6 +80,39 @@ export const DEMOS: readonly DemoMove[] = [
     far: 100,
     outward: 'lift',
     pose: lateralRaisePose,
+    props: [],
+  },
+  // M4d: the other three pose-tracked exercises (Pull A / Legs A), also from tools/synthetic.ts.
+  {
+    exerciseId: 'Dumbbell_Bicep_Curl',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    start: 180,
+    far: 22,
+    outward: 'lift',
+    pose: curlPose,
+    props: [],
+  },
+  {
+    exerciseId: 'One-Arm_Dumbbell_Row',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    start: 180,
+    // tools/synthetic.ts rows to 45 (tuned for world-landmark compression in the fixture); the demo
+    // stops at 70, upper arm in line with the back, the textbook top. Still 20 deg past the 90 rule.
+    far: 70,
+    outward: 'lift',
+    pose: rowPose,
+    props: ROW_BENCH,
+  },
+  {
+    exerciseId: 'Goblet_Squat',
+    view: 'side',
+    measure: { joint: 'knee', side: 'r' },
+    start: 180,
+    far: 75,
+    outward: 'lower',
+    pose: gobletSquatPose,
     props: [],
   },
   // Manual-count Push A exercises (no rep-counter rule): original poses, declared start/far angles.

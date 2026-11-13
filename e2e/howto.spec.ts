@@ -55,7 +55,7 @@ const hasWebGL = (page: Page) =>
     return Boolean(c.getContext('webgl2') ?? c.getContext('webgl'));
   });
 
-test('badges: Push A has six 3D demos, Camera on the tracked three; Hammer Curls is Info', async ({
+test('badges: Push A has six 3D demos, Camera on the tracked three; curl is 3D demo, Hammer Curls Info', async ({
   page,
 }) => {
   const errors = watchErrors(page);
@@ -89,9 +89,9 @@ test('badges: Push A has six 3D demos, Camera on the tracked three; Hammer Curls
   await expect(hammer.locator('[data-badge="info"]')).toHaveText('Info');
   await expect(hammer.locator('[data-badge="3d"]')).toHaveCount(0);
   await expect(hammer.locator('[data-badge="camera"]')).toHaveCount(0);
-  // The pose-tracked curl has Info + Camera (no demo until M4d).
+  // The pose-tracked curl has a 3D demo (M4d) + Camera.
   const curl = list.locator('.ex-row-btn', { hasText: 'Dumbbell Bicep Curl' });
-  await expect(curl.locator('[data-badge]')).toHaveText(['Info', 'Camera']);
+  await expect(curl.locator('[data-badge]')).toHaveText(['3D demo', 'Camera']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 
   expect(errors).toEqual([]);

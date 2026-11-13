@@ -38,7 +38,11 @@ export type DemoProp = { at: V3; size: V3; rotZ?: number };
 export const BONE = { upperArm: 0.3, forearm: 0.26, thigh: 0.42, shin: 0.41, spine: 0.5 } as const;
 const U = BONE.upperArm;
 const F = BONE.forearm;
+const THIGH = BONE.thigh;
+const SHIN = BONE.shin;
 const SPINE = BONE.spine;
+/** One-arm row: torso tilt from vertical (deg), as in tools/synthetic.ts. */
+export const ROW_HINGE = 70;
 export const DEFAULT_HIP_W = 0.09;
 
 // --- tiny vector helpers (tuples, no allocation-heavy classes) ---------------------------------
@@ -61,6 +65,14 @@ const norm = (a: V3): V3 => {
 const at = (p: V3, z: number): V3 => [p[0], p[1], z];
 /** Unit vector in the sagittal (x, y) plane at `d` degrees from +x, counter-clockwise. */
 const dir = (d: number): V3 => v(Math.cos(rad(d)), Math.sin(rad(d)));
+/** Direction angle (deg) of a vector in the sagittal plane. */
+const ang2 = (d: V3) => deg(Math.atan2(d[1], d[0]));
+/**
+ * Hand point 4 cm past the wrist along the forearm. tools/synthetic.ts puts the hand AT the wrist
+ * for the curl, row and goblet squat (it only draws a sphere there); the demo needs a non-zero hand
+ * segment for its frames, like the other demos have. Every other joint keeps synthetic's numbers.
+ */
+const handPast = (e: V3, w: V3): V3 => addS(w, norm(sub(w, e)), 0.04);
 
 /** Point at distance `ra` from a and `rb` from b in the sagittal plane, the solution `pick` prefers. */
 function joint(a: V3, ra: number, b: V3, rb: number, pick: (p: V3) => number): V3 {
@@ -157,6 +169,115 @@ export function lateralRaisePose(theta: number): DemoPose {
     return { s, e, w, h: addS(w, d, 0.04), ...standLegs(sg, hipW) };
   });
   return { hip, neck, face: v(1, 0), hipW, r, l, bells: [r, l].map(bellAtHand(v(1, 0, 0))) };
+}
+
+/** Dumbbell biceps curl, side view: elbow angle; the upper arm hangs still, the forearm curls. */
+export function curlPose(theta: number): DemoPose {
+  const hip = v(0, 0.92);
+  const neck = v(0, 1.42);
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = addS(s, dir(-94), U);
+    const w = addS(e, dir(ang2(sub(s, e)) - theta), F);
+    return { s, e, w, h: handPast(e, w), ...standLegs(sg) };
+  });
+  return {
+    hip,
+    neck,
+    face: v(1, 0),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [r, l].map(bellAtHand(v(0, 0, 1))),
+  };
+}
+
+/**
+ * One-arm dumbbell row, side view: the rowing (right, near) arm's elbow angle. The torso is hinged
+ * ROW_HINGE deg forward, the left hand rests on a bench (ROW_BENCH); the dumbbell hangs, so the
+ * forearm stays vertical while the upper arm swings back by 180 - theta.
+ */
+export function rowPose(theta: number): DemoPose {
+  const hip = v(0, 0.88);
+  const u = v(Math.sin(rad(ROW_HINGE)), Math.cos(rad(ROW_HINGE)));
+  const neck = addS(hip, u, SPINE);
+  const gamma = 180 - theta;
+  const sR = at(neck, 0.2);
+  const eR = addS(sR, dir(-90 - gamma), U);
+  const wR = add(eR, v(0, -F, 0));
+  const sL = at(neck, -0.2);
+  const handL = v(0.66, 0.53, -0.2);
+  const eL = joint(sL, U, handL, F, (p) => -p[0]);
+  const r: DemoSide = {
+    s: sR,
+    e: eR,
+    w: wR,
+    h: handPast(eR, wR),
+    k: v(0.05, 0.49, 0.1),
+    a: v(-0.06, 0.09, 0.1),
+    toe: v(0.14, 0.03, 0.1),
+  };
+  const l: DemoSide = {
+    s: sL,
+    e: at(eL, -0.2),
+    w: handL,
+    h: add(handL, v(0.06, -0.02, 0)),
+    k: v(0.16, 0.49, -0.1),
+    a: v(0.14, 0.09, -0.1),
+    toe: v(0.34, 0.03, -0.1),
+  };
+  return {
+    hip,
+    neck,
+    face: v(Math.cos(rad(ROW_HINGE)), -Math.sin(rad(ROW_HINGE))),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [r].map(bellAtHand(v(0, 0, 1))),
+  };
+}
+
+/**
+ * Bench for the one-arm row: the support hand rests on it (tools/synthetic.ts box, lengthened
+ * forward into a bench so it reads as one; same top height and the same near edge under the hand).
+ */
+export const ROW_BENCH: readonly DemoProp[] = [{ at: v(0.9, 0.25, -0.25), size: v(0.8, 0.5, 0.4) }];
+
+/**
+ * Goblet squat, side view: knee angle (hip-knee-ankle). Feet stay flat; the shins tip forward
+ * 0.4x and the torso leans 0.45x of the knee bend; one dumbbell is held upright at the chest.
+ */
+export function gobletSquatPose(theta: number): DemoPose {
+  const f = 180 - theta;
+  const tau = 0.4 * f;
+  const ankle = v(0, 0.09);
+  const knee = addS(ankle, v(Math.sin(rad(tau)), Math.cos(rad(tau))), SHIN);
+  const kA = ang2(sub(ankle, knee));
+  const c1 = addS(knee, dir(kA + theta), THIGH);
+  const c2 = addS(knee, dir(kA - theta), THIGH);
+  const hip = c1[0] <= c2[0] ? c1 : c2;
+  const lam = 0.45 * f;
+  const u = v(Math.sin(rad(lam)), Math.cos(rad(lam)));
+  const n = v(Math.cos(rad(lam)), -Math.sin(rad(lam)));
+  const neck = addS(hip, u, SPINE);
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = at(addS(addS(neck, u, -0.27), n, 0.12), 0.15 * sg);
+    const w = at(addS(addS(neck, u, -0.07), n, 0.26), 0.06 * sg);
+    return {
+      s,
+      e,
+      w,
+      h: handPast(e, w),
+      k: at(knee, 0.14 * sg),
+      a: at(ankle, 0.15 * sg),
+      toe: v(0.2, 0.03, 0.17 * sg),
+    };
+  });
+  const bell = at(addS(addS(neck, u, -0.06), n, 0.31), 0);
+  // Hip joints in line with the knees (synthetic leaves the default 0.09): the thigh then stays in
+  // the knee's sagittal plane, so the measured knee angle equals theta (0.09 reads ~175 standing).
+  return { hip, neck, face: n, hipW: 0.14, r, l, bells: [{ pos: bell, axis: u }] };
 }
 
 // --- original pose functions (M4b, not in tools/synthetic.ts) ----------------------------------
