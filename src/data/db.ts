@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { SetLog } from '../core/types';
+import type { RepEvent, SetLog } from '../core/types';
 import type { Unit } from '../core/units';
 
 export type SessionRow = {
@@ -32,12 +32,68 @@ export type SessionNoteRow = {
 
 export type SettingRow = { key: string; value: unknown };
 
+// ---------- M4c: developer log (on device only; numbers, never images) ----------
+
+export type DevLogCount = { reps: number; partials: number };
+export type DevLogEvent = { t: number; type: string; data?: unknown };
+export type DevLogSpeech = { t: number; text: string; kind: 'count' | 'hint'; dropped?: boolean };
+export type DevLogCameraMeta = { folder: string; delegate: string; side: string | null };
+
+/** One logged workout session. `bytes` is the approximate stored size of its log. */
+export type DevLogSessionRow = {
+  id: string;
+  startedAt: number;
+  endedAt?: number;
+  appVersion: string;
+  userAgent: string;
+  settings: Record<string, unknown>;
+  dayId: string;
+  bytes: number;
+};
+
+/** One set (manual or camera). `logged`/`endedAt` are missing while the set is open. */
+export type DevLogSetRow = {
+  key: string;
+  sessionId: string;
+  seq: number;
+  exerciseId: string;
+  setIndex: number;
+  targetReps: [number, number];
+  counted?: DevLogCount;
+  logged?: DevLogCount;
+  weightKg: number;
+  startedAt: number;
+  endedAt?: number;
+  restTakenSec?: number;
+  camera?: DevLogCameraMeta;
+};
+
+/**
+ * What one flush appended, for one set (`setKey` = the set's key) or for the session's own
+ * events (`setKey` = `<sessionId>#session`). Frames are devlogCodec bytes.
+ */
+export type DevLogChunkRow = {
+  id?: number;
+  sessionId: string;
+  setKey: string;
+  events?: DevLogEvent[];
+  frames?: Uint8Array;
+  angles?: { t: number; angle: number | null }[];
+  repEvents?: RepEvent[];
+  speech?: DevLogSpeech[];
+  fps?: { t: number; fps: number }[];
+  bytes: number;
+};
+
 export class GymDb extends Dexie {
   sessions!: Table<SessionRow, string>;
   sets!: Table<SetRow, number>;
   exerciseNotes!: Table<ExerciseNoteRow, string>;
   sessionNotes!: Table<SessionNoteRow, [string, string]>;
   settings!: Table<SettingRow, string>;
+  devlogSessions!: Table<DevLogSessionRow, string>;
+  devlogSets!: Table<DevLogSetRow, string>;
+  devlogChunks!: Table<DevLogChunkRow, number>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -49,6 +105,12 @@ export class GymDb extends Dexie {
       exerciseNotes: 'exerciseId',
       sessionNotes: '[sessionId+exerciseId], sessionId',
       settings: 'key',
+    });
+    // M4c: developer log. New tables only; existing data is untouched.
+    this.version(3).stores({
+      devlogSessions: 'id, startedAt',
+      devlogSets: 'key, sessionId, [sessionId+seq]',
+      devlogChunks: '++id, sessionId, setKey',
     });
   }
 }
@@ -68,6 +130,31 @@ export async function finishSession(
 
 export async function saveSet(db: GymDb, log: SetLog): Promise<number> {
   return db.sets.add({ ...log });
+}
+
+/** Identifies one logged set (a session logs each exercise's set index once). */
+export type SetRef = Pick<SetLog, 'sessionId' | 'exerciseId' | 'setIndex'>;
+
+/**
+ * M4c last-set correction: writes the corrected reps/partials to the logged row (partials 0 →
+ * field removed, like a fresh log). Returns the number of rows changed (0 if none matched).
+ */
+export async function updateSet(
+  db: GymDb,
+  ref: SetRef,
+  counts: { reps: number; partials: number },
+): Promise<number> {
+  const reps = Math.max(0, Math.round(counts.reps));
+  const partials = Math.max(0, Math.round(counts.partials));
+  return db.sets
+    .where('sessionId')
+    .equals(ref.sessionId)
+    .filter((r) => r.exerciseId === ref.exerciseId && r.setIndex === ref.setIndex)
+    .modify((r) => {
+      r.reps = reps;
+      if (partials > 0) r.partials = partials;
+      else delete r.partials;
+    });
 }
 
 export async function setsForSession(db: GymDb, sessionId: string): Promise<SetRow[]> {

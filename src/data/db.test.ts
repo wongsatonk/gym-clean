@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto';
+import Dexie from 'dexie';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { SetLog } from '../core/types';
 import {
@@ -17,6 +18,7 @@ import {
   setUnit,
   setsForSession,
   startSessionRow,
+  updateSet,
 } from './db';
 
 let db: GymDb;
@@ -143,5 +145,84 @@ describe('GymDb settings (M4)', () => {
     await again.open();
     expect(await getSpokenCount(again)).toBe(false);
     again.close();
+  });
+});
+
+describe('GymDb v3 (M4c developer log)', () => {
+  it('upgrades a v2 database without touching existing rows and adds the devlog tables', async () => {
+    const name = `upgrade-${n++}`;
+    // The schema exactly as shipped before M4c (versions 1 and 2).
+    const old = new Dexie(name);
+    old.version(1).stores({
+      sessions: 'sessionId, dayId, startedAt',
+      sets: '++id, sessionId, exerciseId, startedAt, [exerciseId+startedAt]',
+    });
+    old.version(2).stores({
+      exerciseNotes: 'exerciseId',
+      sessionNotes: '[sessionId+exerciseId], sessionId',
+      settings: 'key',
+    });
+    await old.open();
+    await old.table('sessions').put({ sessionId: 's1', dayId: 'push-a', startedAt: 1000 });
+    await old.table('sets').add(log());
+    await old.table('exerciseNotes').put({ exerciseId: 'A', machineSetting: 'Seat 3', note: '' });
+    await old.table('settings').put({ key: 'unit', value: 'lb' });
+    old.close();
+
+    const up = new GymDb(name);
+    await up.open();
+    try {
+      expect(up.verno).toBe(3);
+      expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
+      expect(await setsForSession(up, 's1')).toHaveLength(1);
+      expect(await getExerciseNote(up, 'A')).toMatchObject({ machineSetting: 'Seat 3' });
+      expect(await getUnit(up)).toBe('lb');
+      expect(await up.devlogSessions.count()).toBe(0);
+      expect(await up.devlogSets.count()).toBe(0);
+      expect(await up.devlogChunks.count()).toBe(0);
+    } finally {
+      up.close();
+      await up.delete();
+    }
+  });
+});
+
+describe('updateSet (M4c last-set correction)', () => {
+  it('writes the corrected reps/partials to the logged row only', async () => {
+    await saveSet(db, log({ setIndex: 0, reps: 10, partials: 1 }));
+    await saveSet(db, log({ setIndex: 1, startedAt: 3000, endedAt: 4000 }));
+    await saveSet(db, log({ sessionId: 'other', setIndex: 0 }));
+
+    expect(
+      await updateSet(
+        db,
+        { sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0 },
+        { reps: 12, partials: 0 },
+      ),
+    ).toBe(1);
+    const rows = await setsForSession(db, 's1');
+    expect(rows[0]).toMatchObject({ setIndex: 0, reps: 12, weightKg: 20, startedAt: 1000 });
+    expect(rows[0]).not.toHaveProperty('partials');
+    expect(rows[1]).toMatchObject({ setIndex: 1, reps: 10 });
+    expect((await setsForSession(db, 'other'))[0]).toMatchObject({ reps: 10 });
+
+    await updateSet(
+      db,
+      { sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 1 },
+      { reps: 8, partials: 2 },
+    );
+    expect((await setsForSession(db, 's1'))[1]).toMatchObject({ reps: 8, partials: 2 });
+  });
+
+  it('returns 0 and changes nothing when the row is missing', async () => {
+    await saveSet(db, log());
+    expect(
+      await updateSet(
+        db,
+        { sessionId: 's1', exerciseId: 'Nope', setIndex: 0 },
+        { reps: 1, partials: 0 },
+      ),
+    ).toBe(0);
+    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ reps: 10 });
   });
 });

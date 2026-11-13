@@ -45,6 +45,11 @@ export type SessionEvent =
   | { type: 'SET_DONE'; now: number }
   /** Live count from the rep counter: overwrites reps/partials of the current set. */
   | { type: 'SET_COUNTED'; reps: number; partials: number }
+  /**
+   * M4c ground truth: fix the just-logged set's reps/partials on Rest (the camera's Set done
+   * logs immediately). Ignored outside Rest, while paused, or with no logged set.
+   */
+  | { type: 'CORRECT_LAST_SET'; reps: number; partials: number }
   | { type: 'START_SET'; now: number }
   | { type: 'SKIP_EXERCISE'; now: number }
   | { type: 'PAUSE'; now: number }
@@ -150,8 +155,33 @@ function goToExercise(s: SessionState, exIndex: number, now: number): SessionSta
   };
 }
 
+/**
+ * CORRECT_LAST_SET: fix the most recent logged set (Rest, or Summary for the workout's final
+ * set). Never paused here: the paused branch and toSummary handle that.
+ */
+function correctLast(
+  s: SessionState,
+  e: Extract<SessionEvent, { type: 'CORRECT_LAST_SET' }>,
+): SessionState {
+  const last = s.logs.at(-1);
+  if (!last) return s;
+  if (!Number.isFinite(e.reps) || !Number.isFinite(e.partials)) return s;
+  const reps = Math.max(0, Math.round(e.reps));
+  const partials = Math.max(0, Math.round(e.partials));
+  const fixed: SetLog = { ...last, reps };
+  if (partials > 0) fixed.partials = partials;
+  else delete fixed.partials;
+  // Reps carry over to the next set of the same exercise, so carry the corrected value.
+  const sameExercise = currentPlanned(s).exerciseId === last.exerciseId;
+  return {
+    ...s,
+    logs: [...s.logs.slice(0, -1), fixed],
+    ...(sameExercise ? { reps } : {}),
+  };
+}
+
 export function next(s: SessionState, e: SessionEvent): SessionState {
-  if (s.phase === 'summary') return s;
+  if (s.phase === 'summary') return e.type === 'CORRECT_LAST_SET' ? correctLast(s, e) : s;
   if (e.type === 'FINISH') return toSummary(s, e.now);
 
   if (s.paused) {
@@ -193,6 +223,9 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
         partials: Number.isFinite(e.partials) ? Math.max(0, Math.round(e.partials)) : 0,
       };
     }
+
+    case 'CORRECT_LAST_SET':
+      return s.phase === 'rest' ? correctLast(s, e) : s;
 
     case 'SET_DONE': {
       if (s.phase !== 'exercise') return s;

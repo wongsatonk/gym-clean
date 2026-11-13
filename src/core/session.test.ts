@@ -497,3 +497,103 @@ describe('SET_COUNTED from the rep counter (M4)', () => {
     expect(jumped.partials).toBe(0);
   });
 });
+
+describe('CORRECT_LAST_SET on Rest (M4c)', () => {
+  const correct = (reps: number, partials: number): SessionEvent => ({
+    type: 'CORRECT_LAST_SET',
+    reps,
+    partials,
+  });
+  // A camera set: counted 10 reps + 1 partial, then Set done → Rest.
+  const counted = () =>
+    run(
+      fresh(),
+      { type: 'SET_COUNTED', reps: 10, partials: 1 },
+      { type: 'SET_DONE', now: sec(40) },
+    );
+
+  it('corrects the just-logged set while resting', () => {
+    const s = run(counted(), correct(12, 0));
+    expect(s.phase).toBe('rest');
+    expect(s.logs).toHaveLength(1);
+    expect(s.logs[0]).toMatchObject({ exerciseId: 'A', setIndex: 0, reps: 12 });
+    expect(s.logs[0]).not.toHaveProperty('partials');
+    const again = run(s, correct(9, 2));
+    expect(again.logs[0]).toMatchObject({ reps: 9, partials: 2 });
+  });
+
+  it('carries the corrected reps into the next set of the same exercise', () => {
+    const s = run(counted(), correct(8, 0));
+    expect(s.exIndex).toBe(0);
+    expect(s.setIndex).toBe(1);
+    expect(s.reps).toBe(8);
+  });
+
+  it('does not touch the upcoming set’s reps when the next set is another exercise', () => {
+    // Exercise A has 2 sets; after both, Rest leads to B (planned top 15).
+    const s = run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(30) },
+      { type: 'START_SET', now: sec(90) },
+      { type: 'SET_DONE', now: sec(120) },
+    );
+    expect(s.phase).toBe('rest');
+    expect(s.exIndex).toBe(1);
+    const c = run(s, correct(7, 1));
+    expect(c.logs[1]).toMatchObject({ exerciseId: 'A', setIndex: 1, reps: 7, partials: 1 });
+    expect(c.logs[0]).toMatchObject({ reps: 12 });
+    expect(c.reps).toBe(15);
+  });
+
+  it('clamps to whole numbers ≥ 0 and ignores non-finite values', () => {
+    expect(run(counted(), correct(-3, -1)).logs[0]).toMatchObject({ reps: 0 });
+    expect(run(counted(), correct(-3, -1)).logs[0]).not.toHaveProperty('partials');
+    expect(run(counted(), correct(10.6, 1.4)).logs[0]).toMatchObject({ reps: 11, partials: 1 });
+    const before = counted();
+    expect(run(before, correct(Number.NaN, 0))).toBe(before);
+    expect(run(before, correct(5, Number.POSITIVE_INFINITY))).toBe(before);
+  });
+
+  it('is ignored outside Rest, while paused, and before any set is logged', () => {
+    const start = fresh();
+    expect(run(start, correct(5, 0))).toBe(start);
+    const exercising = run(counted(), { type: 'START_SET', now: sec(100) });
+    expect(run(exercising, correct(5, 0))).toBe(exercising);
+    const paused = run(counted(), { type: 'PAUSE', now: sec(50) });
+    expect(run(paused, correct(5, 0))).toBe(paused);
+  });
+
+  it('also corrects the last set on Summary (the final set goes straight there)', () => {
+    // Exercise C (1 set) is the last one: its Set done ends the workout.
+    const s = run(
+      startSession({ ...day, exercises: [exC] }, 's1', T0),
+      { type: 'SET_COUNTED', reps: 3, partials: 2 },
+      { type: 'SET_DONE', now: sec(30) },
+    );
+    expect(s.phase).toBe('summary');
+    const c = run(s, correct(5, 0));
+    expect(c.phase).toBe('summary');
+    expect(c.endedAt).toBe(s.endedAt);
+    expect(c.logs[0]).toMatchObject({ exerciseId: 'C', reps: 5 });
+    expect(c.logs[0]).not.toHaveProperty('partials');
+    expect(summarize(c).totalVolumeKg).toBe(summarize(s).totalVolumeKg); // C has 0 kg
+    const finished = run(counted(), { type: 'FINISH', now: sec(60) }, correct(7, 1));
+    expect(finished.logs[0]).toMatchObject({ reps: 7, partials: 1 });
+    expect(summarize(finished).totalVolumeKg).toBe(7 * 20);
+    expect(summarize(finished).setsDone).toBe(1);
+  });
+
+  it('on Summary, still ignores other events, bad values and a workout with no sets', () => {
+    const done = run(counted(), { type: 'FINISH', now: sec(60) });
+    expect(run(done, correct(Number.NaN, 0))).toBe(done);
+    expect(run(done, { type: 'SET_DONE', now: sec(70) })).toBe(done);
+    expect(run(done, { type: 'SET_COUNTED', reps: 3, partials: 0 })).toBe(done);
+    const empty = run(fresh(), { type: 'FINISH', now: sec(5) });
+    expect(run(empty, correct(5, 0))).toBe(empty);
+  });
+
+  it('changes the summary volume', () => {
+    const s = run(counted(), correct(5, 0), { type: 'FINISH', now: sec(60) });
+    expect(summarize(s).totalVolumeKg).toBe(5 * 20);
+  });
+});
