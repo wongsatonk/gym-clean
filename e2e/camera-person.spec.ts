@@ -87,6 +87,17 @@ test('dev-log recorder: person frames, rep events and the count speech are logge
     speech: { t: number; text: string; kind: string }[];
   };
   const rec = () => page.evaluate(() => (window as unknown as { __rec: Log }).__rec);
+  // GitHub's runners have no GPU (~2.5 fps): too slow to count a curl, so CI skips this live
+  // test below 8 fps (same rule as rep-count.spec.ts). Locally it always runs.
+  if (process.env.CI) {
+    const fpsEl = page.locator('[data-fps]').first();
+    await expect
+      .poll(async () => Number(await fpsEl.getAttribute('data-fps')), { timeout: 30_000 })
+      .toBeGreaterThan(0);
+    await page.waitForTimeout(3_000);
+    const measured = Number(await fpsEl.getAttribute('data-fps'));
+    test.skip(measured < 8, `live inference at ${measured} fps (< 8) on this CI runner`);
+  }
   await expect
     .poll(async () => (await rec()).events.filter((e) => e.type === 'rep').length, {
       timeout: 75_000,
