@@ -5,10 +5,10 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 ## Status
 
 - **Current milestone:** M4 — Rep counter: **provisionally done** (verified on synthetic fixtures, 12/12) → 🧍 Checkpoint B real clips still pending (task 15)
-- **Branch:** m4-rep-counter (all tasks 1–13 committed). Not merged into main yet: the main checkout has uncommitted edits (CLAUDE.md, .gitignore, .claude/agents/core-engineer.md, .claude/commands/build.md) and the branch also changes .gitignore.
-- **Remote:** https://github.com/wongsatonk/gym-clean (live: https://wongsatonk.github.io/gym-clean/). main == origin/main; M4 not pushed.
-- **Next step:** Wongsaton commits or sets aside the main-checkout edits → merge m4-rep-counter into main (--no-ff) → push on approval. Then real fixture clips (SPEC §5) → `npm run landmarks -- fixtures/videos` → re-run task 7 + 13 on real + synthetic. M4b only after that.
-- **Waiting on human:** yes. Main-checkout edits before the merge, approval to push, and the Checkpoint B videos at the next gym visit.
+- **Branch:** main (m4-rep-counter merged and pushed 2026-11-13, together with the M7/M7b spec).
+- **Remote:** https://github.com/wongsatonk/gym-clean (live: https://wongsatonk.github.io/gym-clean/)
+- **Next step:** Wongsaton tries live counting on the phone (curl etc. → Camera) and reports. Then real fixture clips (SPEC §5) → `npm run landmarks -- fixtures/videos` → re-run task 7 + 13 on real + synthetic. M4b after that; M7 can be built in parallel (`/build M7`).
+- **Waiting on human:** yes. Phone test of the live counter, and the Checkpoint B videos at the next gym visit.
 
 ## Milestone checklist
 
@@ -43,7 +43,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 11. [main] Wiring and config. Files: src/ui/app.ts, playwright.config.ts. app.ts passes the current exerciseId and callbacks into the camera view: `onCount` → dispatch `SET_COUNTED`, `onSetDone` → dispatch `SET_DONE`, close the camera and go to Rest. It also loads the spoken-count setting. playwright.config.ts widens the `mobile-person-camera` project's `testMatch` (and the `mobile` project's `testIgnore`) to include `rep-count.spec.ts`. Done when: by hand, Pull day → Dumbbell Bicep Curl → camera → the count appears → Set done logs the counted reps. Depends on: 8, 10.
 - [x] 12. [ui-engineer] E2E `e2e/rep-count.spec.ts` (fake camera = synthetic curl clip, which loops). Files: e2e/rep-count.spec.ts. Flow: start Pull day, go to Dumbbell Bicep Curl, open the camera, and wait until `data-reps` ≥ 3 and partials ≥ 1 (the clip has 3 reps + 1 partial per loop). Mocked speechSynthesis receives "One", "Two", "Three" with the toggle on and nothing with it off. Set done → the IndexedDB set row has reps == the on-screen count and partials ≥ 1. A manual exercise has no counter, and no third-party request is made. Done when: it passes 5× with `--repeat-each=5`. Depends on: 11.
 - [x] 13. [verifier] Verify the milestone against the SPEC M4 acceptance criteria: `npm run check` (fixture suite listed by name, all synthetic fixtures green), `npm run e2e`, `npm run build`, and 390×844 screenshots (`docs/screenshots/m4-camera-counting.png`, `m4-settings-spoken-count.png`, `m4-rest-after-counted-set.png`) with the console clean. State explicitly in the evidence that acceptance holds on synthetic fixtures only. Depends on: 7, 12.
-- [ ] 14. [main] Mark M4 **provisionally done (synthetic fixtures)** in the checklist, merge `m4-rep-counter` into main locally, and ask Wongsaton before pushing. Depends on: 13.
+- [x] 14. [main] Mark M4 **provisionally done (synthetic fixtures)** in the checklist, merge `m4-rep-counter` into main locally, and ask Wongsaton before pushing. Depends on: 13.
 - [ ] 15. 🧍 **Checkpoint B (still open):** Wongsaton records the real clips (SPEC §5). Then: `npm run landmarks`, commit the JSON, re-run task 7 on real plus synthetic fixtures, re-tune thresholds (logged as Decisions), and re-run task 13. M4 is fully done only after that, and it should happen before M5 relies on the counter's tempo and range numbers.
 
 ### M3 — Pose pipeline + 3D live skeleton
