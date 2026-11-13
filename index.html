@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0d10" />
     <meta name="color-scheme" content="dark" />
+    <!-- Privacy: the page may only talk to its own origin. This also blocks MediaPipe's built-in
+         usage logging (odml.pa.googleapis.com), which has no off switch. -->
+    <meta http-equiv="Content-Security-Policy" content="connect-src 'self' blob: data:" />
     <title>Gym Clean</title>
     <link
       rel="icon"

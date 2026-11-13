@@ -1,9 +1,11 @@
-import { defineConfig } from '@playwright/test';
+import { defineConfig, type PlaywrightTestConfig } from '@playwright/test';
+import { FAKE_PERSON_VIDEO } from './e2e/fake-camera.setup';
 
 const PORT = 5174;
 
 export default defineConfig({
   testDir: 'e2e',
+  globalSetup: './e2e/fake-camera.setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -16,13 +18,45 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile',
+      testIgnore: /camera-person\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
         deviceScaleFactor: 3,
         isMobile: true,
         hasTouch: true,
+        permissions: ['camera'],
+        launchOptions: {
+          // Fake camera (test pattern) and auto-accepted permission prompts.
+          args: [
+            '--use-fake-device-for-media-stream',
+            '--use-fake-ui-for-media-stream',
+            ...(process.env.FAKE_VIDEO
+              ? [`--use-file-for-fake-video-capture=${process.env.FAKE_VIDEO}`]
+              : []),
+          ],
+        },
       },
+    },
+    {
+      // Same phone, but the fake camera plays the synthetic mannequin clip (a "person").
+      name: 'mobile-person-camera',
+      testMatch: /camera-person\.spec\.ts/,
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 3,
+        isMobile: true,
+        hasTouch: true,
+        permissions: ['camera'],
+        launchOptions: {
+          args: [
+            '--use-fake-device-for-media-stream',
+            '--use-fake-ui-for-media-stream',
+            `--use-file-for-fake-video-capture=${FAKE_PERSON_VIDEO}`,
+          ],
+        },
+      } satisfies PlaywrightTestConfig['use'],
     },
   ],
   webServer: {
