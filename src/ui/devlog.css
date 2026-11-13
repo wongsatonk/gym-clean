@@ -1,0 +1,181 @@
+/* M4c developer log panel (Settings) and "Last set" correction (Rest).
+   Uses the tokens and base button/switch styles from src/styles.css. */
+
+/* ---------- Developer log panel ---------- */
+
+.devlog-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.devlog-summary {
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.devlog-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.devlog-actions [data-devlog='export-last'] {
+  grid-column: 1 / -1;
+}
+
+.devlog-btn {
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.devlog-btn[data-ready] {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+.devlog-btn.danger {
+  color: var(--danger);
+  background: transparent;
+}
+
+.devlog-btn.danger[data-armed] {
+  background: var(--danger);
+  color: #1b0606;
+  border-color: var(--danger);
+}
+
+.devlog-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.devlog-status:empty,
+.lsc-status:empty {
+  display: none;
+}
+
+.devlog-status,
+.lsc-status {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.devlog-privacy {
+  color: var(--muted);
+}
+
+/* ---------- Last set correction ---------- */
+
+.lsc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  min-width: 0;
+}
+
+.lsc-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lsc-prefix {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.lsc-summary {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lsc-fix {
+  flex: none;
+  min-width: 88px;
+  padding: 0 16px;
+  font-weight: 800;
+  color: var(--accent);
+  background: var(--surface-2);
+}
+
+.lsc.open .lsc-fix {
+  color: var(--text);
+}
+
+.lsc-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lsc-editor[hidden] {
+  display: none;
+}
+
+.lsc-steppers {
+  display: grid;
+  gap: 10px;
+}
+
+.lsc-label {
+  color: var(--muted);
+}
+
+.lsc-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 8px;
+}
+
+.lsc-step {
+  min-height: 72px;
+  font-size: 40px;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.lsc-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.lsc-value {
+  text-align: center;
+  font-size: var(--font-big);
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.lsc-buttons {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 10px;
+}
+
+.lsc-cancel {
+  background: transparent;
+}
+
+.lsc-save {
+  min-height: 64px;
+  font-size: 26px;
+  font-weight: 800;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+}
