@@ -30,3 +30,9 @@ ml/models/
 # Exception: the M3 curl clip feeds the e2e fake camera.
 fixtures/synthetic/**/*.webm
 !fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm
+
+# Developer-log exports (M4c) contain pose data from the gym; only converted fixtures are committed.
+*.devlog.json
+*.devlog.json.gz
+gym-clean-devlog-*.json*
+devlog-exports/
