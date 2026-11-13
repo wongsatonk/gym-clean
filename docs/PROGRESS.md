@@ -7,8 +7,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **Current milestone:** M0 — Scaffold (done locally; "CI green" not verified yet because there's no GitHub remote)
 - **Branch:** main (m0-scaffold merged)
 - **Remote:** https://github.com/wongsatonk/gym-clean (Pages URL will be https://wongsatonk.github.io/gym-clean/)
-- **Next step:** Push `main`, confirm CI + Pages deploy are green, tick M0, then start M1.
-- **Waiting on human:** yes. Approve the first push, and set Settings → Pages → Source to "GitHub Actions" (see Blockers)
+- **Next step:** After Pages is enabled, re-run the CI deploy job, confirm the site loads, tick M0, then start M1.
+- **Waiting on human:** yes. Set Settings → Pages → Source to "GitHub Actions" (see Blockers)
 
 ## Milestone checklist
 
@@ -52,8 +52,9 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - `npm run e2e`: **1 passed** (`[mobile] smoke.spec.ts`: title visible, h1 ≥ 64px, no console errors).
 - `npm run build`: OK (index.html 0.50 kB, JS 1.00 kB, CSS 0.85 kB). `BASE_PATH=/focusrep/` build emits `/focusrep/assets/...` URLs.
 - Screenshot 390×844: `docs/screenshots/m0-home-390x844.png`. Console errors: none.
-- CI / Pages: **not verified**. No GitHub remote yet.
+- CI run 43485291125 (push to main, 706ae53): `test` ✓ (check + e2e, 1 passed), `build` ✓, `deploy` ✗. The deploy failed with "Ensure GitHub Pages has been enabled" (404). Pages isn't turned on in the repo settings yet.
+- CI warnings (not failures): actions v4 run on Node 20, which is deprecated. Bump action majors in a later milestone.
 
 ## Blockers / questions for Wongsaton
 
-- **M0 blocker:** remote `origin` = https://github.com/wongsatonk/gym-clean (empty). Waiting on approval to `git push -u origin main`. In the repo, go to Settings → Pages → Source and choose **GitHub Actions**, otherwise the deploy job fails.
+- **M0 blocker:** `main` is pushed. In https://github.com/wongsatonk/gym-clean/settings/pages set Source = **GitHub Actions**, then re-run the failed deploy (`gh run rerun 43485291125 --failed -R wongsatonk/gym-clean`).
