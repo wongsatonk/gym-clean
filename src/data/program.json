@@ -9,48 +9,48 @@
         {
           "exerciseId": "Dumbbell_Bench_Press",
           "sets": 4,
-          "targetReps": [6, 10],
+          "targetReps": [8, 8],
           "restSec": 120,
-          "startWeightKg": 20,
+          "startWeightKg": 15,
           "tracking": "manual"
         },
         {
           "exerciseId": "Incline_Dumbbell_Press",
-          "sets": 3,
-          "targetReps": [8, 12],
-          "restSec": 90,
+          "sets": 4,
+          "targetReps": [6, 7],
+          "restSec": 120,
           "startWeightKg": 15,
           "tracking": "manual"
         },
         {
           "exerciseId": "Seated_Dumbbell_Press",
           "sets": 3,
-          "targetReps": [8, 12],
+          "targetReps": [7, 8],
           "restSec": 90,
-          "startWeightKg": 15,
+          "startWeightKg": 12.5,
           "tracking": "pose"
         },
         {
           "exerciseId": "Side_Lateral_Raise",
-          "sets": 3,
-          "targetReps": [12, 15],
+          "sets": 5,
+          "targetReps": [20, 20],
           "restSec": 60,
-          "startWeightKg": 5,
+          "startWeightKg": 2.5,
           "tracking": "pose"
         },
         {
           "exerciseId": "Standing_Dumbbell_Triceps_Extension",
           "sets": 3,
           "targetReps": [10, 12],
-          "restSec": 60,
-          "startWeightKg": 12.5,
+          "restSec": 90,
+          "startWeightKg": 10,
           "tracking": "manual"
         },
         {
           "exerciseId": "Pushups",
-          "sets": 2,
-          "targetReps": [10, 20],
-          "restSec": 60,
+          "sets": 3,
+          "targetReps": [20, 20],
+          "restSec": 90,
           "startWeightKg": 0,
           "tracking": "pose"
         }

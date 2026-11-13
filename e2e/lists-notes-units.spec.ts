@@ -17,19 +17,19 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
   );
   await page.getByRole('button', { name: '‹ Back' }).click();
 
-  // Preview: Push A list with lb weights (20 kg plan -> 45 lb)
+  // Preview: Push A list with lb weights (15 kg plan -> 35 lb)
   await page.getByRole('button', { name: /Push A/ }).click();
   const rows = page.locator('.ex-row');
   await expect(rows).toHaveCount(6);
   await expect(rows.first()).toContainText('Dumbbell Bench Press');
-  await expect(rows.first()).toContainText('4 × 6–10 reps · 45 lb');
+  await expect(rows.first()).toContainText('4 × 8 reps · 35 lb');
   await page.getByRole('button', { name: 'Start workout' }).click();
 
   // Exercise: lb stepper steps by 5
   const lb = page.getByLabel('lb', { exact: true });
-  await expect(lb).toHaveText('45');
+  await expect(lb).toHaveText('35');
   await page.getByRole('button', { name: 'lb plus' }).click();
-  await expect(lb).toHaveText('50');
+  await expect(lb).toHaveText('40');
 
   // Notes: machine setting + lasting note + today's note
   await page.getByRole('button', { name: 'Notes and machine setting' }).click();
@@ -42,7 +42,7 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
 
   // Set done -> rest shows today's set
   await page.getByRole('button', { name: 'Set done' }).click();
-  await expect(page.locator('[data-today]')).toHaveText('Today: 10×50 lb');
+  await expect(page.locator('[data-today]')).toHaveText('Today: 8×40 lb');
 
   // List: jump to Side Lateral Raise while resting
   await page.getByRole('button', { name: 'Exercise list' }).click();
@@ -53,12 +53,12 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
   await expect(page.locator('.next-up')).toContainText('Side Lateral Raise');
   await page.getByRole('button', { name: 'Start set' }).click();
   await expect(page.getByRole('heading', { name: 'Side Lateral Raise' })).toBeVisible();
-  await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 3');
+  await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 5');
 
   // End -> summary in lb with today's note
   await page.getByRole('button', { name: 'End workout' }).click();
   await page.getByRole('button', { name: 'Tap again to end' }).click();
-  await expect(page.locator('[data-stat="volume"]')).toContainText('500');
+  await expect(page.locator('[data-stat="volume"]')).toContainText('320');
   await expect(page.locator('[data-stat="volume"]')).toContainText('lb volume');
   await expect(page.getByText('“felt strong”')).toBeVisible();
   await page.getByRole('button', { name: 'Done' }).click();
@@ -66,11 +66,11 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
   // Next session: last time, machine setting and weight default carry over; today's note is fresh
   await page.getByRole('button', { name: /Push A/ }).click();
   await expect(rows.first()).toContainText('Machine: Bench notch 3');
-  await expect(rows.first()).toContainText('Last time: 10×50 lb');
-  await expect(rows.first()).toContainText('· 50 lb');
+  await expect(rows.first()).toContainText('Last time: 8×40 lb');
+  await expect(rows.first()).toContainText('· 40 lb');
   await page.getByRole('button', { name: 'Start workout' }).click();
-  await expect(lb).toHaveText('50');
-  await expect(page.locator('[data-last]')).toHaveText('Last time: 10×50 lb');
+  await expect(lb).toHaveText('40');
+  await expect(page.locator('[data-last]')).toHaveText('Last time: 8×40 lb');
   await expect(page.locator('[data-today]')).toHaveCount(0);
   await page.getByRole('button', { name: 'Notes and machine setting' }).click();
   await expect(page.getByLabel('Exercise note')).toHaveValue('Arch a little');

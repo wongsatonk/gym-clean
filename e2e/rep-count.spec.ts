@@ -53,7 +53,7 @@ async function installMocks(page: Page): Promise<void> {
       configurable: true,
       value: {
         speak: (u: FakeUtterance) => {
-          if (u.text) window.__spoken.push(u.text);
+          if (u.text && (u as { volume?: number }).volume !== 0) window.__spoken.push(u.text); // skip the silent iOS unlock
         },
         cancel: () => undefined,
         getVoices: () => [],
