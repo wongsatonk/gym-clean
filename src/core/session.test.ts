@@ -420,6 +420,24 @@ describe('SET_COUNTED from the rep counter (M4)', () => {
     expect(s.partials).toBe(0);
   });
 
+  it('rounds fractional counts to the nearest whole number', () => {
+    const s = run(fresh(), counted(4.6, 1.4));
+    expect(s.reps).toBe(5);
+    expect(s.partials).toBe(1);
+  });
+
+  it('ignores non-finite counts: keeps the current reps, partials fall back to 0', () => {
+    const before = run(fresh(), counted(6, 2));
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      const s = run(before, counted(bad, bad));
+      expect(s.reps).toBe(6);
+      expect(s.partials).toBe(0);
+    }
+    const mixed = run(before, counted(7, NaN));
+    expect(mixed.reps).toBe(7);
+    expect(mixed.partials).toBe(0);
+  });
+
   it('is ignored during rest', () => {
     const resting = run(fresh(), { type: 'SET_DONE', now: sec(30) });
     expect(run(resting, counted(4, 2))).toBe(resting);
@@ -471,7 +489,11 @@ describe('SET_COUNTED from the rep counter (M4)', () => {
   it('resets partials when moving to another exercise by skip or jump', () => {
     const skipped = run(fresh(), counted(3, 1), { type: 'SKIP_EXERCISE', now: sec(10) });
     expect(skipped.partials).toBe(0);
-    const jumped = run(fresh(), counted(3, 1), { type: 'GO_TO_EXERCISE', exIndex: 2, now: sec(10) });
+    const jumped = run(fresh(), counted(3, 1), {
+      type: 'GO_TO_EXERCISE',
+      exIndex: 2,
+      now: sec(10),
+    });
     expect(jumped.partials).toBe(0);
   });
 });

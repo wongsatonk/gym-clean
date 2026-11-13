@@ -188,8 +188,9 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       if (s.phase !== 'exercise') return s;
       return {
         ...s,
-        reps: Math.max(0, Math.round(e.reps)),
-        partials: Math.max(0, Math.round(e.partials)),
+        // A non-finite count (NaN/Infinity) must not poison state: keep reps, zero partials.
+        reps: Number.isFinite(e.reps) ? Math.max(0, Math.round(e.reps)) : s.reps,
+        partials: Number.isFinite(e.partials) ? Math.max(0, Math.round(e.partials)) : 0,
       };
     }
 
