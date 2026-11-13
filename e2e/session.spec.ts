@@ -31,7 +31,7 @@ async function installMocks(page: Page) {
       configurable: true,
       value: {
         speak: (u: FakeUtterance) => {
-          if (u.text) window.__spoken.push(u.text);
+          if (u.text && (u as { volume?: number }).volume !== 0) window.__spoken.push(u.text); // skip the silent iOS unlock
         },
         cancel: () => undefined,
         getVoices: () => [],
@@ -98,19 +98,19 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await expect(page.locator('.ex-row')).toHaveCount(6);
   await page.getByRole('button', { name: 'Start workout' }).click();
 
-  // Exercise: set 1 of bench press, adjust reps 10 -> 8 and weight 20 -> 22.5
+  // Exercise: set 1 of bench press, adjust reps 8 -> 6 and weight 15 -> 17.5
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 4');
   await expect(page.getByText('Squeeze your chest, slow on the way down.')).toBeVisible();
   const reps = page.getByLabel('Reps', { exact: true });
   const kg = page.getByLabel('kg', { exact: true });
-  await expect(reps).toHaveText('10');
-  await expect(kg).toHaveText('20');
+  await expect(reps).toHaveText('8');
+  await expect(kg).toHaveText('15');
   await page.getByRole('button', { name: 'Reps minus' }).click();
   await page.getByRole('button', { name: 'Reps minus' }).click();
   await page.getByRole('button', { name: 'kg plus' }).click();
-  await expect(reps).toHaveText('8');
-  await expect(kg).toHaveText('22.5');
+  await expect(reps).toHaveText('6');
+  await expect(kg).toHaveText('17.5');
   expect(await page.evaluate(() => window.__wake)).toEqual(['request']);
 
   await page.clock.runFor(30_000);
@@ -153,15 +153,15 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   // Set 2 starts with the focus cue and carries reps/weight forward
   await expect.poll(async () => (await spoken(page)).at(-1)).toBe(BENCH_CUE);
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 2 of 4');
-  await expect(reps).toHaveText('8');
-  await expect(kg).toHaveText('22.5');
+  await expect(reps).toHaveText('6');
+  await expect(kg).toHaveText('17.5');
 
   // Skip the rest of bench press
   await page.getByRole('button', { name: 'Skip exercise' }).click();
   await expect(page.getByRole('heading', { name: 'Incline Dumbbell Press' })).toBeVisible();
-  await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 3');
+  await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 4');
   await expect.poll(async () => (await spoken(page)).at(-1)).toBe(INCLINE_CUE);
-  await expect(reps).toHaveText('12');
+  await expect(reps).toHaveText('7');
   await expect(kg).toHaveText('15');
 
   await page.clock.runFor(40_000);
@@ -174,10 +174,10 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await expect(page.getByRole('button', { name: 'Tap again to end' })).toBeVisible();
   await page.getByRole('button', { name: 'Tap again to end' }).click();
 
-  // Summary: 8×22.5 + 12×15 = 360 kg, one overrun (155 s > 150 s)
+  // Summary: 6×17.5 + 7×15 = 210 kg, one overrun (155 s > 150 s)
   await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
   await expect(page.locator('[data-stat="sets"] .stat-value')).toHaveText('2');
-  await expect(page.locator('[data-stat="volume"] .stat-value')).toHaveText('360');
+  await expect(page.locator('[data-stat="volume"] .stat-value')).toHaveText('210');
   await expect(page.locator('[data-stat="overruns"] .stat-value')).toHaveText('1');
   await expect(page.getByText('skipped')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__wake)).toEqual(['request', 'release']);
@@ -194,8 +194,8 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
       restTakenSec,
     })),
   ).toEqual([
-    { exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 8, weightKg: 22.5, restTakenSec: 0 },
-    { exerciseId: 'Incline_Dumbbell_Press', setIndex: 0, reps: 12, weightKg: 15, restTakenSec: 0 },
+    { exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 6, weightKg: 17.5, restTakenSec: 0 },
+    { exerciseId: 'Incline_Dumbbell_Press', setIndex: 0, reps: 7, weightKg: 15, restTakenSec: 0 },
   ]);
 
   // Back to Today, Pull A is suggested next

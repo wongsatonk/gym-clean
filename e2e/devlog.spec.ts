@@ -128,11 +128,11 @@ test('dev log: correct the last set on Rest and Summary, export it, clear it', a
   await page.getByRole('button', { name: 'Save' }).click();
   await page.getByRole('button', { name: 'Set done' }).click();
 
-  // Rest: "Last set: 10 reps" → Fix → 7 reps, 1 partial → Save.
+  // Rest: "Last set: 8 reps" → Fix → 7 reps, 1 partial → Save.
   const fix = page.locator('[data-lsc=panel]');
-  await expect(fix.locator('[data-lsc=summary]')).toHaveText('10 reps');
+  await expect(fix.locator('[data-lsc=summary]')).toHaveText('8 reps');
   await fix.locator('[data-lsc=fix]').click();
-  for (let i = 0; i < 3; i++) await fix.locator('[data-lsc=reps-minus]').click();
+  for (let i = 0; i < 1; i++) await fix.locator('[data-lsc=reps-minus]').click();
   await fix.locator('[data-lsc=partials-plus]').click();
   await expect(fix.locator('[data-lsc=reps-value]')).toHaveText('7');
   await expect(fix.locator('[data-lsc=partials-value]')).toHaveText('1');

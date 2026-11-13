@@ -346,6 +346,59 @@ export function mountApp(root: HTMLElement): void {
 
   // ---------- Settings ----------
 
+  /** Settings → Voice: speak a test phrase and show what the browser reports (no sound on iOS?). */
+  function voiceTest(): HTMLElement {
+    const statusLine = h('p', { class: 'muted', role: 'status', 'data-voice-status': true }, '');
+    const show = (text: string) => {
+      statusLine.textContent = text;
+    };
+    const btn = h(
+      'button',
+      {
+        class: 'ghost-btn wide-btn',
+        'data-voice-test': true,
+        onclick: () => {
+          voice.unlock(); // inside the tap
+          const st = voice.status();
+          if (!st.supported) {
+            show('This browser has no speech. Try Safari or Chrome.');
+            return;
+          }
+          const u = voice.speak('Voice test. One, two, three.', { kind: 'cue' });
+          if (!u) return;
+          show('Speaking…');
+          u.addEventListener('start', () => show('Speaking… can you hear it?'));
+          u.addEventListener('end', () =>
+            show('Done. If you heard nothing, Silent mode is on or the volume is down.'),
+          );
+          u.addEventListener('error', (e) =>
+            show(`Speech error: ${(e as SpeechSynthesisErrorEvent).error ?? 'unknown'}.`),
+          );
+          // iOS gives no event when speech is blocked: report what we know after a moment.
+          window.setTimeout(() => {
+            const now = voice.status();
+            if (statusLine.textContent === 'Speaking…')
+              show(
+                `Nothing started (voices: ${now.voices}, English: ${now.english}, paused: ${now.paused ? 'yes' : 'no'}). Turn off Silent mode, turn the volume up, then tap again.`,
+              );
+          }, 2500);
+        },
+      },
+      'Test voice',
+    );
+    return h(
+      'div',
+      { class: 'voice-test' },
+      btn,
+      statusLine,
+      h(
+        'p',
+        { class: 'muted' },
+        'No sound? On iPhone, Safari mutes spoken cues in Silent mode: turn Silent mode off and the volume up.',
+      ),
+    );
+  }
+
   function settingsScreen(): HTMLElement {
     devLogPanel?.destroy();
     devLogPanel = createDevLogPanel({ db });
@@ -395,6 +448,7 @@ export function mountApp(root: HTMLElement): void {
         h('span', { class: 'switch-label' }, 'Count reps out loud'),
         h('span', { class: 'switch-state', 'aria-hidden': 'true' }, spokenCount ? 'On' : 'Off'),
       ),
+      voiceTest(),
       h('p', { class: 'field-label' }, 'Weight unit'),
       h(
         'div',
