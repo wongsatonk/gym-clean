@@ -32,6 +32,7 @@ import {
 } from '../data/db';
 import { bodyMapSvg, pickView } from './bodyMap';
 import type { Body3D } from './body3d/viewer';
+import { createCameraView, type CameraView } from './cameraView';
 import { h } from './dom';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
@@ -141,8 +142,26 @@ export function mountApp(root: HTMLElement): void {
     body3d.setMuscles(primary, secondary);
   }
 
+  // ---------- Camera (M3) ----------
+
+  let camera: CameraView | null = null;
+
+  function openCameraView(title: string): void {
+    if (camera) return;
+    camera = createCameraView({ title, onClose: closeCameraView });
+    root.append(camera.el);
+    void camera.start();
+  }
+
+  function closeCameraView(): void {
+    camera?.stop();
+    camera = null;
+    render();
+  }
+
   function render(): void {
     root.replaceChildren(screenFor(view));
+    if (camera) root.append(camera.el);
     if (view.screen === 'session') {
       ensureBody3d();
       placeBody3d();
@@ -253,6 +272,12 @@ export function mountApp(root: HTMLElement): void {
         h('button', { class: 'ghost-btn', onclick: goToday }, '‹ Back'),
       ),
       h('h1', { class: 'page-title' }, 'Settings'),
+      h('p', { class: 'field-label' }, 'Camera'),
+      h(
+        'button',
+        { class: 'ghost-btn wide-btn', onclick: () => openCameraView('Camera test') },
+        'Camera test',
+      ),
       h('p', { class: 'field-label' }, 'Weight unit'),
       h(
         'div',
@@ -460,6 +485,16 @@ export function mountApp(root: HTMLElement): void {
         },
         `☰ ${s.day.name} · ${s.exIndex + 1}/${s.day.exercises.length}`,
       ),
+      currentPlanned(s).tracking === 'pose'
+        ? h(
+            'button',
+            {
+              class: 'ghost-btn',
+              onclick: () => openCameraView(exerciseName(currentPlanned(s).exerciseId)),
+            },
+            'Camera',
+          )
+        : null,
       h(
         'button',
         { class: 'ghost-btn', onclick: () => dispatch({ type: 'PAUSE', now: now() }) },

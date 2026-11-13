@@ -33,6 +33,25 @@ the things only a human can do (filming test videos, testing at the gym).
 8. If a library API doesn't match your expectations, look up current docs (Context7 MCP or the
    official site) instead of guessing — MediaPipe's web API has changed several times.
 
+## Agent team
+
+Run `/build` to work the current milestone with the team below (`.claude/agents/`), and
+`/feedback <notes>` after a gym checkpoint. The main session is the orchestrator: it plans with
+`planner`, dispatches owners (independent tasks in parallel), integrates shared files, gets a
+`reviewer` PASS, commits, and has `verifier` sign off each milestone. **Subagents never commit,
+push or switch branches.**
+
+| Agent | Owns |
+|---|---|
+| `planner` | Task plans + Decisions in `docs/PROGRESS.md`, scope edits in `docs/SPEC.md` (no code) |
+| `core-engineer` | `src/core/**`, `src/data/**` (pure logic, exercises/thresholds, Dexie, JSON data) |
+| `pose-engineer` | `src/pose/**`, `tools/**`, `scripts/{landmarks,synthetic,copy-mediapipe-wasm}.mjs`, `public/models/**`, `fixtures/landmarks/**`, `fixtures/synthetic/**`, `e2e/camera.spec.ts` |
+| `ui-engineer` | `src/ui/**` except 3D modules, `src/styles.css`, `index.html`, other `e2e/*.spec.ts` |
+| `anatomy-3d-engineer` | `src/ui/body3d/**`, `src/ui/bodyMap.ts`, `src/ui/skeleton3d.ts`, `src/ui/demo3d/**` |
+| `reviewer` | Read-only review of diffs against these rules |
+| `verifier` | Read-only on app code; runs check/e2e/build, owns `scripts/screenshots.mjs`, `docs/screenshots/**` |
+| main session | `src/core/types.ts` changes others consume, `src/ui/app.ts` routing, `src/main.ts`, configs, `package.json`, git |
+
 ## Stack
 
 - Vite + TypeScript (strict), no UI framework for v1 (vanilla TS + small components). Add a

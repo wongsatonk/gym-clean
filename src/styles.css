@@ -619,3 +619,69 @@ textarea:focus-visible {
 .swatch.secondary {
   background: #2f9e5c;
 }
+
+/* ---------- M3: camera + 3D skeleton ---------- */
+
+.wide-btn {
+  width: 100%;
+}
+
+.camera-sheet {
+  z-index: 10;
+}
+
+.cam-stage {
+  position: relative;
+  height: 44dvh;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+  aspect-ratio: 3 / 4;
+  background: #000;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.cam-video,
+.cam-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cam-stage[data-facing='user'] .cam-video,
+.cam-stage[data-facing='user'] .cam-overlay {
+  transform: scaleX(-1);
+}
+
+.cam-status {
+  font-variant-numeric: tabular-nums;
+}
+
+.cam-controls {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 8px;
+}
+
+.small-seg {
+  min-height: var(--tap-min);
+  font-size: 20px;
+}
+
+.skeleton-slot {
+  width: 100%;
+  height: 230px;
+  background: var(--surface);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.skeleton3d,
+.skeleton3d canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}

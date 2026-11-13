@@ -4,11 +4,11 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Current milestone:** M2 — Anatomy map (3D + 2D) + focus cues: done locally. Next: M3 pose pipeline.
-- **Branch:** main (m2-anatomy-cues merged locally, not pushed yet)
+- **Current milestone:** M3 — Pose pipeline + 3D live skeleton: done locally → 🧍 **Checkpoint B (record fixture videos)**
+- **Branch:** main (m3-pose-pipeline merged locally, not pushed yet)
 - **Remote:** https://github.com/wongsatonk/gym-clean (live: https://wongsatonk.github.io/gym-clean/)
-- **Next step:** Push main (on approval), then M3: camera + MediaPipe pose pipeline + 3D live skeleton → 🧍 Checkpoint B (record fixtures).
-- **Waiting on human:** no. Checkpoint A runs alongside: Wongsaton said to keep going and will send feedback during development.
+- **Next step:** Push (on approval). Wongsaton records fixtures per SPEC §5 into `fixtures/videos/`. Then run `npm run landmarks`, commit the JSON, and start M4.
+- **Waiting on human:** yes. Checkpoint B fixture videos, plus approval to push. Gym feedback from Checkpoint A still welcome.
 
 ## Milestone checklist
 
@@ -16,12 +16,21 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [x] M1 Guided workout flow
 - [x] M1b Lists, notes, units → 🧍 Checkpoint A (gym test)
 - [x] M2 Anatomy map (3D + 2D fallback) + focus cues
-- [ ] M3 Pose pipeline → 🧍 Checkpoint B (record fixtures)
+- [x] M3 Pose pipeline (+ 3D live skeleton) → 🧍 Checkpoint B (record fixtures)
 - [ ] M4 Rep counter
 - [ ] M5 Focus & form cues → 🧍 Checkpoint C (gym test with camera)
 - [ ] M6 Polish & install
 
 ## Current milestone plan
+
+### M3 — Pose pipeline + 3D live skeleton
+- [x] 1. Assets: `public/models/pose_landmarker_lite.task` (committed, with source/SHA in a README) and the wasm runtime copied from npm on postinstall (`public/mediapipe/`, gitignored). No CDN.
+- [x] 2. `src/core/poseTopology.ts` (33 landmark names, skeleton connections, left/right) + `src/core/fps.ts` (rolling fps meter). Tests first.
+- [x] 3. `src/pose/`: `camera.ts` (getUserMedia front/rear, stop tracks), `landmarker.ts` (Pose Landmarker lite, VIDEO mode, GPU with CPU fallback) → emits `LandmarkFrame`.
+- [x] 4. Camera screen (from Settings → "Camera test" and from pose-tracked exercises): mirrored video, 2D skeleton overlay canvas, fps, camera switch, delegate shown. Stops the camera on leave.
+- [x] 5. 3D live skeleton (`src/ui/skeleton3d.ts`) from `world` landmarks: joints + bones, drag to rotate, Front / Side presets.
+- [x] 6. `npm run landmarks`: dev-only page `tools/landmarks.html` + Playwright runner, `fixtures/videos/**` → `fixtures/landmarks/<same>.json`. Prove it on a synthetic clip (our 3D mannequin rendered to video) if MediaPipe detects it; otherwise on Wongsaton's fixtures at Checkpoint B.
+- [x] 7. Verify (check, e2e with a fake camera, build, screenshots), merge, push → 🧍 Checkpoint B.
 
 ### M2 — Anatomy map + focus cues
 - [x] 1. `src/ui/bodyMap.ts`: original stylized SVG body (front + back), built from half-body point lists, mirrored and smoothed (Catmull-Rom). One `<path data-muscle="…">` per muscle group for all 17 free-exercise-db muscles. `pickView(primary)` chooses front or back. Tests first: every muscle in the dataset maps to a path, the view choice, and highlight classes.
@@ -70,6 +79,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - 2026-11-13 — M1b: weights are stored in kg; lb is display only (5 lb steps, 2.5 kg steps). The weight default is last time's final weight, else the plan's weight snapped to the step. Program start weights were moved onto 2.5 kg steps (16→15, 14→15, 18→17.5, 22→22.5, 12→12.5, 6→5, 8→7.5).
 - 2026-11-13 — M1b: after an exercise finishes, the workout continues with the next unfinished exercise and wraps around to ones that were jumped over. Skipped exercises are not revisited unless you jump to one (which un-skips it). Finished exercises and the current one can't be jumped to.
 - 2026-11-13 — M1b: the machine setting and exercise note last per exercise (`exerciseNotes`). Today's note is per session+exercise (`sessionNotes`) and shows on the Summary. Notes are only edited in the Notes sheet, between sets. The unit lives in the `settings` table.
+- 2026-11-13 — M3 privacy: MediaPipe tasks-vision always sends usage logs to `odml.pa.googleapis.com/v1/log`, with no off switch. Blocked with a CSP meta tag `connect-src 'self' blob: data:` on the app and the tool pages. E2E asserts that no request reaches a third party.
+- 2026-11-13 — M3: the camera screen opens from Settings → Camera test and from pose-tracked exercises. It's an overlay; Close stops every track. The stage takes the camera's aspect (portrait on an upright phone, nothing cropped). The front camera is mirrored, video + overlay + 3D alike. Inference runs on the main thread for now: headless Chrome gets 12–20 fps. Measure on the phone at Checkpoint B and move to a Web Worker if < 24 fps (SPEC M3).
+- 2026-11-13 — M3: the landmarks tool runs in installed Google Chrome (`channel: 'chrome'`) so iPhone H.264/HEVC clips decode, with an ffmpeg → VP9 fallback. It uses the CPU delegate for reproducible output and rounds values to 4 decimals (~95 kB per second of video).
+- 2026-11-13 — M3: synthetic fixture: `npm run synthetic` renders our own articulated mannequin doing 3 full + 1 partial curls (side view). MediaPipe detects it in 311/316 frames. The visible right elbow traces 3 dips to 40–57° and 1 to ~121°, so it's usable as an M4 test fixture alongside the real clips. The far-side elbow has 0.13 visibility, which confirms the "use the more visible side" rule.
+- 2026-11-13 — M3: added the `ui-ux-pro-max` skill (MIT) as a project skill at Wongsaton's request, after review (offline scripts). Its suggestions never override CLAUDE.md (e.g. fonts must be self-hosted because of the CSP).
+- 2026-11-13 — M3: Wongsaton chose to download the pose model into the repo (`public/models/`, 5.8 MB, Apache-2.0), served from our own site. The MediaPipe wasm is copied from npm on install.
 - 2026-11-13 — M2: the 3D body is built from our own primitives (capsules/ellipsoids, muscles as ellipsoids), so no downloaded model or art. One WebGL context for the whole app: the canvas moves between slots on re-render. It renders on demand only (eased turn, drag), and reduced motion snaps the turn. The 2D SVG map shows until 3D loads, and stays when WebGL is missing.
 - 2026-11-13 — M2: SVG ids can't contain spaces, so muscle paths use `data-muscle="middle back"` plus `id="muscle-<view>-middle-back"`.
 - 2026-11-13 — M2: the focus cue is spoken at every set start (session start, Start set, skip/jump into an exercise), never on resume or stepper edits. Per spec; can drop to "first set only" if it gets repetitive.
@@ -111,6 +126,18 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - `npm run build`: main JS 162 kB / 50 kB gzip, lazy `viewer` chunk 538 kB / 134 kB gzip (three.js).
 - Screenshots 390×844: `docs/screenshots/m2-exercise-{push,pull,legs}.png`, `m2-rest.png`, `m2-viewer.png`. scrollWidth 390. Console errors: none.
 
+### M3 (2026-11-13)
+- `npm run check`: typecheck + lint clean. Vitest **10 files / 76 tests passed** (+4: pose topology, mirror indices, fps meter).
+- `npm run e2e`: **10 passed**, and 30/30 with `--repeat-each=3`. New:
+  - `camera.spec.ts`: fake camera (test pattern). The model loads from our origin, inference runs (fps > 1), the delegate is reported, Front/Side presets and Switch camera work, Close stops all tracks, and **no third-party request completes**.
+  - `camera-person.spec.ts` (project `mobile-person-camera`): the fake camera plays the synthetic clip. It asserts a person is detected, the 3D skeleton is live, Side turns it −90°, and the overlay draws.
+  - A test that the camera button appears only on pose-tracked exercises.
+- `npm run landmarks -- fixtures/synthetic`: 311/316 frames → `fixtures/landmarks/curl/synthetic-01__reps-3__partials-1.json` in 11 s.
+- `npm run build`: main 168 kB / 52 kB gzip; lazy chunks: three 132 kB gzip, landmarker 46 kB gzip; model + wasm in `dist/` (21 MB total, loaded only when the camera opens).
+- Screenshots 390×844: `docs/screenshots/m3-exercise-camera-btn.png`, `m3-camera-front.png`, `m3-camera-side.png`. scrollWidth 390. Page errors: none. 12–20 fps (GPU) in headless Chrome.
+
 ## Blockers / questions for Wongsaton
+- **🧍 Checkpoint B:** record fixture videos per SPEC §5 into `fixtures/videos/<exercise>/<label>__reps-<n>__partials-<m>.mp4` (gitignored, never committed). Exercises: curl, push-up, seated DB shoulder press, one-arm DB row, goblet squat, lateral raise. For each: one clean clip + one with 2–3 partial reps and fast lowering, 10–30 s. Then tell me and I'll run `npm run landmarks`.
+- While filming, please open **Settings → Camera test** on the phone and tell me the fps it shows (it decides whether inference moves to a Web Worker).
 - **Checkpoint A:** do one real session from https://wongsatonk.github.io/gym-clean/ and report what felt off, what annoyed you, and what you never used. Things worth checking: do the voice cues play with the screen on and the phone silent switch off? Does the screen stay awake? Are the starting weights in the program close?
 

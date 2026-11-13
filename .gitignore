@@ -16,3 +16,6 @@ fixtures/videos/
 # Starter bundle (contents are unpacked in the repo)
 focusrep-starter.zip
 .playwright-mcp/
+
+# MediaPipe wasm runtime, copied from node_modules on install
+public/mediapipe/

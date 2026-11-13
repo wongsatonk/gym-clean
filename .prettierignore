@@ -7,3 +7,5 @@ package-lock.json
 
 # Hand-written docs: keep author formatting
 *.md
+public/mediapipe
+public/models

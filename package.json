@@ -12,7 +12,9 @@
     "test": "vitest run",
     "check": "npm run typecheck && npm run lint && npm run test",
     "e2e": "playwright test",
-    "landmarks": "node scripts/landmarks.mjs"
+    "landmarks": "node scripts/landmarks.mjs",
+    "postinstall": "node scripts/copy-mediapipe-wasm.mjs",
+    "synthetic": "node scripts/synthetic.mjs"
   },
   "type": "module",
   "devDependencies": {
@@ -36,6 +38,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^1.2.3",
     "dexie": "^4.4.7",
     "three": "^0.187.0"
   }

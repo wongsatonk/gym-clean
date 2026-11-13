@@ -19,7 +19,9 @@
       "Bash(git switch:*)",
       "Bash(git branch:*)",
       "Bash(ls:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(git merge --no-ff:*)",
+      "Bash(git switch main)"
     ],
     "deny": [
       "Bash(git push --force:*)",
