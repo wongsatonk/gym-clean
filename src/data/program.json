@@ -1,0 +1,298 @@
+{
+  "name": "Push / Pull / Legs (6 days)",
+  "weightUnit": "kg",
+  "days": [
+    {
+      "id": "push-a",
+      "name": "Push A",
+      "exercises": [
+        {
+          "exerciseId": "Dumbbell_Bench_Press",
+          "sets": 4,
+          "targetReps": [6, 10],
+          "restSec": 120,
+          "startWeightKg": 20,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Incline_Dumbbell_Press",
+          "sets": 3,
+          "targetReps": [8, 12],
+          "restSec": 90,
+          "startWeightKg": 16,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Seated_Dumbbell_Press",
+          "sets": 3,
+          "targetReps": [8, 12],
+          "restSec": 90,
+          "startWeightKg": 14,
+          "tracking": "pose"
+        },
+        {
+          "exerciseId": "Side_Lateral_Raise",
+          "sets": 3,
+          "targetReps": [12, 15],
+          "restSec": 60,
+          "startWeightKg": 6,
+          "tracking": "pose"
+        },
+        {
+          "exerciseId": "Standing_Dumbbell_Triceps_Extension",
+          "sets": 3,
+          "targetReps": [10, 12],
+          "restSec": 60,
+          "startWeightKg": 12,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Pushups",
+          "sets": 2,
+          "targetReps": [10, 20],
+          "restSec": 60,
+          "startWeightKg": 0,
+          "tracking": "pose"
+        }
+      ]
+    },
+    {
+      "id": "pull-a",
+      "name": "Pull A",
+      "exercises": [
+        {
+          "exerciseId": "One-Arm_Dumbbell_Row",
+          "sets": 4,
+          "targetReps": [8, 12],
+          "restSec": 90,
+          "startWeightKg": 22,
+          "tracking": "pose"
+        },
+        {
+          "exerciseId": "Wide-Grip_Lat_Pulldown",
+          "sets": 3,
+          "targetReps": [8, 12],
+          "restSec": 90,
+          "startWeightKg": 40,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Reverse_Flyes",
+          "sets": 3,
+          "targetReps": [12, 15],
+          "restSec": 60,
+          "startWeightKg": 6,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Dumbbell_Bicep_Curl",
+          "sets": 3,
+          "targetReps": [8, 12],
+          "restSec": 60,
+          "startWeightKg": 10,
+          "tracking": "pose"
+        },
+        {
+          "exerciseId": "Hammer_Curls",
+          "sets": 3,
+          "targetReps": [10, 12],
+          "restSec": 60,
+          "startWeightKg": 10,
+          "tracking": "manual"
+        }
+      ]
+    },
+    {
+      "id": "legs-a",
+      "name": "Legs A",
+      "exercises": [
+        {
+          "exerciseId": "Goblet_Squat",
+          "sets": 4,
+          "targetReps": [8, 12],
+          "restSec": 120,
+          "startWeightKg": 20,
+          "tracking": "pose"
+        },
+        {
+          "exerciseId": "Stiff-Legged_Dumbbell_Deadlift",
+          "sets": 3,
+          "targetReps": [8, 12],
+          "restSec": 90,
+          "startWeightKg": 18,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Dumbbell_Lunges",
+          "sets": 3,
+          "targetReps": [10, 12],
+          "restSec": 90,
+          "startWeightKg": 12,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Lying_Leg_Curls",
+          "sets": 3,
+          "targetReps": [10, 12],
+          "restSec": 60,
+          "startWeightKg": 30,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Standing_Calf_Raises",
+          "sets": 3,
+          "targetReps": [12, 15],
+          "restSec": 60,
+          "startWeightKg": 40,
+          "tracking": "manual"
+        }
+      ]
+    },
+    {
+      "id": "push-b",
+      "name": "Push B",
+      "exercises": [
+        {
+          "exerciseId": "Incline_Dumbbell_Press",
+          "sets": 4,
+          "targetReps": [6, 10],
+          "restSec": 120,
+          "startWeightKg": 18,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Dumbbell_Flyes",
+          "sets": 3,
+          "targetReps": [10, 12],
+          "restSec": 60,
+          "startWeightKg": 10,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Dumbbell_Shoulder_Press",
+          "sets": 3,
+          "targetReps": [8, 12],
+          "restSec": 90,
+          "startWeightKg": 14,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Cable_Crossover",
+          "sets": 3,
+          "targetReps": [12, 15],
+          "restSec": 60,
+          "startWeightKg": 10,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Triceps_Pushdown",
+          "sets": 3,
+          "targetReps": [10, 12],
+          "restSec": 60,
+          "startWeightKg": 20,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Bench_Dips",
+          "sets": 2,
+          "targetReps": [10, 15],
+          "restSec": 60,
+          "startWeightKg": 0,
+          "tracking": "manual"
+        }
+      ]
+    },
+    {
+      "id": "pull-b",
+      "name": "Pull B",
+      "exercises": [
+        {
+          "exerciseId": "Bent_Over_Two-Dumbbell_Row",
+          "sets": 4,
+          "targetReps": [8, 12],
+          "restSec": 90,
+          "startWeightKg": 18,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Seated_Cable_Rows",
+          "sets": 3,
+          "targetReps": [8, 12],
+          "restSec": 90,
+          "startWeightKg": 40,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Face_Pull",
+          "sets": 3,
+          "targetReps": [12, 15],
+          "restSec": 60,
+          "startWeightKg": 15,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Incline_Dumbbell_Curl",
+          "sets": 3,
+          "targetReps": [8, 12],
+          "restSec": 60,
+          "startWeightKg": 8,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Concentration_Curls",
+          "sets": 2,
+          "targetReps": [10, 12],
+          "restSec": 60,
+          "startWeightKg": 8,
+          "tracking": "manual"
+        }
+      ]
+    },
+    {
+      "id": "legs-b",
+      "name": "Legs B",
+      "exercises": [
+        {
+          "exerciseId": "Leg_Press",
+          "sets": 4,
+          "targetReps": [10, 12],
+          "restSec": 120,
+          "startWeightKg": 80,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Dumbbell_Step_Ups",
+          "sets": 3,
+          "targetReps": [10, 12],
+          "restSec": 90,
+          "startWeightKg": 10,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Leg_Extensions",
+          "sets": 3,
+          "targetReps": [12, 15],
+          "restSec": 60,
+          "startWeightKg": 30,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Lying_Leg_Curls",
+          "sets": 3,
+          "targetReps": [10, 12],
+          "restSec": 60,
+          "startWeightKg": 30,
+          "tracking": "manual"
+        },
+        {
+          "exerciseId": "Dumbbell_Seated_One-Leg_Calf_Raise",
+          "sets": 3,
+          "targetReps": [12, 15],
+          "restSec": 60,
+          "startWeightKg": 12,
+          "tracking": "manual"
+        }
+      ]
+    }
+  ]
+}

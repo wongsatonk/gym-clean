@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('renders the Gym Clean title with no console errors', async ({ page }) => {
+test('renders the Gym Clean home with no console errors', async ({ page }) => {
   const errors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') errors.push(msg.text());
@@ -12,9 +12,14 @@ test('renders the Gym Clean title with no console errors', async ({ page }) => {
   const heading = page.getByRole('heading', { level: 1, name: 'Gym Clean' });
   await expect(heading).toBeVisible();
 
-  // Readable at 2 m: main title ≥ 64px.
+  // Readable at 2 m: main title ≥ 64px, tap targets ≥ 56px.
   const fontSize = await heading.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(fontSize).toBeGreaterThanOrEqual(64);
+  for (const box of await page
+    .locator('button')
+    .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) {
+    expect(box).toBeGreaterThanOrEqual(56);
+  }
 
   expect(errors).toEqual([]);
 });
