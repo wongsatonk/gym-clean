@@ -1,0 +1,272 @@
+{
+  "Dumbbell_Bench_Press": {
+    "lines": [
+      "Lie flat, feet on the floor, dumbbells beside your chest.",
+      "Press up until your arms are straight over your chest.",
+      "Lower slowly until the dumbbells reach chest level."
+    ],
+    "focus": "Focus: chest. Front shoulders and triceps help.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Incline_Dumbbell_Press": {
+    "lines": [
+      "Bench on a low incline, dumbbells at your upper chest.",
+      "Press up and slightly in until your arms are straight.",
+      "Lower under control back to the upper chest."
+    ],
+    "focus": "Focus: upper chest. Front shoulders and triceps help.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Seated_Dumbbell_Press": {
+    "lines": [
+      "Sit tall against the back rest, dumbbells at your shoulders.",
+      "Press straight up until your arms are straight.",
+      "Lower back to shoulder height before the next rep."
+    ],
+    "focus": "Focus: shoulders. Triceps help.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Side_Lateral_Raise": {
+    "lines": [
+      "Stand tall, dumbbells at your sides, elbows a little bent.",
+      "Raise your arms out to the side up to shoulder height.",
+      "Lower slowly, no swinging from the hips."
+    ],
+    "focus": "Focus: side of the shoulders.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Standing_Dumbbell_Triceps_Extension": {
+    "lines": [
+      "Hold one dumbbell overhead with both hands, arms straight.",
+      "Bend the elbows to lower it behind your head.",
+      "Keep the upper arms still and straighten back up."
+    ],
+    "focus": "Focus: triceps, the back of the upper arm.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "Pushups": {
+    "lines": [
+      "Hands a bit wider than shoulders, body in one straight line.",
+      "Lower your chest close to the floor.",
+      "Push back up until your arms are straight."
+    ],
+    "focus": "Focus: chest. Front shoulders and triceps help.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "One-Arm_Dumbbell_Row": {
+    "lines": [
+      "One knee and hand on the bench, back flat, arm hanging.",
+      "Pull the dumbbell up to your hip, elbow close to your side.",
+      "Lower until the arm is straight again, then switch sides."
+    ],
+    "focus": "Focus: middle back. Lats, biceps and rear shoulder help.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Wide-Grip_Lat_Pulldown": {
+    "lines": [
+      "Sit under the pads, hands wide on the bar, chest up.",
+      "Pull the bar down to your upper chest, elbows down and back.",
+      "Let the bar rise slowly until your arms are straight."
+    ],
+    "focus": "Focus: lats, the wide muscles of the back.",
+    "tempo": "Pull 1 s · Return 2 s"
+  },
+  "Reverse_Flyes": {
+    "lines": [
+      "Chest on an incline bench, dumbbells hanging, elbows soft.",
+      "Open your arms out to the side up to shoulder level.",
+      "Squeeze your shoulder blades, then lower slowly."
+    ],
+    "focus": "Focus: rear shoulders. Upper back helps.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Dumbbell_Bicep_Curl": {
+    "lines": [
+      "Stand tall, arms straight, palms facing forward.",
+      "Curl the dumbbells up with your elbows fixed at your sides.",
+      "Lower all the way until your arms are straight."
+    ],
+    "focus": "Focus: biceps. Forearms help.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Hammer_Curls": {
+    "lines": [
+      "Stand tall, palms facing your body, thumbs up.",
+      "Curl up to shoulder height, elbows fixed at your sides.",
+      "Lower slowly until your arms are straight."
+    ],
+    "focus": "Focus: biceps and the top of the forearm.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Goblet_Squat": {
+    "lines": [
+      "Hold one weight at your chest, feet about shoulder width.",
+      "Sit down between your knees, chest up, as deep as you can.",
+      "Stand back up by pushing the floor away."
+    ],
+    "focus": "Focus: thighs (quads). Glutes and hamstrings help.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "Stiff-Legged_Dumbbell_Deadlift": {
+    "lines": [
+      "Stand tall, dumbbells in front, knees slightly bent.",
+      "Push your hips back and lower the weights along your legs.",
+      "Keep your back flat and stand up by driving the hips forward."
+    ],
+    "focus": "Focus: hamstrings. Glutes and lower back help.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "Dumbbell_Lunges": {
+    "lines": [
+      "Stand tall with a dumbbell in each hand.",
+      "Step forward and lower until both knees are bent.",
+      "Push through the front heel to step back, then switch legs."
+    ],
+    "focus": "Focus: front thigh (quads). Glutes help.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "Lying_Leg_Curls": {
+    "lines": [
+      "Lie face down, pad just above your heels, hips on the bench.",
+      "Curl your heels toward your glutes and hold a moment.",
+      "Lower slowly until your legs are straight."
+    ],
+    "focus": "Focus: hamstrings, the back of the thigh.",
+    "tempo": "Lift 1 s · Hold 1 s · Lower 2 s"
+  },
+  "Standing_Calf_Raises": {
+    "lines": [
+      "Balls of your feet on the edge, knees straight.",
+      "Rise up onto your toes as high as you can and hold.",
+      "Lower your heels slowly for a full stretch."
+    ],
+    "focus": "Focus: calves.",
+    "tempo": "Lift 1 s · Hold 1 s · Lower 2 s"
+  },
+  "Dumbbell_Flyes": {
+    "lines": [
+      "Lie flat, dumbbells above your chest, elbows slightly bent.",
+      "Open your arms in a wide arc until the chest stretches.",
+      "Bring them back up along the same arc, squeezing the chest."
+    ],
+    "focus": "Focus: chest.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Dumbbell_Shoulder_Press": {
+    "lines": [
+      "Sit with back support, dumbbells at shoulder height.",
+      "Press up until your arms are straight above you.",
+      "Lower slowly back to the shoulders."
+    ],
+    "focus": "Focus: shoulders. Triceps help.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Cable_Crossover": {
+    "lines": [
+      "Pulleys high, one step forward, slight lean, elbows soft.",
+      "Bring your hands together in front of you in a wide arc.",
+      "Squeeze a moment, then open back up slowly."
+    ],
+    "focus": "Focus: chest. Front shoulders help.",
+    "tempo": "Pull 1 s · Hold 1 s · Return 2 s"
+  },
+  "Triceps_Pushdown": {
+    "lines": [
+      "Stand tall at a high pulley, upper arms at your sides.",
+      "Push the bar down until your arms are straight.",
+      "Let it rise slowly, elbows staying where they are."
+    ],
+    "focus": "Focus: triceps, the back of the upper arm.",
+    "tempo": "Push 1 s · Hold 1 s · Return 2 s"
+  },
+  "Bench_Dips": {
+    "lines": [
+      "Hands on a bench behind you, legs out in front.",
+      "Bend your elbows to lower your body, elbows pointing back.",
+      "Push through your palms to straighten your arms."
+    ],
+    "focus": "Focus: triceps. Chest and front shoulders help.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "Bent_Over_Two-Dumbbell_Row": {
+    "lines": [
+      "Hinge forward with a flat back, knees soft, arms hanging.",
+      "Pull both dumbbells to your sides, elbows close to the body.",
+      "Lower slowly until your arms are straight."
+    ],
+    "focus": "Focus: middle back. Lats and biceps help.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Seated_Cable_Rows": {
+    "lines": [
+      "Sit tall, knees soft, arms reaching for the handle.",
+      "Pull the handle to your stomach, elbows close to your sides.",
+      "Squeeze your back, then let the arms reach forward slowly."
+    ],
+    "focus": "Focus: middle back. Lats and biceps help.",
+    "tempo": "Pull 1 s · Return 2 s"
+  },
+  "Face_Pull": {
+    "lines": [
+      "Rope on a high pulley, step back, arms straight.",
+      "Pull the rope to your face, hands apart, elbows high.",
+      "Hold a moment, then let the arms return slowly."
+    ],
+    "focus": "Focus: rear shoulders. Upper back helps.",
+    "tempo": "Pull 1 s · Hold 1 s · Return 2 s"
+  },
+  "Incline_Dumbbell_Curl": {
+    "lines": [
+      "Sit back on an incline bench, arms hanging straight down.",
+      "Curl up while the upper arms stay still.",
+      "Lower all the way for a long stretch at the bottom."
+    ],
+    "focus": "Focus: biceps.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Concentration_Curls": {
+    "lines": [
+      "Sit, upper arm resting on the inside of your thigh.",
+      "Curl the dumbbell up with only the forearm moving.",
+      "Squeeze at the top, lower slowly, then switch arms."
+    ],
+    "focus": "Focus: biceps. Forearms help.",
+    "tempo": "Lift 1 s · Hold 1 s · Lower 2 s"
+  },
+  "Leg_Press": {
+    "lines": [
+      "Back flat on the pad, feet shoulder width on the platform.",
+      "Lower the platform until your knees bend to about 90 degrees.",
+      "Push through your heels, stop just short of locked knees."
+    ],
+    "focus": "Focus: thighs (quads). Glutes and hamstrings help.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "Dumbbell_Step_Ups": {
+    "lines": [
+      "Dumbbells at your sides, one foot fully on the box.",
+      "Step up by pushing through that top foot.",
+      "Step down slowly, then finish the reps and switch legs."
+    ],
+    "focus": "Focus: thighs (quads). Glutes help.",
+    "tempo": "Up 1 s · Down 2 s"
+  },
+  "Leg_Extensions": {
+    "lines": [
+      "Sit back, pad on the front of your shins, hold the handles.",
+      "Straighten your legs and squeeze at the top.",
+      "Lower slowly to the start."
+    ],
+    "focus": "Focus: thighs (quads).",
+    "tempo": "Lift 1 s · Hold 1 s · Lower 2 s"
+  },
+  "Dumbbell_Seated_One-Leg_Calf_Raise": {
+    "lines": [
+      "Sit, ball of one foot on a block, dumbbell on that knee.",
+      "Rise onto your toes as high as you can and hold.",
+      "Lower the heel slowly for a full stretch, then switch."
+    ],
+    "focus": "Focus: calves.",
+    "tempo": "Lift 1 s · Hold 1 s · Lower 2 s"
+  }
+}
