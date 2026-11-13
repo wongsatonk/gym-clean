@@ -6,8 +6,9 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 - **Current milestone:** M0 — Scaffold (done locally; "CI green" not verified yet because there's no GitHub remote)
 - **Branch:** main (m0-scaffold merged)
-- **Next step:** Once the GitHub remote exists and is pushed, confirm CI + Pages are green, tick M0, then start M1.
-- **Waiting on human:** yes. Create the GitHub repo + set the Pages source (see Blockers)
+- **Remote:** https://github.com/wongsatonk/gym-clean (Pages URL will be https://wongsatonk.github.io/gym-clean/)
+- **Next step:** Push `main`, confirm CI + Pages deploy are green, tick M0, then start M1.
+- **Waiting on human:** yes. Approve the first push, and set Settings → Pages → Source to "GitHub Actions" (see Blockers)
 
 ## Milestone checklist
 
@@ -41,6 +42,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - 2026-11-13 — Pages base path comes from the `BASE_PATH` env var, which CI sets to `/<repo-name>/`. Locally it is `/`.
 - 2026-11-13 — The Playwright e2e project uses chromium only (390×844, isMobile, hasTouch) and runs against the HTTPS dev server with `ignoreHTTPSErrors`.
 - 2026-11-13 — The Playwright **MCP** browser rejects the self-signed dev cert (ERR_CERT_AUTHORITY_INVALID), so phone-size screenshots are taken with a Playwright script using `ignoreHTTPSErrors` instead.
+- 2026-11-13 — Prettier ignores `*.md` so hand-written docs keep their formatting.
 - 2026-11-13 — `npm audit`: 10 moderate advisories, all in the dev-only ESLint toolchain (minimatch / config-array). Nothing ships to the browser. Left as-is; recheck when ESLint updates.
 
 ## Verification evidence
@@ -54,4 +56,4 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Blockers / questions for Wongsaton
 
-- **M0 blocker:** create an empty GitHub repo (e.g. `focusrep`), then `git remote add origin <url>` and `git push -u origin main`. In the repo, go to Settings → Pages → Source and choose **GitHub Actions**. Then I'll confirm CI + deploy are green.
+- **M0 blocker:** remote `origin` = https://github.com/wongsatonk/gym-clean (empty). Waiting on approval to `git push -u origin main`. In the repo, go to Settings → Pages → Source and choose **GitHub Actions**, otherwise the deploy job fails.

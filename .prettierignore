@@ -4,3 +4,6 @@ playwright-report
 test-results
 fixtures
 package-lock.json
+
+# Hand-written docs: keep author formatting
+*.md
