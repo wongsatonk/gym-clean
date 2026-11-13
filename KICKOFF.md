@@ -1,8 +1,8 @@
-# FocusRep — How to kick off Claude Code
+# Gym Clean — How to kick off Claude Code
 
 ## 1. One-time setup (≈15 min)
 
-1. Install Node.js LTS and Git. Create an empty GitHub repo `focusrep` and clone it.
+1. Install Node.js LTS and Git. Create an empty GitHub repo `gym-clean` and clone it.
 2. Copy these starter files into the repo root, keeping the folders:
    ```
    CLAUDE.md
@@ -34,7 +34,7 @@ without asking every time. It still has to ask before pushing, and it can't forc
 ## 2. First prompt (paste as-is)
 
 ```
-Read CLAUDE.md, docs/SPEC.md and docs/PROGRESS.md fully. You are building FocusRep
+Read CLAUDE.md, docs/SPEC.md and docs/PROGRESS.md fully. You are building Gym Clean
 agentically: you own implementation, I own product decisions and the human checkpoints.
 
 Work through the milestones in order, starting at M0, and keep going on your own until you

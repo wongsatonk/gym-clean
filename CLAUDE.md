@@ -1,4 +1,4 @@
-# FocusRep — CLAUDE.md
+# Gym Clean — CLAUDE.md
 
 A phone-first web app that keeps me focused during strength training at my apartment gym.
 It runs a guided workout, highlights the target muscles on an anatomy map, and (later) uses
