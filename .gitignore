@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.vite/
+*.local
+.env
+.env.*
+.DS_Store
+.claude/settings.local.json
+
+# Raw fixture videos show the user — never commit (CLAUDE.md hard rule)
+fixtures/videos/
+
+# Starter bundle (contents are unpacked in the repo)
+focusrep-starter.zip
