@@ -43,6 +43,8 @@ the things only a human can do (filming test videos, testing at the gym).
   `src/data/exercises.json`; don't fetch at runtime.
 - Storage: IndexedDB via Dexie. Voice: Web Speech API (`speechSynthesis`). Screen: Wake Lock API.
 - Tests: Vitest (unit), Playwright (e2e, mobile viewport). PWA: `vite-plugin-pwa` (milestone 6).
+- UI/UX guidance: project skill `ui-ux-pro-max` (`.claude/skills/`, see its SOURCE.md). Use it for
+  design/accessibility checks; its suggestions never override the hard rules below.
 
 ## Commands
 
