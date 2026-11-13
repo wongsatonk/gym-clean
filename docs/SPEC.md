@@ -1,4 +1,4 @@
-# FocusRep — Product Spec (v1)
+# Gym Clean — Product Spec (v1)
 
 ## 1. Problem
 
@@ -30,7 +30,7 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
 - HTTPS dev server reachable from phone on LAN (`@vitejs/plugin-basic-ssl`, `host: true`).
 - GitHub Actions: run `check` + `e2e` on push; deploy `main` to GitHub Pages.
 - `.gitignore` includes `fixtures/videos/`.
-- **Accept:** blank app with a "FocusRep" title renders; CI green; a trivial unit + e2e test pass.
+- **Accept:** blank app with a "Gym Clean" title renders; CI green; a trivial unit + e2e test pass.
 
 ### M1 — Guided workout flow (no camera)
 - Program loaded from `src/data/program.json` (see §4). Seed it with a push/pull/legs

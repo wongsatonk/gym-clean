@@ -1,13 +1,13 @@
-# FocusRep — Progress Log
+# Gym Clean — Progress Log
 
 Claude Code updates this file at the end of every task. A fresh session resumes from here.
 
 ## Status
 
-- **Current milestone:** M1 — Guided workout flow (not started). M0 done 2026-11-13.
-- **Branch:** main (m0-scaffold merged)
-- **Remote:** https://github.com/wongsatonk/gym-clean (Pages URL will be https://wongsatonk.github.io/gym-clean/)
-- **Next step:** Write the M1 task plan below, create branch `m1-guided-flow`, then implement.
+- **Current milestone:** M1 — Guided workout flow (in progress)
+- **Branch:** m1-guided-flow
+- **Remote:** https://github.com/wongsatonk/gym-clean (live: https://wongsatonk.github.io/gym-clean/)
+- **Next step:** Implement the M1 tasks below, in order.
 - **Waiting on human:** no
 
 ## Milestone checklist
@@ -22,17 +22,14 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Current milestone plan
 
-### M0 — Scaffold
-
-- [x] 1. Vite + TS strict app (`index.html`, `src/main.ts`) rendering a "FocusRep" title, dark theme
-- [x] 2. ESLint (flat config, typescript-eslint) + Prettier
-- [x] 3. Vitest with a trivial unit test (`src/core/`)
-- [x] 4. Playwright with a mobile 390×844 project + trivial e2e test (title renders)
-- [x] 5. Scripts: `dev`, `check`, `e2e`, `build`, `landmarks` (stub)
-- [x] 6. HTTPS dev server on LAN (`@vitejs/plugin-basic-ssl`, `host: true`)
-- [x] 7. GitHub Actions (written, **not yet run**: no remote): `check` + `e2e` on push; deploy `main` to GitHub Pages
-- [x] 8. `.gitignore` covers `fixtures/videos/`
-- [x] 9. Verify (check, e2e, build, 390×844 screenshot, console) and record evidence
+### M1 — Guided workout flow (no camera)
+- [ ] 1. Data: `src/data/program.json` (6-day PPL, A/B days, chest/arms/back weighted), `exercises.json` (vendored subset of free-exercise-db), `cues.json` (≤ 8 words each), plus `src/data/program.ts` loader + types. Unit test: every exercise in the program has data + a cue, ranges are valid.
+- [ ] 2. `src/core/session.ts`: pure reducer `next(state, event)`. Events: SET_DONE, ADJUST (reps/weight), START_SET, SKIP_EXERCISE, PAUSE, RESUME, FINISH. Selectors: current exercise, rest elapsed (pause-aware), summary (sets, volume, overruns, duration). Tests first, covering every transition, including pause/resume and skip.
+- [ ] 3. `src/core/restCues.ts`: pure "which cues were crossed between two elapsed times" (ten-seconds, go, nudge every 30 s after target + 30 s) plus spoken text. Tests first.
+- [ ] 4. `src/data/db.ts`: Dexie DB (`sessions`, `sets`), saveSet / setsForSession. Tests first, with fake-indexeddb.
+- [ ] 5. UI (`src/ui/`): Today → Exercise → Rest → Summary screens, steppers, Pause overlay, two-tap End. `voice.ts` (speechSynthesis, unlocked on first tap), `wakeLock.ts` (re-acquire on visibility change, release on Summary), 250 ms ticker driving rest cues.
+- [ ] 6. E2E: a mini-session on a fake clock (`page.clock`) with mocked speechSynthesis + wakeLock. Asserts the 10 s / Go / nudge cues, pause/resume, skip, summary numbers, and the IndexedDB rows.
+- [ ] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
 
@@ -43,6 +40,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - 2026-11-13 — The Playwright e2e project uses chromium only (390×844, isMobile, hasTouch) and runs against the HTTPS dev server with `ignoreHTTPSErrors`.
 - 2026-11-13 — The Playwright **MCP** browser rejects the self-signed dev cert (ERR_CERT_AUTHORITY_INVALID), so phone-size screenshots are taken with a Playwright script using `ignoreHTTPSErrors` instead.
 - 2026-11-13 — The repo is public (Wongsaton's choice) so GitHub Pages works on the free plan. Raw videos stay gitignored. Landmark JSON (M3+) will be public.
+- 2026-11-13 — App renamed FocusRep → **Gym Clean** (Wongsaton's request). The package is named `gym-clean` and the IndexedDB is named `gym-clean`.
 - 2026-11-13 — Prettier ignores `*.md` so hand-written docs keep their formatting.
 - 2026-11-13 — `npm audit`: 10 moderate advisories, all in the dev-only ESLint toolchain (minimatch / config-array). Nothing ships to the browser. Left as-is; recheck when ESLint updates.
 
