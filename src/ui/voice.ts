@@ -31,13 +31,23 @@ function hold(u: SpeechSynthesisUtterance): void {
   u.addEventListener('error', release);
 }
 
+/** Clears a stuck paused state. Guarded: test doubles may not implement it. */
+function resume(s: SpeechSynthesis): void {
+  if (typeof s.resume === 'function') s.resume();
+}
+
 export const voice = {
-  /** iOS only allows speech after a user gesture: call from a tap handler. */
+  /**
+   * iOS only allows speech after a user gesture: call from a tap handler. WebKit can ignore an
+   * empty utterance, so speak a real (silent) one; resume() clears a stuck paused state.
+   */
   unlock(): void {
     const s = synth();
     if (!s) return;
-    const u = new SpeechSynthesisUtterance('');
+    resume(s);
+    const u = new SpeechSynthesisUtterance('.');
     u.volume = 0;
+    hold(u);
     s.speak(u);
   },
 
@@ -57,6 +67,7 @@ export const voice = {
     u.lang = 'en-US';
     u.rate = 1;
     hold(u);
+    resume(s); // iOS/Chrome can leave the synth paused; harmless otherwise
     s.speak(u);
     return u;
   },
@@ -65,6 +76,26 @@ export const voice = {
   cancel(): void {
     synth()?.cancel();
     inFlight.clear();
+  },
+
+  /** For the Settings voice test: what this browser reports about speech. */
+  status(): {
+    supported: boolean;
+    voices: number;
+    english: number;
+    speaking: boolean;
+    paused: boolean;
+  } {
+    const s = synth();
+    if (!s) return { supported: false, voices: 0, english: 0, speaking: false, paused: false };
+    const voices = typeof s.getVoices === 'function' ? s.getVoices() : [];
+    return {
+      supported: true,
+      voices: voices.length,
+      english: voices.filter((v) => v.lang.toLowerCase().startsWith('en')).length,
+      speaking: s.speaking,
+      paused: s.paused,
+    };
   },
 
   /** Utterances currently held (queued or speaking); for tests. */
