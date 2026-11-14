@@ -61,7 +61,26 @@ Wongsaton's request after his first real camera session: auto start and stop, no
   - Evidence 2026-11-13 (60b53ec): PASS, no blocking items. Checked: pure core, privacy (pre-roll in memory only, capped at 10 s), stop/undo/close spoken, sizes (Undo 88px, rest buttons 72px, numbers 88/72px), no medical words, off = unchanged, SPEC Accept unit list covered. Follow-ups:
     - Close during the Undo window drops the pending stop; it should commit it.
     - Capture the hands-free setting per camera.
-- [ ] 13. [verifier] Verify against SPEC M5c Accept: `npm run check` (fixture suite unchanged), `npm run e2e`, `npm run build`, 390×844 screenshots `docs/screenshots/m5c-pending-undo.png`, `m5c-camera-rest.png`, `m5c-auto-started.png`, `m5c-rest-camera-button.png`, `m5c-settings-hands-free.png`, console clean; a dev-log export after the flow shows `autoSet` events and an auto-started set whose frames start before its start; evidence into PROGRESS. Deps: 12.
+- [x] 13. [verifier] Verify against SPEC M5c Accept: `npm run check` (fixture suite unchanged), `npm run e2e`, `npm run build`, 390×844 screenshots `docs/screenshots/m5c-pending-undo.png`, `m5c-camera-rest.png`, `m5c-auto-started.png`, `m5c-rest-camera-button.png`, `m5c-settings-hands-free.png`, console clean; a dev-log export after the flow shows `autoSet` events and an auto-started set whose frames start before its start; evidence into PROGRESS. Deps: 12.
+  - Evidence 2026-11-13 (1d527ef). PASS on the second round.
+  - Round 1 failed: the auto-started set had empty camera meta in the dev log. Cause: `rec()` queued `beginSet` a microtask after the camera's same-task `setBegun()`. Fix: once the recorder exists, `rec()` runs immediately.
+  - Same round, also fixed:
+    - Close during the Undo window now saves the set.
+    - Hands-free confirmations are logged as speech kind 'cue'.
+    - The hands-free setting is captured per camera.
+    - The switch is now labelled "Hands-free sets".
+  - Round 2 results:
+    - `npm run check`: vitest 824/824, scripts 13/13; fixture suite unchanged (17 cases).
+    - `npm run e2e`: 60 passed, 0 flaky.
+    - `npm run build`: OK.
+    - Dev-log export of the m5c flow: 5 `autoSet` events (stopPending → commit → start → stopPending → commit). Set 2 (auto start) has camera meta curl/CPU/right/wallT0, its first frame is 1492 ms before startedAt, and its speech is "Two", "Set done. 2 reps.". `scripts/devlog.mjs --dry-run`: 2 sets would be written, 0 skipped; set 2 shows `start:auto stop:still pre 1.5s`.
+    - Screenshots in `docs/screenshots/`: m5c-pending-undo, m5c-camera-rest, m5c-auto-started, m5c-rest-camera-button, m5c-settings-hands-free. All 390 wide, console clean (headless GPU warnings only). Undo 88px, rest buttons 72px, numbers 88–96px, smallest text 20px.
+  - Known gaps:
+    - The two reps that start a set happen before the set opens, so they have no rep events; the converter re-counts them from the pre-roll frames.
+    - While the tab is hidden, a pending Undo window pauses.
+  - Cosmetic, not fixed:
+    - The gauge shows faintly through the Undo banner.
+    - The camera rest line shows the next set's reps value (the last set's count) while the tip says the target.
 - [ ] 14. [main] Merge `m5c-hands-free`, then **ask Wongsaton before pushing** (push = deploy). Deps: 13.
 - [ ] 15. 🧍 **Checkpoint B3 (hands-free gym test):** a training day with hands-free on; note every wrong auto start/stop and whether 6 s stillness / 5 s Undo feel right; export the developer log and send it → retune `AutoSetConfig` (logged as Decisions).
 
