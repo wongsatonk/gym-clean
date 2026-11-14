@@ -1,0 +1,16 @@
+{
+  "note": "What the gym has (M10-q6 default, provisional until Wongsaton lists his gym): dumbbells, a bench, a cable stack with a lat pulldown, and the machines the program already uses (leg press, leg curl, leg extension, calf raise). Values are free-exercise-db 'equipment' strings; swaps only suggest exercises whose equipment is available. No pull-up bar is assumed.",
+  "available": ["body only", "dumbbell", "cable", "machine"],
+  "machines": [
+    "lat pulldown",
+    "cable stack",
+    "leg press",
+    "leg curl",
+    "leg extension",
+    "calf raise"
+  ],
+  "substitutes": {
+    "kettlebells": "dumbbell"
+  },
+  "substitutesNote": "The goblet squat is listed as a kettlebell exercise upstream; it is done here with one dumbbell."
+}

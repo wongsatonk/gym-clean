@@ -1,0 +1,311 @@
+/**
+ * M10 phase A rule-based intent matcher (SPEC M10 "Coach chat", PROGRESS M10 task 10).
+ *
+ * Pure: text + context in, `{ intent, slots, safety }` out. No network, no DOM, no clock. All words
+ * live in `phrases.json` (English + Thai, M10-q5). The matcher only names an intent; the coach turns it
+ * into a Proposal through the same `propose*` functions the chips use, and nothing changes without a tap.
+ *
+ * Order of rules (first hit wins):
+ *  1. red flag → `help`, no slots, `safety: 'redFlag'` (never a training proposal);
+ *  2. deload, 3. swap, 4. postpone;
+ *  5. an area word with a discomfort or "avoid" word → avoidArea;
+ *  6. stall, 7. lighter, 8. food;
+ *  9. discomfort with no area → avoidArea without an area (the coach asks which area);
+ * 10. anything else → help.
+ *
+ * Slots: `area` only for avoidArea, `exerciseId` only for swap/stall, `date` / `moveTo` / `scope` for
+ * any non-help intent. `date` is the day the request is about (e.g. the day to skip); `moveTo` is the
+ * target day of a move ("to Friday", "Saturday instead"). Both are day words; the coach resolves them
+ * against its own `today`.
+ */
+import phrasesJson from './phrases.json';
+import exercisesJson from '../../data/exercises.json';
+import type { BodyArea } from '../types';
+
+export type Intent =
+  'postpone' | 'avoidArea' | 'lighter' | 'deload' | 'swap' | 'stall' | 'food' | 'help';
+export type DayWord = 'today' | 'tomorrow' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+export type Safety = 'none' | 'discomfort' | 'redFlag';
+
+export type IntentSlots = {
+  area?: BodyArea;
+  date?: DayWord;
+  moveTo?: DayWord;
+  exerciseId?: string;
+  scope?: 'today' | 'plan';
+};
+
+export type IntentMatch = { intent: Intent; slots: IntentSlots; safety: Safety };
+
+export type MatchContext = {
+  /** Exercises the user can name (id + display name). Defaults to `src/data/exercises.json`. */
+  exercises?: readonly { id: string; name: string }[];
+  /** Today's exercise ids: a generic word ("curls", "rows") prefers one of these. */
+  todayExerciseIds?: readonly string[];
+};
+
+type Span = { start: number; end: number };
+type Matcher = (text: string) => Span[];
+
+const THAI = /[฀-๿]/;
+
+/** Lowercase, drop apostrophes, punctuation/hyphens → spaces, collapse whitespace. Keeps Thai. */
+export function normalizeText(text: string): string {
+  return text
+    .normalize('NFC')
+    .toLowerCase()
+    .replace(/['’‘`´]/g, '')
+    .replace(/[^a-z0-9฀-๿]+/g, ' ')
+    .trim();
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function compilePhrase(raw: string): Matcher {
+  const phrase = raw.endsWith('*') ? normalizeText(raw.slice(0, -1)) : normalizeText(raw);
+  if (phrase === '') return () => [];
+  if (THAI.test(phrase)) {
+    return (text) => {
+      const out: Span[] = [];
+      let i = text.indexOf(phrase);
+      while (i >= 0) {
+        out.push({ start: i, end: i + phrase.length });
+        i = text.indexOf(phrase, i + 1);
+      }
+      return out;
+    };
+  }
+  const body = escapeRegex(phrase).replace(/ /g, '\\s+') + (raw.endsWith('*') ? '[a-z0-9]*' : 's?');
+  const re = new RegExp(`(?<![a-z0-9])${body}(?![a-z0-9])`, 'g');
+  return (text) =>
+    [...text.matchAll(re)].map((m) => ({ start: m.index, end: m.index + m[0].length }));
+}
+
+function compileList(list: readonly string[]): Matcher {
+  const matchers = list.map(compilePhrase);
+  return (text) => matchers.flatMap((m) => m(text));
+}
+
+function has(m: Matcher, text: string): boolean {
+  return m(text).length > 0;
+}
+
+/** Longest-first, non-overlapping. */
+function dedupe<T extends Span>(spans: T[]): T[] {
+  const sorted = [...spans].sort(
+    (a, b) => a.start - b.start || b.end - b.start - (a.end - a.start),
+  );
+  const kept: T[] = [];
+  for (const s of sorted) {
+    if (kept.every((k) => s.end <= k.start || s.start >= k.end)) kept.push(s);
+  }
+  return kept.sort((a, b) => a.start - b.start);
+}
+
+// ---- compiled data ----
+
+const P = phrasesJson;
+const INTENTS = {
+  deload: compileList(P.intents.deload),
+  swap: compileList(P.intents.swap),
+  postpone: compileList(P.intents.postpone),
+  stall: compileList(P.intents.stall),
+  lighter: compileList(P.intents.lighter),
+  food: compileList(P.intents.food),
+};
+const AVOID_ANYWHERE = compileList(P.avoidArea.anywhere);
+const AVOID_BEFORE = P.avoidArea.before.map((w) => normalizeText(w));
+const AREA_FILLERS = ['on my', 'on the', 'for my', 'my', 'the', 'on'];
+const AREA_IGNORE = P.areaIgnore.phrases.map((p) => ({
+  raw: normalizeText(p),
+  m: compilePhrase(p),
+}));
+const AREAS = (Object.keys(P.areas) as BodyArea[]).map((area) => ({
+  area,
+  m: compileList(P.areas[area]),
+}));
+const DAYS = (Object.keys(P.days) as DayWord[]).map((day) => ({
+  day,
+  m: compileList(P.days[day]),
+}));
+const MOVE_BEFORE = P.moveTo.before.map((w) => normalizeText(w));
+const MOVE_AFTER = P.moveTo.after.map((w) => normalizeText(w));
+const DAY_FILLERS = ['next', 'this', 'on', 'the', 'วัน'];
+const SCOPE_PLAN = compileList(P.scope.plan);
+const SCOPE_TODAY = compileList(P.scope.today);
+const DISCOMFORT = compileList(P.safety.discomfort);
+const RED_FLAG = compileList(P.safety.redFlag);
+const COMBO_A = compileList(P.safety.redFlagCombos.a);
+const COMBO_B = compileList(P.safety.redFlagCombos.b);
+const STOPWORDS = new Set(P.exerciseStopwords.map((w) => normalizeText(w)));
+const ALIASES = Object.entries(P.exerciseAliases)
+  .filter((entry): entry is [string, string[]] => Array.isArray(entry[1]))
+  .flatMap(([id, list]) =>
+    list.map((a) => ({
+      id,
+      m: compilePhrase(a),
+      score: THAI.test(a) ? 1 : normalizeText(a).split(' ').length,
+    })),
+  );
+const DEFAULT_EXERCISES = (exercisesJson as { id: string; name: string }[]).map(({ id, name }) => ({
+  id,
+  name,
+}));
+
+// ---- slot readers ----
+
+function safetyOf(text: string): Safety {
+  if (has(RED_FLAG, text) || (has(COMBO_A, text) && has(COMBO_B, text))) return 'redFlag';
+  if (has(DISCOMFORT, text)) return 'discomfort';
+  return 'none';
+}
+
+/** Ends with `word` as a whole word (English) or as a suffix (Thai). */
+function endsWithWord(prefix: string, word: string): boolean {
+  if (!prefix.endsWith(word)) return false;
+  if (THAI.test(word)) return true;
+  const before = prefix.charAt(prefix.length - word.length - 1);
+  return before === '' || !/[a-z0-9]/.test(before);
+}
+
+function startsWithWord(rest: string, word: string): boolean {
+  if (!rest.startsWith(word)) return false;
+  if (THAI.test(word)) return true;
+  const after = rest.charAt(word.length);
+  return after === '' || !/[a-z0-9]/.test(after);
+}
+
+function stripFillers(prefix: string, fillers: readonly string[]): string {
+  let p = prefix.trimEnd();
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const f of fillers) {
+      if (endsWithWord(p, f)) {
+        p = p.slice(0, p.length - f.length).trimEnd();
+        changed = true;
+      }
+    }
+  }
+  return p;
+}
+
+function areaOf(text: string): { area: BodyArea; viaAvoidBefore: boolean } | undefined {
+  let t = text;
+  for (const ig of AREA_IGNORE) {
+    for (const s of ig.m(t).reverse())
+      t = t.slice(0, s.start) + ' '.repeat(s.end - s.start) + t.slice(s.end);
+  }
+  const hits = dedupe(AREAS.flatMap(({ area, m }) => m(t).map((s) => ({ ...s, area }))));
+  const first = hits[0];
+  if (!first) return undefined;
+  const viaAvoidBefore = hits.some((h) => {
+    const prefix = stripFillers(t.slice(0, h.start), AREA_FILLERS);
+    return AVOID_BEFORE.some((w) => endsWithWord(prefix, w));
+  });
+  return { area: first.area, viaAvoidBefore };
+}
+
+function daysOf(text: string): { date?: DayWord; moveTo?: DayWord } {
+  const hits = dedupe(DAYS.flatMap(({ day, m }) => m(text).map((s) => ({ ...s, day }))));
+  const out: { date?: DayWord; moveTo?: DayWord } = {};
+  for (const h of hits) {
+    const prefix = stripFillers(text.slice(0, h.start), DAY_FILLERS);
+    const rest = text.slice(h.end).trimStart();
+    const isTarget =
+      MOVE_BEFORE.some((w) => endsWithWord(prefix, w)) ||
+      MOVE_AFTER.some((w) => startsWithWord(rest, w));
+    if (isTarget) out.moveTo ??= h.day;
+    else out.date ??= h.day;
+  }
+  return out;
+}
+
+function scopeOf(text: string): 'today' | 'plan' | undefined {
+  if (has(SCOPE_PLAN, text)) return 'plan';
+  if (has(SCOPE_TODAY, text)) return 'today';
+  return undefined;
+}
+
+function singular(w: string): string {
+  return w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w;
+}
+
+function nameTokens(name: string): string[] {
+  return normalizeText(name)
+    .split(' ')
+    .filter((w) => w !== '' && !STOPWORDS.has(w))
+    .map(singular);
+}
+
+function exerciseOf(text: string, ctx: MatchContext): string | undefined {
+  const catalog = ctx.exercises ?? DEFAULT_EXERCISES;
+  const ids = new Set(catalog.map((e) => e.id));
+  const today = new Set(ctx.todayExerciseIds ?? []);
+  const words = new Set(text.split(' ').map(singular));
+  const named = catalog.map((e) => ({ id: e.id, tokens: nameTokens(e.name) }));
+
+  const candidates: { id: string; score: number }[] = [];
+  for (const { id, tokens } of named) {
+    if (tokens.length > 0 && tokens.every((t) => words.has(t)))
+      candidates.push({ id, score: tokens.length });
+  }
+  for (const a of ALIASES) {
+    if (ids.has(a.id) && has(a.m, text)) candidates.push({ id: a.id, score: a.score });
+  }
+
+  const pick = (list: string[]): string | undefined => {
+    const unique = [...new Set(list)];
+    if (unique.length === 1) return unique[0];
+    const inToday = unique.filter((id) => today.has(id));
+    return inToday.length === 1 ? inToday[0] : undefined;
+  };
+
+  const top = Math.max(0, ...candidates.map((c) => c.score));
+  const best = pick(candidates.filter((c) => c.score === top).map((c) => c.id));
+  if (best !== undefined && (today.size === 0 || today.has(best))) return best;
+
+  // A generic word ("curls", "rows"): the exercise whose last name word was typed, preferring today's.
+  const heads = named.filter(
+    (n) => n.tokens.length > 0 && words.has(n.tokens[n.tokens.length - 1] ?? ''),
+  );
+  const todayHeads = [...new Set(heads.filter((n) => today.has(n.id)).map((n) => n.id))];
+  if (todayHeads.length === 1) return todayHeads[0];
+  if (best !== undefined) return best;
+  return pick(heads.map((n) => n.id));
+}
+
+// ---- main ----
+
+export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
+  const t = normalizeText(text);
+  const safety = safetyOf(t);
+  if (t === '' || safety === 'redFlag') return { intent: 'help', slots: {}, safety };
+
+  const area = areaOf(t);
+  let intent: Intent;
+  if (has(INTENTS.deload, t)) intent = 'deload';
+  else if (has(INTENTS.swap, t)) intent = 'swap';
+  else if (has(INTENTS.postpone, t)) intent = 'postpone';
+  else if (area && (safety === 'discomfort' || area.viaAvoidBefore || has(AVOID_ANYWHERE, t)))
+    intent = 'avoidArea';
+  else if (has(INTENTS.stall, t)) intent = 'stall';
+  else if (has(INTENTS.lighter, t)) intent = 'lighter';
+  else if (has(INTENTS.food, t)) intent = 'food';
+  else if (safety === 'discomfort') intent = 'avoidArea';
+  else return { intent: 'help', slots: {}, safety };
+
+  const slots: IntentSlots = {};
+  if (intent === 'avoidArea' && area) slots.area = area.area;
+  if (intent === 'swap' || intent === 'stall') {
+    const exerciseId = exerciseOf(t, ctx);
+    if (exerciseId !== undefined) slots.exerciseId = exerciseId;
+  }
+  const { date, moveTo } = daysOf(t);
+  if (date) slots.date = date;
+  if (moveTo) slots.moveTo = moveTo;
+  const scope = scopeOf(t);
+  if (scope) slots.scope = scope;
+  return { intent, slots, safety };
+}

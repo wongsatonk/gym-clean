@@ -989,7 +989,11 @@ describe('EXTEND_REST (M4e +30 s)', () => {
   });
 
   it('a set reached by skipping mid-set had no rest before it: no rest target logged', () => {
-    const s = run(fresh(), { type: 'SKIP_EXERCISE', now: sec(5) }, { type: 'SET_DONE', now: sec(40) });
+    const s = run(
+      fresh(),
+      { type: 'SKIP_EXERCISE', now: sec(5) },
+      { type: 'SET_DONE', now: sec(40) },
+    );
     expect(s.logs[0]).not.toHaveProperty('restTargetSec');
     // …also when the skip happens mid-set after a rest.
     const t = run(
@@ -1014,5 +1018,260 @@ describe('EXTEND_REST (M4e +30 s)', () => {
     expect(
       run(resting(), extend(sec(30)), { type: 'START_SET', now: sec(limit + 31) }).restOverruns,
     ).toBe(1);
+  });
+});
+
+describe('weightKgToday default precedence (M10)', () => {
+  const lighter = (p: PlannedExercise, kg: number): PlannedExercise => ({
+    ...p,
+    weightKgToday: kg,
+  });
+
+  it('plan < last time < weightKgToday for the first set', () => {
+    const plan = startSession({ ...day, exercises: [exA] }, 's', T0);
+    expect(plan.weightKg).toBe(20);
+    const last = startSession({ ...day, exercises: [exA] }, 's', T0, { lastWeightKg: { A: 25 } });
+    expect(last.weightKg).toBe(25);
+    const today = startSession({ ...day, exercises: [lighter(exA, 22.5)] }, 's', T0, {
+      lastWeightKg: { A: 25 },
+    });
+    expect(today.weightKg).toBe(22.5);
+  });
+
+  it('weightKgToday is used exactly (not re-snapped), also in lb and at 0 kg', () => {
+    const lb = startSession({ ...day, exercises: [lighter(exA, 18.14)] }, 's', T0, { unit: 'lb' });
+    expect(lb.weightKg).toBe(18.14);
+    const zero = startSession({ ...day, exercises: [lighter(exA, 0)] }, 's', T0, {
+      lastWeightKg: { A: 25 },
+    });
+    expect(zero.weightKg).toBe(0);
+  });
+
+  it('ignores a non-finite or negative weightKgToday and falls back to last time', () => {
+    for (const kg of [NaN, Infinity, -5]) {
+      const s = startSession({ ...day, exercises: [lighter(exA, kg)] }, 's', T0, {
+        lastWeightKg: { A: 25 },
+      });
+      expect(s.weightKg).toBe(25);
+    }
+  });
+
+  it('a set logged today still wins for the next set of that exercise', () => {
+    const d: ProgramDay = { ...day, exercises: [lighter(exA, 15), exC] };
+    const s = run(
+      startSession(d, 's', T0, { lastWeightKg: { A: 25 } }),
+      { type: 'ADJUST', field: 'weight', delta: 2.5 },
+      { type: 'SET_DONE', now: sec(30) },
+    );
+    expect(s.logs[0]?.weightKg).toBe(17.5);
+    expect(s.weightKg).toBe(17.5);
+  });
+
+  it('applies when moving to an exercise by jump, skip or finishing the previous one', () => {
+    const d: ProgramDay = { ...day, exercises: [exC, lighter(exA, 15)] };
+    const opts = { lastWeightKg: { A: 25 } };
+    expect(
+      run(startSession(d, 's', T0, opts), { type: 'GO_TO_EXERCISE', exIndex: 1, now: sec(1) })
+        .weightKg,
+    ).toBe(15);
+    expect(
+      run(startSession(d, 's', T0, opts), { type: 'SKIP_EXERCISE', now: sec(1) }).weightKg,
+    ).toBe(15);
+    expect(run(startSession(d, 's', T0, opts), { type: 'SET_DONE', now: sec(30) }).weightKg).toBe(
+      15,
+    );
+  });
+});
+
+describe('REPLACE_UPCOMING (M10 mid-workout coach)', () => {
+  const exD: PlannedExercise = {
+    exerciseId: 'D',
+    sets: 3,
+    targetReps: [6, 8],
+    restSec: 75,
+    startWeightKg: 30,
+    tracking: 'manual',
+    adjusted: 'swap',
+  };
+  const replace = (exIndex: number, p: PlannedExercise | null, t = sec(50)): SessionEvent => ({
+    type: 'REPLACE_UPCOMING',
+    exIndex,
+    planned: p,
+    now: t,
+  });
+  const ids = (s: SessionState) => s.day.exercises.map((p) => p.exerciseId);
+  // Rest after A's last set: the upcoming set is B (exIndex 1), which has no logged sets.
+  const restBeforeB = () =>
+    run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(30) },
+      { type: 'START_SET', now: sec(90) },
+      { type: 'SET_DONE', now: sec(120) },
+    );
+
+  it('replaces a later exercise mid-set without touching the current set', () => {
+    const s0 = run(fresh(), { type: 'ADJUST', field: 'reps', delta: -2 });
+    const s = run(s0, replace(2, exD));
+    expect(ids(s)).toEqual(['A', 'B', 'D']);
+    expect(s.day.exercises[2]).toEqual(exD);
+    expect(s.exIndex).toBe(0);
+    expect(s.setIndex).toBe(0);
+    expect(s.reps).toBe(10);
+    expect(s.weightKg).toBe(20);
+    expect(s.phase).toBe('exercise');
+    expect(s.setStartedAt).toBe(T0);
+    // The original day object is not mutated.
+    expect(day.exercises.map((p) => p.exerciseId)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('removes a later exercise mid-set; the current index stays', () => {
+    const s = run(fresh(), replace(1, null));
+    expect(ids(s)).toEqual(['A', 'C']);
+    expect(s.exIndex).toBe(0);
+    expect(currentPlanned(s).exerciseId).toBe('A');
+  });
+
+  it('removing an exercise before the current index shifts the current index down', () => {
+    // Jump to C mid-set, then remove B (index 1, before C at index 2).
+    const s0 = run(fresh(), { type: 'GO_TO_EXERCISE', exIndex: 2, now: sec(5) });
+    const s = run(s0, replace(1, null));
+    expect(ids(s)).toEqual(['A', 'C']);
+    expect(s.exIndex).toBe(1);
+    expect(currentPlanned(s).exerciseId).toBe('C');
+    expect(s.setStartedAt).toBe(sec(5));
+  });
+
+  it('replacing an exercise before the current index keeps the current index', () => {
+    const s0 = run(fresh(), { type: 'GO_TO_EXERCISE', exIndex: 2, now: sec(5) });
+    const s = run(s0, replace(1, exD));
+    expect(ids(s)).toEqual(['A', 'D', 'C']);
+    expect(s.exIndex).toBe(2);
+    expect(currentPlanned(s).exerciseId).toBe('C');
+  });
+
+  it('rejects the running set (current exercise in the exercise phase)', () => {
+    const s0 = fresh();
+    expect(run(s0, replace(0, exD))).toBe(s0);
+    expect(run(s0, replace(0, null))).toBe(s0);
+  });
+
+  it('rejects an exercise with logged sets, also during rest', () => {
+    // Rest between A's sets: A has 1 logged set and is the upcoming exercise.
+    const r = run(fresh(), { type: 'SET_DONE', now: sec(30) });
+    expect(r.phase).toBe('rest');
+    expect(run(r, replace(0, exD))).toBe(r);
+    expect(run(r, replace(0, null))).toBe(r);
+    // A finished exercise (all sets logged) is rejected too.
+    const b = restBeforeB();
+    expect(run(b, replace(0, null))).toBe(b);
+    expect(run(b, replace(0, exD))).toBe(b);
+  });
+
+  it('rejects while paused, after summary, and for a missing index', () => {
+    const p = run(fresh(), { type: 'PAUSE', now: sec(1) });
+    expect(run(p, replace(2, exD))).toBe(p);
+    const done = run(fresh(), { type: 'FINISH', now: sec(1) });
+    expect(run(done, replace(2, exD))).toBe(done);
+    const s = fresh();
+    expect(run(s, replace(3, exD))).toBe(s);
+    expect(run(s, replace(-1, null))).toBe(s);
+    expect(run(s, replace(1.5, null))).toBe(s);
+  });
+
+  it('rejects a replacement already elsewhere in the day, or with no sets', () => {
+    const s = fresh();
+    expect(run(s, replace(2, { ...exD, exerciseId: 'A' }))).toBe(s);
+    expect(run(s, replace(2, { ...exD, sets: 0 }))).toBe(s);
+    expect(run(s, replace(2, { ...exD, sets: NaN }))).toBe(s);
+    // Re-planning the same exercise in place is fine (e.g. lighter mid-workout).
+    const same = run(s, replace(2, { ...exC, sets: 2, adjusted: 'lighter' }));
+    expect(same.day.exercises[2]?.sets).toBe(2);
+  });
+
+  it('on Rest, replacing the upcoming exercise loads its defaults and keeps resting', () => {
+    const r = restBeforeB();
+    expect(r.exIndex).toBe(1);
+    const s = run(r, replace(1, { ...exD, weightKgToday: 27.5 }));
+    expect(ids(s)).toEqual(['A', 'D', 'C']);
+    expect(s.phase).toBe('rest');
+    expect(s.exIndex).toBe(1);
+    expect(s.setIndex).toBe(0);
+    expect(s.reps).toBe(8);
+    expect(s.weightKg).toBe(27.5);
+    expect(s.restRunningSince).toBe(r.restRunningSince);
+    expect(s.restTargetSec).toBe(r.restTargetSec);
+    expect(s.logs).toBe(r.logs);
+    // The next set logs the new exercise with its own rest.
+    const t = run(s, { type: 'START_SET', now: sec(200) }, { type: 'SET_DONE', now: sec(230) });
+    expect(t.logs.at(-1)?.exerciseId).toBe('D');
+    expect(t.phase).toBe('rest');
+    expect(t.restTargetSec).toBe(75);
+    expect(currentPlanned(t).exerciseId).toBe('D');
+  });
+
+  it('on Rest, removing the upcoming exercise moves to the next unfinished one', () => {
+    const s = run(restBeforeB(), replace(1, null));
+    expect(ids(s)).toEqual(['A', 'C']);
+    expect(s.phase).toBe('rest');
+    expect(s.exIndex).toBe(1);
+    expect(currentPlanned(s).exerciseId).toBe('C');
+    expect(s.reps).toBe(5);
+  });
+
+  it('on Rest, removing the last remaining exercise ends the session at `now`', () => {
+    const d: ProgramDay = { ...day, exercises: [{ ...exA, sets: 1 }, exC] };
+    const r = run(startSession(d, 's', T0), { type: 'SET_DONE', now: sec(30) });
+    expect(r.phase).toBe('rest');
+    const s = run(r, replace(1, null, sec(45)));
+    expect(s.phase).toBe('summary');
+    expect(s.endedAt).toBe(sec(45));
+    expect(ids(s)).toEqual(['A']);
+  });
+
+  it('on Rest, removing an exercise before the upcoming one shifts the index', () => {
+    // A done, skip B on rest → upcoming C (index 2); then remove B.
+    const r = run(restBeforeB(), { type: 'SKIP_EXERCISE', now: sec(125) });
+    expect(r.exIndex).toBe(2);
+    const s = run(r, replace(1, null));
+    expect(ids(s)).toEqual(['A', 'C']);
+    expect(s.exIndex).toBe(1);
+    expect(currentPlanned(s).exerciseId).toBe('C');
+    expect(s.phase).toBe('rest');
+  });
+
+  it('a removed or replaced exercise leaves the skipped list', () => {
+    const r = run(restBeforeB(), { type: 'SKIP_EXERCISE', now: sec(125) });
+    expect(r.skipped).toEqual(['B']);
+    expect(run(r, replace(1, null)).skipped).toEqual([]);
+    const swapped = run(r, replace(1, exD));
+    expect(swapped.skipped).toEqual([]);
+    // The swapped-in exercise is fresh: wrap-around reaches it after C.
+    const t = run(
+      swapped,
+      { type: 'START_SET', now: sec(200) },
+      { type: 'SET_DONE', now: sec(230) },
+    );
+    expect(currentPlanned(t).exerciseId).toBe('D');
+  });
+
+  it('the summary after a removal counts only the remaining work', () => {
+    const s = run(
+      fresh(),
+      replace(1, null),
+      { type: 'SET_DONE', now: sec(30) },
+      { type: 'START_SET', now: sec(90) },
+      { type: 'SET_DONE', now: sec(120) },
+      { type: 'START_SET', now: sec(180) },
+      { type: 'SET_DONE', now: sec(200) },
+    );
+    expect(s.phase).toBe('summary');
+    expect(s.logs.map((l) => l.exerciseId)).toEqual(['A', 'A', 'C']);
+    expect(summarize(s)).toEqual({
+      setsDone: 3,
+      totalVolumeKg: 12 * 20 * 2 + 5 * 0,
+      restOverruns: 0,
+      skipped: [],
+      durationSec: 200,
+    });
   });
 });

@@ -184,7 +184,7 @@ describe('GymDb v3 (M4c developer log)', () => {
     const up = new GymDb(name);
     await up.open();
     try {
-      expect(up.verno).toBe(3);
+      expect(up.verno).toBeGreaterThanOrEqual(3);
       expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
       expect(await setsForSession(up, 's1')).toHaveLength(1);
       expect(await getExerciseNote(up, 'A')).toMatchObject({ machineSetting: 'Seat 3' });
@@ -484,5 +484,59 @@ describe('GymDb history queries (M4e)', () => {
       ['b', 4100],
     ]);
     expect(await finishedHistorySince(db, 6000)).toEqual({ sessions: [], sets: [] });
+  });
+});
+
+describe('GymDb v4 (M10 trainer)', () => {
+  it('upgrades a v3 database without touching existing rows and adds the trainer tables', async () => {
+    const name = `upgrade-${n++}`;
+    // The schema exactly as shipped before M10 (versions 1–3).
+    const old = new Dexie(name);
+    old.version(1).stores({
+      sessions: 'sessionId, dayId, startedAt',
+      sets: '++id, sessionId, exerciseId, startedAt, [exerciseId+startedAt]',
+    });
+    old.version(2).stores({
+      exerciseNotes: 'exerciseId',
+      sessionNotes: '[sessionId+exerciseId], sessionId',
+      settings: 'key',
+    });
+    old.version(3).stores({
+      devlogSessions: 'id, startedAt',
+      devlogSets: 'key, sessionId, [sessionId+seq]',
+      devlogChunks: '++id, sessionId, setKey',
+    });
+    await old.open();
+    await old.table('sessions').put({ sessionId: 's1', dayId: 'push-a', startedAt: 1000 });
+    await old.table('sets').add(log());
+    await old.table('settings').put({ key: 'unit', value: 'lb' });
+    await old.table('devlogSessions').put({ id: 'd1', startedAt: 1000 });
+    old.close();
+
+    const up = new GymDb(name);
+    await up.open();
+    try {
+      expect(up.verno).toBe(4);
+      expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
+      expect(await setsForSession(up, 's1')).toHaveLength(1);
+      expect(await getUnit(up)).toBe('lb');
+      expect(await up.devlogSessions.count()).toBe(1);
+      expect(await up.trainer.count()).toBe(0);
+      expect(await up.planChanges.count()).toBe(0);
+    } finally {
+      up.close();
+      await up.delete();
+    }
+  });
+
+  it('stores a session’s adjust actions (lighter/deload sessions)', async () => {
+    await startSessionRow(db, {
+      sessionId: 's9',
+      dayId: 'push-a',
+      startedAt: 1000,
+      adjust: ['lighter'],
+    });
+    await finishSession(db, 's9', 2000, { setsDone: 3 });
+    expect(await db.sessions.get('s9')).toMatchObject({ adjust: ['lighter'], endedAt: 2000 });
   });
 });

@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import howtoJson from './howto.json';
-import { cueFor, exerciseById, howToFor, program, programDay } from './catalog';
+import cuesJson from './cues.json';
+import bodyAreasJson from './bodyAreas.json';
+import equipmentJson from './equipment.json';
+import type { BodyArea } from '../core/types';
+import { MUSCLES, bodyMapSvg } from '../ui/bodyMap';
+import {
+  areaForWord,
+  bodyAreaOf,
+  catalogExercises,
+  cueFor,
+  exerciseById,
+  gymHas,
+  howToFor,
+  musclesIn,
+  program,
+  programDay,
+} from './catalog';
 
 const allPlanned = program.days.flatMap((d) => d.exercises);
 // Tracked exercises: the demo timing pins eccentric 2 s / concentric 1 s. The only extra allowed
@@ -64,14 +80,19 @@ describe('program data', () => {
   });
 });
 
-describe('how-to text (M4b)', () => {
-  const ids = [...new Set(allPlanned.map((p) => p.exerciseId))];
-  // Coaching language only (CLAUDE.md "No medical claims"); same spirit as the hint denylist.
-  const banned =
-    /\b(pain\w*|injur\w*|hurt\w*|damag\w*|safe\w*|risk\w*|medical\w*|doctor\w*|diagnos\w*|therap\w*|rehab\w*|heal\w*|strain\w*|tear\w*|cure\w*|prevent\w*)\b/i;
+// Coaching language only (CLAUDE.md "No medical claims"); same spirit as the hint denylist, plus
+// the SPEC M10 diagnosis terms.
+const banned =
+  /\b(pain\w*|injur\w*|hurt\w*|damag\w*|safe\w*|risk\w*|medical\w*|doctor\w*|diagnos\w*|therap\w*|rehab\w*|heal\w*|strain\w*|sprain\w*|tear\w*|tendin\w*|tendon\w*|inflam\w*|cure\w*|prevent\w*)\b/i;
 
-  it('covers all 30 program exercises and nothing else', () => {
-    expect(ids).toHaveLength(30);
+describe('how-to text (M4b)', () => {
+  // M10: the how-to text covers the whole catalog (program + swap pool).
+  const ids = catalogExercises().map((e) => e.id);
+
+  it('covers every catalog exercise (the 30 program ones included) and nothing else', () => {
+    const programIds = new Set(allPlanned.map((p) => p.exerciseId));
+    expect(programIds.size).toBe(30);
+    for (const id of programIds) expect(ids, id).toContain(id);
     expect(Object.keys(howtoJson).sort()).toEqual([...ids].sort());
   });
 
@@ -125,5 +146,137 @@ describe('how-to text (M4b)', () => {
 
   it('returns undefined for an unknown id', () => {
     expect(howToFor('Nope')).toBeUndefined();
+  });
+});
+
+const ALL_AREAS: BodyArea[] = ['arms', 'shoulders', 'chest', 'back', 'legs', 'core'];
+
+describe('catalog (M10 swap pool)', () => {
+  const catalog = catalogExercises();
+  const programIds = [...new Set(allPlanned.map((p) => p.exerciseId))];
+
+  it('lists the program exercises plus a 20-30 exercise swap pool, ids unique', () => {
+    const ids = catalog.map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of programIds) expect(ids, id).toContain(id);
+    const pool = ids.filter((id) => !programIds.includes(id));
+    expect(pool.length).toBeGreaterThanOrEqual(20);
+    expect(pool.length).toBeLessThanOrEqual(30);
+  });
+
+  it('keeps the vendored free-exercise-db shape (strength only)', () => {
+    for (const e of catalog) {
+      expect(Object.keys(e), e.id).toEqual([
+        'id',
+        'name',
+        'force',
+        'level',
+        'mechanic',
+        'equipment',
+        'category',
+        'primaryMuscles',
+        'secondaryMuscles',
+        'instructions',
+      ]);
+      expect(e.category, e.id).toBe('strength');
+      expect(e.instructions.length, e.id).toBeGreaterThan(0);
+      expect(exerciseById(e.id), e.id).toBe(e);
+    }
+  });
+
+  it('every catalog exercise has muscles, a cue of at most 8 words and 2-3 how-to lines', () => {
+    expect(Object.keys(cuesJson).sort()).toEqual(catalog.map((e) => e.id).sort());
+    for (const e of catalog) {
+      expect(e.primaryMuscles.length, e.id).toBeGreaterThan(0);
+      const cue = cueFor(e.id);
+      expect(cue, e.id).toBeTruthy();
+      expect(cue.trim(), e.id).toBe(cue);
+      expect(cue.split(/\s+/).length, cue).toBeLessThanOrEqual(8);
+      expect(cue, e.id).not.toMatch(banned);
+      const h = howToFor(e.id);
+      expect(h?.lines.length ?? 0, e.id).toBeGreaterThanOrEqual(2);
+      expect(h?.lines.length ?? 0, e.id).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('every muscle maps to exactly one body area and to an SVG path', () => {
+    const svgMuscles = new Set(
+      (['front', 'back'] as const).flatMap((view) =>
+        [
+          ...bodyMapSvg({ view, primary: [], secondary: [] }).matchAll(/data-muscle="([^"]+)"/g),
+        ].map((m) => m[1]),
+      ),
+    );
+    const listed = Object.values(bodyAreasJson.areas).flatMap((a) => a.muscles);
+    expect([...listed].sort()).toEqual([...MUSCLES].sort());
+    expect(new Set(listed).size).toBe(listed.length);
+    for (const m of MUSCLES) expect(bodyAreaOf(m), m).toBeDefined();
+    for (const e of catalog) {
+      for (const m of [...e.primaryMuscles, ...e.secondaryMuscles]) {
+        expect(bodyAreaOf(m), `${e.id}: ${m}`).toBeDefined();
+        expect(svgMuscles.has(m), `${e.id}: ${m}`).toBe(true);
+      }
+    }
+  });
+
+  it('has exactly the six SPEC body areas, each with a label and muscles', () => {
+    expect(Object.keys(bodyAreasJson.areas).sort()).toEqual([...ALL_AREAS].sort());
+    for (const area of ALL_AREAS) {
+      expect(bodyAreasJson.areas[area].label, area).toBeTruthy();
+      expect(musclesIn(area).length, area).toBeGreaterThan(0);
+      for (const m of musclesIn(area)) expect(bodyAreaOf(m)).toBe(area);
+    }
+    expect(bodyAreaOf('biceps')).toBe('arms');
+    expect(bodyAreaOf('lats')).toBe('back');
+    expect(bodyAreaOf('quadriceps')).toBe('legs');
+    expect(bodyAreaOf('abdominals')).toBe('core');
+    expect(bodyAreaOf('nope')).toBeUndefined();
+  });
+
+  it('maps joint and body words (English and Thai) to an area', () => {
+    for (const [word, area] of Object.entries(bodyAreasJson.words)) {
+      expect(word, word).toBe(word.trim().toLowerCase());
+      expect(ALL_AREAS, word).toContain(area);
+      expect(areaForWord(word), word).toBe(area);
+    }
+    expect(areaForWord('Elbow')).toBe('arms');
+    expect(areaForWord(' wrists ')).toBe('arms');
+    expect(areaForWord('knee')).toBe('legs');
+    expect(areaForWord('shoulder')).toBe('shoulders');
+    expect(areaForWord('lower back')).toBe('back');
+    expect(areaForWord('แขน')).toBe('arms');
+    expect(areaForWord('เข่า')).toBe('legs');
+    expect(areaForWord('ไหล่')).toBe('shoulders');
+    expect(areaForWord('banana')).toBeUndefined();
+    // Every area can be named in words.
+    for (const area of ALL_AREAS) expect(Object.values(bodyAreasJson.words), area).toContain(area);
+  });
+
+  it('every equipment value in the catalog is on the gym equipment list', () => {
+    const { available, substitutes } = equipmentJson as {
+      available: string[];
+      substitutes: Record<string, string>;
+    };
+    for (const to of Object.values(substitutes)) expect(available).toContain(to);
+    for (const e of catalog) {
+      expect(e.equipment, e.id).not.toBeNull();
+      expect(gymHas(e.equipment), `${e.id}: ${e.equipment}`).toBe(true);
+    }
+    expect(gymHas('barbell')).toBe(false);
+    expect(gymHas(null)).toBe(false);
+  });
+
+  it('every program exercise has at least one swap candidate (same primary muscle, kit he has, not in the day)', () => {
+    for (const day of program.days) {
+      const inDay = new Set(day.exercises.map((p) => p.exerciseId));
+      for (const p of day.exercises) {
+        const ex = exerciseById(p.exerciseId);
+        const primary = ex?.primaryMuscles[0];
+        const candidates = catalog.filter(
+          (c) => !inDay.has(c.id) && c.primaryMuscles[0] === primary && gymHas(c.equipment),
+        );
+        expect(candidates.length, `${day.id}: ${p.exerciseId}`).toBeGreaterThanOrEqual(1);
+      }
+    }
   });
 });

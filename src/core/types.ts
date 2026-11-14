@@ -135,7 +135,8 @@ export type Proposal = {
 export type PlanChange = {
   id?: number;
   createdAt: number;
-  action: ProposalAction;
+  /** 'reset' = "Reset to default program", itself undoable. */
+  action: ProposalAction | 'reset';
   title: string;
   source: 'chip' | 'rules' | 'apple' | 'claude';
   before: TrainerState;

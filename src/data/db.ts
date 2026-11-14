@@ -1,5 +1,12 @@
 import Dexie, { type Table } from 'dexie';
-import type { Accent, RepEvent, SetLog } from '../core/types';
+import type {
+  Accent,
+  PlanChange,
+  ProposalAction,
+  RepEvent,
+  SetLog,
+  TrainerState,
+} from '../core/types';
 import type { RuleStatus } from '../core/exercises/types';
 import type { Rudeness } from '../core/personas';
 import type { Unit } from '../core/units';
@@ -12,6 +19,8 @@ export type SessionRow = {
   setsDone?: number;
   totalVolumeKg?: number;
   restOverruns?: number;
+  /** M10: the adjustments this session ran with (lighter/deload sessions skip stall/bests). Not indexed. */
+  adjust?: ProposalAction[];
 };
 
 export type SetRow = SetLog & { id?: number };
@@ -105,6 +114,9 @@ export type DevLogChunkRow = {
   bytes: number;
 };
 
+/** M10: the one trainer state row (`key` is always `'current'`). See src/data/plan.ts. */
+export type TrainerRow = { key: 'current'; state: TrainerState };
+
 export class GymDb extends Dexie {
   sessions!: Table<SessionRow, string>;
   sets!: Table<SetRow, number>;
@@ -114,6 +126,8 @@ export class GymDb extends Dexie {
   devlogSessions!: Table<DevLogSessionRow, string>;
   devlogSets!: Table<DevLogSetRow, string>;
   devlogChunks!: Table<DevLogChunkRow, number>;
+  trainer!: Table<TrainerRow, string>;
+  planChanges!: Table<PlanChange, number>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -131,6 +145,11 @@ export class GymDb extends Dexie {
       devlogSessions: 'id, startedAt',
       devlogSets: 'key, sessionId, [sessionId+seq]',
       devlogChunks: '++id, sessionId, setKey',
+    });
+    // M10: trainer state + plan change log. New tables only (SessionRow.adjust isn't indexed).
+    this.version(4).stores({
+      trainer: 'key',
+      planChanges: '++id, createdAt',
     });
   }
 }

@@ -300,7 +300,7 @@ M10-q8.
   - `PlannedExercise` gains `weightKgToday?` and `adjusted?`.
   - Done when: typecheck passes and the shapes match the SPEC.
   - Deps: none.
-- [ ] 2. [core-engineer ∥A] Body areas, equipment and swap pool, **tests first**.
+- [x] 2. [core-engineer ∥A] Body areas, equipment and swap pool, **tests first**.
   - Files: src/data/bodyAreas.json (new: area → free-exercise-db muscles; joint words → area),
     src/data/equipment.json (new: what his gym has, M10-q6), src/data/exercises.json (+ ~20–30 swap-pool
     exercises vendored from free-exercise-db), src/data/cues.json, src/data/howto.json,
@@ -313,7 +313,7 @@ M10-q8.
     - every program exercise has ≥ 1 swap candidate;
     - no banned words.
   - Deps: none.
-- [ ] 3. [core-engineer ∥B] Plan, schedule and calendar, **tests first**.
+- [x] 3. [core-engineer ∥B] Plan, schedule and calendar, **tests first**.
   - Files: src/core/trainer/plan.ts(+test).
   - `seedPlan(program)`, `effectiveDay(state, date)`, `calendar(state, finishedSessions, fromDate, days)`
     → `{ date, dayId | null, rest, override? }[]`, and `upNext(...)`.
@@ -325,7 +325,7 @@ M10-q8.
     - Sunday 23:59 / Monday 00:00 and a DST week;
     - `upNext` equalling today's behaviour when there are no overrides and no rest weekdays (no regression).
   - Deps: 1.
-- [ ] 4. [core-engineer ∥B, after 3] Apply / Undo, **tests first**.
+- [x] 4. [core-engineer ∥B, after 3] Apply / Undo, **tests first**.
   - Files: src/core/trainer/changes.ts(+test).
   - `applyProposal(state, proposal, now, source)` → `{ state, change }`: rejects a stale `baseVersion` and
     bumps `version`.
@@ -335,7 +335,7 @@ M10-q8.
   - Done when tests cover: a round trip that restores the state exactly, a stale proposal rejected, undo of
     an undone change rejected, reset + undo, and pruning.
   - Deps: 1, 3.
-- [ ] 5. [core-engineer ∥C] Session: `weightKgToday` and `REPLACE_UPCOMING`, **tests first**.
+- [x] 5. [core-engineer ∥C] Session: `weightKgToday` and `REPLACE_UPCOMING`, **tests first**.
   - Files: src/core/session.ts(+test).
   - `defaultsFor` prefers `weightKgToday` over last time over the plan. A logged set today still wins for
     the next set.
@@ -346,7 +346,7 @@ M10-q8.
   - Done when tests cover: default precedence, replace/remove before and after the current index, rejection
     with logged sets, rest phase, the summary after a removal, and every existing session test passing.
   - Deps: 1.
-- [ ] 6. [core-engineer, after 3+4] Action: Not today / move session, **tests first**.
+- [x] 6. [core-engineer, after 3+4] Action: Not today / move session, **tests first**.
   - Files: src/core/trainer/actions/postpone.ts(+test).
   - `proposePostpone(state, sessions, today, { mode: 'useRestDay' | 'pushWeek', to?: date })` → a Proposal
     with a 7-day before → after preview and a why.
@@ -358,7 +358,7 @@ M10-q8.
     - "move to <date>" onto a date that already has a session;
     - a session already started today → no proposal ("finish or end today's workout first").
   - Deps: 3, 4.
-- [ ] 7. [core-engineer, after 2+4] Action: go easy on an area, **tests first**.
+- [x] 7. [core-engineer, after 2+4] Action: go easy on an area, **tests first**.
   - Files: src/core/trainer/actions/avoidArea.ts(+test), src/core/trainer/swapCandidates.ts(+test).
   - `swapCandidates(exercise, catalog, { avoid?: BodyArea, exclude: ids, equipment })`: ranked by overlap of
     primary muscles, then secondary, then the same `tracking`. `tracking: 'pose'` only when a rule exists.
@@ -375,7 +375,7 @@ M10-q8.
     - no candidate → remove;
     - swapped weights come from that exercise's history, else blank ("pick your weight").
   - Deps: 2, 4.
-- [ ] 8. [core-engineer, after 4] Actions: lighter today, deload week, swap, **tests first**.
+- [x] 8. [core-engineer, after 4] Actions: lighter today, deload week, swap, **tests first**.
   - Files: src/core/trainer/actions/lighter.ts(+test), src/core/trainer/actions/swap.ts(+test).
   - Lighter today: −1 set (minimum 2), −10% snapped down to the step in the display unit, bodyweight
     reps −20%.
@@ -386,7 +386,7 @@ M10-q8.
     exercises, deload spanning a rest day, swap scope `plan` changing every day that has the exercise, and
     swap excluding exercises already in the day.
   - Deps: 2, 4, 5 (`weightKgToday`).
-- [ ] 9. [core-engineer, after 4] Action: stalled → adjust, **tests first**.
+- [x] 9. [core-engineer, after 4] Action: stalled → adjust, **tests first**.
   - Files: src/core/trainer/actions/stall.ts(+test). Reuses src/core/history.ts / stats.ts `topSet`.
   - `detectStalls(sets, sessions, plan)`: 3 finished sessions of the exercise in a row with no top-set gain
     (more weight, or more reps at the same weight), skipping sessions whose `adjust` is set.
@@ -394,7 +394,7 @@ M10-q8.
   - Done when tests cover: 2 sessions → none, 3 → stall, a lighter session in between is skipped, a gain
     resets it, bodyweight exercises, and the M5b N1 "drop" coexisting with it (one line each).
   - Deps: 4.
-- [ ] 10. [core-engineer ∥A] Intent matcher + eval set, **tests first**.
+- [x] 10. [core-engineer ∥A] Intent matcher + eval set, **tests first**.
   - Files: src/core/trainer/intents.ts(+test), src/core/trainer/phrases.json (keywords per intent, area
     words, day words, discomfort and red-flag lists, diagnosis-term list; English + Thai per M10-q5),
     src/core/trainer/evals/requests.json (≥ 60 made-up requests: `{ text, intent, slots, safety,
@@ -425,7 +425,7 @@ M10-q8.
     - mid-session → only swap/remove of unstarted exercises;
     - food → the "comes with Fuel" reply before M7.
   - Deps: 6, 7, 8, 9, 10.
-- [ ] 12. [core-engineer ∥, after 1+3+4] Persistence, **tests first**.
+- [x] 12. [core-engineer ∥, after 1+3+4] Persistence, **tests first**.
   - Files: src/data/db.ts(+test), src/data/plan.ts(+test).
   - Dexie version(4):
     - `trainer` (key `'current'`: TrainerState);
@@ -437,7 +437,7 @@ M10-q8.
   - Done when db tests cover: seed, re-seed, keep-if-edited, change list order, undo persisted, and every
     existing db test passing. Record the version bump as a Decision.
   - Deps: 1, 3, 4.
-- [ ] 13. [ui-engineer ∥] Coach sheet and proposal card.
+- [x] 13. [ui-engineer ∥] Coach sheet and proposal card.
   - Files: src/ui/coach/coachSheet.ts, src/ui/coach/proposalCard.ts, src/ui/coach/undoToast.ts,
     src/ui/coach/coach.css (new; tokens only).
   - Props in, callbacks out, no DB.
@@ -1432,6 +1432,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-15: **M10 Dexie version 3 → 4 (core-engineer, task 12).** New tables only: `trainer` (key `'current'`, row `{ key, state: TrainerState }`) and `planChanges` (`++id, createdAt`); `SessionRow.adjust` is unindexed, so existing rows are untouched (upgrade test v3 → v4). `loadTrainerState` re-seeds an unedited plan when program.json's hash changes (plan + rotation from the program; rest weekdays, overrides kept; version + 1, no change record) and keeps an edited one (M10-q11), with `defaultProgramChanged` for the "new default program" prompt.
 - 2026-11-14: **M4f wave-1 retune from synthetic (core-engineer).** Two wave 1 rules miscounted their rendered clips (pose-engineer, staged in `fixtures-staging/m4f/`). Both stay `learning`; real sets at 🧍 Checkpoint F1 decide the final values. SPEC M4f wave 1 table updated.
   - **Watch at 🧍 Checkpoint F1 (reviewer):** the triceps `minVisibility: 0.4` lets MediaPipe guesses of a hidden wrist through; replay his real triceps sets at 0.4 and 0.5 before promoting, and re-check the narrow extended window (136–140 worked, 142 miscounts).
   - **Triceps extension: 150 / 80 → 138 / 95, visibility gate 0.5 → 0.4** (world angles, side view, best side; extended gate kept).

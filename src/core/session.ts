@@ -96,6 +96,16 @@ export type SessionEvent =
   | { type: 'PAUSE'; now: number }
   | { type: 'RESUME'; now: number }
   | { type: 'GO_TO_EXERCISE'; exIndex: number; now: number }
+  /**
+   * M10 coach, mid-workout: replace (`planned`) or remove (`null`) the exercise at `exIndex` in
+   * today's day. Accepted only when that exercise has no logged sets, it isn't the running set
+   * (the current exercise in the exercise phase), and not paused. A replacement must have
+   * ≥ 1 set and must not already be elsewhere in the day. Indices stay right: removing before
+   * the current exercise shifts `exIndex` down. On Rest, replacing the upcoming exercise loads
+   * its defaults; removing it moves to the next unfinished one (summary at `now` if none).
+   * The removed/replaced id leaves `skipped`. Logged sets are never touched.
+   */
+  | { type: 'REPLACE_UPCOMING'; exIndex: number; planned: PlannedExercise | null; now: number }
   | { type: 'FINISH'; now: number };
 
 export type SessionSummary = {
@@ -117,11 +127,19 @@ function planned(day: ProgramDay, exIndex: number): PlannedExercise {
 const loggedFor = (s: Pick<SessionState, 'logs'>, exerciseId: string) =>
   s.logs.filter((l) => l.exerciseId === exerciseId);
 
-/** Values for the next set of exercise `exIndex`: today's last set, else last time, else the plan. */
+const validKg = (kg: number | undefined): kg is number =>
+  kg !== undefined && Number.isFinite(kg) && kg >= 0;
+
+/**
+ * Values for the next set of exercise `exIndex`: today's last set, else the plan's
+ * `weightKgToday` (M10 lighter/deload, used exactly), else last time, else the plan.
+ */
 function defaultsFor(s: Pick<SessionState, 'logs' | 'unit' | 'lastWeightKg'>, p: PlannedExercise) {
   const last = loggedFor(s, p.exerciseId).at(-1);
   if (last) return { reps: last.reps, partials: 0, focusCues: null, weightKg: last.weightKg };
-  const weightKg = s.lastWeightKg[p.exerciseId] ?? snapToStep(p.startWeightKg ?? 0, s.unit);
+  const weightKg = validKg(p.weightKgToday)
+    ? p.weightKgToday
+    : (s.lastWeightKg[p.exerciseId] ?? snapToStep(p.startWeightKg ?? 0, s.unit));
   return { reps: p.targetReps[1], partials: 0, focusCues: null, weightKg };
 }
 
@@ -130,10 +148,13 @@ function isFinished(s: SessionState, exIndex: number): boolean {
   return loggedFor(s, p.exerciseId).length >= p.sets;
 }
 
-/** Next exercise after `from` that is neither finished nor skipped, wrapping around; -1 if none. */
-function nextUnfinished(s: SessionState, from: number): number {
+/**
+ * First exercise from `from + first` on that is neither finished nor skipped, wrapping around
+ * (`first` 1 = after `from`, 0 = including it); -1 if none.
+ */
+function nextUnfinished(s: SessionState, from: number, first: 0 | 1 = 1): number {
   const n = s.day.exercises.length;
-  for (let k = 1; k < n; k++) {
+  for (let k = first; k < n; k++) {
     const i = (from + k) % n;
     if (!isFinished(s, i) && !s.skipped.includes(planned(s.day, i).exerciseId)) return i;
   }
@@ -229,6 +250,43 @@ function correctLast(
     logs: [...s.logs.slice(0, -1), fixed],
     ...(sameExercise ? { reps } : {}),
   };
+}
+
+/** REPLACE_UPCOMING (never paused or on Summary here). Returns `s` itself when rejected. */
+function replaceUpcoming(
+  s: SessionState,
+  e: Extract<SessionEvent, { type: 'REPLACE_UPCOMING' }>,
+): SessionState {
+  const exercises = s.day.exercises;
+  const old = exercises[e.exIndex];
+  if (!Number.isInteger(e.exIndex) || !old) return s;
+  if (s.phase === 'exercise' && e.exIndex === s.exIndex) return s;
+  if (loggedFor(s, old.exerciseId).length > 0) return s;
+  const p = e.planned;
+  if (p) {
+    if (!Number.isInteger(p.sets) || p.sets < 1) return s;
+    if (exercises.some((x, i) => i !== e.exIndex && x.exerciseId === p.exerciseId)) return s;
+  }
+
+  const day: ProgramDay = {
+    ...s.day,
+    exercises: p
+      ? exercises.map((x, i) => (i === e.exIndex ? { ...p } : x))
+      : exercises.filter((_, i) => i !== e.exIndex),
+  };
+  const skipped = s.skipped.filter((id) => id !== old.exerciseId);
+  const base = { ...s, day, skipped };
+
+  if (e.exIndex !== s.exIndex) {
+    // Not the current/upcoming exercise: only its position may shift the current index.
+    const shift = !p && e.exIndex < s.exIndex ? 1 : 0;
+    return { ...base, exIndex: s.exIndex - shift };
+  }
+  // Rest, upcoming exercise (0 logged sets): reload its defaults or move on.
+  if (p) return goToExercise(base, e.exIndex, e.now);
+  if (day.exercises.length === 0) return toSummary(base, e.now);
+  const at = e.exIndex % day.exercises.length;
+  return goToExercise({ ...base, exIndex: at }, nextUnfinished(base, at, 0), e.now);
 }
 
 export function next(s: SessionState, e: SessionEvent): SessionState {
@@ -348,6 +406,9 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       const moved = goToExercise({ ...s, skipped }, e.exIndex, e.now);
       return s.phase === 'rest' ? moved : { ...moved, setStartedAt: e.now };
     }
+
+    case 'REPLACE_UPCOMING':
+      return replaceUpcoming(s, e);
 
     case 'SKIP_EXERCISE': {
       const skipped = [...s.skipped, currentPlanned(s).exerciseId];
