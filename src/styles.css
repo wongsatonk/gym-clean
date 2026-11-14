@@ -1022,7 +1022,10 @@ h1 {
    the two filled presses never touch. The clock stays a main number (120px, inside the ring). */
 .rest.mood-track:has(.coach-tip:not([hidden]) :is(.coach-apply, .coach-applied):not([hidden]))
   .rest-timer {
-  width: min(264px, calc(100% - 58px));
+  /* 248px still holds the 120px "+0:15"; the tighter block margin keeps the margin above Start
+     set even where the coach text sets a line taller (Linux CI). */
+  width: min(248px, calc(100% - 58px));
+  margin-block: -8px;
 }
 
 .rest.mood-track:has(.coach-tip:not([hidden]) :is(.coach-apply, .coach-applied):not([hidden]))
