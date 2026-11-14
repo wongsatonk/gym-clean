@@ -8,6 +8,7 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { endWorkout } from './workout.helpers';
 
 const CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
 const PRESS = '/fixtures/landmarks/shoulder-press/synthetic-01__reps-4__partials-0.json';
@@ -625,8 +626,7 @@ test('(a) dev log: an auto-started set has its camera meta, rep events, speech a
   // End → Summary → Done → Settings → Export last session (mocked share sheet).
   await cam.locator('[data-cam-rest="close"]').click();
   await expect(cam).toHaveCount(0);
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('button', { name: 'Tap again to end' }).click();
+  await endWorkout(page);
   await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
   await page.getByRole('button', { name: 'Done' }).click();
   await page.getByRole('button', { name: 'Settings' }).click();

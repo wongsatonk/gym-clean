@@ -18,6 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { seedHandsFreeOff } from './hands-free.helpers';
+import { endWorkout as endViaPause } from './workout.helpers';
 
 const RUSHED = '/fixtures/landmarks/curl/synthetic-03-rushed-lowering__reps-8__partials-0.json';
 const CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
@@ -304,9 +305,7 @@ async function repsThenFreeze(page: Page, cam: Locator, n: number, frame = 0): P
 
 /** End workout (two taps) → Summary. */
 async function endWorkout(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('button', { name: 'Tap again to end' }).click();
-  await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
+  await endViaPause(page);
 }
 
 /** Fix last set: steps reps / partials to the given values and saves. */

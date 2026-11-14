@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { skipExercise } from './workout.helpers';
 
 test('camera test runs on-device pose inference on the live stream', async ({ page }) => {
   test.setTimeout(60_000);
@@ -64,7 +65,7 @@ test('pose-tracked exercises offer the camera; manual ones do not', async ({ pag
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Camera', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Skip exercise' }).click(); // Lat pulldown = manual
+  await skipExercise(page); // Lat pulldown = manual
   await expect(page.getByRole('heading', { name: 'Wide-Grip Lat Pulldown' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Camera', exact: true })).toHaveCount(0);
 });

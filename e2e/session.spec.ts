@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openPause, skipExercise } from './workout.helpers';
 
 declare global {
   interface Window {
@@ -159,7 +160,7 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await expect(kg).toHaveText('17.5');
 
   // Skip the rest of bench press
-  await page.getByRole('button', { name: 'Skip exercise' }).click();
+  await skipExercise(page);
   await expect(page.getByRole('heading', { name: 'Incline Dumbbell Press' })).toBeVisible();
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 4');
   await expect.poll(async () => (await spoken(page)).at(-1)).toBe(INCLINE_CUE);
@@ -170,8 +171,13 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await page.getByRole('button', { name: 'Set done' }).click();
   await expect(clock).toBeVisible();
 
-  // End needs two taps
-  const end = page.getByRole('button', { name: 'End workout' });
+  // Skip and End are only in the Pause sheet (not on Exercise or Rest); End needs two taps
+  await expect(page.getByRole('button', { name: 'Skip exercise' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
+  await openPause(page);
+  const end = page
+    .getByRole('dialog', { name: 'Paused' })
+    .getByRole('button', { name: 'End workout' });
   await end.click();
   await expect(page.getByRole('button', { name: 'Tap again to end' })).toBeVisible();
   await page.getByRole('button', { name: 'Tap again to end' }).click();

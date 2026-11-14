@@ -293,7 +293,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - Apply `data-accent` on `<html>` at startup from `getAccent`.
   - Done when: by hand, Today shows streak / last time from real IndexedDB data, Start works, and the existing e2e are green.
   - Deps: A1, A4, A8.
-- [ ] A10. [ui-engineer] **Exercise** (Pro) + **Pause sheet** + workout top bar.
+- [x] A10. [ui-engineer] **Exercise** (Pro) + **Pause sheet** + workout top bar.
   - Files: src/ui/screens/exercise.ts, src/ui/screens/pauseSheet.ts, src/ui/topBar.ts, src/styles.css.
   - Exercise screen:
     - lit stage with the figure, set count 72px, muscle legend, How to;
@@ -307,11 +307,11 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - **End workout** (two-tap confirmation kept, danger + icon + words).
   - Done when: a render test, 390×844 harness screenshots, typecheck + lint clean.
   - Deps: A2, A6.
-- [ ] A11. [main] Wire Exercise + the Pause sheet; remove Skip/End from the Exercise and Rest footers.
+- [x] A11. [main] Wire Exercise + the Pause sheet; remove Skip/End from the Exercise and Rest footers.
   - Files: src/ui/app.ts.
   - Done when: by hand, Skip and End work only from the Pause sheet.
   - Deps: A9, A10.
-- [ ] A11b. [ui-engineer] Move the e2e specs that tap Skip/End to the Pause sheet.
+- [x] A11b. [ui-engineer] Move the e2e specs that tap Skip/End to the Pause sheet.
   - Files: e2e/*.spec.ts (not camera.spec.ts).
   - Done when: the full `npm run e2e` is green.
   - Deps: A11.
@@ -846,6 +846,15 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e A10, A11 and A11b done: Exercise (Pro) and the Pause sheet** (review PASS). Full e2e 75/75; check 1308.
+  - **Skip and End live only in the Pause sheet.** Skip dispatches RESUME then SKIP_EXERCISE; End needs two taps; Resume gets focus when the sheet opens.
+  - **Unchanged by choice:** skipping the last unfinished exercise goes straight to Summary in one tap, the same as the old footer Skip.
+  - **Follow-ups:**
+    - make the page behind the sheet inert and resume on Escape;
+    - clear the armed End timer when the sheet closes;
+    - add an e2e for Skip while resting;
+    - the 3D canvas paints its own background on the Exercise stage (anatomy-3d: transparent clear or stage gradient);
+    - the verifier re-shoots Exercise and Pause in A22.
 - 2026-11-14: **M4e A8 and A9 Today done.** Review: one blocking issue fixed — smoke now asserts the hero reads "Push A" on a fresh database and Start is enabled. Full e2e was 74/75 before that fix (the smoke test); smoke and session pass after it.
   - **The hero Start opens the preview** rather than starting directly, so last time's weights load for the defaults. Two taps, deliberately.
   - **Today loads up-next first, then the tiles separately,** so a failed history query never leaves Start disabled.

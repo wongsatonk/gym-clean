@@ -107,12 +107,16 @@
   min-width: 88px;
   padding: 0 16px;
   font-weight: 800;
-  color: var(--cta);
-  background: var(--surface-2);
+  border: none;
+  color: var(--on-cta);
+  background: var(--cta);
 }
 
+/* Open: the editor below is the focus, so the toggle steps back to a neutral button. */
 .lsc.open .lsc-fix {
+  border: 1px solid var(--line);
   color: var(--text);
+  background: var(--surface-2);
 }
 
 .lsc-editor {

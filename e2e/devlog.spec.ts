@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { endWorkout } from './workout.helpers';
 
 // M4c developer log + "Last set" correction (task 11, devlog part). A manual Push A set, a fix on
 // Rest and again on Summary, then Settings → export (share sheet mocked) → Clear.
@@ -144,8 +145,7 @@ test('dev log: correct the last set on Rest and Summary, export it, clear it', a
     .toEqual([[7, 1]]);
 
   // End the workout (two taps) → Summary has the fix control too: 7 → 6 reps.
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('button', { name: 'Tap again to end' }).click();
+  await endWorkout(page);
   await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
   await expect(fix.locator('[data-lsc=summary]')).toHaveText('7 reps · 1 partial');
   await fix.locator('[data-lsc=fix]').click();

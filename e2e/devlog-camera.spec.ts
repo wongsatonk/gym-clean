@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { seedHandsFreeOff } from './hands-free.helpers';
+import { endWorkout } from './workout.helpers';
 
 // M4c gym-session data path: a real camera set (fake camera = synthetic curl clip) is recorded in
 // the developer log with frames, rep events, spoken counts, counted vs corrected numbers, and the
@@ -154,8 +155,7 @@ test('camera set → dev log has frames, rep events, spoken counts and the corre
   await expect(fix.locator('[data-lsc=summary]')).toHaveText('5 reps');
 
   // End workout (two taps) → Summary → Done.
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('button', { name: 'Tap again to end' }).click();
+  await endWorkout(page);
   await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
   await page.getByRole('button', { name: 'Done' }).click();
 

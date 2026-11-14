@@ -68,6 +68,8 @@ import { audioTestPanel, disposeAudioTest } from './audioTest';
 import { createCoachTip } from './coachTip';
 import { createCoachSummary } from './coachSummary';
 import { createFocusSummary } from './focusSummary';
+import { exerciseScreen as renderExercise } from './screens/exercise';
+import { pauseSheet as renderPauseSheet } from './screens/pauseSheet';
 import { previewScreen as renderPreview } from './screens/preview';
 import { todayScreen as renderToday, type TodayLast } from './screens/today';
 import { applyAccent } from './tokens';
@@ -88,7 +90,6 @@ import { voice } from './voice';
 import { wakeLock } from './wakeLock';
 
 const TICK_MS = 250;
-const END_CONFIRM_MS = 3000;
 
 type Sheet =
   | null
@@ -922,6 +923,9 @@ export function mountApp(root: HTMLElement): void {
     if (s.phase === 'summary' && prev.phase !== 'summary') onFinished(s);
     syncCamera(); // before render: the rest screen leaves the tip/Fix to the camera's rest panel
     render();
+    // Pause sheet: move focus into the dialog (the Pause button it came from is gone).
+    if (s.paused && !prev.paused)
+      root.querySelector<HTMLElement>('[data-pause="resume"]')?.focus();
     speakFocusCue(prev, s);
   }
 
@@ -1043,7 +1047,7 @@ export function mountApp(root: HTMLElement): void {
   function sessionScreen(s: SessionState, sheet: Sheet): HTMLElement {
     if (s.phase === 'summary') return summaryScreen(s);
     const body = s.phase === 'rest' ? restScreen(s) : exerciseScreen(s);
-    if (s.paused) return h('div', { class: 'stack' }, body, pausedOverlay());
+    if (s.paused) return h('div', { class: 'stack' }, body, pausedOverlay(s));
     if (sheet?.kind === 'list') return h('div', { class: 'stack' }, body, listSheet(s));
     if (sheet?.kind === 'notes')
       return h('div', { class: 'stack' }, body, notesSheet(s, sheet.exerciseId));
@@ -1086,74 +1090,6 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
-  function footer(): HTMLElement {
-    return h(
-      'footer',
-      { class: 'footer-row' },
-      h(
-        'button',
-        { class: 'ghost-btn', onclick: () => dispatch({ type: 'SKIP_EXERCISE', now: now() }) },
-        'Skip exercise',
-      ),
-      endButton(),
-    );
-  }
-
-  function endButton(): HTMLElement {
-    const btn = h('button', { class: 'ghost-btn danger' }, 'End workout');
-    let timer: number | undefined;
-    btn.addEventListener('click', () => {
-      if (btn.dataset.armed) {
-        window.clearTimeout(timer);
-        dispatch({ type: 'FINISH', now: now() });
-        return;
-      }
-      btn.dataset.armed = 'true';
-      btn.textContent = 'Tap again to end';
-      timer = window.setTimeout(() => {
-        delete btn.dataset.armed;
-        btn.textContent = 'End workout';
-      }, END_CONFIRM_MS);
-    });
-    return btn;
-  }
-
-  function stepper(
-    label: string,
-    value: string,
-    field: 'reps' | 'weight',
-    step: number,
-  ): HTMLElement {
-    return h(
-      'div',
-      { class: 'stepper', 'data-stepper': field },
-      h('span', { class: 'stepper-label' }, label),
-      h(
-        'button',
-        {
-          class: 'step-btn',
-          'aria-label': `${label} minus`,
-          onclick: () => dispatch({ type: 'ADJUST', field, delta: -step }),
-        },
-        '−',
-      ),
-      h(
-        'output',
-        { class: `stepper-value${value.length >= 5 ? ' long' : ''}`, 'aria-label': label },
-        value,
-      ),
-      h(
-        'button',
-        {
-          class: 'step-btn',
-          'aria-label': `${label} plus`,
-          onclick: () => dispatch({ type: 'ADJUST', field, delta: step }),
-        },
-        '+',
-      ),
-    );
-  }
-
   /** Machine setting + notes button and the Today / Last time lines for one exercise. */
   function exerciseInfo(s: SessionState, exerciseId: string): HTMLElement[] {
     const note = noteFor(exerciseId);
@@ -1191,46 +1127,46 @@ export function mountApp(root: HTMLElement): void {
 
   function exerciseScreen(s: SessionState): HTMLElement {
     const p = currentPlanned(s);
-    return h(
-      'main',
-      { class: 'screen exercise', 'data-screen': 'exercise' },
-      topBar(s),
-      h(
-        'div',
-        { class: 'exercise-head' },
-        h(
-          'div',
-          { class: 'exercise-head-text' },
-          h('h1', { class: 'exercise-name' }, exerciseName(p.exerciseId)),
-          badgesFor({ exerciseId: p.exerciseId, tracking: p.tracking }),
-          h('p', { class: 'muted' }, `Target ${repsRange(p)} reps`),
-          h('p', { class: 'focus-cue' }, cueFor(p.exerciseId)),
-          h(
-            'button',
-            {
-              class: 'ghost-btn',
-              'data-howto-open': true,
-              onclick: (ev: Event) => openHowTo(p, ev.currentTarget as HTMLElement),
-            },
-            'How to',
-          ),
-        ),
-        muscleSlot(p.exerciseId, 'inline'),
-      ),
-      h(
-        'p',
-        { class: 'set-counter', 'data-set-counter': true },
-        `Set ${s.setIndex + 1} of ${p.sets}`,
-      ),
-      ...exerciseInfo(s, p.exerciseId),
-      stepper('Reps', String(s.reps), 'reps', 1),
-      stepper(unit, w(s.weightKg), 'weight', stepFor(s.unit)),
-      h(
-        'button',
-        { class: 'primary-btn', onclick: () => dispatch({ type: 'SET_DONE', now: now() }) },
-        'Set done',
-      ),
-      footer(),
+    const id = p.exerciseId;
+    const note = noteFor(id);
+    const today = setsText(s.logs.filter((l) => l.exerciseId === id));
+    const last = setsText(lastTime[id] ?? []);
+    return renderExercise(
+      {
+        dayName: s.day.name,
+        exIndex: s.exIndex,
+        exTotal: s.day.exercises.length,
+        exerciseId: id,
+        tracking: p.tracking,
+        name: exerciseName(id),
+        repsRange: repsRange(p),
+        setIndex: s.setIndex,
+        sets: p.sets,
+        reps: s.reps,
+        weightText: w(s.weightKg),
+        unit,
+        cue: cueFor(id),
+        figure: muscleSlot(id, 'inline'),
+        machine: note.machineSetting || undefined,
+        note: note.note || undefined,
+        hasNotes: Boolean(note.note || todayNotes[id]),
+        today: today || undefined,
+        last: last || undefined,
+      },
+      {
+        onList: () => setSheet({ kind: 'list' }),
+        onCamera: p.tracking === 'pose' ? () => openCameraView(exerciseName(id), id) : undefined,
+        onPause: () => dispatch({ type: 'PAUSE', now: now() }),
+        onHowTo: (opener) => openHowTo(p, opener),
+        onNotes: () => setSheet({ kind: 'notes', exerciseId: id }),
+        onAdjust: (field, dir) =>
+          dispatch({
+            type: 'ADJUST',
+            field,
+            delta: dir * (field === 'reps' ? 1 : stepFor(s.unit)),
+          }),
+        onSetDone: () => dispatch({ type: 'SET_DONE', now: now() }),
+      },
     );
   }
 
@@ -1277,7 +1213,6 @@ export function mountApp(root: HTMLElement): void {
         { class: 'primary-btn', onclick: () => dispatch({ type: 'START_SET', now: now() }) },
         'Start set',
       ),
-      footer(),
     );
   }
 
@@ -1407,17 +1342,24 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
-  function pausedOverlay(): HTMLElement {
-    return h(
-      'div',
-      { class: 'overlay', role: 'dialog', 'aria-label': 'Paused' },
-      h('p', { class: 'overlay-title' }, 'Paused'),
-      h(
-        'button',
-        { class: 'primary-btn', onclick: () => dispatch({ type: 'RESUME', now: now() }) },
-        'Resume',
-      ),
-      endButton(),
+  function pausedOverlay(s: SessionState): HTMLElement {
+    const p = currentPlanned(s);
+    return renderPauseSheet(
+      {
+        context:
+          s.phase === 'rest'
+            ? `Resting · next ${exerciseName(p.exerciseId)}`
+            : `${exerciseName(p.exerciseId)} · set ${s.setIndex + 1} of ${p.sets}`,
+      },
+      {
+        onResume: () => dispatch({ type: 'RESUME', now: now() }),
+        // The reducer only accepts RESUME while paused: resume, then skip.
+        onSkip: () => {
+          dispatch({ type: 'RESUME', now: now() });
+          dispatch({ type: 'SKIP_EXERCISE', now: now() });
+        },
+        onEnd: () => dispatch({ type: 'FINISH', now: now() }),
+      },
     );
   }
 

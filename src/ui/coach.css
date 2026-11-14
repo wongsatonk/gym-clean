@@ -57,9 +57,9 @@
   min-height: var(--tap-min);
   margin-top: 4px;
   padding: 0 18px;
-  border: 2px solid var(--cta);
-  background: transparent;
-  color: var(--cta);
+  border: none;
+  background: var(--cta);
+  color: var(--on-cta);
   font-size: var(--fs-cue);
   font-weight: 800;
 }

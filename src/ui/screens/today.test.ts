@@ -1,93 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { WeekDot } from '../../core/stats';
 import type { ProgramDay } from '../../core/types';
 import { exerciseById, program } from '../../data/catalog';
 import { tabBar, type TabId } from '../tabBar';
+import { FakeEl, asFake, useFakeDom } from './testDom';
 import { dayMuscles, estimateMinutes, muscleLabel } from './dayInfo';
 import { previewScreen, type PreviewRow } from './preview';
 import { dateLabel, todayScreen, volumeLine, whenLabel, type TodayProps } from './today';
 
-// ---------- tiny DOM stub (vitest runs in node) ----------
-
-class FakeEl {
-  children: FakeEl[] = [];
-  attrs = new Map<string, string>();
-  text = '';
-  html = '';
-  listeners = new Map<string, (() => void)[]>();
-  constructor(public tag: string) {}
-  setAttribute(k: string, v: string) {
-    this.attrs.set(k, v);
-  }
-  getAttribute(k: string) {
-    return this.attrs.get(k) ?? null;
-  }
-  hasAttribute(k: string) {
-    return this.attrs.has(k);
-  }
-  set innerHTML(v: string) {
-    this.html = v;
-  }
-  get innerHTML() {
-    return this.html;
-  }
-  addEventListener(type: string, cb: () => void) {
-    this.listeners.set(type, [...(this.listeners.get(type) ?? []), cb]);
-  }
-  click() {
-    for (const cb of this.listeners.get('click') ?? []) cb();
-  }
-  append(...nodes: (FakeEl | string)[]) {
-    for (const n of nodes) {
-      if (typeof n === 'string') {
-        const t = new FakeEl('#text');
-        t.text = n;
-        this.children.push(t);
-      } else this.children.push(n);
-    }
-  }
-  get textContent(): string {
-    return this.tag === '#text' ? this.text : this.children.map((c) => c.textContent).join('');
-  }
-  get classes(): string[] {
-    return (this.attrs.get('class') ?? '').split(/\s+/).filter(Boolean);
-  }
-  /** Depth-first descendants matching a predicate. */
-  find(pred: (e: FakeEl) => boolean): FakeEl[] {
-    const out: FakeEl[] = [];
-    for (const c of this.children) {
-      if (pred(c)) out.push(c);
-      out.push(...c.find(pred));
-    }
-    return out;
-  }
-  byClass(cls: string): FakeEl[] {
-    return this.find((e) => e.classes.includes(cls));
-  }
-  oneByClass(cls: string): FakeEl {
-    const hit = this.byClass(cls)[0];
-    if (!hit) throw new Error(`no .${cls}`);
-    return hit;
-  }
-  byTag(tag: string): FakeEl[] {
-    return this.find((e) => e.tag === tag);
-  }
-}
-
-const g = globalThis as { document?: unknown };
-let saved: unknown;
-beforeEach(() => {
-  saved = g.document;
-  g.document = {
-    createElement: (tag: string) => new FakeEl(tag),
-    createElementNS: (_ns: string, tag: string) => new FakeEl(tag),
-  };
-});
-afterEach(() => {
-  g.document = saved;
-});
-
-const asFake = (el: unknown) => el as FakeEl;
+useFakeDom();
 
 // ---------- data ----------
 
@@ -227,6 +148,9 @@ describe('todayScreen', () => {
     const start = el.oneByClass('hero-cta');
     expect(start.hasAttribute('disabled')).toBe(true);
     expect(start.textContent).toBe('Loading…');
+    // The placeholder heading has a spoken name, not just "…".
+    const h1 = el.byTag('h1')[0];
+    expect(h1?.oneByClass('sr-only').textContent).toBe('Loading');
     start.click();
     expect(calls.start).toEqual([]);
     expect(el.byClass('up-next')).toHaveLength(0);

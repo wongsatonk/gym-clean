@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { endWorkout as endViaPause } from './workout.helpers';
 
 // M5b task 7: the after-set coach on Rest (tip, speech, Apply), its Settings switch, and the
 // Summary "Coach" section. Fixed clock, mocked speech (volume-0 unlock skipped), no camera.
@@ -142,9 +143,7 @@ async function expectSpokenOnceAt2s(page: Page, say: string) {
 }
 
 async function endWorkout(page: Page) {
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('button', { name: 'Tap again to end' }).click();
-  await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
+  await endViaPause(page);
 }
 
 async function noOverflow(page: Page) {

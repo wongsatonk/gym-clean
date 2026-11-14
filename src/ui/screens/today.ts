@@ -118,7 +118,12 @@ function hero(props: TodayProps, actions: TodayActions): HTMLElement {
       'section',
       { class: 'hero', 'aria-busy': 'true', 'data-hero': true },
       h('p', { class: 'eyebrow' }, 'Next up'),
-      h('h1', { class: 'hero-title' }, '…'),
+      h(
+        'h1',
+        { class: 'hero-title' },
+        h('span', { 'aria-hidden': 'true' }, '…'),
+        h('span', { class: 'sr-only' }, 'Loading'),
+      ),
       props.hint ?? null,
       h('button', { class: 'primary-btn hero-cta', type: 'button', disabled: true }, 'Loading…'),
     );

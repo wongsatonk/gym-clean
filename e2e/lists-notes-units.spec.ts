@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { endWorkout } from './workout.helpers';
 
 test('lb units, notes, exercise list jump and last time carry across sessions', async ({
   page,
@@ -56,8 +57,7 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 5');
 
   // End -> summary in lb with today's note
-  await page.getByRole('button', { name: 'End workout' }).click();
-  await page.getByRole('button', { name: 'Tap again to end' }).click();
+  await endWorkout(page);
   await expect(page.locator('[data-stat="volume"]')).toContainText('320');
   await expect(page.locator('[data-stat="volume"]')).toContainText('lb volume');
   await expect(page.getByText('“felt strong”')).toBeVisible();
