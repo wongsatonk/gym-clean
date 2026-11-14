@@ -1,0 +1,39 @@
+/* iOS "turn Silent mode off" reminder above "Start workout" on the day preview. Tokens from
+   src/styles.css. Icon + words (not colour alone); amber border marks it as a reminder. */
+
+.silent-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 6px 6px 6px 12px;
+  border: 2px solid var(--warn);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.silent-hint-icon {
+  flex: 0 0 auto;
+  color: var(--warn);
+}
+
+.silent-hint-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.silent-hint-ok {
+  flex: 0 0 auto;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 0 16px;
+  font-size: 20px;
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--text);
+}

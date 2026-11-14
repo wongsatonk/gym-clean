@@ -39,6 +39,7 @@ import type { Body3D } from './body3d/viewer';
 import { badgesFor } from './badges';
 import { createCameraView, type CameraTarget, type CameraView } from './cameraView';
 import { createHowToSheet } from './howToSheet';
+import { silentHint } from './silentHint';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
 import { h } from './dom';
@@ -534,6 +535,7 @@ export function mountApp(root: HTMLElement): void {
       h(
         'div',
         { class: 'sticky-bottom' },
+        silentHint(), // iOS mutes spoken cues in Silent mode; a page can't detect it
         h(
           'button',
           { class: 'primary-btn', disabled: loading, onclick: () => startDay(day) },
