@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  angleBetweenDeg,
   angleSource,
   frameAngle,
+  imageAngle,
+  torsoDirection,
   jointAngle,
   meanVisibility,
   pickSide,
+  shoulderYawDeg,
   tripletVisibility,
   type SidePair,
   type Triplet,
@@ -119,6 +123,107 @@ describe('angle source', () => {
 
   it('returns null for a degenerate (zero-length) segment', () => {
     expect(frameAngle(frame(), rightElbow)).toBeNull();
+  });
+});
+
+describe('image-space angles (rules with angleSpace image)', () => {
+  // A 90° elbow in a 3:4 portrait video (width/height = 0.75): forearm horizontal, upper arm
+  // vertical. Normalized x is stretched by 1/0.75, so the raw normalized x/y are not square.
+  const image = {
+    [L.RIGHT_SHOULDER]: { x: 0.5, y: 0.2, z: 0 },
+    [L.RIGHT_ELBOW]: { x: 0.5, y: 0.4, z: 0 },
+    // 0.2 of the height to the right = 0.2 / 0.75 of the width.
+    [L.RIGHT_WRIST]: { x: 0.5 + 0.2 / 0.75, y: 0.4, z: 0 },
+  };
+  // A diagonal: wrist 45° up-right in pixels (equal pixel dx and dy).
+  const diag = {
+    [L.RIGHT_SHOULDER]: { x: 0.5, y: 0.6, z: 0 },
+    [L.RIGHT_ELBOW]: { x: 0.5, y: 0.4, z: 0 },
+    [L.RIGHT_WRIST]: { x: 0.5 + 0.1 / 0.75, y: 0.3, z: 0 },
+  };
+  const world = {
+    [L.RIGHT_SHOULDER]: { x: 0, y: -0.3, z: 0 },
+    [L.RIGHT_ELBOW]: { x: 0, y: 0, z: 0 },
+    [L.RIGHT_WRIST]: { x: 0, y: 0, z: 0.25 },
+  };
+
+  it('imageAngle uses normalized x/y with x scaled by the aspect (width / height)', () => {
+    expect(imageAngle(frame({ image }), rightElbow, 0.75)).toBeCloseTo(90, 6);
+    expect(imageAngle(frame({ image: diag }), rightElbow, 0.75)).toBeCloseTo(135, 6);
+    // Aspect 1 is the raw normalized square (what the 2D fallback uses).
+    expect(imageAngle(frame({ image: diag }), rightElbow, 1)).toBeCloseTo(
+      180 - (Math.atan2(0.1 / 0.75, 0.1) * 180) / Math.PI,
+      6,
+    );
+  });
+
+  it('frameAngle with space image ignores world landmarks', () => {
+    const f = frame({ image, world });
+    expect(frameAngle(f, rightElbow)).toBeCloseTo(90, 6); // world (z bend)
+    expect(frameAngle(f, rightElbow, { space: 'image', aspect: 0.75 })).toBeCloseTo(90, 6);
+    const g = frame({ image: diag, world });
+    expect(frameAngle(g, rightElbow, { space: 'image', aspect: 0.75 })).toBeCloseTo(135, 6);
+  });
+
+  it('imageAngle returns null for missing points, a degenerate segment or a bad aspect', () => {
+    expect(imageAngle({ t: 0, landmarks: [] }, rightElbow, 0.75)).toBeNull();
+    expect(imageAngle(frame(), rightElbow, 0.75)).toBeNull();
+    expect(imageAngle(frame({ image }), rightElbow, 0)).toBeNull();
+    expect(imageAngle(frame({ image }), rightElbow, Number.NaN)).toBeNull();
+  });
+});
+
+describe('torso direction (posture gate)', () => {
+  const upright = {
+    [L.LEFT_SHOULDER]: { x: 0.2, y: -0.5, z: 0 },
+    [L.RIGHT_SHOULDER]: { x: -0.2, y: -0.5, z: 0 },
+    [L.LEFT_HIP]: { x: 0.1, y: 0, z: 0 },
+    [L.RIGHT_HIP]: { x: -0.1, y: 0, z: 0 },
+  };
+
+  it('is the unit vector from the hip midpoint to the shoulder midpoint (world)', () => {
+    const d = torsoDirection(frame({ world: upright }));
+    expect(d?.x).toBeCloseTo(0, 6);
+    expect(d?.y).toBeCloseTo(-1, 6);
+    expect(d?.z).toBeCloseTo(0, 6);
+  });
+
+  it('is null without world landmarks or with coincident midpoints', () => {
+    expect(torsoDirection(frame())).toBeNull();
+    expect(torsoDirection(frame({ world: {} }))).toBeNull();
+  });
+
+  it('angleBetweenDeg measures the lean between two directions', () => {
+    const up = { x: 0, y: -1, z: 0 };
+    // Bent forward toward the camera by 60°.
+    const bent = { x: 0, y: -Math.cos(Math.PI / 3), z: -Math.sin(Math.PI / 3) };
+    expect(angleBetweenDeg(up, up)).toBeCloseTo(0, 6);
+    expect(angleBetweenDeg(up, bent)).toBeCloseTo(60, 6);
+    expect(angleBetweenDeg(up, { x: 0, y: 1, z: 0 })).toBeCloseTo(180, 6);
+  });
+});
+
+describe('shoulderYawDeg (camera view)', () => {
+  const at = (l: P, r: P) => frame({ world: { [L.LEFT_SHOULDER]: l, [L.RIGHT_SHOULDER]: r } });
+
+  it('is 0 when the shoulder line is across the image (facing the camera)', () => {
+    expect(shoulderYawDeg(at({ x: 0.2, y: 0, z: 0 }, { x: -0.2, y: 0, z: 0 }))).toBeCloseTo(0, 6);
+  });
+
+  it('is 90 when the shoulder line points at the camera (side-on)', () => {
+    expect(shoulderYawDeg(at({ x: 0, y: 0, z: 0.2 }, { x: 0, y: 0, z: -0.2 }))).toBeCloseTo(90, 6);
+  });
+
+  it('is 45 half-turned, whichever way', () => {
+    expect(shoulderYawDeg(at({ x: 0.1, y: 0, z: -0.1 }, { x: -0.1, y: 0, z: 0.1 }))).toBeCloseTo(
+      45,
+      6,
+    );
+  });
+
+  it('is null without world landmarks or with coincident shoulders', () => {
+    expect(shoulderYawDeg(frame())).toBeNull();
+    expect(shoulderYawDeg(frame({ world: {} }))).toBeNull();
   });
 });
 

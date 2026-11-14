@@ -16,6 +16,7 @@ export type {
   Side,
   SidePair,
   Triplet,
+  ViewVariant,
 } from './types';
 export { COUNTER_DEFAULTS } from './types';
 

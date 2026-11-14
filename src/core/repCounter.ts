@@ -12,7 +12,22 @@
 // turnaround at least minPartialDepthDeg past the threshold it left, and the minimum leg times.
 // One attempt gives at most one partial: after a `start` partial, a return to the start band
 // without reaching far finishes that attempt (no extra `far` partial).
-import { frameAngle, pickSide, tripletVisibility, type Side } from './angles';
+//
+// Real-data options (Push A log, 2026-11-13), all rule data: `angleSpace: 'image'` measures in
+// the image plane with the video aspect estimated from the pose; `maxTorsoLeanDeg` drops frames
+// (and the attempt in progress) once the torso leans away from its posture at the settle;
+// `otherView` swaps in thresholds for the other camera view, judged while settling.
+import {
+  angleBetweenDeg,
+  frameAngle,
+  pickSide,
+  torsoDirection,
+  shoulderYawDeg,
+  tripletVisibility,
+  type Side,
+  type Vec3,
+} from './angles';
+import { createAspectEstimator } from './aspect';
 import { extendedGatePasses, type ExerciseRule, type MissReason } from './exercises';
 import type { LandmarkFrame, RepEvent } from './types';
 
@@ -38,7 +53,10 @@ export type RepCounter = {
   readonly tracking: boolean;
   /** Smoothed joint angle in degrees; null before the first tracked frame. */
   readonly angle: number | null;
-  /** The rule this counter uses (thresholds for the gauge, hints, placement). */
+  /**
+   * The rule this counter uses (thresholds for the gauge, hints, placement): the rule passed in,
+   * or it merged with its `otherView` thresholds while the camera sees that view.
+   */
   readonly rule: ExerciseRule;
   /** The current rep has reached the far band (phase bottom/up): the gauge target is met. */
   readonly reachedFar: boolean;
@@ -57,22 +75,37 @@ export type RepCounter = {
 const SIDE_WINDOW = 15;
 /** After a gap longer than this (no tracked frames), the EMA restarts from the raw angle. */
 const RESEED_GAP_MS = 500;
+/** Mean shoulder-line yaw (deg) below which the camera sees the body from the front. */
+const FRONT_MAX_YAW = 45;
 
 type Reading = { angle: number; side: TrackedSide; gate: boolean };
 
 export function createRepCounter(rule: ExerciseRule): RepCounter {
   const sign = rule.direction === 'decreasing' ? 1 : -1;
-  const E = sign * rule.extended;
-  const C = sign * rule.contracted;
   const h = rule.hysteresisDeg;
   const startExtended = rule.start === 'extended';
   // Progress toward the far end: +1 means growing o goes toward far (start contracted).
   const farSign = startExtended ? -1 : 1;
-  const startThresholdProgress = farSign * (startExtended ? E : C);
-  const farThresholdProgress = farSign * (startExtended ? C : E);
   // The out leg (start → far) moves toward `far`; is that the lowering?
   const far = startExtended ? 'contracted' : 'extended';
   const eccentricIsOut = (rule.eccentric === 'toExtended' ? 'extended' : 'contracted') === far;
+  /** The rule merged with its other-view thresholds (null if it has none). */
+  const variant: ExerciseRule | null = rule.otherView ? { ...rule, ...rule.otherView } : null;
+
+  // Thresholds of the active rule (the rule, or its other-view variant once that view is seen).
+  let active = rule;
+  let E = 0;
+  let C = 0;
+  let startThresholdProgress = 0;
+  let farThresholdProgress = 0;
+  function applyRule(r: ExerciseRule): void {
+    active = r;
+    E = sign * r.extended;
+    C = sign * r.contracted;
+    startThresholdProgress = farSign * (startExtended ? E : C);
+    farThresholdProgress = farSign * (startExtended ? C : E);
+  }
+  applyRule(rule);
 
   const inExtended = (o: number, gate: boolean) => o > E && gate;
   const inContracted = (o: number) => o < C;
@@ -130,6 +163,12 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   let fromStartPartial = false;
   let lastMiss: MissReason | null = null;
   let lastPartial: RepEvent | null = null;
+  /** Video aspect from the pose, for image-plane angles (rule.angleSpace 'image'). */
+  const aspect = createAspectEstimator();
+  /** Torso direction at the settle, for the posture gate (rule.maxTorsoLeanDeg). */
+  let refTorso: Vec3 | null = null;
+  /** Recent shoulder-line yaws while settling, to judge the camera view (rule.otherView). */
+  let yaws: number[] = [];
 
   /** Forget the limb's position (back to setup, side unlocked) but keep the counts. */
   function restartTracking(): void {
@@ -143,6 +182,31 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     lastFrameT = -Infinity;
     settleSince = null;
     prevTracked = false;
+    aspect.reset(); // a restarted stream may be another camera
+    refTorso = null;
+    yaws = [];
+    applyRule(rule);
+  }
+
+  /**
+   * While settling: which view does the camera see? Mean shoulder-line yaw over the recent
+   * frames under FRONT_MAX_YAW = front, else side. Switching thresholds restarts the settle.
+   */
+  function judgeView(frame: LandmarkFrame): void {
+    if (!variant) return;
+    const yaw = shoulderYawDeg(frame);
+    if (yaw === null) return;
+    yaws.push(yaw);
+    if (yaws.length > SIDE_WINDOW) yaws.shift();
+    const mean = yaws.reduce((sum, y) => sum + y, 0) / yaws.length;
+    const seen = mean < FRONT_MAX_YAW ? 'front' : 'side';
+    const target = seen === rule.view ? rule : variant;
+    if (target === active) return;
+    applyRule(target);
+    ema = null;
+    settleSince = null;
+    side = null;
+    lockedSide = null;
   }
 
   function reset(): void {
@@ -156,12 +220,31 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   function readSide(frame: LandmarkFrame, s: Side): number | null {
     // Written as !(v >= min) so a NaN visibility fails the gate.
     if (!(tripletVisibility(frame, rule.triplets[s]) >= rule.minVisibility)) return null;
+    if (rule.angleSpace === 'image')
+      return frameAngle(frame, rule.triplets[s], { space: 'image', aspect: aspect.value ?? 1 });
     return frameAngle(frame, rule.triplets[s]);
   }
 
-  /** Angle + side for this frame, or null when the visibility gate fails. */
+  /** False when the torso has turned past rule.maxTorsoLeanDeg from its direction at settle. */
+  function postureOk(frame: LandmarkFrame): boolean {
+    if (rule.maxTorsoLeanDeg === undefined || refTorso === null) return true;
+    const d = torsoDirection(frame);
+    return d === null || angleBetweenDeg(d, refTorso) <= rule.maxTorsoLeanDeg;
+  }
+
+  /** Angle + side for this frame, or null when the visibility or posture gate fails. */
   function read(frame: LandmarkFrame): Reading | null {
-    if (rule.sideMode === 'both') {
+    if (rule.angleSpace === 'image') aspect.push(frame);
+    if (phase === 'setup') judgeView(frame);
+    if (!postureOk(frame)) {
+      // Left the exercise posture (bending to pick up or put down the weights): whatever was
+      // in progress is not an attempt. Settle again at the start (counts, side and the
+      // reference posture are kept).
+      phase = 'setup';
+      settleSince = null;
+      return null;
+    }
+    if (active.sideMode === 'both') {
       const l = readSide(frame, 'left');
       const r = readSide(frame, 'right');
       if (l !== null && r !== null) {
@@ -298,6 +381,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
           settleSince ??= t;
           if (t - settleSince >= rule.minPhaseMs) {
             if (r.side !== 'both') lockedSide = r.side;
+            if (rule.maxTorsoLeanDeg !== undefined) refTorso = torsoDirection(frame);
             enterStart(ct, a);
           }
         } else if (leftStart(o)) {
@@ -421,7 +505,9 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     get angle() {
       return ema;
     },
-    rule,
+    get rule() {
+      return active;
+    },
     get reachedFar() {
       return phase === 'bottom' || phase === 'up';
     },

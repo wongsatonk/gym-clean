@@ -26,6 +26,13 @@ export type PhonePlacement = {
   spoken: string;
 };
 
+/**
+ * Thresholds for the camera view the rule was not written for. The counter switches to them
+ * when it sees that view while settling (world shoulder line: across the image = front,
+ * pointing at the camera = side). Hints and placement stay the rule's own.
+ */
+export type ViewVariant = Pick<ExerciseRule, 'view' | 'sideMode' | 'extended' | 'contracted'>;
+
 export type ExerciseRule = {
   /** Id in exercises.json / program.json. */
   exerciseId: string;
@@ -62,6 +69,27 @@ export type ExerciseRule = {
    * image (smaller normalized y). Press: wrist above shoulder, so hanging arms aren't "extended".
    */
   extendedGate?: { upper: SidePair<number>; lower: SidePair<number> };
+  /**
+   * Where the joint angle is measured (default `world`: 3D world landmarks when the frame has
+   * them, else 2D). `image`: always the 2D image plane, with normalized x scaled by the video
+   * aspect estimated from the pose (core/aspect.ts). For front-view movements in the camera's
+   * plane, where the world model's depth guess compresses the angle (seated press, 2026-11-13
+   * Push A log: world tops 124–137° vs image 147–161° on the same reps).
+   */
+  angleSpace?: 'world' | 'image';
+  /**
+   * Optional posture gate (deg): once the counter has settled, frames where the torso
+   * (hip midpoint → shoulder midpoint, world 3D) has turned more than this from its direction at
+   * the settle are not tracked, like a visibility miss. Measured relative to the settle, so phone
+   * pitch doesn't matter. Lateral raise: bending over to pick up or put down the dumbbells opens
+   * the shoulder angle like a raise (Push A log: phantom rep at the start of 3 of 4 sets).
+   */
+  maxTorsoLeanDeg?: number;
+  /**
+   * Optional thresholds for the other camera view (see ViewVariant). Push-up: filmed head-on,
+   * the world elbow angle bottoms out at 93–118° instead of < 95° (Push A log, 2026-11-13).
+   */
+  otherView?: ViewVariant;
   /** EMA smoothing factor for the angle (SPEC §3: 0.4). */
   emaAlpha: number;
   /** Hysteresis (deg): leave a band only once past its threshold by this much (SPEC §3: 10). */

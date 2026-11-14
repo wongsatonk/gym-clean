@@ -1,5 +1,8 @@
 // Joint-angle math over LandmarkFrames (SPEC §3). Pure: no DOM, no MediaPipe.
+import { LANDMARK } from './poseTopology';
 import type { LandmarkFrame } from './types';
+
+const { LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP } = LANDMARK;
 
 export type Side = 'left' | 'right';
 export type SidePair<T> = { left: T; right: T };
@@ -34,24 +37,99 @@ export function angleSource(frame: LandmarkFrame): 'world' | 'image' {
   return frame.world && frame.world.length > 0 ? 'world' : 'image';
 }
 
+/**
+ * The 2D joint angle in the image plane: normalized x/y with x scaled by the video aspect
+ * (width / height), so the angle is measured in square pixels. Null if a point is missing, a
+ * segment is degenerate, or the aspect is not a positive number.
+ */
+export function imageAngle(
+  frame: LandmarkFrame,
+  [ia, ib, ic]: Triplet,
+  aspect: number,
+): number | null {
+  if (!(aspect > 0) || !Number.isFinite(aspect)) return null;
+  const a = frame.landmarks[ia];
+  const b = frame.landmarks[ib];
+  const c = frame.landmarks[ic];
+  if (!a || !b || !c) return null;
+  const angle = jointAngle(
+    { x: a.x * aspect, y: a.y },
+    { x: b.x * aspect, y: b.y },
+    { x: c.x * aspect, y: c.y },
+  );
+  return Number.isFinite(angle) ? angle : null;
+}
+
+/**
+ * Where to measure: by default `world` 3D when the frame has it (else 2D normalized x/y).
+ * `space: 'image'` always measures in the image plane with x scaled by `aspect` (default 1):
+ * for front-view movements in the camera's plane, where the world model's depth guess bends
+ * the angle (M4 real-data Decision, seated press).
+ */
+export type AngleOptions = { space?: 'auto' | 'image'; aspect?: number };
+
 /** The joint angle for a triplet in this frame, or null if points are missing/degenerate. */
-export function frameAngle(frame: LandmarkFrame, [ia, ib, ic]: Triplet): number | null {
-  let angle: number;
+export function frameAngle(
+  frame: LandmarkFrame,
+  triplet: Triplet,
+  opts: AngleOptions = {},
+): number | null {
+  if (opts.space === 'image') return imageAngle(frame, triplet, opts.aspect ?? 1);
+  const [ia, ib, ic] = triplet;
   if (angleSource(frame) === 'world') {
     const w = frame.world ?? [];
     const a = w[ia];
     const b = w[ib];
     const c = w[ic];
     if (!a || !b || !c) return null;
-    angle = jointAngle(a, b, c);
-  } else {
-    const a = frame.landmarks[ia];
-    const b = frame.landmarks[ib];
-    const c = frame.landmarks[ic];
-    if (!a || !b || !c) return null;
-    angle = jointAngle({ x: a.x, y: a.y }, { x: b.x, y: b.y }, { x: c.x, y: c.y });
+    const angle = jointAngle(a, b, c);
+    return Number.isFinite(angle) ? angle : null;
   }
-  return Number.isFinite(angle) ? angle : null;
+  return imageAngle(frame, triplet, 1);
+}
+
+export type Vec3 = { x: number; y: number; z: number };
+
+/**
+ * Unit vector from the hip midpoint to the shoulder midpoint in world coordinates (camera axes,
+ * y down), or null without world landmarks or with coincident midpoints.
+ */
+export function torsoDirection(frame: LandmarkFrame): Vec3 | null {
+  const w = frame.world;
+  if (!w || w.length === 0) return null;
+  const ls = w[LEFT_SHOULDER];
+  const rs = w[RIGHT_SHOULDER];
+  const lh = w[LEFT_HIP];
+  const rh = w[RIGHT_HIP];
+  if (!ls || !rs || !lh || !rh) return null;
+  const x = (ls.x + rs.x - lh.x - rh.x) / 2;
+  const y = (ls.y + rs.y - lh.y - rh.y) / 2;
+  const z = (ls.z + rs.z - lh.z - rh.z) / 2;
+  const n = Math.hypot(x, y, z);
+  if (!(n > 0)) return null;
+  return { x: x / n, y: y / n, z: z / n };
+}
+
+/**
+ * How far the shoulder line (left → right shoulder, world 3D) turns toward the camera, in
+ * degrees: ~0 facing the camera (front view), ~90 side-on. Null without world landmarks.
+ */
+export function shoulderYawDeg(frame: LandmarkFrame): number | null {
+  const w = frame.world;
+  if (!w || w.length === 0) return null;
+  const ls = w[LEFT_SHOULDER];
+  const rs = w[RIGHT_SHOULDER];
+  if (!ls || !rs) return null;
+  const across = Math.hypot(ls.x - rs.x, ls.y - rs.y);
+  const depth = Math.abs(ls.z - rs.z);
+  if (!(across > 0) && !(depth > 0)) return null;
+  return Math.atan2(depth, across) * DEG;
+}
+
+/** Angle between two unit vectors in degrees (0–180). */
+export function angleBetweenDeg(u: Vec3, v: Vec3): number {
+  const cross = Math.hypot(u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x);
+  return Math.atan2(cross, u.x * v.x + u.y * v.y + u.z * v.z) * DEG;
 }
 
 /** Lowest visibility of the three points (0 if any is missing). Used for the visibility gate. */

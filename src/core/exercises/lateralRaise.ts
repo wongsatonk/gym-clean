@@ -15,6 +15,9 @@ export const lateralRaise: ExerciseRule = {
   start: 'extended',
   eccentric: 'toExtended',
   sideMode: 'both',
+  // Push A log: bending to pick up / put down the dumbbells leaned 50–131° from the settle;
+  // while raising, the torso stayed within 18° of it.
+  maxTorsoLeanDeg: 35,
   hints: { far: 'Raise to shoulder height.', start: 'Lower your arms fully.' },
   placement: {
     view: 'front',
