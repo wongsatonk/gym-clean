@@ -635,13 +635,23 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - privacy: dev-log cue data = enum + numbers;
   - hands-free off and manual exercises unchanged apart from the score.
   - Deps: 7, 10, 14.
-- [ ] 16. [verifier] Verify against SPEC M5 Accept.
+- [x] 16. [verifier] Verify against SPEC M5 Accept.
   - `npm run check`: fixture suite counts unchanged, plus the synthetic-03 clips; the replay test green. Also `npm run e2e` and `npm run build`.
   - 390×844 screenshots, console clean: `docs/screenshots/m5-camera-cue.png`, `m5-camera-stalled.png`, `m5-summary-focus.png`, `m5-coach-tempo.png`, `m5-rest-fix-score.png`.
   - A dev-log export after the flow shows `focusCue` + `focusScore` events, and `npm run devlog -- --dry-run` lists them.
   - The task 7 Decision exists, and the flags in the code match its table.
   - Evidence into PROGRESS.
   - Deps: 15.
+  - Evidence 2026-11-14 (4c35244): verifier PASS.
+    - `npm run check`: vitest 1122, scripts 16/16, fixture suite 23 cases.
+    - `npm run e2e`: 68 passed. focus-cues ×3: 15/15. Build OK.
+    - Flags match the Decision table.
+    - Scores on screen and in the DB: 80, then 75 after the Fix, then 85 with "(not scored)" lines.
+    - Dev-log export has focusCue and focusScore, and `devlog.mjs --dry-run` prints the Focus section.
+    - Speech order: "Six, Slow the lowering., Seven".
+    - Screenshots: `docs/screenshots/m5-*.png`, 9 files at 390×844.
+    - Console clean apart from the headless GPU warning. No third-party requests.
+    - Not changed by M5, found in passing: 16px stat labels on Summary and an 18px "Today" line on Rest (to be fixed in M4e); the M5b "Sets: 3" wording is ambiguous.
 - [ ] 17. [main] Merge `m5-live-trainer`, then **ask Wongsaton before pushing** (push = deploy). Deps: 16.
 - [ ] 18. 🧍 **Checkpoint C:** a full camera session at the gym with hands-free on.
   - Wongsaton notes every cue that felt wrong or missing, whether the Summary focus scores match how the sets felt, and anything spoken at a bad moment.

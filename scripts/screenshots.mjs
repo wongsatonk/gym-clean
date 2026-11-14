@@ -6,6 +6,10 @@
 //   node scripts/screenshots.mjs m4c         # M4c + M4b Push A slice screens
 //   node scripts/screenshots.mjs m4c-flow    # Push A click-through (JSON report, export saved
 //                                            #   under test-results/), no docs screenshots
+//   node scripts/screenshots.mjs m5           # M5 focus cues (fixture landmarker): live cue, stalled,
+//                                            #   out of frame, Rest Fix, Summary Focus / not scored,
+//                                            #   Coach T1, Settings coach voice; dev-log export saved
+//                                            #   to test-results/verify-m5/
 //   node scripts/screenshots.mjs m5b [coach|s2|m4d|silent]
 //                                            # m4d-next round: M5b coach click-through, S2 gauge,
 //                                            #   M4d demos + Pull A badges, silent hint (iOS UA)
@@ -14,7 +18,7 @@
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
 // (test-results/fake-camera/person.mjpeg, made by e2e/fake-camera.setup.ts).
 import { spawn, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 
 const PORT = Number(process.env.SHOT_PORT ?? 5197);
@@ -1082,6 +1086,395 @@ async function m5c(browser) {
   }
 }
 
+// ---------------------------------------------------------------- M5 (live focus & form cues)
+
+const M5_RUSHED = '/fixtures/landmarks/curl/synthetic-03-rushed-lowering__reps-8__partials-0.json';
+const M5_CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
+const M5_DEVLOG = 'test-results/verify-m5/m5-devlog-export.json';
+
+/** Fixture player (like e2e/focus-cues.spec.ts) + speech spy + wake lock + share-sheet capture. */
+async function installM5Mocks(page, fixture) {
+  await page.addInitScript(() => {
+    window.__said = [];
+    window.__freezeAt = 0;
+    window.__from = 0;
+    window.__noPerson = false;
+    window.__hideWrists = false;
+    window.__slowMs = 0;
+    window.__play = () => {
+      window.__freezeAt = null;
+    };
+    window.__holdWhenReps = (n, frame) => {
+      const check = () => {
+        const el = document.querySelector('[role=dialog] .rep-num[data-reps]');
+        if (el && Number(el.dataset.reps) >= n) {
+          window.__freezeAt = frame;
+          obs.disconnect();
+        }
+      };
+      const obs = new MutationObserver(check);
+      obs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-reps'] });
+      check();
+    };
+    class FakeUtterance extends EventTarget {
+      constructor(text) {
+        super();
+        this.text = text;
+        this.lang = '';
+        this.rate = 1;
+        this.pitch = 1;
+        this.volume = 1;
+        this.voice = null;
+      }
+    }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: FakeUtterance, configurable: true });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => {
+          if (u.volume === 0) return;
+          window.__said.push({ text: u.text, at: Date.now() });
+          setTimeout(() => u.dispatchEvent(new Event('end')), 300);
+        },
+        cancel: () => window.__said.push({ text: '<cancel>', at: Date.now() }),
+        resume: () => undefined,
+        getVoices: () => [],
+        addEventListener: () => undefined,
+        speaking: false,
+        pending: false,
+      },
+    });
+    window.__shared = [];
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: (d) => Boolean(d?.files?.length),
+    });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (d) => {
+        window.__shared.push(...(d.files ?? []));
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => undefined, release: async () => undefined }) },
+    });
+  });
+  await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        const HIDE = new Set([13, 14, 15, 16]);
+        const hide = (pts) => pts && pts.map((p, i) => (HIDE.has(i) ? { ...p, visibility: 0 } : p));
+        export async function createPoseTracker() {
+          const frames = await (await fetch(${JSON.stringify(fixture)})).json();
+          let base = null;
+          return {
+            delegate: 'CPU',
+            detect(_video, t) {
+              if (window.__slowMs > 0) {
+                const until = performance.now() + window.__slowMs;
+                while (performance.now() < until) {}
+              }
+              if (window.__noPerson) { base = null; return null; }
+              let f;
+              if (window.__freezeAt != null) { base = null; f = frames[window.__freezeAt]; }
+              else {
+                base ??= t;
+                f = frames[(window.__from + Math.floor((t - base) / 33.333)) % frames.length];
+              }
+              if (window.__hideWrists) f = { ...f, landmarks: hide(f.landmarks), world: hide(f.world) };
+              return { ...f, t };
+            },
+            close() {},
+          };
+        }`,
+    }),
+  );
+}
+
+async function m5SeedHandsFreeOff(page) {
+  const ok = await pollUntil(
+    () =>
+      page.evaluate(
+        () =>
+          new Promise((resolve) => {
+            void indexedDB.databases().then((dbs) => {
+              if (!dbs.some((d) => d.name === 'gym-clean')) return resolve(false);
+              const open = indexedDB.open('gym-clean');
+              open.onerror = () => resolve(false);
+              open.onsuccess = () => {
+                const d = open.result;
+                if (!d.objectStoreNames.contains('settings')) {
+                  d.close();
+                  return resolve(false);
+                }
+                const tx = d.transaction('settings', 'readwrite');
+                tx.objectStore('settings').put({ key: 'handsFree', value: false });
+                tx.oncomplete = () => {
+                  d.close();
+                  resolve(true);
+                };
+                tx.onerror = () => resolve(false);
+              };
+            });
+          }),
+      ),
+    10_000,
+  );
+  if (!ok) throw new Error('could not seed handsFree=false');
+  await page.reload();
+}
+
+async function m5SetRows(page) {
+  return page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const open = indexedDB.open('gym-clean');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const req = open.result.transaction('sets').objectStore('sets').getAll();
+          req.onsuccess = () => {
+            open.result.close();
+            resolve(req.result.map((r) => ({
+              exerciseId: r.exerciseId, setIndex: r.setIndex, reps: r.reps,
+              partials: r.partials, cues: r.cues, focusScore: r.focusScore,
+            })));
+          };
+          req.onerror = () => reject(req.error);
+        };
+      }),
+  );
+}
+
+async function m5Said(page) {
+  return page.evaluate(() => window.__said.map((s) => s.text).filter((t) => t !== '<cancel>'));
+}
+
+async function m5GoToCurl(page) {
+  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await page.getByRole('heading', { name: 'One-Arm Dumbbell Row' }).waitFor();
+  await page.getByRole('button', { name: 'Exercise list' }).click();
+  const list = page.getByRole('dialog', { name: 'Exercise list' });
+  await list.locator('.ex-row-btn', { hasText: 'Dumbbell Bicep Curl' }).click();
+  const startSet = page.getByRole('button', { name: 'Start set' });
+  if (await startSet.isVisible()) await startSet.click();
+  await page.getByRole('heading', { name: 'Dumbbell Bicep Curl' }).waitFor();
+}
+
+async function m5OpenCam(page) {
+  await page.evaluate(() => (window.__freezeAt = 0));
+  await page.getByRole('button', { name: 'Camera', exact: true }).click();
+  const cam = page.getByRole('dialog', { name: 'Camera' });
+  await cam.and(page.locator('[data-person="true"]')).waitFor({ timeout: 15_000 });
+  return cam;
+}
+
+async function m5RepsThenFreeze(page, cam, n, frame = 0) {
+  await page.evaluate(([n, f]) => window.__holdWhenReps(n, f), [n, frame]);
+  await page.evaluate(() => window.__play());
+  await cam.locator(`.rep-num[data-reps="${n}"]`).waitFor({ timeout: 45_000 });
+}
+
+async function m5FixLastSet(page, r, p, shotName, log) {
+  const fix = page.locator('[data-lsc=panel]');
+  await fix.locator('[data-lsc=fix]').click();
+  const repsValue = fix.locator('[data-lsc=reps-value]');
+  const partialsValue = fix.locator('[data-lsc=partials-value]');
+  for (let i = 0; i < 40 && Number(await repsValue.textContent()) !== r; i++) {
+    const n = Number(await repsValue.textContent());
+    await fix.locator(n > r ? '[data-lsc=reps-minus]' : '[data-lsc=reps-plus]').click();
+  }
+  for (let i = 0; i < 40 && Number(await partialsValue.textContent()) !== p; i++) {
+    const n = Number(await partialsValue.textContent());
+    await fix.locator(n > p ? '[data-lsc=partials-minus]' : '[data-lsc=partials-plus]').click();
+  }
+  if (shotName) {
+    await fix.scrollIntoViewIfNeeded();
+    await shot(page, log, shotName, { sizes: await textSizes(page, 'main') });
+  }
+  await fix.locator('[data-lsc=save]').click();
+}
+
+async function m5CueStyle(cam) {
+  const coach = cam.locator('.rep-coach[data-cue]');
+  if (!(await coach.count())) return null;
+  return coach.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { id: el.dataset.cue, text: el.textContent, font: parseFloat(cs.fontSize),
+      color: cs.color, bg: cs.backgroundColor };
+  });
+}
+
+async function m5EndWorkout(page) {
+  await page.getByRole('button', { name: 'End workout' }).click();
+  await page.getByRole('button', { name: 'Tap again to end' }).click();
+  await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+}
+
+async function m5FocusSizes(page) {
+  return page.evaluate(() => {
+    const out = [];
+    for (const el of document.querySelectorAll('[data-focus-summary] *')) {
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      if (!own) continue;
+      out.push({ cls: el.className, text: el.textContent.trim().slice(0, 50),
+        font: parseFloat(getComputedStyle(el).fontSize), color: getComputedStyle(el).color });
+    }
+    return out;
+  });
+}
+
+async function m5(browser) {
+  // A. Rushed curl (hands-free off): live cue, Rest Fix, set 2, Summary Focus + Coach T1, export.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    await installM5Mocks(page, M5_RUSHED);
+    await page.goto(BASE);
+    await m5SeedHandsFreeOff(page);
+    await m5GoToCurl(page);
+    let cam = await m5OpenCam(page);
+    await m5RepsThenFreeze(page, cam, 8);
+    await cam.locator('.rep-coach[data-cue="rushedLowering"]').waitFor({ timeout: 10_000 });
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm5-camera-cue', {
+      cue: await m5CueStyle(cam),
+      hf: await handsFreeSizes(page),
+      sizes: await textSizes(page, '[role=dialog][aria-label="Camera"]'),
+      said: await m5Said(page),
+    });
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await cam.waitFor({ state: 'detached' });
+    await page.locator('[data-rest-clock]').waitFor();
+    await page.waitForTimeout(800);
+    await m5FixLastSet(page, 8, 1, 'm5-rest-fix-score', log);
+    await page.waitForTimeout(500);
+    const afterFix = await m5SetRows(page);
+    // Set 2: same clip.
+    await page.getByRole('button', { name: 'Start set' }).click();
+    cam = await m5OpenCam(page);
+    await m5RepsThenFreeze(page, cam, 8);
+    await cam.locator('.rep-coach[data-cue="rushedLowering"]').waitFor({ timeout: 10_000 });
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await cam.waitFor({ state: 'detached' });
+    await m5EndWorkout(page);
+    const focus = page.locator('[data-focus-summary]');
+    await focus.waitFor();
+    await focus.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm5-summary-focus', {
+      rows: await m5SetRows(page),
+      afterFix,
+      focusText: (await focus.innerText()).split('\n'),
+      focusSizes: await m5FocusSizes(page),
+      sizes: await textSizes(page, '[data-focus-summary]'),
+    });
+    const coachRow = page.locator('[data-coach-exercise="Dumbbell_Bicep_Curl"]');
+    await coachRow.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm5-coach-tempo', {
+      rule: await coachRow.getAttribute('data-advice-rule'),
+      text: await coachRow.innerText(),
+      sizes: await textSizes(page, 'main'),
+    });
+    // Dev-log export (mocked share sheet).
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const panel = page.locator('[data-devlog=panel]');
+    await panel.locator('[data-devlog=export-last]').click();
+    await panel.locator('[data-devlog=status]', { hasText: 'Shared.' }).waitFor({ timeout: 15_000 });
+    const text = await page.evaluate(async () => {
+      const file = window.__shared.at(-1);
+      if (!file) return '';
+      const stream = file.name.endsWith('.gz')
+        ? file.stream().pipeThrough(new DecompressionStream('gzip'))
+        : file.stream();
+      return new Response(stream).text();
+    });
+    mkdirSync('test-results/verify-m5', { recursive: true });
+    writeFileSync(M5_DEVLOG, text);
+    const ev = JSON.parse(text).sessions[0].events;
+    results.push({
+      m5Export: {
+        file: M5_DEVLOG,
+        focusCue: ev.filter((e) => e.type === 'focusCue').map((e) => e.data),
+        focusScore: ev.filter((e) => e.type === 'focusScore').map((e) => e.data),
+      },
+      offsiteA: offsite,
+      saidA: await m5Said(page),
+      consoleA: log,
+    });
+    await ctx.close();
+  }
+  // B. M4 curl clip (hands-free off): stalled cue, out of frame, low fps, Summary "(not scored)".
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    await installM5Mocks(page, M5_CURL);
+    await page.goto(BASE);
+    await m5SeedHandsFreeOff(page);
+    await m5GoToCurl(page);
+    const cam = await m5OpenCam(page);
+    await m5RepsThenFreeze(page, cam, 3);
+    await cam.locator('.rep-coach[data-cue="stalled"]').waitFor({ timeout: 14_000 });
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm5-camera-stalled', {
+      cue: await m5CueStyle(cam),
+      hf: await handsFreeSizes(page),
+      sizes: await textSizes(page, '[role=dialog][aria-label="Camera"]'),
+    });
+    await page.waitForTimeout(6_500);
+    await page.evaluate(() => (window.__hideWrists = true));
+    await cam.locator('.rep-coach[data-cue="outOfFrame"]').waitFor({ timeout: 8_000 });
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm5-camera-out-of-frame', { cue: await m5CueStyle(cam) });
+    await page.evaluate(() => (window.__hideWrists = false));
+    await page.waitForTimeout(6_500);
+    await page.evaluate(() => (window.__slowMs = 90));
+    await pollUntil(async () => (await m5Said(page)).includes('Move closer to the light.'), 14_000);
+    await page.evaluate(() => (window.__slowMs = 0));
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await cam.waitFor({ state: 'detached' });
+    await m5EndWorkout(page);
+    const focus = page.locator('[data-focus-summary]');
+    await focus.waitFor();
+    await focus.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm5-summary-not-scored', {
+      rows: await m5SetRows(page),
+      focusText: (await focus.innerText()).split('\n'),
+      focusSizes: await m5FocusSizes(page),
+    });
+    results.push({ offsiteB: offsite, saidB: await m5Said(page), consoleB: log });
+    await ctx.close();
+  }
+  // C. Settings → Coach voice.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    await installM5Mocks(page, M5_CURL);
+    await page.goto(BASE);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const cv = page.locator('[data-coach-voice]');
+    await cv.waitFor();
+    await cv.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await page.waitForTimeout(300);
+    await shot(page, log, 'm5-settings-coach-voice', {
+      sizes: await textSizes(page, '[data-coach-voice]'),
+      text: (await cv.innerText()).split('\n'),
+    });
+    await cv.getByRole('button', { name: 'Drill sergeant' }).click();
+    await page.waitForTimeout(300);
+    await cv.evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await shot(page, log, 'm5-settings-coach-voice-drill', {
+      sizes: await textSizes(page, '[data-coach-voice]'),
+      text: (await cv.innerText()).split('\n'),
+    });
+    await ctx.close();
+  }
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -1109,6 +1502,7 @@ try {
     if (!only || only === 'silent') await silentHintShot(browser);
   }
   else if (milestone === 'm5c') await m5c(browser);
+  else if (milestone === 'm5') await m5(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
