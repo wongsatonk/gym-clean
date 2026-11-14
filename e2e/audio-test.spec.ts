@@ -293,3 +293,67 @@ test('Audio test without navigator.audioSession: a note instead of the choice, b
   await page.evaluate(() => window.__audioTest?.dispose());
   expect(thirdParty).toEqual([]);
 });
+
+test('Audio test in the real Settings: survives a re-render, ‹ Back stops the camera and restores auto', async ({
+  page,
+}) => {
+  await installFakes(page, true);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const panel = page.locator('[data-audio-test]');
+  // Mounted under "Test voice".
+  await expect(page.locator('.voice-test:has([data-voice-test]) + [data-audio-test]')).toHaveCount(
+    1,
+  );
+  await panel.locator('summary').click();
+  await panel.getByRole('button', { name: 'ambient', exact: true }).click();
+  await page.getByRole('button', { name: 'Play a beep' }).click();
+  await page.locator('[data-audio-camera]').click();
+  await expect(page.locator('[data-audio-status]')).toHaveText(/Camera: on\.$/);
+  expect(await liveTracks(page)).toBe(1);
+
+  // Changing the unit re-renders Settings: same panel, still open, camera still on.
+  await page.getByRole('button', { name: 'lb', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'lb', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(panel).toHaveCount(1);
+  expect(await panel.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(true);
+  await expect(page.locator('[data-audio-camera]')).toHaveText('Camera off');
+  await expect(page.locator('[data-audio-status]')).toHaveText(
+    'Session: ambient. Played: beep. Camera: on.',
+  );
+  expect(await liveTracks(page)).toBe(1);
+
+  await page.getByRole('button', { name: '‹ Back' }).click();
+  await expect(page.locator('[data-audio-test]')).toHaveCount(0);
+  expect(await liveTracks(page)).toBe(0);
+  expect(
+    await page.evaluate(
+      () => (navigator as unknown as { audioSession: { type: string } }).audioSession.type,
+    ),
+  ).toBe('auto');
+  expect(await page.evaluate(() => window.__log.slice(-2))).toEqual(['ctx:close', 'type=auto']);
+
+  // Back in Settings: a fresh panel, collapsed, camera off.
+  await page.getByRole('button', { name: 'Settings' }).click();
+  expect(await panel.evaluate((el) => (el as HTMLDetailsElement).open)).toBe(false);
+  await expect(page.locator('[data-audio-status]')).toHaveText(/Camera: off\.$/);
+});
+
+test('Audio test: the page going hidden stops the camera', async ({ page }) => {
+  await installFakes(page, true);
+  await mount(page);
+  await page.locator('[data-audio-test] summary').click();
+  await page.locator('[data-audio-camera]').click();
+  await expect(page.locator('[data-audio-status]')).toHaveText(/Camera: on\.$/);
+  expect(await liveTracks(page)).toBe(1);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  expect(await liveTracks(page)).toBe(0);
+  await expect(page.locator('[data-audio-camera]')).toHaveText('Camera on');
+  await expect(page.locator('[data-audio-status]')).toHaveText(/Camera: off\.$/);
+});
