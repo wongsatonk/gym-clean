@@ -59,7 +59,7 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
   // End -> summary in lb with today's note
   await endWorkout(page);
   await expect(page.locator('[data-stat="volume"]')).toContainText('320');
-  await expect(page.locator('[data-stat="volume"]')).toContainText('lb volume');
+  await expect(page.locator('[data-stat="volume"] .sum-volume-unit')).toHaveText('lb');
   await expect(page.getByText('“felt strong”')).toBeVisible();
   await page.getByRole('button', { name: 'Done' }).click();
 

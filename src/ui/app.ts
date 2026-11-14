@@ -1,6 +1,5 @@
 // App controller: owns the session state, renders screens, runs side effects
 // (voice, wake lock, IndexedDB). All workout rules live in src/core/.
-import { formatDuration } from '../core/format';
 import { restCueText, restCuesBetween } from '../core/restCues';
 import {
   currentPlanned,
@@ -30,6 +29,7 @@ import {
   getAccent,
   getCoachVoice,
   sessionsSince,
+  setsForExercises,
   setsForSessions,
   type SessionRow,
   getHandsFree,
@@ -72,10 +72,13 @@ import { exerciseScreen as renderExercise } from './screens/exercise';
 import { pauseSheet as renderPauseSheet } from './screens/pauseSheet';
 import { previewScreen as renderPreview } from './screens/preview';
 import { restScreen as renderRest } from './screens/rest';
+import { summaryScreen as renderSummary } from './screens/summary';
 import { todayScreen as renderToday, type TodayLast } from './screens/today';
 import { applyAccent } from './tokens';
 import {
   lastSession,
+  newBests,
+  sessionVolume,
   previousSameDaySession,
   STREAK_MIN_PER_WEEK,
   volumeVsLast,
@@ -291,6 +294,15 @@ export function mountApp(root: HTMLElement): void {
   // ---------- Camera (M3) ----------
 
   let camera: CameraView | null = null;
+  // M4e Summary: last time's same day + today's new bests (loaded when the workout ends).
+  // Raw inputs only: the % and bests are recomputed from the current logs on every render, so a
+  // Fix on Summary updates them too.
+  let summaryHistory: {
+    sessionId: string;
+    prevLogs: SetLog[];
+    last: { volumeKg: number; reps: number } | null;
+    history: SetLog[];
+  } | null = null;
   // M4e Rest: the mounted Rest screen's cheap per-tick updater (clock + ring).
   let restView: { update(remainingMs: number, targetMs: number): void } | null = null;
   // Hands-free (M5c): the exercise the open camera counts, and the pre-roll for the next set.
@@ -935,6 +947,7 @@ export function mountApp(root: HTMLElement): void {
     stopTicker();
     void wakeLock.release();
     saveTotals(s);
+    void loadSummaryHistory(s);
     // Keep the dev log open on Summary so a last-set fix there still reaches it;
     // it is finished when leaving Summary (goToday). Flush now in case the app is closed here.
     rec((r) => void r.flush());
@@ -1291,64 +1304,59 @@ export function mountApp(root: HTMLElement): void {
 
   function summaryScreen(s: SessionState): HTMLElement {
     const sum = summarize(s);
-    const byExercise = new Map<string, SetLog[]>();
-    for (const l of s.logs)
-      byExercise.set(l.exerciseId, [...(byExercise.get(l.exerciseId) ?? []), l]);
-    const stat = (label: string, value: string, key: string) =>
-      h(
-        'div',
-        { class: 'stat', 'data-stat': key },
-        h('span', { class: 'stat-value' }, value),
-        h('span', { class: 'muted' }, label),
-      );
-    const todayNote = (id: string) =>
-      todayNotes[id] ? h('span', { class: 'today-note' }, `“${todayNotes[id]}”`) : null;
-    return h(
-      'main',
-      { class: 'screen summary', 'data-screen': 'summary' },
-      h('h1', { class: 'summary-title' }, 'Workout done'),
-      h('p', { class: 'muted' }, `${s.day.name} · ${formatDuration(sum.durationSec)}`),
-      h(
-        'div',
-        { class: 'stats' },
-        stat('sets', String(sum.setsDone), 'sets'),
-        stat(`${unit} volume`, w(sum.totalVolumeKg), 'volume'),
-        stat('rest overruns', String(sum.restOverruns), 'overruns'),
-      ),
-      lastSetFix(s),
-      createCoachSummary(coachSummary(s, lastTime, exerciseName), exerciseName),
-      createFocusSummary(s.logs, exerciseName),
-      h('h2', { class: 'section-title' }, 'Sets'),
-      h(
-        'ul',
-        { class: 'set-list' },
-        ...[...byExercise].map(([id, sets]) =>
-          h(
-            'li',
-            {},
-            h('strong', {}, exerciseName(id)),
-            h(
-              'span',
-              { class: 'muted' },
-              setsText(sets) + (sum.skipped.includes(id) ? ' · rest skipped' : ''),
-            ),
-            todayNote(id),
-          ),
-        ),
-        ...sum.skipped
-          .filter((id) => !byExercise.has(id))
-          .map((id) =>
-            h(
-              'li',
-              { class: 'skipped' },
-              h('strong', {}, exerciseName(id)),
-              h('span', { class: 'muted' }, 'skipped'),
-              todayNote(id),
-            ),
-          ),
-      ),
-      h('button', { class: 'primary-btn', onclick: goToday }, 'Done'),
+    const hist = summaryHistory?.sessionId === s.sessionId ? summaryHistory : null;
+    return renderSummary(
+      {
+        dayName: s.day.name,
+        date: s.startedAt,
+        durationSec: sum.durationSec,
+        unit,
+        logs: s.logs,
+        plannedExercises: s.day.exercises.length,
+        restOverruns: sum.restOverruns,
+        skipped: sum.skipped,
+        vsLastPct: hist ? volumeVsLast(s.logs, hist.prevLogs) : null,
+        last: hist?.last ?? null,
+        bests: hist ? newBests(s.logs, hist.history) : [],
+        name: exerciseName,
+        todayNotes,
+        fixEl: lastSetFix(s),
+        coachEl: createCoachSummary(coachSummary(s, lastTime, exerciseName), exerciseName),
+        focusEl: createFocusSummary(s.logs, exerciseName),
+      },
+      { onDone: goToday },
     );
+  }
+
+  /** Summary extras: the same day last time (volume / reps) and today's new bests. */
+  async function loadSummaryHistory(s: SessionState): Promise<void> {
+    try {
+      const t = now();
+      const sessions = await sessionsSince(db, t - STATS_WEEKS * 7 * 24 * 3600 * 1000);
+      const prev = previousSameDaySession(sessions, s.sessionId);
+      const prevLogs = prev ? await setsForSessions(db, [prev.sessionId]) : [];
+      const ids = [...new Set(s.logs.map((l) => l.exerciseId))];
+      const history = await setsForExercises(db, ids);
+      summaryHistory = {
+        sessionId: s.sessionId,
+        prevLogs,
+        history,
+        last: prev
+          ? {
+              volumeKg: sessionVolume(prevLogs),
+              reps: prevLogs.reduce((n, l) => n + l.reps, 0),
+            }
+          : null,
+      };
+      if (
+        view.screen === 'session' &&
+        view.s.sessionId === s.sessionId &&
+        view.s.phase === 'summary'
+      )
+        render();
+    } catch (err) {
+      console.warn('Could not read history for Summary', err);
+    }
   }
 
   function logDbError(err: unknown): void {

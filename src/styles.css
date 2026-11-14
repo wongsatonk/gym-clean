@@ -1489,6 +1489,266 @@ h1 {
   padding-bottom: 8px;
 }
 
+/* ---------- Summary (M4e Energy, src/ui/screens/summary.ts) ---------- */
+
+.summary.mood-energy {
+  gap: 14px;
+}
+
+.sum-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 8px;
+}
+
+/* Green trophy burst: achievement, never a button. */
+.sum-trophy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--success);
+  color: var(--on-success);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+.sum-hero-txt {
+  min-width: 0;
+}
+
+.sum-hero .summary-title {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-display);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sum-eyebrow {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--success);
+  margin-bottom: 4px;
+}
+
+.sum-day {
+  overflow-wrap: anywhere;
+}
+
+.sum-meta {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+/* Volume card on the ember surface. */
+.sum-volume {
+  border-radius: var(--r-card);
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: radial-gradient(ellipse 80% 90% at 90% 0%, var(--ember-hi), var(--ember) 75%);
+}
+
+.sum-volume-label {
+  font-weight: 700;
+  font-size: var(--fs-cue);
+}
+
+.sum-volume-num {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  line-height: 0.95;
+}
+
+.sum-volume-num .stat-value {
+  font-size: var(--fs-num);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sum-volume-unit {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.sum-volume-note {
+  color: var(--text);
+}
+
+.sum-vs {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  font-size: var(--fs-body);
+}
+
+.sum-vs-up {
+  background: var(--success);
+  color: var(--on-success);
+}
+
+/* Down or flat is information, not failure: a neutral pill, no red. */
+.sum-vs-flat,
+.sum-vs-down {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.sum-vs-down .ic {
+  transform: scaleY(-1);
+}
+
+.sum-bars {
+  display: grid;
+  gap: 8px;
+}
+
+.sum-bar {
+  display: grid;
+  grid-template-columns: 4.2em 1fr auto;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+}
+
+.sum-bar-track {
+  height: 14px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  overflow: hidden;
+}
+
+.sum-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--text-2);
+}
+
+.sum-bar-today .sum-bar-fill {
+  background: var(--success);
+}
+
+.sum-bar-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* New bests: solid green blocks, full width so each 64px number fits. */
+.sum-bests-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.sum-bests-title .ic {
+  color: var(--success);
+}
+
+.sum-best-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.sum-best {
+  border-radius: var(--r-card);
+  padding: 12px 18px 14px;
+  background: var(--success);
+  color: var(--on-success);
+  min-width: 0;
+}
+
+.sum-best-name {
+  font-weight: 700;
+  font-size: var(--fs-cue);
+  overflow-wrap: anywhere;
+}
+
+.sum-best-now {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.sum-best-was {
+  font-weight: 600;
+}
+
+/* Sets / reps / exercises / long rests. */
+.sum-tiles {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 0;
+}
+
+.sum-tiles[data-count='3'] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.sum-tile {
+  border-radius: var(--r-card);
+  padding: 10px 6px 12px;
+  min-width: 0;
+  font-size: var(--fs-body);
+}
+
+.sum-tile .stat-value {
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.sum-tile-label {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.summary .section-title {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.summary .set-list li {
+  gap: 2px;
+}
+
+/* Coach and Focus on the Energy cards. Coach is the low-key "Next time", last before Done. */
+.summary .focus-item {
+  border-radius: var(--r-card);
+}
+
+.summary .coach-summary-title,
+.summary .focus-summary-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     animation: none !important;

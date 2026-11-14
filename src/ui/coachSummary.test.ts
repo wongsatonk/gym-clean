@@ -50,7 +50,7 @@ describe('coachRows', () => {
           next: {
             rule: 'N3',
             text: 'Next time on Dumbbell Bench Press: +2.5 kg.',
-            why: 'Sets: 8, 8, 8',
+            why: 'Reps: 8, 8, 8',
           },
           progress: 'Dumbbell Bench Press: 22.5 kg, up from 20 kg.',
         },
@@ -63,7 +63,7 @@ describe('coachRows', () => {
         exerciseId: 'bench',
         name: 'Dumbbell Bench Press',
         next: 'Next time: +2.5 kg.',
-        why: 'Sets: 8, 8, 8',
+        why: 'Reps: 8, 8, 8',
         rule: 'N3',
         progress: '22.5 kg, up from 20 kg.',
       },

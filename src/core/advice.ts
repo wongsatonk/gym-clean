@@ -135,7 +135,7 @@ function setsWhy(L: readonly SetLog[], unit: Unit): string {
   const reps = L.map((l) => l.reps).join(', ');
   const last = L.at(-1);
   const total = L.reduce((n, l) => n + partialsOf(l), 0);
-  const parts = [`Sets: ${reps}`];
+  const parts = [`Reps: ${reps}`];
   if (last && !isBodyweight(last.weightKg)) parts.push(shown(last.weightKg, unit));
   parts.push(total === 0 ? 'no partials' : `${total} partial${total === 1 ? '' : 's'}`);
   return parts.join(' · ');

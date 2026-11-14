@@ -336,7 +336,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - The camera rest panel stays as is until A16.
   - Done when: by hand, +30 s moves the clock and "Ten seconds" comes 30 s later.
   - Deps: A5, A11, A12.
-- [ ] A14. [ui-engineer] **Summary** (Energy).
+- [x] A14. [ui-engineer] **Summary** (Energy).
   - Files: src/ui/screens/summary.ts, src/ui/coachSummary.ts, src/ui/focusSummary.ts, src/styles.css.
   - Celebration:
     - trophy + "Push A done";
@@ -348,7 +348,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - The "Next time" coach line last, kept low-key.
   - Done when: render tests (with and without a previous session), screenshots, the existing coachSummary / focusSummary tests pass, typecheck + lint clean.
   - Deps: A2, A3, A6.
-- [ ] A15. [main] Wire Summary.
+- [x] A15. [main] Wire Summary.
   - Files: src/ui/app.ts.
   - History for `volumeVsLast` / `newBests`.
   - Done when: by hand, a second session of the same day shows a vs-last % and a best.
@@ -846,6 +846,13 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e A14 and A15: Summary (Energy) done.**
+  - **Review:** one blocking item, fixed. app.ts caches the raw history (`prevLogs`, `history`) and recomputes vs-last % and new bests from the current logs on every render, so a Fix on Summary updates them.
+  - **Tests:** new e2e/summary.spec.ts covers vs-last, a new best, a Fix that refreshes both, and a bodyweight-only day; 4/4 with repeat-each 2. Full e2e 74/75: the single failure was focus-cues:341, which passed when re-run alone (load-sensitive, seen before).
+  - **Wording:** the coach "why" line reads "Reps: 8, 8, 7" instead of "Sets: …".
+  - **Hero title is 44px**, a title rather than a number; every main number is ≥ 64px.
+  - **Bodyweight days:** the card shows total reps.
+  - **Known:** the vs-last % rounds a −12.5% change to −12 (Math.round).
 - 2026-11-14: **M4e A12 and A13: Rest (Track) done** (review PASS). Full e2e 75/75; check passes with 1323 unit tests.
   - **Ticking:** the Rest screen keeps a `restView.update()` handle, so each tick changes only the clock text and the ring offset, with no re-render.
   - **Over rest:** "+0:12" plus the "Over rest" label, so it isn't shown by colour alone.

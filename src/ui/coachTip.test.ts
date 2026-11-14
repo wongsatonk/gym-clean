@@ -5,7 +5,7 @@ import { applySlot, appliedText, applyText, sameApply, weightLabel } from './coa
 const a3 = (weightKg: number) => ({
   rule: 'A3',
   text: 'Strong set. Try +5 lb next set.',
-  why: 'Sets: 8, 8 · no partials',
+  why: 'Reps: 8, 8 · no partials',
   apply: { weightKg },
 });
 const a2 = { rule: 'A2', text: 'Keep the weight. Aim for 8 reps.', why: 'Set 2: 6 reps' };
