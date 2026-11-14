@@ -1,6 +1,7 @@
 // Per-exercise rep-counting rules as data (SPEC §2 M4 table, §3). A rep counter is generic over
 // ExerciseRule: it never branches on the exercise id.
 import type { Side, SidePair, Triplet } from '../angles';
+import type { AutoSetConfig } from '../autoSet';
 
 export type { Side, SidePair, Triplet };
 
@@ -107,6 +108,12 @@ export type ExerciseRule = {
    * The Push A log read 0–10° head-on; the synthetic side clips 49–89°.
    */
   viewYawDeg?: { frontBelow: number; sideAbove: number };
+  /**
+   * Optional per-exercise hands-free tuning (M5c), merged over AUTO_SET_DEFAULTS by
+   * autoSetConfigFor. No rule sets one yet (see the M5c Decision: the Push A log doesn't justify
+   * any).
+   */
+  autoSet?: Partial<AutoSetConfig>;
   /** EMA smoothing factor for the angle (SPEC §3: 0.4). */
   emaAlpha: number;
   /** Hysteresis (deg): leave a band only once past its threshold by this much (SPEC §3: 10). */

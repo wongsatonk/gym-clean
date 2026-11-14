@@ -1,4 +1,5 @@
 // Registry of per-exercise rules. Add an exercise = add a data file and list it here.
+import { AUTO_SET_DEFAULTS, type AutoSetConfig } from '../autoSet';
 import type { LandmarkFrame } from '../types';
 import { curl } from './curl';
 import { gobletSquat } from './gobletSquat';
@@ -48,4 +49,9 @@ export function extendedGatePasses(rule: ExerciseRule, frame: LandmarkFrame, sid
   const lower = frame.landmarks[gate.lower[side]];
   if (!upper || !lower) return false;
   return upper.y < lower.y;
+}
+
+/** Hands-free config for an exercise: AUTO_SET_DEFAULTS with the rule's `autoSet` override. */
+export function autoSetConfigFor(rule: ExerciseRule): AutoSetConfig {
+  return { ...AUTO_SET_DEFAULTS, ...rule.autoSet };
 }

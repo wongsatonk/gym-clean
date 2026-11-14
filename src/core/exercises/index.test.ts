@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import program from '../../data/program.json';
 import { LANDMARK, LANDMARK_COUNT } from '../poseTopology';
 import type { LandmarkFrame } from '../types';
-import { extendedGatePasses, RULES, ruleFor, ruleForFolder } from './index';
+import { AUTO_SET_DEFAULTS } from '../autoSet';
+import { autoSetConfigFor, extendedGatePasses, RULES, ruleFor, ruleForFolder } from './index';
 import type { ExerciseRule } from './types';
 
 const L = LANDMARK;
@@ -313,4 +314,33 @@ describe('coaching data per exercise', () => {
     for (const r of RULES.filter((x) => x.view === 'front'))
       expect(r.placement.lines.join(' ')).toMatch(/both arms/i);
   });
+});
+
+describe('autoSetConfigFor (M5c per-exercise hands-free override)', () => {
+  const curl = ruleForFolder('curl');
+  if (!curl) throw new Error('curl rule missing');
+
+  it('is the defaults (a fresh copy, including stillMoveDeg) for a rule without an override', () => {
+    const c = autoSetConfigFor({ ...curl });
+    expect(c).toEqual(AUTO_SET_DEFAULTS);
+    expect(c).not.toBe(AUTO_SET_DEFAULTS);
+    expect(c.stillMoveDeg).toBe(AUTO_SET_DEFAULTS.stillMoveDeg);
+  });
+
+  it('merges the rule override over the defaults', () => {
+    const c = autoSetConfigFor({ ...curl, autoSet: { stillSec: 9, stillMoveDeg: 20 } });
+    expect(c.stillSec).toBe(9);
+    expect(c.stillMoveDeg).toBe(20);
+    expect(c.undoSec).toBe(AUTO_SET_DEFAULTS.undoSec);
+  });
+
+  it.each(RULES.map((r) => [r.folder, r] as const))(
+    '%s: every override key is a known config key with a finite value > 0',
+    (_folder, r) => {
+      for (const [k, v] of Object.entries(r.autoSet ?? {})) {
+        expect(Object.keys(AUTO_SET_DEFAULTS), k).toContain(k);
+        expect(Number.isFinite(v) && (v as number) > 0, `${k}=${String(v)}`).toBe(true);
+      }
+    },
+  );
 });

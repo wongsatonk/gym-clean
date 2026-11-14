@@ -3,6 +3,7 @@ import {
   ADVICE_BANNED_WORDS,
   type Advice,
   adviceSpeakDue,
+  adviceSpeakOnCommit,
   afterSetAdvice,
   coachSummary,
   nextTimeAdvice,
@@ -688,6 +689,28 @@ describe('wording', () => {
 
   it('wordCount splits on whitespace (hyphenated names are one word)', () => {
     expect(wordCount(`Next time on ${LONGEST}: +5 lb.`)).toBe(10);
+  });
+});
+
+describe('adviceSpeakOnCommit (M5c: tip spoken at a hands-free save)', () => {
+  // The tip (~4 s) must end ≥ 5 s before "Ten seconds": target − 10 s − elapsed ≥ 9 s.
+  it('speaks when the backdated rest leaves room before the Ten seconds cue', () => {
+    expect(adviceSpeakOnCommit(11000, 60)).toBe(true);
+    expect(adviceSpeakOnCommit(11000, 30)).toBe(true); // exactly 9 s left
+  });
+
+  it('stays silent when the tip would run into the Ten seconds cue', () => {
+    expect(adviceSpeakOnCommit(11000, 25)).toBe(false);
+    expect(adviceSpeakOnCommit(11001, 30)).toBe(false);
+  });
+
+  it('stays silent when the rest is already past its target', () => {
+    expect(adviceSpeakOnCommit(95000, 90)).toBe(false);
+  });
+
+  it('treats non-finite input as silent', () => {
+    expect(adviceSpeakOnCommit(Number.NaN, 90)).toBe(false);
+    expect(adviceSpeakOnCommit(11000, Number.NaN)).toBe(false);
   });
 });
 

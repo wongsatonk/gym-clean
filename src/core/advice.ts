@@ -40,6 +40,23 @@ const SPEAK_LATEST_MS = 6000;
 /** …and only if it can finish before the "Ten seconds" cue. */
 const SPEAK_MIN_REST_SEC = 17;
 
+/** The "Ten seconds" rest cue fires this long before the rest target (M1). */
+const TEN_SECONDS_CUE_MS = 10000;
+/** A spoken tip takes about this long… */
+const TIP_SPEECH_MS = 4000;
+/** …and must end at least this long before the "Ten seconds" cue. */
+const TIP_GAP_MS = 5000;
+
+/**
+ * M5c: speak the coach tip at a hands-free save? The save is backdated, so the rest clock is
+ * already ~11 s in and the 2 s rule (adviceSpeakDue) has passed. True when the tip still ends
+ * ≥ 5 s before the "Ten seconds" cue: target − 10 s − elapsed ≥ 4 s + 5 s.
+ */
+export function adviceSpeakOnCommit(restElapsedMs: number, restTargetSec: number): boolean {
+  const untilCue = restTargetSec * 1000 - TEN_SECONDS_CUE_MS - restElapsedMs;
+  return Number.isFinite(untilCue) && untilCue >= TIP_SPEECH_MS + TIP_GAP_MS;
+}
+
 export function wordCount(s: string): number {
   return s.trim().split(/\s+/).filter(Boolean).length;
 }
