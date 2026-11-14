@@ -4,7 +4,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Live:** 4bda987 on main, deployed 2026-11-14. Through **M5** (live focus and form cues, focus score, Summary Focus) plus the drill-sergeant coach voice.
+- **Live:** 9b03916 on main, deployed 2026-11-14 (CI: 94 e2e passed, build and deploy green). It contains everything through M5, the drill voice, M5c tap-to-continue, the M4e redesign, the polish follow-ups and **M6** (installable offline PWA + History). The M10 AI trainer is planned only. Branch `m4d-demos` (3D demos) is still being built by the cloud session.
 - **Built and verified, NOT deployed** (waiting for Wongsaton's OK to push): branch `m4e-redesign` at e600af5, which contains both:
   - **M5c follow-up "tap to continue"** (B1–B10). A sit or walk-away mid-set holds the set, and Continue / Start next set / Save set resolves it. Verifier PASS.
   - **M4e redesign** (A1–A22 plus the cleanup round): the mix (Energy for Today and Summary, Pro for Exercise, Camera and Settings, Track for Rest), the Orange / Volt / Yellow accent picker, +30 s on Rest, and Skip / End moved into the Pause sheet. Verifier PASS: e2e 90/90, Lighthouse a11y 100 on Today, 57 screenshots in `docs/screenshots/m4e-*`.
