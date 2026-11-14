@@ -894,6 +894,9 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
 
   const closeSheet = () => {
     counter?.silence();
+    // Hands-free Undo window: Close saves the set as the window would have (backdated end).
+    if (auto?.state === 'pending') handleAuto(auto.confirm(frameNow()));
+    if (disposed) return;
     opts.onClose();
   };
 
@@ -944,6 +947,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   /** A short spoken confirmation; queued after any count word (never cancels it). */
   function say(text: string): void {
     voice.speak(text, { kind: 'cue' });
+    rec((r) => r.speech({ t: frameNow(), text, kind: 'cue' }));
   }
 
   /** Dev log: one `autoSet` event per action, enum words and numbers only (wall-clock t). */

@@ -40,7 +40,8 @@ export type DevLogEvent = { t: number; type: string; data?: unknown };
 export type DevLogSpeech = {
   t: number;
   text: string;
-  kind: 'count' | 'hint' | 'placement';
+  /** 'cue' = hands-free confirmations ("Set done. 8 reps.", "Keep going.", "Camera off."). */
+  kind: 'count' | 'hint' | 'placement' | 'cue';
   dropped?: 'rate' | 'stale' | 'superseded' | 'interrupted';
 };
 /** `wallT0` = Date.now() when the camera's frame clock started, to line frames up with events. */

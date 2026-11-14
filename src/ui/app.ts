@@ -90,10 +90,16 @@ export function mountApp(root: HTMLElement): void {
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
 
-  // Developer log (M4c): numbers only, stays on the phone. Calls queue until the recorder exists.
+  // Developer log (M4c): numbers only, stays on the phone. Calls queue until the recorder exists,
+  // then run at once: a hands-free set is opened and the camera's first writes to it (meta, the
+  // auto-start rep) follow in the same task, so a queued beginSet would drop them.
   let recorder: DevLogRecorder | null = null;
   let recorderReady: Promise<DevLogRecorder | null> = Promise.resolve(null);
   const rec = (f: (r: DevLogRecorder) => unknown) => {
+    if (recorder) {
+      f(recorder);
+      return;
+    }
     void recorderReady.then((r) => {
       if (r) f(r);
     });
@@ -254,6 +260,8 @@ export function mountApp(root: HTMLElement): void {
   let camera: CameraView | null = null;
   // Hands-free (M5c): the exercise the open camera counts, and the pre-roll for the next set.
   let cameraExerciseId: string | null = null;
+  // The hands-free setting the open camera was created with (Settings can't change it mid-camera).
+  let cameraHandsFree = false;
   let cameraPrerollFromT: number | undefined;
 
   /** `exerciseId` turns on rep counting (M4); leave it out for Settings → Camera test. */
@@ -276,13 +284,14 @@ export function mountApp(root: HTMLElement): void {
               dispatch({ type: 'SET_COUNTED', reps, partials }),
             onSetDone: () => {
               // Hands-free keeps the camera for the next set of the same exercise (syncCamera).
-              if (!handsFree) closeCameraView();
+              if (!cameraHandsFree) closeCameraView();
               dispatch({ type: 'SET_DONE', now: now() });
             },
             ...(handsFree ? { handsFree: handsFreeOptions() } : {}),
           }),
     });
     cameraExerciseId = exerciseId ?? null;
+    cameraHandsFree = handsFree && exerciseId !== undefined;
     if (exerciseId !== undefined) {
       placementSpoken.add(exerciseId);
       cameraThisSet = true;
@@ -347,7 +356,7 @@ export function mountApp(root: HTMLElement): void {
     if (!camera || cameraExerciseId === null || view.screen !== 'session') return;
     const s = view.s;
     const nextId = s.phase === 'summary' ? null : currentPlanned(s).exerciseId;
-    if (handsFree && nextId !== cameraExerciseId) {
+    if (cameraHandsFree && nextId !== cameraExerciseId) {
       closeCameraView();
       return;
     }
@@ -617,6 +626,8 @@ export function mountApp(root: HTMLElement): void {
         h('span', { class: 'switch-label' }, 'Coach tips after a set'),
         h('span', { class: 'switch-state', 'aria-hidden': 'true' }, coachTips ? 'On' : 'Off'),
       ),
+      voiceTest(),
+      audioTestPanel(),
       h('p', { class: 'field-label' }, 'Camera sets'),
       h(
         'button',
@@ -631,11 +642,9 @@ export function mountApp(root: HTMLElement): void {
             render();
           },
         },
-        h('span', { class: 'switch-label' }, 'Hands-free: start and stop sets by moving'),
+        h('span', { class: 'switch-label' }, 'Hands-free sets'),
         h('span', { class: 'switch-state', 'aria-hidden': 'true' }, handsFree ? 'On' : 'Off'),
       ),
-      voiceTest(),
-      audioTestPanel(),
       h('p', { class: 'field-label' }, 'Weight unit'),
       h(
         'div',

@@ -5,6 +5,8 @@
 // returns no pose. Real timers (autoSet runs on the camera frame clock); speech is mocked and
 // recorded in order with wall-clock times. The curl clip completes reps ~3.3 s, ~8.3 s and
 // ~13 s after it starts playing, with partials at ~5.5 s and ~10.3 s.
+import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
@@ -32,6 +34,7 @@ declare global {
     __repsAt: Record<number, number>;
     __playedAt: number;
     __play: () => void;
+    __shared: File[];
     __freezeWhenReps: (n: number) => void;
   }
 }
@@ -103,6 +106,18 @@ async function installMocks(page: Page, fixture: string): Promise<void> {
         getVoices: () => [],
         speaking: false,
         pending: false,
+      },
+    });
+    // Dev-log export goes through the share sheet: keep the file.
+    window.__shared = [];
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: (d?: ShareData) => Boolean(d?.files?.length),
+    });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (d: ShareData) => {
+        window.__shared.push(...(d.files ?? []));
       },
     });
     Object.defineProperty(navigator, 'wakeLock', {
@@ -521,6 +536,125 @@ test('out of frame: no person for 3 s after 2 reps → "away" stop, saved after 
     .poll(async () => (await setRows(page)).map((r) => r.reps), { timeout: 8_000 })
     .toEqual([2]);
   await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
+
+test('(b) Close during the Undo window saves the set (backdated) and closes the sheet', async ({
+  page,
+}) => {
+  const w = watch(page);
+  await installMocks(page, CURL);
+  await page.goto('/');
+  const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
+  await repsThenFreeze(page, cam, 2);
+  const lastRepAt = await page.evaluate(() => window.__repsAt[2] ?? 0);
+  await expect(banner(cam)).toBeVisible({ timeout: 10_000 });
+  expect(await setRows(page)).toEqual([]);
+  await cam.locator('.cam-top').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(cam).toHaveCount(0);
+  await expect.poll(async () => (await setRows(page)).length).toBe(1);
+  const [row] = await setRows(page);
+  expect(row?.reps).toBe(2);
+  expect(Math.abs((row?.endedAt ?? 0) - lastRepAt)).toBeLessThan(500);
+  await expect(page.locator('[data-rest-clock]')).toBeVisible();
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
+
+type DevLogExport = {
+  format: string;
+  sessions: {
+    events: { type: string; t: number; data?: { action?: string; reason?: string } }[];
+    sets: {
+      exerciseId: string;
+      setIndex: number;
+      startedAt: number;
+      endedAt?: number;
+      camera?: {
+        folder: string;
+        delegate: string;
+        wallT0?: number;
+        frames: { t: number; landmarks: unknown[] | null }[];
+        repEvents: unknown[];
+        speech: { text: string; kind: string }[];
+      };
+    }[];
+  }[];
+};
+
+test('(a) dev log: an auto-started set has its camera meta, rep events, speech and a 1.5 s pre-roll', async ({
+  page,
+}) => {
+  test.setTimeout(150_000);
+  const w = watch(page);
+  await installMocks(page, CURL);
+  await page.goto('/');
+  const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
+  // Set 1: auto stop → saved → rest mode.
+  await repsThenFreeze(page, cam, 2);
+  await expect(cam).toHaveAttribute('data-cam-mode', 'rest', { timeout: 15_000 });
+  // Set 2: auto start in rest mode (armed: the rest is backdated past 10 s), then auto stop.
+  await page.waitForTimeout(5_500); // past the 5 s after an auto stop
+  // One more rep inside set 2: the two starting reps happen in rest, before the set opens, so
+  // their rep events aren't in it (the pre-roll carries frames and angles only).
+  await freezeWhenReps(page, 3);
+  await play(page);
+  await expect(cam).toHaveAttribute('data-cam-mode', 'set', { timeout: 12_000 });
+  await expect(reps(cam)).toHaveAttribute('data-reps', '3', { timeout: 10_000 });
+  await expect(cam).toHaveAttribute('data-cam-mode', 'rest', { timeout: 15_000 });
+  await expect.poll(async () => (await setRows(page)).length).toBe(2);
+
+  // End → Summary → Done → Settings → Export last session (mocked share sheet).
+  await cam.locator('[data-cam-rest="close"]').click();
+  await expect(cam).toHaveCount(0);
+  await page.getByRole('button', { name: 'End workout' }).click();
+  await page.getByRole('button', { name: 'Tap again to end' }).click();
+  await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const panel = page.locator('[data-devlog=panel]');
+  await panel.locator('[data-devlog=export-last]').click();
+  await expect(panel.locator('[data-devlog=status]')).toHaveText('Shared.', { timeout: 15_000 });
+  const text = await page.evaluate(async () => {
+    const file = window.__shared.at(-1);
+    if (!file) return '';
+    const stream = file.name.endsWith('.gz')
+      ? file.stream().pipeThrough(new DecompressionStream('gzip'))
+      : file.stream();
+    return new Response(stream).text();
+  });
+  const log = JSON.parse(text) as DevLogExport;
+  const session = log.sessions[0];
+  if (!session) throw new Error('no session in the export');
+  const curl = session.sets.filter((s) => s.exerciseId === 'Dumbbell_Bicep_Curl');
+  expect(curl.map((s) => s.setIndex)).toEqual([0, 1]);
+  const set2 = curl[1];
+  const camera = set2?.camera;
+  if (!set2 || !camera) throw new Error('set 2 has no camera data');
+  expect(camera.folder).toBe('curl');
+  expect(camera.delegate).toBe('CPU');
+  expect(camera.wallT0 ?? 0).toBeGreaterThan(0);
+  expect(camera.repEvents.length).toBeGreaterThanOrEqual(1);
+  expect(camera.speech.map((s) => s.text)).toEqual(expect.arrayContaining(['Two', 'Three']));
+  expect(camera.speech.some((s) => s.kind === 'count' && s.text === 'Two')).toBe(true);
+  // Pre-roll: the first frame is ~1.5 s before the backdated start (on the camera frame clock).
+  const startFt = set2.startedAt - (camera.wallT0 ?? 0);
+  const firstT = Math.min(...camera.frames.map((f) => f.t));
+  expect(startFt - firstT).toBeGreaterThan(1_000);
+  expect(startFt - firstT).toBeLessThan(2_000);
+  const auto = session.events.filter((e) => e.type === 'autoSet').map((e) => e.data?.action ?? '');
+  expect(auto).toEqual(expect.arrayContaining(['stopPending', 'commit', 'start']));
+  expect(auto.filter((a) => a === 'commit')).toHaveLength(2);
+
+  // The converter turns both sets into fixtures (dry run: nothing written).
+  const file = test.info().outputPath('devlog-hands-free.json');
+  writeFileSync(file, text);
+  const out = execFileSync('node', ['scripts/devlog.mjs', file, '--dry-run'], {
+    encoding: 'utf8',
+  });
+  expect(out).toMatch(/2 set\(s\): 2 would be written, 0 kept \(exists\), 0 skipped/);
+  expect(out).not.toContain('skipped:');
   expect(w.thirdParty).toEqual([]);
   expect(w.errors).toEqual([]);
 });

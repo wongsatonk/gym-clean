@@ -838,6 +838,250 @@ async function m5b(browser) {
   results.push({ m5bFlow: out });
 }
 
+// ------------------------------------- M5c hands-free sets (fixture landmarker, like e2e/hands-free)
+
+const HF_CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
+const HF_PRESS = '/fixtures/landmarks/shoulder-press/synthetic-01__reps-4__partials-0.json';
+
+/** Speech spy + wake lock + share-less export, and the fixture player in place of the model. */
+async function installHandsFreeMocks(page, fixture) {
+  await page.addInitScript(() => {
+    window.__said = [];
+    window.__freezeAt = 0;
+    window.__noPerson = false;
+    window.__play = () => {
+      window.__playedAt = Date.now();
+      window.__freezeAt = null;
+    };
+    window.__freezeWhenReps = (n) => {
+      const check = () => {
+        const el = document.querySelector('[role=dialog] .rep-num[data-reps]');
+        if (el && Number(el.dataset.reps) >= n) {
+          window.__freezeAt = 0;
+          obs.disconnect();
+        }
+      };
+      const obs = new MutationObserver(check);
+      obs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-reps'] });
+      check();
+    };
+    class FakeUtterance extends EventTarget {
+      constructor(text) {
+        super();
+        this.text = text;
+        this.lang = '';
+        this.rate = 1;
+        this.volume = 1;
+      }
+    }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: FakeUtterance, configurable: true });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => {
+          if (u.volume === 0) return;
+          window.__said.push({ text: u.text, at: Date.now() });
+          setTimeout(() => u.dispatchEvent(new Event('end')), 300);
+        },
+        cancel: () => window.__said.push({ text: '<cancel>', at: Date.now() }),
+        resume: () => undefined,
+        getVoices: () => [],
+        speaking: false,
+        pending: false,
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => undefined, release: async () => undefined }) },
+    });
+  });
+  await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export async function createPoseTracker() {
+          const frames = await (await fetch(${JSON.stringify(fixture)})).json();
+          let base = null;
+          return {
+            delegate: 'CPU',
+            detect(_video, t) {
+              if (window.__noPerson) { base = null; return null; }
+              if (window.__freezeAt != null) { base = null; return { ...frames[window.__freezeAt], t }; }
+              base ??= t;
+              const i = Math.floor((t - base) / 33.333) % frames.length;
+              return { ...frames[i], t };
+            },
+            close() {},
+          };
+        }`,
+    }),
+  );
+}
+
+/** Font sizes / tap heights of the hands-free parts that must be readable at 2 m. */
+async function handsFreeSizes(page) {
+  return page.evaluate(() => {
+    const px = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return {
+        font: parseFloat(getComputedStyle(el).fontSize),
+        h: Math.round(r.height),
+        w: Math.round(r.width),
+        top: Math.round(r.top),
+        bottom: Math.round(r.bottom),
+        text: (el.textContent ?? '').trim().slice(0, 60),
+        color: getComputedStyle(el).color,
+        bg: getComputedStyle(el).backgroundColor,
+      };
+    };
+    return {
+      bannerReps: px('[data-auto-stop="reps"]'),
+      undo: px('[data-auto-stop="undo"]'),
+      restClock: px('[data-cam-rest-clock]'),
+      restNext: px('[data-cam-rest="next"]'),
+      restStart: px('[data-cam-rest="start"]'),
+      restClose: px('[data-cam-rest="close"]'),
+      repNum: px('[role=dialog] .rep-num[data-reps]'),
+      setDone: px('[role=dialog][aria-label="Camera"] button.set-done, [role=dialog][aria-label="Camera"] [data-set-done]'),
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+    };
+  });
+}
+
+async function m5c(browser) {
+  // A. Pull A curl: settings, pending Undo, camera rest mode, auto-started set; dev-log export.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    await installHandsFreeMocks(page, HF_CURL);
+    const out = {};
+    await page.goto(BASE);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const sw = page.locator('[data-setting="hands-free"]');
+    await sw.waitFor();
+    await sw.scrollIntoViewIfNeeded();
+    await shot(page, log, 'm5c-settings-hands-free', {
+      switch: { checked: await sw.getAttribute('aria-checked'), box: await sw.boundingBox() },
+      sizes: await textSizes(page, 'main'),
+    });
+    await page.getByRole('button', { name: '‹ Back' }).click();
+
+    await page.getByRole('button', { name: /Pull A/ }).click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await openFromList(page, 'Dumbbell Bicep Curl');
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    await cam.and(page.locator('[data-person="true"]')).waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(1500);
+    // Set 1: two reps, then hold still → stop pending (Undo window).
+    await page.evaluate(() => window.__freezeWhenReps(2));
+    await page.evaluate(() => window.__play());
+    const banner = cam.locator('[data-auto-stop="pending"]');
+    await banner.waitFor({ timeout: 20_000 });
+    await page.waitForTimeout(400);
+    await shot(page, log, 'm5c-pending-undo', {
+      reason: await banner.getAttribute('data-reason'),
+      hf: await handsFreeSizes(page),
+      sizes: await textSizes(page, '[role=dialog][aria-label="Camera"]'),
+    });
+    // Window over → saved → rest mode with clock + tip + Fix.
+    await cam.and(page.locator('[data-cam-mode="rest"]')).waitFor({ timeout: 10_000 });
+    await page.waitForTimeout(1500);
+    out.restSlots = {
+      coach: await cam.locator('[data-cam-rest="coach"]').isVisible(),
+      fix: await cam.locator('[data-cam-rest="fix"]').isVisible(),
+    };
+    await shot(page, log, 'm5c-camera-rest', {
+      hf: await handsFreeSizes(page),
+      sizes: await textSizes(page, '[role=dialog][aria-label="Camera"]'),
+      slots: out.restSlots,
+    });
+    // Rest is already ~12 s in (armed): play → 2 reps → auto start of set 2.
+    await page.evaluate(() => window.__play());
+    await cam.and(page.locator('[data-cam-mode="set"]')).waitFor({ timeout: 15_000 });
+    await page.evaluate(() => (window.__freezeAt = 0));
+    await page.waitForTimeout(600);
+    await shot(page, log, 'm5c-auto-started', {
+      set: await cam.locator('[data-set]').getAttribute('data-set'),
+      reps: await cam.locator('.rep-num[data-reps]').getAttribute('data-reps'),
+      hf: await handsFreeSizes(page),
+      sizes: await textSizes(page, '[role=dialog][aria-label="Camera"]'),
+    });
+    // Let set 2 auto-stop and save (still → window → commit), then end the workout.
+    await cam.and(page.locator('[data-cam-mode="rest"]')).waitFor({ timeout: 20_000 });
+    out.spoken = await page.evaluate(() => window.__said.map((s) => s.text));
+    await cam.locator('[data-cam-rest="close"]').click();
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('button', { name: 'Tap again to end' }).click();
+    await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const panel = page.locator('[data-devlog=panel]');
+    out.devlogSessions = await panel.getAttribute('data-sessions');
+    const dl = page.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
+    await panel.locator('[data-devlog=export-last]').click();
+    const d = await dl;
+    out.exportStatus = await panel.locator('[data-devlog=status]').textContent();
+    if (d) {
+      const path = `test-results/m5c-export-${Date.now()}.json.gz`;
+      await d.saveAs(path);
+      out.exportFile = path;
+    }
+    out.offsite = offsite;
+    out.console = log;
+    await ctx.close();
+    results.push({ m5cFlowA: out });
+  }
+  // B. Push A press: last set hands-free → camera closes → Rest shows Camera for the lateral raise.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    await installHandsFreeMocks(page, HF_PRESS);
+    await page.goto(BASE);
+    await page.getByRole('button', { name: /Push A/ }).click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await openFromList(page, 'Seated Dumbbell Press');
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    await cam.locator('.rep-panel').waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(1500);
+    for (const n of [1, 2]) {
+      await cam.locator(`[data-set="${n}/3"]`).waitFor();
+      await cam.getByRole('button', { name: 'Set done' }).click();
+      await cam.and(page.locator('[data-cam-mode="rest"]')).waitFor();
+      await cam.locator('[data-cam-rest="start"]').click();
+      await cam.and(page.locator('[data-cam-mode="set"]')).waitFor();
+    }
+    await cam.locator('[data-set="3/3"]').waitFor();
+    await page.evaluate(() => window.__freezeWhenReps(2));
+    await page.evaluate(() => window.__play());
+    await cam.locator('[data-auto-stop="pending"]').waitFor({ timeout: 20_000 });
+    await page.getByRole('dialog', { name: 'Camera' }).waitFor({ state: 'detached', timeout: 10_000 });
+    await page.locator('[data-rest-clock]').waitFor();
+    await page.waitForTimeout(1500);
+    const camBtn = page.getByRole('button', { name: 'Camera', exact: true });
+    await shot(page, log, 'm5c-rest-camera-button', {
+      cameraButton: await camBtn.boundingBox(),
+      sizes: await textSizes(page, 'main'),
+      offsite,
+    });
+    await camBtn.click();
+    const next = page.getByRole('dialog', { name: 'Camera' });
+    await next.locator('[data-cam-rest-clock]').waitFor();
+    results.push({
+      m5cFlowB: {
+        nextMode: await next.getAttribute('data-cam-mode'),
+        nextLine: await next.locator('[data-cam-rest="next"]').textContent(),
+        spoken: await page.evaluate(() => window.__said.map((s) => s.text)),
+        console: log,
+      },
+    });
+    await ctx.close();
+  }
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -864,6 +1108,7 @@ try {
     if (!only || only === 'm4d') await m4d(browser);
     if (!only || only === 'silent') await silentHintShot(browser);
   }
+  else if (milestone === 'm5c') await m5c(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
