@@ -192,9 +192,14 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
     return g;
   });
 
+  // Moving machine parts (pulldown bar, cables, weight stack): counts are fixed for the loop.
+  const pose0 = poseAt(move, 0);
+  const rodMeshes = (pose0.rods ?? []).map(() => mesh(cylinder, ironMat));
+  const blockMeshes = (pose0.blocks ?? []).map(() => mesh(box, propMat));
+
   // Muscle patches: one mesh per patch, created once (the count doesn't change with the pose).
   const twist = armTwist(move);
-  const startPatches = patchesFor(segmentFrames(poseAt(move, 0), twist), highlights);
+  const startPatches = patchesFor(segmentFrames(pose0, twist), highlights);
   const patchMeshes = startPatches.map((p) => mesh(sphere, levelMat[p.level]));
 
   // --- placement helpers (scratch objects, no per-frame allocation of three objects) -----------
@@ -273,6 +278,20 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
       set(b.position, spec.pos);
       set(vd, spec.axis).normalize();
       b.quaternion.setFromUnitVectors(UP, vd);
+    });
+
+    rodMeshes.forEach((m, i) => {
+      const x = p.rods?.[i];
+      m.visible = !!x;
+      if (x) rod(m, x.a, x.b, x.r);
+    });
+    blockMeshes.forEach((m, i) => {
+      const x = p.blocks?.[i];
+      m.visible = !!x;
+      if (!x) return;
+      m.position.set(...x.at);
+      m.scale.set(...x.size);
+      m.rotation.z = x.rotZ ?? 0;
     });
 
     const patches = patchesFor(segmentFrames(p, twist), highlights);

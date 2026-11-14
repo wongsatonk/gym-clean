@@ -26,7 +26,22 @@ export type DemoPose = {
   l: DemoSide;
   /** Dumbbells: centre and handle axis (unit). */
   bells: { pos: V3; axis: V3 }[];
+  /**
+   * Moving machine parts (lat pulldown bar and cables) as round rods a -> b of radius r. The count
+   * stays the same through the loop (the player creates the meshes once).
+   */
+  rods?: Rod[];
+  /** Moving machine boxes (the weight stack). Same count through the loop. */
+  blocks?: DemoProp[];
+  /**
+   * The point the lift raises, when it isn't the hand: a pulldown's pull brings the bar (and the
+   * hands) DOWN while the weight stack goes up. Tests use it to check lift = load up.
+   */
+  load?: V3;
 };
+
+/** A round rod (bar, cable) from a to b, radius r. */
+export type Rod = { a: V3; b: V3; r: number };
 
 /**
  * A static box prop (bench, seat) in the figure frame: centre + full size, optionally tilted by
@@ -381,6 +396,207 @@ export function tricepsExtensionPose(theta: number): DemoPose {
     bells: [{ pos, axis: v(0, 0, 1) }],
   };
 }
+
+// --- M4d Pull A: hammer curl, reverse fly, wide-grip lat pulldown (original poses) -------------
+
+/**
+ * Hammer curl, side view, elbow angle: the curl's arm path with a neutral grip (palms facing each
+ * other, thumbs up). The dumbbell handle stays in the arm's plane at right angles to the forearm,
+ * so it points forward at the bottom and upright at the top, like a hammer.
+ */
+export function hammerCurlPose(theta: number): DemoPose {
+  const p = curlPose(theta);
+  const bells = [p.r, p.l].map((sd) => {
+    const f = norm(sub(sd.h, sd.e));
+    return { pos: addS(sd.h, f, 0.04), axis: norm(v(-f[1], f[0])) };
+  });
+  return { ...p, bells };
+}
+
+/**
+ * Chest-supported reverse fly layout (howto: "Chest on an incline bench"): the torso lies face down
+ * on a pad tilted `incline` deg from horizontal, feet on the floor behind. `bend` is the fixed soft
+ * elbow (elbow angle = 180 - bend).
+ */
+export const REVERSE_FLY = { incline: 40, hip: v(0, 0.82), hipW: 0.1, bend: 20 } as const;
+
+/** Upper-arm direction for a reverse-fly raise of `phi` deg: hanging (0) -> out to the side (90). */
+const flyDir = (phi: number, sg: number): V3 => v(0, -Math.cos(rad(phi)), Math.sin(rad(phi)) * sg);
+
+/**
+ * Reverse fly (rear delts), shoulder angle (hip-shoulder-elbow): both arms swing out to the sides
+ * in the vertical plane across the body, soft elbows, until level with the back. The raise angle
+ * for `theta` is found by bisection (the angle grows monotonically with the raise).
+ */
+export function reverseFlyPose(theta: number): DemoPose {
+  const { incline, hip, hipW, bend } = REVERSE_FLY;
+  const u = dir(incline); // spine, hip -> neck
+  const chest = dir(incline - 90); // chest normal, toward the pad (down and forward)
+  const neck = addS(hip, u, SPINE);
+  const sR = at(neck, 0.2);
+  const hjR = at(hip, hipW);
+  const shoulderAt = (phi: number) => angleAtJoint(hjR, sR, addS(sR, flyDir(phi, 1), U));
+  let lo = -15;
+  let hi = 100;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (shoulderAt(mid) < theta) lo = mid;
+    else hi = mid;
+  }
+  const phi = (lo + hi) / 2;
+  const ankleX = -0.35;
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = addS(s, flyDir(phi, sg), U);
+    // Soft elbow: the forearm trails the upper arm by `bend` deg in the same swing plane.
+    const fd = flyDir(phi - bend, sg);
+    const w = addS(e, fd, F);
+    const a = v(ankleX, 0.09, hipW * sg);
+    const k = joint(at(hip, hipW * sg), THIGH, a, SHIN, (p) => p[0]);
+    return { s, e, w, h: addS(w, fd, 0.04), k, a, toe: v(ankleX + 0.2, 0.03, hipW * sg) };
+  });
+  // Neutral grip: handles point forward (along x), across the swing plane.
+  const bells = [r, l].map(bellAtHand(v(1, 0, 0)));
+  return { hip, neck, face: chest, hipW, r, l, bells };
+}
+
+/** Incline bench under the chest for the reverse fly: tilted pad, a post and a floor base. */
+export const REVERSE_FLY_BENCH: readonly DemoProp[] = (() => {
+  const { incline, hip } = REVERSE_FLY;
+  const u = dir(incline);
+  const chest = dir(incline - 90);
+  const pad = addS(addS(hip, u, 0.17), chest, 0.155);
+  const under = addS(pad, chest, 0.04);
+  return [
+    { at: pad, size: v(0.62, 0.08, 0.26), rotZ: rad(incline) },
+    { at: v(under[0], under[1] / 2, 0), size: v(0.08, under[1], 0.08) },
+    { at: v(under[0] + 0.05, 0.025, 0), size: v(0.6, 0.05, 0.3) },
+  ];
+})();
+
+/**
+ * Wide-grip lat pulldown machine layout (figure frame, metres). The bar hangs on a vertical cable
+ * at x = barX, from the pulley at pulleyY; the weight stack sits behind the seat at stackX.
+ */
+export const PULLDOWN = {
+  hip: v(0, 0.56),
+  /** Torso lean back from vertical (deg): "chest up". */
+  lean: 12,
+  barX: 0,
+  /** Hands on the bar, each side (shoulders are at 0.2: about twice shoulder width). */
+  gripZ: 0.42,
+  barHalf: 0.6,
+  pulleyY: 1.95,
+  stackX: -0.62,
+  /** Bar height at the bottom: touching the upper chest. */
+  barLow: 1.02,
+  /** Elbow-to-hand distance, the bar sits in the fist 4 cm past the wrist. */
+  reachSlack: 0.001,
+} as const;
+
+const HAND = 0.04;
+
+/** Elbow at distance U from s and F + HAND from the grip g, on the side `pref` points to. */
+function elbowToward(s: V3, g: V3, pref: V3): V3 {
+  const L = F + HAND;
+  const d = Math.min(dist(s, g), U + L - 1e-9);
+  const ex = norm(sub(g, s));
+  const x = (d * d + U * U - L * L) / (2 * d);
+  const r = Math.sqrt(Math.max(0, U * U - x * x));
+  const perp = norm(addS(pref, ex, -dot(pref, ex)));
+  return addS(addS(s, ex, x), perp, r);
+}
+
+const pulldownTorso = () => {
+  const u = v(-Math.sin(rad(PULLDOWN.lean)), Math.cos(rad(PULLDOWN.lean)));
+  const neck = addS(PULLDOWN.hip, u, SPINE);
+  return { u, neck };
+};
+
+/** Highest bar the hands reach with arms (all but) straight: the start of each rep. */
+export const PULLDOWN_BAR_TOP: number = (() => {
+  const { neck } = pulldownTorso();
+  const s = at(neck, 0.2);
+  const reach = U + F + HAND - PULLDOWN.reachSlack;
+  const dx = PULLDOWN.barX - s[0];
+  const dz = PULLDOWN.gripZ - s[2];
+  return s[1] + Math.sqrt(reach * reach - dx * dx - dz * dz);
+})();
+
+/** Elbows drop down and a little out and forward, under the bar (wide grip). */
+const PULLDOWN_ELBOW = (sg: number) => norm(v(0.1, -1, 0.55 * sg));
+
+/** Pose at bar height b (the shoulder angle is measured from it). */
+function pulldownAtBar(b: number): DemoPose {
+  const { hip } = PULLDOWN;
+  const { neck } = pulldownTorso();
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const g = v(PULLDOWN.barX, b, PULLDOWN.gripZ * sg);
+    const e = elbowToward(s, g, PULLDOWN_ELBOW(sg));
+    const f = norm(sub(g, e));
+    return {
+      s,
+      e,
+      w: addS(e, f, F),
+      h: addS(e, f, F + HAND),
+      k: v(0.42, 0.52, 0.13 * sg),
+      a: v(0.45, 0.09, 0.15 * sg),
+      toe: v(0.62, 0.03, 0.15 * sg),
+    };
+  });
+  const rise = PULLDOWN_BAR_TOP - b;
+  const stackTop = 0.32 + rise;
+  const x = PULLDOWN.barX;
+  const P = PULLDOWN.pulleyY;
+  return {
+    hip,
+    neck,
+    face: v(Math.cos(rad(PULLDOWN.lean)), Math.sin(rad(PULLDOWN.lean))),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [],
+    rods: [
+      { a: v(x, b, -PULLDOWN.barHalf), b: v(x, b, PULLDOWN.barHalf), r: 0.016 },
+      { a: v(x, b, 0), b: v(x, P, 0), r: 0.006 },
+      { a: v(PULLDOWN.stackX, stackTop, 0), b: v(PULLDOWN.stackX, P, 0), r: 0.006 },
+    ],
+    blocks: [{ at: v(PULLDOWN.stackX, stackTop - 0.15, 0), size: v(0.2, 0.3, 0.22) }],
+    load: v(PULLDOWN.stackX, stackTop, 0),
+  };
+}
+
+/**
+ * Wide-grip lat pulldown, front view, shoulder angle (hip-shoulder-elbow): seated, thighs under
+ * the pad, the bar comes from arms straight overhead down to the upper chest, elbows down and out.
+ * The bar height for `theta` is found by bisection (the shoulder angle shrinks as the bar drops).
+ */
+export function pulldownPose(theta: number): DemoPose {
+  const angle = (b: number) => measuredAngle(pulldownAtBar(b), 'shoulder', 'r');
+  let lo = PULLDOWN.barLow - 0.05;
+  let hi = PULLDOWN_BAR_TOP;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (angle(mid) < theta) lo = mid;
+    else hi = mid;
+  }
+  return pulldownAtBar((lo + hi) / 2);
+}
+
+/** Static pulldown machine: seat, thigh pad on a post, column and top beam over the bar. */
+export const PULLDOWN_MACHINE: readonly DemoProp[] = (() => {
+  const { stackX, pulleyY, barX } = PULLDOWN;
+  const beamFrom = stackX - 0.06;
+  const beamTo = barX + 0.06;
+  return [
+    { at: v(-0.02, 0.24, 0), size: v(0.46, 0.48, 0.42) }, // seat
+    { at: v(0.32, 0.65, 0), size: v(0.1, 0.08, 0.46) }, // thigh pad
+    { at: v(0.32, 0.305, 0), size: v(0.04, 0.61, 0.04) }, // thigh pad post
+    { at: v(stackX - 0.15, (pulleyY + 0.09) / 2, 0), size: v(0.08, pulleyY + 0.09, 0.3) }, // column
+    { at: v((beamFrom + beamTo) / 2, pulleyY + 0.05, 0), size: v(beamTo - beamFrom, 0.07, 0.08) },
+  ];
+})();
 
 // --- measuring a pose (tests, and later the ROM caption) --------------------------------------
 

@@ -243,8 +243,32 @@ describe('phaseLabel', () => {
     ['Side_Lateral_Raise', 'lower', 'Lower'],
     ['Side_Lateral_Raise', 'hold', 'Hold'],
     ['Pushups', 'pause', 'Hold'],
+    ['Wide-Grip_Lat_Pulldown', 'lift', 'Pull'],
+    ['Wide-Grip_Lat_Pulldown', 'lower', 'Return'],
+    ['Wide-Grip_Lat_Pulldown', 'hold', 'Hold'],
   ];
   it.each(cases)('%s %s -> %s', (id, phase, label) => {
     expect(phaseLabel(demo(id), phase)).toBe(label);
+  });
+});
+
+describe('moving machine parts', () => {
+  it('pulldown: the bounds hold the bar, cables and weight stack through the loop', () => {
+    const m = demo('Wide-Grip_Lat_Pulldown');
+    const box = demoBounds(m);
+    const T = cycleSeconds(m);
+    for (let i = 0; i <= 20; i++) {
+      const p = poseAt(m, (T * i) / 20);
+      const pts = [
+        ...(p.rods ?? []).flatMap((r) => [r.a, r.b]),
+        ...(p.blocks ?? []).map((b) => b.at),
+      ];
+      expect(pts.length).toBeGreaterThan(0);
+      for (const q of pts)
+        for (let k = 0; k < 3; k++) {
+          expect(q[k]).toBeGreaterThanOrEqual((box.min[k] ?? 0) - 1e-9);
+          expect(q[k]).toBeLessThanOrEqual((box.max[k] ?? 0) + 1e-9);
+        }
+    }
   });
 });

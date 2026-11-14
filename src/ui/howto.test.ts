@@ -13,7 +13,7 @@ describe('badgeList', () => {
   });
 
   it('shows "Info" without a demo, and no "Camera" for manual tracking', () => {
-    expect(badgeList({ exerciseId: 'Hammer_Curls', tracking: 'manual' })).toEqual([
+    expect(badgeList({ exerciseId: 'Leg_Press', tracking: 'manual' })).toEqual([
       { kind: 'info', label: 'Info' },
     ]);
   });
@@ -43,7 +43,7 @@ describe('howToContent', () => {
 
   it('marks demo exercises and gives an empty, safe result for an unknown id', () => {
     expect(howToContent('Pushups').hasDemo).toBe(true);
-    expect(howToContent('Hammer_Curls').hasDemo).toBe(false);
+    expect(howToContent('Leg_Press').hasDemo).toBe(false);
     const none = howToContent('not-a-real-id');
     expect(none).toMatchObject({ hasDemo: false, tempo: '', lines: [], focus: '', cue: '' });
   });

@@ -9,6 +9,11 @@ import {
   benchPressPose,
   curlPose,
   gobletSquatPose,
+  hammerCurlPose,
+  PULLDOWN_MACHINE,
+  pulldownPose,
+  REVERSE_FLY_BENCH,
+  reverseFlyPose,
   rowPose,
   inclinePressPose,
   lateralRaisePose,
@@ -44,6 +49,21 @@ export type DemoMove = {
   pose: (theta: number) => DemoPose;
   /** Static props (bench, seat). */
   props: readonly DemoProp[];
+  /**
+   * Words for the two legs when "Lift"/"Lower" don't fit (pulldown: "Pull"/"Return"); used by the
+   * tempo text and the phase label, matching the how-to tempo line.
+   */
+  words?: { lift: string; lower: string };
+  /**
+   * Muscles the how-to focus line names as helpers that the exercise data doesn't list (e.g. the
+   * forearms in a hammer curl). Lit as secondary.
+   */
+  helpers?: readonly string[];
+  /**
+   * Opening camera turn (rad, the player's yaw) when neither preset shows the target muscles:
+   * the reverse fly opens on a 3/4 rear view of the rear shoulders. Front/Side still work.
+   */
+  openYaw?: number;
 };
 
 export type Key = { t: number; angle: number };
@@ -146,6 +166,52 @@ export const DEMOS: readonly DemoMove[] = [
     pose: tricepsExtensionPose,
     props: [],
   },
+  // M4d Pull A, manual count: original poses, declared start/far angles.
+  {
+    exerciseId: 'Hammer_Curls',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    start: 180,
+    // Hands at shoulder height (howto: "Curl up to shoulder height").
+    far: 30,
+    outward: 'lift',
+    pose: hammerCurlPose,
+    props: [],
+    // Focus line: "biceps and the top of the forearm" (brachioradialis; the M2 map has forearms).
+    helpers: ['forearms'],
+  },
+  {
+    exerciseId: 'Reverse_Flyes',
+    // Neither preset shows the rear shoulders on a chest-down figure: the front view sees the
+    // chest side, the side view sees the arm come straight at the camera. It opens on a 3/4 view
+    // from behind and above the right shoulder instead (openYaw); Side is the nearest preset.
+    view: 'side',
+    measure: { joint: 'shoulder', side: 'r' },
+    start: 55,
+    // Upper arms level with the back (howto: "up to shoulder level").
+    far: 100,
+    outward: 'lift',
+    pose: reverseFlyPose,
+    props: REVERSE_FLY_BENCH,
+    // Focus line: "Upper back helps."
+    helpers: ['middle back'],
+    openYaw: 0.75,
+  },
+  {
+    exerciseId: 'Wide-Grip_Lat_Pulldown',
+    // Front: the wide grip and the elbows travelling down and out are the point of the exercise.
+    view: 'front',
+    // Shoulder angle (hip-shoulder-elbow): the lats' job. The elbow angle bottoms out at the
+    // shoulder line and opens again as the bar goes on to the chest, so it can't drive the pose.
+    measure: { joint: 'shoulder', side: 'r' },
+    // Arms all but straight overhead (elbow ~167 deg) -> bar touching the upper chest.
+    start: 152,
+    far: 35,
+    outward: 'lift',
+    pose: pulldownPose,
+    props: PULLDOWN_MACHINE,
+    words: { lift: 'Pull', lower: 'Return' },
+  },
 ];
 
 const BY_ID = new Map(DEMOS.map((d) => [d.exerciseId, d]));
@@ -167,9 +233,9 @@ export function hasDemo(exerciseId: string): boolean {
  * starts with the lowering (push-up), "Lift 1 s · Lower 2 s" when it starts with the lift.
  */
 export function tempoLabel(m: DemoMove): string {
-  return m.outward === 'lower'
-    ? `Down ${TEMPO.lower} s · Up ${TEMPO.lift} s`
-    : `Lift ${TEMPO.lift} s · Lower ${TEMPO.lower} s`;
+  if (m.outward === 'lower') return `Down ${TEMPO.lower} s · Up ${TEMPO.lift} s`;
+  const w = m.words ?? { lift: 'Lift', lower: 'Lower' };
+  return `${w.lift} ${TEMPO.lift} s · ${w.lower} ${TEMPO.lower} s`;
 }
 
 const back = (l: Leg): Leg => (l === 'lift' ? 'lower' : 'lift');

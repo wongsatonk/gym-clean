@@ -81,9 +81,10 @@ export async function createDemoPlayer(
   const reducedMotion =
     opts.reducedMotion ?? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const ex = exerciseById(exerciseId);
+  // The how-to focus line's helper muscles (move.helpers) light as secondary too.
   const muscles = opts.muscles ?? {
     primary: ex?.primaryMuscles ?? [],
-    secondary: ex?.secondaryMuscles ?? [],
+    secondary: [...(ex?.secondaryMuscles ?? []), ...(move.helpers ?? [])],
   };
 
   let scene: DemoScene;
@@ -272,6 +273,8 @@ export async function createDemoPlayer(
 
   // --- start ----------------------------------------------------------------------------------
   setView(view);
+  // A demo whose muscles neither preset shows opens on its own turn (reverse fly: 3/4 rear).
+  if (move.openYaw !== undefined) targetYaw = move.openYaw;
   yaw = targetYaw;
   setPlaying(!reducedMotion);
 

@@ -317,6 +317,8 @@ export function demoBounds(m: DemoMove, samples = 12): { min: V3; max: V3 } {
     for (const sd of [p.r, p.l])
       for (const j of [sd.s, sd.e, sd.w, sd.h, sd.k, sd.a, sd.toe]) grow(j, 0.06);
     for (const b of p.bells) grow(b.pos, 0.09);
+    for (const r of p.rods ?? []) for (const j of [r.a, r.b]) grow(j, r.r);
+    for (const b of p.blocks ?? []) grow(b.at, Math.max(...b.size) / 2);
   }
   for (const pr of m.props) {
     // Half-diagonal in the x/y plane covers any rotZ; z keeps its own half size.
@@ -361,5 +363,6 @@ export function fitCamera(
 export function phaseLabel(m: DemoMove, phase: Phase): string {
   if (phase === 'hold' || phase === 'pause') return 'Hold';
   if (m.outward === 'lower') return phase === 'lower' ? 'Down' : 'Up';
-  return phase === 'lift' ? 'Lift' : 'Lower';
+  const w = m.words ?? { lift: 'Lift', lower: 'Lower' };
+  return phase === 'lift' ? w.lift : w.lower;
 }

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { ruleFor } from '../../core/exercises';
 import exercises from '../../data/exercises.json';
+import howto from '../../data/howto.json';
+import program from '../../data/program.json';
+import { MUSCLES } from '../bodyMap';
 import {
   DEMO_IDS,
   DEMOS,
@@ -16,7 +19,7 @@ import {
   type DemoMove,
   type Phase,
 } from './moves';
-import { boneLengths, measuredAngle, type DemoPose } from './poses';
+import { PULLDOWN, boneLengths, hipJoint, measuredAngle, type DemoPose, type V3 } from './poses';
 
 const PUSH_A_TRACKED = ['Pushups', 'Seated_Dumbbell_Press', 'Side_Lateral_Raise'];
 const M4D_TRACKED = ['Dumbbell_Bicep_Curl', 'One-Arm_Dumbbell_Row', 'Goblet_Squat'];
@@ -26,6 +29,10 @@ const MANUAL = [
   'Incline_Dumbbell_Press',
   'Standing_Dumbbell_Triceps_Extension',
 ];
+/** M4d Pull A manual exercises. */
+const PULL_A_MANUAL = ['Hammer_Curls', 'Reverse_Flyes', 'Wide-Grip_Lat_Pulldown'];
+const ALL_MANUAL = [...MANUAL, ...PULL_A_MANUAL];
+const HOWTO = howto as Record<string, { tempo: string; focus: string } | undefined>;
 const STEP = 1 / 60;
 
 function must<T>(x: T | undefined, what = 'value'): T {
@@ -63,13 +70,19 @@ describe('demo registry', () => {
 
   it('has demos for all six Push A exercises, and none of the manual ones has a counter rule', () => {
     for (const id of [...PUSH_A_TRACKED, ...MANUAL]) expect(hasDemo(id), id).toBe(true);
-    for (const id of MANUAL) expect(ruleFor(id), id).toBeUndefined();
+    for (const id of ALL_MANUAL) expect(ruleFor(id), id).toBeUndefined();
   });
 
-  it('has no demo for a manual Pull exercise or an unknown id', () => {
-    expect(hasDemo('Hammer_Curls')).toBe(false);
+  it('demos every Pull A exercise', () => {
+    const pullA = program.days.find((d) => d.id === 'pull-a');
+    expect(pullA).toBeDefined();
+    for (const e of pullA?.exercises ?? []) expect(hasDemo(e.exerciseId), e.exerciseId).toBe(true);
+  });
+
+  it('has no demo for an exercise not built yet (Legs B) or an unknown id', () => {
+    expect(hasDemo('Leg_Press')).toBe(false);
     expect(hasDemo('nope')).toBe(false);
-    expect(demoFor('Hammer_Curls')).toBeUndefined();
+    expect(demoFor('Leg_Press')).toBeUndefined();
   });
 
   it('lists only real exercise ids, once each', () => {
@@ -98,7 +111,16 @@ describe('tempo', () => {
     expect(tempoLabel(must(demoFor('Dumbbell_Bicep_Curl')))).toBe('Lift 1 s · Lower 2 s');
     expect(tempoLabel(must(demoFor('One-Arm_Dumbbell_Row')))).toBe('Lift 1 s · Lower 2 s');
     expect(tempoLabel(must(demoFor('Goblet_Squat')))).toBe('Down 2 s · Up 1 s');
+    expect(tempoLabel(must(demoFor('Hammer_Curls')))).toBe('Lift 1 s · Lower 2 s');
+    expect(tempoLabel(must(demoFor('Reverse_Flyes')))).toBe('Lift 1 s · Lower 2 s');
+    expect(tempoLabel(must(demoFor('Wide-Grip_Lat_Pulldown')))).toBe('Pull 1 s · Return 2 s');
   });
+
+  for (const m of DEMOS) {
+    it(`${m.exerciseId}: the tempo text matches the how-to tempo line`, () => {
+      expect(tempoLabel(m)).toBe(HOWTO[m.exerciseId]?.tempo);
+    });
+  }
 
   for (const id of POSE_TRACKED) {
     it(`${id}: the eccentric leg (from rule.eccentric) takes 2 s, the other 1 s`, () => {
@@ -145,9 +167,11 @@ describe('tempo', () => {
           }
         throw new Error(`no ${p} phase`);
       };
-      // Push-up: the "weight" is the body, so track the shoulder; otherwise the hand.
+      // Push-up: the "weight" is the body, so track the shoulder; a machine names its load (the
+      // pulldown's weight stack); otherwise the hand.
       const y = (t: number) => {
         const p = poseAt(m, t);
+        if (p.load) return p.load[1];
         return m.exerciseId === 'Pushups' ? p.r.s[1] : p.r.h[1];
       };
       expect(y(mid('lift') + 0.05)).toBeGreaterThan(y(mid('lift') - 0.05));
@@ -379,5 +403,169 @@ describe('M4d pose-tracked demos (curl, row, goblet squat)', () => {
     }
     // A real squat: hips drop at least 25 cm.
     expect(ref.hip[1] - lowestHip).toBeGreaterThan(0.25);
+  });
+});
+
+describe('manual-count demos without a rule: the range comes from the demo itself', () => {
+  const tracking = new Map(
+    program.days.flatMap((d) => d.exercises.map((e) => [e.exerciseId, e.tracking] as const)),
+  );
+  for (const m of DEMOS.filter((d) => !ruleFor(d.exerciseId))) {
+    it(`${m.exerciseId}: a manual program exercise with a real range of motion`, () => {
+      expect(tracking.get(m.exerciseId)).toBe('manual');
+      expect(Math.abs(m.far - m.start)).toBeGreaterThanOrEqual(30);
+      const angles = sampleLoop(m).map((x) => x.angle);
+      const lo = Math.min(m.start, m.far);
+      const hi = Math.max(m.start, m.far);
+      // Stays between its declared ends (eased, no overshoot) and physically sensible.
+      for (const a of angles) {
+        expect(a).toBeGreaterThanOrEqual(Math.max(0, lo - 2));
+        expect(a).toBeLessThanOrEqual(Math.min(180.0001, hi + 2));
+      }
+      // Every rep crosses the whole range: both ends within 3 deg.
+      expect(Math.min(...angles)).toBeLessThan(lo + 3);
+      expect(Math.max(...angles)).toBeGreaterThan(hi - 3);
+    });
+
+    it(`${m.exerciseId}: helper muscles are real M2 muscles not already in the data`, () => {
+      const ex = exercises.find((e) => e.id === m.exerciseId);
+      for (const h of m.helpers ?? []) {
+        expect(MUSCLES as readonly string[]).toContain(h);
+        expect([...(ex?.primaryMuscles ?? []), ...(ex?.secondaryMuscles ?? [])]).not.toContain(h);
+      }
+    });
+  }
+});
+
+describe('M4d Pull A demos (hammer curl, reverse fly, lat pulldown)', () => {
+  const close = (a: readonly number[], b: readonly number[], what: string, digits = 9) =>
+    a.forEach((x, i) => expect(x, what).toBeCloseTo(b[i] ?? NaN, digits));
+  const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const unit = (a: V3): V3 => {
+    const l = Math.hypot(...a);
+    return [a[0] / l, a[1] / l, a[2] / l];
+  };
+
+  it('Hammer_Curls: the curl path with a neutral grip, up to shoulder height', () => {
+    const m = must(demoFor('Hammer_Curls'));
+    const curl = must(demoFor('Dumbbell_Bicep_Curl'));
+    expect(m.helpers).toEqual(['forearms']);
+    expect(HOWTO.Hammer_Curls?.focus).toMatch(/forearm/);
+    const ref = m.pose(m.start);
+    for (const { pose, t } of sampleLoop(m)) {
+      // Elbows fixed at the sides.
+      for (const k of ['r', 'l'] as const) {
+        close(pose[k].s, ref[k].s, `${k}.s`);
+        close(pose[k].e, ref[k].e, `${k}.e`);
+      }
+      expect(pose.bells).toHaveLength(2);
+      for (const [i, k] of (['r', 'l'] as const).entries()) {
+        const b = must(pose.bells[i]);
+        const fore = unit(sub(pose[k].h, pose[k].e));
+        // Handle across the forearm, inside the arm's (sagittal) plane: thumbs up, palms in.
+        expect(Math.abs(dot(b.axis, fore)), `t=${t}`).toBeLessThan(1e-9);
+        expect(Math.abs(b.axis[2]), `t=${t}`).toBeLessThan(1e-9);
+      }
+    }
+    // The supinated curl holds its handles across the body instead.
+    expect(Math.abs(must(curl.pose(90).bells[0]).axis[2])).toBeCloseTo(1, 9);
+    // Bottom: handle points forward. Top: dumbbell at shoulder height (within 10 cm).
+    expect(Math.abs(must(ref.bells[0]).axis[0])).toBeGreaterThan(0.99);
+    const top = m.pose(m.far);
+    expect(Math.abs(must(top.bells[0]).pos[1] - top.r.s[1])).toBeLessThan(0.1);
+  });
+
+  it('Reverse_Flyes: chest stays on the incline pad, soft elbows, arms end level with the back', () => {
+    const m = must(demoFor('Reverse_Flyes'));
+    const ref = m.pose(m.start);
+    const [pad] = m.props;
+    const padTilt = must(pad, 'pad').rotZ ?? 0;
+    // Torso along the pad, head higher than the hips (howto: "Chest on an incline bench").
+    const spine = unit(sub(ref.neck, ref.hip));
+    expect(Math.atan2(spine[1], spine[0])).toBeCloseTo(padTilt, 9);
+    expect(ref.neck[1]).toBeGreaterThan(ref.hip[1] + 0.2);
+    for (const { pose } of sampleLoop(m)) {
+      close(pose.hip, ref.hip, 'hip');
+      close(pose.neck, ref.neck, 'neck');
+      for (const k of ['r', 'l'] as const) {
+        // Feet stay planted.
+        close(pose[k].a, ref[k].a, `${k}.a`);
+        expect(pose[k].toe[1]).toBeLessThan(0.05);
+        // Soft elbows: 160 deg the whole rep, never locked, never a row.
+        expect(measuredAngle(pose, 'elbow', k)).toBeCloseTo(160, 6);
+      }
+      // Both arms move together (mirror image).
+      expect(measuredAngle(pose, 'shoulder', 'l')).toBeCloseTo(
+        measuredAngle(pose, 'shoulder', 'r'),
+        6,
+      );
+      expect(pose.bells).toHaveLength(2);
+      for (const b of pose.bells) expect(b.pos[1]).toBeGreaterThan(0.2);
+    }
+    // Start: arms hang under the shoulders. Far: elbows out to the side at shoulder height.
+    expect(ref.r.e[1]).toBeLessThan(ref.r.s[1] - 0.25);
+    const top = m.pose(m.far);
+    for (const k of ['r', 'l'] as const) {
+      expect(Math.abs(top[k].e[1] - top[k].s[1])).toBeLessThan(0.03);
+      expect(Math.abs(top[k].e[2])).toBeGreaterThan(Math.abs(top[k].s[2]) + 0.25);
+      // Arms move sideways, not forward or back.
+      expect(top[k].e[0]).toBeCloseTo(top[k].s[0], 9);
+    }
+    // Rear shoulders (primary) and the upper back (helper, from the focus line) light up.
+    expect(m.helpers).toEqual(['middle back']);
+    expect(HOWTO.Reverse_Flyes?.focus).toMatch(/[Uu]pper back/);
+  });
+
+  it('Wide-Grip_Lat_Pulldown: seated under the pad, bar from overhead to the upper chest', () => {
+    const m = must(demoFor('Wide-Grip_Lat_Pulldown'));
+    const [seat, thighPad] = m.props;
+    const seatTop = must(seat).at[1] + must(seat).size[1] / 2;
+    const padBottom = must(thighPad).at[1] - must(thighPad).size[1] / 2;
+    const ref = m.pose(m.start);
+    let lowestBar = Infinity;
+    for (const { pose, t } of sampleLoop(m)) {
+      // Hips stay on the seat, torso still, thighs under the pad.
+      close(pose.hip, ref.hip, 'hip');
+      close(pose.neck, ref.neck, 'neck');
+      expect(pose.hip[1]).toBeGreaterThan(seatTop);
+      expect(pose.hip[1] - seatTop).toBeLessThan(0.12);
+      for (const k of ['r', 'l'] as const) {
+        expect(pose[k].k[1] + 0.075).toBeLessThanOrEqual(padBottom);
+        expect(Math.abs(pose[k].k[0] - must(thighPad).at[0])).toBeLessThan(0.15);
+      }
+      // The hands hold the bar, wide: about twice the shoulder width.
+      const bar = must(pose.rods?.[0], 'bar');
+      expect(pose.rods).toHaveLength(3);
+      expect(pose.blocks).toHaveLength(1);
+      for (const k of ['r', 'l'] as const) {
+        expect(Math.abs(pose[k].h[1] - bar.a[1]), `t=${t}`).toBeLessThan(1e-9);
+        expect(Math.abs(pose[k].h[0] - bar.a[0])).toBeLessThan(1e-9);
+        expect(Math.abs(pose[k].h[2])).toBeCloseTo(PULLDOWN.gripZ, 9);
+        expect(Math.abs(pose[k].h[2])).toBeGreaterThan(Math.abs(pose[k].s[2]) * 1.8);
+      }
+      // The bar never passes through the face: in front of the head whenever it is at head height.
+      const headTop = pose.neck[1] + 0.37;
+      if (bar.a[1] > pose.neck[1] && bar.a[1] < headTop)
+        expect(bar.a[0]).toBeGreaterThan(pose.neck[0] + 0.05);
+      // Weight stack rises exactly as far as the bar comes down (1:1 cable).
+      expect(must(pose.load)[1] - must(ref.load)[1]).toBeCloseTo(
+        must(ref.rods?.[0]).a[1] - bar.a[1],
+        9,
+      );
+      lowestBar = Math.min(lowestBar, bar.a[1]);
+    }
+    // Top: arms (all but) straight, the bar well above the shoulders' line.
+    expect(measuredAngle(ref, 'elbow', 'r')).toBeGreaterThan(160);
+    expect(must(ref.rods?.[0]).a[1]).toBeGreaterThan(ref.r.s[1] + 0.45);
+    // Bottom: the bar at the upper chest: at or just below the shoulder line, not at the belly.
+    const low = m.pose(m.far);
+    expect(lowestBar).toBeLessThan(low.r.s[1] + 0.01);
+    expect(lowestBar).toBeGreaterThan(low.r.s[1] - 0.1);
+    // Elbows end down by the sides, below the shoulders and outside the torso.
+    for (const k of ['r', 'l'] as const) {
+      expect(low[k].e[1]).toBeLessThan(low[k].s[1] - 0.2);
+      expect(Math.abs(low[k].e[2])).toBeGreaterThan(Math.abs(hipJoint(low, k)[2]) + 0.1);
+    }
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import exercises from '../../data/exercises.json';
 import { MUSCLES } from '../bodyMap';
 import { MANNEQUIN_SEGMENTS, MUSCLE_TO_PARTS, highlightFor, partsFor } from './highlight';
-import { DEMO_IDS } from './moves';
+import { DEMO_IDS, demoFor } from './moves';
 
 const byId = new Map(exercises.map((e) => [e.id, e]));
 
@@ -27,7 +27,8 @@ describe('muscle -> mannequin part map', () => {
       expect(ex, id).toBeDefined();
       if (!ex) return;
       expect(ex.primaryMuscles.length).toBeGreaterThan(0);
-      for (const m of [...ex.primaryMuscles, ...ex.secondaryMuscles])
+      const helpers = demoFor(id)?.helpers ?? [];
+      for (const m of [...ex.primaryMuscles, ...ex.secondaryMuscles, ...helpers])
         expect(partsFor(m).length, `${id}: ${m}`).toBeGreaterThan(0);
       const lit = highlightFor(ex.primaryMuscles, ex.secondaryMuscles);
       expect(lit.some((h) => h.level === 'primary')).toBe(true);

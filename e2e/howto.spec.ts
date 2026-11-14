@@ -55,7 +55,7 @@ const hasWebGL = (page: Page) =>
     return Boolean(c.getContext('webgl2') ?? c.getContext('webgl'));
   });
 
-test('badges: Push A has six 3D demos, Camera on the tracked three; curl is 3D demo, Hammer Curls Info', async ({
+test('badges: Push A has six 3D demos, Camera on the tracked three; Pull A all 3D demo, Leg Press Info', async ({
   page,
 }) => {
   const errors = watchErrors(page);
@@ -79,16 +79,25 @@ test('badges: Push A has six 3D demos, Camera on the tracked three; curl is 3D d
   expect(fontPx).toBeGreaterThanOrEqual(20);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 
-  // Pull A in-session list: Hammer Curls (manual, no demo) shows only "Info".
+  // Legs B preview: Leg Press (manual, no demo yet) shows only "Info".
+  await page.getByRole('button', { name: '‹ Back' }).click();
+  await page.getByRole('button', { name: /Legs B/ }).click();
+  const legPress = page.locator('.ex-row', { hasText: 'Leg Press' });
+  await expect(legPress.locator('[data-badge="info"]')).toHaveText('Info');
+  await expect(legPress.locator('[data-badge="3d"]')).toHaveCount(0);
+  await expect(legPress.locator('[data-badge="camera"]')).toHaveCount(0);
+
+  // Pull A in-session list: every exercise has a 3D demo (M4d); the manual ones no Camera.
   await page.getByRole('button', { name: '‹ Back' }).click();
   await page.getByRole('button', { name: /Pull A/ }).click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.getByRole('button', { name: 'Exercise list' }).click();
   const list = page.getByRole('dialog', { name: 'Exercise list' });
-  const hammer = list.locator('.ex-row-btn', { hasText: 'Hammer Curls' });
-  await expect(hammer.locator('[data-badge="info"]')).toHaveText('Info');
-  await expect(hammer.locator('[data-badge="3d"]')).toHaveCount(0);
-  await expect(hammer.locator('[data-badge="camera"]')).toHaveCount(0);
+  for (const name of ['Hammer Curls', 'Reverse Flyes', 'Wide-Grip Lat Pulldown']) {
+    const row = list.locator('.ex-row-btn', { hasText: name });
+    await expect(row.locator('[data-badge]')).toHaveText(['3D demo']);
+  }
+  await expect(list.locator('[data-badge="info"]')).toHaveCount(0);
   // The pose-tracked curl has a 3D demo (M4d) + Camera.
   const curl = list.locator('.ex-row-btn', { hasText: 'Dumbbell Bicep Curl' });
   await expect(curl.locator('[data-badge]')).toHaveText(['3D demo', 'Camera']);
