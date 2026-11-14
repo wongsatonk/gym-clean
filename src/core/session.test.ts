@@ -940,3 +940,79 @@ describe('SET_FOCUS and the focus score (M5)', () => {
     expect(run(s, correct(5, 2)).logs[0]).toMatchObject({ focusScore: 80 });
   });
 });
+
+describe('EXTEND_REST (M4e +30 s)', () => {
+  const resting = () => run(fresh(), { type: 'SET_DONE', now: sec(0) });
+  const extend = (now: number, s = 30): SessionEvent => ({ type: 'EXTEND_REST', sec: s, now });
+
+  it('raises the rest target during rest and keeps the clock running', () => {
+    const s = run(resting(), extend(sec(20)));
+    expect(s.restTargetSec).toBe(90);
+    expect(s.phase).toBe('rest');
+    expect(restElapsedMs(s, sec(40))).toBe(40_000);
+  });
+
+  it('two taps add 60 s', () => {
+    const s = run(resting(), extend(sec(10)), extend(sec(12)));
+    expect(s.restTargetSec).toBe(120);
+  });
+
+  it('is ignored during a set, while paused, and after summary', () => {
+    const ex = fresh();
+    expect(next(ex, extend(sec(1)))).toBe(ex);
+    const paused = run(resting(), { type: 'PAUSE', now: sec(5) });
+    expect(next(paused, extend(sec(6)))).toBe(paused);
+    const done = run(resting(), { type: 'FINISH', now: sec(5) });
+    expect(next(done, extend(sec(6)))).toBe(done);
+  });
+
+  it('ignores zero, negative and non-finite amounts', () => {
+    const s = resting();
+    for (const bad of [0, -30, Number.NaN, Number.POSITIVE_INFINITY])
+      expect(next(s, extend(sec(5), bad))).toBe(s);
+  });
+
+  it('applies to this rest only: the next rest is back to the plan', () => {
+    let s = run(resting(), extend(sec(10)), { type: 'START_SET', now: sec(80) });
+    s = run(s, { type: 'SET_DONE', now: sec(120) });
+    expect(s.phase).toBe('rest');
+    expect(s.restTargetSec).toBe(exA.restSec);
+  });
+
+  it('logs the rest target that applied before each set, including +30 s; none for the first set', () => {
+    let s = run(resting(), extend(sec(10)), { type: 'START_SET', now: sec(80) });
+    s = run(s, { type: 'SET_DONE', now: sec(120) }); // A set 2, after the extended rest
+    expect(s.logs[0]).not.toHaveProperty('restTargetSec');
+    expect(s.logs[1]?.restTargetSec).toBe(90);
+    s = run(s, { type: 'START_SET', now: sec(150) }, { type: 'SET_DONE', now: sec(180) }); // B
+    expect(s.logs[2]?.restTargetSec).toBe(exA.restSec); // rest after A's last set, plan 60
+  });
+
+  it('a set reached by skipping mid-set had no rest before it: no rest target logged', () => {
+    const s = run(fresh(), { type: 'SKIP_EXERCISE', now: sec(5) }, { type: 'SET_DONE', now: sec(40) });
+    expect(s.logs[0]).not.toHaveProperty('restTargetSec');
+    // …also when the skip happens mid-set after a rest.
+    const t = run(
+      resting(),
+      { type: 'START_SET', now: sec(60) },
+      { type: 'SKIP_EXERCISE', now: sec(70) },
+      { type: 'SET_DONE', now: sec(100) },
+    );
+    expect(t.logs[1]?.restTakenSec).toBe(0);
+    expect(t.logs[1]).not.toHaveProperty('restTargetSec');
+  });
+
+  it('measures overrun against the extended target (extra time is planned rest)', () => {
+    const limit = 60 + REST_OVERRUN_GRACE_SEC;
+    // Without the extension, limit + 20 s is an overrun…
+    expect(run(resting(), { type: 'START_SET', now: sec(limit + 20) }).restOverruns).toBe(1);
+    // …with +30 s it is not, up to the new limit…
+    const ext = run(resting(), extend(sec(30)), { type: 'START_SET', now: sec(limit + 30) });
+    expect(ext.restOverruns).toBe(0);
+    expect(ext.lastRestTakenSec).toBe(limit + 30);
+    // …and past the new limit it still is.
+    expect(
+      run(resting(), extend(sec(30)), { type: 'START_SET', now: sec(limit + 31) }).restOverruns,
+    ).toBe(1);
+  });
+});

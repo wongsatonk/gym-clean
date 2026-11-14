@@ -30,6 +30,11 @@ export type SessionState = {
   readonly setStartedAt: number;
   /** Rest before the current set, logged with it. */
   readonly lastRestTakenSec: number;
+  /**
+   * Rest: the current target (plan restSec + any EXTEND_REST). Exercise: the target of the rest
+   * before this set, logged with it as `restTargetSec`; 0 = no rest before it (first set, or
+   * reached by a mid-set skip), logged without one.
+   */
   readonly restTargetSec: number;
   /** Rest clock: accumulated ms plus the running segment (null while paused / not resting). */
   readonly restAccumMs: number;
@@ -80,6 +85,13 @@ export type SessionEvent =
    * pause/resume can't make a negative segment or a start before the previous set's end.
    */
   | { type: 'START_SET'; now: number }
+  /**
+   * M4e "+30 s": raise `restTargetSec` by `sec` for the current rest only (the next rest starts
+   * from the plan's restSec again). Only on Rest, not paused, finite `sec` > 0. The extra time
+   * counts as planned rest (A-q3): START_SET's overrun check and the rest cues use the raised
+   * target. The rest clock keeps running; `now` is informational.
+   */
+  | { type: 'EXTEND_REST'; sec: number; now: number }
   | { type: 'SKIP_EXERCISE'; now: number }
   | { type: 'PAUSE'; now: number }
   | { type: 'RESUME'; now: number }
@@ -276,6 +288,10 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       if (!Number.isFinite(e.weightKg) || e.weightKg < 0) return s;
       return { ...s, weightKg: e.weightKg };
 
+    case 'EXTEND_REST':
+      if (s.phase !== 'rest' || !Number.isFinite(e.sec) || e.sec <= 0) return s;
+      return { ...s, restTargetSec: s.restTargetSec + e.sec };
+
     case 'SET_DONE': {
       if (s.phase !== 'exercise') return s;
       const now = Math.max(e.now, s.setStartedAt);
@@ -288,6 +304,7 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
         ...(s.partials > 0 ? { partials: s.partials } : {}),
         weightKg: s.weightKg,
         restTakenSec: s.lastRestTakenSec,
+        ...(s.restTargetSec > 0 ? { restTargetSec: s.restTargetSec } : {}),
         ...(s.focusCues ? { cues: [...s.focusCues] } : {}),
         startedAt: s.setStartedAt,
         endedAt: now,
@@ -337,7 +354,7 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       const withSkip = { ...s, skipped };
       const moved = goToExercise(withSkip, nextUnfinished(withSkip, s.exIndex), e.now);
       if (moved.phase === 'summary' || s.phase === 'rest') return moved;
-      return { ...moved, setStartedAt: e.now, lastRestTakenSec: 0 };
+      return { ...moved, setStartedAt: e.now, lastRestTakenSec: 0, restTargetSec: 0 };
     }
   }
 }

@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { RepEvent, SetLog } from '../core/types';
+import type { Accent, RepEvent, SetLog } from '../core/types';
 import type { Rudeness } from '../core/personas';
 import type { Unit } from '../core/units';
 
@@ -248,6 +248,18 @@ export async function setHandsFree(db: GymDb, on: boolean): Promise<void> {
   await db.settings.put({ key: 'handsFree', value: on });
 }
 
+const ACCENTS: readonly Accent[] = ['orange', 'volt', 'yellow'];
+
+/** M4e accent theme. Default orange; an unknown stored value reads as orange. */
+export async function getAccent(db: GymDb): Promise<Accent> {
+  const v = (await db.settings.get('accent'))?.value;
+  return ACCENTS.find((a) => a === v) ?? 'orange';
+}
+
+export async function setAccent(db: GymDb, accent: Accent): Promise<void> {
+  await db.settings.put({ key: 'accent', value: accent });
+}
+
 /** Coach voice (drill-sergeant design 2026-11-13): persona, its rudeness level, chosen voice. */
 export type CoachVoice = {
   persona: 'calm' | 'drill';
@@ -310,4 +322,29 @@ export function lastWeights(last: Record<string, SetRow[]>): Record<string, numb
     if (final) out[id] = final.weightKg;
   }
   return out;
+}
+
+// ---------- M4e: history for the Today / Summary selectors (src/core/stats.ts) ----------
+
+/** Sessions started at or after `sinceMs` (finished or not), oldest first. */
+export async function sessionsSince(db: GymDb, sinceMs: number): Promise<SessionRow[]> {
+  return db.sessions.where('startedAt').aboveOrEqual(sinceMs).sortBy('startedAt');
+}
+
+/** All sets of the given sessions, in start order. */
+export async function setsForSessions(db: GymDb, sessionIds: string[]): Promise<SetRow[]> {
+  if (sessionIds.length === 0) return [];
+  return db.sets
+    .where('sessionId')
+    .anyOf([...new Set(sessionIds)])
+    .sortBy('startedAt');
+}
+
+/** Every logged set of the given exercises (all sessions), in start order; for `newBests`. */
+export async function setsForExercises(db: GymDb, exerciseIds: string[]): Promise<SetRow[]> {
+  if (exerciseIds.length === 0) return [];
+  return db.sets
+    .where('exerciseId')
+    .anyOf([...new Set(exerciseIds)])
+    .sortBy('startedAt');
 }

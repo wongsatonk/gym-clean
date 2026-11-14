@@ -112,14 +112,23 @@ function plannedFor(s: SessionState, exerciseId: string): PlannedExercise | unde
   return s.day.exercises.find((p) => p.exerciseId === exerciseId);
 }
 
-/** Did log `i` of the workout overrun its rest? Compared with the previous log's exercise restSec. */
-function overran(s: SessionState, i: number): boolean {
+/**
+ * Rest target before log `i`: the logged `restTargetSec` (plan + any "+30 s", M4e), else — for
+ * rows logged before M4e — the previous log's exercise restSec. Undefined for the first set.
+ */
+function restTargetBefore(s: SessionState, i: number): number | undefined {
   const log = s.logs[i];
   const prev = s.logs[i - 1];
-  if (!log || !prev) return false; // the workout's first set never overran
-  const p = plannedFor(s, prev.exerciseId);
-  if (!p) return false;
-  return log.restTakenSec > p.restSec + OVERRUN_GRACE_SEC;
+  if (!log || !prev) return undefined; // the workout's first set had no rest before it
+  return log.restTargetSec ?? plannedFor(s, prev.exerciseId)?.restSec;
+}
+
+/** Did log `i` of the workout overrun its rest target (see restTargetBefore)? */
+function overran(s: SessionState, i: number): boolean {
+  const log = s.logs[i];
+  const target = restTargetBefore(s, i);
+  if (!log || target === undefined) return false;
+  return log.restTakenSec > target + OVERRUN_GRACE_SEC;
 }
 
 function setsWhy(L: readonly SetLog[], unit: Unit): string {
@@ -200,8 +209,7 @@ function duringExerciseAdvice(
   if (s.logs[i] === set && overran(s, i)) {
     const count = s.logs.filter((_, k) => overran(s, k)).length;
     if (count >= 2) {
-      const prev = s.logs[i - 1];
-      const target = prev ? (plannedFor(s, prev.exerciseId)?.restSec ?? 0) : 0;
+      const target = restTargetBefore(s, i) ?? 0;
       return advice(
         id,
         'A5',

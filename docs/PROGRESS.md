@@ -214,7 +214,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - the existing e2e still pass, since the look barely changes yet;
     - typecheck + lint clean.
   - Deps: A1 for the font families (can start with fallbacks).
-- [ ] A3. [core-engineer ∥A] Home/summary selectors, **tests first**.
+- [x] A3. [core-engineer ∥A] Home/summary selectors, **tests first**.
   - Files: src/core/stats.ts(+test). Pure; takes session rows + set logs.
   - `weeklyStreak(sessions, today, minPerWeek)`: consecutive Mon–Sun local weeks with ≥ `minPerWeek` finished sessions. The current week counts once it qualifies and doesn't break the streak while it's in progress.
   - `STREAK_MIN_PER_WEEK` is a provisional constant: Blockers A-q1.
@@ -233,14 +233,14 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - the first-ever session → no bests;
     - no DOM.
   - Deps: none.
-- [ ] A4. [core-engineer ∥B] Data layer, **tests first**.
+- [x] A4. [core-engineer ∥B] Data layer, **tests first**.
   - Files: src/data/db.ts(+test).
   - `getAccent / setAccent` (key `accent`, default `'orange'`, an unknown value reads as orange).
   - `sessionsSince(db, sinceMs)` and `setsForSessions(db, ids)`, plus `bestSetsFor(db, exerciseIds)` or all sets of those exercises.
   - No Dexie version bump unless an index is needed; if one is, do the bump and record it as a Decision.
   - Done when: db tests cover default / set / read back / unknown, and the history queries; existing db tests pass.
   - Deps: A1 (Accent type).
-- [ ] A5. [core-engineer ∥C] `EXTEND_REST { sec, now }`, **tests first**.
+- [x] A5. [core-engineer ∥C] `EXTEND_REST { sec, now }`, **tests first**.
   - Files: src/core/session.ts(+test).
   - Accepted only in `rest`, not paused, sec > 0.
   - Raises `restTargetSec` for this rest only; the next rest uses the plan's `restSec`.
@@ -253,7 +253,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - `restCues` crossings at the new target: "Ten seconds" fires again at target − 10 when it hasn't been passed (a restCues test, same instance);
     - existing session tests pass.
   - Deps: none.
-- [ ] A6. [ui-engineer, second instance ∥] Icon set.
+- [x] A6. [ui-engineer, second instance ∥] Icon set.
   - Files: src/ui/icons.ts(+test).
   - Port the original 24-grid `ICONS` from `docs/design/m4e-mix/_src/build.mjs`: 2.25px stroke, round caps, `currentColor`, `aria-hidden`.
   - `icon(name, size: 'sm' | 'md' | 'lg')`.
@@ -847,6 +847,18 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-14: **M4e A3–A6 done** (review PASS). `npm run check` passes: 1237 unit tests, 19 script tests.
+  - **stats.ts** passes under 8 time zones, across the EU and US DST switches.
+  - **New `SetLog.restTargetSec`.** It holds the rest target in force before that set, plan rest plus any +30 s. The session overrun and the coach advice both use it, so a +30 s rest used in full doesn't count as a rest overrun (A-q3). Old rows fall back to the plan.
+  - **"New best" (as built):** today's top set per exercise (heaviest, then most reps) compared with the history's top set. Heavier, or more reps at the same weight, counts as a best. More reps at a lower weight does not.
+    - A rep best at a lighter weight he has used before isn't reported, e.g. 20×10 when history has 22.5×3 and 20×8.
+    - Question for Wongsaton in Blockers (A-q5); defaults stay as built.
+  - **Non-blocking follow-ups:**
+    - pin a DST time zone in the stats tests for UTC CI;
+    - check real-browser SVG namespace for icons in the A8 screenshots;
+    - escape `opts.class` in iconMarkup;
+    - UI fallback when `volumeVsLast` is null (bodyweight days).
+
 - 2026-11-14: **M5c break hold B5–B7 done** (review PASS).
   - **e2e/hands-free-break.spec.ts:** 7 tests, 21/21 with `--repeat-each=3`. It runs in the `mobile-clips` project (workers: 1) with focus-cues. Full `npm run e2e`: 75/75. `npm run check` green (1164 unit, 19 script).
   - **Screenshots** taken by the spec: m5c-hold, m5c-hold-last-set. The verifier re-shoots them into docs/screenshots.
@@ -1236,6 +1248,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - Non-blocking observations: (1) after Apply, set 3 at 40 lb (sets 8×35, 8×35, 8×40) gets A3 again, "+5 lb → 45 lb". That matches the rule table (A3 looks at reps only, all of today's sets), but it suggests a second jump after one set at the new weight; product call for Wongsaton (e.g. only count sets at the current weight). (2) The one-arm row demo has the hand on the bench but both feet on the floor, while how-to line 1 says "One knee and hand on the bench" (anatomy-3d-engineer or the how-to text). (3) In headless Chrome the gauge screenshot shows count "0 · Get into start position" while the gauge moves (counter still settling at 14 fps); expected.
 
 ## Blockers / questions for Wongsaton
+- **A-q5 (new bests):** should a rep best at a lighter weight you've used before count? For example 20 kg × 10 when your best at 20 kg was × 8. As built, only a heavier top set, or more reps at your top weight, counts.
 - **🧍 Checkpoint B3 (hands-free gym test, waiting for his report):** train a day with hands-free on, note every wrong auto start/stop and whether 6 s stillness / the 5 s Undo feel right, then export the dev log.
 - ~~M4e design pick~~: answered, the mix (Decisions 2026-11-13 night).
 - ~~Press, "first press = positioning"?~~: answered, no; the counter stays at 8.

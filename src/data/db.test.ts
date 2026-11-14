@@ -5,6 +5,7 @@ import type { SetLog } from '../core/types';
 import {
   GymDb,
   finishSession,
+  getAccent,
   getCoachTips,
   getCoachVoice,
   getExerciseNote,
@@ -17,12 +18,16 @@ import {
   saveSessionNote,
   saveSet,
   sessionNotes,
+  sessionsSince,
+  setAccent,
   setCoachTips,
   setCoachVoice,
   setHandsFree,
   setSpokenCount,
   setUnit,
+  setsForExercises,
   setsForSession,
+  setsForSessions,
   startSessionRow,
   updateSet,
 } from './db';
@@ -386,5 +391,79 @@ describe('GymDb coach voice setting (drill-sergeant design)', () => {
     await setCoachVoice(db, v);
     v.voiceName = 'Tom';
     expect((await getCoachVoice(db)).voiceName).toBe('Fred');
+  });
+});
+
+describe('GymDb accent setting (M4e)', () => {
+  it('defaults to orange', async () => {
+    expect(await getAccent(db)).toBe('orange');
+  });
+
+  it('remembers each accent and reads it back after reopening', async () => {
+    for (const a of ['volt', 'yellow', 'orange'] as const) {
+      await setAccent(db, a);
+      expect(await getAccent(db)).toBe(a);
+    }
+    await setAccent(db, 'volt');
+    const name = db.name;
+    db.close();
+    db = new GymDb(name);
+    await db.open();
+    expect(await getAccent(db)).toBe('volt');
+  });
+
+  it('reads an unknown stored value as orange', async () => {
+    await db.settings.put({ key: 'accent', value: 'pink' });
+    expect(await getAccent(db)).toBe('orange');
+    await db.settings.put({ key: 'accent', value: 3 });
+    expect(await getAccent(db)).toBe('orange');
+  });
+
+  it('is independent of the unit setting', async () => {
+    await setAccent(db, 'yellow');
+    expect(await getUnit(db)).toBe('kg');
+    await setUnit(db, 'lb');
+    expect(await getAccent(db)).toBe('yellow');
+  });
+});
+
+describe('GymDb history queries (M4e)', () => {
+  it('sessionsSince returns sessions started at or after the time, oldest first', async () => {
+    await startSessionRow(db, { sessionId: 'b', dayId: 'pull-a', startedAt: 3000, endedAt: 4000 });
+    await startSessionRow(db, { sessionId: 'a', dayId: 'push-a', startedAt: 1000, endedAt: 2000 });
+    await startSessionRow(db, { sessionId: 'c', dayId: 'legs', startedAt: 5000 });
+    await startSessionRow(db, { sessionId: 'old', dayId: 'legs', startedAt: 999 });
+    const rows = await sessionsSince(db, 1000);
+    expect(rows.map((r) => r.sessionId)).toEqual(['a', 'b', 'c']);
+    expect(rows[1]).toEqual({ sessionId: 'b', dayId: 'pull-a', startedAt: 3000, endedAt: 4000 });
+    expect(await sessionsSince(db, 6000)).toEqual([]);
+  });
+
+  it('setsForSessions returns the sets of those sessions in start order', async () => {
+    await saveSet(db, log({ sessionId: 's2', startedAt: 9000 }));
+    await saveSet(db, log({ sessionId: 's1', setIndex: 1, startedAt: 5000 }));
+    await saveSet(db, log({ sessionId: 's1', startedAt: 1000 }));
+    await saveSet(db, log({ sessionId: 's3', startedAt: 3000 }));
+    const rows = await setsForSessions(db, ['s1', 's2', 's1']);
+    expect(rows.map((r) => [r.sessionId, r.startedAt])).toEqual([
+      ['s1', 1000],
+      ['s1', 5000],
+      ['s2', 9000],
+    ]);
+    expect(await setsForSessions(db, [])).toEqual([]);
+  });
+
+  it('setsForExercises returns every set of those exercises in start order', async () => {
+    await saveSet(db, log({ exerciseId: 'Pushups', weightKg: 0, startedAt: 7000 }));
+    await saveSet(db, log({ sessionId: 's0', startedAt: 500 }));
+    await saveSet(db, log({ startedAt: 2000 }));
+    await saveSet(db, log({ exerciseId: 'Other', startedAt: 100 }));
+    const rows = await setsForExercises(db, ['Dumbbell_Bench_Press', 'Pushups']);
+    expect(rows.map((r) => [r.exerciseId, r.startedAt])).toEqual([
+      ['Dumbbell_Bench_Press', 500],
+      ['Dumbbell_Bench_Press', 2000],
+      ['Pushups', 7000],
+    ]);
+    expect(await setsForExercises(db, [])).toEqual([]);
   });
 });

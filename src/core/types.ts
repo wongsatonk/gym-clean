@@ -53,6 +53,8 @@ export type SetLog = {
   partials?: number;
   weightKg: number;
   restTakenSec: number;
+  /** The rest target that applied before this set (plan + any +30 s), for overrun advice. */
+  restTargetSec?: number;
   focusScore?: number;
   /** M5: one entry per focus/form detection in the set (ids, never text). */
   cues?: FocusCueId[];

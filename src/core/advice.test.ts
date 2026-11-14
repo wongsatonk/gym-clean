@@ -44,7 +44,7 @@ function lg(
   exerciseId: string,
   reps: number,
   weightKg: number,
-  opts: { partials?: number; rest?: number; cues?: FocusCueId[] } = {},
+  opts: { partials?: number; rest?: number; target?: number; cues?: FocusCueId[] } = {},
 ): SetLog {
   t += 100_000;
   return {
@@ -55,6 +55,7 @@ function lg(
     ...(opts.partials ? { partials: opts.partials } : {}),
     weightKg,
     restTakenSec: opts.rest ?? 60,
+    ...(opts.target !== undefined ? { restTargetSec: opts.target } : {}),
     ...(opts.cues ? { cues: opts.cues } : {}),
     startedAt: t,
     endedAt: t + 30_000,
@@ -318,6 +319,50 @@ describe('afterSetAdvice A5: rest ran long', () => {
       lg('raise', 13, 5, { rest: 121 }),
     ]);
     expect(rule(afterSetAdvice(s2, name))).toBe('A5');
+  });
+
+  it('prefers the logged rest target: a +30 s rest used in full is not an overrun (M4e A-q3)', () => {
+    // raise restSec 45; the rest before the last set was extended to 75 and ran 105 s = 75 + 30.
+    const extended = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 105, target: 75 }),
+    ]);
+    expect(rule(afterSetAdvice(extended, name))).toBeNull();
+    // Past the extended target + grace it still counts, and "why" shows the extended target.
+    const late = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 106, target: 75 }),
+    ]);
+    const a = afterSetAdvice(late, name);
+    expect(rule(a)).toBe('A5');
+    expect(a?.why).toContain('106 s vs 75 s target');
+  });
+
+  it('an extended earlier rest no longer counts toward the 2-overrun total', () => {
+    // curl rest 120 would overrun plan 60 + 30, but its target was extended to 90.
+    const s = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 120, target: 90 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 200 }),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('old rows without restTargetSec fall back to the plan (105 s vs 45 s overruns)', () => {
+    const s = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 105 }),
+    ]);
+    const a = afterSetAdvice(s, name);
+    expect(rule(a)).toBe('A5');
+    expect(a?.why).toContain('105 s vs 45 s target');
   });
 
   it('exactly target + 30 is not an overrun', () => {
