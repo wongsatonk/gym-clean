@@ -31,7 +31,10 @@ export type PhonePlacement = {
  * when it sees that view while settling (world shoulder line: across the image = front,
  * pointing at the camera = side). Hints and placement stay the rule's own.
  */
-export type ViewVariant = Pick<ExerciseRule, 'view' | 'sideMode' | 'extended' | 'contracted'>;
+export type ViewVariant = Pick<
+  ExerciseRule,
+  'view' | 'sideMode' | 'extended' | 'contracted' | 'minHipAngleDeg'
+>;
 
 export type ExerciseRule = {
   /** Id in exercises.json / program.json. */
@@ -90,6 +93,14 @@ export type ExerciseRule = {
    * the world elbow angle bottoms out at 93–118° instead of < 95° (Push A log, 2026-11-13).
    */
   otherView?: ViewVariant;
+  /**
+   * Optional body-line gate (deg): frames where the shoulder–hip–knee angle (world 3D, visible
+   * sides only; unknown = pass) is below this are not tracked (tracking false) and drop the
+   * attempt in progress (back to setup, counts kept).
+   * Push-up head-on: real push-ups held 159–178°; sitting down / getting up read 37–121° and
+   * made the only stray events (Push A log, 2026-11-13).
+   */
+  minHipAngleDeg?: number;
   /**
    * View cut-offs for otherView (mean world shoulder-line yaw while settling, deg): front below
    * `frontBelow`, side above `sideAbove`, in between keep the current view. Default 40 / 50.

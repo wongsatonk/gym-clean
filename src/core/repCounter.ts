@@ -20,6 +20,7 @@
 import {
   angleBetweenDeg,
   frameAngle,
+  hipAngleDeg,
   pickSide,
   torsoDirection,
   shoulderYawDeg,
@@ -235,6 +236,13 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     return frameAngle(frame, rule.triplets[s]);
   }
 
+  /** False when the active rule's body-line gate (minHipAngleDeg) fails for this frame. */
+  function bodyLineOk(frame: LandmarkFrame): boolean {
+    if (active.minHipAngleDeg === undefined) return true;
+    const hip = hipAngleDeg(frame, rule.minVisibility); // null = unknown: passes
+    return hip === null || hip >= active.minHipAngleDeg;
+  }
+
   /** False when the torso has turned past rule.maxTorsoLeanDeg from its direction at settle. */
   function postureOk(frame: LandmarkFrame): boolean {
     if (rule.maxTorsoLeanDeg === undefined || refTorso === null) return true;
@@ -252,6 +260,12 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   function read(frame: LandmarkFrame): Reading | null {
     if (rule.angleSpace === 'image') aspect.push(frame);
     if (phase === 'setup') judgeView(frame);
+    if (!bodyLineOk(frame)) {
+      // Not in the exercise's body position (sitting, kneeling up): no attempt in progress.
+      phase = 'setup';
+      settleSince = null;
+      return null;
+    }
     const r = readAngle(frame);
     if (postureOk(frame)) {
       leanFailSince = null;

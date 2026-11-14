@@ -2,7 +2,7 @@
 import { LANDMARK } from './poseTopology';
 import type { LandmarkFrame } from './types';
 
-const { LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP } = LANDMARK;
+const { LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP, LEFT_KNEE, RIGHT_KNEE } = LANDMARK;
 
 export type Side = 'left' | 'right';
 export type SidePair<T> = { left: T; right: T };
@@ -124,6 +124,34 @@ export function shoulderYawDeg(frame: LandmarkFrame): number | null {
   const depth = Math.abs(ls.z - rs.z);
   if (!(across > 0) && !(depth > 0)) return null;
   return Math.atan2(depth, across) * DEG;
+}
+
+/**
+ * Body line at the hips: shoulder–hip–knee angle in world 3D (180 = straight body, as in a
+ * plank; ~40–120 sitting, kneeling up or standing up), averaged over the sides whose shoulder,
+ * hip and knee all have image visibility ≥ minVisibility. MediaPipe returns every world point,
+ * guessed when unseen, so a hidden side says nothing. A degenerate side (zero-length segment) is
+ * skipped too. Null (unknown) when no side is usable or there are no world landmarks.
+ */
+export function hipAngleDeg(frame: LandmarkFrame, minVisibility: number): number | null {
+  const w = frame.world;
+  if (!w || w.length === 0) return null;
+  const sides = [
+    [LEFT_SHOULDER, LEFT_HIP, LEFT_KNEE],
+    [RIGHT_SHOULDER, RIGHT_HIP, RIGHT_KNEE],
+  ] as const;
+  let sum = 0;
+  let n = 0;
+  for (const triplet of sides) {
+    if (!(tripletVisibility(frame, triplet) >= minVisibility)) continue;
+    const [pa, pb, pc] = triplet.map((i) => w[i]);
+    if (!pa || !pb || !pc) continue;
+    const angle = jointAngle(pa, pb, pc);
+    if (!Number.isFinite(angle)) continue;
+    sum += angle;
+    n++;
+  }
+  return n > 0 ? sum / n : null;
 }
 
 /** Angle between two unit vectors in degrees (0–180). */

@@ -1601,6 +1601,92 @@ describe('createRepCounter: camera view variant (rule.otherView, push-up filmed 
     expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 0 });
   });
 
+  /** Put hips and knees in the world so the shoulder–hip–knee angle is `deg` (180 = plank). */
+  function withHip(f: LandmarkFrame, deg: number, kneeVisibility = 0.9): LandmarkFrame {
+    const landmarks = f.landmarks.map((p, i) =>
+      i === 25 || i === 26 ? { ...p, visibility: kneeVisibility } : p,
+    );
+    const world = f.world?.map((p) => ({ ...p }));
+    if (!world) return f;
+    const th = (deg * Math.PI) / 180;
+    for (const [sh, hip, knee] of [
+      [11, 23, 25],
+      [12, 24, 26],
+    ] as const) {
+      const s0 = world[sh];
+      if (!s0) continue;
+      const h = { x: s0.x, y: s0.y + 0.3, z: s0.z };
+      world[hip] = h;
+      world[knee] = { x: h.x, y: h.y - Math.cos(th) * 0.4, z: h.z + Math.sin(th) * 0.4 };
+    }
+    return { ...f, landmarks, world };
+  }
+
+  it('the front variant needs a straight body line (hip angle) while counting', () => {
+    expect(PUSHUP.otherView?.minHipAngleDeg).toBeGreaterThan(125);
+    expect(PUSHUP.otherView?.minHipAngleDeg).toBeLessThan(155);
+    expect(PUSHUP.minHipAngleDeg).toBeUndefined(); // side view: the rule as tuned on synthetic
+  });
+
+  it('head-on: elbow bends while sitting or getting up (hip bent) are neither reps nor partials', () => {
+    const sitAt = 2600; // after the first push-up
+    const more = curve(165, [
+      [600, 165],
+      [700, 130], // would be a far partial
+      [700, 165],
+      [500, 165],
+      [700, 110], // would be a rep
+      [200, 110],
+      [700, 165],
+      [500, 165],
+    ]);
+    const frames = [
+      ...sample(PUSHUP, keys).filter((f) => f.t < sitAt),
+      ...sample(PUSHUP, more).map((f) => ({ ...f, t: f.t + sitAt })),
+    ].map((f) => withHip(f, f.t < sitAt ? 175 : 45));
+    const { counter } = runAll(PUSHUP, frames);
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 1, partials: 0 });
+    // The same frames in a plank count both attempts.
+    const plank = runAll(
+      PUSHUP,
+      frames.map((f) => withHip(f, 175)),
+    );
+    expect({ reps: plank.counter.reps, partials: plank.counter.partials }).toEqual({
+      reps: 2,
+      partials: 1,
+    });
+  });
+
+  it('hidden knees (head-on, legs cropped or behind the torso) leave the body line unknown: counts', () => {
+    // World knees guessed bent at 45°, but the knees are at visibility 0.2 in the image.
+    const sitAt = 2600;
+    const more = curve(165, [
+      [600, 165],
+      [700, 130],
+      [700, 165],
+      [500, 165],
+      [700, 110],
+      [200, 110],
+      [700, 165],
+      [500, 165],
+    ]);
+    const frames = [
+      ...sample(PUSHUP, keys).filter((f) => f.t < sitAt),
+      ...sample(PUSHUP, more).map((f) => ({ ...f, t: f.t + sitAt })),
+    ].map((f) => withHip(f, 45, 0.2));
+    const { counter } = runAll(PUSHUP, frames);
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 1 });
+    expect(counter.tracking).toBe(true);
+  });
+
+  it('side view ignores the hip angle', () => {
+    const { counter } = runAll(
+      PUSHUP,
+      sample(PUSHUP, keys).map((f) => sideOn(withHip(f, 45))),
+    );
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 0, partials: 2 });
+  });
+
   it('rules without a variant never switch', () => {
     const { counter } = runAll(CURL, sample(CURL, curlReps(1)));
     expect(counter.rule).toBe(CURL);

@@ -3,6 +3,7 @@ import {
   angleBetweenDeg,
   angleSource,
   frameAngle,
+  hipAngleDeg,
   imageAngle,
   torsoDirection,
   jointAngle,
@@ -200,6 +201,58 @@ describe('torso direction (posture gate)', () => {
     expect(angleBetweenDeg(up, up)).toBeCloseTo(0, 6);
     expect(angleBetweenDeg(up, bent)).toBeCloseTo(60, 6);
     expect(angleBetweenDeg(up, { x: 0, y: 1, z: 0 })).toBeCloseTo(180, 6);
+  });
+});
+
+describe('hipAngleDeg (body line)', () => {
+  /** Left and right shoulder–hip–knee angles, with optional per-side knee visibility. */
+  const body = (left: number, right = left, vis: { left?: number; right?: number } = {}) => {
+    const knee = (x: number, deg: number) => {
+      const th = (deg * Math.PI) / 180;
+      return { x, y: 0.3 - Math.cos(th) * 0.4, z: Math.sin(th) * 0.4 };
+    };
+    return frame({
+      world: {
+        [L.LEFT_SHOULDER]: { x: 0.2, y: -0.2, z: 0 },
+        [L.RIGHT_SHOULDER]: { x: -0.2, y: -0.2, z: 0 },
+        [L.LEFT_HIP]: { x: 0.2, y: 0.3, z: 0 },
+        [L.RIGHT_HIP]: { x: -0.2, y: 0.3, z: 0 },
+        [L.LEFT_KNEE]: knee(0.2, left),
+        [L.RIGHT_KNEE]: knee(-0.2, right),
+      },
+      visibility: { [L.LEFT_KNEE]: vis.left ?? 0.9, [L.RIGHT_KNEE]: vis.right ?? 0.9 },
+    });
+  };
+
+  it('is the mean shoulder–hip–knee angle (world): 180 for a straight body', () => {
+    expect(hipAngleDeg(body(180), 0.5)).toBeCloseTo(180, 6);
+    expect(hipAngleDeg(body(45), 0.5)).toBeCloseTo(45, 6);
+    expect(hipAngleDeg(body(170, 150), 0.5)).toBeCloseTo(160, 6);
+  });
+
+  it('averages only the sides whose shoulder, hip and knee pass the visibility minimum', () => {
+    // MediaPipe guesses hidden points; a hidden knee says nothing about the body line.
+    expect(hipAngleDeg(body(175, 45, { right: 0.2 }), 0.5)).toBeCloseTo(175, 6);
+    expect(hipAngleDeg(body(45, 175, { left: 0.3 }), 0.5)).toBeCloseTo(175, 6);
+  });
+
+  it('is null (unknown) when no side is visible', () => {
+    expect(hipAngleDeg(body(45, 45, { left: 0.2, right: 0.1 }), 0.5)).toBeNull();
+  });
+
+  it('a degenerate side (hip on the knee) is unknown; null when no side is usable', () => {
+    const oneDegenerate = body(170, 45);
+    const w = oneDegenerate.world ?? [];
+    w[L.RIGHT_KNEE] = { ...(w[L.RIGHT_HIP] ?? { x: 0, y: 0, z: 0 }) };
+    expect(hipAngleDeg(oneDegenerate, 0.5)).toBeCloseTo(170, 6);
+    const w2 = oneDegenerate.world ?? [];
+    w2[L.LEFT_KNEE] = { ...(w2[L.LEFT_HIP] ?? { x: 0, y: 0, z: 0 }) };
+    expect(hipAngleDeg(oneDegenerate, 0.5)).toBeNull();
+  });
+
+  it('is null without world landmarks', () => {
+    expect(hipAngleDeg(frame(), 0.5)).toBeNull();
+    expect(hipAngleDeg(frame({ world: {} }), 0.5)).toBeNull();
   });
 });
 
