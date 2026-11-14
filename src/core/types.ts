@@ -79,3 +79,6 @@ export type RepEvent = {
   /** Frame time when the event fired. */
   t: number;
 };
+
+/** M4e accent theme (Settings); the mix README defines each colour. */
+export type Accent = 'orange' | 'volt' | 'yellow';

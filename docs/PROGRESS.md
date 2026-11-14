@@ -190,7 +190,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
 - The screen tasks share styles.css, so they run one at a time, in the order Wongsaton asked for.
 - Hard rules stay: ≥ 64px numbers, ≥ 20px body (the mix README's 16–18px bend applies only to short labels next to an icon or number), ≥ 56px targets, voice over screen, reduced motion, no third-party request, original art.
 
-- [ ] A1. [main] Packages + shared type.
+- [x] A1. [main] Packages + shared type.
   - Files: package.json, src/main.ts, src/core/types.ts.
   - Add `@fontsource/barlow-condensed` and `@fontsource/barlow`. Import only the latin-subset CSS: Condensed 700; Barlow 400/600/700.
   - Add `lighthouse` (dev), used by the verifier against `vite preview`.
