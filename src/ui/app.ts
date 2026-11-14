@@ -43,6 +43,7 @@ import { badgesFor } from './badges';
 import { createCameraView, type CameraTarget, type CameraView } from './cameraView';
 import { createHowToSheet } from './howToSheet';
 import { silentHint } from './silentHint';
+import { audioTestPanel, disposeAudioTest } from './audioTest';
 import { createCoachTip } from './coachTip';
 import { createCoachSummary } from './coachSummary';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
@@ -325,6 +326,7 @@ export function mountApp(root: HTMLElement): void {
     if (view.screen === 'session') finishDevLog();
     devLogPanel?.destroy();
     devLogPanel = null;
+    disposeAudioTest(); // stops its camera, restores audioSession 'auto'
     view = { screen: 'today', upNextDayId: null };
     render();
     void loadUpNext();
@@ -510,6 +512,7 @@ export function mountApp(root: HTMLElement): void {
         h('span', { class: 'switch-state', 'aria-hidden': 'true' }, coachTips ? 'On' : 'Off'),
       ),
       voiceTest(),
+      audioTestPanel(),
       h('p', { class: 'field-label' }, 'Weight unit'),
       h(
         'div',
