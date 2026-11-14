@@ -332,6 +332,61 @@ to the gym and work out: clean, visual, sporty. Themes are OK if needed." Owner:
 - Order: after M5 (uses its cues), but the reps/partials/rest rules only need M1–M4 data and may ship
   earlier if Wongsaton wants. Planned after the Push A gym report.
 
+#### M5b round 1 rule table (2026-11-13, supersedes the starting table above where they differ)
+Built ahead of M5 (reps/partials/rest/weight only; the tempo rule waits for M5 cues). Pure
+`src/core/advice.ts`. **One recommendation per exercise per moment**: rules are checked in the order
+listed and the first match wins. Nothing is ever applied automatically.
+
+Definitions. `min`/`max` = the planned `targetReps`. `L` = today's logs of the exercise, in order.
+`w` = the weight of the last log in `L` (kg). **Bodyweight** = `w === 0`: no weight advice, reps only.
+`step` = 2.5 kg or 5 lb (display unit, `stepFor`). `w + step` / `w − step` are computed in the display
+unit and snapped with `snapToStep`. **Too big a jump** = `step > 25%` of `w` in the display unit
+(e.g. 5 lb on a 15 lb dumbbell): no weight increase is suggested. A set's rest **overran** when its
+`restTakenSec` > (restSec of the exercise of the log before it) + 30 s (same as the M1 overrun rule;
+the workout's first set never overran). "Clean" = no partials.
+
+**(a) After a set, while sets of the same exercise remain** (shown on Rest, spoken once):
+
+| # | When | Text (shown) |
+|---|---|---|
+| A1 | this set has partials ≥ 2 | "Keep the weight. Focus on full range." |
+| A2 | this set reps < `min` | "Keep the weight. Aim for {min} reps." |
+| A3 | `L` has ≥ 2 sets, every set reps ≥ `max` and clean, not bodyweight, not too big a jump | "Strong set. Try +{step} {unit} next set." + **Apply** (sets the next set's weight to `w + step`) |
+| A4 | as A3 but bodyweight | "Strong set. Try {reps + 1} reps next set." (no Apply) |
+| A5 | this set's rest overran and ≥ 2 sets in the workout overran (this one included) | "Rest ran long. Start when the timer says go." |
+| — | otherwise | no advice |
+
+**(b) Next time** (per exercise; shown on Rest after the exercise's final set instead of (a), and on
+Summary for every exercise with ≥ 1 set today; `last` = `lastSessionSets` for the exercise):
+
+| # | When | Text |
+|---|---|---|
+| N1 | some set in `L` reps < `min`, and `last` also had a set < `min` at a weight ≥ `w`, not bodyweight, `w − step` > 0 | "Next time on {Name}: drop to {w − step} {unit}." |
+| N2 | some set in `L` reps < `min` | "Next time on {Name}: repeat {w} {unit}." (bodyweight: "… aim for {min} reps.") |
+| N3 | `L` has all planned sets, every set reps ≥ `max` and clean | "Next time on {Name}: +{step} {unit}." (bodyweight: "… +1 rep per set."; too big a jump: "… {w} {unit}, more reps.") |
+| N4 | total partials in `L` ≥ 2 | "Next time on {Name}: same weight, full range." |
+| N5 | some set in `L` reps < `max` | "Next time on {Name}: same weight, {max} reps." |
+| N6 | otherwise (all at the top, but sets were skipped) | "Next time on {Name}: repeat {w} {unit}." |
+
+**Progress vs last time** (Summary only, positive only, nothing when there's no `last` or no gain;
+weights compared in the display unit, a gain needs ≥ half a step):
+
+| # | When | Text |
+|---|---|---|
+| P1 | max weight today > max weight in `last` | "{Name}: {w} {unit}, up from {prev} {unit}." |
+| P2 | else, max weight today ≥ last max and total reps today > total reps in `last` | "{Name}: +{N} reps vs last time." |
+
+Every advice also carries a short **why** shown under it, not spoken (e.g. "Sets: 8, 8 · no partials").
+Each text is ≤ 12 words with the longest exercise name, uses no banned words (pain, injur*, hurt,
+damage, safe, risk), and has a spoken form with units spelled out ("pounds", "kilos", "plus").
+Speaking: once per logged set, when the rest clock crosses 2 s, only if that is ≤ 6 s into rest (a
+throttled tab skips it) and the rest target leaves ≥ 15 s before the "Ten seconds" cue; it queues
+behind speech already playing and never cancels anything. A "Last set" correction updates the shown
+advice but doesn't speak it again. Summary is shown only, not spoken. A Settings switch "Coach tips"
+(default on) turns the Rest advice and its speech off; the Summary Coach section always shows.
+Deferred: the next session's Exercise-screen line and Dismiss (round 2), the tempo rule (M5),
+all-time bests (M6 history).
+
 ### M6 — Polish & install
 - PWA (installable, offline after first load, model + wasm cached).
 - History screen: last 4 weeks per exercise (weight × reps, focus score trend), including a
