@@ -57,7 +57,10 @@ Wongsaton's request after his first real camera session: auto start and stop, no
     - auto start/stop wall times use `Date.now() - (frameNow() - t)` (iOS suspend).
   - Known limit: while the tab is hidden, a pending Undo window doesn't advance, so the set saves when the tab is visible again.
   - The Rest-screen Camera button is the existing top-bar one; it shows for pose exercises whether hands-free is on or off.
-- [ ] 12. [reviewer] Review the branch diff against CLAUDE.md: pure core (autoSet has no DOM/MediaPipe), privacy (no new storage of frames beyond the set + 1.5 s pre-roll, nothing uploaded), voice over screen (stop/undo/close are spoken), 56px/20px/64px, no medical words, off = unchanged behaviour. Deps: 10, 11.
+- [x] 12. [reviewer] Review the branch diff against CLAUDE.md: pure core (autoSet has no DOM/MediaPipe), privacy (no new storage of frames beyond the set + 1.5 s pre-roll, nothing uploaded), voice over screen (stop/undo/close are spoken), 56px/20px/64px, no medical words, off = unchanged behaviour. Deps: 10, 11.
+  - Evidence 2026-11-13 (60b53ec): PASS, no blocking items. Checked: pure core, privacy (pre-roll in memory only, capped at 10 s), stop/undo/close spoken, sizes (Undo 88px, rest buttons 72px, numbers 88/72px), no medical words, off = unchanged, SPEC Accept unit list covered. Follow-ups:
+    - Close during the Undo window drops the pending stop; it should commit it.
+    - Capture the hands-free setting per camera.
 - [ ] 13. [verifier] Verify against SPEC M5c Accept: `npm run check` (fixture suite unchanged), `npm run e2e`, `npm run build`, 390×844 screenshots `docs/screenshots/m5c-pending-undo.png`, `m5c-camera-rest.png`, `m5c-auto-started.png`, `m5c-rest-camera-button.png`, `m5c-settings-hands-free.png`, console clean; a dev-log export after the flow shows `autoSet` events and an auto-started set whose frames start before its start; evidence into PROGRESS. Deps: 12.
 - [ ] 14. [main] Merge `m5c-hands-free`, then **ask Wongsaton before pushing** (push = deploy). Deps: 13.
 - [ ] 15. 🧍 **Checkpoint B3 (hands-free gym test):** a training day with hands-free on; note every wrong auto start/stop and whether 6 s stillness / 5 s Undo feel right; export the developer log and send it → retune `AutoSetConfig` (logged as Decisions).
