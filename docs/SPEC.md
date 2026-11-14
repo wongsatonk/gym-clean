@@ -279,9 +279,37 @@ to the gym and work out: clean, visual, sporty. Themes are OK if needed." Owner:
 - Hard rules win: readable at 2 m (≥ 64px main numbers, ≥ 20px body, ≥ 56px targets, high contrast,
   dark default), self-hosted fonts only (CSP, no third-party requests), original art only,
   `prefers-reduced-motion` respected.
+- **Picked (2026-11-13 night): the mix** in `docs/design/m4e-mix/README.md` is the contract for steps 2–3.
+  - **Moods per screen:** Energy for Today (and the day preview) and Summary; Pro for Exercise, Camera,
+    Settings and the overlays (Pause sheet, exercise list, notes, How-to); Track for Rest. Each screen
+    root carries `.mood-energy` / `.mood-pro` / `.mood-track`; a mood only sets surface tokens, radius
+    and line weight.
+  - **One action colour app-wide.** A filled `--cta` shape is something to press; an outline/dot/bar/ring
+    marks "now". Success = green, muscle = cyan, spoken cue = lavender, danger only in confirmations.
+  - **Accent themes in Settings: Orange (default), Volt, Yellow**, persisted (`accent` setting). A theme
+    swaps `--cta`/`--on-cta` only, **except Volt also turns success gold** (`#FFC94D` / `#221800`),
+    because Volt sits close to success green.
+  - **Type:** Barlow Condensed 700 (display, numbers) + Barlow 400/600/700 (body), self-hosted through
+    `@fontsource` (latin subset, bundled same-origin). Scale per the mix README (rep count 120, timer 132).
+  - **One original icon set** (24 grid, 2.25px round stroke), every icon button with a text label.
+  - **Rest screen:** a ≥ 56px **"+30 s"** button extends the current rest's target by 30 s (the rest cues
+    follow the new target; overrun is measured against it). **Skip exercise and End workout move off the
+    Exercise and Rest screens into the Pause sheet**, so they can't be hit by accident; End keeps its
+    two-tap confirmation. No separate "Skip rest" button (Start set already ends rest).
+  - **Today data** comes from pure core selectors over the stored history: weekly streak, week dots,
+    last session; **Summary**: session volume, volume vs the last session of the same day, new bests
+    (more reps at the same or higher weight, or more weight). Summary's "Next time" line is the M5b coach
+    line (no second hint source).
+  - **Tab bar:** Today / Settings (History doesn't exist yet; it gets a tab when a milestone adds it).
+  - 3D body, demos, skeleton and the 2D map take their colours from the same tokens.
 - **Accept:** tokens are the only colour/size source in `styles.css` (lint/grep check), theme switch
   persists, every screen screenshotted at 390×844 in each theme, existing e2e green, Lighthouse
   accessibility ≥ 95 on Today.
+  - The grep check is a unit test: no hex/rgb/hsl colour and no raw `font-size` outside the token blocks
+    in any `src/**/*.css`, and no colour literal in `src/ui/**/*.ts` (canvas and 3D read tokens).
+  - Selectors, the accent setting and `+30 s` have unit tests written first; e2e covers the accent
+    persisting, Volt → gold success, `+30 s`, Skip/End only in the Pause sheet, fonts same-origin, and no
+    third-party request.
 
 ### M5 — Live trainer: focus & form cues
 - `src/core/focus.ts` consumes rep events (and per-frame landmarks where a rule needs them) and produces
@@ -497,6 +525,35 @@ auto start simply falls back to tapping Start set).
   Rest's Camera button opens rest mode, setting off = M4 behaviour; live model on the synthetic curl
   loop: auto start from rest mode. No third-party request. 390×844 screenshots of the pending Undo, the
   rest mode, an auto-started set and the setting.
+- **Breaks inside a set: "tap to continue"** (follow-up, Wongsaton 2026-11-13 night, option b). His real
+  push-up set was 6 reps, a 16 s sit-down, then 5 reps: **one set** (rest-pause), which M5c saved as two.
+  - **A break** is, inside a set with ≥ `stopMinReps` reps, either: the counter untracked for a
+    **posture or body-line** reason (`counter.untracked` = `posture` / `bodyLine`, e.g. sitting down,
+    bending over) continuously for `breakGateSec` (5 s) while a person is in frame; or no person in frame
+    (`personInFrame` false) for `awaySec` (3 s). A visibility-gate failure (hands out of frame) is not a
+    break. Fewer than `stopMinReps` reps: no break and no stop (unchanged).
+  - **A break doesn't end the set.** It replaces the M5c `away` stop. Posture/body-line-gated frames don't
+    count toward the `still` or `stalled` timers, so a sit-down can't turn into a still stop. The set is
+    **on hold**: nothing is saved, the shown count freezes, and the camera shows "On hold · N reps", a
+    break clock since the last rep (≥ 64px) and two ≥ 56px buttons: **Continue set** and **Start next
+    set** (**Save set** on the exercise's last set). Spoken once, as a cue: "Set on hold. Tap to
+    continue."
+  - **While on hold, nothing starts from reps:** reps are not added and no set auto-starts. A rep seen
+    during the hold re-speaks "Tap Continue to count." (at most once per 10 s). No focus cues on hold.
+  - **Continue set:** counting continues from N in the same set; the normal stops apply again.
+    **Start next set:** the held set is saved with `SET_DONE` backdated to the end of its last rep, then
+    `START_SET` now (rest taken = the break). **Save set**, Set done, Close, and the idle limits also
+    save the held set the same way.
+  - **Plain rest in place is unchanged:** a `still` or `stalled` stop (no break) → Undo window → save →
+    rest mode with the M5c auto start. A break during rest (after a save) doesn't disarm auto start.
+  - Thresholds are data (`breakGateSec` on `AutoSetConfig`), retuned at Checkpoint B3.
+  - **Accept:** autoSet unit tests written first (gate break at 5 s and not at 4.9 s, away break, a
+    visibility gap isn't a break, gated frames never feed still/stalled, < 2 reps → nothing, Continue /
+    Start next set / Save set / confirm / idle while held, reps while held don't count or start a set,
+    plain rest unchanged); an acceptance replay through the real counter of the push-up timeline above
+    (6 reps, 16 s seated, 5 reps → one saved set of 11 with Continue, never two sets); e2e for the hold
+    panel, both buttons, the spoken prompt, backdated save, and plain rest unchanged; 390×844 screenshot
+    of the hold panel.
 - 🧍 **Checkpoint B3 (hands-free gym test):** Wongsaton trains a day with hands-free on, notes any
   wrong auto start/stop (and whether 6 s / 5 s feel right), then exports the developer log.
 

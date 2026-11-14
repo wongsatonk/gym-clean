@@ -93,7 +93,7 @@ const HINGE = 70; // row: torso tilt from vertical
 // rendered larger than what the focus rules should measure.
 const CURL_LEAN = 28; // curl elbow swing: torso leans back this far at the top of the lift
 const CURL_DRIFT = 45; // ... and the upper arm swings this far forward of the torso line
-const PUSHUP_SAG = 45; // push-up hip sag: shoulder-hip-ankle bends to 180 - this (rendered)
+const PUSHUP_SAG = 50; // push-up hip sag: shoulder-hip-ankle bends to 180 - this (rendered)
 const RAISE_LAG = 15; // lateral raise: the left arm trails the right by this mid-rep ...
 const RAISE_LEFT_SCALE = 0.65; // ... on top of covering only this share of the right arm's range
 const rad = (d: number) => (d * Math.PI) / 180;
@@ -456,13 +456,16 @@ const FLAWS: Record<string, Plan[]> = {
     },
     {
       name: 'synthetic-03-raise-too-high',
-      // Reps 1-4 stop at 90, reps 5-8 go to 116 (rendered; MediaPipe reads ~108). Arms in sync.
-      moves: [90, 90, 90, 90, 116, 116, 116, 116].map((turn, i) =>
-        full({ turn, w: i < 4 ? 0 : 1 }),
+      // Reps 1-4 stop at 90, reps 5-8 go to 148 (rendered; MediaPipe reads high raises
+      // lower: rendered 116 / 138 / 165 read ~108 / ~121 / ~150). Arms in sync. Reps 5-8 lift in 1.4 s and
+      // lower in 1.7 s so the bigger range doesn't also read as a rushed lowering.
+      moves: [90, 90, 90, 90, 148, 148, 148, 148].map((turn, i) =>
+        full(i < 4 ? { turn } : { turn, up: 1.4, down: 1.7, w: 1 }),
       ),
       flaw: {
         flaw: 'raise-too-high',
-        description: 'both arms raise to 90 deg on reps 1-4 and to 116 deg on reps 5-8',
+        description:
+          'both arms raise to 90 deg on reps 1-4 and to 148 deg on reps 5-8 (lift 1.4 s, lower 1.7 s)',
       },
     },
   ],
@@ -500,14 +503,14 @@ const FLAWS: Record<string, Plan[]> = {
   'goblet-squat': [
     {
       name: 'synthetic-03-short-range',
-      // Rendered depth 45 deg on reps 1-4 and 78 on reps 5-8. MediaPipe reads deep knee angles
-      // shallower (rendered 55 / 85 measured ~76 / ~99), so this keeps reps 5-8 clearly under the
-      // 100 deg threshold while their range is ~75% of reps 1-4.
-      moves: eight({ turn: 45 }, { turn: 78 }).map(full),
+      // Rendered depth 45 deg on reps 1-4 and 83 on reps 5-8. MediaPipe reads deep knee angles
+      // shallower (rendered 45 / 80 measured ~72 / ~94), so this keeps reps 5-8 under the 100 deg
+      // threshold while their measured range is under 80% of reps 1-4.
+      moves: eight({ turn: 45 }, { turn: 83 }).map(full),
       flaw: {
         flaw: 'short-range',
         description:
-          'knee bends to 45 deg on reps 1-4 and only to 78 deg on reps 5-8 (rendered range 135 vs 102 deg)',
+          'knee bends to 45 deg on reps 1-4 and only to 83 deg on reps 5-8 (rendered range 135 vs 97 deg)',
       },
     },
   ],

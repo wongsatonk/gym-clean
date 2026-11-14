@@ -6,14 +6,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 - **Live:** c3c1f85, deployed 2026-11-13. It includes: the Push A slice (M4c + M4b), M5b round 1 (after-set coach), the S2 gauge, the M4d Pull A demos, the M4e step-1 mockups, the counter retune on the real Push A log (press image-plane angles, lateral-raise posture gate, push-up front variant + body-line gate), and **M5c Hands-free sets** (all 13 tasks done, verifier PASS recorded below).
 - **In progress:** M5 Live trainer (focus & form cues) on branch `m5-live-trainer`, cut from c3c1f85. Plan below ("M5 — Live trainer").
-- **Next step:** M5 wave 1 (see the plan's "Parallel waves"). M5 is planned around the real data we have: the 4 committed real lateral-raise clips, the 12 synthetic clips, and the press/push-up numbers in Decisions (that real data isn't committed).
-- **Waiting on Wongsaton (none of these block M5 wave 1):**
+- **Next step:** finish M5 (tasks 11, 13–17). Then the **M5c follow-up "tap to continue"** (plan below; B1, B4 and B8 can start now). Then **M4e steps 2–3** (plan below; its wave 1 can run alongside). Neither follow-up is deployed without Wongsaton's OK: he only authorized deploying M5.
+- **Waiting on Wongsaton (none of these block the plans):**
   - 🧍 **Checkpoint B3**, the hands-free gym test: a training day with hands-free on, then the exported dev log (he'll report).
-  - The **M4e design pick**: Energy / Pro / Track.
-  - **Press "first press = positioning"?** He did 7 per set; the app counts 8. See the Decisions entry on the retune.
-  - **Push-up set with a sit-down break:** is it one set or two? Hands-free currently saves it as two.
+  - **Press "first press = positioning"?** Answered: no, the counter stays at 8.
   - **The two older coach questions:** should the coach trust manually logged reps, and is the 25% jump guard right for light dumbbells?
-  - New M5 questions are under "Blockers / questions".
+  - New M5, M5c follow-up (B-q) and M4e (A-q) questions are under "Blockers / questions".
 
 ## Milestone checklist
 
@@ -26,15 +24,399 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [x] M4c Coaching on the camera page + developer log (Push A slice; live). Checkpoint B2 is done: the Push A log was analysed and the counter retuned (Decisions)
 - [x] M4b 3D exercise demos: the six Push A exercises + "3D demo"/"Info"/"Camera" badges (live)
 - [~] M4d 3D demos for the other 24 exercises: Pull A done and live (curl, row, goblet squat, hammer curls, reverse flyes, lat pulldown); the rest are open. Doesn't gate M5
-- [~] M4e Visual redesign: step 1 mockups live in docs/design/m4e-directions → 🧍 waiting for Wongsaton's pick (Energy / Pro / Track)
+- [~] M4e Visual redesign: the mix (docs/design/m4e-mix) was picked 2026-11-13 night. Steps 2–3 planned below
 - [ ] M5 Live trainer: focus & form cues (partial cues moved to M4c) → 🧍 Checkpoint C (gym test with camera). **In progress, plan below**
 - [~] M5b Trainer recommendations after the set: round 1 is live. The tempo rule (T1) is built in M5 (task 8)
-- [~] M5c Hands-free sets: **built and live** (c3c1f85, verifier PASS) → waiting for 🧍 Checkpoint B3 (hands-free gym test)
+- [~] M5c Hands-free sets: **built and live** (c3c1f85, verifier PASS) → waiting for 🧍 Checkpoint B3 (hands-free gym test). Follow-up "Breaks inside a set: tap to continue" planned below
 - [ ] M6 Polish & install
 - [ ] M7 Fuel: food & nutrition (independent of the camera; can be built while waiting on Checkpoint B with `/build M7`)
 - [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
 
 ## Current milestone plan
+
+### M5c follow-up — Breaks inside a set: "tap to continue" (planned 2026-11-14; runs first)
+**Contract:** SPEC M5c "Breaks inside a set" and the Decision "Wongsaton's answers before sleeping". Logic is **tests first**. **Not deployed without Wongsaton's OK** (he only authorized deploying M5).
+
+**Branch:** `m5c-break-hold`, cut from `m5-live-trainer` once M5 tasks 11, 13 and 14 are committed (they edit cameraView.ts and app.ts). It merges **after** M5, so M5 can deploy on its own. Tasks B1–B4 and B8 only touch files M5's open tasks don't, so they can start before the cut, and main brings them onto the branch.
+
+**Break definition (defaults, all data on `AutoSetConfig`, retuned at B3):**
+- inside a set with ≥ `stopMinReps` (2) reps;
+- posture/body-line gate (`counter.untracked` ∈ `posture`, `bodyLine`) failing continuously for `breakGateSec` = **5 s** while `present`. That's longer than a ~1–3 s bend to rack and shorter than the real 16 s sit;
+- or not `present` for `awaySec` (3 s, unchanged). This replaces the M5c `away` stop;
+- a `visibility` gate is never a break;
+- gated (posture/bodyLine) frames reset the `still` and `stalled` clocks, so the sit-down can't become a still stop first.
+
+The real push-up replay showed the still stop at 36 s during the sit, so B3 must confirm which signal the real sit gives.
+
+- [ ] B1. [core-engineer ∥A] autoSet hold, **tests first**.
+  - Files: src/core/autoSet.ts(+test).
+  - `AutoSetConfig.breakGateSec` 5.
+  - `AutoSetInput.untracked?: 'visibility' | 'posture' | 'bodyLine' | null`.
+  - New state `'held'`.
+  - New action `{ type: 'hold'; reason: 'posture' | 'bodyLine' | 'away'; reps; partials; endedAt }`.
+  - `continueSet(t)` → `{ type: 'holdEnded', how: 'continue' }`, back to `set` with the same counts and fresh stop timers.
+  - `nextSet(t)` → `commit` (backdated endedAt, frozen counts); the caller dispatches SET_DONE then START_SET.
+  - `confirm(t)` while held → `commit`; idle limits while held → `commit` then `close`.
+  - While held: events change no counts, and no `start` happens.
+  - A pending Undo window is unaffected: a break after a still stop is plain rest.
+  - Done when tests cover:
+    - a gate break at 5.0 s and none at 4.9 s;
+    - a gate that flickers (re-tracked frames) restarts the 5 s;
+    - away → hold, not `stopPending`;
+    - a visibility gap of 10 s → no hold;
+    - gated frames never produce `still` / `stalled`;
+    - < 2 reps → nothing;
+    - reps while held → no count, no start;
+    - Continue → later still stop with the summed reps;
+    - nextSet / confirm / idle while held → commit with the backdated endedAt;
+    - paused while held → nothing;
+    - plain rest in place → the M5c still stop + auto start, unchanged;
+    - a break in rest doesn't disarm auto start;
+    - every existing autoSet test passes, with the `away` stop cases rewritten to `hold`.
+  - Deps: none.
+- [ ] B2. [core-engineer ∥A, after B1] Focus: no cues while held.
+  - Files: src/core/focus.ts(+test).
+  - `'held'` joins the quiet auto states.
+  - Done when: a test shows a would-fire `outOfFrame` / `stalled` / `rushedLowering` input gives nothing with autoState `held`; the replay test is unchanged.
+  - Deps: B1 (type).
+- [ ] B3. [core-engineer ∥A, after B1] Acceptance replay, **tests first**.
+  - Files: src/core/autoSet.replay.test.ts.
+  - Synthetic push-up **front-variant** landmark frames through the **real counter** + autoSet, reusing repCounter.test's angle-curve and seated-frame builders. Timeline from the M5c tasks 5–6 Decision: 6 reps; a 16 s sit (body line fails, person present); 5 reps; still.
+  - Done when tests assert:
+    - with a Continue tap after the sit → exactly one `commit` with 11 reps, and no `start`;
+    - without a tap → a `hold`, no second set, no `start`;
+    - a 5.7 s in-plank pause (the real longest) → neither a hold nor a stop.
+  - **Real data:** if the main session still has the converted real push-up set outside the repo, replay it locally. Write a Decision with what the sit reads as (`untracked` reason, when the hold fires, no `stopPending`). If the real sit isn't body-line gated, report it: no silent retune. The real set isn't committed (Blockers B-q5).
+  - Deps: B1.
+- [ ] B4. [ui-engineer ∥] Hold panel component.
+  - Files: src/ui/holdPanel.ts (new), src/ui/handsfree.css. Not styles.css: M4e A2 rewrites it in parallel.
+  - `createHoldPanel({ reps, partials, lastSet, onContinue, onNext })` with `setClock(sinceLastRepMs)`:
+    - "On hold · 6 reps" and a break clock ≥ 64px (`data-hold-clock`);
+    - **Continue set** and **Start next set** (**Save set** when `lastSet`), each ≥ 72px tall and full width;
+    - `data-hold`, `data-reason`, `aria-live`;
+    - a solid backing over the video.
+  - Done when: 390×844 harness screenshots of both labels, text ≥ 20px, nothing overflowing, typecheck + lint clean.
+  - Deps: none (shape from this plan).
+- [ ] B5. [ui-engineer, after B1 + B2 + B4 and the branch cut] Camera view hold flow.
+  - Files: src/ui/cameraView.ts.
+  - Feed: pass `counter.untracked` into autoSet, and autoState `held` into the focus tracker.
+  - On `hold`:
+    - mount the panel and freeze the shown count;
+    - speak "Set on hold. Tap to continue." (kind `cue`, also with the spoken count off);
+    - log `autoSet` `{ action: 'hold', reason, reps, partials, at }`.
+  - While held:
+    - the counter runs silently;
+    - a counted rep → "Tap Continue to count." at most once per 10 s;
+    - the clock ticks from endedAt.
+  - Buttons:
+    - Continue → unmount, the count resumes from N (offset the counter's own count), speak "Keep going.";
+    - Start next set / Save set → new option `handsFree.onHoldNext(endedAtWall, counts, { startNext })`;
+    - Close while held saves, like Close in the Undo window.
+  - Done when:
+    - typecheck + lint clean;
+    - the existing camera e2e specs (camera-layout, rep-panel, rep-count, hands-free, devlog-camera, focus-cues) pass;
+    - a manual run on the fixture landmarker shows reps → no person 3 s → hold panel + prompt.
+  - Deps: B1, B2, B4.
+- [ ] B6. [main] Wiring.
+  - Files: src/ui/app.ts (and playwright.config.ts for a new spec).
+  - `onHoldNext`: SET_DONE `{ now: endedAt }`, then (`startNext`) START_SET `{ now }`, then `camera.setSession(...)` + `beginLoggedSet`.
+  - Save set on the last set: the existing commit path, so the camera closes.
+  - Done when, by hand on Push A with the fixture landmarker: hold → Start next set → the DB row for set 1 is backdated, and set 2's `restTakenSec` ≈ the break.
+  - Deps: B5.
+- [ ] B7. [ui-engineer] E2E `e2e/hands-free-break.spec.ts`.
+  - Fixture landmarker and hooks as in hands-free.spec.ts, plus a gate hook: a seated/leaning frame that fails the posture or body-line gate. Real timers, mocked speech.
+  - Cases:
+    1. 2 reps → `__noPerson` → hold at ~3 s, the prompt spoken, no "Set done", no DB row;
+    2. back + reps without a tap → not counted, the reminder spoken, no auto start, still no row;
+    3. Continue → the count resumes from N → freeze → still stop → **one** row with the total;
+    4. Start next set → row 1 backdated to its last rep, set 2 running, `restTakenSec` ≈ the break;
+    5. a gate held 6 s → hold; a 2 s gate then stillness → the normal still stop;
+    6. plain rest in place → M5c stop + auto start unchanged;
+    7. last set → Save set → the camera closes;
+    8. Close while held saves;
+    9. buttons ≥ 56px;
+    10. no third-party request.
+  - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
+  - Deps: B6.
+- [ ] B8. [pose-engineer ∥] Converter.
+  - Files: scripts/devlog.mjs(+`scripts/devlog.test.mjs`).
+  - The report shows `hold:<reason> <sec> → continue|next|save`.
+  - A set with a hold converts to **one** fixture.
+  - Done when: a synthetic export with a hold mid-set converts to one fixture the suite counts, and the script tests pass.
+  - Deps: none (event shapes from B1/B5 in this plan).
+- [ ] B9. [reviewer] Review the branch diff against CLAUDE.md:
+  - pure core;
+  - break thresholds are data;
+  - prompt spoken, never cancelling a count;
+  - 56 / 64 / 20px;
+  - no medical words;
+  - plain rest and hands-free off unchanged;
+  - no focus cues on hold;
+  - dev-log data = enum + numbers.
+  - Deps: B3, B7, B8.
+- [ ] B10. [verifier] Verify against SPEC M5c "Breaks inside a set" Accept.
+  - `npm run check`, `npm run e2e`, `npm run build`.
+  - 390×844 screenshots `docs/screenshots/m5c-hold.png` and `m5c-hold-last-set.png`, console clean.
+  - A dev-log export with a `hold` event, and `npm run devlog -- --dry-run` showing one set.
+  - Evidence into PROGRESS.
+  - Deps: B9.
+- [ ] B11. [main] Merge `m5c-break-hold` after M5's merge, then **ask Wongsaton before pushing** (push = deploy). Deps: B10.
+- [ ] B12. 🧍 Folded into **Checkpoint B3**: on the hands-free gym day, a push-up rest-pause set and one walk-away; he reports whether the hold and taps felt right (and the B-q questions).
+
+**Parallel waves:**
+- **Now:** B1 [core ∥A], B4 [ui], B8 [pose].
+- **Then:** B2 and B3 [core ∥A, after B1; can be one instance in sequence].
+- **After the branch cut:** B5 → B6 → B7 → B9 → B10 → B11.
+- **Critical path:** B1 → B5 → B6 → B7.
+
+### M4e steps 2–3 — Build the approved mix (planned 2026-11-14; follows the M5c follow-up)
+**Contract:** SPEC M4e "Picked" + Accept, `docs/design/m4e-mix/README.md` (tokens, moods, type, icons, gym rules), `docs/design/m4e-directions/README.md` (core selectors), and the Decision "Wongsaton's answers before sleeping". Logic is **tests first**. **Not deployed without Wongsaton's OK.**
+
+**Branch:** `m4e-redesign`, cut from `m5-live-trainer` after M5's merge (task 17). `m5c-break-hold` is merged in before A16 (camera restyle). Wave-1 tasks touch no M5 or M5c file.
+
+**Shape:**
+- The screens live inline in app.ts (main-owned). So each screen becomes a ui-engineer module, `src/ui/screens/<screen>.ts`: props + callbacks in, element out, no DB access. Main swaps it into app.ts.
+- The screen tasks share styles.css, so they run one at a time, in the order Wongsaton asked for.
+- Hard rules stay: ≥ 64px numbers, ≥ 20px body (the mix README's 16–18px bend applies only to short labels next to an icon or number), ≥ 56px targets, voice over screen, reduced motion, no third-party request, original art.
+
+- [ ] A1. [main] Packages + shared type.
+  - Files: package.json, src/main.ts, src/core/types.ts.
+  - Add `@fontsource/barlow-condensed` and `@fontsource/barlow`. Import only the latin-subset CSS: Condensed 700; Barlow 400/600/700.
+  - Add `lighthouse` (dev), used by the verifier against `vite preview`.
+  - Add `export type Accent = 'orange' | 'volt' | 'yellow'`.
+  - Done when: `npm run build` puts the `.woff2` files in `dist/assets` (same-origin, no external font URL) and typecheck passes.
+  - Deps: none.
+- [ ] A2. [ui-engineer ∥] Tokens, moods, themes, guard test.
+  - Files: src/styles.css, src/ui/handsfree.css, src/ui/devlog.css, src/ui/audioTest.css, src/ui/tokens.ts (new), src/ui/tokens.test.ts (new), index.html (theme-color).
+  - `:root` holds the mix's shared tokens: colours, `--font-display` / `--font-body`, the type scale (18/20/22/34/72/84/120/132), radii, `--ic-*`, tap sizes.
+  - `.mood-energy` / `.mood-pro` / `.mood-track`.
+  - Accents:
+    - `[data-accent="orange"]` (default): `#FF7A1A` / `#1A0B00`;
+    - `"volt"`: `#C8F31D` / `#12160A`, **plus `--success` `#FFC94D` / `--on-success` `#221800`**;
+    - `"yellow"`: `#FFD60A` / `#000000`.
+  - Every existing raw colour and font size in those CSS files moves onto tokens.
+  - `tokens.ts`: `cssToken(name)` for canvas/3D.
+  - `tokens.test.ts` (imports the CSS `?raw` and globs `src/ui/**/*.ts`): no hex/rgb/hsl outside the token blocks, no `font-size` without `var(`, and no colour literal in `src/ui/**/*.ts`. A named allow-list covers the 3D files until A7 and `cameraView.ts` until A16.
+  - Done when:
+    - the test is green;
+    - each accent pair's contrast is asserted ≥ 7:1 (on-cta on cta) and ≥ 3:1 (cta on bg);
+    - the existing e2e still pass, since the look barely changes yet;
+    - typecheck + lint clean.
+  - Deps: A1 for the font families (can start with fallbacks).
+- [ ] A3. [core-engineer ∥A] Home/summary selectors, **tests first**.
+  - Files: src/core/stats.ts(+test). Pure; takes session rows + set logs.
+  - `weeklyStreak(sessions, today, minPerWeek)`: consecutive Mon–Sun local weeks with ≥ `minPerWeek` finished sessions. The current week counts once it qualifies and doesn't break the streak while it's in progress.
+  - `STREAK_MIN_PER_WEEK` is a provisional constant: Blockers A-q1.
+  - `weekDots(sessions, today)`: 7 entries (`done` / `today` / `rest` / `future`).
+  - `lastSession(sessions, sets)`: day, duration, volume, date.
+  - `sessionVolume(logs)`: Σ reps × kg; bodyweight sets add 0.
+  - `volumeVsLast(logs, prevSameDayLogs)`: percent, or null with no previous.
+  - `newBests(todayLogs, historyLogs)`: per exercise, more reps at the same or higher weight, or more weight, with the old value.
+  - **No `nextTimeHint`:** Summary's "Next time" line is the M5b coach line (SPEC).
+  - Done when tests cover:
+    - week edges: Sunday 23:59 / Monday 00:00 local, a gap week breaks the streak, the in-progress week;
+    - empty history;
+    - unfinished sessions ignored;
+    - volume in kg for lb-entered weights;
+    - a best at a lower weight with more reps isn't a best;
+    - the first-ever session → no bests;
+    - no DOM.
+  - Deps: none.
+- [ ] A4. [core-engineer ∥B] Data layer, **tests first**.
+  - Files: src/data/db.ts(+test).
+  - `getAccent / setAccent` (key `accent`, default `'orange'`, an unknown value reads as orange).
+  - `sessionsSince(db, sinceMs)` and `setsForSessions(db, ids)`, plus `bestSetsFor(db, exerciseIds)` or all sets of those exercises.
+  - No Dexie version bump unless an index is needed; if one is, do the bump and record it as a Decision.
+  - Done when: db tests cover default / set / read back / unknown, and the history queries; existing db tests pass.
+  - Deps: A1 (Accent type).
+- [ ] A5. [core-engineer ∥C] `EXTEND_REST { sec, now }`, **tests first**.
+  - Files: src/core/session.ts(+test).
+  - Accepted only in `rest`, not paused, sec > 0.
+  - Raises `restTargetSec` for this rest only; the next rest uses the plan's `restSec`.
+  - The overrun check uses the extended target.
+  - Done when tests cover:
+    - rest / exercise / paused / summary;
+    - two taps → +60;
+    - the next rest is back to plan;
+    - overrun with and without the extension;
+    - `restCues` crossings at the new target: "Ten seconds" fires again at target − 10 when it hasn't been passed (a restCues test, same instance);
+    - existing session tests pass.
+  - Deps: none.
+- [ ] A6. [ui-engineer, second instance ∥] Icon set.
+  - Files: src/ui/icons.ts(+test).
+  - Port the original 24-grid `ICONS` from `docs/design/m4e-mix/_src/build.mjs`: 2.25px stroke, round caps, `currentColor`, `aria-hidden`.
+  - `icon(name, size: 'sm' | 'md' | 'lg')`.
+  - Done when: a test renders every name, checks the stroke width, and finds no `href` / external reference; typecheck + lint clean.
+  - Deps: none.
+- [ ] A7. [anatomy-3d-engineer ∥] 3D/2D colour alignment.
+  - Files: src/ui/body3d/**, src/ui/demo3d/player.ts (+ scene files), src/ui/skeleton3d.ts, src/ui/bodyMap.ts(+test).
+  - Body, rim, stage and muscle colours come from `cssToken('--body' | '--edge' | '--stage-1' | '--stage-2' | '--muscle')`, read when the scene is created. The fallback is the token value in one exported constant, not scattered literals.
+  - The muscle colour is the mix's cyan everywhere, with a text legend kept.
+  - bodyMap gains a compact `mini` size for the Today day strip.
+  - Done when:
+    - 390×844 screenshots of the Exercise inline figure, the full viewer, a demo and the camera skeleton show cyan muscles and a visible rim on the stage;
+    - bodyMap tests pass;
+    - these files have no colour literal.
+  - Deps: A2's token names (can start from the README table).
+- [ ] A7b. [ui-engineer, after A7] Remove the 3D entries from the tokens test allow-list. Files: src/ui/tokens.test.ts. Done when: green. Deps: A2, A7.
+- [ ] A8. [ui-engineer] **Today** (Energy) + day preview + tab bar.
+  - Files: src/ui/screens/today.ts, src/ui/screens/preview.ts, src/ui/tabBar.ts, src/styles.css.
+  - Hero:
+    - day name 84px;
+    - exercise count and an estimated time;
+    - muscle chips;
+    - the figure with the muscles lit;
+    - Start workout CTA 80px.
+  - Below the hero:
+    - streak tile (`weeklyStreak` + `weekDots`, ≥ 64px number);
+    - last-time tile;
+    - day strip with mini figures; the next day is outlined in cta;
+    - the silent-mode hint keeps its place above Start.
+  - Tab bar: Today / Settings, 72px, labelled.
+  - Done when: a render unit test, 390×844 harness screenshots in all 3 accents, nothing overflowing, typecheck + lint clean.
+  - Deps: A2, A3 (types), A6; A7 for the mini figure (stub until then).
+- [ ] A9. [main] Wire Today and the preview.
+  - Files: src/ui/app.ts.
+  - Replace `todayScreen` / `previewScreen`. Load the history via A4 for the selectors (`STREAK_MIN_PER_WEEK`).
+  - Tab bar navigation.
+  - Apply `data-accent` on `<html>` at startup from `getAccent`.
+  - Done when: by hand, Today shows streak / last time from real IndexedDB data, Start works, and the existing e2e are green.
+  - Deps: A1, A4, A8.
+- [ ] A10. [ui-engineer] **Exercise** (Pro) + **Pause sheet** + workout top bar.
+  - Files: src/ui/screens/exercise.ts, src/ui/screens/pauseSheet.ts, src/ui/topBar.ts, src/styles.css.
+  - Exercise screen:
+    - lit stage with the figure, set count 72px, muscle legend, How to;
+    - REPS / WEIGHT labels above the 72px steppers;
+    - the lavender cue panel with the speaker icon;
+    - Set done as the only orange.
+  - Top bar: list / Camera / Pause, 60px, labelled.
+  - Pause sheet:
+    - Resume (CTA);
+    - **Skip exercise**;
+    - **End workout** (two-tap confirmation kept, danger + icon + words).
+  - Done when: a render test, 390×844 harness screenshots, typecheck + lint clean.
+  - Deps: A2, A6.
+- [ ] A11. [main] Wire Exercise + the Pause sheet; remove Skip/End from the Exercise and Rest footers.
+  - Files: src/ui/app.ts.
+  - Done when: by hand, Skip and End work only from the Pause sheet.
+  - Deps: A9, A10.
+- [ ] A11b. [ui-engineer] Move the e2e specs that tap Skip/End to the Pause sheet.
+  - Files: e2e/*.spec.ts (not camera.spec.ts).
+  - Done when: the full `npm run e2e` is green.
+  - Deps: A11.
+- [ ] A12. [ui-engineer] **Rest** (Track).
+  - Files: src/ui/screens/rest.ts, src/styles.css.
+  - Countdown:
+    - 132px white countdown;
+    - dashed ring draining in cta (static under reduced motion);
+    - amber/over state kept, not colour-only.
+  - **+30 s** (≥ 56px, labelled "+30 s").
+  - "Last set … Fix" strip (the existing component).
+  - Next card (orange top rule, figure, target, cue).
+  - Coach tip slot.
+  - Start set CTA.
+  - Top bar: list / Pause.
+  - No Skip/End.
+  - Done when: a render test, 390×844 screenshots (normal / overrun / with tip), typecheck + lint clean.
+  - Deps: A2, A6, A10 (topBar).
+- [ ] A13. [main] Wire Rest.
+  - Files: src/ui/app.ts.
+  - `+30 s` → `EXTEND_REST`; `tick()` uses the new target.
+  - The camera rest panel stays as is until A16.
+  - Done when: by hand, +30 s moves the clock and "Ten seconds" comes 30 s later.
+  - Deps: A5, A11, A12.
+- [ ] A14. [ui-engineer] **Summary** (Energy).
+  - Files: src/ui/screens/summary.ts, src/ui/coachSummary.ts, src/ui/focusSummary.ts, src/styles.css.
+  - Celebration:
+    - trophy + "Push A done";
+    - a volume card (72px) with vs-last;
+    - new bests (green block + medal icon + old value);
+    - tiles: sets / reps / exercises.
+  - The existing Coach + Focus sections, restyled.
+  - Today's notes.
+  - The "Next time" coach line last, kept low-key.
+  - Done when: render tests (with and without a previous session), screenshots, the existing coachSummary / focusSummary tests pass, typecheck + lint clean.
+  - Deps: A2, A3, A6.
+- [ ] A15. [main] Wire Summary.
+  - Files: src/ui/app.ts.
+  - History for `volumeVsLast` / `newBests`.
+  - Done when: by hand, a second session of the same day shows a vs-last % and a best.
+  - Deps: A4, A13, A14.
+- [ ] A16. [ui-engineer, after `m5c-break-hold` is merged in] **Camera** (Pro).
+  - Files: src/ui/cameraView.ts, src/ui/autoStopBanner.ts, src/ui/cameraRestPanel.ts, src/ui/holdPanel.ts, src/ui/handsfree.css.
+  - Solid `--surface` HUD panels (never translucent).
+  - Rep count 120px.
+  - Neutral range gauge with the target mark in `--success`.
+  - Set done is the only cta.
+  - Canvas colours via `cssToken`.
+  - Remove the `cameraView.ts` allow-list entry.
+  - Done when:
+    - screenshots of set mode, Undo, rest mode and hold in all 3 accents;
+    - the camera e2e specs pass;
+    - the tokens test is green with no camera allow-list.
+  - Deps: A2, A6, B11 merged.
+- [ ] A17. [ui-engineer] **Settings** (Pro).
+  - Files: src/ui/screens/settings.ts, src/ui/accentPicker.ts, src/ui/coachVoiceSettings.ts, src/ui/devLogPanel.ts, src/styles.css.
+  - Accent picker: Orange / Volt / Yellow, each a swatch + name, the chosen one in white fill with dark text, ≥ 56px.
+  - Existing switches, the unit choice, coach voice and dev log restyled; On/Off words next to the switches.
+  - Done when: a render test, screenshots in all 3 accents, typecheck + lint clean.
+  - Deps: A2, A6.
+- [ ] A18. [main] Wire Settings.
+  - Files: src/ui/app.ts.
+  - A picker change → `setAccent` and set `data-accent` at once.
+  - Done when: by hand, the accent survives a reload and success turns gold on Volt.
+  - Deps: A4, A15, A17.
+- [ ] A19. [ui-engineer] Overlays (Pro), mostly CSS.
+  - Files: src/styles.css, src/ui/howToSheet.ts, src/ui/badges.ts, src/ui/lastSetCorrection.ts, src/ui/coachTip.ts.
+  - Covers the exercise list, notes, How-to, body sheet, badges, coach tip and Fix strip.
+  - Done when: screenshots, typecheck + lint clean.
+  - Deps: A2, A6.
+- [ ] A20. [ui-engineer] E2E `e2e/m4e-theme.spec.ts`. Cases:
+  - pick Volt → reload → still Volt; the computed `--success` is gold;
+  - Orange / Yellow keep green;
+  - +30 s extends the clock, and "Ten seconds" is spoken 30 s later;
+  - Skip/End are absent from Exercise/Rest and work from the Pause sheet;
+  - the fonts load from the app's origin;
+  - Today's streak / last-time tiles appear after a seeded session;
+  - no third-party request.
+  - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
+  - Deps: A9, A11b, A13, A15, A16, A18.
+- [ ] A21. [reviewer] Review the branch diff against CLAUDE.md:
+  - sizes (64 / 20 / 56; the label bend only next to an icon or number);
+  - contrast;
+  - colour never alone;
+  - one action colour;
+  - reduced motion;
+  - self-hosted fonts and no third-party request (CSP unchanged);
+  - original icons and art;
+  - pure core selectors;
+  - tokens the only source;
+  - no medical words.
+  - Deps: A7b, A19, A20.
+- [ ] A22. [verifier] Verify against SPEC M4e Accept.
+  - `npm run check` (tokens test included), `npm run e2e`, `npm run build`.
+  - **Every screen × Orange / Volt / Yellow at 390×844**, via `scripts/screenshots.mjs m4e`: Today, preview, Exercise, Pause sheet, Rest, Rest +30 s, Summary, Camera set / Undo / rest / hold, Settings, How-to. Output `docs/screenshots/m4e-<screen>-<accent>.png`, console clean.
+  - **Lighthouse accessibility ≥ 95 on Today** (built app, `vite preview`, mobile).
+  - Bundle size delta (fonts included).
+  - Evidence into PROGRESS.
+  - Deps: A21.
+- [ ] A23. [main] Merge `m4e-redesign`, then **ask Wongsaton before pushing** (push = deploy). Deps: A22.
+- [ ] A24. 🧍 (no SPEC checkpoint; informal) Wongsaton looks at the screenshots and trains with the new look; notes go in via `/feedback`.
+
+**Parallel waves:**
+- **Wave 1 (alongside the M5c follow-up):**
+  - A1 [main];
+  - A2 [ui];
+  - A6 [ui, second instance];
+  - A3 [core ∥A];
+  - A4 [core ∥B, after A1];
+  - A5 [core ∥C];
+  - A7 [3d].
+
+  A3 needs its own core instance (the M5c follow-up's B1–B3 hold one), or it runs after B3.
+- **Wave 2:** A7b, then the screen pipeline. The ui-engineer runs A8 → A10 → A12 → A14 → A17 → A19 in order, since they all touch styles.css. Main follows each one: A9 → A11 → A13 → A15 → A18. A11b goes right after A11.
+- **Then:** A16 once B11 is merged → A20 → A21 → A22 → A23.
+- **Critical path:** A2 → A8 → A9 → A10 → A11 → A12 → A13 → A14 → A15 → A17 → A18 → A20 → A21 → A22.
 
 ### M5 — Live trainer: focus & form cues (planned 2026-11-13)
 **Contract:** SPEC M5, including its "Plan decisions (2026-11-13)" block, and the M5b T1 row. Branch `m5-live-trainer`, cut from c3c1f85. Logic is **tests first**. Nothing is pushed or deployed without Wongsaton's OK.
@@ -184,7 +566,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Done when: a synthetic export with these events prints them, and the existing script tests pass.
   - Deps: none beyond the event shapes in tasks 11/13 (written in this plan).
   - Evidence 2026-11-13: `npm run test:scripts` 16/16, including 3 new focus tests. A synthetic export prints each set's cues and score. Only ids and numbers are printed, and none of it goes into fixtures.
-- [ ] 11. [ui-engineer] Focus tracker in the camera view.
+- [x] 11. [ui-engineer] Focus tracker in the camera view.
   - Files: src/ui/cameraView.ts, src/styles.css.
   - **Lifecycle:**
     - One tracker per camera sheet, only when the exercise has a rule (the Settings camera test has none).
@@ -192,7 +574,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - Feed it every tick after the counter and `autoSet`, with no-pose ticks too.
     - `reset` at every set start (manual Start set, or the exercise phase), with the target = the top of the range.
     - On an auto start, seed it with the rest-mode rep events since the start action's `at`. Keep ≤ 8 s of those events.
-    - Nothing is fed in rest mode, while paused, or during the Undo window.
+    - Every tick is fed (with autoState/paused); the core tracker ignores rest frames and stays quiet in pending, closed and paused.
   - **Each cue:**
     - show it in the coach line for 4 s (≥ 20px, `data-cue="<id>"`);
     - speak it with `policy.hint(text, now)`;
@@ -213,7 +595,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Renders nothing when there are only manual sets. Text ≥ 20px. Cue labels come from `CUE_TEXT`; it can start from this plan's ids.
   - Done when: a unit test (render / omit), a 390×844 screenshot (harness), typecheck + lint clean.
   - Deps: 1.
-- [ ] 13. [main] Wiring.
+- [x] 13. [main] Wiring.
   - Files: src/ui/app.ts, playwright.config.ts.
   - `onFocus` → `SET_FOCUS`. Before a hands-free commit's `SET_DONE` the cues are already in state.
   - Summary mounts `createFocusSummary`, next to the Coach section.
@@ -229,7 +611,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - a second rushed set → Summary shows Focus < 100 with the cue and the Coach line T1;
     - a manual exercise has no score.
   - Deps: 4, 8, 11, 12.
-- [ ] 14. [ui-engineer] E2E `e2e/focus-cues.spec.ts`. Fixture landmarker as in hands-free.spec.ts, real timers, mocked speech that records order.
+- [x] 14. [ui-engineer] E2E `e2e/focus-cues.spec.ts`. Fixture landmarker as in hands-free.spec.ts, real timers, mocked speech that records order.
   - Cases:
     1. rushed lowering on reps 3–4 → "Slow the lowering." once, after the count word; never two cues within 6 s; a partial still speaks only its M4c hint;
     2. hands-free rest mode: rushed reps → no cue;
@@ -243,7 +625,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     10. no third-party request.
   - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
   - Deps: 13.
-- [ ] 15. [reviewer] Review the branch diff against CLAUDE.md:
+- [x] 15. [reviewer] Review the branch diff against CLAUDE.md:
   - pure core (focus.ts / focusScore.ts: no DOM, no MediaPipe);
   - every rule's thresholds and flags are data (no `if (exercise === …)`);
   - no geometry flag on without real fixtures (task 6's test);
@@ -443,6 +825,45 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-14: **M5 tasks 11, 13, 14 and 15 done** (review PASS, no blocking items).
+  - e2e/focus-cues.spec.ts: 5 tests covering the plan's 10 cases. It runs in its own `mobile-clips` Playwright project with workers: 1, because one in three local repeat runs failed under parallel load.
+  - Review hardening:
+    - `onFocus` is only sent once the set has ≥ 1 counted rep, so a lone low-fps cue before rep 1 can't score a set the user then types in by hand;
+    - the camera tick stops right after `feedFocus` if the sheet was closed.
+
+- 2026-11-14 — **Planner defaults for the two approved follow-ups** (plans above; SPEC M4e "Picked" and M5c "Breaks inside a set" updated). Each is data or easy to change; open points are under Blockers.
+  - **Break definition:** posture/body-line gate for 5 s while present, or away for 3 s, with ≥ 2 reps. A break holds the set instead of the M5c `away` stop. Gated frames don't feed the still/stalled timers. Visibility gaps aren't breaks.
+  - **Hold behaviour:**
+    - reps during a hold aren't counted (a spoken reminder instead);
+    - "Start next set" saves the held set backdated to its last rep, then starts the next one now;
+    - on the exercise's last set the button reads "Save set";
+    - Close, Set done and idle limits save the held set.
+  - **Acceptance replay:** the real push-up set isn't committed, so the replay is a scripted push-up front-variant timeline through the real counter. A local run on the real set, if available, is reported as a Decision.
+  - **M4e:**
+    - screens become ui-engineer modules under `src/ui/screens/`, which main wires into app.ts;
+    - Summary's "Next time" reuses the M5b coach line (the step-1 `nextTimeHint` is dropped);
+    - the tab bar is Today / Settings until History exists;
+    - "+30 s" extends only the current rest, and overrun is measured against the extended target;
+    - no "Skip rest" button;
+    - the day preview uses the Energy mood.
+- 2026-11-13 (night): **Wongsaton's answers before sleeping.**
+  - **M4e: the mix is approved** (docs/design/m4e-mix): Energy for Today and Summary; Pro for Exercise, Camera and Settings; Track for Rest. One orange action colour everywhere. Next: step 2 (tokens and themes), then step 3 (screens, Today first).
+  - **Accent themes:** keep Orange, Volt and Yellow. Because Volt sits close to success green, success switches to gold (the Pro direction's `#FFC94D`) while Volt is active.
+  - **Rest screen:** add "+30 s". Move Skip and End into the Pause sheet so they can't be tapped by accident.
+  - **Push-up / hands-free break = "tap to continue"** (option b).
+    - A sit-down or walk-away inside a set doesn't end the set.
+    - After such a break, hands-free stops starting a new set from reps on its own. A tap is needed (Continue set, or Start next set).
+    - Plain rest in place, without a break, keeps the M5c auto start.
+    - This needs a small M5c follow-up plan: what counts as a "break" (posture or body-line gate failing, or the person away) and for how long.
+
+- 2026-11-13: **Update to the M5 task 7 replay after the flaw re-render.** This replaces the related numbers below.
+  - **raise-too-high:** reps 5–8 now read 131.8–132.5° and fire at reps 6 and 8 at the live 120° threshold. That closes the "no positive replay at 120°" gap.
+  - **squat short-range:** reads 0.77–0.78 of baseline, so it's no longer thin against 0.85. The trade-off: reps 5–8 bottom out about 2° under the 100° count line, so a future re-render could tip one into a partial.
+  - **hip-sag:** reads 155.7 / 162.3 / 157.1 / 154.2°, so `hipSag` fires at rep 8 only.
+  - **curl elbow-swing:** unchanged; rep 7 stays at 24.4°. A bigger drift turns reps into partials.
+  - The flags and the enable decision are unchanged.
+  - `createHold` and `MID_REP` are exported so the replay test's pre-set sync check reuses the tracker's own hold logic.
 
 - 2026-11-13: **M5 task 7 replay: lateral raise `armsOutOfSync` and `raiseTooHigh` are ON** (`src/core/focus.replay.test.ts`; counter + focus tracker frame by frame, autoState `set`, hands-free defaults, 30 fps; real clips with every lateral-raise rule forced on).
   - **Threshold change:** `FOCUS_DEFAULTS.raiseTooHighDeg` 100 → **120** (Wongsaton's answer (1)). Tested at the edges: 121 fires, 120 and 119 don't. The cue text stays "Stop at shoulder height." Accuracy before/after on his 80 real reps: at 100°, 3 of 4 clips would fire (peaks 91.5–109.2°); at 120°, 0 fires, margin 10.8°.
@@ -775,9 +1196,20 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Blockers / questions for Wongsaton
 - **🧍 Checkpoint B3 (hands-free gym test, waiting for his report):** train a day with hands-free on, note every wrong auto start/stop and whether 6 s stillness / the 5 s Undo feel right, then export the dev log.
-- **🧍 M4e design pick:** Energy, Pro or Track (mockups in docs/design/m4e-directions).
-- **Press, "first press = positioning"?** He logged 7 per set; the app counts 8 identical press cycles. If the first press from the shoulders is setup (lockout-start convention), the SPEC, the synthetic press labels and the press demo all change. Press real fixtures and the press M5 form rules wait on this.
-- **Push-up set with a sit-down break: one set or two?** Today, with hands-free, a 16 s sit-down saves the first part (still stop) and auto-starts the rest as a second set.
+- ~~M4e design pick~~: answered, the mix (Decisions 2026-11-13 night).
+- ~~Press, "first press = positioning"?~~: answered, no; the counter stays at 8.
+- ~~Push-up set with a sit-down break~~: answered, one set, "tap to continue" (plan above).
+- **New (M5c follow-up, not blocking; the defaults are built, see Decisions 2026-11-14):**
+  - **(B-q1) Set ends with a walk-away or a long bend.** A walk-away or a ≥ 5 s bend at the **end** of a set looks the same as a mid-set break, so that set waits for a tap ("Start next set" / "Save set"). Until the tap, the rest clock cues ("Ten seconds", "Go") don't play; the save is backdated, so rest taken is still right. Default: as decided ("doesn't end the set"). Alternative: after a break, standing still in place for 6 s ends the held set like a normal stop, and a tap is only needed if you start repping.
+  - **(B-q2) Reps done during the hold, before you tap.** Default: not counted, and you hear "Tap Continue to count.". Alternative: they're added when you tap Continue.
+  - **(B-q3) A break during rest** (after a normal stop): auto start stays on. OK?
+  - **(B-q4) Timings:** 5 s of sitting or bending = a break; 3 s out of frame = a break. Retune at Checkpoint B3.
+  - **(B-q5) Push-up fixture:** OK to commit the landmark JSON (no video) of the real push-up set as a fixture, labelled one set of 11?
+- **New (M4e, not blocking; defaults in the plan):**
+  - **(A-q1) Streak:** how many workouts make a week count? Provisional: 3 (`STREAK_MIN_PER_WEEK`, one constant).
+  - **(A-q2) History tab:** it doesn't exist yet, so the tab bar is Today / Settings. OK?
+  - **(A-q3) +30 s:** it counts as planned rest, so no overrun is flagged for the extra 30 s. OK?
+  - **(A-q4) "Skip rest" button:** step 1 proposed one; the plan relies on Start set instead. OK?
 - **Older coach questions:** (1) should the coach trust manually logged reps? (2) Is the 25% jump guard right for light dumbbells?
 - **New (M5, not blocking; defaults in Decisions):**
   - (a) **M4 gate:** SPEC M4 says the real Checkpoint B fixtures must pass before M5, but only the lateral raise has committed real fixtures (press and push-up wait on the questions above; curl, row and squat have none). OK to build M5 now, with every unverified form rule shipped **off**?
@@ -788,7 +1220,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - ~~Checkpoint B2 (Push A log)~~: done; the log was analysed and the counter retuned (Decisions).
 - **Not blocking (M5b, the "older coach questions" above):** the coach trusts the logged numbers. A manual set logged without touching the reps stepper reads as "top of the range", so it can earn "Strong set" / "+5 lb next time". Default: trust the log (that's what Fix is for). Alternative if it misleads him: only count a set as "top" when the reps were camera-counted or edited. Also: is the 25% jump guard right for light dumbbells (no "+5 lb" on a 15 lb lateral raise; "more reps" instead)?
 - **Not blocking:** after the log analysis, should an incomplete return ("didn't straighten") count as a rep (lenient) or stay a partial (strict, current)? The default stays strict until the data says otherwise.
-- **🧍 M4e (later):** pick one of the 2–3 visual directions when they're ready.
+- ~~🧍 M4e (later): pick one of the 2–3 visual directions~~: done, the mix.
 - **🧍 Checkpoint B: fixture videos still outstanding. Next gym visit.** Not blocking M4 day to day (it runs on synthetic fixtures), but M4 isn't fully done until these pass (M4 task 15). Record per SPEC §5 into `fixtures/videos/<folder>/<label>__reps-<n>__partials-<m>.mp4` (gitignored, never committed). Folders: `curl`, `push-up`, `shoulder-press`, `row`, `goblet-squat`, `lateral-raise`. For each: one clean clip, plus one with 2–3 partial reps and fast lowering, 10–30 s. Then tell me and I'll run `npm run landmarks`.
 - **Question (not blocking): should "count reps out loud" default to on or off?** The plan defaults it to **on** ("voice over screen" rule). It's a toggle in Settings either way.
 - ~~Camera test fps~~ — done: 30 fps on the phone, inference stays on the main thread.

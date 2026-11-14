@@ -10,7 +10,8 @@ import {
   type AutoSetConfig,
   type AutoStopReason,
 } from '../core/autoSet';
-import { autoSetConfigFor, ruleFor } from '../core/exercises';
+import { autoSetConfigFor, focusFlagsFor, ruleFor } from '../core/exercises';
+import { createFocusTracker, type FocusCue, type FocusTracker } from '../core/focus';
 import { FpsMeter } from '../core/fps';
 import {
   createCoachSpeech,
@@ -21,7 +22,7 @@ import {
 import { createRepCounter, type RepCounter } from '../core/repCounter';
 import { GAUGE_MAX, GAUGE_MIN, missedMark, readGauge } from '../core/romGauge';
 import { JOINTS, SKELETON } from '../core/poseTopology';
-import type { LandmarkFrame, RepEvent } from '../core/types';
+import type { FocusCueId, LandmarkFrame, RepEvent } from '../core/types';
 import type { DevLogRecorder } from '../data/devlog';
 import { openCamera, stopStream, type Facing } from '../pose/camera';
 import type { PoseTracker } from '../pose/landmarker';
@@ -171,6 +172,12 @@ export type CameraViewOptions = {
    * counting exercise. Without it the view behaves exactly as before (camera per set).
    */
   handsFree?: HandsFreeOptions;
+  /**
+   * M5 focus cues (counting exercises only): the set's fired cue ids so far, one entry per
+   * detection. Called once at the set's first counted rep (with [] when nothing fired yet; on an
+   * auto start, right after onAutoStart) and after every cue. Dispatch SET_FOCUS { cues }.
+   */
+  onFocus?: (cues: FocusCueId[]) => void;
 };
 
 /**
@@ -251,6 +258,11 @@ export type RepPanel = {
   silence(): void;
   /** Speaks the phone-placement sentence (not rate-limited); the next count word cuts it off. */
   speakPlacement(text: string): void;
+  /**
+   * M5 focus cue: shown in the coach line (`data-cue`) for COACH_SHOW_MS and spoken as a hint
+   * through the same policy as partial hints (6 s gap, never over a count). No-op while quiet.
+   */
+  cue(id: string, text: string): void;
   /**
    * Range-of-motion gauge (vertical bar), updated with the panel. The camera view puts it on the
    * video's right edge; hidden while the person isn't tracked.
@@ -472,6 +484,8 @@ export function createRepPanel(
   let placementUtt: SpeechSynthesisUtterance | null = null;
   let coachUntil = 0;
   let shownCoach = '';
+  /** The coach line shows a focus cue (stays its full time; a new rep doesn't clear it). */
+  let coachIsCue = false;
 
   function report(e: SpeechReport): void {
     opts.onSpeech?.(e);
@@ -488,7 +502,8 @@ export function createRepPanel(
       const cancel = d.kind === 'count' && (d.cancel || placementUtt !== null);
       if (cancel) placementUtt = null;
       const u = voice.speak(d.text, { kind: d.kind, cancel });
-      report({ t, text: d.text, kind: d.kind });
+      // u.text is the line actually spoken (the drill persona may rewrite hints).
+      report({ t, text: u?.text ?? d.text, kind: d.kind });
       if (u) {
         const done = () => apply(policy.ended(d.id, clock()));
         u.addEventListener('end', done);
@@ -497,9 +512,16 @@ export function createRepPanel(
     }
   }
 
-  function showCoach(text: string, reason: string, now: number): void {
+  function showCoach(text: string, reason: string, now: number, cueId?: string): void {
     coach.textContent = text;
-    coach.dataset.hintReason = reason;
+    if (cueId) {
+      coach.dataset.cue = cueId;
+      delete coach.dataset.hintReason;
+    } else {
+      coach.dataset.hintReason = reason;
+      delete coach.dataset.cue;
+    }
+    coachIsCue = cueId !== undefined;
     shownCoach = text;
     coachUntil = now + COACH_SHOW_MS;
   }
@@ -507,8 +529,10 @@ export function createRepPanel(
   function clearCoach(): void {
     if (!shownCoach) return;
     shownCoach = '';
+    coachIsCue = false;
     coach.textContent = '';
     delete coach.dataset.hintReason;
+    delete coach.dataset.cue;
   }
 
   render(false);
@@ -528,7 +552,7 @@ export function createRepPanel(
           opts.onRepEvent?.(ev);
           if (quiet) continue;
           if (ev.type === 'rep') {
-            clearCoach(); // a new full rep replaces the last hint
+            if (!coachIsCue) clearCoach(); // a new full rep replaces the last partial hint
             if (opts.spokenCount !== false) apply(policy.count(repWord(ev.index - baseReps), now));
           } else {
             const text = hintFor(counter.rule, ev);
@@ -588,9 +612,15 @@ export function createRepPanel(
       policy.reset();
       placementUtt = null;
     },
+    cue(id, text) {
+      if (quiet) return;
+      const now = clock();
+      showCoach(text, '', now, id);
+      apply(policy.hint(text, now));
+    },
     speakPlacement(text) {
       const u = voice.speak(text, { kind: 'cue' });
-      report({ t: clock(), text, kind: 'placement' });
+      report({ t: clock(), text: u?.text ?? text, kind: 'placement' });
       placementUtt = u;
       if (u) {
         const done = () => {
@@ -692,6 +722,125 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   }
   let recSide: string | null = null;
   let recFpsAt = -Infinity;
+
+  // ---- M5 focus tracker: one per sheet (counting exercises only), reset at every set start ----
+  /** The session as last told by setSession (also without hands-free). */
+  let sessionPaused = false;
+  let sessionPhase: CameraSession['phase'] = 'exercise';
+  /** Top of the planned range ("/ 12"): the stalled cue's "N to go"; 0 = unknown (no stalled). */
+  let targetTop = opts.target?.targetReps ?? 0;
+  let focus: FocusTracker | null = null;
+  let focusFlagsKey = '';
+  let focusView: string | null = null;
+  /** Cues fired by an earlier tracker of this set (re-created when the view's flags changed). */
+  let focusCarried: FocusCueId[] = [];
+  /** The set's counted rep events (seed included), to re-seed a re-created tracker. */
+  let setRepEvents: RepEvent[] = [];
+  /** onFocus has been called for this set (at its first counted rep). */
+  let focusReported = false;
+  /** Hands-free rest mode: recent rep events, to seed an auto-started set. */
+  let restEvents: RepEvent[] = [];
+  /** Events already seeded into the tracker this tick (not fed again). */
+  let seededNow: ReadonlySet<RepEvent> | null = null;
+  const REST_SEED_MS = 8000;
+
+  const focusFired = (): FocusCueId[] => [...focusCarried, ...(focus?.fired ?? [])];
+
+  /**
+   * Creates the tracker, or re-creates it when the counter settled on a view whose flags differ
+   * (push-up front variant). A re-created tracker is re-seeded with the set's reps so far.
+   */
+  function syncFocusTracker(): void {
+    if (!rule || !repCounter) return;
+    const view = repCounter.rule.view;
+    if (focus && view === focusView) return;
+    focusView = view;
+    const flags = focusFlagsFor(rule, repCounter.rule);
+    const key = JSON.stringify(flags);
+    if (focus && key === focusFlagsKey) return;
+    focusFlagsKey = key;
+    const old = focus;
+    focus = createFocusTracker(rule, { flags, targetReps: targetTop, autoSet: autoConfig });
+    if (old) {
+      focusCarried = [...focusCarried, ...old.fired];
+      focus.reset({ targetReps: targetTop, seed: setRepEvents });
+    }
+  }
+
+  /** A set starts (camera open, manual Start set, auto start with its starting reps). */
+  function startFocusSet(seed: readonly RepEvent[] = []): void {
+    syncFocusTracker();
+    if (!focus) return;
+    focusCarried = [];
+    focusReported = false;
+    setRepEvents = seed.filter((e) => e.type === 'rep');
+    restEvents = [];
+    seededNow = seed.length ? new Set(seed) : null;
+    focus.reset({ targetReps: targetTop, seed });
+  }
+
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+
+  function onFocusCue(cue: FocusCue): void {
+    counter?.cue(cue.id, cue.text);
+    // Enum + numbers only (frame clock t); the spoken text is in the speech log.
+    rec((r) =>
+      r.logEvent('focusCue', {
+        id: cue.id,
+        t: Math.round(cue.t),
+        reps: cue.reps,
+        value: round1(cue.value),
+        baseline: cue.baseline === null ? null : round1(cue.baseline),
+        threshold: round1(cue.threshold),
+      }),
+    );
+    // Only sets with ≥ 1 counted rep are scored (a lone low-fps cue before rep 1 waits for it).
+    if (sessionPhase === 'exercise' && !sessionPaused && setRepEvents.length > 0) {
+      focusReported = true;
+      opts.onFocus?.(focusFired());
+    }
+  }
+
+  /** Feed one camera tick to the focus tracker (after the counter and autoSet). */
+  function feedFocus(frame: LandmarkFrame | null, ft: number, events: readonly RepEvent[]): void {
+    if (!focus || !repCounter) return;
+    syncFocusTracker();
+    const seeded = seededNow;
+    seededNow = null;
+    const fresh = seeded ? events.filter((e) => !seeded.has(e)) : events;
+    const autoState = auto ? auto.state : 'off';
+    if (mode === 'set' && autoState !== 'rest') {
+      for (const e of fresh) if (e.type === 'rep') setRepEvents.push(e);
+    }
+    const cues = focus.push({
+      t: ft,
+      present: frame !== null && personInFrame(frame),
+      tracking: frame !== null && repCounter.tracking,
+      // No pose at all: nothing is visible (the counter wasn't fed this tick).
+      untracked: frame ? repCounter.untracked : 'visibility',
+      phase: repCounter.phase,
+      angle: repCounter.angle,
+      sides: frame ? repCounter.sideAngles : null,
+      frame,
+      view: repCounter.rule.view,
+      side: repCounter.side,
+      events: fresh,
+      fps: fps.fps,
+      autoState,
+      paused: sessionPaused,
+    });
+    for (const cue of cues) onFocusCue(cue);
+    if (
+      !focusReported &&
+      mode === 'set' &&
+      sessionPhase === 'exercise' &&
+      !sessionPaused &&
+      setRepEvents.length > 0
+    ) {
+      focusReported = true;
+      opts.onFocus?.(focusFired());
+    }
+  }
 
   const counter =
     rule && repCounter
@@ -946,8 +1095,9 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
 
   /** A short spoken confirmation; queued after any count word (never cancels it). */
   function say(text: string): void {
-    voice.speak(text, { kind: 'cue' });
-    rec((r) => r.speech({ t: frameNow(), text, kind: 'cue' }));
+    const u = voice.speak(text, { kind: 'cue' });
+    // Log what was actually said (the drill persona may rewrite it).
+    rec((r) => r.speech({ t: frameNow(), text: u?.text ?? text, kind: 'cue' }));
   }
 
   /** Dev log: one `autoSet` event per action, enum words and numbers only (wall-clock t). */
@@ -1026,10 +1176,15 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       switch (a.type) {
         case 'start': {
           enterSetMode();
+          // The starting reps (rest mode, since the backdated start) seed the focus baseline.
+          const startReps = restEvents
+            .filter((e) => e.type === 'rep' && e.t >= a.at)
+            .slice(-a.reps);
           // Show autoSet's counts: reps the counter saw earlier in rest don't belong to the set.
           counter.setBase(repCounter.reps - a.reps, repCounter.partials - a.partials);
           hf.onAutoStart({ at: toWall(a.at), frameT: a.at, reps: a.reps, partials: a.partials });
           if (disposed) return;
+          startFocusSet(startReps); // after onAutoStart: the app's setSession has the new target
           opts.onCount?.(a.reps, a.partials);
           counter.announce(a.reps); // the first word of the set ("Two")
           break;
@@ -1103,6 +1258,9 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       drawOverlay(overlay, frame);
       rec((r) => r.frame(frame, ft));
       const events = counter?.update(frame) ?? [];
+      if (mode === 'rest' && events.length) {
+        restEvents = [...restEvents, ...events].filter((e) => e.t >= ft - REST_SEED_MS);
+      }
       if (auto && repCounter) {
         handleAuto(
           auto.push({
@@ -1117,6 +1275,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         if (!running) return; // idle close, or the app closed the sheet in a callback
         if (banner && auto.pendingUntil !== null) banner.tick(auto.pendingUntil - ft);
       }
+      feedFocus(frame, ft, events);
+      if (!running) return; // onFocus dispatches into the app; never tick a closed sheet
       if (recorder && repCounter) {
         const side = repCounter.side;
         rec((r) => {
@@ -1240,6 +1400,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       }
       // Fresh sheet: nothing counted yet, so no onCount(0, 0). Camera switches don't reset.
       counter?.reset();
+      startFocusSet();
       const delegate = tracker.delegate;
       if (rule) rec((r) => r.camera({ folder: rule.folder, delegate, side: null, wallT0 }));
       recSide = null;
@@ -1257,7 +1418,11 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       el.remove();
     },
     setSession(session) {
-      if (!auto || !counter || disposed) return;
+      if (disposed) return;
+      sessionPaused = session.paused;
+      sessionPhase = session.phase;
+      if (session.target) targetTop = session.target.targetReps;
+      if (!auto || !counter) return;
       if (session.target) counter.setTarget(session.target);
       const actions = auto.setSession(
         { phase: session.phase, paused: session.paused, restElapsedMs: session.restElapsedMs },
@@ -1269,6 +1434,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         // A manual Start set (an auto start has already switched to set mode).
         enterSetMode();
         counter.reset();
+        startFocusSet();
       }
       handleAuto(actions);
     },

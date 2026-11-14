@@ -155,8 +155,10 @@ describe('voice.speak with a persona', () => {
     expect(synth.last.lang).toBe('en-GB');
     expect(synth.last.rate).toBe(DRILL_RATE);
     expect(synth.last.pitch).toBe(DRILL_PITCH);
-    voice.speak('Full range', { kind: 'hint' });
+    const u = voice.speak('Full range', { kind: 'hint' });
     expect(synth.last.text).toBe('DRILL[3/hint] Full range');
+    // The returned utterance carries the line actually spoken (the dev log reads it).
+    expect(u?.text).toBe('DRILL[3/hint] Full range');
     expect(typeof line.mock.calls[0]?.[3]).toBe('function');
     voice.speak('Ten seconds.'); // no kind = cue
     expect(synth.last.text).toBe('DRILL[3/cue] Ten seconds.');

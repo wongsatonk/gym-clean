@@ -21,8 +21,27 @@ export default defineConfig({
   },
   projects: [
     {
+      // M5 focus cues replay a fixture clip on the wall clock over several sets: under parallel
+      // load the page drops frames and misses rep turnarounds. One test at a time, like the
+      // live-camera project (CI already runs workers: 1).
+      name: 'mobile-clips',
+      workers: 1,
+      testMatch: /focus-cues\.spec\.ts/,
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 3,
+        isMobile: true,
+        hasTouch: true,
+        permissions: ['camera'],
+        launchOptions: {
+          args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+        },
+      },
+    },
+    {
       name: 'mobile',
-      testIgnore: /(camera-person|rep-count|devlog-camera|hands-free-live)\.spec\.ts/,
+      testIgnore: /(camera-person|rep-count|devlog-camera|hands-free-live|focus-cues)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },

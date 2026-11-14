@@ -121,7 +121,7 @@
   },
   "push-up/synthetic-03-hip-sag__reps-8__partials-0": {
     "flaw": "hip-sag",
-    "description": "reps 5-8: hips drop below the ankle-shoulder line by up to 45 deg (shoulder-hip-ankle 135 deg rendered), zero near the top, ramping in between elbow angles 131 and 103 deg, ~30 deg at the bottom where the hips touch the floor; arms and shoulders move exactly as in a clean rep",
+    "description": "reps 5-8: hips drop below the ankle-shoulder line by up to 50 deg (shoulder-hip-ankle 130 deg rendered), zero near the top, ramping in between elbow angles 131 and 103 deg, ~30 deg at the bottom where the hips touch the floor; arms and shoulders move exactly as in a clean rep",
     "flawReps": [
       5,
       6,
@@ -181,7 +181,7 @@
   },
   "goblet-squat/synthetic-03-short-range__reps-8__partials-0": {
     "flaw": "short-range",
-    "description": "knee bends to 45 deg on reps 1-4 and only to 78 deg on reps 5-8 (rendered range 135 vs 102 deg)",
+    "description": "knee bends to 45 deg on reps 1-4 and only to 83 deg on reps 5-8 (rendered range 135 vs 97 deg)",
     "flawReps": [
       5,
       6,
@@ -214,25 +214,25 @@
         "w": 0
       },
       {
-        "turn": 78,
+        "turn": 83,
         "upSec": 1,
         "downSec": 1.2,
         "w": 1
       },
       {
-        "turn": 78,
+        "turn": 83,
         "upSec": 1,
         "downSec": 1.2,
         "w": 1
       },
       {
-        "turn": 78,
+        "turn": 83,
         "upSec": 1,
         "downSec": 1.2,
         "w": 1
       },
       {
-        "turn": 78,
+        "turn": 83,
         "upSec": 1,
         "downSec": 1.2,
         "w": 1
@@ -301,7 +301,7 @@
   },
   "lateral-raise/synthetic-03-raise-too-high__reps-8__partials-0": {
     "flaw": "raise-too-high",
-    "description": "both arms raise to 90 deg on reps 1-4 and to 116 deg on reps 5-8",
+    "description": "both arms raise to 90 deg on reps 1-4 and to 148 deg on reps 5-8 (lift 1.4 s, lower 1.7 s)",
     "flawReps": [
       5,
       6,
@@ -334,27 +334,27 @@
         "w": 0
       },
       {
-        "turn": 116,
-        "upSec": 1,
-        "downSec": 1.2,
+        "turn": 148,
+        "upSec": 1.4,
+        "downSec": 1.7,
         "w": 1
       },
       {
-        "turn": 116,
-        "upSec": 1,
-        "downSec": 1.2,
+        "turn": 148,
+        "upSec": 1.4,
+        "downSec": 1.7,
         "w": 1
       },
       {
-        "turn": 116,
-        "upSec": 1,
-        "downSec": 1.2,
+        "turn": 148,
+        "upSec": 1.4,
+        "downSec": 1.7,
         "w": 1
       },
       {
-        "turn": 116,
-        "upSec": 1,
-        "downSec": 1.2,
+        "turn": 148,
+        "upSec": 1.4,
+        "downSec": 1.7,
         "w": 1
       }
     ]

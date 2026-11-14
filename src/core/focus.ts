@@ -238,16 +238,17 @@ const QUIET_AUTO_STATES: ReadonlySet<AutoSetState> = new Set<AutoSetState>([
 ]);
 
 /** Counter phases between leaving the start band and returning to it. */
-const MID_REP: ReadonlySet<RepPhase> = new Set<RepPhase>(['down', 'bottom', 'up']);
+export const MID_REP: ReadonlySet<RepPhase> = new Set<RepPhase>(['down', 'bottom', 'up']);
 /** A hold is broken by a hole of this many ms without frames (the counter's EMA reseed gap). */
 const HOLD_GAP_MS = 500;
 
 /**
  * "Held for holdMs": push samples in time order; returns the smallest value over the last
  * holdMs (the sample at or before t − holdMs included), or null until the run covers holdMs.
- * A null sample or a hole over HOLD_GAP_MS breaks the run.
+ * A null sample or a hole over HOLD_GAP_MS breaks the run. Exported so real-data replays measure
+ * with the tracker's own hold (focus.replay.test.ts).
  */
-function createHold(holdMs: number) {
+export function createHold(holdMs: number) {
   let buf: { t: number; v: number }[] = [];
   return {
     clear(): void {

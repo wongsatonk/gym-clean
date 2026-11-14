@@ -9,13 +9,15 @@ import { AUTO_SET_DEFAULTS, personInFrame } from './autoSet';
 import { focusFlagsFor, ruleForFolder, type ExerciseRule } from './exercises';
 import {
   createFocusTracker,
+  createHold,
   FOCUS_DEFAULTS,
+  MID_REP,
   type FocusConfig,
   type FocusCue,
   type FocusRuleFlags,
   type FormMeasures,
 } from './focus';
-import { createRepCounter, type RepPhase } from './repCounter';
+import { createRepCounter } from './repCounter';
 import type { FocusCueId, LandmarkFrame, RepEvent } from './types';
 
 const FIXTURES = import.meta.glob<LandmarkFrame[]>('../../fixtures/landmarks/**/*.json', {
@@ -171,34 +173,24 @@ function verdict(row: RepRow, id: JudgedId): { value: number | null; bad: boolea
 const firedAt = (cues: readonly FocusCue[], id?: FocusCueId) =>
   cues.filter((c) => id === undefined || c.id === id).map((c) => c.reps);
 
-const MID_REP: ReadonlySet<RepPhase> = new Set<RepPhase>(['down', 'bottom', 'up']);
-
 /**
  * The largest |left − right| held ≥ holdMs while mid-rep, over the frames before the clip's first
  * counted rep (the arms-out-of-sync measure, applied to the swing the tracker discards as a
- * partial). Same hold as the tracker: the smallest value over the window, a hole > 500 ms or a
- * frame without both sides breaks the run.
+ * partial). Uses the tracker's own hold and mid-rep phases; a frame that isn't mid-rep, tracked
+ * and two-sided breaks the run, as in the tracker.
  */
 function preSetSyncHeld(c: Clip, holdMs: number): number | null {
   const counter = createRepCounter(ruleOf(c.folder));
-  let run: { t: number; v: number }[] = [];
+  const hold = createHold(holdMs);
   let best: number | null = null;
   for (const frame of c.frames) {
     counter.push(frame);
     if (counter.reps > 0) break;
     const l = counter.sideAngles?.left ?? null;
     const r = counter.sideAngles?.right ?? null;
-    const last = run[run.length - 1];
-    if (!MID_REP.has(counter.phase) || l === null || r === null || !counter.tracking) {
-      run = [];
-      continue;
-    }
-    if (last && frame.t - last.t > 500) run = [];
-    run.push({ t: frame.t, v: Math.abs(l - r) });
-    while (run.length > 1 && (run[1]?.t ?? Infinity) <= frame.t - holdMs) run.shift();
-    if ((run[0]?.t ?? Infinity) > frame.t - holdMs) continue;
-    const held = Math.min(...run.map((s) => s.v));
-    best = best === null ? held : Math.max(best, held);
+    const ok = MID_REP.has(counter.phase) && counter.tracking && l !== null && r !== null;
+    const held = hold.push(frame.t, ok && l !== null && r !== null ? Math.abs(l - r) : null);
+    if (held !== null) best = best === null ? held : Math.max(best, held);
   }
   return best;
 }
@@ -246,12 +238,12 @@ const OWN_RULE: Record<string, { id: JudgedId & FocusCueId; firesAt: number[] }[
     { id: 'bodySwing', firesAt: [6, 8] },
   ],
   'curl/synthetic-03-rushed-lowering': [{ id: 'rushedLowering', firesAt: [6, 8] }],
-  // Rendered 135° reads 152.6–158.1° on reps 5–7 and 163.9° on rep 8, so only rep 6 fires.
-  'push-up/synthetic-03-hip-sag': [{ id: 'hipSag', firesAt: [6] }],
+  // Reads 155.7 / 162.3 / 157.1 / 154.2° on reps 5–8: rep 6 breaks the streak, so rep 8 fires.
+  'push-up/synthetic-03-hip-sag': [{ id: 'hipSag', firesAt: [8] }],
   'goblet-squat/synthetic-03-short-range': [{ id: 'shrinkingRange', firesAt: [6, 8] }],
   'lateral-raise/synthetic-03-arms-out-of-sync': [{ id: 'armsOutOfSync', firesAt: [6, 8] }],
-  // Rendered 116° reads 108.2–109.0°: under the 120° line, so no fire (see the next block).
-  'lateral-raise/synthetic-03-raise-too-high': [{ id: 'raiseTooHigh', firesAt: [] }],
+  // Reps 5–8 read 131.8–132.5°, past the live 120° line (see the next block).
+  'lateral-raise/synthetic-03-raise-too-high': [{ id: 'raiseTooHigh', firesAt: [6, 8] }],
 };
 
 describe('synthetic-03 flaw clips, only their own rule on', () => {
@@ -275,16 +267,15 @@ describe('synthetic-03 flaw clips, only their own rule on', () => {
     });
   }
 
-  it('raise-too-high clip: the flawed reps read 108–109°, so it fires at the old 100° line only', () => {
+  it('raise-too-high clip: the flawed reps read > 120° and fire at the live 120° threshold', () => {
     const c = FLAWED.find((f) => f.label === 'synthetic-03-raise-too-high');
     if (!c) throw new Error('missing clip');
-    const at120 = replay(c, { raiseTooHigh: true });
-    const peaks = at120.rows.map((r) => r.form.raiseTooHigh ?? NaN);
+    expect(FOCUS_DEFAULTS.raiseTooHighDeg).toBe(120);
+    const res = replay(c, { raiseTooHigh: true });
+    const peaks = res.rows.map((r) => r.form.raiseTooHigh ?? NaN);
     expect(Math.max(...peaks.slice(0, 4))).toBeLessThan(90);
-    expect(Math.min(...peaks.slice(4))).toBeGreaterThan(105);
-    expect(Math.max(...peaks.slice(4))).toBeLessThan(FOCUS_DEFAULTS.raiseTooHighDeg);
-    const at100 = replay(c, { raiseTooHigh: true }, { raiseTooHighDeg: 100 });
-    expect(firedAt(at100.cues, 'raiseTooHigh')).toEqual([6, 8]);
+    expect(Math.min(...peaks.slice(4))).toBeGreaterThan(FOCUS_DEFAULTS.raiseTooHighDeg);
+    expect(firedAt(res.cues, 'raiseTooHigh')).toEqual([6, 8]);
   });
 });
 
@@ -292,10 +283,10 @@ describe('synthetic-03 flaw clips, only their own rule on', () => {
 const ALL_ON_FIRES: Record<string, string[]> = {
   'curl/synthetic-03-elbow-swing': ['elbowDrift@6', 'bodySwing@7', 'shrinkingRange@8'],
   'curl/synthetic-03-rushed-lowering': ['rushedLowering@6', 'rushedLowering@8'],
-  'push-up/synthetic-03-hip-sag': ['hipSag@6'],
+  'push-up/synthetic-03-hip-sag': ['hipSag@8'],
   'goblet-squat/synthetic-03-short-range': ['shrinkingRange@6', 'shrinkingRange@8'],
   'lateral-raise/synthetic-03-arms-out-of-sync': ['armsOutOfSync@6', 'armsOutOfSync@8'],
-  'lateral-raise/synthetic-03-raise-too-high': [],
+  'lateral-raise/synthetic-03-raise-too-high': ['raiseTooHigh@6', 'raiseTooHigh@8'],
 };
 
 describe('synthetic-03 flaw clips, every rule forced on', () => {
@@ -346,6 +337,7 @@ describe('real lateral raise, every lateral-raise rule forced on', () => {
   it('raise too high at 120°: 0 fires, every real peak ≤ 110° (≥ 10° margin)', () => {
     expect(FOCUS_DEFAULTS.raiseTooHighDeg).toBe(120);
     expect(runs.flatMap((r) => firedAt(r.res.cues, 'raiseTooHigh'))).toEqual([]);
+    // Regression pin picked after seeing the data (peaks 91.5–109.2°), not an enable criterion.
     expect(Math.max(...values('raiseTooHigh'))).toBeLessThanOrEqual(110);
   });
 
@@ -354,7 +346,7 @@ describe('real lateral raise, every lateral-raise rule forced on', () => {
       expect(firedAt(res.cues, 'rushedLowering').length, c.label).toBeLessThanOrEqual(1);
       expect(firedAt(res.cues, 'shrinkingRange').length, c.label).toBeLessThanOrEqual(1);
     }
-    // Margins: no judged rep comes near its line.
+    // Regression pins picked after seeing the data (lowest 0.77 / 0.90), not enable criteria.
     expect(Math.min(...values('rushedLowering'))).toBeGreaterThan(0.7);
     expect(Math.min(...values('shrinkingRange'))).toBeGreaterThan(0.88);
   });

@@ -98,7 +98,8 @@ export const voice = {
   },
 
   /**
-   * Queues `text` after anything already speaking. Returns the utterance (null if unsupported).
+   * Queues `text` after anything already speaking. Returns the utterance (null if unsupported);
+   * its `text` is the line actually spoken (the drill persona's rewrite), for the dev log.
    * `kind: 'count'` with `cancel: true` first drops whatever is speaking or queued (a count must
    * never lag behind). Only a count may cancel: hints and cues always queue.
    */

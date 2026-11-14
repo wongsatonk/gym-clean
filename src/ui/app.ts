@@ -11,7 +11,7 @@ import {
   type SessionEvent,
   type SessionState,
 } from '../core/session';
-import type { PlannedExercise, ProgramDay, SetLog } from '../core/types';
+import type { FocusCueId, PlannedExercise, ProgramDay, SetLog } from '../core/types';
 import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
 import { shouldSpeakFocusCue } from '../core/focusCue';
 import {
@@ -63,6 +63,7 @@ import { silentHint } from './silentHint';
 import { audioTestPanel, disposeAudioTest } from './audioTest';
 import { createCoachTip } from './coachTip';
 import { createCoachSummary } from './coachSummary';
+import { createFocusSummary } from './focusSummary';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
 import { h } from './dom';
@@ -288,6 +289,8 @@ export function mountApp(root: HTMLElement): void {
             // The reducer ignores this outside an active, unpaused set.
             onCount: (reps: number, partials: number) =>
               dispatch({ type: 'SET_COUNTED', reps, partials }),
+            // M5: every cue fired so far this set (ids); the reducer scores it at Set done.
+            onFocus: (cues: FocusCueId[]) => dispatch({ type: 'SET_FOCUS', cues }),
             onSetDone: () => {
               // Hands-free keeps the camera for the next set of the same exercise (syncCamera).
               if (!cameraHandsFree) closeCameraView();
@@ -847,6 +850,7 @@ export function mountApp(root: HTMLElement): void {
             restTakenSec: newLog.restTakenSec,
           }),
       );
+      if (newLog.focusScore !== undefined) logFocusScore(newLog);
     }
     const newSet =
       s.phase === 'exercise' &&
@@ -925,6 +929,17 @@ export function mountApp(root: HTMLElement): void {
     return correction.handle.el;
   }
 
+  /** Dev log (M5): ids and numbers only; logged at the save, so it lands after the set's end. */
+  function logFocusScore(log: SetLog): void {
+    rec((r) =>
+      r.logEvent('focusScore', {
+        score: log.focusScore ?? null,
+        cues: log.cues?.length ?? 0,
+        partials: log.partials ?? 0,
+      }),
+    );
+  }
+
   function correctLastSet(reps: number, partials: number): void {
     dispatch({ type: 'CORRECT_LAST_SET', reps, partials });
     if (view.screen !== 'session') return;
@@ -932,8 +947,10 @@ export function mountApp(root: HTMLElement): void {
     const last = s.logs.at(-1);
     if (!last) return;
     const counts = { reps: last.reps, partials: last.partials ?? 0 };
-    void updateSet(db, last, counts).catch(logDbError);
+    // The reducer recomputed the focus score from the stored cues; null removes it (0 reps).
+    void updateSet(db, last, { ...counts, focusScore: last.focusScore ?? null }).catch(logDbError);
     rec((r) => void r.correctSet(counts));
+    if (last.cues) logFocusScore(last);
     if (s.phase === 'summary') saveTotals(s);
   }
 
@@ -1393,6 +1410,7 @@ export function mountApp(root: HTMLElement): void {
       ),
       lastSetFix(s),
       createCoachSummary(coachSummary(s, lastTime, exerciseName), exerciseName),
+      createFocusSummary(s.logs, exerciseName),
       h('h2', { class: 'section-title' }, 'Sets'),
       h(
         'ul',

@@ -1,7 +1,9 @@
 // Coach voice names and settings types (drill-sergeant design 2026-11-13). Pure: no speech, no persona.
 
+import type { Rudeness } from '../core/personas';
+
+export type { Rudeness };
 export type CoachPersona = 'calm' | 'drill';
-export type Rudeness = 1 | 2 | 3;
 export type VoiceConfig = { persona: CoachPersona; rudeness: Rudeness; voiceName: string | null };
 
 /** Drill-sergeant delivery: a bit faster and lower than calm (design: ~1.15 / ~0.8). */
