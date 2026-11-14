@@ -26,6 +26,7 @@ import {
   finishSession,
   getExerciseNote,
   getCoachTips,
+  finishedHistorySince,
   getAccent,
   setAccent,
   getCoachVoice,
@@ -72,7 +73,15 @@ import { createFocusSummary } from './focusSummary';
 import { exerciseScreen as renderExercise } from './screens/exercise';
 import { pauseSheet as renderPauseSheet } from './screens/pauseSheet';
 import { previewScreen as renderPreview } from './screens/preview';
+import { historyScreen as renderHistory } from './screens/history';
 import { restScreen as renderRest } from './screens/rest';
+import {
+  exercisesWithHistory,
+  exerciseHistory,
+  historyWindowStart,
+  lastDays,
+  lastDaysStart,
+} from '../core/history';
 import { settingsScreen as renderSettings } from './screens/settings';
 import { summaryScreen as renderSummary } from './screens/summary';
 import { todayScreen as renderToday, type TodayLast } from './screens/today';
@@ -114,9 +123,13 @@ type TodayStats = {
   doneThisWeek: Record<string, number>;
 };
 
+/** M6 History: finished sessions and their sets in the window (loaded when the tab opens). */
+type HistoryData = { sessions: SessionRow[]; sets: SetRow[]; today: number } | 'error';
+
 type View =
   | { screen: 'today'; upNextDayId: string | null; stats: TodayStats | null }
   | { screen: 'settings' }
+  | { screen: 'history'; exerciseId: string | null; data: HistoryData | null }
   | { screen: 'preview'; day: ProgramDay; loading: boolean }
   | { screen: 'session'; s: SessionState; sheet: Sheet };
 
@@ -492,6 +505,8 @@ export function mountApp(root: HTMLElement): void {
         return todayScreen(v.upNextDayId, v.stats);
       case 'settings':
         return settingsScreen();
+      case 'history':
+        return historyView(v.exerciseId, v.data);
       case 'preview':
         return previewScreen(v.day, v.loading);
       case 'session':
@@ -511,11 +526,64 @@ export function mountApp(root: HTMLElement): void {
           render();
         }
         return;
+      case 'history':
+        if (view.screen !== 'history') openHistory();
+        return;
       default: {
         const unhandled: never = tab;
         throw new Error(`Unhandled tab: ${String(unhandled)}`);
       }
     }
+  }
+
+  function openHistory(): void {
+    view = { screen: 'history', exerciseId: null, data: null };
+    render();
+    const t = now();
+    void finishedHistorySince(db, Math.min(historyWindowStart(t), lastDaysStart(t)))
+      .then(({ sessions, sets }) => {
+        if (view.screen !== 'history') return;
+        view = { ...view, data: { sessions, sets, today: t } };
+        render();
+      })
+      .catch((err: unknown) => {
+        logDbError(err);
+        if (view.screen === 'history') {
+          view = { ...view, data: 'error' };
+          render();
+        }
+      });
+  }
+
+  function historyView(exerciseId: string | null, data: HistoryData | null): HTMLElement {
+    const ok = data !== null && data !== 'error' ? data : null;
+    const sets = ok?.sets ?? [];
+    const today = ok?.today ?? now();
+    return renderHistory(
+      {
+        loading: data === null,
+        error: data === 'error',
+        unit,
+        days: ok ? lastDays(ok.sessions, sets, today) : [],
+        exercises: exercisesWithHistory(sets, today).map((id) => exerciseHistory(sets, id, today)),
+        detail: exerciseId ? exerciseHistory(sets, exerciseId, today) : null,
+        dayName: (id) => program.days.find((d) => d.id === id)?.name ?? id,
+        name: exerciseName,
+      },
+      {
+        onOpenExercise: (id) => {
+          if (view.screen !== 'history') return;
+          view = { ...view, exerciseId: id };
+          render();
+        },
+        onBack: () => {
+          if (view.screen !== 'history') return;
+          view = { ...view, exerciseId: null };
+          render();
+        },
+        onTab: (t) => goTab(t),
+      },
+    );
   }
 
   function goToday(): void {

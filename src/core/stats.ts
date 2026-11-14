@@ -39,24 +39,25 @@ export type NewBest = {
 };
 
 /** Weights within this many kg are the same (lb-entered weights are stored as odd kg). */
-const WEIGHT_EPS_KG = 0.01;
+export const WEIGHT_EPS_KG = 0.01;
 
-const isFinished = (s: StatsSession): boolean => s.endedAt !== undefined;
+export const isFinished = (s: StatsSession): boolean => s.endedAt !== undefined;
 
-function dayStartOf(ms: number): number {
+/** Local midnight of the day that holds `ms`. */
+export function dayStartOf(ms: number): number {
   const d = new Date(ms);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 /** Local midnight of the Monday starting the week that holds `ms`. */
-function weekStartOf(ms: number): number {
+export function weekStartOf(ms: number): number {
   const d = new Date(ms);
   const sinceMonday = (d.getDay() + 6) % 7;
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() - sinceMonday).getTime();
 }
 
 /** `n` local days after the local midnight `dayStart` (DST-safe). */
-function addDays(dayStart: number, n: number): number {
+export function addDays(dayStart: number, n: number): number {
   const d = new Date(dayStart);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n).getTime();
 }
@@ -178,10 +179,10 @@ export function lastSession(
   };
 }
 
-type Top = { weightKg: number; reps: number };
+export type Top = { weightKg: number; reps: number };
 
 /** Heaviest set, then most reps at that weight (0-rep sets ignored). */
-function topSet(logs: readonly SetLog[]): Top | null {
+export function topSet(logs: readonly SetLog[]): Top | null {
   let top: Top | null = null;
   for (const l of logs) {
     if (l.reps <= 0) continue;

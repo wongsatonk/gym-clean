@@ -3,6 +3,10 @@ import { FAKE_PERSON_VIDEO } from './e2e/fake-camera.setup';
 
 // E2E_PORT lets several checkouts/worktrees run e2e side by side.
 const PORT = Number(process.env.E2E_PORT ?? 5174);
+// M6 PWA: the service worker only exists in a production build, so pwa.spec.ts runs against
+// `vite preview` of a build in its own out dir (dist/ stays untouched) on a second port.
+const PWA_PORT = Number(process.env.E2E_PWA_PORT ?? PORT + 1000);
+const PWA_OUT = 'node_modules/.cache/e2e-pwa-dist'; // ignored by git, eslint and prettier
 
 export default defineConfig({
   testDir: 'e2e',
@@ -41,7 +45,8 @@ export default defineConfig({
     },
     {
       name: 'mobile',
-      testIgnore: /(camera-person|rep-count|devlog-camera|hands-free-live|focus-cues|hands-free-break)\.spec\.ts/,
+      testIgnore:
+        /(camera-person|rep-count|devlog-camera|hands-free-live|focus-cues|hands-free-break|pwa)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -84,12 +89,44 @@ export default defineConfig({
         },
       } satisfies PlaywrightTestConfig['use'],
     },
+    {
+      // M6 offline/install: same phone, against the production build (service worker active).
+      name: 'pwa',
+      testMatch: /pwa\.spec\.ts/,
+      use: {
+        browserName: 'chromium',
+        baseURL: `https://localhost:${PWA_PORT}`,
+        viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 3,
+        isMobile: true,
+        hasTouch: true,
+        permissions: ['camera'],
+        launchOptions: {
+          // Chromium refuses to register a service worker over a self-signed cert even with
+          // ignoreHTTPSErrors (that only covers page requests); this covers the worker too.
+          args: [
+            '--use-fake-device-for-media-stream',
+            '--use-fake-ui-for-media-stream',
+            '--ignore-certificate-errors',
+          ],
+        },
+      },
+    },
   ],
-  webServer: {
-    command: `npx vite --port ${PORT} --strictPort`,
-    url: `https://localhost:${PORT}`,
-    ignoreHTTPSErrors: true,
-    // Never reuse: a server left on this port by another checkout would silently test its code.
-    reuseExistingServer: false,
-  },
+  webServer: [
+    {
+      command: `npx vite --port ${PORT} --strictPort`,
+      url: `https://localhost:${PORT}`,
+      ignoreHTTPSErrors: true,
+      // Never reuse: a server left on this port by another checkout would silently test its code.
+      reuseExistingServer: false,
+    },
+    {
+      command: `npx vite build --outDir ${PWA_OUT} --emptyOutDir --logLevel warn && npx vite preview --outDir ${PWA_OUT} --port ${PWA_PORT} --strictPort`,
+      url: `https://localhost:${PWA_PORT}`,
+      ignoreHTTPSErrors: true,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+  ],
 });

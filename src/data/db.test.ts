@@ -5,6 +5,7 @@ import type { SetLog } from '../core/types';
 import {
   GymDb,
   finishSession,
+  finishedHistorySince,
   getAccent,
   getCoachTips,
   getCoachVoice,
@@ -465,5 +466,23 @@ describe('GymDb history queries (M4e)', () => {
       ['Pushups', 7000],
     ]);
     expect(await setsForExercises(db, [])).toEqual([]);
+  });
+
+  it('finishedHistorySince returns finished sessions since the time and only their sets', async () => {
+    await startSessionRow(db, { sessionId: 'old', dayId: 'legs', startedAt: 500, endedAt: 900 });
+    await startSessionRow(db, { sessionId: 'a', dayId: 'push-a', startedAt: 1000, endedAt: 2000 });
+    await startSessionRow(db, { sessionId: 'open', dayId: 'pull-a', startedAt: 3000 });
+    await startSessionRow(db, { sessionId: 'b', dayId: 'legs', startedAt: 4000, endedAt: 5000 });
+    await saveSet(db, log({ sessionId: 'old', startedAt: 600 }));
+    await saveSet(db, log({ sessionId: 'b', startedAt: 4100 }));
+    await saveSet(db, log({ sessionId: 'open', startedAt: 3100 }));
+    await saveSet(db, log({ sessionId: 'a', startedAt: 1100 }));
+    const { sessions, sets } = await finishedHistorySince(db, 1000);
+    expect(sessions.map((r) => r.sessionId)).toEqual(['a', 'b']);
+    expect(sets.map((r) => [r.sessionId, r.startedAt])).toEqual([
+      ['a', 1100],
+      ['b', 4100],
+    ]);
+    expect(await finishedHistorySince(db, 6000)).toEqual({ sessions: [], sets: [] });
   });
 });

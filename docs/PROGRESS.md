@@ -851,6 +851,22 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M6 (Polish & install) built on branch `m6-polish`.** Review: 2 blocking items fixed (a TS tuple in history.spec; a real-flow e2e, history-flow.spec, that seeds IndexedDB and checks unfinished sessions are excluded). check 1422 unit + 24 script tests; M6 e2e 12/12.
+  - **PWA** (vite-plugin-pwa, generateSW):
+    - It precaches about 21 MB, including the 14.7 MB wasm and the 5.8 MB pose model, so the camera works in airplane mode even if it has never been opened.
+    - Update strategy: registerType 'prompt' with no skipWaiting, so a new version takes over only on the next full launch and never mid-workout. On iOS, swipe the app away to update.
+    - Original icons come from the in-app logo (`npm run icons`). Nothing is active in dev.
+    - iOS note: the home-screen app has its own storage, separate from Safari, so history in Safari doesn't carry over.
+  - **History:**
+    - The Last 7 days scoreboard and list, plus a per-exercise view with best set, trend, volume or reps change and average focus.
+    - Window: the current Mon–Sun week plus the 3 before it (22–28 days), matching stats.ts week maths.
+    - Loading and error cards.
+    - A third tab (Today / History / Settings).
+  - **Follow-ups:**
+    - Move the bodyweight reps-change into core (`ExerciseTrend.repsChange`).
+    - Pin a DST time zone in the history tests.
+    - Tapping the History tab from detail should return to the list.
+    - Wongsaton should try the install on his real iPhone (Checkpoint: add to home screen, airplane mode).
 - 2026-11-14: **Polish follow-ups on branch `polish-followups`** (from main eb16eed; review PASS; check 1377 unit + 24 script tests).
   - **Pause sheet:**
     - Escape resumes, and a focus trap keeps focus inside the sheet.

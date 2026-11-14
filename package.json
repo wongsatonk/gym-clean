@@ -16,7 +16,8 @@
     "landmarks": "node scripts/landmarks.mjs",
     "postinstall": "node scripts/copy-mediapipe-wasm.mjs",
     "synthetic": "node scripts/synthetic.mjs",
-    "devlog": "node scripts/devlog.mjs"
+    "devlog": "node scripts/devlog.mjs",
+    "icons": "node scripts/icons.mjs"
   },
   "type": "module",
   "devDependencies": {
@@ -34,6 +35,7 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.2",
     "vite": "^8.3.8",
+    "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.1.0"
   },
   "private": true,

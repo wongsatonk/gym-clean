@@ -1,13 +1,14 @@
-// M4e tab bar (mix README "cohesion anchors"): Today / Settings until History exists.
+// M4e tab bar (mix README "cohesion anchors"): Today / History / Settings (History since M6).
 // 72px tabs, icon + visible label, the active tab marked by an orange bar, orange icon and
 // aria-current="page" (never colour alone). Buttons, not links: the app has no URL routes.
 import { h } from './dom';
 import { icon, type IconName } from './icons';
 
-export type TabId = 'today' | 'settings';
+export type TabId = 'today' | 'history' | 'settings';
 
 export const TABS: readonly { id: TabId; label: string; icon: IconName }[] = [
   { id: 'today', label: 'Today', icon: 'home' },
+  { id: 'history', label: 'History', icon: 'bars' },
   { id: 'settings', label: 'Settings', icon: 'sliders' },
 ];
 
