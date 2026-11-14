@@ -4,10 +4,16 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Live:** ec91d2f (Push A slice + iOS voice hotfix + today's Push A targets).
-- **Ready, verified (PASS), not deployed — branch m4d-next:** S2 range-of-motion gauge; 3D demos for curl, one-arm row, goblet squat, hammer curls, reverse flyes, wide-grip lat pulldown (Pull A fully demo'd); Silent-mode reminder; M5b after-set coach (Rest tip spoken once + Apply, Summary Coach section, Coach tips switch); M4e design mockups (docs/design/m4e-directions).
-- **Next step:** Wongsaton reviews → deploy m4d-next on his OK (push = deploy). Then his Push A dev log → `npm run devlog -- <file>` → retune; M4e build after he picks a direction. **Planned next: M5c Hands-free sets** (his request after the first real camera session: auto start/stop, no tapping): plan below, branch `m5c-hands-free` off m4d-next once the lateral-raise phantom-rep fix and the press/push-up retune are committed (wave 1 core work can start now; it doesn't touch repCounter.ts).
-- **Waiting on human:** yes — deploy OK for m4d-next, the exported Push A dev log, a design pick (Energy / Pro / Track), and two coach questions (trust manually logged reps? 25% jump guard for light dumbbells?).
+- **Live:** c3c1f85, deployed 2026-11-13. It includes: the Push A slice (M4c + M4b), M5b round 1 (after-set coach), the S2 gauge, the M4d Pull A demos, the M4e step-1 mockups, the counter retune on the real Push A log (press image-plane angles, lateral-raise posture gate, push-up front variant + body-line gate), and **M5c Hands-free sets** (all 13 tasks done, verifier PASS recorded below).
+- **In progress:** M5 Live trainer (focus & form cues) on branch `m5-live-trainer`, cut from c3c1f85. Plan below ("M5 — Live trainer").
+- **Next step:** M5 wave 1 (see the plan's "Parallel waves"). M5 is planned around the real data we have: the 4 committed real lateral-raise clips, the 12 synthetic clips, and the press/push-up numbers in Decisions (that real data isn't committed).
+- **Waiting on Wongsaton (none of these block M5 wave 1):**
+  - 🧍 **Checkpoint B3**, the hands-free gym test: a training day with hands-free on, then the exported dev log (he'll report).
+  - The **M4e design pick**: Energy / Pro / Track.
+  - **Press "first press = positioning"?** He did 7 per set; the app counts 8. See the Decisions entry on the retune.
+  - **Push-up set with a sit-down break:** is it one set or two? Hands-free currently saves it as two.
+  - **The two older coach questions:** should the coach trust manually logged reps, and is the 25% jump guard right for light dumbbells?
+  - New M5 questions are under "Blockers / questions".
 
 ## Milestone checklist
 
@@ -17,18 +23,254 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [x] M2 Anatomy map (3D + 2D fallback) + focus cues
 - [x] M3 Pose pipeline (+ 3D live skeleton) → 🧍 Checkpoint B (record fixtures)
 - [~] M4 Rep counter: provisionally done on synthetic fixtures; real clips pending (Checkpoint B, or real sets from the M4c developer log)
-- [ ] M4c Coaching on the camera page + developer log (Push A slice, in progress) → 🧍 Checkpoint B2 (Push A gym session + exported log)
-- [ ] M4b 3D exercise demos: the six Push A exercises + "3D demo"/"Info"/"Camera" badges (Push A slice, in progress)
-- [ ] M4d 3D demos for the other 24 exercises (curl, row, goblet squat first); after the Push A report, doesn't gate M5
-- [ ] M4e Visual redesign (directions → 🧍 Wongsaton picks → tokens/themes → Today first); after the Push A slice
-- [ ] M5 Live trainer: focus & form cues (partial cues moved to M4c) → 🧍 Checkpoint C (gym test with camera)
-- [ ] M5b Trainer recommendations after the set (progression, rest advice). Round 1 (reps/partials/rest/weight rules) being built now, ahead of M5; the tempo rule waits for M5
-- [ ] M5c Hands-free sets (auto start/stop on camera exercises, camera open for the whole exercise) → 🧍 Checkpoint B3 (hands-free gym test)
+- [x] M4c Coaching on the camera page + developer log (Push A slice; live). Checkpoint B2 is done: the Push A log was analysed and the counter retuned (Decisions)
+- [x] M4b 3D exercise demos: the six Push A exercises + "3D demo"/"Info"/"Camera" badges (live)
+- [~] M4d 3D demos for the other 24 exercises: Pull A done and live (curl, row, goblet squat, hammer curls, reverse flyes, lat pulldown); the rest are open. Doesn't gate M5
+- [~] M4e Visual redesign: step 1 mockups live in docs/design/m4e-directions → 🧍 waiting for Wongsaton's pick (Energy / Pro / Track)
+- [ ] M5 Live trainer: focus & form cues (partial cues moved to M4c) → 🧍 Checkpoint C (gym test with camera). **In progress, plan below**
+- [~] M5b Trainer recommendations after the set: round 1 is live. The tempo rule (T1) is built in M5 (task 8)
+- [~] M5c Hands-free sets: **built and live** (c3c1f85, verifier PASS) → waiting for 🧍 Checkpoint B3 (hands-free gym test)
 - [ ] M6 Polish & install
 - [ ] M7 Fuel: food & nutrition (independent of the camera; can be built while waiting on Checkpoint B with `/build M7`)
 - [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
 
 ## Current milestone plan
+
+### M5 — Live trainer: focus & form cues (planned 2026-11-13)
+**Contract:** SPEC M5, including its "Plan decisions (2026-11-13)" block, and the M5b T1 row. Branch `m5-live-trainer`, cut from c3c1f85. Logic is **tests first**. Nothing is pushed or deployed without Wongsaton's OK.
+
+**Real data available:**
+- the 4 committed real lateral-raise clips: 80 reps, front view, both arms, `fixtures/landmarks/lateral-raise/real-2026-11-13-*`;
+- the 12 synthetic clips (all six exercises);
+- the real press and push-up numbers in Decisions. Their fixtures aren't committed, so those numbers can switch a rule **off** but never **on**.
+
+**Shape:**
+- `src/core/focus.ts` is a pure per-frame tracker, fed like `autoSet` (every camera tick, after the counter). It returns `FocusCue`s.
+- Cues are spoken through the existing M4c `coachSpeech` policy as hints: they share its 6 s gap, a count word always wins, and stale cues are dropped. There is no second partial cue.
+- Which rule is on for which exercise is **data on the exercise rule** (`focus` flags, including the push-up's `otherView` variant).
+- The focus score is computed in core from the cue ids plus the partials. It is stored on the SetLog and recomputed when "Fix last set" corrects the partials.
+
+**Ownership:** core-engineer: `src/core/**` and `src/data/db.ts`. ui-engineer: camera view, Summary component, e2e. pose-engineer: synthetic clips, converter. main: `types.ts`, `app.ts`, `playwright.config.ts`.
+
+- [ ] 1. [main] Shared types.
+  - Files: src/core/types.ts.
+  - Add `FocusCueId = 'rushedLowering' | 'shrinkingRange' | 'stalled' | 'outOfFrame' | 'lowFps' | 'armsOutOfSync' | 'raiseTooHigh' | 'elbowDrift' | 'bodySwing' | 'hipSag'`.
+  - Change `SetLog.cues?: FocusCueId[]`: one entry per detection, ids not text. The field stays optional and isn't indexed, so there is no Dexie version bump and old rows still read.
+  - Done when: `npm run typecheck` passes.
+  - Deps: none.
+- [ ] 2. [core-engineer ∥A] Counter getters, **tests first**.
+  - Files: src/core/repCounter.ts(+test).
+  - `untracked: 'visibility' | 'posture' | 'bodyLine' | null`: why the last frame wasn't tracked; null when it was.
+  - `sideAngles: { left: number | null; right: number | null } | null`: this frame's per-side joint angles in the rule's angle space (image plane for the press), before the EMA. Only for `sideMode: 'both'`.
+  - Counting doesn't change.
+  - Done when tests cover:
+    - a hidden wrist → `visibility`;
+    - a lean past `maxTorsoLeanDeg` → `posture`;
+    - sitting on the push-up front variant → `bodyLine`;
+    - per-side angles on a both-arms frame, in world space (lateral raise) and image space (press);
+    - the fixture suite still has 17 cases with unchanged counts.
+  - Deps: none.
+- [ ] 3. [core-engineer ∥B] `src/core/focus.ts`(+test) part 1: the tracker and the focus rules. **Tests first**, pure, no DOM.
+  - Files: src/core/focus.ts(+test).
+  - **Config:** `FocusConfig` + `FOCUS_DEFAULTS`: `baselineReps` 2, `rushedRatio` 0.5, `rangeRatio` 0.85, `streakReps` 2, `maxFiresPerRule` 2, `stalledSec` 8, `stalledHandsFreeFraction` 0.5, `outOfFrameSec` 2, `lowFps` 15, `lowFpsSec` 3, plus the geometry values used by task 5.
+  - **Types:** `FocusRuleFlags = Partial<Record<FocusCueId, boolean>>`. `CUE_TEXT`: shown = spoken, ≤ 6 words, no banned words; the stalled cue is "Stay with it. {N} to go.".
+  - **API:**
+    - `createFocusTracker(rule, { config?, flags, targetReps, autoSet: AutoSetConfig | null })`.
+    - `reset({ targetReps, seed?: RepEvent[] })`. The seed is the reps that auto-started a set and count toward the baseline. Reset keeps the once-per-camera low-fps flag.
+    - `push({ t, present, tracking, untracked, phase, angle, sides, frame, events, fps, autoState, paused }): FocusCue[]`, where `FocusCue = { id, t, reps, value, baseline, threshold, text }`. Push returns at most one cue, by the priority in the SPEC.
+    - `fired: FocusCueId[]`.
+  - **Rules in this task:**
+    - `rushedLowering` and `shrinkingRange`: reps only. A partial neither extends nor breaks a streak. Baseline = mean of the first 2 reps. After a fire the streak restarts. At most 2 fires per rule per set.
+    - `stalled`, `outOfFrame` and `lowFps`: exactly as in SPEC M5 "Plan decisions".
+    - Nothing fires while `paused`, or when autoState is `rest`, `pending` or `closed`.
+    - A flag that is false never fires.
+  - Done when tests cover:
+    - the edges: eccentric at 49% / 51% of baseline, range at 84% / 86%;
+    - 1 vs 2 reps in a row, and a partial between two rushed reps keeping the streak;
+    - a seeded baseline;
+    - ≤ 2 fires per rule, and the priority order;
+    - the stalled matrix (below);
+    - the out-of-frame cases (below);
+    - low fps fires once per tracker, also across `reset`;
+    - nothing in rest, pending or paused;
+    - **real-data-like noise** gives no cue: ±5° jitter, 15–30 fps with dropped frames, a 450 ms gap;
+    - the cue texts' word count and banned words.
+  - Stalled matrix:
+    - hands-free on, in the start band → no cue (the still stop wins);
+    - hands-free on, out of the band → cue at 5 s, and the stop still comes at 10 s;
+    - hands-free off → cue at 8 s, anywhere;
+    - fewer than `stopMinReps` reps → the hands-free-off timing;
+    - no cue once reps ≥ the target, and at most once per set.
+  - Out-of-frame cases:
+    - present but the visibility gate fails → cue;
+    - a posture or body-line gate failure → never;
+    - absent with hands-free on and ≥ 2 reps → none (the away stop speaks instead);
+    - absent with hands-free off → cue after 2 s;
+    - before the set's first rep → none.
+  - Deps: 1. It uses task 2's getters only through the input shape, so it can start on stubs.
+- [ ] 4. [core-engineer ∥C] Focus score + reducer + DB, **tests first**.
+  - Files: src/core/focusScore.ts(+test), src/core/session.ts(+test), src/data/db.ts(+test).
+  - `focusScore(cues, partials)`: start at 100; −10 per tempo/range/form cue, −5 per `stalled`, −5 per partial; `outOfFrame` and `lowFps` cost 0; clamped to 0–100. Also `cueWeight(id)`.
+  - Reducer:
+    - new `SET_FOCUS { cues }`, accepted only in the `exercise` phase and only when not paused. It overwrites, like `SET_COUNTED`, and is cleared on the next set.
+    - `SET_DONE` writes `cues` + `focusScore` only when the set got a `SET_FOCUS`, so manual sets have no score.
+    - `CORRECT_LAST_SET` recomputes `focusScore` from the stored cues and the corrected partials.
+  - db: `updateSet` takes an optional `focusScore`.
+  - Done when tests cover: the weights and the clamp; a manual set → no score; a camera set with no cues → 100 − 5 × partials; recompute on correction (state and the DB row); reset on the next set; rest and paused ignored; every existing session and db test still passes.
+  - Deps: 1.
+- [ ] 5. [core-engineer, after 2 + 3] `focus.ts` part 2: the geometry (form) rules, **tests first**. All rules use world landmarks, are visibility-gated (unknown = no fire) and need 2 reps in a row.
+  - Files: src/core/focus.ts(+test).
+  - `armsOutOfSync` (rules with `sideMode: 'both'`): |left − right| > 20° held ≥ 0.5 s while mid-rep (counter phase down/bottom/up). Uses `sideAngles`.
+  - `raiseTooHigh`: rep `maxAngle` > 100°.
+  - `elbowDrift`: during the lift, the upper arm (shoulder → elbow) swings > 25° forward of the torso line.
+  - `bodySwing`: during the lift, the torso (hip mid → shoulder mid) direction changes > 15°.
+  - `hipSag`: shoulder–hip–ankle angle < 160°. Only while the active view is `side`; never evaluated on the push-up front variant.
+  - Done when:
+    - tests built from synthetic landmark sequences (angle curves → landmarks, like repCounter.test) fire each rule at its edge and not 1° under it;
+    - one bad rep doesn't fire;
+    - every clean `synthetic-01` fixture (all six) fires none of the geometry rules with every flag forced on.
+  - Deps: 2, 3.
+- [ ] 6. [core-engineer, after 3] Rule flags as data.
+  - Files: src/core/exercises/types.ts (`focus?: FocusRuleFlags` on `ExerciseRule` and `ViewVariant`), the six rule files, src/core/exercises/index.ts (`focusFlagsFor(rule, active)`: the variant's flags override the rule's), index.test.ts.
+  - Starting flags: the Decision table "M5 rule enablement". The lateral-raise geometry flags stay **false** until task 7.
+  - Done when index.test asserts:
+    - every flag key is a known `FocusCueId`;
+    - each geometry rule is only set on the exercises SPEC M5 lists for it;
+    - **a geometry flag can be true only if `fixtures/landmarks/<folder>/real-*` exists** (checked with `import.meta.glob`);
+    - the push-up front variant has `shrinkingRange: false` and no `hipSag`;
+    - the fixture suite is unchanged.
+  - Deps: 3.
+- [ ] 7. [core-engineer, after 5 + 6 + 9] Real-data replay + enable decision.
+  - Files: src/core/focus.replay.test.ts, src/core/exercises/lateralRaise.ts (flags only).
+  - Replay the 4 real lateral-raise clips through counter + focus tracker, with every lateral-raise rule forced on and autoState `set`. Also replay every synthetic fixture (01/02/03).
+  - Pin the fire count per clip in the test, and report per rep: eccentric ratio, range ratio, `maxAngle`, the largest |L − R| held ≥ 0.5 s.
+  - Apply the pre-registered criteria (Decision "M5 rule enablement") and flip `armsOutOfSync` / `raiseTooHigh` for the lateral raise only if they pass.
+  - Write the numbers and the outcome as a Decision. A criterion that fails = the rule stays off, plus a question for Wongsaton. No silent threshold change: a retune is its own Decision, with the numbers.
+  - Done when: the replay test is green, the flags match the criteria, and the Decision is written.
+  - Deps: 5, 6, 9.
+- [ ] 8. [core-engineer ∥C, after 4] M5b tempo rule **T1**, **tests first**.
+  - Files: src/core/advice.ts(+test).
+  - Text: "Next time on {Name}: lower for 2 seconds." Spoken: "… lower for two seconds.". Why: "Slow the lowering: {k} of {n} sets". No Apply.
+  - Fires when ≥ 2 of today's sets of the exercise have `rushedLowering` in `cues`.
+  - Order: N1 > N2 > **T1** > N3 > N4 > N5 > N6.
+  - Done when tests cover:
+    - 1 set → no T1, 2 sets → T1;
+    - N2 still wins;
+    - T1 beats N3 (all top reps but rushed);
+    - old rows without `cues` → never T1;
+    - ≤ 12 words with the longest exercise name, no banned words;
+    - `coachSummary` shows T1.
+  - Deps: 1 (types only; sequenced after 4 to share one instance).
+- [ ] 9. [pose-engineer ∥] Synthetic clips with form flaws (positive fixtures for the geometry and tempo rules).
+  - Files: tools/synthetic.ts, tools/synthetic.html, scripts/synthetic.mjs, `fixtures/synthetic/<folder>/synthetic-03-<flaw>__reps-<n>__partials-<m>.webm`, `fixtures/landmarks/<folder>/synthetic-03-*.json`.
+  - Clips, each 8 reps in the SPEC view:
+    - lateral raise: left arm lags ~30° on reps 5–8, and reps 6–8 go to ~110°;
+    - curl: elbow swings ~35° forward + torso swings ~20° on reps 5–8;
+    - side push-up: hips sag ~30° on reps 5–8;
+    - curl: lowering 2 s on reps 1–4, then 0.6 s on reps 5–8;
+    - goblet squat: depth on reps 5–8 is ~75% of the baseline range, still past the 100° threshold.
+  - The existing clips stay byte-identical. A clip under ~90% detection isn't committed (report it).
+  - The pose-engineer doesn't touch thresholds: a clip the counter miscounts goes back to core-engineer.
+  - Done when: the JSON files are committed with their detection rates, and the fixture suite counts each one by its filename.
+  - Deps: none.
+- [ ] 10. [pose-engineer, after 9] Converter report.
+  - Files: scripts/devlog.mjs(+`scripts/devlog.test.mjs`).
+  - The per-set report lists each `focusCue` event (id, rep, value / baseline) and the set's `focusScore` event.
+  - Done when: a synthetic export with these events prints them, and the existing script tests pass.
+  - Deps: none beyond the event shapes in tasks 11/13 (written in this plan).
+- [ ] 11. [ui-engineer] Focus tracker in the camera view.
+  - Files: src/ui/cameraView.ts, src/styles.css.
+  - **Lifecycle:**
+    - One tracker per camera sheet, only when the exercise has a rule (the Settings camera test has none).
+    - Flags come from `focusFlagsFor(rule, counter.rule)`, so the push-up front variant gets its own.
+    - Feed it every tick after the counter and `autoSet`, with no-pose ticks too.
+    - `reset` at every set start (manual Start set, or the exercise phase), with the target = the top of the range.
+    - On an auto start, seed it with the rest-mode rep events since the start action's `at`. Keep ≤ 8 s of those events.
+    - Nothing is fed in rest mode, while paused, or during the Undo window.
+  - **Each cue:**
+    - show it in the coach line for 4 s (≥ 20px, `data-cue="<id>"`);
+    - speak it with `policy.hint(text, now)`;
+    - log it with `recorder.logEvent('focusCue', { id, t, reps, value, baseline, threshold })` (enum + numbers only).
+  - **New option:** `onFocus(cues: FocusCueId[])`, called at a set's first counted rep and after every cue.
+  - Done when:
+    - typecheck + lint clean;
+    - the existing camera e2e specs (camera-layout, rep-panel, rep-count, hands-free, devlog-camera) still pass;
+    - by hand on the fixture landmarker, "Slow the lowering." is spoken after a count word, never over it.
+  - Deps: 2, 3, 6. Task 5 lands behind the same interface.
+- [ ] 12. [ui-engineer, second instance ∥] Summary focus component.
+  - Files: src/ui/focusSummary.ts(+test), src/styles.css.
+  - `createFocusSummary(logs, name)`, per exercise with camera sets:
+    - "Set 2 · Focus 80" (score ≥ 28px);
+    - the fired cues with counts ("Slow the lowering ×2", "1 partial");
+    - one explainer line ("Start 100 · −10 per cue · −5 per partial or stall");
+    - attributes `data-focus-set`, `data-focus-score`, `data-focus-cue`.
+  - Renders nothing when there are only manual sets. Text ≥ 20px. Cue labels come from `CUE_TEXT`; it can start from this plan's ids.
+  - Done when: a unit test (render / omit), a 390×844 screenshot (harness), typecheck + lint clean.
+  - Deps: 1.
+- [ ] 13. [main] Wiring.
+  - Files: src/ui/app.ts, playwright.config.ts.
+  - `onFocus` → `SET_FOCUS`. Before a hands-free commit's `SET_DONE` the cues are already in state.
+  - Summary mounts `createFocusSummary`, next to the Coach section.
+  - Fix last set (Rest and Summary) passes the recomputed `focusScore` to `updateSet`.
+  - Dev log: `logEvent('focusScore', { score, cues: n, partials })` when a camera set is saved.
+  - T1 reaches Rest/Summary through the existing coach code.
+  - Add `e2e/focus-cues.spec.ts` to the right Playwright project.
+  - Done when, by hand on Pull A with the fixture landmarker:
+    - a curl set with rushed lowering → "Slow the lowering." after a count word;
+    - the set saves (manual and hands-free);
+    - the DB row has `focusScore` + `cues`;
+    - Fix partials changes the score;
+    - a second rushed set → Summary shows Focus < 100 with the cue and the Coach line T1;
+    - a manual exercise has no score.
+  - Deps: 4, 8, 11, 12.
+- [ ] 14. [ui-engineer] E2E `e2e/focus-cues.spec.ts`. Fixture landmarker as in hands-free.spec.ts, real timers, mocked speech that records order.
+  - Cases:
+    1. rushed lowering on reps 3–4 → "Slow the lowering." once, after the count word; never two cues within 6 s; a partial still speaks only its M4c hint;
+    2. hands-free rest mode: rushed reps → no cue;
+    3. no cue during the Undo window;
+    4. hands-free, held outside the start band → "Stay with it. N to go." at ~5 s, then "Set done. N reps." at ~10 s; held in the band → only "Set done" at 6 s; hands-free off → the stalled cue at ~8 s;
+    5. hidden wrists while present → "Step back into frame."; walking away with hands-free on after ≥ 2 reps → only "Set done";
+    6. a disabled rule (`elbowDrift` on the curl) never fires;
+    7. Summary shows "Focus" + the cue; the IndexedDB row has `focusScore` / `cues`; Fix on Rest recomputes the score;
+    8. two rushed curl sets → Summary Coach T1;
+    9. the dev-log export has `focusCue` events whose data holds only ids and numbers;
+    10. no third-party request.
+  - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
+  - Deps: 13.
+- [ ] 15. [reviewer] Review the branch diff against CLAUDE.md:
+  - pure core (focus.ts / focusScore.ts: no DOM, no MediaPipe);
+  - every rule's thresholds and flags are data (no `if (exercise === …)`);
+  - no geometry flag on without real fixtures (task 6's test);
+  - voice over screen (every cue spoken through the policy, never over a count);
+  - no second partial cue; no cues in rest mode or the Undo window;
+  - no medical words; sizes (20 / 56 / 64px);
+  - privacy: dev-log cue data = enum + numbers;
+  - hands-free off and manual exercises unchanged apart from the score.
+  - Deps: 7, 10, 14.
+- [ ] 16. [verifier] Verify against SPEC M5 Accept.
+  - `npm run check`: fixture suite counts unchanged, plus the synthetic-03 clips; the replay test green. Also `npm run e2e` and `npm run build`.
+  - 390×844 screenshots, console clean: `docs/screenshots/m5-camera-cue.png`, `m5-camera-stalled.png`, `m5-summary-focus.png`, `m5-coach-tempo.png`, `m5-rest-fix-score.png`.
+  - A dev-log export after the flow shows `focusCue` + `focusScore` events, and `npm run devlog -- --dry-run` lists them.
+  - The task 7 Decision exists, and the flags in the code match its table.
+  - Evidence into PROGRESS.
+  - Deps: 15.
+- [ ] 17. [main] Merge `m5-live-trainer`, then **ask Wongsaton before pushing** (push = deploy). Deps: 16.
+- [ ] 18. 🧍 **Checkpoint C:** a full camera session at the gym with hands-free on.
+  - Wongsaton notes every cue that felt wrong or missing, whether the Summary focus scores match how the sets felt, and anything spoken at a bad moment.
+  - He exports the dev log → `npm run devlog` → retune `FOCUS_DEFAULTS` / flags (logged as Decisions).
+  - A deliberate-mistake set per exercise (SPEC §5) would let the off rules be switched on (see questions).
+
+**Parallel waves:**
+- **Right away:** 1 [main] (minutes), 2 [core ∥A], 9 [pose], 12 [ui second instance, from this plan's ids]. Then, as soon as 1 lands: 3 [core ∥B] and 4 [core ∥C].
+- **Wave 2:**
+  - 5 [core ∥A, after 2 + 3];
+  - 6 [core ∥B, after 3];
+  - 8 [core ∥C, after 4];
+  - 10 [pose, after 9];
+  - 11 [ui, after 2 + 3 + 6].
+- **Wave 3:** 7 [core, after 5 + 6 + 9], 13 [main, after 4 + 8 + 11 + 12].
+- **Then:** 14 → 15 (also needs 7, 10) → 16 → 17 → 18.
+- **Critical path:** 1 → 3 → 6 → 11 → 13 → 14 → 15. The three core instances never share a file: ∥A owns repCounter then focus part 2, ∥B owns focus.ts then the exercises, ∥C owns focusScore/session/db then advice. 5 and 3 are both focus.ts, so 5 starts only after 3 is in.
 
 ### M5c — Hands-free sets (planned 2026-11-13)
 Wongsaton's request after his first real camera session: auto start and stop, no tapping. Contract: SPEC M5c (defaults, reasons, speech order, Accept). Branch `m5c-hands-free` off m4d-next, cut after the lateral-raise phantom-rep fix and the press/push-up retune are committed (only task 6 touches a file the retune touches). Logic is **tests first**. Nothing is pushed/deployed without Wongsaton's OK. Design choice that keeps it small: the Undo window **delays the save** instead of undoing it, so there is no "un-log" reducer event, no DB delete and no dev-log reversal; the save is backdated to the end of the last rep.
@@ -40,7 +282,7 @@ Wongsaton's request after his first real camera session: auto start and stop, no
 - [x] 5. [core-engineer ∥A, after 1] Commit-time coach tip in `src/core/advice.ts`(+test), **tests first**: `adviceSpeakOnCommit(restElapsedMs, restTargetSec): boolean` = the tip (≈ 4 s) still ends ≥ 5 s before the "Ten seconds" cue, i.e. `restTargetSec*1000 − 10000 − restElapsedMs ≥ 9000`. `adviceSpeakDue` unchanged. Done when: tests cover 60 s / 11 s elapsed (true), 30 s / 11 s (true, 9 s left exactly), 25 s / 11 s (false), and a rest already past target (false). Deps: none.
 - [x] 6. [core-engineer, after the retune is committed] Optional per-exercise override: `autoSet?: Partial<AutoSetConfig>` on `ExerciseRule` in `src/core/exercises/types.ts`, and `autoSetConfigFor(rule)` in autoSet.ts (defaults ← override). No rule sets one yet. Done when: exercises/index.test asserts every override key is a known config key with a finite value > 0, and the fixture suite is unchanged. Deps: 1.
 - [x] 7. [ui-engineer] Hands-free components, new files + CSS. `src/ui/autoStopBanner.ts`: `createAutoStopBanner({ reps, partials, undoSec, onUndo })` → "Set done · 8 reps" (≥ 64px number), full-width **Undo** ≥ 72px tall with a live countdown ("Undo · 4"), `data-auto-stop`, `data-reason`, `aria-live`. `src/ui/cameraRestPanel.ts`: `createCameraRestPanel({ nextLine, onStartSet, onClose })` with `setClock(remainingMs)` (≥ 64px, amber "+0:12" when over, `data-cam-rest-clock`, **not** `data-rest-clock`, which app.ts's tick already queries), and `slots` for the coach tip and the Last-set Fix elements app.ts passes in; Start set and Close ≥ 56px; a dark backing so the dimmed video behind stays visible above it. Files: src/ui/autoStopBanner.ts, src/ui/cameraRestPanel.ts, src/styles.css. Done when: 390×844 screenshots (harness or after 8) of the banner and of the rest panel with a coach tip + Fix, nothing overflowing, text ≥ 20px, typecheck + lint clean. Deps: none (shapes from this plan).
-- [ ] 8. [ui-engineer, after 7] Camera sheet lifecycle across sets. Files: src/ui/cameraView.ts (+ src/ui/voice.ts if needed). New option `handsFree?: { config, onAutoStart(atWall, counts), onCommit(endedAtWall), onStopPending?, onStopCancelled?, onIdleClose(reason) }`; methods `setSession({ phase, paused, restElapsedMs })` (rest → counter reset, rest mode: silent counter, no hints, no `onCount`; exercise via manual Start set → counter reset to 0, set mode), `setRest({ remainingMs, nextLine, slots })`, `setBegun()` (re-send camera meta to the recorder after each beginSet: delegate, side, folder, wallT0). Feed `createAutoSet` every frame after the counter; frame clock → wall via `wallT0`. Auto start: switch to set mode with the start counts, `onAutoStart` before the next `onCount`, then speak the count. Stop pending: mount the banner, speak "Set done. N reps." (`kind: 'cue'`, also with spoken count off); Undo / rep → unmount, "Keep going."; Set done tapped during pending → `confirm()`; commit → `onCommit` (the app decides close vs rest mode). Idle close → "Camera off." then stop tracks. Every action → `recorder.logEvent('autoSet', { action, reason, reps, partials, at, phase, angle })`. Without `handsFree` the view behaves exactly as today. Done when: typecheck + lint clean, the existing camera e2e specs still pass, and a manual run on the fixture landmarker shows stop → banner → rest mode → auto start. Deps: 1, 7.
+- [x] 8. [ui-engineer, after 7] Camera sheet lifecycle across sets. Files: src/ui/cameraView.ts (+ src/ui/voice.ts if needed). New option `handsFree?: { config, onAutoStart(atWall, counts), onCommit(endedAtWall), onStopPending?, onStopCancelled?, onIdleClose(reason) }`; methods `setSession({ phase, paused, restElapsedMs })` (rest → counter reset, rest mode: silent counter, no hints, no `onCount`; exercise via manual Start set → counter reset to 0, set mode), `setRest({ remainingMs, nextLine, slots })`, `setBegun()` (re-send camera meta to the recorder after each beginSet: delegate, side, folder, wallT0). Feed `createAutoSet` every frame after the counter; frame clock → wall via `wallT0`. Auto start: switch to set mode with the start counts, `onAutoStart` before the next `onCount`, then speak the count. Stop pending: mount the banner, speak "Set done. N reps." (`kind: 'cue'`, also with spoken count off); Undo / rep → unmount, "Keep going."; Set done tapped during pending → `confirm()`; commit → `onCommit` (the app decides close vs rest mode). Idle close → "Camera off." then stop tracks. Every action → `recorder.logEvent('autoSet', { action, reason, reps, partials, at, phase, angle })`. Without `handsFree` the view behaves exactly as today. Done when: typecheck + lint clean, the existing camera e2e specs still pass, and a manual run on the fixture landmarker shows stop → banner → rest mode → auto start. Deps: 1, 7.
 - [x] 9. [main] Wiring. Files: src/ui/app.ts, playwright.config.ts. Load `handsFree` at start; Settings switch "Hands-free sets" (56px, persisted via 3). With it on and a pose exercise: pass `handsFree` into the camera; `onAutoStart` → `START_SET { now: at }` then `SET_COUNTED`; `onCommit` → `SET_DONE { now: endedAt }`; manual Set done no longer closes the sheet while sets of this exercise remain; on every dispatch call `camera.setSession(...)`; close the camera when the set saved was the exercise's last (phase rest with another exercise upcoming, or summary) or on idle close; `beginSet` for an auto-started set passes `prerollFromT` = start − 1.5 s, then `camera.setBegun()`; `tick()` → `camera.setRest(...)` with the coach tip + Fix elements as slots (same instances as the Rest screen's). Coach tip for a hands-free commit: speak at the save if `adviceSpeakOnCommit(elapsed, target)`, mark it spoken (`adviceSpokenKey`), and set `lastCueElapsedMs = elapsed` so no stale rest cue fires. Rest screen: a ≥ 56px "Camera" button when the upcoming exercise is pose-tracked and hands-free is on → open the camera in rest mode. Off = today's code path. Add the new e2e specs to the right Playwright projects. Done when: by hand on Pull A with the fixture landmarker: curl → camera → reps → stillness → "Set done" + Undo → saved → rest mode with clock + tip → reps → auto start with rest taken correct → last set → camera closes → Rest shows Camera for the next pose exercise; and with the switch off everything behaves as before. Deps: 2, 3, 4, 5, 8.
 - [x] 10. [pose-engineer] Converter for hands-free sets: `scripts/devlog.mjs`(+`scripts/devlog.test.mjs`) handles pre-roll frames before the set's start and one camera frame clock spanning several sets (rebase per set), and the report lists each set's auto start/stop reason from the `autoSet` events. Done when: a synthetic-curl export built with pre-roll + two sets on one clock converts to two fixtures the suite counts correctly, and the existing script tests pass. Deps: 4.
 - [x] 11. [ui-engineer] E2E. `e2e/hands-free.spec.ts` (fixture landmarker served in place of `src/pose/landmarker.ts`, like camera-layout.spec.ts, with `__freezeAt` = hold a start-position frame and `__noPerson` hooks; real timers; mocked speech records order): (i) reps → freeze → "Set done. N reps." spoken after ~6 s, Undo visible ≥ 56px with a countdown, **no** IndexedDB set row during the window, a row after it with `endedAt` ≈ the last rep and reps = N, rest clock already ≈ 11 s in; (ii) Undo → "Keep going.", no row, unfreeze → counting continues from N; (iii) unfreeze inside the window → cancelled without a tap; (iv) rest mode: unfreeze at 5 s of rest → no start; after 10 s → 2 reps → set 2 running, `restTakenSec` matches the backdated start, "Two" spoken; (v) speech order: last count word → "Set done…" → coach tip (A-rule set-up via steppers) → nothing cancelled; (vi) after the exercise's last set the camera closes and the Rest screen shows "Camera" for the next pose exercise, which opens in rest mode; (vii) "Hands-free sets" off (after reload) → freeze 15 s → no auto stop, Set done closes the sheet (M4 behaviour); (viii) no third-party request. `e2e/hands-free-live.spec.ts` (`mobile-person-camera`, synthetic curl loop, real model): Rest → Camera → auto start after the arming time; skips below 8 fps in CI like rep-count.spec.ts. Done when: both pass with `--repeat-each=3` and the full `npm run e2e` is green. Deps: 9.
@@ -81,7 +323,7 @@ Wongsaton's request after his first real camera session: auto start and stop, no
   - Cosmetic, not fixed:
     - The gauge shows faintly through the Undo banner.
     - The camera rest line shows the next set's reps value (the last set's count) while the tip says the target.
-- [ ] 14. [main] Merge `m5c-hands-free`, then **ask Wongsaton before pushing** (push = deploy). Deps: 13.
+- [x] 14. [main] Merge `m5c-hands-free`, then **ask Wongsaton before pushing** (push = deploy). Deps: 13. Done: live as c3c1f85 (2026-11-13).
 - [ ] 15. 🧍 **Checkpoint B3 (hands-free gym test):** a training day with hands-free on; note every wrong auto start/stop and whether 6 s stillness / 5 s Undo feel right; export the developer log and send it → retune `AutoSetConfig` (logged as Decisions).
 
 **Parallel waves:** Wave 1: 1 [core ∥A], 2 → 3 [core ∥B], 4 [core ∥C], 7 [ui]. Wave 2: 5 [core ∥A], 6 [core, once the retune is in], 8 [ui, after 1 + 7], 10 [pose, after 4]. Then 9 → 11 → 12 → 13 → 14 → 15. The ui-engineer path (7 → 8 → 11) is the critical path; 7 can go to a second ui instance at the start since it only adds new files + CSS.
@@ -196,6 +438,74 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-13 — **M5 rule enablement (planner).** Rules come in two groups:
+  - **Focus rules** are computed from the counter's own rep events, relative to the set's own baseline, or from presence/fps: rushed lowering, shrinking range, stalled, out of frame, low fps.
+  - **Form rules** need body geometry: arms out of sync, raise too high, elbow drift, body swing, hips sag.
+
+  The SPEC M5 table marks the focus rules "reliable from all 6", and it only requires real-fixture checks for the rows below "Arms out of sync". This plan applies the stricter rule: every form rule, Arms out of sync included, needs real fixtures. A form rule is on for an exercise only when that exercise's committed real fixtures pass the criteria below. Otherwise it's built, tested on synthetic data, and **off** (data flag `focus` on the rule).
+
+  Uncommitted real data (press, push-up: numbers in the retune Decision) can switch a rule **off**, never **on**. Starting flags:
+
+  | Rule | Curl | Push-up (side) | Push-up (front variant) | Press | Row | Goblet squat | Lateral raise |
+  |---|---|---|---|---|---|---|---|
+  | Rushed lowering | on | on | on | on | on | on | on* |
+  | Shrinking range | on | on | **off** (a) | **off** (b) | on | on | on* |
+  | Stalled / Out of frame | on | on | on | on | on | on | on |
+  | Low fps (not scored) | on | on | on | on | on | on | on |
+  | Arms out of sync | — | — | — | **off** (c) | — | — | off → task 7 |
+  | Raise too high | — | — | — | — | — | — | off → task 7 |
+  | Elbow drift | **off** (d) | — | — | — | — | — | — |
+  | Body swing | **off** (d) | — | — | — | **off** (d) | — | — |
+  | Hips sag | — | **off** (d) | never (e) | — | — | — | — |
+
+  **Notes:**
+  - (a) The real head-on push-ups top out at 157–171° and bottom out at 93–118°, so a rep's range runs 39–78°. That spread alone crosses the 85%-of-baseline line, so "Full range." would misfire.
+  - (b) The real press (image plane) tops out at 148–162° and bottoms out at 51–65°: rep ranges of ~83–111°, which straddles 85% of a typical baseline. Whether the spread is within a set or between sets **can't be settled** from the numbers we kept. Off until press fixtures are committed, which waits on the "7 vs 8" question. If the main session still has the converted press sets outside the repo, a local replay may inform the decision, but the flag stays off until the fixtures are committed.
+  - (c) No committed real press data. The Decisions do show the image-plane arms "alike" while the world arms read 30° apart, so the rule must use `sideAngles` in the rule's angle space.
+  - (d) No real fixtures for the curl, the row or a side-view push-up.
+  - (e) A front view can't judge the body line (SPEC "not judged"). The front variant's body-line gate stays a tracking gate only.
+
+  **Task 7 criteria for the lateral raise**, fixed before the replay so the result can't be tuned to fit:
+  - **Arms out of sync** turns on only if all three hold: (1) 0 fires over the 80 real reps; (2) the largest |L − R| held ≥ 0.5 s mid-rep on a real rep is ≤ 15° (5° margin); (3) clip s1-0's pre-set one-arm swing (right arm to 67°, the one real asymmetry we have) reads > 20°, so the signal can see a real fault.
+  - **Raise too high** turns on only if 0 fires and every real rep's `maxAngle` ≤ 95°.
+  - Rushed lowering and shrinking range (*) stay on only if they fire ≤ 1 time per real clip.
+
+  **What the real data can't settle:** we have no labelled real mistakes (his 80 real reps are clean by count, but nobody judged their tempo or height). So "fires correctly" on real data means: silent on his real sets, and the signal sees the one real asymmetry. True positives come only from the synthetic flaw clips (task 9). For rushed lowering and shrinking range, "≤ 1 fire per clip" only bounds nagging; it can't prove a fire was right, because fatigue at reps 15–20 can genuinely shrink the range.
+
+  **Other limits:**
+  - The curl, row and squat counters have never seen real data (M4 is still provisional), so their focus rules ride on synthetic-tuned timing. Checkpoint C covers them.
+  - The press baseline (first 2 reps) includes the disputed first "positioning" press.
+- 2026-11-13 — **M5 cue mechanics (planner).**
+  1. **Firing:**
+     - Baseline = mean of the first 2 reps. On an auto-started set these are the two starting reps, which happen in rest mode and are seeded into the tracker.
+     - Partials neither extend nor break a streak, and they never get a second cue: the M4c hint is the only partial cue. They do count toward the score.
+     - After a fire the rule's streak restarts. At most 2 fires per rule per set.
+     - At most one cue per frame, by priority: out of frame > low fps > form rules > rushed lowering > shrinking range > stalled.
+  2. **Speech:** every cue goes through `coachSpeech.hint()`. It shares the 6 s gap with partial hints, a count word always cancels it, and it's dropped if it would start > 1.5 s late. A cue dropped by the policy still counts as fired: the score counts detections, not speech, so it doesn't depend on speech timing. The dev log records both.
+  3. **Hands-free consistency:**
+     - No cues in rest mode, during the Undo window (`pending`), while paused, or after the camera is closed.
+     - **Stalled:**
+       - hands-free on with ≥ `stopMinReps` reps: in the start band there is no stalled cue, because the 6 s still stop decides ("Set done. N reps."). Outside the band, "Stay with it. N to go." fires at `stalledSec × 0.5` (5 s), then the 10 s stalled stop follows as before (the cue doesn't reset autoSet's timers);
+       - hands-free off, or fewer reps: the SPEC rule, 8 s with no phase change or event, anywhere.
+       - Either way: once per set, only after the first rep, and only while reps < the target (the top of the range).
+     - **Out of frame:**
+       - fires when a person is present but the rule's joints fail the visibility gate for 2 s (e.g. hands above the frame at the press lockout);
+       - posture and body-line gate failures (bending for the dumbbells, sitting after push-ups) never fire it; that's why the counter gets an `untracked` reason getter;
+       - no person at all for 2 s fires it only when no auto stop can follow (hands-free off, or fewer than `stopMinReps` reps); otherwise the 3 s away stop speaks instead;
+       - never before the set's first rep (the camera page already shows "Step into frame").
+     - **Low fps:** once per camera sheet, in set mode only.
+  4. **Score:**
+     - Start at 100. −10 per tempo, range or form cue; −5 per stalled cue; −5 per partial. Out of frame and low fps cost 0, because phone placement and light aren't his focus; they're still listed. Clamped to 0–100.
+     - Only camera sets with ≥ 1 counted rep get a score; manual sets have none.
+     - "Fix last set" recomputes the score from the stored cue ids and the corrected partials.
+     - `SetLog.cues` stores ids, not text.
+  5. **M5b T1** ("Next time on {Name}: lower for 2 seconds."): fires when ≥ 2 of today's sets of the exercise had rushed lowering. Priority N1 > N2 > T1 > N3: a trainer fixes control before adding weight, and below-range problems still come first. The mid-workout A rules are unchanged.
+  6. **Dev log:**
+     - `focusCue` event per detection: `{ id, t, reps, value, baseline, threshold }`;
+     - `focusScore` event per saved camera set: `{ score, cues, partials }`.
+     - Enum + numbers only. The spoken text is already in the speech log.
+  7. There is no Settings switch for live cues. The SPEC doesn't ask for one, and the M4c rule stands: "Count reps out loud" mutes only the count words.
+  8. M5 is built while M4 is still provisional. Only the lateral raise has committed real fixtures; the SPEC M4 line "real fixtures must pass before M5" is raised as a question. Building is low-risk because every unverified form rule ships off.
 - 2026-11-13 — M5c tasks 5–6 (core). `adviceSpeakOnCommit(restElapsedMs, restTargetSec)` = target − 10 s − elapsed ≥ 9 s (a ~4 s tip ending ≥ 5 s before "Ten seconds"). `ExerciseRule.autoSet?: Partial<AutoSetConfig>` + `autoSetConfigFor(rule)` (in `src/core/exercises/index.ts`, not autoSet.ts, which another owner was editing) = AUTO_SET_DEFAULTS ← override. **No rule sets an override**: replaying the real Push A fixtures through counter + autoSet with defaults, the lateral raise and press sets never stop mid-set; the only push-up stop is a 16 s break where he sat down after 6 push-ups (still stop at 36 s, commit at 41 s, the other 5 would auto-start as a second set). No sane `stillSec` bridges a 16 s sit-down, and the longest in-plank pause between push-ups was 5.7 s (< 6 s, and a rep inside the 5 s Undo window cancels anyway). Open question for Wongsaton: is a rest-pause (sit, then more push-ups) one set or two?
 - 2026-11-13 — **Counter retune on the first real Push A log** (camera sets converted outside the repo; no fixture committed). Replay of the old counter reproduced the live counts exactly. Changes, all rule data in `src/core/exercises/*.ts`:
   - **Seated press: image-plane angles, extended 155 → 142 → 143, contracted 100 → 80** (new `angleSpace: 'image'`; the video aspect is estimated from the pose by a least-squares fit of image vs world offsets, `src/core/aspect.ts`, 0.735–0.752 on the log, true 0.75). Why: every press was a `far` partial ("Press all the way up"), short by 18–31°: the world elbow angle topped out at 124–137° and bottomed at 84–99° (the world model's depth guess compresses a front-view press, and reads the two arms 30° apart). In the image plane the same reps top out at 148–162° and sit at 51–65° at the shoulders, both arms alike. The wrist-above-shoulder gate held on every rep and is unchanged. 143 is the midpoint between the real lockouts (≥ 148) and the synthetic partials (136–139), 5° from each (first set at 142, re-centred after review); 80 keeps the synthetic press's fast lowering above the 125 ms leg minimum. Result: 8 / 8 / 8 reps, 0–1 partial (a kick-up into position), was 0/11, 0/9, 0/8. **He logged 7 each**: the log shows 8 regular press cycles per set (~3.5 s apart, wrists above shoulders, both arms; the live run also heard 8 "Press all the way up"), so the counter is not tuned to 7. To confirm with Wongsaton.
@@ -394,9 +704,19 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - Non-blocking observations: (1) after Apply, set 3 at 40 lb (sets 8×35, 8×35, 8×40) gets A3 again, "+5 lb → 45 lb". That matches the rule table (A3 looks at reps only, all of today's sets), but it suggests a second jump after one set at the new weight; product call for Wongsaton (e.g. only count sets at the current weight). (2) The one-arm row demo has the hand on the bench but both feet on the floor, while how-to line 1 says "One knee and hand on the bench" (anatomy-3d-engineer or the how-to text). (3) In headless Chrome the gauge screenshot shows count "0 · Get into start position" while the gauge moves (counter still settling at 14 fps); expected.
 
 ## Blockers / questions for Wongsaton
+- **🧍 Checkpoint B3 (hands-free gym test, waiting for his report):** train a day with hands-free on, note every wrong auto start/stop and whether 6 s stillness / the 5 s Undo feel right, then export the dev log.
+- **🧍 M4e design pick:** Energy, Pro or Track (mockups in docs/design/m4e-directions).
+- **Press, "first press = positioning"?** He logged 7 per set; the app counts 8 identical press cycles. If the first press from the shoulders is setup (lockout-start convention), the SPEC, the synthetic press labels and the press demo all change. Press real fixtures and the press M5 form rules wait on this.
+- **Push-up set with a sit-down break: one set or two?** Today, with hands-free, a 16 s sit-down saves the first part (still stop) and auto-starts the rest as a second set.
+- **Older coach questions:** (1) should the coach trust manually logged reps? (2) Is the 25% jump guard right for light dumbbells?
+- **New (M5, not blocking; defaults in Decisions):**
+  - (a) **M4 gate:** SPEC M4 says the real Checkpoint B fixtures must pass before M5, but only the lateral raise has committed real fixtures (press and push-up wait on the questions above; curl, row and squat have none). OK to build M5 now, with every unverified form rule shipped **off**?
+  - (b) **"Fires correctly" on real data:** your real sets are clean by count, so the most the data can show is "silent on your sets + sees your one real asymmetry". Is that enough to switch a form rule on (the plan's default for the lateral raise), or do you want to record deliberate-mistake sets first (SPEC §5: a set with partials, fast lowering, one arm lagging, raising too high)? Those sets would also let us switch on the curl/row/push-up form rules.
+  - (c) **Focus score weights:** −10 per cue, −5 per partial or stall; out of frame and low light cost nothing. OK?
+  - (d) **Stalled cue with hands-free:** "Stay with it. N to go." at 5 s when you hold mid-rep, with the auto stop at 10 s. When you rest at the start position, the 6 s still stop says "Set done" without a nudge first. Right, or do you want a nudge before every auto stop?
 - **Not blocking (M5c, defaults chosen, see Decisions):** (a) "Hands-free sets" on by default, OK? (b) Auto start waits for **2 reps** (the first rep isn't spoken) to avoid phantom starts; would you rather it start on the first rep and accept the odd false start? (c) Stop after **6 s** standing still + a **5 s** Undo window: too quick near failure (e.g. holding the push-up plank) or too slow? (d) A false auto start during rest (rare with 2 reps) logs a short extra set; round 1 has no "not a set" button, so you'd fix its reps on Rest. Want a "Discard set" button instead?
-- **After the Push A slice deploys (🧍 Checkpoint B2):** train Push A. Fix any miscounted set with the "Last set" steppers on Rest. Then Settings → Developer log → Export last session, and send the file. Nothing is uploaded automatically.
-- **Not blocking (M5b):** the coach trusts the logged numbers. A manual set logged without touching the reps stepper reads as "top of the range", so it can earn "Strong set" / "+5 lb next time". Default: trust the log (that's what Fix is for). Alternative if it misleads him: only count a set as "top" when the reps were camera-counted or edited. Also: is the 25% jump guard right for light dumbbells (no "+5 lb" on a 15 lb lateral raise; "more reps" instead)?
+- ~~Checkpoint B2 (Push A log)~~: done; the log was analysed and the counter retuned (Decisions).
+- **Not blocking (M5b, the "older coach questions" above):** the coach trusts the logged numbers. A manual set logged without touching the reps stepper reads as "top of the range", so it can earn "Strong set" / "+5 lb next time". Default: trust the log (that's what Fix is for). Alternative if it misleads him: only count a set as "top" when the reps were camera-counted or edited. Also: is the 25% jump guard right for light dumbbells (no "+5 lb" on a 15 lb lateral raise; "more reps" instead)?
 - **Not blocking:** after the log analysis, should an incomplete return ("didn't straighten") count as a rep (lenient) or stay a partial (strict, current)? The default stays strict until the data says otherwise.
 - **🧍 M4e (later):** pick one of the 2–3 visual directions when they're ready.
 - **🧍 Checkpoint B: fixture videos still outstanding. Next gym visit.** Not blocking M4 day to day (it runs on synthetic fixtures), but M4 isn't fully done until these pass (M4 task 15). Record per SPEC §5 into `fixtures/videos/<folder>/<label>__reps-<n>__partials-<m>.mp4` (gitignored, never committed). Folders: `curl`, `push-up`, `shoulder-press`, `row`, `goblet-squat`, `lateral-raise`. For each: one clean clip, plus one with 2–3 partial reps and fast lowering, 10–30 s. Then tell me and I'll run `npm run landmarks`.

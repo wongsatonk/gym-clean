@@ -312,6 +312,37 @@ to the gym and work out: clean, visual, sporty. Themes are OK if needed." Owner:
 - Rate limit and priority: the M4c speech policy (max one cue per 6 s, never over the rep count).
 - Per-set **focus score** (0–100) = simple, explainable: start 100, subtract per cue fired and per
   partial; show which cues fired on the Summary screen. Store it with the set.
+- **Plan decisions (2026-11-13; details and reasons in PROGRESS Decisions):**
+  - **Rule groups.** Focus rules (rushed lowering, shrinking range, stalled, out of frame, low fps)
+    vs form rules (arms out of sync and every row below it). Every form rule, Arms out of sync
+    included, is on for an exercise only when that exercise's **committed** real fixtures pass the
+    pre-registered criteria. Uncommitted data can only switch a rule off. Per-exercise on/off is a data
+    flag on the exercise rule (`focus`), including the push-up's front variant.
+  - **Starting flags.** Shrinking range is off for the push-up front variant (real head-on ranges vary
+    39–78°) and for the press (real data not committed; ranges ~83–111°). Arms out of sync and raise
+    too high on the lateral raise depend on the replay of the 4 real clips. Elbow drift, body swing and
+    hips sag are off (no real curl/row/side push-up fixtures). Hips sag is never judged from the front.
+  - **Firing.** Each rule needs 2 reps in a row. It fires at most twice per set and its streak
+    restarts after a fire. One cue per frame, by priority: out of frame > low fps > form > rushed
+    lowering > shrinking range > stalled. Partials are excluded from streaks and get no second cue.
+  - **Speech.** Cues use the M4c policy as hints (6 s gap shared with partial hints, a count wins,
+    dropped if > 1.5 s late).
+  - **Hands-free (M5c).**
+    - No cues in rest mode, during the Undo window, or while paused.
+    - Stalled, with hands-free on and ≥ 2 reps: in the start band, no cue (the 6 s still stop
+      decides); outside it, "Stay with it. N to go." at half of `stalledSec` (5 s), then the 10 s
+      stalled stop.
+    - Stalled otherwise: 8 s, anywhere. Always once per set, after the first rep, and only while
+      reps < the target.
+  - **Out of frame** = a person is present but the joints fail the visibility gate for 2 s (posture /
+    body-line gate failures never count). No person at all only cues when no auto stop follows.
+    Never before the first rep.
+  - **Low fps:** once per camera sheet, set mode only.
+  - **Score.** −10 per tempo/range/form cue, −5 per stalled cue, −5 per partial; out of frame and low
+    fps cost 0; clamped to 0–100. Only camera sets with ≥ 1 counted rep get a score. `SetLog.cues`
+    stores cue ids. A "Last set" fix recomputes the score.
+  - **Dev log.** `focusCue { id, t, reps, value, baseline, threshold }` per detection and
+    `focusScore { score, cues, partials }` per camera set (enum + numbers only).
 - **Accept:** unit tests for every rule using fixture landmark JSON + synthetic sequences; each new form
   rule is enabled only for the exercises whose real fixtures show it fires correctly.
 - 🧍 **Checkpoint C:** I do a full camera session at the gym and report.
@@ -369,6 +400,7 @@ Summary for every exercise with ≥ 1 set today; `last` = `lastSessionSets` for 
 |---|---|---|
 | N1 | some set in `L` reps < `min`, and `last` also had a set < `min` at a weight ≥ `w`, not bodyweight, `w − step` > 0 | "Next time on {Name}: drop to {w − step} {unit}." |
 | N2 | some set in `L` reps < `min` | "Next time on {Name}: repeat {w} {unit}." (bodyweight: "… aim for {min} reps.") |
+| T1 | (M5, added 2026-11-13) ≥ 2 sets in `L` have the M5 "Slow the lowering." cue (`rushedLowering` in `cues`) | "Next time on {Name}: lower for 2 seconds." (no Apply; checked after N2, before N3) |
 | N3 | `L` has all planned sets, and the sets at the final weight `w` (≥ 2, or all of a 1-set plan) are all reps ≥ `max` and clean | "Next time on {Name}: +{step} {unit}." (bodyweight: "… +1 rep per set."; too big a jump: "… {w} {unit}, more reps.") |
 | N4 | total partials in `L` ≥ 2 | "Next time on {Name}: same weight, full range." |
 | N5 | some set in `L` reps < `max` | "Next time on {Name}: same weight, {max} reps." |
@@ -390,8 +422,8 @@ throttled tab skips it) and the rest target leaves ≥ 15 s before the "Ten seco
 behind speech already playing and never cancels anything. A "Last set" correction updates the shown
 advice but doesn't speak it again. Summary is shown only, not spoken. A Settings switch "Coach tips"
 (default on) turns the Rest advice and its speech off; the Summary Coach section always shows.
-Deferred: the next session's Exercise-screen line and Dismiss (round 2), the tempo rule (M5),
-all-time bests (M6 history).
+Deferred: the next session's Exercise-screen line and Dismiss (round 2), all-time bests (M6 history).
+The tempo rule is T1 above, built in M5.
 
 ### M5c — Hands-free sets (added 2026-11-13, after the first real camera session)
 Wongsaton: "Let's plan to do auto start and stop, that don't need to press button on the screen." The
