@@ -382,7 +382,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - Covers the exercise list, notes, How-to, body sheet, badges, coach tip and Fix strip.
   - Done when: screenshots, typecheck + lint clean.
   - Deps: A2, A6.
-- [ ] A20. [ui-engineer] E2E `e2e/m4e-theme.spec.ts`. Cases:
+- [x] A20. [ui-engineer] E2E `e2e/m4e-theme.spec.ts`. Cases:
   - pick Volt → reload → still Volt; the computed `--success` is gold;
   - Orange / Yellow keep green;
   - +30 s extends the clock, and "Ten seconds" is spoken 30 s later;
@@ -846,6 +846,10 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e A20 done.** e2e/m4e-theme.spec.ts: 7 tests, 42/42 with repeat-each 6; with settings.spec, 30/30 ×3 after the fix.
+  - **Covers:** the accent persisting before first paint; Volt gold vs green; +30 s moving "Ten seconds" back 30 s; Skip/End only in Pause; self-hosted fonts; Today tiles after seeded and finished sessions; no third-party requests.
+  - **Race fixed:** the accent's localStorage copy is written only after the IndexedDB save lands. Before, reloading within milliseconds of a pick flipped back to the old accent.
+  - **Full e2e:** 85/87. The 2 failures are the known load-sensitive real-timer camera specs (focus-cues:341, hands-free-live:90); both pass alone.
 - 2026-11-14: **M4e A17–A19: Settings (Pro), accent picker, overlays done** (review PASS). check 1358 tests; full e2e 80/80.
   - **Accent picker:** Orange / Volt / Yellow, with the chosen one in white fill plus a check. The pick applies at once and is saved to IndexedDB.
   - **No colour flash at startup:** a localStorage copy (`gc-accent`) is applied by an inline script in index.html before first paint. IndexedDB stays the source of truth.

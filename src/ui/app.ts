@@ -684,8 +684,10 @@ export function mountApp(root: HTMLElement): void {
         onAccent: (a) => {
           accent = a;
           applyAccent(a); // at once, before the save
-          mirrorAccent(a);
-          void setAccent(db, a).catch(logDbError);
+          // Mirror only once IndexedDB has it, so the two copies never disagree after a reload.
+          void setAccent(db, a)
+            .then(() => mirrorAccent(a))
+            .catch(logDbError);
           render();
         },
         onSpokenCount: (on) => {
