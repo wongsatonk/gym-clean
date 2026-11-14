@@ -4,14 +4,19 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Live:** c3c1f85, deployed 2026-11-13. It includes: the Push A slice (M4c + M4b), M5b round 1 (after-set coach), the S2 gauge, the M4d Pull A demos, the M4e step-1 mockups, the counter retune on the real Push A log (press image-plane angles, lateral-raise posture gate, push-up front variant + body-line gate), and **M5c Hands-free sets** (all 13 tasks done, verifier PASS recorded below).
-- **In progress:** M5 Live trainer (focus & form cues) on branch `m5-live-trainer`, cut from c3c1f85. Plan below ("M5 — Live trainer").
-- **Next step:** finish M5 (tasks 11, 13–17). Then the **M5c follow-up "tap to continue"** (plan below; B1, B4 and B8 can start now). Then **M4e steps 2–3** (plan below; its wave 1 can run alongside). Neither follow-up is deployed without Wongsaton's OK: he only authorized deploying M5.
-- **Waiting on Wongsaton (none of these block the plans):**
-  - 🧍 **Checkpoint B3**, the hands-free gym test: a training day with hands-free on, then the exported dev log (he'll report).
-  - **Press "first press = positioning"?** Answered: no, the counter stays at 8.
-  - **The two older coach questions:** should the coach trust manually logged reps, and is the 25% jump guard right for light dumbbells?
-  - New M5, M5c follow-up (B-q) and M4e (A-q) questions are under "Blockers / questions".
+- **Live:** 4bda987 on main, deployed 2026-11-14. Through **M5** (live focus and form cues, focus score, Summary Focus) plus the drill-sergeant coach voice.
+- **Built and verified, NOT deployed** (waiting for Wongsaton's OK to push): branch `m4e-redesign` at e600af5, which contains both:
+  - **M5c follow-up "tap to continue"** (B1–B10). A sit or walk-away mid-set holds the set, and Continue / Start next set / Save set resolves it. Verifier PASS.
+  - **M4e redesign** (A1–A22 plus the cleanup round): the mix (Energy for Today and Summary, Pro for Exercise, Camera and Settings, Track for Rest), the Orange / Volt / Yellow accent picker, +30 s on Rest, and Skip / End moved into the Pause sheet. Verifier PASS: e2e 90/90, Lighthouse a11y 100 on Today, 57 screenshots in `docs/screenshots/m4e-*`.
+- **Next step:** Wongsaton reviews the screenshots and OKs a deploy (fast-forward main to m4e-redesign). After that, 🧍 Checkpoint C / B3 at the gym.
+- **Waiting on Wongsaton:**
+  - Deploy OK for m4e-redesign.
+  - **A-q6:** the `--warn` amber is too close to Volt gold and to the Yellow CTA.
+  - **A-q5:** should a rep best at a lighter weight count?
+  - **A-q7:** should Legs days show the front of the figure?
+  - **Exercise first screen:** the notes row sits about 30px under the sticky Set done until you scroll. Shrinking the content would fix it.
+  - The B-q and A-q questions under "Blockers / questions".
+  - The 🧍 gym checkpoints.
 
 ## Milestone checklist
 
