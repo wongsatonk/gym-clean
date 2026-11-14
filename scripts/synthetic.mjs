@@ -1,6 +1,7 @@
 // npm run synthetic [-- <folder>...] [--force]
 // Renders the synthetic mannequin clips (tools/synthetic.ts) to
-// fixtures/synthetic/<folder>/synthetic-0N__reps-<n>__partials-<m>.webm.
+// fixtures/synthetic/<folder>/synthetic-0N[-<flaw>]__reps-<n>__partials-<m>.webm, and writes the
+// ground truth of the flaw clips (synthetic-03-<flaw>, M5) to fixtures/synthetic/flaws.json.
 // Existing clips are kept unless --force: rendering is real-time and not byte-reproducible, and
 // curl/synthetic-01 is the e2e fake-camera clip, which must stay byte-identical.
 import { execFileSync } from 'node:child_process';
@@ -36,6 +37,10 @@ try {
       `synthetic: no clips for ${unknown.join(', ')}; valid folders: ${folders.join(', ')}`,
     );
   }
+  const flaws = Object.fromEntries(
+    all.filter((c) => c.flaw).map((c) => [`${c.folder}/${c.name}`, c.flaw]),
+  );
+  writeFileSync('fixtures/synthetic/flaws.json', JSON.stringify(flaws, null, 2) + '\n');
   const clips = all.filter((c) => only.length === 0 || only.includes(c.folder));
 
   for (const { folder, name } of clips) {

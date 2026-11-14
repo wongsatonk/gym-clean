@@ -161,7 +161,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - ≤ 12 words with the longest exercise name, no banned words;
     - `coachSummary` shows T1.
   - Deps: 1 (types only; sequenced after 4 to share one instance).
-- [ ] 9. [pose-engineer ∥] Synthetic clips with form flaws (positive fixtures for the geometry and tempo rules).
+- [x] 9. [pose-engineer ∥] Synthetic clips with form flaws (positive fixtures for the geometry and tempo rules).
   - Files: tools/synthetic.ts, tools/synthetic.html, scripts/synthetic.mjs, `fixtures/synthetic/<folder>/synthetic-03-<flaw>__reps-<n>__partials-<m>.webm`, `fixtures/landmarks/<folder>/synthetic-03-*.json`.
   - Clips, each 8 reps in the SPEC view:
     - lateral raise: left arm lags ~30° on reps 5–8, and reps 6–8 go to ~110°;
@@ -173,6 +173,11 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - The pose-engineer doesn't touch thresholds: a clip the counter miscounts goes back to core-engineer.
   - Done when: the JSON files are committed with their detection rates, and the fixture suite counts each one by its filename.
   - Deps: none.
+  - Evidence 2026-11-13: six `synthetic-03-*` clips, each 8 reps / 0 partials, with the mistake on reps 5–8.
+    - Detection rates: elbow-swing 866/870, rushed-lowering 819/822, short-range 797/798, arms-out-of-sync 1085/1086, raise-too-high 797/798, hip-sag 793/798 (all 99.4–99.9%).
+    - **Plan change:** the lateral-raise mistake is now **two clips**, `arms-out-of-sync` and `raise-too-high`, one rule each. With one arm stopping lower, the two-arm mean can't also cross the height limit.
+    - Flaws are rendered about 2× larger than the target, because MediaPipe reads them at about half size (named constants in tools/synthetic.ts). `fixtures/synthetic/flaws.json` holds the rendered values, not the measured ones.
+    - The fixture suite now has 23 cases, all counting their filename reps.
 - [ ] 10. [pose-engineer, after 9] Converter report.
   - Files: scripts/devlog.mjs(+`scripts/devlog.test.mjs`).
   - The per-set report lists each `focusCue` event (id, rep, value / baseline) and the set's `focusScore` event.
