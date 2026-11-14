@@ -315,7 +315,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - Files: e2e/*.spec.ts (not camera.spec.ts).
   - Done when: the full `npm run e2e` is green.
   - Deps: A11.
-- [ ] A12. [ui-engineer] **Rest** (Track).
+- [x] A12. [ui-engineer] **Rest** (Track).
   - Files: src/ui/screens/rest.ts, src/styles.css.
   - Countdown:
     - 132px white countdown;
@@ -330,7 +330,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - No Skip/End.
   - Done when: a render test, 390×844 screenshots (normal / overrun / with tip), typecheck + lint clean.
   - Deps: A2, A6, A10 (topBar).
-- [ ] A13. [main] Wire Rest.
+- [x] A13. [main] Wire Rest.
   - Files: src/ui/app.ts.
   - `+30 s` → `EXTEND_REST`; `tick()` uses the new target.
   - The camera rest panel stays as is until A16.
@@ -846,6 +846,15 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e A12 and A13: Rest (Track) done** (review PASS). Full e2e 75/75; check passes with 1323 unit tests.
+  - **Ticking:** the Rest screen keeps a `restView.update()` handle, so each tick changes only the clock text and the ring offset, with no re-render.
+  - **Over rest:** "+0:12" plus the "Over rest" label, so it isn't shown by colour alone.
+  - **+30 s** dispatches EXTEND_REST.
+  - **Deviation from the README:** the Rest top bar keeps Camera for pose exercises. The M5c rest-camera flow needs it.
+  - **Sheets:** `.overlay` is now z-index 20, so sheets sit above screen content and the camera sheet. Guarded by an anatomy e2e.
+  - **3D fixes:** inline viewers clear transparently on the stage; pickView weights muscles by area, so pull days show the back.
+  - **Narrow phones:** the timer scales below 390px.
+  - **Still to come:** an e2e for +30 s in A20; Rest screenshots in A22.
 - 2026-11-14: **M4e A10, A11 and A11b done: Exercise (Pro) and the Pause sheet** (review PASS). Full e2e 75/75; check 1308.
   - **Skip and End live only in the Pause sheet.** Skip dispatches RESUME then SKIP_EXERCISE; End needs two taps; Resume gets focus when the sheet opens.
   - **Unchanged by choice:** skipping the last unfinished exercise goes straight to Summary in one tap, the same as the old footer Skip.
@@ -1280,6 +1289,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - Non-blocking observations: (1) after Apply, set 3 at 40 lb (sets 8×35, 8×35, 8×40) gets A3 again, "+5 lb → 45 lb". That matches the rule table (A3 looks at reps only, all of today's sets), but it suggests a second jump after one set at the new weight; product call for Wongsaton (e.g. only count sets at the current weight). (2) The one-arm row demo has the hand on the bench but both feet on the floor, while how-to line 1 says "One knee and hand on the bench" (anatomy-3d-engineer or the how-to text). (3) In headless Chrome the gauge screenshot shows count "0 · Get into start position" while the gauge moves (counter still settling at 14 fps); expected.
 
 ## Blockers / questions for Wongsaton
+- **A-q7 (small):** Legs days show the figure from the back, because hamstrings plus calves outweigh the quads by area, even though the quads get the most sets. Should Legs show the front instead?
 - **A-q6 (Volt):** with the Volt accent, achieved items turn gold, which looks close to the amber used for warnings (overtime, on hold). Keep it, or change one of them?
 - **A-q5 (new bests):** should a rep best at a lighter weight you've used before count? For example 20 kg × 10 when your best at 20 kg was × 8. As built, only a heavier top set, or more reps at your top weight, counts.
 - **🧍 Checkpoint B3 (hands-free gym test, waiting for his report):** train a day with hands-free on, note every wrong auto start/stop and whether 6 s stillness / the 5 s Undo feel right, then export the dev log.

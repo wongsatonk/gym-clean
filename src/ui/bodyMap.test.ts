@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import exercises from '../data/exercises.json';
+import program from '../data/program.json';
 import { MUSCLES, bodyMapSvg, musclesInView, pickView } from './bodyMap';
 
 const pathsFor = (svg: string) =>
@@ -52,6 +53,37 @@ describe('pickView', () => {
     expect(pickView(['triceps'])).toBe('back');
     expect(pickView(['calves'])).toBe('back');
     expect(pickView([])).toBe('front');
+  });
+});
+
+describe('pickView for a whole day (Today hero and day strip)', () => {
+  const dayPrimary = (id: string) => {
+    const day = program.days.find((d) => d.id === id);
+    const out = new Set<string>();
+    for (const p of day?.exercises ?? [])
+      for (const m of exercises.find((e) => e.id === p.exerciseId)?.primaryMuscles ?? [])
+        out.add(m);
+    return [...out];
+  };
+
+  it('shows the back on pull days, where the lats and middle back are', () => {
+    // Pull A: biceps, middle back, lats, shoulders: a 2-2 tie by count used to go to the front.
+    expect(pickView(['biceps', 'middle back', 'lats', 'shoulders'])).toBe('back');
+    expect(pickView(['middle back', 'biceps', 'shoulders'])).toBe('back');
+    for (const d of program.days.filter((x) => /^pull/.test(x.id)))
+      expect(pickView(dayPrimary(d.id)), d.id).toBe('back');
+  });
+
+  it('shows the front on push days', () => {
+    expect(pickView(['chest', 'shoulders', 'triceps'])).toBe('front');
+    for (const d of program.days.filter((x) => /^push/.test(x.id)))
+      expect(pickView(dayPrimary(d.id)), d.id).toBe('front');
+  });
+
+  it('a single muscle still shows its own side', () => {
+    expect(pickView(['biceps'])).toBe('front');
+    expect(pickView(['triceps'])).toBe('back');
+    expect(pickView(['abdominals', 'abdominals'])).toBe('front');
   });
 });
 

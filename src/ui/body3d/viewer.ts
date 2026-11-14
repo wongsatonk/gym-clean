@@ -27,8 +27,12 @@ export type Body3D = {
   readonly el: HTMLDivElement;
   setMuscles(primary: readonly string[], secondary: readonly string[]): void;
   setInteractive(on: boolean): void;
-  /** Paint the lit stage behind the figure (default on); off where the slot draws its own. */
-  setStage(on: boolean): void;
+  /**
+   * Paint the lit stage behind the figure. 'auto' (default) paints it only in the interactive
+   * full viewer: the inline (Exercise) and Rest slots sit on a stage their screen already draws,
+   * so there the canvas stays transparent.
+   */
+  setStage(on: boolean | 'auto'): void;
   dispose(): void;
 };
 
@@ -71,19 +75,24 @@ export function createBody3D(opts: { reducedMotion: boolean }): Body3D {
   el.className = 'body3d';
   // Token colours, read once now (M4e A7): body, rim, stage, cyan muscle.
   const C = figurePalette();
-  const setStage = (on: boolean) => {
+  const paintStage = (on: boolean) => {
     el.dataset.stage = String(on);
     el.style.background = on ? stageBackground() : '';
     el.style.borderRadius = on ? 'var(--r-btn, 12px)' : '';
     el.style.overflow = on ? 'hidden' : '';
   };
-  setStage(true);
+  let stageMode: boolean | 'auto' = 'auto';
+  const applyStage = () =>
+    paintStage(stageMode === 'auto' ? el.dataset.interactive === 'true' : stageMode);
+  applyStage();
   const renderer = new WebGLRenderer({
     antialias: true,
     alpha: true,
     powerPreference: 'low-power',
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // Clear to fully transparent: off the full viewer, the screen's own stage shows through.
+  renderer.setClearAlpha(0);
   el.append(renderer.domElement);
 
   const scene = new Scene();
@@ -215,9 +224,11 @@ export function createBody3D(opts: { reducedMotion: boolean }): Body3D {
     setInteractive(on) {
       el.dataset.interactive = String(on);
       canvas.style.touchAction = on ? 'none' : 'auto';
+      applyStage();
     },
     setStage(on) {
-      setStage(on);
+      stageMode = on;
+      applyStage();
     },
     dispose() {
       disposed = true;

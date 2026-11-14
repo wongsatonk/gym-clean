@@ -1,6 +1,6 @@
 // App controller: owns the session state, renders screens, runs side effects
 // (voice, wake lock, IndexedDB). All workout rules live in src/core/.
-import { formatDuration, formatRest } from '../core/format';
+import { formatDuration } from '../core/format';
 import { restCueText, restCuesBetween } from '../core/restCues';
 import {
   currentPlanned,
@@ -71,6 +71,7 @@ import { createFocusSummary } from './focusSummary';
 import { exerciseScreen as renderExercise } from './screens/exercise';
 import { pauseSheet as renderPauseSheet } from './screens/pauseSheet';
 import { previewScreen as renderPreview } from './screens/preview';
+import { restScreen as renderRest } from './screens/rest';
 import { todayScreen as renderToday, type TodayLast } from './screens/today';
 import { applyAccent } from './tokens';
 import {
@@ -290,6 +291,8 @@ export function mountApp(root: HTMLElement): void {
   // ---------- Camera (M3) ----------
 
   let camera: CameraView | null = null;
+  // M4e Rest: the mounted Rest screen's cheap per-tick updater (clock + ring).
+  let restView: { update(remainingMs: number, targetMs: number): void } | null = null;
   // Hands-free (M5c): the exercise the open camera counts, and the pre-roll for the next set.
   let cameraExerciseId: string | null = null;
   // The hands-free setting the open camera was created with (Settings can't change it mid-camera).
@@ -924,8 +927,7 @@ export function mountApp(root: HTMLElement): void {
     syncCamera(); // before render: the rest screen leaves the tip/Fix to the camera's rest panel
     render();
     // Pause sheet: move focus into the dialog (the Pause button it came from is gone).
-    if (s.paused && !prev.paused)
-      root.querySelector<HTMLElement>('[data-pause="resume"]')?.focus();
+    if (s.paused && !prev.paused) root.querySelector<HTMLElement>('[data-pause="resume"]')?.focus();
     speakFocusCue(prev, s);
   }
 
@@ -1028,7 +1030,7 @@ export function mountApp(root: HTMLElement): void {
     // If the tab was throttled and several cues piled up, only the latest is still relevant.
     const cue = cues.at(-1);
     if (cue) voice.speak(restCueText(cue.kind, upcoming(s)));
-    updateRestClock(s, elapsed);
+    restView?.update(s.restTargetSec * 1000 - elapsed, s.restTargetSec * 1000);
     if (camera?.mode === 'rest') updateCameraRest(s);
   }
 
@@ -1036,15 +1038,8 @@ export function mountApp(root: HTMLElement): void {
     return { name: exerciseName(currentPlanned(s).exerciseId), setNumber: s.setIndex + 1 };
   }
 
-  function updateRestClock(s: SessionState, elapsed: number): void {
-    const el = root.querySelector<HTMLElement>('[data-rest-clock]');
-    if (!el) return;
-    const remaining = s.restTargetSec * 1000 - elapsed;
-    el.textContent = formatRest(remaining);
-    el.classList.toggle('overtime', remaining < 0);
-  }
-
   function sessionScreen(s: SessionState, sheet: Sheet): HTMLElement {
+    if (s.phase !== 'rest') restView = null; // the tick only updates a live Rest screen
     if (s.phase === 'summary') return summaryScreen(s);
     const body = s.phase === 'rest' ? restScreen(s) : exerciseScreen(s);
     if (s.paused) return h('div', { class: 'stack' }, body, pausedOverlay(s));
@@ -1054,75 +1049,6 @@ export function mountApp(root: HTMLElement): void {
     if (sheet?.kind === 'body')
       return h('div', { class: 'stack' }, body, bodySheet(sheet.exerciseId));
     return body;
-  }
-
-  function topBar(s: SessionState): HTMLElement {
-    return h(
-      'header',
-      { class: 'top-bar' },
-      h(
-        'button',
-        {
-          class: 'ghost-btn list-btn',
-          'aria-label': 'Exercise list',
-          onclick: () => setSheet({ kind: 'list' }),
-        },
-        `☰ ${s.day.name} · ${s.exIndex + 1}/${s.day.exercises.length}`,
-      ),
-      currentPlanned(s).tracking === 'pose'
-        ? h(
-            'button',
-            {
-              class: 'ghost-btn',
-              onclick: () => {
-                const id = currentPlanned(s).exerciseId;
-                openCameraView(exerciseName(id), id);
-              },
-            },
-            'Camera',
-          )
-        : null,
-      h(
-        'button',
-        { class: 'ghost-btn', onclick: () => dispatch({ type: 'PAUSE', now: now() }) },
-        'Pause',
-      ),
-    );
-  }
-
-  /** Machine setting + notes button and the Today / Last time lines for one exercise. */
-  function exerciseInfo(s: SessionState, exerciseId: string): HTMLElement[] {
-    const note = noteFor(exerciseId);
-    const today = setsText(s.logs.filter((l) => l.exerciseId === exerciseId));
-    const last = setsText(lastTime[exerciseId] ?? []);
-    const hasToday = Boolean(todayNotes[exerciseId]);
-    return [
-      h(
-        'button',
-        {
-          class: 'notes-btn',
-          'aria-label': 'Notes and machine setting',
-          onclick: () => setSheet({ kind: 'notes', exerciseId }),
-        },
-        h(
-          'span',
-          { class: note.machineSetting ? 'machine' : 'muted' },
-          note.machineSetting ? `Machine: ${note.machineSetting}` : 'Machine setting',
-        ),
-        h('span', { class: 'notes-tag' }, note.note || hasToday ? 'Notes •' : 'Notes'),
-      ),
-      ...(note.note ? [h('p', { class: 'lasting-note small' }, note.note)] : []),
-      h(
-        'div',
-        { class: 'history small' },
-        today
-          ? h('p', { 'data-today': true }, h('span', { class: 'muted' }, 'Today: '), today)
-          : null,
-        last
-          ? h('p', { 'data-last': true }, h('span', { class: 'muted' }, 'Last time: '), last)
-          : null,
-      ),
-    ];
   }
 
   function exerciseScreen(s: SessionState): HTMLElement {
@@ -1172,48 +1098,48 @@ export function mountApp(root: HTMLElement): void {
 
   function restScreen(s: SessionState): HTMLElement {
     const p = currentPlanned(s);
-    const remaining = s.restTargetSec * 1000 - restElapsedMs(s, now());
-    return h(
-      'main',
-      { class: 'screen rest', 'data-screen': 'rest' },
-      topBar(s),
-      h('p', { class: 'muted rest-label' }, 'Rest'),
-      h(
-        'p',
-        {
-          class: `rest-clock${remaining < 0 ? ' overtime' : ''}`,
-          role: 'timer',
-          'data-rest-clock': true,
-        },
-        formatRest(remaining),
-      ),
-      // Hands-free rest on the camera shows these in its own panel (one element, one place).
-      ...(camera?.mode === 'rest' ? [] : [lastSetFix(s), coachTipFor(s)]),
-      h(
-        'div',
-        { class: 'rest-next' },
-        muscleSlot(p.exerciseId, 'rest'),
-        h(
-          'p',
-          { class: 'next-up' },
-          h('span', { class: 'muted' }, 'Next'),
-          h('br'),
-          h('strong', {}, exerciseName(p.exerciseId)),
-          h('br'),
-          h('span', { class: 'nowrap' }, `Set ${s.setIndex + 1} of ${p.sets}`),
-          h('br'),
-          h('span', { class: 'muted' }, `${s.reps} reps × ${w(s.weightKg)} ${unit}`),
-          h('br'),
-          h('span', { class: 'focus-cue' }, cueFor(p.exerciseId)),
-        ),
-      ),
-      ...exerciseInfo(s, p.exerciseId),
-      h(
-        'button',
-        { class: 'primary-btn', onclick: () => dispatch({ type: 'START_SET', now: now() }) },
-        'Start set',
-      ),
+    const id = p.exerciseId;
+    const note = noteFor(id);
+    const today = setsText(s.logs.filter((l) => l.exerciseId === id));
+    const last = setsText(lastTime[id] ?? []);
+    const targetMs = s.restTargetSec * 1000;
+    // Hands-free rest on the camera shows the Fix and tip in its own panel (one element, one place).
+    const onCamera = camera?.mode === 'rest';
+    const v = renderRest(
+      {
+        dayName: s.day.name,
+        exIndex: s.exIndex,
+        exTotal: s.day.exercises.length,
+        remainingMs: targetMs - restElapsedMs(s, now()),
+        targetMs,
+        exerciseId: id,
+        name: exerciseName(id),
+        setIndex: s.setIndex,
+        sets: p.sets,
+        reps: s.reps,
+        weightText: w(s.weightKg),
+        unit,
+        cue: cueFor(id),
+        figure: muscleSlot(id, 'rest'),
+        fixEl: onCamera ? null : lastSetFix(s),
+        coachTipEl: onCamera ? null : coachTipFor(s),
+        machine: note.machineSetting || undefined,
+        note: note.note || undefined,
+        hasNotes: Boolean(note.note || todayNotes[id]),
+        today: today || undefined,
+        last: last || undefined,
+      },
+      {
+        onList: () => setSheet({ kind: 'list' }),
+        onCamera: p.tracking === 'pose' ? () => openCameraView(exerciseName(id), id) : undefined,
+        onPause: () => dispatch({ type: 'PAUSE', now: now() }),
+        onExtend: () => dispatch({ type: 'EXTEND_REST', sec: 30, now: now() }),
+        onNotes: () => setSheet({ kind: 'notes', exerciseId: id }),
+        onStartSet: () => dispatch({ type: 'START_SET', now: now() }),
+      },
     );
+    restView = v;
+    return v.el;
   }
 
   function bodySheet(exerciseId: string): HTMLElement {

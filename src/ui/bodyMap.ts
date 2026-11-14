@@ -381,10 +381,41 @@ export function musclesInView(view: BodyView): Muscle[] {
   return MUSCLES.filter((m) => VIEWS[view][m] !== undefined);
 }
 
-/** Front unless most of the primary muscles are seen from behind. */
+/** Shoelace area of a half-body shape (map units²). */
+function shapeArea(shape: Shape): number {
+  let a = 0;
+  shape.forEach(([x1, y1], i) => {
+    const [x2, y2] = shape[(i + 1) % shape.length] ?? [x1, y1];
+    a += x1 * y2 - x2 * y1;
+  });
+  return Math.abs(a) / 2;
+}
+
+/** How much of the figure a muscle lights in the view it is mainly seen from. */
+export function muscleArea(m: string): number {
+  const view: BodyView = BACK_FIRST.has(m) ? 'back' : 'front';
+  const shape = VIEWS[view][m as Muscle];
+  return shape ? shapeArea(shape) : 0;
+}
+
+/** Arm and shoulder muscles: helpers on most days, so they count half when picking a view. */
+const LIMB_HELPERS = new Set<string>(['biceps', 'triceps', 'forearms', 'shoulders', 'neck']);
+
+/**
+ * The view that shows more of the primary muscles, by lit area. Each muscle counts on the side
+ * it is mainly seen from (BACK_FIRST), weighted by its size on the map; arm and shoulder muscles
+ * count half. So a pull day (biceps, shoulders, middle back, lats) shows the back, instead of a
+ * tie by count going to the front. A single muscle still shows its own side. Ties go to the front.
+ */
 export function pickView(primary: readonly string[]): BodyView {
-  const back = primary.filter((m) => BACK_FIRST.has(m)).length;
-  return back > primary.length - back ? 'back' : 'front';
+  let front = 0;
+  let back = 0;
+  for (const m of new Set(primary)) {
+    const a = muscleArea(m) * (LIMB_HELPERS.has(m) ? 0.5 : 1);
+    if (BACK_FIRST.has(m)) back += a;
+    else front += a;
+  }
+  return back > front ? 'back' : 'front';
 }
 
 const slug = (m: string) => m.replace(/\s+/g, '-');
