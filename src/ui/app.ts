@@ -552,7 +552,7 @@ export function mountApp(root: HTMLElement): void {
           }, 2500);
         },
       },
-      'Test voice',
+      'Speaker check',
     );
     return h(
       'div',

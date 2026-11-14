@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { CUE_TEXT } from '../core/focus';
 import type { FocusCueId, SetLog } from '../core/types';
 import {
-  FOCUS_CUE_LABEL,
+  NOT_SCORED_TEXT,
+  cueLineText,
+  focusCueLabel,
   FOCUS_EXPLAINER,
   createFocusSummary,
   cueCountText,
@@ -51,9 +54,19 @@ describe('cue label helpers', () => {
       'hipSag',
     ];
     for (const id of ids) {
-      expect(FOCUS_CUE_LABEL[id]).toMatch(/^[A-Z][^.]*$/);
-      expect(FOCUS_CUE_LABEL[id].split(' ').length).toBeLessThanOrEqual(6);
+      expect(focusCueLabel(id)).toMatch(/^[A-Z][^.]*$/);
+      expect(focusCueLabel(id).split(' ').length).toBeLessThanOrEqual(6);
     }
+    // Built from core's spoken CUE_TEXT, so shown and spoken never drift apart.
+    expect(focusCueLabel('stalled')).toBe('Stay with it');
+    expect(focusCueLabel('hipSag')).toBe('Keep your body straight');
+  });
+  it('marks the cues that cost no points as not scored', () => {
+    const line = (id: FocusCueId, count: number, scored: boolean) =>
+      cueLineText({ id, label: focusCueLabel(id), count, scored });
+    expect(line('outOfFrame', 1, false)).toBe('Step back into frame (not scored)');
+    expect(line('lowFps', 2, false)).toBe('Move closer to the light ×2 (not scored)');
+    expect(line('rushedLowering', 2, true)).toBe('Slow the lowering ×2');
   });
   it('counts and partials read naturally', () => {
     expect(cueCountText('Slow the lowering', 2)).toBe('Slow the lowering ×2');
@@ -63,7 +76,8 @@ describe('cue label helpers', () => {
   });
   it('explainer has no medical wording', () => {
     expect(FOCUS_EXPLAINER).toBe('Start 100 · −10 per cue · −5 per partial or stall');
-    const all = [FOCUS_EXPLAINER, ...Object.values(FOCUS_CUE_LABEL)].join(' ').toLowerCase();
+    const labels = (Object.keys(CUE_TEXT) as FocusCueId[]).map(focusCueLabel);
+    const all = [FOCUS_EXPLAINER, NOT_SCORED_TEXT, ...labels].join(' ').toLowerCase();
     for (const w of ['injur', 'pain', 'danger', 'damage', 'diagnos', 'risk', 'unsafe']) {
       expect(all).not.toContain(w);
     }
@@ -107,9 +121,9 @@ describe('focusRows', () => {
             setNumber: 2,
             score: 65,
             cues: [
-              { id: 'rushedLowering', label: 'Slow the lowering', count: 2 },
-              { id: 'stalled', label: 'Stay with it', count: 1 },
-              { id: 'outOfFrame', label: 'Step back into frame', count: 1 },
+              { id: 'rushedLowering', label: 'Slow the lowering', count: 2, scored: true },
+              { id: 'stalled', label: 'Stay with it', count: 1, scored: true },
+              { id: 'outOfFrame', label: 'Step back into frame', count: 1, scored: false },
             ],
             partials: 1,
           },
@@ -227,5 +241,21 @@ describe('createFocusSummary', () => {
     expect(el.all('data-focus-partials').map((c) => c.getAttribute('data-focus-partials'))).toEqual(
       ['1'],
     );
+  });
+
+  it('a 100 set with out-of-frame / low-light cues says they are not scored', () => {
+    const el = createFocusSummary(
+      [log('curl', 0, { focusScore: 100, cues: ['outOfFrame', 'lowFps', 'lowFps'] })],
+      name,
+    ) as unknown as FakeEl;
+    const cues = el.all('data-focus-cue');
+    expect(cues.map((c) => c.textContent)).toEqual([
+      'Step back into frame (not scored)',
+      'Move closer to the light ×2 (not scored)',
+    ]);
+    expect(el.all('data-focus-unscored')).toHaveLength(2);
+    expect(el.all('data-focus-score').map((s) => s.getAttribute('data-focus-score'))).toEqual([
+      '100',
+    ]);
   });
 });

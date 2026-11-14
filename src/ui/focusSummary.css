@@ -144,3 +144,8 @@
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
+
+/* Placement/light cues cost no points: muted so a 100 with them reads as fine. */
+.focus-cue[data-focus-unscored] {
+  color: var(--muted);
+}

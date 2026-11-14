@@ -4,30 +4,16 @@
 // fields (focusScore, cues, partials); the score itself is computed in core (focusScore.ts).
 // app.ts mounts it next to the Coach section.
 
+import { CUE_TEXT } from '../core/focus';
+import { cueWeight } from '../core/focusScore';
 import type { FocusCueId, SetLog } from '../core/types';
 import { h } from './dom';
 import './focusSummary.css';
 
-/**
- * Short shown labels, the first sentence of each SPEC M5 spoken cue. Core's `CUE_TEXT`
- * (task 3) can be passed to `createFocusSummary` / `focusRows` as overrides once it lands;
- * `cueLabelFromText` turns a cue text into a label ("Stay with it. {N} to go." → "Stay with it").
- */
-export const FOCUS_CUE_LABEL: Readonly<Record<FocusCueId, string>> = {
-  rushedLowering: 'Slow the lowering',
-  shrinkingRange: 'Full range',
-  stalled: 'Stay with it',
-  outOfFrame: 'Step back into frame',
-  lowFps: 'Move closer to the light',
-  armsOutOfSync: 'Both arms together',
-  raiseTooHigh: 'Stop at shoulder height',
-  elbowDrift: 'Keep your elbow still',
-  bodySwing: 'Keep your body still',
-  hipSag: 'Keep your body straight',
-};
-
 export const FOCUS_EXPLAINER = 'Start 100 · −10 per cue · −5 per partial or stall';
 export const CLEAN_SET_TEXT = 'Clean set';
+/** Shown after a cue that costs no points (placement/light), so a 100 with it isn't a puzzle. */
+export const NOT_SCORED_TEXT = '(not scored)';
 
 export type CueLabels = Partial<Readonly<Record<FocusCueId, string>>>;
 
@@ -39,6 +25,11 @@ export function cueLabelFromText(text: string): string {
   return (dot >= 0 ? text.slice(0, dot) : text).trim();
 }
 
+/** Shown label for a cue: the first sentence of core's spoken CUE_TEXT ("Stay with it"). */
+export function focusCueLabel(id: FocusCueId): string {
+  return cueLabelFromText(CUE_TEXT[id] ?? id);
+}
+
 /** "Slow the lowering ×2"; a single detection is just the label. */
 export function cueCountText(label: string, count: number): string {
   return count > 1 ? `${label} ×${count}` : label;
@@ -48,7 +39,19 @@ export function partialsText(n: number): string {
   return `${n} ${n === 1 ? 'partial' : 'partials'}`;
 }
 
-export type FocusCueCount = { id: FocusCueId; label: string; count: number };
+export type FocusCueCount = {
+  id: FocusCueId;
+  label: string;
+  count: number;
+  /** false when the cue costs no points (core cueWeight 0: out of frame, low light). */
+  scored: boolean;
+};
+
+/** "Step back into frame ×2 (not scored)". */
+export function cueLineText(c: FocusCueCount): string {
+  const text = cueCountText(c.label, c.count);
+  return c.scored ? text : `${text} ${NOT_SCORED_TEXT}`;
+}
 export type FocusSetRow = {
   /** 1-based, as on the Exercise screen. */
   setNumber: number;
@@ -83,8 +86,9 @@ export function focusRows(
       score: Math.min(100, Math.max(0, Math.round(l.focusScore))),
       cues: [...counts].map(([id, count]) => ({
         id,
-        label: cueLabelFromText(labels[id] ?? FOCUS_CUE_LABEL[id] ?? id),
+        label: labels[id] ? cueLabelFromText(labels[id]) : focusCueLabel(id),
         count,
+        scored: cueWeight(id) > 0,
       })),
       partials: Math.max(0, l.partials ?? 0),
     });
@@ -120,7 +124,11 @@ function focusIcon(): SVGSVGElement {
 
 function setItem(s: FocusSetRow): HTMLElement {
   const details: HTMLElement[] = s.cues.map((c) =>
-    h('li', { class: 'focus-cue', 'data-focus-cue': c.id }, cueCountText(c.label, c.count)),
+    h(
+      'li',
+      { class: 'focus-cue', 'data-focus-cue': c.id, 'data-focus-unscored': !c.scored },
+      cueLineText(c),
+    ),
   );
   if (s.partials > 0)
     details.push(
@@ -149,7 +157,7 @@ function setItem(s: FocusSetRow): HTMLElement {
 /**
  * The Summary "Focus" section, or null when no set today has a focus score (manual sets only).
  * `name` maps an exercise id to its display name; `labels` optionally overrides cue labels
- * (pass core's CUE_TEXT).
+ * (default: from core's CUE_TEXT).
  */
 export function createFocusSummary(
   logs: readonly SetLog[],

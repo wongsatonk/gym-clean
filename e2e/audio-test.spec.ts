@@ -301,7 +301,7 @@ test('Audio test in the real Settings: survives a re-render, ‹ Back stops the 
   await page.goto('/');
   await page.getByRole('button', { name: 'Settings' }).click();
   const panel = page.locator('[data-audio-test]');
-  // Mounted under "Test voice".
+  // Mounted under "Speaker check".
   await expect(page.locator('.voice-test:has([data-voice-test]) + [data-audio-test]')).toHaveCount(
     1,
   );
