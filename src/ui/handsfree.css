@@ -1,0 +1,285 @@
+/* M5c hands-free pieces on the camera sheet: the auto-stop Undo banner and the rest-mode panel.
+   Tokens from src/styles.css. Both are positioned inside .cam-stage (position: relative) and
+   cover it, so the video stays behind them. Gym rules: count/clock ≥ 64px, text ≥ 20px,
+   buttons ≥ 56px (Undo ≥ 72px), no colour-only meaning. */
+
+.hf-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- auto-stop banner ---------- */
+
+.auto-stop {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 16px 16px;
+  background: rgb(11 13 16 / 0.95);
+  border-top: 3px solid var(--accent);
+  color: var(--text);
+}
+
+.auto-stop-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.auto-stop-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 12px;
+  margin: 0;
+}
+
+.auto-stop-done {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.auto-stop-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.auto-stop-num {
+  font-size: 88px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+.auto-stop-unit {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.auto-stop-partials {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: right;
+}
+
+.auto-stop-keep {
+  font-size: 52px;
+  white-space: nowrap;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--accent);
+}
+
+.auto-stop.undone {
+  border-top-color: var(--muted);
+}
+
+.auto-stop-undo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 88px;
+  padding: 0 12px 0 20px;
+  font-size: 32px;
+  font-weight: 800;
+  background: var(--text);
+  color: var(--bg);
+  border: none;
+}
+
+.auto-stop-undo-text {
+  flex: 1 1 auto;
+  text-align: left;
+}
+
+.auto-stop-undo-icon {
+  flex: 0 0 auto;
+}
+
+.auto-stop-countdown {
+  position: relative;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+}
+
+.auto-stop-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.auto-stop-ring-bg,
+.auto-stop-ring-fg {
+  fill: none;
+  stroke-width: 5;
+}
+
+.auto-stop-ring-bg {
+  stroke: rgb(11 13 16 / 0.2);
+}
+
+.auto-stop-ring-fg {
+  stroke: var(--bg);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.25s linear;
+}
+
+.auto-stop-secs {
+  position: relative;
+  font-size: 32px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Numeric countdown only. */
+  .auto-stop-ring {
+    display: none;
+  }
+}
+
+/* ---------- camera rest panel ---------- */
+
+/* Covers the stage: dims the video, the card sits at the bottom, video visible above it.
+   Scrolls inside itself if a tall coach tip + open Fix editor don't fit (375×667). The card is
+   pushed down with margin-top: auto, not justify-content: flex-end, which would overflow
+   upwards out of reach of scrolling. */
+.cam-rest {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.cam-rest-card {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 16px;
+  background: rgb(11 13 16 / 0.9);
+  border-top: 1px solid var(--border);
+}
+
+.cam-rest-label {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--muted);
+}
+
+.cam-rest-clock {
+  margin: 0;
+  font-size: 88px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.cam-rest-clock.overtime {
+  color: var(--warn);
+}
+
+.cam-rest-next {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.cam-rest-next:empty {
+  display: none;
+}
+
+.cam-rest-slot {
+  min-width: 0;
+}
+
+.cam-rest-slot[hidden] {
+  display: none;
+}
+
+.cam-rest-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.cam-rest-start,
+.cam-rest-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 72px;
+  padding: 0 12px;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.cam-rest-start {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+}
+
+.cam-rest-close {
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 22px;
+}
+
+.cam-rest-icon {
+  flex: 0 0 auto;
+}
+
+/* Short phones (375×667): tighter so Start set stays on screen with a coach tip + Fix. */
+@media (max-height: 720px) {
+  .cam-rest-card {
+    gap: 6px;
+    padding-top: 8px;
+  }
+
+  .cam-rest-clock {
+    font-size: 72px;
+  }
+
+  .cam-rest-label {
+    display: none;
+  }
+}
