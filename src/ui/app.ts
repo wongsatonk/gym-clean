@@ -27,7 +27,11 @@ import {
   finishSession,
   getExerciseNote,
   getCoachTips,
+  getAccent,
   getCoachVoice,
+  sessionsSince,
+  setsForSessions,
+  type SessionRow,
   getHandsFree,
   COACH_VOICE_DEFAULT,
   setCoachVoice,
@@ -64,6 +68,18 @@ import { audioTestPanel, disposeAudioTest } from './audioTest';
 import { createCoachTip } from './coachTip';
 import { createCoachSummary } from './coachSummary';
 import { createFocusSummary } from './focusSummary';
+import { previewScreen as renderPreview } from './screens/preview';
+import { todayScreen as renderToday, type TodayLast } from './screens/today';
+import { applyAccent } from './tokens';
+import {
+  lastSession,
+  previousSameDaySession,
+  STREAK_MIN_PER_WEEK,
+  volumeVsLast,
+  weekDots,
+  weeklyStreak,
+  type WeekDot,
+} from '../core/stats';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
 import { h } from './dom';
@@ -80,15 +96,23 @@ type Sheet =
   | { kind: 'notes'; exerciseId: string }
   | { kind: 'body'; exerciseId: string };
 
+/** M4e Today tiles (loaded with the up-next day). */
+type TodayStats = {
+  streakWeeks: number;
+  weekDots: WeekDot[];
+  last: TodayLast | null;
+  doneThisWeek: Record<string, number>;
+};
+
 type View =
-  | { screen: 'today'; upNextDayId: string | null }
+  | { screen: 'today'; upNextDayId: string | null; stats: TodayStats | null }
   | { screen: 'settings' }
   | { screen: 'preview'; day: ProgramDay; loading: boolean }
   | { screen: 'session'; s: SessionState; sheet: Sheet };
 
 export function mountApp(root: HTMLElement): void {
   const db = new GymDb();
-  let view: View = { screen: 'today', upNextDayId: null };
+  let view: View = { screen: 'today', upNextDayId: null, stats: null };
   let unit: Unit = 'kg';
   let spokenCount = true;
   let coachTips = true;
@@ -443,7 +467,7 @@ export function mountApp(root: HTMLElement): void {
   function screenFor(v: View): HTMLElement {
     switch (v.screen) {
       case 'today':
-        return todayScreen(v.upNextDayId);
+        return todayScreen(v.upNextDayId, v.stats);
       case 'settings':
         return settingsScreen();
       case 'preview':
@@ -458,67 +482,98 @@ export function mountApp(root: HTMLElement): void {
     devLogPanel?.destroy();
     devLogPanel = null;
     disposeAudioTest(); // stops its camera, restores audioSession 'auto'
-    view = { screen: 'today', upNextDayId: null };
+    view = { screen: 'today', upNextDayId: null, stats: null };
     render();
     void loadUpNext();
   }
 
   // ---------- Today ----------
 
+  /** Weeks of history loaded for the streak (generous: the streak stops at the first gap). */
+  const STATS_WEEKS = 26;
+
   async function loadUpNext(): Promise<void> {
+    let upNext: string | null;
     try {
       const last = await db.sessions.orderBy('startedAt').last();
       const idx = last ? program.days.findIndex((d) => d.id === last.dayId) : -1;
-      const upNext = program.days[(idx + 1) % program.days.length]?.id ?? null;
-      if (view.screen === 'today') {
-        view = { screen: 'today', upNextDayId: upNext };
+      upNext = program.days[(idx + 1) % program.days.length]?.id ?? null;
+    } catch (err) {
+      console.warn('Could not read history', err);
+      upNext = program.days[0]?.id ?? null; // never leave Start disabled
+    }
+    if (view.screen !== 'today') return;
+    view = { screen: 'today', upNextDayId: upNext, stats: null };
+    render();
+    // The tiles load separately, so a failed history query never blocks Start.
+    try {
+      const t = now();
+      const sessions = await sessionsSince(db, t - STATS_WEEKS * 7 * 24 * 3600 * 1000);
+      const sets = await setsForSessions(
+        db,
+        sessions.map((x) => x.sessionId),
+      );
+      if (view.screen === 'today' && view.upNextDayId === upNext) {
+        view = { screen: 'today', upNextDayId: upNext, stats: todayStats(sessions, sets, t) };
         render();
       }
     } catch (err) {
-      console.warn('Could not read history', err);
+      console.warn('Could not read history stats', err);
     }
   }
 
-  function todayScreen(upNextDayId: string | null): HTMLElement {
-    return h(
-      'main',
-      { class: 'screen today' },
-      h(
-        'header',
-        { class: 'top-bar end' },
-        h(
-          'button',
-          {
-            class: 'ghost-btn',
-            onclick: () => {
-              view = { screen: 'settings' };
-              render();
-            },
-          },
-          'Settings',
+  function todayStats(sessions: SessionRow[], sets: SetRow[], t: number): TodayStats {
+    const dots = weekDots(sessions, t);
+    const weekStart = dots[0]?.dayStart ?? t;
+    const doneThisWeek: Record<string, number> = {};
+    for (const x of sessions)
+      if (x.endedAt !== undefined && x.startedAt >= weekStart) doneThisWeek[x.dayId] = x.startedAt;
+    const info = lastSession(sessions, sets);
+    let last: TodayLast | null = null;
+    if (info) {
+      const prev = previousSameDaySession(sessions, info.sessionId);
+      last = {
+        dayName: program.days.find((d) => d.id === info.dayId)?.name ?? info.dayId,
+        date: info.date,
+        durationMs: info.durationMs,
+        volumeKg: info.volumeKg,
+        volumeVsLast: volumeVsLast(
+          sets.filter((x) => x.sessionId === info.sessionId),
+          prev ? sets.filter((x) => x.sessionId === prev.sessionId) : [],
         ),
-      ),
-      h('h1', { class: 'app-title' }, 'Gym Clean'),
-      h('p', { class: 'muted' }, 'Pick today’s workout'),
-      h(
-        'div',
-        { class: 'day-list' },
-        ...program.days.map((day) => {
-          const sets = day.exercises.reduce((n, e) => n + e.sets, 0);
-          const upNext = day.id === upNextDayId;
-          return h(
-            'button',
-            {
-              class: `day-btn${upNext ? ' up-next' : ''}`,
-              'data-day': day.id,
-              onclick: () => void openPreview(day),
-            },
-            h('span', { class: 'day-name' }, day.name),
-            h('span', { class: 'day-meta' }, `${day.exercises.length} exercises · ${sets} sets`),
-            upNext ? h('span', { class: 'badge' }, 'Up next') : null,
-          );
-        }),
-      ),
+      };
+    }
+    return {
+      streakWeeks: weeklyStreak(sessions, t, STREAK_MIN_PER_WEEK),
+      weekDots: dots,
+      last,
+      doneThisWeek,
+    };
+  }
+
+  function todayScreen(upNextDayId: string | null, stats: TodayStats | null): HTMLElement {
+    return renderToday(
+      {
+        now: now(),
+        days: program.days,
+        upNextDayId,
+        streakWeeks: stats?.streakWeeks ?? 0,
+        weekDots: stats?.weekDots ?? weekDots([], now()),
+        last: stats?.last ?? null,
+        doneThisWeek: stats?.doneThisWeek,
+        unit,
+      },
+      {
+        // The hero goes through the preview, which loads last time's weights for the defaults.
+        onStart: (day) => void openPreview(day),
+        onOpenDay: (day) => void openPreview(day),
+        onTab: (tab) => {
+          if (tab === 'settings') {
+            view = { screen: 'settings' };
+            render();
+          }
+        },
+      },
     );
   }
 
@@ -724,50 +779,27 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function previewScreen(day: ProgramDay, loading: boolean): HTMLElement {
-    return h(
-      'main',
-      { class: 'screen preview', 'data-screen': 'preview' },
-      h(
-        'header',
-        { class: 'top-bar' },
-        h('button', { class: 'ghost-btn', onclick: goToday }, '‹ Back'),
-      ),
-      h('h1', { class: 'page-title' }, day.name),
-      h(
-        'ol',
-        { class: 'ex-list' },
-        ...day.exercises.map((p) => {
-          const note = noteFor(p.exerciseId);
+    return renderPreview(
+      {
+        day,
+        position: program.days.indexOf(day) + 1,
+        total: program.days.length,
+        loading,
+        hint: silentHint(), // iOS mutes spoken cues in Silent mode; a page can't detect it
+        rows: day.exercises.map((p) => {
+          const wKg = defaultWeightKg(p);
           const last = setsText(lastTime[p.exerciseId] ?? []);
-          return h(
-            'li',
-            { class: 'ex-row' },
-            h('strong', {}, exerciseName(p.exerciseId)),
-            badgesFor({ exerciseId: p.exerciseId, tracking: p.tracking }),
-            h(
-              'span',
-              { class: 'muted' },
-              `${p.sets} × ${repsRange(p)} reps · ${
-                defaultWeightKg(p) > 0 ? `${w(defaultWeightKg(p))} ${unit}` : 'bodyweight'
-              }`,
-            ),
-            note.machineSetting
-              ? h('span', { class: 'machine' }, `Machine: ${note.machineSetting}`)
-              : null,
-            last ? h('span', { class: 'muted small' }, `Last time: ${last}`) : null,
-          );
+          return {
+            exerciseId: p.exerciseId,
+            tracking: p.tracking,
+            name: exerciseName(p.exerciseId),
+            plan: `${p.sets} × ${repsRange(p)} reps · ${wKg > 0 ? `${w(wKg)} ${unit}` : 'bodyweight'}`,
+            machine: noteFor(p.exerciseId).machineSetting || undefined,
+            last: last || undefined,
+          };
         }),
-      ),
-      h(
-        'div',
-        { class: 'sticky-bottom' },
-        silentHint(), // iOS mutes spoken cues in Silent mode; a page can't detect it
-        h(
-          'button',
-          { class: 'primary-btn', disabled: loading, onclick: () => startDay(day) },
-          loading ? 'Loading…' : 'Start workout',
-        ),
-      ),
+      },
+      { onBack: goToday, onStart: startDay },
     );
   }
 
@@ -1473,6 +1505,9 @@ export function mountApp(root: HTMLElement): void {
       coachTips = on;
       if (view.screen === 'settings') render();
     })
+    .catch(logDbError);
+  void getAccent(db)
+    .then((a) => applyAccent(a))
     .catch(logDbError);
   void getCoachVoice(db)
     .then((v) => {

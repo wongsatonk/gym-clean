@@ -130,7 +130,6 @@
 }
 
 /* Display width for titles, big numbers and the CTA. Body text stays Barlow. */
-.app-title,
 .page-title,
 .summary-title,
 .exercise-name,
@@ -199,61 +198,491 @@ h1 {
   gap: 10px;
 }
 
-/* ---------- Today ---------- */
+/* ---------- Today (M4e Energy, src/ui/screens/today.ts) ---------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 .today {
+  gap: 10px;
+}
+
+/* A screen that ends with the tab bar: the bar carries the bottom safe area. */
+.screen.has-tabbar {
+  padding-bottom: 0;
+}
+
+.appbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-lead);
+}
+
+.brand .ic {
+  color: var(--cta);
+}
+
+.date {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.eyebrow {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Hero: dark ember surface; the orange rings are decoration only, the orange fill is Start. */
+.hero,
+.preview-head {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: none;
+  background: radial-gradient(ellipse 70% 80% at 82% 30%, var(--ember-hi), var(--ember) 70%);
+}
+
+.preview-head {
+  gap: 8px;
+}
+
+.hero .eyebrow,
+.preview-head .eyebrow {
+  color: var(--text);
+}
+
+.hero-rings,
+.hero-rings::before,
+.hero-rings::after {
+  position: absolute;
+  border: 2px solid var(--cta);
+  border-radius: 50%;
+}
+
+.hero-rings {
+  right: -56px;
+  top: -40px;
+  width: 260px;
+  height: 260px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.hero-rings::before,
+.hero-rings::after {
+  content: '';
+}
+
+.hero-rings::before {
+  inset: 26px;
+}
+
+.hero-rings::after {
+  inset: 54px;
+}
+
+.hero-fig {
+  position: absolute;
+  z-index: 1;
+  right: 22px;
+  top: 18px;
+  height: 128px;
+}
+
+.hero-fig .body-map {
+  display: block;
+  height: 100%;
+  width: auto;
+}
+
+.hero-txt {
+  position: relative;
+  z-index: 1;
+}
+
+/* Eyebrow and day name stay clear of the figure; meta and chips run under it. */
+.hero-txt .eyebrow,
+.hero-txt .hero-title {
+  padding-right: 76px;
+}
+
+.hero-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-hero);
+  font-weight: 700;
+  line-height: 1;
+  margin: 4px 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-weight: 600;
+}
+
+.hero-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.chips {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+  color: var(--text);
+}
+
+/* The most-worked muscle wears the muscle colour, as on the figure. */
+.chip:first-child {
+  color: var(--muscle);
+  box-shadow: inset 0 0 0 2px var(--muscle);
+}
+
+.hero-cta {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: var(--tap-hero);
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.hero .silent-hint {
+  position: relative;
+  z-index: 1;
+}
+
+/* Streak + last time tiles. */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.app-title {
-  font-size: var(--fs-num-sm);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-}
-
-.day-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.day-btn {
-  position: relative;
+.tile {
+  border-radius: var(--r-card);
+  padding: 10px 14px 12px;
+  min-height: 140px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 14px 18px;
-  text-align: left;
+  gap: 6px;
 }
 
-.day-btn.up-next {
-  border-color: var(--cta);
+.tile-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.tile.streak {
+  background: var(--success);
+  color: var(--on-success);
+}
+
+.tile.last {
   background: var(--surface-2);
 }
 
-.day-name {
-  font-size: var(--fs-lead);
+.tile-num {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-num small {
+  font-family: var(--font-body);
+  font-size: var(--fs-cue);
   font-weight: 700;
 }
 
-.day-meta {
+.week {
+  list-style: none;
+  margin: auto 0 0;
+  padding: 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.wd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.wd .dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--on-success);
+  opacity: 0.5;
+}
+
+.wd .dot .ic {
+  width: 12px;
+  height: 12px;
+}
+
+.wd.done .dot {
+  opacity: 1;
+  background: var(--on-success);
+  color: var(--success);
+}
+
+.wd.today .dot {
+  opacity: 1;
+  border-width: 3px;
+}
+
+.wd .wl {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.last-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.last-meta {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.trend {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.trend.up {
+  color: var(--success);
+}
+
+/* Your week: day cards scroll inside their own row, never the page. */
+.days-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.days-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+}
+
+.days-head span {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.day-strip {
+  display: flex;
+  gap: 10px;
+  margin: 0 -16px;
+  padding: 4px 16px 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+}
+
+.day-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.day-strip .day-btn {
+  flex: none;
+  width: 112px;
+  min-height: 124px;
+  padding: 6px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+/* "Now" marker: an outline, not a fill. */
+.day-strip .day-btn.up-next {
+  border: 3px solid var(--cta);
+  background: var(--surface);
+}
+
+.day-fig {
+  height: 50px;
+  display: block;
+}
+
+.day-fig .body-map {
+  display: block;
+  height: 100%;
+  width: auto;
+}
+
+.day-strip .day-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.day-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.day-when.next {
+  color: var(--cta);
+}
+
+.day-when.done {
+  color: var(--success);
+}
+
+/* Tab bar (src/ui/tabBar.ts): same on every top-level screen. */
+.tabbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  margin: auto -16px 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface);
+  border-top: 2px solid var(--line);
+}
+
+.tab {
+  position: relative;
+  flex: 1;
+  min-height: var(--tab-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--text-2);
   font-size: var(--fs-label);
+  font-weight: 700;
 }
 
-.badge {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-  font-size: var(--fs-label);
-  font-weight: 700;
+.tab.on {
+  color: var(--text);
+}
+
+.tab.on .ic {
   color: var(--cta);
-  background: var(--surface);
-  border: 2px solid var(--cta);
-  border-radius: var(--r-pill);
-  padding: 2px 10px;
+}
+
+.tab.on::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 28%;
+  right: 28%;
+  height: 4px;
+  border-radius: 0 0 4px 4px;
+  background: var(--cta);
+}
+
+/* Day preview rows on the Energy page. */
+.preview .ex-row-plan {
+  color: var(--text-2);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rings {
+    animation: hero-pulse 6s ease-in-out infinite alternate;
+  }
+
+  .hero-cta {
+    transition: transform 0.15s ease-out;
+  }
+
+  .hero-cta:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  @keyframes hero-pulse {
+    to {
+      transform: scale(1.05);
+      opacity: 0.25;
+    }
+  }
 }
 
 /* ---------- Session ---------- */

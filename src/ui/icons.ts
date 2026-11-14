@@ -84,10 +84,19 @@ function rootAttrs(name: IconName, size: IconSize, opts: IconOptions): Record<st
   };
 }
 
+/** Escapes an attribute value (opts.class may come from a caller). */
+function escapeAttr(v: string): string {
+  return v
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 /** Pure: the full `<svg>` markup for an icon (used by tests and string templates). */
 export function iconMarkup(name: IconName, size: IconSize = 'md', opts: IconOptions = {}): string {
   const attrs = Object.entries(rootAttrs(name, size, opts))
-    .map(([k, v]) => `${k}="${v}"`)
+    .map(([k, v]) => `${k}="${escapeAttr(v)}"`)
     .join(' ');
   return `<svg xmlns="${SVG_NS}" ${attrs}>${ICON_PATHS[name]}</svg>`;
 }

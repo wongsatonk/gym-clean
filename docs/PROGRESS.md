@@ -270,7 +270,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - these files have no colour literal.
   - Deps: A2's token names (can start from the README table).
 - [ ] A7b. [ui-engineer, after A7] Remove the 3D entries from the tokens test allow-list. Files: src/ui/tokens.test.ts. Done when: green. Deps: A2, A7.
-- [ ] A8. [ui-engineer] **Today** (Energy) + day preview + tab bar.
+- [x] A8. [ui-engineer] **Today** (Energy) + day preview + tab bar.
   - Files: src/ui/screens/today.ts, src/ui/screens/preview.ts, src/ui/tabBar.ts, src/styles.css.
   - Hero:
     - day name 84px;
@@ -286,7 +286,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - Tab bar: Today / Settings, 72px, labelled.
   - Done when: a render unit test, 390×844 harness screenshots in all 3 accents, nothing overflowing, typecheck + lint clean.
   - Deps: A2, A3 (types), A6; A7 for the mini figure (stub until then).
-- [ ] A9. [main] Wire Today and the preview.
+- [x] A9. [main] Wire Today and the preview.
   - Files: src/ui/app.ts.
   - Replace `todayScreen` / `previewScreen`. Load the history via A4 for the selectors (`STREAK_MIN_PER_WEEK`).
   - Tab bar navigation.
@@ -846,6 +846,16 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e A8 and A9 Today done.** Review: one blocking issue fixed — smoke now asserts the hero reads "Push A" on a fresh database and Start is enabled. Full e2e was 74/75 before that fix (the smoke test); smoke and session pass after it.
+  - **The hero Start opens the preview** rather than starting directly, so last time's weights load for the defaults. Two taps, deliberately.
+  - **Today loads up-next first, then the tiles separately,** so a failed history query never leaves Start disabled.
+  - **The streak window is 26 weeks** (`STATS_WEEKS`). The streak can't show more than about 26, and a last session older than that shows "None yet". Widen it if he ever gets near it.
+  - **Silent hint:** it stays on the preview, above Start, and isn't on the Today hero.
+  - **Screenshots:** A8 harness at 390×844 in Orange, Volt and Yellow, in the scratchpad. The verifier re-shoots them in A22.
+  - **Follow-ups:**
+    - move dayInfo's pure helpers (estimateMinutes, dayMuscles, setCount) into src/core;
+    - give the loading `…` h1 an sr-only label;
+    - the Pull A mini figure only lights the arms from the front view (anatomy-3d: check `BACK_FIRST`).
 
 - 2026-11-14: **M4e A2 and A7 done** (review: 2 colour-role fixes applied: done status is green, "Keep going." is lavender; the how-to phase label is plain text).
   - **Checks:** `npm run check` 1282 tests; full e2e 75/75 in A2's run.

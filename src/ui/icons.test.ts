@@ -86,6 +86,12 @@ describe('icon set', () => {
     expect(a['class']).toBe('ic ic-lg stepper-ic');
     expect(a['stroke-width']).toBe('3');
   });
+
+  it('escapes a caller-supplied class so it cannot break out of the attribute', () => {
+    const m = iconMarkup('plus', 'sm', { class: 'x" onload="evil()' });
+    expect(m).not.toContain('" onload="');
+    expect(rootAttrs(m)['class']).toBe('ic ic-sm x&quot; onload=&quot;evil()');
+  });
 });
 
 describe('icon() element', () => {
