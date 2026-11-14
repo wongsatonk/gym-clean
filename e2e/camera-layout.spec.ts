@@ -526,7 +526,7 @@ for (const vp of [
     expect(overlaps(g, phone)).toBe(false);
     expect(g.x + g.width).toBeLessThanOrEqual(stage.x + stage.width);
     expect(g.y + g.height).toBeLessThanOrEqual(stage.y + stage.height);
-    expect(g.x).toBeGreaterThanOrEqual(stage.x + stage.width - 84); // right edge only
+    expect(g.x).toBeGreaterThanOrEqual(stage.x + stage.width - 100); // right edge only (88px column + 8px inset)
     expect(g.height).toBeGreaterThanOrEqual(200);
 
     // Start/Target labels are whole: inside the viewport, inside the gauge backing, and not cut

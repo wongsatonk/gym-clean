@@ -688,7 +688,7 @@ textarea:focus-visible {
   position: absolute;
   top: 8px;
   left: 8px;
-  right: 88px;
+  right: 104px;
   display: flex;
   pointer-events: none;
 }
@@ -700,7 +700,8 @@ textarea:focus-visible {
   top: 8px;
   right: 8px;
   bottom: 80px;
-  width: 72px;
+  /* Wide enough for 20px bold Start/Target labels in wider fonts too (Linux fallbacks). */
+  width: 88px;
   pointer-events: none;
 }
 
@@ -791,7 +792,7 @@ textarea:focus-visible {
   background: rgb(0 0 0 / 0.85);
   color: var(--text);
   font-size: 20px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.15;
   white-space: nowrap;
 }
