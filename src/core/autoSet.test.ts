@@ -1478,6 +1478,31 @@ describe('held set', () => {
 });
 
 describe('plain rest is unchanged around breaks', () => {
+  for (const tap of ['confirm', 'nextSet'] as const) {
+    it(`${tap} while held after a long break: no auto start within armAfterAutoStopSec (5 s)`, () => {
+      const sim = inSet();
+      const last = nth(sim.reps_(2), 1);
+      sim.hold('top', 300);
+      sim.hold('setup', 30000, SIT); // a long break: the rest since rep 2 is well past 10 s
+      sim.hold('top', 1000);
+      expect(sim.types()).toEqual(['hold']);
+      const tapT = sim.t;
+      if (tap === 'confirm') sim.confirm();
+      else sim.nextSet();
+      expect(sim.types()).toEqual(['hold', 'commit']);
+      // The caller's SET_DONE → setSession(rest) with the rest backdated to the last rep.
+      sim.session('rest', false, sim.t - last.t);
+      sim.hold('top', 300);
+      sim.reps_(2, 300); // 2 quick reps right after the tap
+      expect(sim.t).toBeLessThan(tapT + 5000);
+      expect(sim.of('start')).toEqual([]);
+      // After the 5 s floor, 2 reps start a set as usual.
+      sim.hold('top', 1500);
+      sim.reps_(2);
+      expect(sim.types()).toEqual(['hold', 'commit', 'start']);
+    });
+  }
+
   it('rest in place (tracked, untracked null) → still stop, commit, auto start on 2 reps', () => {
     const sim = inSet();
     const last = nth(sim.reps_(3), 2);

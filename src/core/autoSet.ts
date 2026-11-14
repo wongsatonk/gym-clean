@@ -557,22 +557,18 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     if (paused) return [];
     const closed = idle(input.t);
     if (closed.length === 0) return [];
-    const saved = holdCommit();
+    const saved = holdCommit(input.t);
     state = 'closed';
     return [...saved, ...closed];
   }
 
-  /** Save the held set: frozen counts, backdated end; the machine goes to rest. */
-  function holdCommit(): AutoSetAction[] {
-    const end = pendingEndedAt;
-    const action: AutoSetAction = {
-      type: 'commit',
-      endedAt: end,
-      reps: pendingReps,
-      partials: pendingPartials,
-    };
-    enterRest(lastT ?? end, (lastT ?? end) - end);
-    return [action];
+  /**
+   * Save the held set: frozen counts, backdated end; the machine goes to rest. Same as an auto
+   * stop's commit (the hold froze pendingEndedAt / pendingReps / pendingPartials), including the
+   * armAfterAutoStopSec floor: quick reps right after the tap never auto-start a set.
+   */
+  function holdCommit(t: number): AutoSetAction[] {
+    return commit(t);
   }
 
   function undo(t: number): AutoSetAction[] {
@@ -583,7 +579,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
 
   function confirm(t: number): AutoSetAction[] {
     see(t);
-    if (state === 'held') return holdCommit();
+    if (state === 'held') return holdCommit(t);
     if (state !== 'pending') return [];
     return commit(t);
   }
@@ -599,7 +595,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
   function nextSet(t: number): AutoSetAction[] {
     see(t);
     if (state !== 'held') return [];
-    return holdCommit();
+    return holdCommit(t);
   }
 
   return {
