@@ -32,6 +32,19 @@ export type Exercise = {
   instructions: string[];
 };
 
+/** M5 live-trainer cues (SPEC M5): ids only; the spoken/shown text lives in the UI. */
+export type FocusCueId =
+  | 'rushedLowering'
+  | 'shrinkingRange'
+  | 'stalled'
+  | 'outOfFrame'
+  | 'lowFps'
+  | 'armsOutOfSync'
+  | 'raiseTooHigh'
+  | 'elbowDrift'
+  | 'bodySwing'
+  | 'hipSag';
+
 export type SetLog = {
   sessionId: string;
   exerciseId: string;
@@ -41,7 +54,8 @@ export type SetLog = {
   weightKg: number;
   restTakenSec: number;
   focusScore?: number;
-  cues?: string[];
+  /** M5: one entry per focus/form detection in the set (ids, never text). */
+  cues?: FocusCueId[];
   startedAt: number;
   endedAt: number;
 };

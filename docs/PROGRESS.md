@@ -52,7 +52,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 **Ownership:** core-engineer: `src/core/**` and `src/data/db.ts`. ui-engineer: camera view, Summary component, e2e. pose-engineer: synthetic clips, converter. main: `types.ts`, `app.ts`, `playwright.config.ts`.
 
-- [ ] 1. [main] Shared types.
+- [x] 1. [main] Shared types.
   - Files: src/core/types.ts.
   - Add `FocusCueId = 'rushedLowering' | 'shrinkingRange' | 'stalled' | 'outOfFrame' | 'lowFps' | 'armsOutOfSync' | 'raiseTooHigh' | 'elbowDrift' | 'bodySwing' | 'hipSag'`.
   - Change `SetLog.cues?: FocusCueId[]`: one entry per detection, ids not text. The field stays optional and isn't indexed, so there is no Dexie version bump and old rows still read.
