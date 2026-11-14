@@ -19,6 +19,8 @@
 // rebased on its own first person frame. An auto-started set's frames begin before its
 // (backdated) start: that pre-roll is kept in the fixture (the counter must see the starting reps)
 // and shown in the "pre" column. Its length needs `camera.wallT0` (wall time of frame clock 0).
+// M5c B8: a set put on hold (a break inside the set) and continued is one devlog set, so one
+// fixture with all its reps. The auto column adds "hold:<reason> <sec> → continue|next|save".
 // Existing fixtures are kept unless --force. --dry-run writes nothing.
 // --compact makes fixtures small enough to commit (~5x smaller): coordinates at 3 decimals,
 // visibility at 2, and landmarks src/core never reads (see USED_INDICES) zeroed in place.
@@ -124,12 +126,24 @@ function fpsOf(frames) {
   return span > 0 ? ((frames.length - 1) * 1000) / span : null;
 }
 
-const AUTO_ACTIONS = new Set(['start', 'stopPending', 'stopCancelled', 'commit', 'close']);
+const AUTO_ACTIONS = new Set([
+  'start',
+  'stopPending',
+  'stopCancelled',
+  'commit',
+  'close',
+  'hold',
+  'holdEnded',
+]);
 const WORD = /^[A-Za-z]{1,24}$/; // reasons are enum words; anything else is never printed
 /** An auto event logged just before its set's backdated/clamped start still belongs to it. */
 const AUTO_EVENT_SLACK_MS = 2000;
+const numOrNull = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-/** `autoSet` session events as { t, action, reason } (enum words only, nothing else kept). */
+/**
+ * `autoSet` session events as { t, action, reason, how, ft, endedAtFt } (enum words and numbers
+ * only, nothing else kept). `ft` / `endedAtFt` are the camera frame clock (cameraView logAuto).
+ */
 function autoEventsOf(session) {
   const events = Array.isArray(session?.events) ? session.events : [];
   return events
@@ -138,32 +152,66 @@ function autoEventsOf(session) {
       t: e.t,
       action: e.data.action,
       reason: WORD.test(e.data.reason ?? '') ? e.data.reason : null,
+      how: WORD.test(e.data.how ?? '') ? e.data.how : null,
+      ft: numOrNull(e.data.ft),
+      endedAtFt: numOrNull(e.data.endedAtFt),
     }))
     .filter((e) => AUTO_ACTIONS.has(e.action))
     .sort((a, b) => a.t - b.t);
 }
 
 /**
- * One-line summary of a set's auto actions, e.g. "start:auto stop:still undo:1". Events go to
- * the set with the latest start ≤ t + slack. '-' when the session logged no autoSet events
- * (hands-free off).
+ * M5c B8: how a `hold` ended and how long the break was. The first `holdEnded` / `commit` /
+ * `close` after it in the session ends it: holdEnded → its `how` (Continue set), a commit →
+ * "next" when another set of the session starts at the commit (Start next set: START_SET right
+ * after it), else "save" (Save set, Set done, Close, idle limits). The break clock runs from
+ * the end of the last rep (`endedAtFt`) on the frame clock, else from the hold, else wall time.
+ * Returns "hold:<reason> <sec>s → continue|next|save|?".
  */
-function autoSummary(autoEvents, setStarts, set) {
+function holdSummary(hold, autoEvents, setStarts) {
+  const end = autoEvents.find(
+    (e) => e.t >= hold.t && e !== hold && ['holdEnded', 'commit', 'close'].includes(e.action),
+  );
+  let how = '?';
+  if (end?.action === 'holdEnded') how = end.how ?? 'continue';
+  else if (end) {
+    const next = setStarts.some((st) => st > hold.t && Math.abs(st - end.t) <= AUTO_EVENT_SLACK_MS);
+    how = end.action === 'commit' && next ? 'next' : 'save';
+  }
+  let ms = null;
+  if (end && end.ft != null && (hold.endedAtFt ?? hold.ft) != null) {
+    ms = end.ft - (hold.endedAtFt ?? hold.ft);
+  } else if (end) ms = end.t - hold.t;
+  const sec = ms == null || ms < 0 ? '?' : `${(ms / 1000).toFixed(1)}s`;
+  return `hold:${hold.reason ?? '?'} ${sec} → ${how}`;
+}
+
+/**
+ * One-line summary of a set's auto actions, e.g. "start:auto stop:still undo:1", or with a
+ * break "start:tap stop:hold hold:away 12.0s → next". Events go to the set with the latest
+ * start ≤ t + slack, except a commit, which goes to the set with the latest end ≤ t + slack
+ * (after Start next set the commit lands at the next set's start, but it saves the held one).
+ * '-' when the session logged no autoSet events (hands-free off).
+ */
+function autoSummary(autoEvents, setStarts, setEnds, set) {
   if (autoEvents.length === 0 || !Number.isFinite(set?.startedAt)) return '-';
-  const mine = autoEvents.filter((e) => {
-    let owner = null;
-    for (const st of setStarts) if (st <= e.t + AUTO_EVENT_SLACK_MS) owner = st;
-    return owner === set.startedAt;
-  });
+  const mine = autoEvents.filter((e) =>
+    e.action === 'commit' && setEnds.length > 0
+      ? ownerAt(setEnds, e.t) === set.endedAt
+      : ownerAt(setStarts, e.t) === set.startedAt,
+  );
   const started = mine.some((e) => e.action === 'start');
   const commitAt = mine.findIndex((e) => e.action === 'commit');
-  const pending = mine
-    .slice(0, commitAt < 0 ? mine.length : commitAt)
-    .filter((e) => e.action === 'stopPending');
+  const beforeCommit = mine.slice(0, commitAt < 0 ? mine.length : commitAt);
+  const lastStop = beforeCommit
+    .filter((e) => e.action === 'stopPending' || e.action === 'hold')
+    .at(-1);
   const stop =
     commitAt >= 0
-      ? pending.length
-        ? (pending.at(-1).reason ?? '?')
+      ? lastStop
+        ? lastStop.action === 'hold'
+          ? 'hold'
+          : (lastStop.reason ?? '?')
         : 'auto'
       : set.endedAt != null
         ? 'tap'
@@ -173,6 +221,9 @@ function autoSummary(autoEvents, setStarts, set) {
   const parts = [`start:${started ? 'auto' : 'tap'}`, `stop:${stop}`];
   if (cancels('undo')) parts.push(`undo:${cancels('undo')}`);
   if (cancels('rep')) parts.push(`rep:${cancels('rep')}`);
+  for (const h of mine.filter((e) => e.action === 'hold')) {
+    parts.push(holdSummary(h, autoEvents, setStarts));
+  }
   const close = mine.find((e) => e.action === 'close');
   if (close) parts.push(`close:${close.reason ?? '?'}`);
   return parts.join(' ');
@@ -275,7 +326,7 @@ export function planConversion(exp, opts = {}) {
         personFrames: 0,
         fps: null,
         prerollMs: null,
-        auto: autoSummary(autoEvents, setStarts, set),
+        auto: autoSummary(autoEvents, setStarts, setEnds, set),
         focus: focusOf(focusEvents, setStarts, setEnds, set),
       };
       // Frame-clock times (one clock may span several sets): sort, never assume t starts near 0.

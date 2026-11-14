@@ -31,7 +31,8 @@
 //  - At most one cue per push, by priority: out of frame > low fps > form > rushed lowering >
 //    shrinking range > stalled. A rep rule that loses on priority keeps its streak (it isn't a
 //    fire), so it fires on its next qualifying rep; a timer rule simply stays due.
-//  - Nothing fires while paused or when autoState is rest / pending / closed. Rest frames are
+//  - Nothing fires while paused or when autoState is rest / pending / held / closed (held = a
+//    break inside the set, M5c follow-up: the hold prompt speaks instead). Rest frames are
 //    ignored entirely (an auto-started set's starting reps arrive as the reset seed); in the other
 //    quiet states reps still count (for "N to go") and fill the baseline, but don't judge, and
 //    every timer restarts when the quiet state ends.
@@ -234,6 +235,7 @@ const START_BAND: ReadonlySet<RepPhase> = new Set<RepPhase>(['top', 'setup']);
 const QUIET_AUTO_STATES: ReadonlySet<AutoSetState> = new Set<AutoSetState>([
   'rest',
   'pending',
+  'held',
   'closed',
 ]);
 

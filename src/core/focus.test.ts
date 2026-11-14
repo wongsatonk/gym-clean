@@ -135,6 +135,7 @@ class Sim {
           t: full.t,
           tracking: full.tracking,
           present: full.present,
+          untracked: full.untracked,
           phase: full.phase,
           events: full.events,
         }))
@@ -608,15 +609,14 @@ describe('out of frame', () => {
     }
   });
 
-  it('absent with hands-free on and ≥ 2 reps → none (the away stop speaks instead)', () => {
+  it('absent with hands-free on and ≥ 2 reps → none (the away hold speaks instead)', () => {
     const s = handsFreeSim();
     s.rep();
     s.rep();
     s.hold(10_000, { present: false, untracked: 'visibility' });
     expect(oof(s)).toEqual([]);
-    expect(s.actions.find((a) => a.action.type === 'stopPending')?.action).toMatchObject({
-      reason: 'away',
-    });
+    expect(s.actions.map((a) => a.action.type)).toEqual(['hold']);
+    expect(s.actions[0]?.action).toMatchObject({ reason: 'away' });
   });
 
   it('absent with hands-free off → cue after 2 s', () => {
@@ -711,6 +711,7 @@ describe('quiet states', () => {
   for (const blocked of [
     { autoState: 'rest' },
     { autoState: 'pending' },
+    { autoState: 'held' },
     { autoState: 'closed' },
     { paused: true },
   ] as Partial<FocusInput>[]) {
@@ -728,6 +729,39 @@ describe('quiet states', () => {
       expect(s.cues).toEqual([]);
     });
   }
+
+  it('held (M5c break): would-fire out of frame, stalled and rushed lowering give nothing', () => {
+    // The same inputs fire each cue with autoState set…
+    const fire = (autoState: 'set' | 'held') => {
+      const oofS = new Sim(tracker());
+      oofS.base = { autoState };
+      oofS.rep();
+      oofS.hold(3000, { untracked: 'visibility' });
+      const stalledS = new Sim(tracker());
+      stalledS.base = { autoState };
+      stalledS.rep();
+      stalledS.hold(9000, {}, 'bottom');
+      const rushedS = new Sim(rushed());
+      rushedS.base = { autoState };
+      for (let i = 0; i < 2; i++) rushedS.rep({ eccMs: 2000 });
+      for (let i = 0; i < 2; i++) rushedS.rep({ eccMs: 400 });
+      return [...oofS.ids(), ...stalledS.ids(), ...rushedS.ids()];
+    };
+    expect(fire('set')).toEqual(['outOfFrame', 'stalled', 'rushedLowering']);
+    // …and nothing with autoState held.
+    expect(fire('held')).toEqual([]);
+  });
+
+  it('a real hold (sit-down, body line gated) silences the tracker until Continue', () => {
+    const s = handsFreeSim();
+    s.rep();
+    s.rep();
+    s.hold(6000, { untracked: 'bodyLine' }, 'setup');
+    expect(s.actions.map((a) => a.action.type)).toEqual(['hold']);
+    s.hold(20_000, { untracked: 'visibility' }, 'bottom');
+    s.hold(20_000, {}, 'bottom');
+    expect(s.cues).toEqual([]);
+  });
 
   it('paused time does not count toward stalled or out of frame', () => {
     const s = new Sim(tracker());

@@ -3,7 +3,16 @@
 // the camera frame clock (the caller converts to wall time).
 //
 // States: 'off' (no exercise / summary / manual exercise) → 'rest' ⇄ 'set' → 'pending' (Undo
-// window) → commit → 'rest', and 'closed' (idle close; terminal, the camera is stopped).
+// window) → commit → 'rest', 'set' → 'held' (a break inside the set) → continueSet() → 'set' or
+// nextSet() / confirm() / idle → commit, and 'closed' (idle close; terminal, the camera is stopped).
+//
+// Breaks (SPEC M5c "Breaks inside a set: tap to continue"): inside a set with ≥ stopMinReps reps,
+// a posture / body-line gate failing for breakGateSec while present, or nobody in frame for
+// awaySec, puts the set on hold instead of stopping it. While held nothing is counted, nothing
+// starts and nothing is saved until a tap (or an idle limit). Gated (posture / body-line) frames
+// reset the still and stalled clocks, so a sit-down can't turn into a still stop first. The gate
+// clock restarts on a re-tracked frame; visibility-gated and no-pose frames neither restart it nor
+// start it (a visibility failure is never a break). A pending Undo window is unaffected.
 //
 // The Undo window delays the save: `stopPending` is only a proposal; `commit` (when the window
 // expires, or on confirm()) is when the caller dispatches SET_DONE, backdated to `endedAt`.
@@ -18,7 +27,7 @@
 //   setSession({ phase: 'rest' }) call; otherwise the started set is dropped as a manual Set done.
 // - If the frame clock restarts (t goes back ≥ 100 ms; smaller steps back are ignored), stored times are rebased onto the new clock as
 //   if no time passed, and the stop/idle timers restart from the first new frame.
-import type { RepPhase } from './repCounter';
+import type { RepPhase, UntrackedReason } from './repCounter';
 import type { LandmarkFrame, RepEvent } from './types';
 
 /** All thresholds are data (SPEC M5c defaults); retuned from the developer log. */
@@ -38,8 +47,14 @@ export type AutoSetConfig = {
   stopMinReps: number;
   /** `still`: in the start band (or setup), no event, no phase change, for this long. */
   stillSec: number;
-  /** `away`: no tracked person for this long. */
+  /** Break (hold) `away`: no person in frame for this long, inside a set with ≥ stopMinReps reps. */
   awaySec: number;
+  /**
+   * Break (hold) on a posture / body-line gate (sitting down, bending over) failing continuously
+   * for this long while the person is in frame. Longer than a 1–3 s bend to the rack, shorter than
+   * the real 16 s sit of a push-up rest-pause.
+   */
+  breakGateSec: number;
   /** `stalled`: outside the start band, no event, no phase change, for this long. */
   stalledSec: number;
   /** Undo window length; nothing is committed before it ends. */
@@ -66,6 +81,7 @@ export const AUTO_SET_DEFAULTS: Readonly<AutoSetConfig> = Object.freeze({
   stopMinReps: 2,
   stillSec: 6,
   awaySec: 3,
+  breakGateSec: 5,
   stalledSec: 10,
   undoSec: 5,
   undoStillFactor: 2,
@@ -74,7 +90,9 @@ export const AUTO_SET_DEFAULTS: Readonly<AutoSetConfig> = Object.freeze({
   stillMoveDeg: 15,
 });
 
-export type AutoStopReason = 'still' | 'away' | 'stalled';
+export type AutoStopReason = 'still' | 'stalled';
+/** Why a set went on hold: the counter's gate reason, or nobody in frame. */
+export type AutoHoldReason = 'posture' | 'bodyLine' | 'away';
 export type AutoCancelReason = 'undo' | 'rep' | 'paused';
 export type AutoCloseReason = 'noPerson' | 'noRep';
 
@@ -93,12 +111,25 @@ export type AutoSetAction =
     }
   /** The pending stop is off ("Keep going."); the set continues with the same counts. */
   | { type: 'stopCancelled'; reason: AutoCancelReason }
+  /**
+   * A break inside the set: freeze the shown count, show Continue set / Start next set (Save set)
+   * and say "Set on hold. Tap to continue." Nothing is saved; `endedAt` is the backdated end.
+   */
+  | {
+      type: 'hold';
+      reason: AutoHoldReason;
+      reps: number;
+      partials: number;
+      endedAt: number;
+    }
+  /** Continue set was tapped: the set runs on with the same counts. */
+  | { type: 'holdEnded'; how: 'continue' }
   /** Save now: SET_DONE with now = endedAt. */
   | { type: 'commit'; endedAt: number; reps: number; partials: number }
   /** Stop the camera ("Camera off."). Terminal. */
   | { type: 'close'; reason: AutoCloseReason };
 
-export type AutoSetState = 'off' | 'rest' | 'set' | 'pending' | 'closed';
+export type AutoSetState = 'off' | 'rest' | 'set' | 'pending' | 'held' | 'closed';
 
 export type AutoSetSession = {
   phase: 'exercise' | 'rest' | 'other';
@@ -118,9 +149,16 @@ export type AutoSetInput = {
   /**
    * A person is in frame (see personInFrame), whatever the counter's gates say. A posture /
    * body-line gate failure (sitting down, kneeling) makes tracking false but keeps present true,
-   * so it never counts as `away` or idle `noPerson`. Defaults to `tracking`.
+   * so it never counts as `away` or idle `noPerson`. Defaults to `tracking`, or true when
+   * `untracked` is posture / bodyLine (the counter saw a pose).
    */
   present?: boolean;
+  /**
+   * The counter's `untracked` reason on this frame. `posture` / `bodyLine` while present feed the
+   * break gate (and reset the still / stalled clocks); `visibility` is never a break. Omitted =
+   * unknown: no gate break (the M5c behaviour).
+   */
+  untracked?: UntrackedReason | null;
   phase: RepPhase;
   /** The counter's smoothed angle (optional; enables the still-movement check). */
   angle?: number | null;
@@ -135,12 +173,22 @@ export type AutoSet = {
   push(input: AutoSetInput): AutoSetAction[];
   /** Undo tapped: cancels a pending stop. */
   undo(t: number): AutoSetAction[];
-  /** Set done tapped during the window: commit at once (same backdated end). */
+  /**
+   * Set done tapped during the window, or Save set / Set done while held: commit at once (same
+   * backdated end, frozen counts).
+   */
   confirm(t: number): AutoSetAction[];
+  /** Continue set tapped while held: `holdEnded`, back to the set with fresh stop timers. */
+  continueSet(t: number): AutoSetAction[];
+  /**
+   * Start next set (or Save set) tapped while held: `commit` (backdated endedAt, frozen counts).
+   * The caller dispatches SET_DONE { now: endedAt }, then START_SET for the next set.
+   */
+  nextSet(t: number): AutoSetAction[];
   readonly state: AutoSetState;
   /** End of the Undo window (frame clock), or null when no stop is pending. */
   readonly pendingUntil: number | null;
-  /** Counts of the current set (zero outside a set). */
+  /** Counts of the current set (frozen while held; zero outside a set). */
   readonly counts: { reps: number; partials: number };
 };
 
@@ -210,6 +258,8 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
   /** Stop timers never count from before this (set start, resume, cancel, clock restart). */
   let stopFloor = -Infinity;
   let stillFactor = 1;
+  /** First frame of the current posture / body-line gate run (null = not gated). */
+  let gateSince: number | null = null;
 
   // Pending stop (Undo window).
   let pendingUntil: number | null = null;
@@ -242,6 +292,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     activityT += shift;
     movedT += shift;
     if (pendingUntil !== null) pendingUntil += shift;
+    if (gateSince !== null) gateSince += shift;
     pendingEndedAt += shift;
     restReps = restReps.map((r) => ({ t: r.t + shift, departT: r.departT + shift }));
     restPartials = restPartials.map((p) => p + shift);
@@ -276,6 +327,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     anchorAngle = null;
     stopFloor = t;
     stillFactor = 1;
+    gateSince = null;
     pendingUntil = null;
   }
 
@@ -323,6 +375,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
       }
     } else {
       // exercise
+      // 'held' stays held (a tap decides); pausing it only stops the idle limits.
       if (state === 'off' || state === 'rest') enterSet(t, 0, 0, null);
       if (paused && state === 'pending') out.push(...cancel(t, 'paused'));
     }
@@ -402,6 +455,13 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
       activityT = t;
     }
     if (phaseChanged) activityT = t;
+    // Gate run: a gated frame starts or extends it, a re-tracked frame ends it; visibility-gated
+    // and no-pose frames leave it as it is. Gated frames reset the still / stalled clocks.
+    const gated = gatedFrame(input);
+    if (gated) {
+      gateSince ??= t;
+      activityT = t;
+    } else if (input.tracking) gateSince = null;
     if (activityT === t) anchorAngle = null;
     const angle = input.angle;
     if (input.tracking && typeof angle === 'number' && Number.isFinite(angle)) {
@@ -419,10 +479,25 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     if (paused) return [];
 
     if (reps >= config.stopMinReps && lastEventT !== null) {
+      let hold: AutoHoldReason | null = null;
+      if (t - Math.max(lastPresentT, stopFloor) >= ms(config.awaySec)) hold = 'away';
+      else if (
+        gated &&
+        gateSince !== null &&
+        t - Math.max(gateSince, stopFloor) >= ms(config.breakGateSec) &&
+        (input.untracked === 'posture' || input.untracked === 'bodyLine')
+      )
+        hold = input.untracked;
+      if (hold !== null) {
+        state = 'held';
+        pendingEndedAt = Math.max(lastEventT, resumeT);
+        pendingReps = reps;
+        pendingPartials = partials;
+        return [{ type: 'hold', reason: hold, reps, partials, endedAt: pendingEndedAt }];
+      }
       let reason: AutoStopReason | null = null;
       const since = Math.max(activityT, stopFloor);
-      if (t - Math.max(lastPresentT, stopFloor) >= ms(config.awaySec)) reason = 'away';
-      else if (START_BAND.has(input.phase)) {
+      if (START_BAND.has(input.phase)) {
         if (t - Math.max(since, movedT) >= ms(config.stillSec * stillFactor)) reason = 'still';
       } else if (t - since >= ms(config.stalledSec)) reason = 'stalled';
       if (reason !== null) {
@@ -447,10 +522,24 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     return idle(t);
   }
 
+  /** A posture / body-line gate failure with the person in frame (a break candidate). */
+  function gatedFrame(input: AutoSetInput): boolean {
+    return (
+      (input.untracked === 'posture' || input.untracked === 'bodyLine') && presentIn(input)
+    );
+  }
+
+  function presentIn(input: AutoSetInput): boolean {
+    return (
+      input.present ??
+      (input.tracking || input.untracked === 'posture' || input.untracked === 'bodyLine')
+    );
+  }
+
   function push(input: AutoSetInput): AutoSetAction[] {
     const { t } = input;
     see(t);
-    if (input.present ?? input.tracking) lastPresentT = t;
+    if (presentIn(input)) lastPresentT = t;
     for (const ev of input.events) if (ev.type === 'rep') lastRepT = Math.max(lastRepT, ev.t);
     const phaseChanged = prevPhase !== null && prevPhase !== input.phase;
     if (prevPhase === 'top' && input.phase !== 'top' && lastTopT !== null) departT = lastTopT;
@@ -459,7 +548,31 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
 
     if (state === 'rest') return restFrame(input);
     if (state === 'set' || state === 'pending') return setFrame(input, phaseChanged);
+    if (state === 'held') return heldFrame(input);
     return [];
+  }
+
+  /** While held: nothing counts or starts; only the idle limits (commit, then close). */
+  function heldFrame(input: AutoSetInput): AutoSetAction[] {
+    if (paused) return [];
+    const closed = idle(input.t);
+    if (closed.length === 0) return [];
+    const saved = holdCommit();
+    state = 'closed';
+    return [...saved, ...closed];
+  }
+
+  /** Save the held set: frozen counts, backdated end; the machine goes to rest. */
+  function holdCommit(): AutoSetAction[] {
+    const end = pendingEndedAt;
+    const action: AutoSetAction = {
+      type: 'commit',
+      endedAt: end,
+      reps: pendingReps,
+      partials: pendingPartials,
+    };
+    enterRest(lastT ?? end, (lastT ?? end) - end);
+    return [action];
   }
 
   function undo(t: number): AutoSetAction[] {
@@ -470,8 +583,23 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
 
   function confirm(t: number): AutoSetAction[] {
     see(t);
+    if (state === 'held') return holdCommit();
     if (state !== 'pending') return [];
     return commit(t);
+  }
+
+  function continueSet(t: number): AutoSetAction[] {
+    see(t);
+    if (state !== 'held') return [];
+    // Same counts and last event; every stop / break clock starts again at the tap.
+    enterSet(t, pendingReps, pendingPartials, lastEventT);
+    return [{ type: 'holdEnded', how: 'continue' }];
+  }
+
+  function nextSet(t: number): AutoSetAction[] {
+    see(t);
+    if (state !== 'held') return [];
+    return holdCommit();
   }
 
   return {
@@ -479,6 +607,8 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     push,
     undo,
     confirm,
+    continueSet,
+    nextSet,
     get state() {
       return state;
     },
@@ -486,6 +616,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
       return pendingUntil;
     },
     get counts() {
+      if (state === 'held') return { reps: pendingReps, partials: pendingPartials };
       return state === 'set' || state === 'pending' ? { reps, partials } : { reps: 0, partials: 0 };
     },
   };

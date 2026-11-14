@@ -48,7 +48,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 The real push-up replay showed the still stop at 36 s during the sit, so B3 must confirm which signal the real sit gives.
 
-- [ ] B1. [core-engineer ∥A] autoSet hold, **tests first**.
+- [x] B1. [core-engineer ∥A] autoSet hold, **tests first**.
   - Files: src/core/autoSet.ts(+test).
   - `AutoSetConfig.breakGateSec` 5.
   - `AutoSetInput.untracked?: 'visibility' | 'posture' | 'bodyLine' | null`.
@@ -74,12 +74,12 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - a break in rest doesn't disarm auto start;
     - every existing autoSet test passes, with the `away` stop cases rewritten to `hold`.
   - Deps: none.
-- [ ] B2. [core-engineer ∥A, after B1] Focus: no cues while held.
+- [x] B2. [core-engineer ∥A, after B1] Focus: no cues while held.
   - Files: src/core/focus.ts(+test).
   - `'held'` joins the quiet auto states.
   - Done when: a test shows a would-fire `outOfFrame` / `stalled` / `rushedLowering` input gives nothing with autoState `held`; the replay test is unchanged.
   - Deps: B1 (type).
-- [ ] B3. [core-engineer ∥A, after B1] Acceptance replay, **tests first**.
+- [x] B3. [core-engineer ∥A, after B1] Acceptance replay, **tests first**.
   - Files: src/core/autoSet.replay.test.ts.
   - Synthetic push-up **front-variant** landmark frames through the **real counter** + autoSet, reusing repCounter.test's angle-curve and seated-frame builders. Timeline from the M5c tasks 5–6 Decision: 6 reps; a 16 s sit (body line fails, person present); 5 reps; still.
   - Done when tests assert:
@@ -88,7 +88,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - a 5.7 s in-plank pause (the real longest) → neither a hold nor a stop.
   - **Real data:** if the main session still has the converted real push-up set outside the repo, replay it locally. Write a Decision with what the sit reads as (`untracked` reason, when the hold fires, no `stopPending`). If the real sit isn't body-line gated, report it: no silent retune. The real set isn't committed (Blockers B-q5).
   - Deps: B1.
-- [ ] B4. [ui-engineer ∥] Hold panel component.
+- [x] B4. [ui-engineer ∥] Hold panel component.
   - Files: src/ui/holdPanel.ts (new), src/ui/handsfree.css. Not styles.css: M4e A2 rewrites it in parallel.
   - `createHoldPanel({ reps, partials, lastSet, onContinue, onNext })` with `setClock(sinceLastRepMs)`:
     - "On hold · 6 reps" and a break clock ≥ 64px (`data-hold-clock`);
@@ -138,7 +138,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     10. no third-party request.
   - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
   - Deps: B6.
-- [ ] B8. [pose-engineer ∥] Converter.
+- [x] B8. [pose-engineer ∥] Converter.
   - Files: scripts/devlog.mjs(+`scripts/devlog.test.mjs`).
   - The report shows `hold:<reason> <sec> → continue|next|save`.
   - A set with a hold converts to **one** fixture.
@@ -835,6 +835,12 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-14: **M5c break hold: B1–B4 and B8 done** (review PASS).
+  - **B3, synthetic run:** the head-on sit reads `untracked = bodyLine` with the person present. The hold fires 5.0–5.6 s into the sit, with no still stop first. With Continue tapped, the set is one commit of 11 reps. A 5.7 s pause in the plank does nothing (a 6.3 s control does stop).
+  - **Not confirmed on the real set:** that waits for B-q5 / Checkpoint B3.
+  - **Walk-away now holds instead of stopping.** e2e `hands-free.spec.ts` ("away stop") and `focus-cues.spec.ts` (set 3 walk-away) expect the old stop and stay red on this branch until B5 rewrites them as hold, prompt, then Continue or Next.
+  - **`src/core/testkit/` is test-only,** enforced by ESLint.
 
 - 2026-11-14: **M5 tasks 11, 13, 14 and 15 done** (review PASS, no blocking items).
   - e2e/focus-cues.spec.ts: 5 tests covering the plan's 10 cases. It runs in its own `mobile-clips` Playwright project with workers: 1, because one in three local repeat runs failed under parallel load.

@@ -24,5 +24,27 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Test helpers (src/core/testkit) never reach app code. Repeats the core patterns because a
+    // later block replaces the rule's options for the files it matches.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/core/testkit/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['**/testkit/*', './testkit/*'] },
+      ],
+    },
+  },
+  {
+    files: ['src/core/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/core/testkit/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['@mediapipe/*', '../ui/*', '../pose/*', 'dexie', '**/testkit/*', './testkit/*'] },
+      ],
+    },
+  },
   prettier,
 );

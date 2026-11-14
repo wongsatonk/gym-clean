@@ -523,3 +523,200 @@ describe('scripts/devlog.mjs, focus cues and score (M5)', () => {
     }
   });
 });
+
+// M5c follow-up B8: a set with a hold ("tap to continue"). Event shapes from the plan (B1/B5),
+// logged by cameraView's logAuto like the other autoSet actions — event `t` is wall time, `ft`
+// the camera frame clock:
+//   { action: 'hold', reason: 'posture' | 'bodyLine' | 'away', reps, partials, ft, endedAtFt }
+//     (endedAtFt = end of the last rep; the break clock runs from there)
+//   { action: 'holdEnded', how: 'continue', ft }              Continue set
+//   { action: 'commit', reps, partials, ft, endedAtFt }       Start next set / Save set / confirm /
+//                                                               idle (backdated endedAt)
+// "next" vs "save": after Start next set the app dispatches START_SET right after the commit, so
+// another set of the session starts at the commit's time; Save set (last set) starts none.
+// A set held then continued is ONE devlog set and must convert to ONE fixture with all its reps.
+describe('scripts/devlog.mjs, a set with a hold (M5c B8)', () => {
+  const WALL_T0 = Date.UTC(2026, 10, 13, 11, 0);
+  const SPAN = original.at(-1).t; // one copy of the curl clip: 3 reps, 1 partial
+  const BREAK_MS = 16_000;
+
+  /** Frames of `copies` back-to-back clips at frame-clock `c`, a break between each pair. */
+  function heldFrames(c, { copies = 2, seated = true } = {}) {
+    const out = [{ t: c - 100, landmarks: null }];
+    for (let k = 0; k < copies; k++) {
+      const off = c + k * (SPAN + BREAK_MS);
+      out.push(...original.map((f) => ({ ...f, t: f.t + off })));
+      if (k < copies - 1) {
+        // The break: the person sits still in frame (posture/bodyLine) or leaves (away).
+        for (let t = 33; t < BREAK_MS; t += 33) {
+          out.push(
+            seated
+              ? { ...original.at(-1), t: off + SPAN + t }
+              : { t: off + SPAN + t, landmarks: null },
+          );
+        }
+      }
+    }
+    return decodeFrames(encodeFrames(out));
+  }
+
+  const ev = (t, data) => ({ t, type: 'autoSet', data: { ...data, note: SECRET_SPEECH } });
+
+  function holdExport() {
+    // Session 1: 3 reps, a 16 s seated break (bodyLine hold at 5 s), Continue, 3 more reps, still stop.
+    const c1 = 50_000;
+    const held = set(0, {
+      startedAt: WALL_T0 + c1,
+      endedAt: WALL_T0 + c1 + 2 * SPAN + BREAK_MS,
+      counted: { reps: 6, partials: 2 },
+      logged: { reps: 6, partials: 2 },
+      camera: { ...camera('curl', heldFrames(c1)), wallT0: WALL_T0 },
+    });
+    const lastRep1 = c1 + SPAN; // frame clock of the end of rep 3
+    const s1Events = [
+      ev(WALL_T0 + lastRep1 + 5000, {
+        action: 'hold',
+        reason: 'bodyLine',
+        reps: 3,
+        partials: 1,
+        ft: lastRep1 + 5000,
+        endedAtFt: lastRep1,
+      }),
+      ev(WALL_T0 + lastRep1 + BREAK_MS, {
+        action: 'holdEnded',
+        how: 'continue',
+        ft: lastRep1 + BREAK_MS,
+      }),
+      ev(held.endedAt + 6000, { action: 'stopPending', reason: 'still', reps: 6, partials: 2 }),
+      ev(held.endedAt + 11_000, { action: 'commit', reps: 6, partials: 2 }),
+    ];
+
+    // Session 2: set 0 held (away) → Start next set; set 1 held (non-word reason) → Save set.
+    const c2 = [100_000, 300_000];
+    const sets2 = c2.map((c, i) =>
+      set(i, {
+        startedAt: WALL_T0 + c,
+        endedAt: WALL_T0 + c + SPAN, // backdated to the end of the last rep
+        counted: { reps: 3, partials: 1 },
+        logged: { reps: 3, partials: 1 },
+        camera: { ...camera('curl', heldFrames(c, { copies: 1 })), wallT0: WALL_T0 },
+      }),
+    );
+    const b = sets2[1];
+    const aLast = c2[0] + SPAN;
+    const s2Events = [
+      ev(WALL_T0 + aLast + 3000, {
+        action: 'hold',
+        reason: 'away',
+        reps: 3,
+        partials: 1,
+        ft: aLast + 3000,
+        endedAtFt: aLast,
+      }),
+      // Start next set tapped 12 s after the last rep: commit, then START_SET at once.
+      ev(WALL_T0 + aLast + 12_000, {
+        action: 'commit',
+        reps: 3,
+        partials: 1,
+        ft: aLast + 12_000,
+        endedAtFt: aLast,
+      }),
+      // No ft on these two: the clock falls back to wall time.
+      ev(b.endedAt + 5000, { action: 'hold', reason: SECRET_SPEECH, reps: 3, partials: 1 }),
+      ev(b.endedAt + 25_000, { action: 'commit', reps: 3, partials: 1 }),
+      ev(b.endedAt + 200_000, { action: 'close', reason: 'noRep' }),
+    ];
+    b.startedAt = WALL_T0 + aLast + 12_000 + 300; // START_SET right after the commit
+
+    const session = (id, events, sets) => ({
+      id,
+      startedAt: SESSION_START,
+      appVersion: 'abc123',
+      userAgent: SECRET_UA,
+      settings: { handsFree: true },
+      dayId: 'pull-a',
+      events,
+      sets,
+    });
+    return {
+      format: 'gym-clean-devlog',
+      version: 1,
+      exportedAt: WALL_T0 + 900_000,
+      sessions: [session('s1', s1Events, [held]), session('s2', s2Events, sets2)],
+    };
+  }
+
+  /** The real rep counter (src/core, extensionless imports) loaded in plain node. */
+  async function realCounter() {
+    const { registerHooks } = await import('node:module');
+    registerHooks({
+      resolve(spec, ctx, next) {
+        try {
+          return next(spec, ctx);
+        } catch (err) {
+          if (!spec.startsWith('.')) throw err;
+          try {
+            return next(`${spec}.ts`, ctx);
+          } catch {
+            return next(`${spec}/index.ts`, ctx);
+          }
+        }
+      },
+    });
+    const { createRepCounter } = await import('../src/core/repCounter.ts');
+    const { ruleForFolder } = await import('../src/core/exercises/index.ts');
+    return (folder, frames) => {
+      const counter = createRepCounter(ruleForFolder(folder));
+      for (const f of frames) counter.push(f);
+      return { reps: counter.reps, partials: counter.partials };
+    };
+  }
+
+  it('a held-then-continued set converts to ONE fixture with both halves, counted 6/2', async () => {
+    const plan = planConversion(holdExport(), { label: 'hold' });
+    const s1 = plan.items.filter((i) => i.session === 1);
+    assert.equal(s1.length, 1);
+    const [it] = s1;
+    assert.equal(it.skip, undefined);
+    assert.equal(it.rel, 'curl/hold-1805-s1-0__reps-6__partials-2.json');
+    // Both clips plus the seated break frames (the person stays in frame), rebased to 0.
+    assert.equal(it.fixture[0].t, 0);
+    assert.ok(it.fixture.length > 2 * original.length, `${it.fixture.length} frames`);
+    assert.ok(it.fixture.at(-1).t >= 2 * SPAN + BREAK_MS - 1);
+    // The suite's rule: the fixture's name says 6/2 and the real counter agrees.
+    const count = await realCounter();
+    assert.deepEqual(count('curl', it.fixture), { reps: 6, partials: 2 });
+    // An away break drops the no-person frames but the time gap stays: still 3/1 per half.
+    const away = heldFrames(0, { seated: false }).filter((f) => f.landmarks?.length);
+    assert.deepEqual(count('curl', away), { reps: 6, partials: 2 });
+  });
+
+  it('reports hold:<reason> <sec> → continue | next | save; enum words and numbers only', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devlog-hold-'));
+    try {
+      const file = join(dir, 'hold.json.gz');
+      writeFileSync(file, gzipSync(JSON.stringify(holdExport())));
+      const stdout = run(file, '--out', join(dir, 'out'), '--label', 'hold', '--dry-run');
+      const rows = stdout.split('\n').filter((l) => l.startsWith('Dumbbell_Bicep_Curl'));
+      assert.equal(rows.length, 3);
+      // Continue: the break clock runs from the last rep (frame clock), then the still stop.
+      assert.match(rows[0], /start:tap stop:still hold:bodyLine 16\.0s → continue\s+would write/);
+      assert.match(rows[0], /hold-1805-s1-0__reps-6__partials-2\.json/);
+      // Start next set: the commit belongs to the held set (not the set it started), stop:hold.
+      assert.match(rows[1], /start:tap stop:hold hold:away 12\.0s → next\s+would write/);
+      // Save set (no set starts after it); a non-word reason prints "?"; wall-clock fallback.
+      assert.match(rows[2], /start:tap stop:hold hold:\? 20\.0s → save close:noRep\s+would write/);
+      assert.match(stdout, /3 would be written/);
+      for (const s of [SECRET_SPEECH, SECRET_UA]) assert.equal(stdout.includes(s), false, s);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a hold with no resolution yet shows → ?', () => {
+    const exp = holdExport();
+    exp.sessions[0].events = exp.sessions[0].events.slice(0, 1); // hold only
+    const it = planConversion(exp).items.find((i) => i.session === 1);
+    assert.match(it.auto, /hold:bodyLine \S+ → \?/);
+  });
+});
