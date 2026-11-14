@@ -17,6 +17,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - **Exercise first screen:** the notes row sits about 30px under the sticky Set done until you scroll. Shrinking the content would fix it.
   - The B-q and A-q questions under "Blockers / questions".
   - The 🧍 gym checkpoints.
+  - **M10 AI trainer (planned 2026-11-14):** the M10-q questions under "Blockers / questions". Phase A can start once q1–q3 and q8 have answers, or on the defaults if he says so.
 
 ## Milestone checklist
 
@@ -36,8 +37,354 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M6 Polish & install
 - [ ] M7 Fuel: food & nutrition (independent of the camera; can be built while waiting on Checkpoint B with `/build M7`)
 - [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
+- [ ] M9 Native iOS shell (Capacitor). Outline only in the SPEC; not planned (M10-q9)
+- [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
 
 ## Current milestone plan
+
+### M10 — AI trainer (planned 2026-11-14; phase A first, B with M9, C optional)
+**Contract:** SPEC M10 and the Decision "M10 direction" (2026-11-14). All logic is **tests first**. Ownership
+follows CLAUDE.md, and shared types are `[main]`. Native/iOS files have no owner in the table yet
+(M10-q9), so those tasks are tagged `[main]` until Wongsaton approves an owner.
+
+**Branch:** `m10a-trainer`, cut from main after M6 merges. The order against M7 and the open checkpoints is
+M10-q8.
+
+**Fit with the current code (why the plan looks like this):**
+- `program.json` is imported statically (`src/data/catalog.ts`).
+- Up next is "last session's day + 1" in `app.ts loadUpNext`, so there's no calendar yet.
+- `startSession(day, …)` takes a `ProgramDay`, so an adjusted day can be passed in without changing the
+  reducer's shape.
+- `defaultsFor` prefers last time's weight over the plan. That's why lighter/deload needs `weightKgToday`.
+- `exercises.json` holds only the 30 program exercises, so swaps need a vendored swap pool.
+
+#### Phase A — trainer actions + coach chat (web)
+- [ ] 1. [main] Shared types.
+  - Files: src/core/types.ts.
+  - Add `BodyArea`, `UserPlan`, `Schedule`, `DayAdjust`, `DayOverride`, `TrainerState`, `Proposal`,
+    `PlanChange` (SPEC M10 data model).
+  - `PlannedExercise` gains `weightKgToday?` and `adjusted?`.
+  - Done when: typecheck passes and the shapes match the SPEC.
+  - Deps: none.
+- [ ] 2. [core-engineer ∥A] Body areas, equipment and swap pool, **tests first**.
+  - Files: src/data/bodyAreas.json (new: area → free-exercise-db muscles; joint words → area),
+    src/data/equipment.json (new: what his gym has, M10-q6), src/data/exercises.json (+ ~20–30 swap-pool
+    exercises vendored from free-exercise-db), src/data/cues.json, src/data/howto.json,
+    src/data/catalog.ts(+test).
+  - `catalogExercises()` lists the whole catalog. Program exercises stay a subset.
+  - Done when tests show:
+    - every catalog exercise has muscles, a cue (≤ 8 words) and 2–3 how-to lines;
+    - every muscle maps to exactly one area and to an SVG path id (the M2 test, widened to the catalog);
+    - every equipment value is in equipment.json;
+    - every program exercise has ≥ 1 swap candidate;
+    - no banned words.
+  - Deps: none.
+- [ ] 3. [core-engineer ∥B] Plan, schedule and calendar, **tests first**.
+  - Files: src/core/trainer/plan.ts(+test).
+  - `seedPlan(program)`, `effectiveDay(state, date)`, `calendar(state, finishedSessions, fromDate, days)`
+    → `{ date, dayId | null, rest, override? }[]`, and `upNext(...)`.
+  - Default schedule: rotation = the program order; rest weekdays per M10-q1 (provisional `[0]`, Sunday).
+  - Done when tests cover:
+    - the rotation after the last finished session (unfinished sessions ignored);
+    - rest weekdays and missed days;
+    - a rest override and a train override;
+    - Sunday 23:59 / Monday 00:00 and a DST week;
+    - `upNext` equalling today's behaviour when there are no overrides and no rest weekdays (no regression).
+  - Deps: 1.
+- [ ] 4. [core-engineer ∥B, after 3] Apply / Undo, **tests first**.
+  - Files: src/core/trainer/changes.ts(+test).
+  - `applyProposal(state, proposal, now, source)` → `{ state, change }`: rejects a stale `baseVersion` and
+    bumps `version`.
+  - `undoLast(state, changes)`: LIFO; only the newest change that isn't undone; restores `before`.
+  - `resetToProgram(state, program)` is itself a change, so it can be undone.
+  - Overrides older than 14 days are pruned on apply.
+  - Done when tests cover: a round trip that restores the state exactly, a stale proposal rejected, undo of
+    an undone change rejected, reset + undo, and pruning.
+  - Deps: 1, 3.
+- [ ] 5. [core-engineer ∥C] Session: `weightKgToday` and `REPLACE_UPCOMING`, **tests first**.
+  - Files: src/core/session.ts(+test).
+  - `defaultsFor` prefers `weightKgToday` over last time over the plan. A logged set today still wins for
+    the next set.
+  - New event `REPLACE_UPCOMING { exIndex, planned: PlannedExercise | null, now }`: `null` removes the
+    exercise. Accepted only when that exercise has 0 logged sets, it isn't the running set, and the session
+    isn't paused. It's applied to `day.exercises`, and the indices of the current set and later exercises
+    stay right.
+  - Done when tests cover: default precedence, replace/remove before and after the current index, rejection
+    with logged sets, rest phase, the summary after a removal, and every existing session test passing.
+  - Deps: 1.
+- [ ] 6. [core-engineer, after 3+4] Action: Not today / move session, **tests first**.
+  - Files: src/core/trainer/actions/postpone.ts(+test).
+  - `proposePostpone(state, sessions, today, { mode: 'useRestDay' | 'pushWeek', to?: date })` → a Proposal
+    with a 7-day before → after preview and a why.
+  - Done when tests cover:
+    - both modes;
+    - postpone on the day before the rest day;
+    - postponing on a rest day → no proposal, with a "today is already a rest day" reply;
+    - postponing twice in a row;
+    - "move to <date>" onto a date that already has a session;
+    - a session already started today → no proposal ("finish or end today's workout first").
+  - Deps: 3, 4.
+- [ ] 7. [core-engineer, after 2+4] Action: go easy on an area, **tests first**.
+  - Files: src/core/trainer/actions/avoidArea.ts(+test), src/core/trainer/swapCandidates.ts(+test).
+  - `swapCandidates(exercise, catalog, { avoid?: BodyArea, exclude: ids, equipment })`: ranked by overlap of
+    primary muscles, then secondary, then the same `tracking`. `tracking: 'pose'` only when a rule exists.
+  - `proposeAvoidArea(day, area, catalog, opts)`:
+    - primary in the area → swap, or remove when there's no candidate;
+    - secondary only → lighten (default per M10-q2);
+    - a whole day in the area (e.g. legs on a Legs day) → suggests "Not today" or a different day
+      instead.
+  - Done when tests cover:
+    - arms on Pull A (curls removed or swapped, rows lightened);
+    - arms on Push A (triceps extension swapped/removed, presses lightened);
+    - legs on Legs A → a postpone suggestion;
+    - a candidate never loads the avoided area (primary or secondary);
+    - no candidate → remove;
+    - swapped weights come from that exercise's history, else blank ("pick your weight").
+  - Deps: 2, 4.
+- [ ] 8. [core-engineer, after 4] Actions: lighter today, deload week, swap, **tests first**.
+  - Files: src/core/trainer/actions/lighter.ts(+test), src/core/trainer/actions/swap.ts(+test).
+  - Lighter today: −1 set (minimum 2), −10% snapped down to the step in the display unit, bodyweight
+    reps −20%.
+  - Deload: dated overrides for 7 days with sets halved (rounded up) and −10%. The numbers are constants,
+    pending M10-q3.
+  - Swap: the top 3 candidates, scope `today` or `plan`.
+  - Done when tests cover: kg and lb (35 lb → 30 lb, not 31.5), 2.5 kg minimum weights, bodyweight, 1-set
+    exercises, deload spanning a rest day, swap scope `plan` changing every day that has the exercise, and
+    swap excluding exercises already in the day.
+  - Deps: 2, 4, 5 (`weightKgToday`).
+- [ ] 9. [core-engineer, after 4] Action: stalled → adjust, **tests first**.
+  - Files: src/core/trainer/actions/stall.ts(+test). Reuses src/core/history.ts / stats.ts `topSet`.
+  - `detectStalls(sets, sessions, plan)`: 3 finished sessions of the exercise in a row with no top-set gain
+    (more weight, or more reps at the same weight), skipping sessions whose `adjust` is set.
+  - `proposeStallFix(ex, option)`: `'lighter'` (−10%, rep top +2) or `'addSet'` (+1, maximum 5).
+  - Done when tests cover: 2 sessions → none, 3 → stall, a lighter session in between is skipped, a gain
+    resets it, bodyweight exercises, and the M5b N1 "drop" coexisting with it (one line each).
+  - Deps: 4.
+- [ ] 10. [core-engineer ∥A] Intent matcher + eval set, **tests first**.
+  - Files: src/core/trainer/intents.ts(+test), src/core/trainer/phrases.json (keywords per intent, area
+    words, day words, discomfort and red-flag lists, diagnosis-term list; English + Thai per M10-q5),
+    src/core/trainer/evals/requests.json (≥ 60 made-up requests: `{ text, intent, slots, safety,
+    ruleSupported }`).
+  - `matchIntent(text, ctx)` → `{ intent: 'postpone' | 'avoidArea' | 'lighter' | 'deload' | 'swap' |
+    'stall' | 'food' | 'help', slots: { area?, date?, exerciseId?, scope? }, safety: 'none' |
+    'discomfort' | 'redFlag' }`.
+  - Done when:
+    - ≥ 90% of `ruleSupported` items match intent + slots;
+    - 100% of discomfort/red-flag items carry the flag;
+    - unknown text → `help`;
+    - no network or DOM;
+    - the eval file has no personal data.
+  - Deps: 1.
+- [ ] 11. [core-engineer, after 6–10] Replies, safety copy and the coach controller, **tests first**.
+  - Files: src/core/trainer/replies.ts(+test), src/core/trainer/coach.ts(+test).
+  - `replies.ts` turns a Proposal into title, lines, why and `say` (≤ 8 words), and holds:
+    - the fixed referral line;
+    - the fixed red-flag line;
+    - the help text;
+    - `checkCopy(text)` (M5b banned words + diagnosis terms).
+  - `coach.ts`: `handle({ text } | { chip, args }, ctx)` → `{ reply, proposal?, chips[] }`. Context:
+    phase, logged exercise ids, today, unit, M7 available.
+  - Done when tests cover:
+    - every reply text passes `checkCopy`;
+    - discomfort → referral line + an area proposal (or an area chip question when no area is named);
+    - red flag → only the End workout / Not today chips;
+    - mid-session → only swap/remove of unstarted exercises;
+    - food → the "comes with Fuel" reply before M7.
+  - Deps: 6, 7, 8, 9, 10.
+- [ ] 12. [core-engineer ∥, after 1+3+4] Persistence, **tests first**.
+  - Files: src/data/db.ts(+test), src/data/plan.ts(+test).
+  - Dexie version(4):
+    - `trainer` (key `'current'`: TrainerState);
+    - `planChanges` (`++id, createdAt`);
+    - a `SessionRow.adjust` field (no index).
+  - `loadTrainerState(db, program)` seeds on first read. If `program.json`'s hash changed and `edited` is
+    false, it re-seeds; if `edited` is true, it keeps the user plan (M10-q11).
+  - `saveChange(db, change)`, `listChanges(db, limit)`.
+  - Done when db tests cover: seed, re-seed, keep-if-edited, change list order, undo persisted, and every
+    existing db test passing. Record the version bump as a Decision.
+  - Deps: 1, 3, 4.
+- [ ] 13. [ui-engineer ∥] Coach sheet and proposal card.
+  - Files: src/ui/coach/coachSheet.ts, src/ui/coach/proposalCard.ts, src/ui/coach/undoToast.ts,
+    src/ui/coach/coach.css (new; tokens only).
+  - Props in, callbacks out, no DB.
+  - Contents:
+    - message list;
+    - chip row (≥ 56px, labelled icons);
+    - area chips;
+    - an optional text box (prop `allowTyping`);
+    - Proposal card: title, before → after rows (24px+), why (20px), Apply (CTA) and Not now;
+    - Undo toast with a 10 s bar (static under reduced motion);
+    - a red-flag card style (danger only in confirmations, per M4e);
+    - privacy line "Stays on this phone."
+  - Focus trap and Escape, as in the Pause sheet.
+  - Done when: render tests, 390×844 harness screenshots (chips, a proposal, red flag, Undo) in the 3
+    accents, tokens test green, typecheck + lint clean.
+  - Deps: 1.
+- [ ] 14. [ui-engineer ∥] Today, preview and Settings → Plan changes.
+  - Files: src/ui/screens/today.ts, src/ui/screens/preview.ts, src/ui/screens/planChanges.ts (new),
+    src/styles.css.
+  - Today and preview:
+    - a Coach button (≥ 56px);
+    - a "Rest day" hero with **Train anyway**;
+    - an "Adjusted today: …" banner with Undo;
+    - the week strip from calendar entries (moved days marked).
+  - The preview lists swapped/removed/lightened rows with an "Adjusted" badge.
+  - Plan changes list: newest first, Undo on the newest one only, "Reset to default program" (two-tap).
+  - Done when: render tests, 390×844 screenshots, typecheck + lint clean.
+  - Deps: 1.
+- [ ] 15. [ui-engineer] Pause sheet Coach entry and Summary stall card.
+  - Files: src/ui/screens/pauseSheet.ts, src/ui/screens/summary.ts, src/ui/coachSummary.ts.
+  - Pause sheet: a "Coach" row that opens the sheet with `allowTyping: true` (the set isn't running while
+    paused; Exercise/camera never show it).
+  - Summary: a stall card under the M5b line with two options, each opening its Proposal.
+  - Done when: render tests and screenshots.
+  - Deps: 13.
+- [ ] 16. [main] Wiring.
+  - Files: src/ui/app.ts, src/data/catalog.ts call sites.
+  - Load the trainer state at startup.
+  - Replace `loadUpNext` with `upNext(calendar…)`, and keep "never leave Start disabled".
+  - Start uses `effectiveDay`, and the session row stores `adjust`.
+  - Coach entry points call `coach.handle`. Apply → `applyProposal` + `saveChange` + rerender; mid-workout
+    proposals dispatch `REPLACE_UPCOMING` per row.
+  - Undo → `undoLast`. A mid-workout undo reverts only exercises that are still unstarted.
+  - Spoken confirmation via the existing speaker (kind `cue`, not during a set, never cancelling).
+  - Dev-log events `trainer { intent, action, outcome: 'shown' | 'applied' | 'dismissed' | 'undone',
+    source }`: ids only.
+  - Done when, by hand: Not today → Today moves, the avoid-arms day runs, Undo works, existing e2e green.
+  - Deps: 5, 11, 12, 13, 14, 15.
+- [ ] 17. [ui-engineer] E2E `e2e/trainer.spec.ts`.
+  - Cases: the SPEC M10 phase A Accept list. Also: Lighter today in lb shows 30 lb for a 35 lb default,
+    reload keeps the plan, Reset + Undo, and no `input`/`textarea` on the Exercise screen during a set.
+  - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
+  - Deps: 16.
+- [ ] 18. [reviewer] Review the branch diff against CLAUDE.md.
+  - Pure core (no DOM, no fetch in `src/core/trainer`).
+  - Every action goes through `propose*`; nothing applies without a tap; Undo everywhere.
+  - Copy passes `checkCopy`; referral and red-flag lines are verbatim.
+  - 56 / 64 / 20px, tokens only.
+  - No typing mid-set; dev log ids only; no network.
+  - Deps: 17.
+- [ ] 19. [verifier] Verify phase A against SPEC M10 Accept (phase A).
+  - Run `npm run check`, `npm run e2e`, `npm run build`.
+  - The intent-eval score.
+  - 390×844 screenshots `docs/screenshots/m10-*`, console clean, 0 off-device requests.
+  - Evidence into PROGRESS.
+  - Deps: 18.
+- [ ] 20. [main] Merge `m10a-trainer` + **ask Wongsaton before pushing** (push = deploy). Deps: 19.
+- [ ] 21. 🧍 **Checkpoint E:** a week with the coach (Not today, Go easy on…, a swap); he reports. Deps: 20.
+
+**Later in phase A (needs M7):**
+- [ ] F1. [core-engineer] `actions/food.ts`, **tests first**: `suggestFood(remaining, favorites, recipes,
+  thaiDishes)` → 3 items that fit the remaining protein/kcal (protein first), plus a Log payload. Done when
+  tests cover: nothing left → "You've hit today's targets", no data → help, made-up numbers only. Deps: M7, 11.
+- [ ] F2. [ui-engineer] A food result card with Log buttons in the coach sheet, plus the e2e case. Deps: F1, 13.
+- [ ] F3. [main] Wiring to the M7 log. Deps: F1, F2.
+
+**Parallel waves (phase A):**
+- **Wave 1:** 1 [main], then 2 [core ∥A], 3 → 4 [core ∥B], 5 [core ∥C], 10 [core ∥A after 2 or a 4th
+  instance], 13 and 14 [ui].
+- **Wave 2:** 6, 7, 8, 9 [core, up to 2 instances: 6+9 and 7+8] and 12.
+- **Wave 3:** 11, then 15.
+- **Then:** 16 → 17 → 18 → 19 → 20.
+- **Critical path:** 1 → 3 → 4 → 7 → 11 → 16 → 17.
+
+#### Phase B — on-device brain (with M9; blocked on M10-q9)
+- [ ] B0. Prerequisite: **M9 native shell** is specified, planned and running the web build on his iPhone
+  (a separate plan). Not part of this list.
+- [ ] B1. [core-engineer] Tool definitions, the single source, **tests first**.
+  - Files: src/core/trainer/tools.ts(+test).
+  - One entry per action: name, description, JSON-schema args (area enum, date `YYYY-MM-DD`, exerciseId
+    enum from the catalog, scope enum), and `toProposal(args, ctx)` calling the matching `propose*`.
+  - Done when tests cover:
+    - 1:1 with the actions (no tool without an action, no action without a tool, except `food` until M7);
+    - invalid args rejected with a short reason: unknown exercise, a past date, a removed area;
+    - a tool call returns a Proposal and never a new state;
+    - `tools.contract.json` is regenerated by the test and matches the committed file.
+  - Deps: phase A 11.
+- [ ] B2. [core-engineer] Instructions, context and output filter, **tests first**.
+  - Files: src/core/trainer/brain/instructions.ts, context.ts, sanitize.ts (+tests).
+  - The guardrail instructions (SPEC M10 Safety).
+  - `serializeContext(state, sessions, sets, today)`: a compact text block whose budget is a constant
+    (provisional ≤ 6,000 chars ≈ 1,500 tokens; check the current Foundation Models context size).
+  - `sanitizeReply(text, safety)`: banned/diagnosis words → the fixed safe line; adds the referral line
+    when `discomfort`; caps at 3 sentences.
+  - Done when tests cover: the budget held on a heavy 4-week fixture history (made-up), no personal fields
+    (notes) in the context, and sanitize on a list of bad replies.
+  - Deps: B1.
+- [ ] B3. [main, until an owner exists] Swift tool codegen + contract check.
+  - Files: scripts/gen-trainer-tools.mjs(+test), ios/App/App/GymBrain/TrainerTools.generated.swift.
+  - Generates `@Generable` argument structs with `@Guide` descriptions plus `Tool` conformances whose
+    `call` records `{ name, args }` and returns "Proposed; the app will ask the user to confirm."
+  - Done when: `npm run check` fails if the generated Swift is stale (diff test), and the script test
+    covers each arg type.
+  - Deps: B1, B0.
+- [ ] B4. [main, until an owner exists] `GymBrain` Capacitor plugin (Swift).
+  - Files: ios/App/App/GymBrain/GymBrainPlugin.swift (+ XCTest), src/native/gymBrain.ts (plugin
+    registration/typing).
+  - `availability()` → `available | deviceNotEligible | appleIntelligenceNotEnabled | modelNotReady |
+    unsupported`.
+  - `respond({ instructions, context, messages })` → `{ text, toolCalls, latencyMs }` via
+    `LanguageModelSession(tools:instructions:)`.
+  - Errors map to codes: guardrail, contextTooLong, unsupportedLanguage, timeout, other.
+  - **Look up the current Foundation Models docs first** (CLAUDE.md rule 8).
+  - Done when: XCTest with a fake session passes, and a manual run on his iPhone answers "can't make it
+    today" with a `postponeSession` call.
+  - Deps: B3.
+- [ ] B5. [core-engineer] Brain adapters + fallback chain, **tests first**.
+  - Files: src/data/brain/index.ts, src/data/brain/native.ts, src/data/brain/rules.ts (+tests). Transports
+    are injected.
+  - `pickBrain({ native?, claude?, settings })`; `ask(text, ctx)` → `{ reply, proposal?, chips, source,
+    fallbackReason? }`.
+  - Done when tests cover:
+    - every availability reason → rules (+ reason);
+    - every error code → rules + a one-line note;
+    - a tool call → a validated Proposal (B1);
+    - an invalid tool call → "I couldn't do that" + chips;
+    - two tool calls → the first one shown, the second as a chip;
+    - model text always passes through `sanitizeReply`;
+    - chips bypass the brain.
+  - Deps: B1, B2.
+- [ ] B6. [ui-engineer] Coach sheet: "Thinking…" state (static under reduced motion), a source badge
+  ("On-device AI" / "Quick replies"), Settings → Coach brain status with the fallback reason. Done when: render
+  tests + screenshots. Deps: phase A 13.
+- [ ] B7. [main] Wiring in app.ts (native bridge only inside the Capacitor build). The PWA keeps rules. Done
+  when: the native build on his phone routes free text to Apple's model, and the PWA makes no change. Deps: B4, B5, B6.
+- [ ] B8. [main, until an owner exists] On-device eval runner.
+  - A dev-only Settings screen in the native build runs `evals/requests.json` through B5.
+  - It exports a report (ids, expected vs got, pass/fail, latency; no text).
+  - Done when the report shows: action + args ≥ 85% (M10-q10), safe replies 100%, 0 applied without a tap,
+    p50 latency logged. Results go into PROGRESS.
+  - Deps: B7.
+- [ ] B9. [reviewer] → B10. [verifier] (B Accept, including contract/codegen in CI) → B11. [main] merge +
+  ask to push → B12. 🧍 a week of the on-device coach (with the M9 checkpoint).
+
+#### Phase C — optional Claude brain (blocked on M10-q7: paid account + yes)
+- [ ] C1. [core-engineer] Claude adapter + key store, **tests first**.
+  - Files: src/data/brain/claude.ts(+test), src/data/brain/keyStore.ts(+test).
+  - Messages API with tool use: the B1 tools, the B2 instructions + context, and the
+    `anthropic-dangerous-direct-browser-access` header.
+  - Model from settings (default `claude-opus-5-5`), timeout 20 s, `fetch` injected.
+  - The key lives in IndexedDB under a key that dev-log export and "Export all" skip.
+  - Done when tests cover:
+    - the request body has exactly the documented fields (messages, the context block, tools); no notes,
+      no dev log, the key only in the header;
+    - a `tool_use` → Proposal via B1;
+    - 401/429/5xx/timeout → rules + reason;
+    - the key never appears in any export.
+  - Deps: B1, B2, B5.
+- [ ] C2. [ui-engineer] Settings → Cloud coach (Claude).
+  - Off by default.
+  - An explainer of exactly what's sent, shown before the switch turns on.
+  - Paste key, Test key, Remove key (two-tap), model picker.
+  - index.html CSP `connect-src` gains `https://api.anthropic.com` (coordinate with M7b, which needs the
+    same).
+  - Done when: render tests + screenshots.
+  - Deps: B6.
+- [ ] C3. [main] Wiring + `scripts/trainer-eval.mjs` (runs the eval set against Claude with a key from an
+  env var, locally only, never in CI, report ids + numbers). Done when: a local run report is in PROGRESS. Deps: C1, C2.
+- [ ] C4. [ui-engineer] E2E `e2e/trainer-claude.spec.ts` with `page.route` mocks: off → 0 requests to
+  api.anthropic.com; on → the request shape, a proposal shown, Apply/Undo; error → rules. Deps: C3.
+- [ ] C5. [reviewer] → C6. [verifier] → C7. [main] merge + ask to push.
 
 ### M5c follow-up — Breaks inside a set: "tap to continue" (planned 2026-11-14; runs first)
 **Contract:** SPEC M5c "Breaks inside a set" and the Decision "Wongsaton's answers before sleeping". Logic is **tests first**. **Not deployed without Wongsaton's OK** (he only authorized deploying M5).
@@ -851,6 +1198,14 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M10 direction: "AI personal trainer"** (Wongsaton's request: suggest food, postpone a session, adjust the plan when his arms hurt; free and local if possible; iPhone 17 Pro). He chose the free/local path proposed by the main session.
+  - **Phase A (web):** deterministic trainer actions + a coach chat with quick-action chips and a rule-based intent matcher.
+  - **Phase B (with M9):** Apple Foundation Models through a Capacitor Swift plugin with tool calling, each tool 1:1 with a phase A action.
+  - **Phase C (optional, opt-in):** a Claude brain with his own on-device key.
+  - **The brain only proposes.** Every change is a validated Proposal, applied on a tap and undoable.
+  - **Milestone id:** M10, because M9 is the native shell (it was only named in the 2026-11-13 ducking Decision; the SPEC now has an outline) and M8 isn't used anywhere in the docs.
+  - **Safety:** the copy rules live in SPEC M10. They extend the M5b banned words with diagnosis terms, use a fixed referral line ("If something doesn't feel right, check with a doctor or physio."), and a fixed red-flag line. No banned word appears in either line.
+  - The defaults marked M10-q* are provisional until he answers.
 - 2026-11-14: **M6 (Polish & install) built on branch `m6-polish`.** Review: 2 blocking items fixed (a TS tuple in history.spec; a real-flow e2e, history-flow.spec, that seeds IndexedDB and checks unfinished sessions are excluded). check 1422 unit + 24 script tests; M6 e2e 12/12.
   - **PWA** (vite-plugin-pwa, generateSW):
     - It precaches about 21 MB, including the 14.7 MB wasm and the 5.8 MB pose model, so the camera works in airplane mode even if it has never been opened.
@@ -1384,6 +1739,20 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - Non-blocking observations: (1) after Apply, set 3 at 40 lb (sets 8×35, 8×35, 8×40) gets A3 again, "+5 lb → 45 lb". That matches the rule table (A3 looks at reps only, all of today's sets), but it suggests a second jump after one set at the new weight; product call for Wongsaton (e.g. only count sets at the current weight). (2) The one-arm row demo has the hand on the bench but both feet on the floor, while how-to line 1 says "One knee and hand on the bench" (anatomy-3d-engineer or the how-to text). (3) In headless Chrome the gauge screenshot shows count "0 · Get into start position" while the gauge moves (counter still settling at 14 fps); expected.
 
 ## Blockers / questions for Wongsaton
+- **New (M10 AI trainer, planned 2026-11-14; the defaults are what gets built if you say "go"):**
+  - **(M10-q1) Rest days and "Not today".** Which weekday(s) are your rest days? Default: Sunday. When you postpone, should the coach use this week's rest day so you still get 6 sessions ("use rest day", the default), or slide the whole week by a day ("push week")? Both are offered; which one should be preselected?
+  - **(M10-q2) "Go easy on my arms".** Exercises where arms are the **main** target (curls, triceps work) get swapped or removed. What about exercises where arms only **help** (rows, presses, pulldowns)? Default: keep them, 10% lighter. Alternatives: swap those too, or leave them as planned.
+  - **(M10-q3) Lighter today / deload.** Default for "Lighter today": 1 set fewer (at least 2) and 10% lighter, with bodyweight exercises at 20% fewer reps. Default for "Deload week": half the sets and 10% lighter for 7 days. OK?
+  - **(M10-q4) "Stalled".** Default: no progress on an exercise's best set for 3 sessions in a row. The options offered are "10% lighter and build back up" or "+1 set". Right trigger, right options?
+  - **(M10-q5) Language.** Will you type to the coach in English, Thai or both? Default: English, plus Thai keywords for the common cases (พรุ่งนี้, เจ็บ, ปวด, แขน, ขา…). Note: Apple's on-device model may not support Thai yet; we'll check when phase B starts.
+  - **(M10-q6) Your gym's equipment** (for swaps): dumbbells and a bench for sure. Which machines and cables are there (lat pulldown, cable stack, leg press, leg curl/extension, calf machine, pull-up bar, …)? Swaps only suggest what's on the list.
+  - **(M10-q7) Phase C (Claude).** It needs a **paid Anthropic account** and your own API key, pasted into the app and kept only on your phone. When it's on, your messages, plan and workout numbers go to Anthropic (never notes, camera or the dev log). Do you want it at all? If yes: default model `claude-opus-5-5`, or a cheaper one?
+  - **(M10-q8) Order.** Build M10 phase A right after M6 merges (before M7 Fuel)? Also, CLAUDE.md says to finish milestones in order, and Checkpoints C/B3 are still open. OK to build M10 phase A while those wait? Food tips need M7, so they come after it either way.
+  - **(M10-q9) Native shell (M9) and its owner.** The SPEC only has an M9 outline. Phase B needs it planned first: Capacitor iOS app, how it gets on your phone (Xcode on your Mac with a free Apple ID, which re-signs every 7 days, or a paid Apple Developer account for TestFlight). There's also no agent that owns `ios/**` and `src/native/**`. Add one (e.g. `native-engineer`) to the CLAUDE.md table? That needs your OK.
+  - **(M10-q10) How good must the on-device brain be?** Default bar: the right action and arguments on ≥ 85% of the example requests, and 100% safe replies. Higher or lower?
+  - **(M10-q11) Updating the default program.** If I change `program.json` later and you've already edited your plan with the coach, default: keep your plan and show "a new default program is available" (Use it / Keep mine). OK?
+  - **(M10-q12) Chat history.** Default: the chat isn't saved; only the list of applied plan changes is kept (for Undo). Want the conversation kept on the phone?
+  - **(M10-q13) Red flags.** For phrases like chest pain, dizziness or numbness, the coach only says "Stop the workout for today and get checked by a doctor." and offers End workout / Not today. OK?
 - **A-q7 (small):** Legs days show the figure from the back, because hamstrings plus calves outweigh the quads by area, even though the quads get the most sets. Should Legs show the front instead?
 - **A-q6 (Volt):** with the Volt accent, achieved items turn gold, which looks close to the amber used for warnings (overtime, on hold). Keep it, or change one of them?
 - **A-q5 (new bests):** should a rep best at a lighter weight you've used before count? For example 20 kg × 10 when your best at 20 kg was × 8. As built, only a heavier top set, or more reps at your top weight, counts.
