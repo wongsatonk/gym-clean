@@ -1,0 +1,187 @@
+/* M5b coach tip (Rest screen). Tokens from src/styles.css. The "Coach" label + icon and the
+   left bar mark it as advice, not colour alone. */
+
+.coach-tip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.coach-tip[hidden],
+.coach-tip [hidden] {
+  display: none;
+}
+
+.coach-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.coach-icon {
+  flex: 0 0 auto;
+}
+
+.coach-text {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.coach-why {
+  margin: 0;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.coach-apply {
+  align-self: stretch;
+  min-height: var(--tap-min);
+  margin-top: 4px;
+  padding: 0 18px;
+  border: 2px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* After Apply: plain text with a tick, same height as the button so nothing jumps. */
+.coach-applied {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap-min);
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.coach-applied::before {
+  content: '✓';
+  color: var(--accent);
+  font-size: 26px;
+}
+
+.coach-applied:focus {
+  outline: none;
+}
+
+.coach-applied:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---------- Summary "Coach" section (M5b task 5) ---------- */
+
+.coach-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 8px 0;
+}
+
+.coach-summary-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.coach-summary-title .coach-icon {
+  color: var(--accent);
+}
+
+.coach-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One card per exercise; the accent bar matches the Rest tip. */
+.coach-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.coach-item-name {
+  color: var(--muted);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.coach-next {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* Progress vs last time: an "Up" badge (arrow + word) and the numbers, not colour alone. */
+.coach-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 4px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.coach-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 10px 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.coach-progress-text {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
