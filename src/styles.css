@@ -729,7 +729,10 @@ textarea:focus-visible {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  /* Not clipped: the Start/Target labels sit outside the lines. The fill and marker stay inside
+     anyway (the position is clamped to the track's −0.25…1.25 scale). This margin plus the
+     track's own ±0.25 headroom keeps each label clear of the gauge edge on short phones. */
+  margin: 22px 0;
 }
 
 /* The empty channel the fill runs in. */

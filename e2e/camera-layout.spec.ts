@@ -373,6 +373,7 @@ async function runGaugeFixture(page: Page, exerciseId: string, fixture: string) 
             ? `${missedEl.dataset.mark}:${getComputedStyle(missedEl).backgroundImage}`
             : null,
           nowTop: q('.gauge-now').getBoundingClientRect().top,
+          fillScale: new DOMMatrix(getComputedStyle(q('.gauge-fill')).transform).d,
           targetTop: q('.gauge-target').getBoundingClientRect().top,
           startTop: q('.gauge-start').getBoundingClientRect().top,
           position: readGauge(rule, counter.angle)?.position ?? null,
@@ -421,6 +422,9 @@ for (const [exerciseId, fixture] of [
       // The live marker is above the target line exactly when the position is past it.
       if (s.position !== null && s.position > 1.02) expect(s.nowTop).toBeLessThan(s.targetTop);
       if (s.position !== null && s.position < -0.02) expect(s.nowTop).toBeGreaterThan(s.startTop);
+      // The fill never flips below the start line: clamped at 0, only the marker goes lower.
+      expect(s.fillScale).toBeGreaterThanOrEqual(0);
+      if (s.position !== null && s.position < 0) expect(s.fillScale).toBe(0);
       // Green fill exactly while this rep has reached the target.
       expect(s.reached).toBe(String(s.reachedFar));
       expect(s.fillColour === GREEN).toBe(s.reachedFar);
@@ -525,6 +529,39 @@ for (const vp of [
     expect(g.x).toBeGreaterThanOrEqual(stage.x + stage.width - 84); // right edge only
     expect(g.height).toBeGreaterThanOrEqual(200);
 
+    // Start/Target labels are whole: inside the viewport, inside the gauge backing, and not cut
+    // by any clipping ancestor (short phones have little headroom above/below the lines).
+    const labelClips = await gauge.evaluate((root) =>
+      [...root.querySelectorAll<HTMLElement>('.gauge-label')].map((label) => {
+        const r = label.getBoundingClientRect();
+        const inside = (o: DOMRect) =>
+          r.left >= o.left - 0.5 &&
+          r.right <= o.right + 0.5 &&
+          r.top >= o.top - 0.5 &&
+          r.bottom <= o.bottom + 0.5;
+        const clippedBy: string[] = [];
+        for (let a = label.parentElement; a && a !== document.body; a = a.parentElement) {
+          const cs = getComputedStyle(a);
+          if (
+            (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') &&
+            !inside(a.getBoundingClientRect())
+          )
+            clippedBy.push(a.className);
+        }
+        const vp = new DOMRect(0, 0, innerWidth, innerHeight);
+        return {
+          text: label.textContent,
+          inViewport: inside(vp),
+          inGauge: inside(root.getBoundingClientRect()),
+          clippedBy,
+        };
+      }),
+    );
+    expect(labelClips).toEqual([
+      { text: 'Target', inViewport: true, inGauge: true, clippedBy: [] },
+      { text: 'Start', inViewport: true, inGauge: true, clippedBy: [] },
+    ]);
+
     // "Phone position" brings the card back over the width of the video: the gauge steps aside.
     await cam.getByRole('button', { name: 'Phone position' }).click();
     await expect(cam.getByRole('region', { name: 'Set up your phone' })).toBeVisible();
@@ -532,7 +569,7 @@ for (const vp of [
     await cam.getByRole('button', { name: 'Got it' }).click();
     await expect(gauge).toBeVisible();
 
-    if (vp.height === 844) {
+    {
       // Mid-rep screenshot: wait for the arm part-way up, then hold that frame.
       await expect
         .poll(
@@ -549,7 +586,7 @@ for (const vp of [
         w.__gaugeFreezeAt = w.__gaugeIdx;
       });
       await page.waitForTimeout(600);
-      await page.screenshot({ path: info.outputPath('gauge-390x844.png') });
+      await page.screenshot({ path: info.outputPath(`gauge-${vp.width}x${vp.height}.png`) });
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(vp.width);
     expect(errors).toEqual([]);

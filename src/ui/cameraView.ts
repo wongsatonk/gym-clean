@@ -190,7 +190,7 @@ function createGauge(): Gauge {
     now,
   );
   const track = h('div', { class: 'gauge-track' }, range, targetMark, startMark);
-  const angleText = h('p', { class: 'gauge-angle', 'data-angle': '' }, '');
+  const angleText = h('p', { class: 'gauge-angle' }, '');
   const el = h(
     'div',
     {
@@ -226,14 +226,14 @@ function createGauge(): Gauge {
       const pos = Math.round(reading.position * 1000) / 1000;
       if (pos !== shownPos) {
         shownPos = pos;
-        fill.style.transform = `scaleY(${pos})`;
+        // The fill never flips below the start line; only the marker cap goes there.
+        fill.style.transform = `scaleY(${Math.max(0, pos)})`;
         now.style.transform = `translateY(${(1 - pos) * 100}%)`;
       }
       const deg = String(Math.round(reading.angle));
       if (deg !== shownAngle) {
         shownAngle = deg;
         el.dataset.angle = deg;
-        angleText.dataset.angle = deg;
         angleText.textContent = `${deg}°`;
       }
       if (reading.zone !== shownZone) {
