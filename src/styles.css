@@ -1,18 +1,151 @@
+/* ==========================================================================
+   Design tokens (M4e mix, docs/design/m4e-mix/README.md).
+   Raw colours live ONLY in the token blocks: `:root`, `.mood-*` and `[data-accent=…]`.
+   Everything else uses var(--…). src/ui/tokens.test.ts enforces this.
+   ========================================================================== */
 :root {
-  --bg: #0b0d10;
-  --surface: #161a20;
-  --surface-2: #1f252d;
-  --border: #2c343e;
-  --text: #f4f6f8;
-  --muted: #a9b2bd;
-  --accent: #4ade80;
-  --accent-ink: #052e14;
-  --warn: #fbbf24;
-  --danger: #f87171;
+  /* Colour roles: each token has one role. */
+  --bg: #0d0f12; /* page */
+  --surface: #16191e; /* cards */
+  --surface-2: #20242b; /* buttons */
+  --line: #323842; /* borders, inactive progress */
+  --text: #f2f4f7;
+  --text-2: #a9b1bc; /* secondary text */
+  --info: var(--text-2);
+  --cta: #ff7a1a; /* action: filled = press this; outline/dot/bar/ring = where you are now */
+  --on-cta: #1a0b00;
+  --success: #3be38b; /* achieved: streak, bests, target reached. Filled green is never a button. */
+  --on-success: #06210f;
+  --muscle: #35c8ff; /* muscle highlight only, always with a text legend */
+  --muscle-2: #1f86b0; /* secondary muscles (dimmer cyan) */
+  --body: #3a424d; /* figure fill */
+  --edge: #8d98a6; /* figure rim */
+  --stage-1: #2a313b; /* lit stage */
+  --stage-2: #16191e; /* stage */
+  --cue: #c5b3ff; /* spoken line */
+  --danger: #ff6b6b; /* confirmations only, with an icon and words */
+  --on-danger: #1b0606;
+  --warn: #fbbf24; /* attention, not action: overtime, skipped, hold, silent phone */
+  --black: #000000; /* camera / video backdrop, Track page */
+  --selected: var(--text); /* selected / on states: white fill, dark text (not orange) */
+  --on-selected: var(--bg);
+  --focus: var(--cta);
+  /* Translucent layers over the camera or the page. */
+  --scrim: rgb(0 0 0 / 0.8);
+  --scrim-soft: rgb(0 0 0 / 0.5);
+  --veil: rgb(13 15 18 / 0.94);
+  --veil-faint: rgb(13 15 18 / 0.2);
+  --glass-line: rgb(255 255 255 / 0.25);
+  --glass-track: rgb(255 255 255 / 0.14);
+
+  /* Type: one family, two widths (self-hosted, imported in main.ts). */
+  --font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* The mix scale. */
+  --fs-label: 18px; /* short labels next to an icon or number only */
+  --fs-body: 20px;
+  --fs-cue: 22px;
+  --fs-title: 34px;
+  --fs-num: 72px;
+  --fs-hero: 84px;
+  --fs-rep: 120px;
+  --fs-timer: 132px;
+  /* Transitional steps that keep today's layouts; retired as each screen moves to the mix. */
+  --fs-lead: 26px;
+  --fs-head: 32px;
+  --fs-display: 44px;
+  --fs-stepper: 54px; /* documented stepper exception */
+  --fs-num-sm: 64px; /* minimum for main numbers */
+  --fs-count: 96px;
+
+  /* Shape. Moods override --r-card and --line-w. */
+  --r-btn: 14px;
+  --r-card: 20px;
+  --r-pill: 999px;
+  --line-w: 1px;
+
+  /* Icons and tap sizes. */
+  --ic-sm: 22px;
+  --ic-md: 28px;
+  --ic-lg: 32px;
   --tap-min: 56px;
-  --font-body: 20px;
-  --font-big: 64px;
+  --tap-bar: 60px; /* workout top bar, settings rows */
+  --tap-cta: 72px;
+  --tap-hero: 80px;
+  --tab-h: 72px;
+
   color-scheme: dark;
+}
+
+/* Accent themes swap only the action colour. Orange is the default (same as :root). */
+[data-accent='orange'] {
+  --cta: #ff7a1a;
+  --on-cta: #1a0b00;
+}
+
+/* Volt sits close to the success green, so success turns gold while Volt is on. */
+[data-accent='volt'] {
+  --cta: #c8f31d;
+  --on-cta: #12160a;
+  --success: #ffc94d;
+  --on-success: #221800;
+}
+
+[data-accent='yellow'] {
+  --cta: #ffd60a;
+  --on-cta: #000000;
+}
+
+/* Moods: set on each screen root. Pro is the default look. */
+.mood-energy {
+  --ember: #3d1c0a;
+  --ember-hi: #5a2a0e;
+  --r-card: 24px;
+  --line-w: 2px;
+}
+
+.mood-pro {
+  --r-card: 20px;
+  --line-w: 1px;
+}
+
+.mood-track {
+  --bg: #000000;
+  --line: #3a3a3a;
+  --r-card: 8px;
+  --line-w: 2px;
+}
+
+.mood-energy,
+.mood-pro,
+.mood-track {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* Track's short caps labels (REST, LAST SET). Never on exercise names. */
+.caps {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Display width for titles, big numbers and the CTA. Body text stays Barlow. */
+.app-title,
+.page-title,
+.summary-title,
+.exercise-name,
+.set-counter,
+.stepper-value,
+.rest-clock,
+.stat-value,
+.primary-btn,
+.rep-num,
+.rep-target,
+.auto-stop-num,
+.auto-stop-secs,
+.cam-rest-clock,
+.hold-clock {
+  font-family: var(--font-display);
 }
 
 * {
@@ -24,13 +157,8 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  font-size: var(--font-body);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
   line-height: 1.35;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
@@ -40,15 +168,15 @@ button {
   font: inherit;
   color: inherit;
   min-height: var(--tap-min);
-  border-radius: 14px;
-  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  border: 1px solid var(--line);
   background: var(--surface);
   cursor: pointer;
   touch-action: manipulation;
 }
 
 button:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -58,7 +186,7 @@ h1 {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .screen {
@@ -78,7 +206,7 @@ h1 {
 }
 
 .app-title {
-  font-size: var(--font-big);
+  font-size: var(--fs-num-sm);
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.05;
@@ -101,29 +229,30 @@ h1 {
 }
 
 .day-btn.up-next {
-  border-color: var(--accent);
+  border-color: var(--cta);
   background: var(--surface-2);
 }
 
 .day-name {
-  font-size: 28px;
+  font-size: var(--fs-lead);
   font-weight: 700;
 }
 
 .day-meta {
-  color: var(--muted);
-  font-size: 18px;
+  color: var(--text-2);
+  font-size: var(--fs-label);
 }
 
 .badge {
   position: absolute;
   top: 14px;
   right: 16px;
-  font-size: 16px;
+  font-size: var(--fs-label);
   font-weight: 700;
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-radius: 999px;
+  color: var(--cta);
+  background: var(--surface);
+  border: 2px solid var(--cta);
+  border-radius: var(--r-pill);
   padding: 2px 10px;
 }
 
@@ -146,26 +275,26 @@ h1 {
 
 .ghost-btn[data-armed] {
   background: var(--danger);
-  color: #1b0606;
+  color: var(--on-danger);
   border-color: var(--danger);
   font-weight: 700;
 }
 
 .exercise-name {
-  font-size: 32px;
+  font-size: var(--fs-head);
   font-weight: 800;
   line-height: 1.1;
 }
 
 .set-counter {
-  font-size: var(--font-big);
+  font-size: var(--fs-num-sm);
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
 .focus-cue {
-  color: var(--accent);
+  color: var(--cue);
   font-style: italic;
 }
 
@@ -177,12 +306,12 @@ h1 {
 }
 
 .stepper-label {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .step-btn {
   min-height: 64px;
-  font-size: 36px;
+  font-size: var(--fs-title);
   font-weight: 700;
   background: var(--surface-2);
 }
@@ -191,22 +320,22 @@ h1 {
   text-align: center;
   letter-spacing: -0.04em;
   white-space: nowrap;
-  font-size: var(--font-big);
+  font-size: var(--fs-num-sm);
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
 .stepper-value.long {
-  font-size: 54px;
+  font-size: var(--fs-stepper);
 }
 
 .primary-btn {
   min-height: 88px;
-  font-size: 30px;
+  font-size: var(--fs-head);
   font-weight: 800;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--cta);
+  color: var(--on-cta);
   border: none;
   margin-top: auto;
 }
@@ -225,7 +354,7 @@ h1 {
 }
 
 .rest-clock {
-  font-size: 120px;
+  font-size: var(--fs-timer);
   font-weight: 800;
   line-height: 1;
   text-align: center;
@@ -248,7 +377,7 @@ h1 {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgb(11 13 16 / 0.96);
+  background: var(--veil);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -257,7 +386,7 @@ h1 {
 }
 
 .overlay-title {
-  font-size: var(--font-big);
+  font-size: var(--fs-num-sm);
   font-weight: 800;
   text-align: center;
 }
@@ -269,7 +398,7 @@ h1 {
 /* ---------- Summary ---------- */
 
 .summary-title {
-  font-size: 44px;
+  font-size: var(--fs-display);
   font-weight: 800;
   margin-top: 16px;
 }
@@ -283,17 +412,17 @@ h1 {
 
 .stat {
   background: var(--surface);
-  border-radius: 14px;
+  border-radius: var(--r-btn);
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  font-size: 16px;
+  font-size: var(--fs-label);
 }
 
 .stat-value {
-  font-size: 40px;
+  font-size: var(--fs-display);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -309,7 +438,7 @@ h1 {
 .set-list li {
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   padding-bottom: 8px;
 }
 
@@ -335,21 +464,21 @@ h1 {
 }
 
 .page-title {
-  font-size: 40px;
+  font-size: var(--fs-display);
   font-weight: 800;
   line-height: 1.1;
 }
 
 .small-title {
-  font-size: 26px;
+  font-size: var(--fs-lead);
 }
 
 .small {
-  font-size: 18px;
+  font-size: var(--fs-label);
 }
 
 .field-label {
-  color: var(--muted);
+  color: var(--text-2);
   margin-top: 6px;
 }
 
@@ -361,14 +490,14 @@ h1 {
 
 .seg-btn {
   min-height: 72px;
-  font-size: 30px;
+  font-size: var(--fs-head);
   font-weight: 800;
 }
 
 .seg-btn.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
 }
 
 .ex-list {
@@ -386,7 +515,7 @@ h1 {
   align-items: flex-start;
   gap: 2px;
   padding: 12px 14px;
-  border-radius: 14px;
+  border-radius: var(--r-btn);
   background: var(--surface);
   text-align: left;
   width: 100%;
@@ -398,7 +527,7 @@ h1 {
 }
 
 .ex-row-btn.current {
-  border-color: var(--accent);
+  border-color: var(--cta);
 }
 
 .ex-row-btn.done {
@@ -413,13 +542,16 @@ h1 {
   position: absolute;
   right: 14px;
   top: 12px;
-  font-size: 16px;
+  font-size: var(--fs-label);
   font-weight: 700;
 }
 
-.status.done,
+.status.done {
+  color: var(--success); /* achieved */
+}
+
 .status.current {
-  color: var(--accent);
+  color: var(--cta); /* where you are now */
 }
 
 .status.skipped {
@@ -427,7 +559,7 @@ h1 {
 }
 
 .machine {
-  color: var(--accent);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -441,13 +573,13 @@ h1 {
 }
 
 .notes-tag {
-  color: var(--muted);
+  color: var(--text-2);
   white-space: nowrap;
 }
 
 .lasting-note {
   color: var(--text);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--text-2);
   padding-left: 10px;
   white-space: pre-wrap;
 }
@@ -496,7 +628,7 @@ textarea {
   font: inherit;
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px 14px;
   min-height: var(--tap-min);
@@ -505,7 +637,7 @@ textarea {
 
 input:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -567,21 +699,23 @@ textarea:focus-visible {
 }
 
 .body-map .body {
-  fill: #1f252d;
+  fill: var(--body);
+  stroke: var(--edge);
+  stroke-width: 1.5px;
 }
 
 .body-map .muscle {
-  fill: #3a4452;
+  fill: var(--body);
   stroke: var(--bg);
   stroke-width: 0.6;
 }
 
 .body-map .muscle.secondary {
-  fill: #2f9e5c;
+  fill: var(--muscle-2);
 }
 
 .body-map .muscle.primary {
-  fill: var(--accent);
+  fill: var(--muscle);
 }
 
 .rest-next {
@@ -612,12 +746,12 @@ textarea:focus-visible {
 }
 
 .swatch.primary {
-  background: var(--accent);
+  background: var(--muscle);
   margin-left: 0;
 }
 
 .swatch.secondary {
-  background: #2f9e5c;
+  background: var(--muscle-2);
 }
 
 /* ---------- M3: camera + 3D skeleton ---------- */
@@ -656,7 +790,7 @@ textarea:focus-visible {
 
 .cam-3d-btn[aria-expanded='true'] {
   background: var(--surface-2);
-  border-color: var(--accent);
+  border-color: var(--selected);
 }
 
 .cam-stage {
@@ -664,7 +798,7 @@ textarea:focus-visible {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  background: #000;
+  background: var(--black);
   overflow: hidden;
 }
 
@@ -718,8 +852,8 @@ textarea:focus-visible {
   flex-direction: column;
   gap: 4px;
   padding: 6px 4px;
-  border-radius: 14px;
-  background: rgb(0 0 0 / 0.8);
+  border-radius: var(--r-btn);
+  background: var(--scrim);
 }
 
 .rom-gauge[hidden] {
@@ -742,7 +876,7 @@ textarea:focus-visible {
   position: absolute;
   inset: 0 12px;
   border-radius: 6px;
-  background: rgb(255 255 255 / 0.14);
+  background: var(--glass-track);
 }
 
 /* Box from the start line (bottom) to the target line (top): scale 1 = the full range. */
@@ -757,12 +891,12 @@ textarea:focus-visible {
   inset: 0;
   transform: scaleY(0);
   transform-origin: bottom;
-  background: #7dd3fc;
+  background: var(--text-2);
   will-change: transform;
 }
 
 .rom-gauge[data-gauge-reached='true'] .gauge-fill {
-  background: var(--accent);
+  background: var(--success);
 }
 
 /* Current position: a white cap at the end of the fill. */
@@ -789,9 +923,9 @@ textarea:focus-visible {
   transform: translateX(-50%);
   padding: 0 3px;
   border-radius: 6px;
-  background: rgb(0 0 0 / 0.85);
+  background: var(--scrim);
   color: var(--text);
-  font-size: 20px;
+  font-size: var(--fs-body);
   font-weight: 700;
   line-height: 1.15;
   white-space: nowrap;
@@ -808,11 +942,11 @@ textarea:focus-visible {
 /* Reached this rep: the target line turns green and thicker (not colour alone). */
 .rom-gauge[data-gauge-reached='true'] .gauge-target {
   height: 8px;
-  background: var(--accent);
+  background: var(--success);
 }
 
 .rom-gauge[data-gauge-reached='true'] .gauge-target .gauge-label {
-  color: var(--accent);
+  color: var(--success);
 }
 
 /* The mark the last partial missed: amber, thicker, dashed (not colour alone). Reaching the
@@ -830,7 +964,7 @@ textarea:focus-visible {
   flex: 0 0 auto;
   margin: 0;
   text-align: center;
-  font-size: 26px;
+  font-size: var(--fs-lead);
   font-weight: 800;
   line-height: 1.1;
   color: var(--text);
@@ -856,9 +990,9 @@ textarea:focus-visible {
 .cam-icon-btn,
 .cam-chip {
   min-height: var(--tap-min);
-  border-radius: 14px;
-  border: 1px solid rgb(255 255 255 / 0.25);
-  background: rgb(0 0 0 / 0.8);
+  border-radius: var(--r-btn);
+  border: 1px solid var(--glass-line);
+  background: var(--scrim);
   color: var(--text);
 }
 
@@ -897,9 +1031,9 @@ textarea:focus-visible {
   max-height: calc(100% - 72px - 16px - var(--hud-h, 200px));
   overflow-y: auto;
   padding: 12px 16px;
-  border-radius: 14px;
-  background: rgb(11 13 16 / 0.92);
-  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  background: var(--veil);
+  border: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -917,14 +1051,14 @@ textarea:focus-visible {
 
 .setup-title {
   margin: 0;
-  font-size: 26px;
+  font-size: var(--fs-lead);
   font-weight: 800;
   line-height: 1.15;
 }
 
 .setup-line {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--fs-cue);
   line-height: 1.3;
 }
 
@@ -946,11 +1080,11 @@ textarea:focus-visible {
 }
 
 .setup-pic .pic-lens {
-  fill: var(--accent);
+  fill: var(--cta);
 }
 
 .setup-pic .pic-sight {
-  stroke: var(--accent);
+  stroke: var(--cta);
   stroke-width: 2;
   stroke-dasharray: 4 4;
 }
@@ -1004,20 +1138,20 @@ textarea:focus-visible {
 }
 
 .cam-status {
-  color: var(--muted);
+  color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
 
 .small-seg {
   min-height: var(--tap-min);
-  font-size: 20px;
+  font-size: var(--fs-body);
 }
 
 .skeleton-slot {
   width: 100%;
   height: 200px;
   background: var(--surface);
-  border-radius: 14px;
+  border-radius: var(--r-btn);
   overflow: hidden;
 }
 
@@ -1036,8 +1170,8 @@ textarea:focus-visible {
   gap: 2px;
   max-width: 100%;
   padding: 6px 14px 8px;
-  background: rgb(0 0 0 / 0.8);
-  border-radius: 14px;
+  background: var(--scrim);
+  border-radius: var(--r-btn);
 }
 
 .rep-count {
@@ -1049,10 +1183,10 @@ textarea:focus-visible {
 .rep-num {
   margin: 0;
   min-width: 1.2ch;
-  font-size: 96px;
+  font-size: var(--fs-count);
   font-weight: 800;
   line-height: 1;
-  color: var(--accent);
+  color: var(--success);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1063,12 +1197,12 @@ textarea:focus-visible {
 
 .rep-panel.at-target .rep-num,
 .rep-panel.at-target .rep-target {
-  color: var(--accent);
+  color: var(--success);
 }
 
 .rep-target {
   margin: 0;
-  font-size: 44px;
+  font-size: var(--fs-display);
   font-weight: 800;
   line-height: 1;
   color: var(--text);
@@ -1078,14 +1212,14 @@ textarea:focus-visible {
 
 .rep-label {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--fs-lead);
   font-weight: 700;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .rep-set {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--fs-cue);
   font-weight: 700;
 }
 
@@ -1102,20 +1236,25 @@ textarea:focus-visible {
 }
 
 .rep-side {
-  font-size: 22px;
+  font-size: var(--fs-cue);
   font-weight: 700;
 }
 
 .rep-hint,
 .rep-coach {
-  font-size: 22px;
+  font-size: var(--fs-cue);
   font-weight: 700;
   color: var(--warn);
 }
 
+/* The coach line is spoken, so it wears the cue colour. */
+.rep-coach {
+  color: var(--cue);
+}
+
 .rep-partials {
-  font-size: 20px;
-  color: var(--muted);
+  font-size: var(--fs-body);
+  color: var(--text-2);
 }
 
 .rep-side:empty,
@@ -1158,14 +1297,14 @@ textarea:focus-visible {
 .switch-state {
   min-width: 64px;
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   text-align: center;
   font-weight: 800;
   background: var(--surface-2);
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .switch-btn.on .switch-state {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--selected);
+  color: var(--on-selected);
 }

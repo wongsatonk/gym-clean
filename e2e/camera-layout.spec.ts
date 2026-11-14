@@ -29,6 +29,17 @@ async function mockSpeech(page: Page): Promise<void> {
   });
 }
 
+/** A colour token's computed rgb() string, so tests follow the theme instead of pinning a hex. */
+const tokenRgb = (page: Page, name: string) =>
+  page.evaluate((n) => {
+    const probe = document.createElement('i');
+    probe.style.color = `var(${n})`;
+    document.body.append(probe);
+    const rgb = getComputedStyle(probe).color;
+    probe.remove();
+    return rgb;
+  }, name);
+
 const speech = (page: Page) =>
   page.evaluate(() => (window as unknown as { __speech: string[] }).__speech);
 
@@ -176,9 +187,10 @@ test('the count turns green when the target is reached', async ({ page }) => {
   const reached = colours.find((c) => c.reps >= 3);
   expect(below.every((c) => !c.at)).toBe(true);
   expect(reached?.at).toBe(true);
-  // Green (#4ade80) at the target, not before.
-  expect(reached?.colour).toBe('rgb(74, 222, 128)');
-  expect(below.every((c) => c.colour !== 'rgb(74, 222, 128)')).toBe(true);
+  // Success green (--success) at the target, not before.
+  const green = await tokenRgb(page, '--success');
+  expect(reached?.colour).toBe(green);
+  expect(below.every((c) => c.colour !== green)).toBe(true);
 });
 
 test('Camera test from Settings: big video, no counter, no set-up card', async ({ page }) => {
@@ -390,9 +402,6 @@ async function runGaugeFixture(page: Page, exerciseId: string, fixture: string) 
   );
 }
 
-const GREEN = 'rgb(74, 222, 128)';
-const AMBER = 'rgb(251, 191, 36)';
-
 for (const [exerciseId, fixture] of [
   ['Dumbbell_Bicep_Curl', '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json'],
   ['Side_Lateral_Raise', '/fixtures/landmarks/lateral-raise/synthetic-02__reps-3__partials-2.json'],
@@ -405,6 +414,8 @@ for (const [exerciseId, fixture] of [
     page,
   }) => {
     await page.goto('/');
+    const GREEN = await tokenRgb(page, '--success');
+    const AMBER = await tokenRgb(page, '--warn');
     const { steps, labels, sizes, angleText } = await runGaugeFixture(page, exerciseId, fixture);
     expect(labels).toEqual(['Target', 'Start']);
     expect(sizes.label).toBeGreaterThanOrEqual(20);

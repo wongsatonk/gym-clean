@@ -197,7 +197,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - Add `export type Accent = 'orange' | 'volt' | 'yellow'`.
   - Done when: `npm run build` puts the `.woff2` files in `dist/assets` (same-origin, no external font URL) and typecheck passes.
   - Deps: none.
-- [ ] A2. [ui-engineer ∥] Tokens, moods, themes, guard test.
+- [x] A2. [ui-engineer ∥] Tokens, moods, themes, guard test.
   - Files: src/styles.css, src/ui/handsfree.css, src/ui/devlog.css, src/ui/audioTest.css, src/ui/tokens.ts (new), src/ui/tokens.test.ts (new), index.html (theme-color).
   - `:root` holds the mix's shared tokens: colours, `--font-display` / `--font-body`, the type scale (18/20/22/34/72/84/120/132), radii, `--ic-*`, tap sizes.
   - `.mood-energy` / `.mood-pro` / `.mood-track`.
@@ -259,7 +259,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - `icon(name, size: 'sm' | 'md' | 'lg')`.
   - Done when: a test renders every name, checks the stroke width, and finds no `href` / external reference; typecheck + lint clean.
   - Deps: none.
-- [ ] A7. [anatomy-3d-engineer ∥] 3D/2D colour alignment.
+- [x] A7. [anatomy-3d-engineer ∥] 3D/2D colour alignment.
   - Files: src/ui/body3d/**, src/ui/demo3d/player.ts (+ scene files), src/ui/skeleton3d.ts, src/ui/bodyMap.ts(+test).
   - Body, rim, stage and muscle colours come from `cssToken('--body' | '--edge' | '--stage-1' | '--stage-2' | '--muscle')`, read when the scene is created. The fallback is the token value in one exported constant, not scattered literals.
   - The muscle colour is the mix's cyan everywhere, with a text legend kept.
@@ -847,6 +847,19 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-14: **M4e A2 and A7 done** (review: 2 colour-role fixes applied: done status is green, "Keep going." is lavender; the how-to phase label is plain text).
+  - **Checks:** `npm run check` 1282 tests; full e2e 75/75 in A2's run.
+  - **Tokens:** all colours and font sizes live in `:root`, moods and accents. Guard test: tokens.test.ts, which reads the CSS from disk because Vitest blanks CSS imports. Allow-list: `body3d/palette.ts` (fallback) and `cameraView.ts` (until A16).
+  - **Sizes snapped 2–4px.** Short labels are 18px (`--fs-label`).
+  - **`--warn` amber kept** for overtime, skipped, hold and the silent hint. With Volt on, success gold is close to it (question A-q6).
+  - **Follow-ups for the screen tasks:**
+    - `.small` and `.day-meta` reading text are 18px → `--fs-body` (A10);
+    - `.rep-num` base colour should be `--text` when there's no target;
+    - pressable outline buttons (`.coach-apply`, `.lsc-fix`) → filled;
+    - howto badges should use a neutral surface;
+    - tighten the guard (named colours, TS font-size in demo3d/player.ts);
+    - weight 800 is used but only 700 is loaded.
+
 - 2026-11-14: **M4e A3–A6 done** (review PASS). `npm run check` passes: 1237 unit tests, 19 script tests.
   - **stats.ts** passes under 8 time zones, across the EU and US DST switches.
   - **New `SetLog.restTargetSec`.** It holds the rest target in force before that set, plan rest plus any +30 s. The session overrun and the coach advice both use it, so a +30 s rest used in full doesn't count as a rest overrun (A-q3). Old rows fall back to the plan.
@@ -1248,6 +1261,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - Non-blocking observations: (1) after Apply, set 3 at 40 lb (sets 8×35, 8×35, 8×40) gets A3 again, "+5 lb → 45 lb". That matches the rule table (A3 looks at reps only, all of today's sets), but it suggests a second jump after one set at the new weight; product call for Wongsaton (e.g. only count sets at the current weight). (2) The one-arm row demo has the hand on the bench but both feet on the floor, while how-to line 1 says "One knee and hand on the bench" (anatomy-3d-engineer or the how-to text). (3) In headless Chrome the gauge screenshot shows count "0 · Get into start position" while the gauge moves (counter still settling at 14 fps); expected.
 
 ## Blockers / questions for Wongsaton
+- **A-q6 (Volt):** with the Volt accent, achieved items turn gold, which looks close to the amber used for warnings (overtime, on hold). Keep it, or change one of them?
 - **A-q5 (new bests):** should a rep best at a lighter weight you've used before count? For example 20 kg × 10 when your best at 20 kg was × 8. As built, only a heavier top set, or more reps at your top weight, counts.
 - **🧍 Checkpoint B3 (hands-free gym test, waiting for his report):** train a day with hands-free on, note every wrong auto start/stop and whether 6 s stillness / the 5 s Undo feel right, then export the dev log.
 - ~~M4e design pick~~: answered, the mix (Decisions 2026-11-13 night).

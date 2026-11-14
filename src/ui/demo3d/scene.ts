@@ -1,5 +1,5 @@
 // Three.js side of the M4b demo player: builds the original mannequin (cylinders, spheres and
-// ellipsoids only, M2 body colours) and poses it from a DemoPose each frame. Loaded lazily by
+// ellipsoids only, design-token colours from body3d/palette) and poses it from a DemoPose each frame. Loaded lazily by
 // player.ts, so three.js stays in its own chunk.
 //
 // The figure is drawn in the figure frame of poses.ts (+x forward, +y up, +z the figure's right),
@@ -25,21 +25,11 @@ import {
   type BufferGeometry,
   type Material,
 } from 'three';
+import { figurePalette } from '../body3d/palette';
+import { addRim } from '../body3d/rim';
 import type { Highlight } from './highlight';
 import { poseAt, type DemoMove, type DemoPose, type V3 } from './moves';
 import { SIZES, armTwist, bodyAxes, demoBounds, fitCamera, patchesFor, segmentFrames } from './rig';
-
-/** M2 body3d colours (viewer.ts), plus a lighter limb tone so the figure reads at 2 m. */
-const COLORS = {
-  body: 0x56636f,
-  joint: 0x3b4652,
-  secondary: 0x2f9e5c,
-  primary: 0x4ade80,
-  primaryGlow: 0x166534,
-  iron: 0x9aa5b1,
-  prop: 0x2a323c,
-  floor: 0x000000,
-};
 
 const FOV = 32;
 const PITCH = 0.12; // radians the camera looks down
@@ -69,13 +59,15 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
   canvas.style.width = '100%';
   canvas.style.height = '100%';
 
+  // Token colours (M4e A7), read once: the same body, rim and cyan muscles as the M2 viewer.
+  const C = figurePalette();
   const scene = new Scene();
   const camera = new PerspectiveCamera(FOV, 1, 0.05, 30);
-  scene.add(new HemisphereLight(0xdfe7f0, 0x0b0d10, 1.3));
-  const key = new DirectionalLight(0xffffff, 1.8);
+  scene.add(new HemisphereLight(C.skyLight, C.groundLight, 1.3));
+  const key = new DirectionalLight(C.keyLight, 1.8);
   key.position.set(2.2, 3, 3);
   scene.add(key);
-  const rim = new DirectionalLight(0x4ade80, 0.45);
+  const rim = new DirectionalLight(C.rimLight, 0.8);
   rim.position.set(-2, 1.5, -2.5);
   scene.add(rim);
 
@@ -98,19 +90,26 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
   };
   const box = geo(new BoxGeometry(1, 1, 1));
   const bodyMat = mat(
-    new MeshStandardMaterial({ color: COLORS.body, roughness: 0.75, metalness: 0.05 }),
+    addRim(new MeshStandardMaterial({ color: C.body, roughness: 0.75, metalness: 0.05 }), {
+      color: C.edge,
+    }),
   );
-  const jointMat = mat(new MeshStandardMaterial({ color: COLORS.joint, roughness: 0.8 }));
-  const ironMat = mat(
-    new MeshStandardMaterial({ color: COLORS.iron, roughness: 0.35, metalness: 0.6 }),
+  const jointMat = mat(
+    addRim(new MeshStandardMaterial({ color: C.joint, roughness: 0.8 }), { color: C.edge }),
   );
-  const propMat = mat(new MeshStandardMaterial({ color: COLORS.prop, roughness: 0.9 }));
+  const ironMat = mat(new MeshStandardMaterial({ color: C.iron, roughness: 0.35, metalness: 0.6 }));
+  const propMat = mat(
+    addRim(new MeshStandardMaterial({ color: C.prop, roughness: 0.9 }), {
+      color: C.edge,
+      strength: 0.6,
+    }),
+  );
   const levelMat = {
-    secondary: mat(new MeshStandardMaterial({ color: COLORS.secondary, roughness: 0.55 })),
+    secondary: mat(new MeshStandardMaterial({ color: C.secondary, roughness: 0.55 })),
     primary: mat(
       new MeshStandardMaterial({
-        color: COLORS.primary,
-        emissive: new Color(COLORS.primaryGlow),
+        color: C.muscle,
+        emissive: new Color(C.muscleGlow),
         emissiveIntensity: 0.7,
         roughness: 0.45,
       }),
@@ -127,9 +126,9 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
     geo(new CircleGeometry(1, 48)),
     mat(
       new MeshBasicMaterial({
-        color: COLORS.floor,
+        color: C.stage2,
         transparent: true,
-        opacity: 0.28,
+        opacity: 0.6,
         depthWrite: false,
       }),
     ),

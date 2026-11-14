@@ -27,8 +27,8 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px 16px 16px;
-  background: rgb(11 13 16 / 0.95);
-  border-top: 3px solid var(--accent);
+  background: var(--veil);
+  border-top: 3px solid var(--cta);
   color: var(--text);
 }
 
@@ -48,7 +48,7 @@
 }
 
 .auto-stop-done {
-  font-size: 34px;
+  font-size: var(--fs-title);
   font-weight: 800;
   line-height: 1.1;
 }
@@ -61,36 +61,36 @@
 }
 
 .auto-stop-num {
-  font-size: 88px;
+  font-size: var(--fs-hero);
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
+  color: var(--success);
 }
 
 .auto-stop-unit {
-  font-size: 28px;
+  font-size: var(--fs-lead);
   font-weight: 700;
 }
 
 .auto-stop-partials {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--fs-cue);
   font-weight: 600;
-  color: var(--muted);
+  color: var(--text-2);
   text-align: right;
 }
 
 .auto-stop-keep {
-  font-size: 52px;
+  font-size: var(--fs-stepper);
   white-space: nowrap;
   font-weight: 800;
   line-height: 1.1;
-  color: var(--accent);
+  color: var(--cue); /* spoken line, not a button */
 }
 
 .auto-stop.undone {
-  border-top-color: var(--muted);
+  border-top-color: var(--text-2);
 }
 
 .auto-stop-undo {
@@ -100,7 +100,7 @@
   width: 100%;
   min-height: 88px;
   padding: 0 12px 0 20px;
-  font-size: 32px;
+  font-size: var(--fs-head);
   font-weight: 800;
   background: var(--text);
   color: var(--bg);
@@ -139,7 +139,7 @@
 }
 
 .auto-stop-ring-bg {
-  stroke: rgb(11 13 16 / 0.2);
+  stroke: var(--veil-faint);
 }
 
 .auto-stop-ring-fg {
@@ -150,7 +150,7 @@
 
 .auto-stop-secs {
   position: relative;
-  font-size: 32px;
+  font-size: var(--fs-head);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -178,7 +178,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: rgb(0 0 0 / 0.45);
+  background: var(--scrim-soft);
 }
 
 .cam-rest-card {
@@ -187,23 +187,23 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px 16px 16px;
-  background: rgb(11 13 16 / 0.9);
-  border-top: 1px solid var(--border);
+  background: var(--veil);
+  border-top: 1px solid var(--line);
 }
 
 .cam-rest-label {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--fs-body);
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   text-align: center;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .cam-rest-clock {
   margin: 0;
-  font-size: 88px;
+  font-size: var(--fs-hero);
   font-weight: 800;
   line-height: 1;
   text-align: center;
@@ -216,7 +216,7 @@
 
 .cam-rest-next {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--fs-cue);
   font-weight: 700;
   text-align: center;
   overflow-wrap: anywhere;
@@ -248,20 +248,20 @@
   gap: 8px;
   min-height: 72px;
   padding: 0 12px;
-  font-size: 26px;
+  font-size: var(--fs-lead);
   font-weight: 800;
 }
 
 .cam-rest-start {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--cta);
+  color: var(--on-cta);
   border: none;
 }
 
 .cam-rest-close {
   background: var(--surface-2);
   color: var(--text);
-  font-size: 22px;
+  font-size: var(--fs-cue);
 }
 
 .cam-rest-icon {
@@ -276,7 +276,7 @@
   }
 
   .cam-rest-clock {
-    font-size: 72px;
+    font-size: var(--fs-num);
   }
 
   .cam-rest-label {
@@ -299,7 +299,7 @@
 /* The Undo window ran out but the save waits for the rep in progress (autoSet holds it). */
 .auto-stop-hold {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--fs-lead);
   font-weight: 700;
   color: var(--warn);
 }
@@ -326,7 +326,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  background: rgb(0 0 0 / 0.55);
+  background: var(--scrim-soft);
 }
 
 .hold-card {
@@ -348,7 +348,7 @@
 
 .hold-title {
   margin: 0;
-  font-size: 34px;
+  font-size: var(--fs-title);
   font-weight: 800;
   line-height: 1.15;
   overflow-wrap: anywhere;
@@ -356,24 +356,24 @@
 
 .hold-partials {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--fs-cue);
   font-weight: 600;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .hold-label {
   margin: 4px 0 0;
-  font-size: 20px;
+  font-size: var(--fs-body);
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   text-align: center;
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .hold-clock {
   margin: 0;
-  font-size: 88px;
+  font-size: var(--fs-hero);
   font-weight: 800;
   line-height: 1;
   text-align: center;
@@ -396,22 +396,22 @@
   width: 100%;
   min-height: 80px;
   padding: 0 16px;
-  font-size: 30px;
+  font-size: var(--fs-head);
   font-weight: 800;
   line-height: 1.1;
 }
 
 .hold-continue {
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--cta);
+  color: var(--on-cta);
   border: none;
 }
 
 .hold-next {
   background: var(--surface-2);
   color: var(--text);
-  border: 2px solid var(--border);
-  font-size: 26px;
+  border: 2px solid var(--line);
+  font-size: var(--fs-lead);
 }
 
 .hold-btn:disabled {
@@ -430,7 +430,7 @@
   }
 
   .hold-clock {
-    font-size: 72px;
+    font-size: var(--fs-num);
   }
 
   .hold-label {

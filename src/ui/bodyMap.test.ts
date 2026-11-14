@@ -75,3 +75,46 @@ describe('highlighting', () => {
     expect(svg).toContain('aria-label="Back view. Primary: lats. Secondary: biceps."');
   });
 });
+
+describe('colours (M4e A7)', () => {
+  it('leaves colour to the token CSS: classes only, no inline colour', () => {
+    for (const size of ['regular', 'mini'] as const) {
+      const svg = bodyMapSvg({ view: 'front', primary: ['chest'], secondary: ['shoulders'], size });
+      expect(svg).not.toMatch(/style=|fill=|stroke=/);
+      expect(svg).not.toMatch(/#[0-9a-f]{3,8}\b|rgb|hsl/i);
+      expect(svg).toContain('class="body" vector-effect="non-scaling-stroke"');
+    }
+  });
+});
+
+describe('mini size (Today day strip)', () => {
+  const mini = bodyMapSvg({
+    view: 'back',
+    primary: ['lats'],
+    secondary: ['biceps', 'middle back'],
+    size: 'mini',
+  });
+
+  it('draws only the worked muscles on the silhouette', () => {
+    expect(
+      pathsFor(mini)
+        .map((p) => p.muscle)
+        .sort(),
+    ).toEqual(['lats', 'middle back']);
+    expect(mini).toContain('class="body-map body-map--mini"');
+    expect(mini).toContain('data-size="mini"');
+    expect(mini).toContain('class="body"');
+  });
+
+  it('has no ids, so many minis can share a page, and is hidden from screen readers', () => {
+    expect(mini).not.toMatch(/\sid="/);
+    expect(mini).toContain('aria-hidden="true"');
+    expect(mini).not.toContain('role="img"');
+  });
+
+  it('keeps the regular size as the default', () => {
+    const svg = bodyMapSvg({ view: 'back', primary: ['lats'], secondary: [] });
+    expect(svg).toContain('data-size="regular"');
+    expect(svg).not.toContain('body-map--mini');
+  });
+});

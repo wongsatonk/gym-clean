@@ -11,7 +11,7 @@
 }
 
 .devlog-summary {
-  font-size: 24px;
+  font-size: var(--fs-lead);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -34,9 +34,9 @@
 }
 
 .devlog-btn[data-ready] {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
 }
 
 .devlog-btn.danger {
@@ -46,7 +46,7 @@
 
 .devlog-btn.danger[data-armed] {
   background: var(--danger);
-  color: #1b0606;
+  color: var(--on-danger);
   border-color: var(--danger);
 }
 
@@ -62,12 +62,12 @@
 
 .devlog-status,
 .lsc-status {
-  color: var(--accent);
+  color: var(--success);
   overflow-wrap: anywhere;
 }
 
 .devlog-privacy {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 /* ---------- Last set correction ---------- */
@@ -77,8 +77,8 @@
   flex-direction: column;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
   background: var(--surface);
   min-width: 0;
 }
@@ -91,7 +91,7 @@
 }
 
 .lsc-prefix {
-  color: var(--muted);
+  color: var(--text-2);
   white-space: nowrap;
 }
 
@@ -107,7 +107,7 @@
   min-width: 88px;
   padding: 0 16px;
   font-weight: 800;
-  color: var(--accent);
+  color: var(--cta);
   background: var(--surface-2);
 }
 
@@ -131,7 +131,7 @@
 }
 
 .lsc-label {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .lsc-row {
@@ -143,7 +143,7 @@
 
 .lsc-step {
   min-height: 72px;
-  font-size: 40px;
+  font-size: var(--fs-display);
   font-weight: 700;
   background: var(--surface-2);
 }
@@ -155,7 +155,7 @@
 
 .lsc-value {
   text-align: center;
-  font-size: var(--font-big);
+  font-size: var(--fs-num-sm);
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -173,9 +173,9 @@
 
 .lsc-save {
   min-height: 64px;
-  font-size: 26px;
+  font-size: var(--fs-lead);
   font-weight: 800;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--cta);
+  color: var(--on-cta);
   border: none;
 }

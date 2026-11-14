@@ -9,6 +9,7 @@
 // Under reduced motion the player starts paused on the start pose and preset turns snap; the Play
 // button still plays the loop when the user asks for it.
 import { exerciseById } from '../../data/catalog';
+import { cssVar, stageBackground } from '../body3d/palette';
 import { highlightFor } from './highlight';
 import { demoFor, phaseAt, tempoLabel, type Phase } from './moves';
 import { openingView, phaseLabel } from './rig';
@@ -104,15 +105,17 @@ export async function createDemoPlayer(
   el.style.cssText = 'display:flex;flex-direction:column;gap:8px;width:100%;height:100%;';
   const stage = document.createElement('div');
   stage.className = 'demo3d-stage';
-  stage.style.cssText = 'position:relative;flex:1;min-height:0;touch-action:none;';
+  stage.style.cssText =
+    'position:relative;flex:1;min-height:0;touch-action:none;border-radius:var(--r-btn, 12px);';
+  stage.style.background = stageBackground();
   stage.append(scene.canvas);
   scene.canvas.setAttribute('role', 'img');
   scene.canvas.setAttribute('aria-label', `${ex?.name ?? exerciseId}: 3D demo. Drag to turn.`);
   const phaseEl = document.createElement('div');
   phaseEl.className = 'demo3d-phase';
   phaseEl.style.cssText =
-    'position:absolute;left:12px;top:8px;font-size:28px;font-weight:700;color:#fff;' +
-    'text-shadow:0 1px 3px #000;pointer-events:none;';
+    'position:absolute;left:12px;top:8px;font-size:28px;font-weight:700;pointer-events:none;' +
+    `color:${cssVar('--text')};text-shadow:0 1px 3px ${cssVar('--stage-2')};`;
   if (opts.phaseOverlay !== false) stage.append(phaseEl);
   el.append(stage);
 

@@ -389,27 +389,45 @@ export function pickView(primary: readonly string[]): BodyView {
 
 const slug = (m: string) => m.replace(/\s+/g, '-');
 
+export type BodyMapSize = 'regular' | 'mini';
+
 export type BodyMapOptions = {
   view: BodyView;
   primary: readonly string[];
   secondary: readonly string[];
+  /**
+   * 'mini' is the compact figure for the Today day strip (about 56 px tall): only the worked
+   * muscles are drawn, there are no element ids (many minis share a page), and it is
+   * aria-hidden because the day card's text names the day. Default 'regular'.
+   */
+  size?: BodyMapSize;
 };
 
+// Colours are not set here: styles.css paints `.body-map .body` / `.muscle` / `.secondary` /
+// `.primary` from the design tokens (--body, --edge, --muscle-2, --muscle), the same tokens the 3D
+// figure reads (body3d/palette.ts). The silhouette's rim stroke keeps a fixed screen width at any
+// size (non-scaling-stroke), so the mini figure still shows its edge.
+
 /** SVG markup for one view. Content is generated from constants only, so it is safe as innerHTML. */
-export function bodyMapSvg({ view, primary, secondary }: BodyMapOptions): string {
+export function bodyMapSvg({ view, primary, secondary, size = 'regular' }: BodyMapOptions): string {
+  const mini = size === 'mini';
   const label =
     `${view === 'front' ? 'Front' : 'Back'} view.` +
     (primary.length ? ` Primary: ${primary.join(', ')}.` : '') +
     (secondary.length ? ` Secondary: ${secondary.join(', ')}.` : '');
   const paths = musclesInView(view)
     .map((m) => {
+      const level = primary.includes(m) ? 'primary' : secondary.includes(m) ? 'secondary' : '';
+      if (mini && !level) return '';
       const shape = VIEWS[view][m] ?? [];
-      const level = primary.includes(m) ? ' primary' : secondary.includes(m) ? ' secondary' : '';
-      return `<path id="muscle-${view}-${slug(m)}" data-muscle="${m}" class="muscle${level}" d="${bothSides(shape)}"/>`;
+      const id = mini ? '' : `id="muscle-${view}-${slug(m)}" `;
+      const cls = level ? `muscle ${level}` : 'muscle';
+      return `<path ${id}data-muscle="${m}" class="${cls}" d="${bothSides(shape)}"/>`;
     })
     .join('');
+  const a11y = mini ? 'aria-hidden="true" focusable="false"' : `role="img" aria-label="${label}"`;
   return (
-    `<svg class="body-map" data-view="${view}" viewBox="0 0 100 212" role="img" aria-label="${label}" xmlns="http://www.w3.org/2000/svg">` +
-    `<path class="body" d="${SILHOUETTE}"/>${paths}</svg>`
+    `<svg class="body-map${mini ? ' body-map--mini' : ''}" data-view="${view}" data-size="${size}" viewBox="0 0 100 212" ${a11y} xmlns="http://www.w3.org/2000/svg">` +
+    `<path class="body" vector-effect="non-scaling-stroke" d="${SILHOUETTE}"/>${paths}</svg>`
   );
 }
