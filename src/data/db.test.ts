@@ -7,6 +7,7 @@ import {
   finishSession,
   getCoachTips,
   getExerciseNote,
+  getHandsFree,
   getSpokenCount,
   getUnit,
   lastSessionSets,
@@ -16,6 +17,7 @@ import {
   saveSet,
   sessionNotes,
   setCoachTips,
+  setHandsFree,
   setSpokenCount,
   setUnit,
   setsForSession,
@@ -262,5 +264,40 @@ describe('GymDb coach tips setting (M5b)', () => {
     await again.open();
     expect(await getCoachTips(again)).toBe(false);
     again.close();
+  });
+});
+
+describe('GymDb hands-free sets setting (M5c)', () => {
+  it('is on by default, and remembers when turned off and on', async () => {
+    expect(await getHandsFree(db)).toBe(true);
+    await setHandsFree(db, false);
+    expect(await getHandsFree(db)).toBe(false);
+    await setHandsFree(db, true);
+    expect(await getHandsFree(db)).toBe(true);
+  });
+
+  it('only an explicit false turns it off', async () => {
+    await db.settings.put({ key: 'handsFree', value: 'off' });
+    expect(await getHandsFree(db)).toBe(true);
+    await db.settings.put({ key: 'handsFree', value: 0 });
+    expect(await getHandsFree(db)).toBe(true);
+  });
+
+  it('reads back after reopening the database', async () => {
+    await setHandsFree(db, false);
+    const name = db.name;
+    db.close();
+    db = new GymDb(name);
+    expect(await getHandsFree(db)).toBe(false);
+  });
+
+  it('is independent of the coach-tips and spoken-count settings', async () => {
+    await setHandsFree(db, false);
+    expect(await getCoachTips(db)).toBe(true);
+    expect(await getSpokenCount(db)).toBe(true);
+    await setCoachTips(db, false);
+    await setHandsFree(db, true);
+    expect(await getCoachTips(db)).toBe(false);
+    expect(await getHandsFree(db)).toBe(true);
   });
 });

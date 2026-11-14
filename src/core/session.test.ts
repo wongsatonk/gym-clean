@@ -709,3 +709,82 @@ describe('APPLY_NEXT_WEIGHT on Rest (M5b)', () => {
     expect(run(done, apply(30))).toBe(done);
   });
 });
+
+describe('backdated START_SET / SET_DONE times (M5c hands-free)', () => {
+  it('a backdated START_SET measures rest from the rest start to the given time', () => {
+    // Rest started at 30 s; the auto start fires at 140 s but is backdated to the first rep's
+    // departure at 125 s.
+    const s = run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(30) },
+      { type: 'START_SET', now: sec(125) },
+    );
+    expect(s.phase).toBe('exercise');
+    expect(s.setStartedAt).toBe(sec(125));
+    expect(s.lastRestTakenSec).toBe(95);
+    // 95 s > 60 s target + 30 s grace: the overrun is counted on the backdated value.
+    expect(s.restOverruns).toBe(1);
+    const onTime = run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(30) },
+      { type: 'START_SET', now: sec(115) },
+    );
+    expect(onTime.lastRestTakenSec).toBe(85);
+    expect(onTime.restOverruns).toBe(0);
+  });
+
+  it('clamps a START_SET backdated before the rest start', () => {
+    const s = run(fresh(), { type: 'SET_DONE', now: sec(30) }, { type: 'START_SET', now: sec(20) });
+    expect(s.setStartedAt).toBe(sec(30));
+    expect(s.lastRestTakenSec).toBe(0);
+    expect(s.restOverruns).toBe(0);
+  });
+
+  it('clamps a START_SET backdated before a resume to the running rest segment start', () => {
+    const s = run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(0) },
+      { type: 'PAUSE', now: sec(20) }, // 20 s accumulated
+      { type: 'RESUME', now: sec(200) },
+      { type: 'START_SET', now: sec(190) }, // before the resume: no negative segment
+    );
+    expect(s.setStartedAt).toBe(sec(200));
+    expect(s.lastRestTakenSec).toBe(20);
+    expect(s.restOverruns).toBe(0);
+    const later = run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(0) },
+      { type: 'PAUSE', now: sec(20) },
+      { type: 'RESUME', now: sec(200) },
+      { type: 'START_SET', now: sec(230) },
+    );
+    expect(later.lastRestTakenSec).toBe(50);
+  });
+
+  it('a backdated SET_DONE logs the given end and starts rest from it', () => {
+    let s = run(fresh(), { type: 'SET_DONE', now: sec(30) }, { type: 'START_SET', now: sec(90) });
+    // The save is dispatched at 131 s, backdated to the last rep's end at 120 s.
+    s = run(s, { type: 'SET_DONE', now: sec(120) });
+    expect(s.logs[1]).toMatchObject({ startedAt: sec(90), endedAt: sec(120), restTakenSec: 60 });
+    expect(s.phase).toBe('rest');
+    expect(s.restRunningSince).toBe(sec(120));
+    // Rest elapsed at the dispatch moment already includes the 11 s gap.
+    expect(restElapsedMs(s, sec(131))).toBe(11_000);
+  });
+
+  it('clamps a SET_DONE before the set start to the set start', () => {
+    let s = run(fresh(), { type: 'SET_DONE', now: sec(30) }, { type: 'START_SET', now: sec(90) });
+    s = run(s, { type: 'SET_DONE', now: sec(80) });
+    expect(s.logs[1]).toMatchObject({ startedAt: sec(90), endedAt: sec(90) });
+    expect(s.restRunningSince).toBe(sec(90));
+    expect(restElapsedMs(s, sec(100))).toBe(10_000);
+  });
+
+  it('clamps a final SET_DONE before the set start, and summary ends there', () => {
+    const s = startSession({ ...day, exercises: [exC] }, 's', sec(50));
+    const done = next(s, { type: 'SET_DONE', now: sec(40) });
+    expect(done.phase).toBe('summary');
+    expect(done.logs[0]).toMatchObject({ startedAt: sec(50), endedAt: sec(50) });
+    expect(done.endedAt).toBe(sec(50));
+  });
+});

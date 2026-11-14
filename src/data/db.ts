@@ -229,6 +229,16 @@ export async function setCoachTips(db: GymDb, on: boolean): Promise<void> {
   await db.settings.put({ key: 'coachTips', value: on });
 }
 
+/** M5c "Hands-free sets" (auto start/stop on camera exercises). On unless explicitly false. */
+export async function getHandsFree(db: GymDb): Promise<boolean> {
+  const row = await db.settings.get('handsFree');
+  return row?.value !== false;
+}
+
+export async function setHandsFree(db: GymDb, on: boolean): Promise<void> {
+  await db.settings.put({ key: 'handsFree', value: on });
+}
+
 /** For each exercise, the sets from the most recent session other than `excludeSessionId`. */
 export async function lastSessionSets(
   db: GymDb,

@@ -42,6 +42,10 @@ export type StartOptions = { unit?: Unit; lastWeightKg?: Record<string, number> 
 
 export type SessionEvent =
   | { type: 'ADJUST'; field: 'reps' | 'weight'; delta: number }
+  /**
+   * `now` may be backdated (M5c hands-free: the end of the last rep). It is clamped to
+   * ≥ `setStartedAt`, so a set never ends before it started.
+   */
   | { type: 'SET_DONE'; now: number }
   /** Live count from the rep counter: overwrites reps/partials of the current set. */
   | { type: 'SET_COUNTED'; reps: number; partials: number }
@@ -57,6 +61,11 @@ export type SessionEvent =
    * carries over like any other.
    */
   | { type: 'APPLY_NEXT_WEIGHT'; exerciseId: string; weightKg: number }
+  /**
+   * `now` may be backdated (M5c hands-free: when the first rep left the start band). It is
+   * clamped to ≥ the running rest segment start (`restRunningSince`), so a backdate across a
+   * pause/resume can't make a negative segment or a start before the previous set's end.
+   */
   | { type: 'START_SET'; now: number }
   | { type: 'SKIP_EXERCISE'; now: number }
   | { type: 'PAUSE'; now: number }
@@ -241,6 +250,7 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
 
     case 'SET_DONE': {
       if (s.phase !== 'exercise') return s;
+      const now = Math.max(e.now, s.setStartedAt);
       const p = currentPlanned(s);
       const log: SetLog = {
         sessionId: s.sessionId,
@@ -251,31 +261,32 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
         weightKg: s.weightKg,
         restTakenSec: s.lastRestTakenSec,
         startedAt: s.setStartedAt,
-        endedAt: e.now,
+        endedAt: now,
       };
       const logged = { ...s, logs: [...s.logs, log] };
       const moved =
         s.setIndex + 1 < p.sets
           ? { ...logged, setIndex: s.setIndex + 1, partials: 0 } // keep reps/weight for the next set
-          : goToExercise(logged, nextUnfinished(logged, s.exIndex), e.now);
+          : goToExercise(logged, nextUnfinished(logged, s.exIndex), now);
       if (moved.phase === 'summary') return moved;
       return {
         ...moved,
         phase: 'rest',
         restTargetSec: p.restSec,
         restAccumMs: 0,
-        restRunningSince: e.now,
+        restRunningSince: now,
       };
     }
 
     case 'START_SET': {
       if (s.phase !== 'rest') return s;
-      const elapsedSec = restElapsedMs(s, e.now) / 1000;
+      const now = s.restRunningSince === null ? e.now : Math.max(e.now, s.restRunningSince);
+      const elapsedSec = restElapsedMs(s, now) / 1000;
       const overrun = elapsedSec > s.restTargetSec + REST_OVERRUN_GRACE_SEC;
       return {
         ...s,
         phase: 'exercise',
-        setStartedAt: e.now,
+        setStartedAt: now,
         lastRestTakenSec: Math.round(elapsedSec),
         restAccumMs: 0,
         restRunningSince: null,

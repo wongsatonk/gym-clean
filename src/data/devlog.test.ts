@@ -566,3 +566,145 @@ describe('developer log robustness (review fixes)', () => {
     expect(DEVLOG_PLAIN_EXPORT_MAX_BYTES).toBeGreaterThan(0);
   });
 });
+
+describe('developer log pre-roll (M5c hands-free)', () => {
+  const setInfo = {
+    exerciseId: 'Dumbbell_Bicep_Curl',
+    setIndex: 1,
+    targetReps: [8, 12] as [number, number],
+    weightKg: 10,
+  };
+
+  /** Rest-time camera data at 30 fps from `fromT` to `toT` (frame clock, ms). */
+  function rest(r: DevLogRecorder, fromT: number, toT: number) {
+    const n = Math.round(((toT - fromT) * 30) / 1000);
+    for (let i = 0; i <= n; i++) {
+      const t = fromT + (i * 1000) / 30;
+      r.frame(frame(t, Math.round(t / 100)), t);
+      r.angle(t, 160);
+    }
+  }
+
+  it('stores nothing from rest frames on their own', async () => {
+    const r = await start({ id: 'p0' });
+    rest(r, 0, 20_000);
+    await r.flush();
+    expect(await db.devlogChunks.count()).toBe(0);
+    await r.finish();
+    expect(await db.devlogChunks.count()).toBe(0);
+    expect((await exportSession(db, 'p0')).sessions[0]?.sets).toEqual([]);
+  });
+
+  it('moves the buffered frames/angles from prerollFromT into the new set, in order', async () => {
+    const r = await start({ id: 'p1' });
+    rest(r, 0, 20_000);
+    r.beginSet(setInfo, { prerollFromT: 18_500 });
+    r.frame(frame(20_100, 7), 20_100);
+    r.frame(null, 20_133);
+    r.angle(20_100, 150);
+    r.angle(20_133, null);
+    await r.endSet({ logged: { reps: 2, partials: 0 }, weightKg: 10 });
+    await r.finish();
+    const cam = must((await firstSet(db, 'p1')).camera);
+    const ts = cam.frames.map((f) => f.t);
+    expect(ts[0]).toBeGreaterThanOrEqual(18_500);
+    expect(ts[0]).toBeLessThan(18_500 + 1000 / 30 + 1e-6);
+    expect(ts.at(-2)).toBeCloseTo(20_100, 3);
+    expect(cam.frames.at(-1)).toEqual({ t: 20_133, landmarks: null });
+    expect(ts).toEqual([...ts].sort((a, b) => a - b));
+    // ≈ 1.5 s at 30 fps of pre-roll + the 2 live frames.
+    expect(cam.frames.length).toBeGreaterThanOrEqual(45 + 2);
+    expect(cam.frames.length).toBeLessThanOrEqual(46 + 2);
+    expect(cam.angles.length).toBe(cam.frames.length);
+    expect(must(cam.angles[0]).t).toBeCloseTo(must(ts[0]), 3);
+    expect(must(cam.angles[0]).angle).toBe(160);
+    expect(cam.angles.at(-1)).toEqual({ t: 20_133, angle: null });
+    // Round trip within 1e-4 for the pre-roll frames.
+    const first = must(must(cam.frames[0]).landmarks);
+    const src = frame(must(ts[0]), Math.round(must(ts[0]) / 100)).landmarks;
+    src.forEach((p, j) => expect(Math.abs(must(first[j]).x - p.x)).toBeLessThanOrEqual(1e-4));
+  });
+
+  it('keeps only the last 10 s in memory', async () => {
+    const r = await start({ id: 'p2' });
+    rest(r, 0, 60_000);
+    r.beginSet(setInfo, { prerollFromT: 0 }); // asks for everything; only 10 s are left
+    await r.endSet({ logged: { reps: 2, partials: 0 }, weightKg: 10 });
+    await r.finish();
+    const cam = must((await firstSet(db, 'p2')).camera);
+    expect(must(cam.frames[0]).t).toBeGreaterThanOrEqual(50_000 - 1e-6);
+    expect(must(cam.frames.at(-1)).t).toBeCloseTo(60_000, 0);
+    expect(cam.frames.length).toBeLessThanOrEqual(301);
+    expect(must(cam.angles[0]).t).toBeGreaterThanOrEqual(50_000 - 1e-6);
+  });
+
+  it('drops the pre-roll when the frame clock restarts (camera reopened)', async () => {
+    const r = await start({ id: 'p3' });
+    rest(r, 50_000, 55_000);
+    rest(r, 0, 1000); // new camera, new clock
+    r.beginSet(setInfo, { prerollFromT: 0 });
+    await r.endSet({ logged: { reps: 2, partials: 0 }, weightKg: 10 });
+    await r.finish();
+    const cam = must((await firstSet(db, 'p3')).camera);
+    expect(cam.frames.every((f) => f.t <= 1000 + 1e-6)).toBe(true);
+    expect(cam.angles.every((a) => a.t <= 1000 + 1e-6)).toBe(true);
+  });
+
+  it('adds no pre-roll when prerollFromT is omitted (M4c behaviour)', async () => {
+    const r = await start({ id: 'p4' });
+    rest(r, 0, 5000);
+    r.beginSet(setInfo);
+    r.frame(frame(6000), 6000);
+    await r.endSet({ logged: { reps: 2, partials: 0 }, weightKg: 10 });
+    await r.finish();
+    const cam = must((await firstSet(db, 'p4')).camera);
+    expect(cam.frames.map((f) => f.t)).toEqual([6000]);
+    expect(cam.angles).toEqual([]);
+  });
+
+  it('a set does not reuse rest frames buffered before an earlier set', async () => {
+    const r = await start({ id: 'p5' });
+    rest(r, 0, 2000);
+    r.beginSet(setInfo);
+    r.frame(frame(3000), 3000);
+    await r.endSet({ logged: { reps: 2, partials: 0 }, weightKg: 10 });
+    // Frames during the open set are not buffered for the next one either.
+    rest(r, 4000, 5000);
+    r.beginSet({ ...setInfo, setIndex: 2 }, { prerollFromT: 0 });
+    await r.endSet({ logged: { reps: 2, partials: 0 }, weightKg: 10 });
+    await r.finish();
+    const sets = must((await exportSession(db, 'p5')).sessions[0]).sets;
+    const ts = must(must(sets[1]).camera).frames.map((f) => f.t);
+    expect(must(ts[0])).toBeGreaterThanOrEqual(4000);
+    expect(must(must(sets[0]).camera).frames).toHaveLength(1);
+  });
+
+  it('pre-roll frames keep the stored size ≤ 0.47 kB per frame', async () => {
+    const frames = curlFrames as LandmarkFrame[];
+    const r = await start({ id: 'p6' });
+    const split = Math.floor(frames.length / 3);
+    for (const f of frames.slice(0, split)) {
+      r.frame(f, f.t);
+      r.angle(f.t, 120);
+    }
+    r.beginSet(setInfo, { prerollFromT: must(frames[0]).t });
+    for (const f of frames.slice(split)) {
+      r.frame(f, f.t);
+      r.angle(f.t, 120);
+    }
+    await r.endSet({ logged: { reps: 3, partials: 1 }, weightKg: 10 });
+    await r.finish();
+    const back = must((await firstSet(db, 'p6')).camera).frames;
+    expect(back).toHaveLength(frames.length);
+    back.forEach((f, i) => {
+      const src = must(frames[i]);
+      expect(f.t).toBeCloseTo(src.t, 3);
+      src.landmarks.forEach((p, j) => {
+        expect(Math.abs(must(must(f.landmarks)[j]).y - p.y)).toBeLessThanOrEqual(1e-4);
+      });
+    });
+    const chunks = await db.devlogChunks.where('sessionId').equals('p6').toArray();
+    const frameBytes = chunks.reduce((sum, c) => sum + (c.frames?.byteLength ?? 0), 0);
+    expect(frameBytes / frames.length).toBeLessThanOrEqual(470);
+  });
+});

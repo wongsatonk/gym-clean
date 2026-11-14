@@ -23,6 +23,8 @@ export type { DevLogCameraMeta, DevLogCount, DevLogEvent, DevLogSpeech, DevLogFr
 
 export const DEVLOG_FLUSH_MS = 10_000;
 export const DEVLOG_CAP_BYTES = 150 * 1024 * 1024;
+/** M5c: camera frames/angles kept in memory while no set is open (frame clock, ms). */
+export const DEVLOG_PREROLL_MS = 10_000;
 const SETTING_KEY = 'devLog';
 
 // ---------- export shape (SPEC §4 DevLog types, frames decoded) ----------
@@ -123,10 +125,20 @@ export type DevLogSetEnd = {
   restTakenSec?: number;
 };
 
+export type DevLogBeginOptions = {
+  /**
+   * M5c pre-roll: copy the in-memory rest frames/angles with `t ≥ prerollFromT` (camera frame
+   * clock, ms) into the new set, e.g. 1.5 s before an auto-started set's backdated start.
+   * Omitted = no pre-roll (M4c behaviour).
+   */
+  prerollFromT?: number;
+};
+
 /**
  * Records one workout. Data methods are synchronous and cheap (safe at 30 fps); the async
  * ones resolve once their data is in IndexedDB. Camera-data calls while no set is open are
- * ignored. A disabled log gives a recorder with `active: false` whose methods do nothing.
+ * not stored, except that `frame()` / `angle()` keep the last `DEVLOG_PREROLL_MS` in memory
+ * (never persisted on their own) for `beginSet(info, { prerollFromT })`. A disabled log gives a recorder with `active: false` whose methods do nothing.
  */
 export interface DevLogRecorder {
   readonly active: boolean;
@@ -134,8 +146,11 @@ export interface DevLogRecorder {
   readonly sessionId: string;
   /** A session event (set done, start set, skip, jump, pause, adjust…). `t` default now. */
   logEvent(type: string, data?: unknown, t?: number): void;
-  /** Opens a set (ends nothing: call endSet first). Returns the set's key ('' if inactive). */
-  beginSet(info: DevLogSetStart): string;
+  /**
+   * Opens a set (ends nothing: call endSet first). Returns the set's key ('' if inactive).
+   * With `prerollFromT`, the buffered rest frames/angles from that time on start the set.
+   */
+  beginSet(info: DevLogSetStart, opts?: DevLogBeginOptions): string;
   /** Camera details for the open set; merged, so call again when e.g. the side changes. */
   camera(meta: Partial<DevLogCameraMeta>): void;
   /** One pose frame, or `null` with its time when no person was found. `t` = frame clock. */
@@ -205,6 +220,9 @@ class Recorder implements DevLogRecorder {
   private events: DevLogEvent[] = [];
   private open: OpenSet | null = null;
   private lastEnded: DevLogSetRow | null = null;
+  /** M5c pre-roll: rest-time camera data (no set open), last DEVLOG_PREROLL_MS, memory only. */
+  private preFrames: DevLogFrame[] = [];
+  private preAngles: { t: number; angle: number | null }[] = [];
   private timer: ReturnType<typeof setInterval> | undefined;
   /** A quota error has already triggered the one-off cleanup of older sessions. */
   private quotaCleaned = false;
@@ -233,6 +251,8 @@ class Recorder implements DevLogRecorder {
   private halt(): void {
     if (!this.active) return;
     this.active = false;
+    this.preFrames = [];
+    this.preAngles = [];
     clearInterval(this.timer);
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.onVisibility);
@@ -255,7 +275,7 @@ class Recorder implements DevLogRecorder {
     this.events.push(ev);
   }
 
-  beginSet(info: DevLogSetStart): string {
+  beginSet(info: DevLogSetStart, opts: DevLogBeginOptions = {}): string {
     if (!this.active) return '';
     if (this.open) void this.flush(); // leaves the previous set open-ended in the log
     const seq = this.seq++;
@@ -269,15 +289,16 @@ class Recorder implements DevLogRecorder {
       weightKg: info.weightKg,
       startedAt: info.startedAt ?? this.now(),
     };
-    this.open = {
-      row,
-      dirty: true,
-      enc: new FrameEncoder(),
-      angles: [],
-      repEvents: [],
-      speech: [],
-      fps: [],
-    };
+    const enc = new FrameEncoder();
+    let angles: { t: number; angle: number | null }[] = [];
+    const from = opts.prerollFromT;
+    if (from !== undefined && Number.isFinite(from)) {
+      for (const f of this.preFrames) if (f.t >= from) enc.push(f);
+      angles = this.preAngles.filter((a) => a.t >= from);
+    }
+    this.preFrames = [];
+    this.preAngles = [];
+    this.open = { row, dirty: true, enc, angles, repEvents: [], speech: [], fps: [] };
     return row.key;
   }
 
@@ -289,11 +310,16 @@ class Recorder implements DevLogRecorder {
   }
 
   frame(frame: LandmarkFrame | null, t: number): void {
-    if (this.active) this.open?.enc.push(frame ?? { t, landmarks: null });
+    if (!this.active) return;
+    const f = frame ?? { t, landmarks: null };
+    if (this.open) this.open.enc.push(f);
+    else this.preFrames = keepRecent(this.preFrames, f);
   }
 
   angle(t: number, angle: number | null): void {
-    if (this.active) this.open?.angles.push({ t, angle });
+    if (!this.active) return;
+    if (this.open) this.open.angles.push({ t, angle });
+    else this.preAngles = keepRecent(this.preAngles, { t, angle });
   }
 
   repEvent(ev: RepEvent): void {
@@ -446,6 +472,23 @@ class Recorder implements DevLogRecorder {
     this.halt();
     await this.settled();
   }
+}
+
+/**
+ * Appends `item` to a time-ordered pre-roll buffer and drops what's older than
+ * DEVLOG_PREROLL_MS before it. A time going backwards means a new frame clock (camera
+ * reopened), so the old buffer is dropped. May return a new array.
+ */
+function keepRecent<T extends { t: number }>(buf: T[], item: T): T[] {
+  if (!Number.isFinite(item.t)) return buf;
+  const last = buf.at(-1);
+  const out = last && item.t < last.t ? [] : buf;
+  out.push(item);
+  const cutoff = item.t - DEVLOG_PREROLL_MS;
+  let drop = 0;
+  while (drop < out.length && (out[drop] as T).t < cutoff) drop++;
+  if (drop) out.splice(0, drop);
+  return out;
 }
 
 /** A chunk row with its approximate stored size. */
