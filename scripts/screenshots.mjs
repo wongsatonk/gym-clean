@@ -13,6 +13,9 @@
 //   node scripts/screenshots.mjs m5b [coach|s2|m4d|silent]
 //                                            # m4d-next round: M5b coach click-through, S2 gauge,
 //                                            #   M4d demos + Pull A badges, silent hint (iOS UA)
+//   node scripts/screenshots.mjs m5c-hold    # M5c breaks inside a set: body-line hold, Continue →
+//                                            #   one set; last-set hold (Save set); dev-log export
+//                                            #   to test-results/verify-m5c-hold/
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -1475,6 +1478,277 @@ async function m5(browser) {
   }
 }
 
+// ------------------------------- M5c follow-up: breaks inside a set ("tap to continue", B10)
+
+const M5C_HOLD_DEVLOG = 'test-results/verify-m5c-hold/m5c-hold-devlog.json';
+
+/**
+ * Like e2e/hands-free-break.spec.ts: a head-on push-up clip built from the core test kit, with
+ * __sit (hips at 45°: the body-line gate fails, person in frame) and __noPerson hooks. Speech spy,
+ * wake lock and a share-sheet capture for the dev-log export.
+ */
+async function installHoldMocks(page) {
+  await page.addInitScript(() => {
+    window.__said = [];
+    window.__freezeAt = 0;
+    window.__noPerson = false;
+    window.__sit = false;
+    window.__play = () => {
+      window.__freezeAt = null;
+    };
+    window.__freezeWhenReps = (n) => {
+      const check = () => {
+        const el = document.querySelector('[role=dialog] .rep-num[data-reps]');
+        if (el && Number(el.dataset.reps) >= n) {
+          window.__freezeAt = 0;
+          obs.disconnect();
+        }
+      };
+      const obs = new MutationObserver(check);
+      obs.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-reps'] });
+      check();
+    };
+    class FakeUtterance extends EventTarget {
+      constructor(text) {
+        super();
+        this.text = text;
+        this.lang = '';
+        this.rate = 1;
+        this.pitch = 1;
+        this.volume = 1;
+        this.voice = null;
+      }
+    }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: FakeUtterance, configurable: true });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => {
+          if (u.volume === 0) return;
+          window.__said.push({ text: u.text, at: Date.now() });
+          setTimeout(() => u.dispatchEvent(new Event('end')), 300);
+        },
+        cancel: () => window.__said.push({ text: '<cancel>', at: Date.now() }),
+        resume: () => undefined,
+        getVoices: () => [],
+        addEventListener: () => undefined,
+        speaking: false,
+        pending: false,
+      },
+    });
+    window.__shared = [];
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: (d) => Boolean(d?.files?.length) });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (d) => {
+        window.__shared.push(...(d.files ?? []));
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => undefined, release: async () => undefined }) },
+    });
+  });
+  await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        import { curve, sample, withHip } from '/src/core/testkit/frames.ts';
+        import { ruleFor } from '/src/core/exercises/index.ts';
+        export async function createPoseTracker() {
+          const rule = ruleFor('Pushups');
+          const TOP = 165, BOTTOM = 110;
+          const segs = [[600, TOP]];
+          for (let i = 0; i < 6; i++) segs.push([700, BOTTOM], [200, BOTTOM], [700, TOP], [1500, TOP]);
+          const frames = sample(rule, curve(TOP, segs));
+          let base = null;
+          const pose = (f, t) => ({ ...withHip(f, window.__sit ? 45 : 175), t });
+          return {
+            delegate: 'CPU',
+            detect(_video, t) {
+              if (window.__noPerson) { base = null; return null; }
+              if (window.__freezeAt != null) { base = null; return pose(frames[window.__freezeAt], t); }
+              base ??= t;
+              const i = Math.floor((t - base) / 33.333) % frames.length;
+              return pose(frames[i], t);
+            },
+            close() {},
+          };
+        }`,
+    }),
+  );
+}
+
+async function holdSizes(page) {
+  return page.evaluate(() => {
+    const px = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return {
+        text: (el.textContent ?? '').trim().slice(0, 40),
+        font: parseFloat(cs.fontSize),
+        h: Math.round(r.height),
+        w: Math.round(r.width),
+        top: Math.round(r.top),
+        bottom: Math.round(r.bottom),
+        left: Math.round(r.left),
+        right: Math.round(r.right),
+        color: cs.color,
+        bg: cs.backgroundColor,
+      };
+    };
+    const panel = document.querySelector('[data-hold]');
+    const card = panel?.querySelector('.hold-card');
+    return {
+      reason: panel?.getAttribute('data-reason'),
+      lastSet: panel?.getAttribute('data-last-set'),
+      panel: px(panel),
+      card: px(card),
+      title: px(panel?.querySelector('[data-hold-title]')),
+      clock: px(panel?.querySelector('[data-hold-clock]')),
+      label: px(panel?.querySelector('.hold-label')),
+      buttons: [...(panel?.querySelectorAll('button') ?? [])].map(px),
+      shownReps: document.querySelector('[role=dialog] .rep-num[data-reps]')?.getAttribute('data-reps'),
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+    };
+  });
+}
+
+async function holdOpenPushups(page) {
+  await page.goto(BASE);
+  await page.getByRole('button', { name: /Push A/ }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await openFromList(page, 'Pushups');
+  await page.getByRole('button', { name: 'Camera', exact: true }).click();
+  const cam = page.getByRole('dialog', { name: 'Camera' });
+  await cam.and(page.locator('[data-person="true"]')).waitFor({ timeout: 15_000 });
+  return cam;
+}
+
+async function holdRepsThenFreeze(page, cam, n) {
+  await page.evaluate((k) => {
+    window.__freezeWhenReps(k);
+    window.__play();
+  }, n);
+  await cam.locator(`.rep-num[data-reps="${n}"]`).waitFor({ timeout: 25_000 });
+}
+
+const holdSaidFrom = (page, from) => page.evaluate((f) => window.__said.slice(f).map((s) => s.text), from);
+const holdSaidLen = (page) => page.evaluate(() => window.__said.length);
+async function holdWaitSaid(page, text, from, ms) {
+  const ok = await pollUntil(async () => (await holdSaidFrom(page, from)).includes(text), ms);
+  if (!ok) throw new Error(`not said within ${ms} ms: ${text}`);
+}
+
+async function m5cHold(browser) {
+  // A. Push-ups set 1: 2 reps → sit down (body-line gate) → hold → screenshot → Continue → 2 more
+  //    reps → still stop → one saved set of 4. End workout, dev-log export.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    await installHoldMocks(page);
+    const out = {};
+    const cam = await holdOpenPushups(page);
+    await holdRepsThenFreeze(page, cam, 2);
+    let from = await holdSaidLen(page);
+    await page.evaluate(() => (window.__sit = true));
+    await holdWaitSaid(page, 'Set on hold. Tap to continue.', from, 10_000);
+    await cam.locator('[data-hold]').waitFor();
+    await page.waitForTimeout(7_000); // clock past 0:10
+    await shot(page, log, 'm5c-hold', {
+      hold: await holdSizes(page),
+      sizes: await textSizes(page, '[data-hold]'),
+      camSizes: await textSizes(page, '[role=dialog][aria-label="Camera"]'),
+    });
+    out.saidToHold = await holdSaidFrom(page, from);
+    // Continue.
+    await page.evaluate(() => (window.__sit = false));
+    from = await holdSaidLen(page);
+    await cam.locator('[data-hold]').getByRole('button', { name: 'Continue set' }).click();
+    await cam.locator('[data-hold]').waitFor({ state: 'detached', timeout: 5_000 });
+    out.repsAfterContinue = await cam.locator('.rep-num[data-reps]').getAttribute('data-reps');
+    await holdRepsThenFreeze(page, cam, 4);
+    await holdWaitSaid(page, 'Set done. 4 reps.', from, 15_000);
+    await cam.and(page.locator('[data-cam-mode="rest"]')).waitFor({ timeout: 15_000 });
+    out.saidAfterContinue = await holdSaidFrom(page, from);
+    await page.waitForTimeout(800);
+    await shot(page, log, 'm5c-hold-continued-rest', {
+      sizes: await textSizes(page, '[role=dialog][aria-label="Camera"]'),
+    });
+    await cam.locator('[data-cam-rest="close"]').click();
+    await page.getByRole('button', { name: 'End workout' }).click();
+    await page.getByRole('button', { name: 'Tap again to end' }).click();
+    await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const panel = page.locator('[data-devlog=panel]');
+    await panel.locator('[data-devlog=export-last]').click();
+    await panel.locator('[data-devlog=status]', { hasText: 'Shared.' }).waitFor({ timeout: 15_000 });
+    const text = await page.evaluate(async () => {
+      const file = window.__shared.at(-1);
+      if (!file) return '';
+      const stream = file.name.endsWith('.gz')
+        ? file.stream().pipeThrough(new DecompressionStream('gzip'))
+        : file.stream();
+      return new Response(stream).text();
+    });
+    mkdirSync('test-results/verify-m5c-hold', { recursive: true });
+    writeFileSync(M5C_HOLD_DEVLOG, text);
+    const sessions = JSON.parse(text).sessions ?? [];
+    const ev = sessions.flatMap((s) => s.events ?? []);
+    out.export = {
+      file: M5C_HOLD_DEVLOG,
+      autoSet: ev.filter((e) => e.type === 'autoSet').map((e) => e.data),
+      setDone: ev.filter((e) => /set/i.test(e.type) && e.type !== 'autoSet').map((e) => ({ type: e.type, data: e.data })),
+    };
+    out.offsite = offsite;
+    out.console = log;
+    results.push({ m5cHoldA: out });
+    await ctx.close();
+  }
+  // B. Sets 1–2 via hold → Start next set; set 3 (the last): walk away → hold → Save set.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    await installHoldMocks(page);
+    const out = { sets: [] };
+    const cam = await holdOpenPushups(page);
+    for (const set of ['1/3', '2/3']) {
+      await cam.locator(`[data-set="${set}"]`).waitFor();
+      await page.evaluate(() => (window.__noPerson = false));
+      await cam.and(page.locator('[data-person="true"]')).waitFor({ timeout: 10_000 });
+      await holdRepsThenFreeze(page, cam, 2);
+      const from = await holdSaidLen(page);
+      await page.evaluate(() => (window.__noPerson = true));
+      await holdWaitSaid(page, 'Set on hold. Tap to continue.', from, 10_000);
+      await cam.locator('[data-hold]').getByRole('button', { name: 'Start next set' }).click();
+      out.sets.push(set);
+    }
+    await cam.locator('[data-set="3/3"]').waitFor();
+    await page.evaluate(() => (window.__noPerson = false));
+    await cam.and(page.locator('[data-person="true"]')).waitFor({ timeout: 10_000 });
+    await holdRepsThenFreeze(page, cam, 2);
+    const from = await holdSaidLen(page);
+    await page.evaluate(() => (window.__noPerson = true));
+    await holdWaitSaid(page, 'Set on hold. Tap to continue.', from, 10_000);
+    await cam.locator('[data-hold]').waitFor();
+    await page.waitForTimeout(4_000);
+    await shot(page, log, 'm5c-hold-last-set', {
+      hold: await holdSizes(page),
+      sizes: await textSizes(page, '[data-hold]'),
+      camSizes: await textSizes(page, '[role=dialog][aria-label="Camera"]'),
+    });
+    await cam.locator('[data-hold]').getByRole('button', { name: 'Save set' }).click();
+    await page.getByRole('dialog', { name: 'Camera' }).waitFor({ state: 'detached', timeout: 10_000 });
+    out.said = await page.evaluate(() => window.__said.map((s) => s.text));
+    out.offsite = offsite;
+    out.console = log;
+    results.push({ m5cHoldB: out });
+    await ctx.close();
+  }
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -1502,6 +1776,7 @@ try {
     if (!only || only === 'silent') await silentHintShot(browser);
   }
   else if (milestone === 'm5c') await m5c(browser);
+  else if (milestone === 'm5c-hold') await m5cHold(browser);
   else if (milestone === 'm5') await m5(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();

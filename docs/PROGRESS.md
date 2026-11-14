@@ -154,12 +154,23 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - no focus cues on hold;
   - dev-log data = enum + numbers.
   - Deps: B3, B7, B8.
-- [ ] B10. [verifier] Verify against SPEC M5c "Breaks inside a set" Accept.
+- [x] B10. [verifier] Verify against SPEC M5c "Breaks inside a set" Accept.
   - `npm run check`, `npm run e2e`, `npm run build`.
   - 390×844 screenshots `docs/screenshots/m5c-hold.png` and `m5c-hold-last-set.png`, console clean.
   - A dev-log export with a `hold` event, and `npm run devlog -- --dry-run` showing one set.
   - Evidence into PROGRESS.
   - Deps: B9.
+  - Evidence 2026-11-14 (41e7ecf): verifier PASS.
+    - `npm run check`: 1164 unit, 19 script.
+    - `npm run e2e`: 75/75.
+    - Build OK.
+    - Dev-log hold → Continue export converts to one fixture: "start:tap stop:still hold:bodyLine 12.3s → continue".
+    - Screenshots: `docs/screenshots/m5c-hold.png`, `m5c-hold-last-set.png`, `m5c-hold-continued-rest.png`. Clock 88px, buttons 80px, smallest text 20px.
+    - Not deployed; it waits for Wongsaton's OK (B11).
+  - Open, non-blocking:
+    - the dimmed rep panel under a sit hold reads "Step into frame";
+    - the footer Set done is visible under the hold panel;
+    - the M5b "Sets: 4" wording.
 - [ ] B11. [main] Merge `m5c-break-hold` after M5's merge, then **ask Wongsaton before pushing** (push = deploy). Deps: B10.
 - [ ] B12. 🧍 Folded into **Checkpoint B3**: on the hands-free gym day, a push-up rest-pause set and one walk-away; he reports whether the hold and taps felt right (and the B-q questions).
 
