@@ -454,7 +454,7 @@ M10-q8.
   - Done when: render tests, 390×844 harness screenshots (chips, a proposal, red flag, Undo) in the 3
     accents, tokens test green, typecheck + lint clean.
   - Deps: 1.
-- [ ] 14. [ui-engineer ∥] Today, preview and Settings → Plan changes.
+- [x] 14. [ui-engineer ∥] Today, preview and Settings → Plan changes.
   - Files: src/ui/screens/today.ts, src/ui/screens/preview.ts, src/ui/screens/planChanges.ts (new),
     src/styles.css.
   - Today and preview:

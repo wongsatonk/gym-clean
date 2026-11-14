@@ -557,7 +557,8 @@ h1 {
   display: none;
 }
 
-.day-strip .day-btn {
+.day-strip .day-btn,
+.day-strip .cal-card {
   flex: none;
   width: 112px;
   min-height: 124px;
@@ -660,6 +661,260 @@ h1 {
   height: 4px;
   border-radius: 0 0 4px 4px;
   background: var(--cta);
+}
+
+/* ---------- M10 trainer on Today and the preview (today.ts, preview.ts) ---------- */
+
+.appbar-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Coach: a neutral button (orange stays Start's). */
+.coach-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.top-bar .coach-btn {
+  margin-left: auto;
+}
+
+/* "Adjusted today": attention (warn edge + icon + words), not an action colour. */
+.adjusted-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  border-left: 4px solid var(--warn);
+}
+
+.adjusted-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-body);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.adjusted-text .ic {
+  flex: none;
+  margin-top: 1px;
+  color: var(--warn);
+}
+
+.adjusted-undo {
+  flex: none;
+  min-height: var(--tap-min);
+  min-width: 88px;
+  padding: 0 18px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+/* Rest day hero: the same ember card without rings or a figure. */
+.hero-rest .hero-txt .eyebrow,
+.hero-rest .hero-txt .hero-title {
+  padding-right: 0;
+}
+
+.hero-rest .rest-next {
+  font-size: var(--fs-cue);
+}
+
+/* Calendar week cards: a date line on top; moved days get a dashed edge and "Moved".
+   Positioned so each card's sr-only status stays inside the scrolling strip (no page overflow). */
+.day-strip .cal-card {
+  position: relative;
+}
+
+.cal-date {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.cal-card.today .cal-date {
+  color: var(--text);
+}
+
+.day-strip .cal-card.today:not(.up-next) {
+  border: 3px solid var(--text-2);
+}
+
+.day-strip .cal-card.moved {
+  border-style: dashed;
+}
+
+.cal-rest-mark {
+  height: 50px;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+}
+
+.day-strip .cal-card.rest .day-name {
+  color: var(--text-2);
+}
+
+.day-when.moved,
+.day-when.adjusted {
+  color: var(--warn);
+}
+
+/* Preview: an "Adjusted" pill (icon + word) on changed rows; removed rows in their own list. */
+.adj-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--warn);
+  color: var(--warn);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.ex-row.adjusted {
+  border-color: var(--warn);
+}
+
+.adj-note {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.removed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.removed-title {
+  margin: 4px 0 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.ex-row-removed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--r-btn);
+  border: 1px dashed var(--line);
+  color: var(--text-2);
+}
+
+/* ---------- M10 Settings → Plan changes (planChanges.ts, Pro) ---------- */
+
+.plan-changes.mood-pro {
+  gap: 18px;
+}
+
+.plan-change-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plan-change {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.plan-change-txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-change-title {
+  font-size: var(--fs-cue);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.plan-change-when {
+  color: var(--text-2);
+}
+
+.plan-change.undone .plan-change-title {
+  color: var(--text-2);
+}
+
+.plan-undo {
+  flex: none;
+  min-height: var(--tap-min);
+  min-width: 88px;
+  padding: 0 18px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.plan-empty {
+  color: var(--text-2);
+}
+
+.plan-reset-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Confirmations only: danger with an icon and words, filled once armed (as End workout). */
+.plan-reset {
+  width: 100%;
+  min-height: var(--tap-bar);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--danger);
+  border: var(--line-w) solid var(--danger);
+}
+
+.plan-reset[data-armed] {
+  background: var(--danger);
+  color: var(--on-danger);
 }
 
 /* Day preview rows on the Energy page. */

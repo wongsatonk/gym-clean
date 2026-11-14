@@ -44,6 +44,8 @@ export const ICON_PATHS = {
   palette:
     '<path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.7 0-1.3-1.3-1.6-1.3-2.8 0-1 .8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 6.6 17 3 12 3z"/><circle cx="7.5" cy="11" r="1.2"/><circle cx="10.5" cy="7.2" r="1.2"/><circle cx="15" cy="7.5" r="1.2"/>',
   ruler: '<path d="M4 15.5L15.5 4 20 8.5 8.5 20z"/><path d="M8 12l2 2M10.5 9.5l1.5 1.5M13 7l2 2"/>',
+  /** M10 Coach: a speech bubble with two lines. */
+  chat: '<path d="M4 5.5h16v10.5h-9l-4.5 3.5V16H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICON_PATHS;
