@@ -387,6 +387,81 @@ advice but doesn't speak it again. Summary is shown only, not spoken. A Settings
 Deferred: the next session's Exercise-screen line and Dismiss (round 2), the tempo rule (M5),
 all-time bests (M6 history).
 
+### M5c — Hands-free sets (added 2026-11-13, after the first real camera session)
+Wongsaton: "Let's plan to do auto start and stop, that don't need to press button on the screen." The
+phone sits on a stand or the floor and he doesn't want to walk back with dumbbells in hand to tap
+"Set done" / "Start set". Applies to camera (`tracking: 'pose'`) exercises only; manual exercises are
+unchanged. Builds on the M4 counter as it is; it doesn't wait for the press/push-up retune (a missed
+auto start simply falls back to tapping Start set).
+- **Camera stays open for the whole exercise:** with "Hands-free sets" on, the camera sheet no longer
+  closes at Set done. It stays open through every set and rest of the current exercise and switches
+  between a **set mode** (today's camera page) and a **rest mode** (rest panel over the dimmed video:
+  rest clock ≥ 64px, "Next: Set 3 of 4 · 12 reps × 15 lb", the M5b coach tip with Apply, the "Last set"
+  Fix, a ≥ 56px **Start set** and Close). It closes after the exercise's final set is saved (the next
+  exercise needs a new phone position), on Summary, on Close, and after the idle limits below. The Rest
+  screen gets a ≥ 56px **Camera** button when the upcoming exercise is pose-tracked, so the first set
+  of an exercise can be hands-free too (the camera opens in rest mode).
+- **Auto start:** in rest mode the rep counter keeps running silently (no count words, no hints). Once
+  the rest has run ≥ `armAfterSec` (10 s), **2 counted reps** with the second completed ≤ 8 s after the
+  first start the set. The set is backdated: `START_SET.now` = the moment the first rep left the start
+  band, so rest taken and overrun stay exact (an early start is fine; overrun logic unchanged). The set
+  starts with reps 2 and the partials seen in between; the count word "Two" is spoken (the first rep
+  is silent). Partials alone never start a set.
+- **Auto stop:** only after ≥ `stopMinReps` (2) reps in the set, when one of these holds:
+  `still`: the counter sits in the start band (or setup) with no rep/partial and no phase change for
+  `stillSec` (6 s; covers racking for curl, row, lateral raise, where "arms down" is the start
+  position); `away`: no tracked person for `awaySec` (3 s); `stalled`: outside the start band with no
+  event and no phase change for `stalledSec` (10 s; e.g. lying on the floor after push-ups, press arms
+  dropped). The app then says **"Set done. 8 reps."** (kind `cue`, never cancels; spoken even with
+  "Count reps out loud" off) and shows "Set done · 8 reps" with a big **Undo** (≥ 56px, full width) and
+  a countdown of `undoSec` (5 s). No voice input.
+- **Undo window = delayed save:** nothing is logged until the window ends. Then `SET_DONE` is dispatched
+  with `now` = the end of the set's last rep/partial (backdated), so the rest clock starts when he
+  actually stopped (it shows ≈ 11 s elapsed). Undo, or a new counted rep inside the window, cancels the
+  stop: "Keep going." is spoken, counting continues from the same number, and that set's next auto stop
+  waits 2 × `stillSec`. Tapping Set done during the window saves at once (same backdated time).
+- **Speech order after a hands-free stop:** count word → "Set done. 8 reps." → (window) → save → the
+  M5b coach tip (spoken at the save, instead of at 2 s, if it still ends ≥ 5 s before the "Ten seconds"
+  cue; otherwise not spoken) → the normal rest cues. A manual Set done keeps the M5b 2 s timing.
+- **Manual override:** every button still works: Set done (saves now; with hands-free on the camera
+  stays open in rest mode unless the exercise is finished), Start set (in the rest panel and on the Rest
+  screen), Close camera, Pause (auto start/stop do nothing while paused), Skip, Fix last set.
+- **Idle close (battery/heat):** the camera stops (all tracks) and says "Camera off." after 3 min with
+  no tracked person, or 10 min without a counted rep. A phone running camera + pose inference for a
+  whole exercise (≈ 8–12 min instead of ≈ 45 s per set) gets warm; fps samples in the dev log show
+  thermal throttling. Throttling inference during rest is a later option if the log shows a problem.
+- **Settings → "Hands-free sets"** (key `handsFree`, default **on**, only an explicit false turns it
+  off). Off = the M4/M4c behaviour exactly (camera per set, Set done closes it).
+- **Thresholds are data:** `AutoSetConfig` defaults in `src/core/autoSet.ts` (`startReps` 2,
+  `startWindowSec` 8, `armAfterSec` 10, `stopMinReps` 2, `stillSec` 6, `awaySec` 3, `stalledSec` 10,
+  `undoSec` 5, `undoStillFactor` 2, `idleNoPersonSec` 180, `idleNoRepSec` 600), with an optional
+  per-exercise `autoSet` override on the exercise rule. Retuned from the dev log, like the counter.
+- **Pure core:** `src/core/autoSet.ts` is a state machine (`rest` → `set` → `pending` → saved, plus
+  `off`/`closed`) fed per frame with `{ t, tracking, phase, events }` from the rep counter and told the
+  session phase/paused/rest elapsed; it returns actions (`start`, `stopPending`, `stopCancelled`,
+  `commit`, `close`) with reasons and times on the camera frame clock. No DOM, no MediaPipe.
+- **Developer log:** every auto action is logged as an `autoSet` event (action, reason, reps, partials,
+  times, counter phase and angle at that moment). The recorder keeps a 10 s in-memory pre-roll of frames
+  while no set is open, and an auto-started set's frames begin 1.5 s before its backdated start, so the
+  converter sees the starting reps. Rest frames otherwise aren't stored (log size unchanged).
+- **Privacy:** unchanged: video and inference stay on the phone, nothing uploaded, no recording. The
+  camera is simply open longer (the iOS camera indicator stays on); Close and the idle limits stop it.
+- **Accept:** unit tests, written first, for `autoSet` with frame/rep-event sequences including
+  real-data-like noise (±5° jitter in the start band, gated frames, 15–30 fps with gaps, a lone phantom
+  rep in rest → no start, two reps 9 s apart → no start, start before `armAfterSec` → none, backdated
+  start/end times, every stop reason, cancel by Undo and by a rep, doubled `stillSec` after a cancel,
+  paused → nothing, idle close both ways); reducer tests that backdated `START_SET`/`SET_DONE` times are
+  clamped (never before the set start or the rest start); `handsFree` setting default/read back; dev-log
+  pre-roll; the commit-time coach-tip rule. E2E (deterministic fixture landmarker, real timers): auto
+  stop after stillness with spoken confirmation + Undo, delayed save (no row during the window, row after
+  with the backdated end), Undo and rep-cancel, auto start in rest mode after 10 s with the backdated rest
+  taken, speech order (count → "Set done" → coach tip), camera closes after the exercise's last set,
+  Rest's Camera button opens rest mode, setting off = M4 behaviour; live model on the synthetic curl
+  loop: auto start from rest mode. No third-party request. 390×844 screenshots of the pending Undo, the
+  rest mode, an auto-started set and the setting.
+- 🧍 **Checkpoint B3 (hands-free gym test):** Wongsaton trains a day with hands-free on, notes any
+  wrong auto start/stop (and whether 6 s / 5 s feel right), then exports the developer log.
+
 ### M6 — Polish & install
 - PWA (installable, offline after first load, model + wasm cached).
 - History screen: last 4 weeks per exercise (weight × reps, focus score trend), including a
