@@ -1,0 +1,887 @@
+import { describe, expect, it } from 'vitest';
+import {
+  AUTO_SET_DEFAULTS,
+  createAutoSet,
+  type AutoSet,
+  type AutoSetAction,
+  type AutoSetConfig,
+  personInFrame,
+} from './autoSet';
+import type { RepPhase } from './repCounter';
+import type { LandmarkFrame, RepEvent } from './types';
+
+// ---------------------------------------------------------------------------------------------
+// A stream simulator shaped like the camera loop: counter snapshots (phase, tracking, smoothed
+// angle) at an irregular 15–30 fps with dropped frames, angle jitter, gated (untracked) frames and
+// gaps, with rep/partial events on the frame where the counter completes them. Curl-like angles:
+// start band ≈ 165°, far band ≈ 50°.
+// ---------------------------------------------------------------------------------------------
+
+/** Element i, failing the test if it is missing. */
+function nth<T>(xs: readonly T[], i: number): T {
+  const x = xs[i];
+  if (x === undefined) throw new Error(`missing element ${i}`);
+  return x;
+}
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+type SimOpts = { fps?: [number, number]; drop?: number; seed?: number; t0?: number };
+type Logged = { t: number; action: AutoSetAction };
+
+const TOP = 165;
+const BOTTOM = 50;
+
+class Sim {
+  t: number;
+  phase: RepPhase = 'top';
+  log: Logged[] = [];
+  reps = 0;
+  partials = 0;
+  /** Frame t of the last pushed 'top' frame before the latest departure. */
+  lastDepartT = 0;
+  private lastTopT = 0;
+  private rnd: () => number;
+  private fps: [number, number];
+  private drop: number;
+
+  constructor(
+    public auto: AutoSet,
+    opts: SimOpts = {},
+  ) {
+    this.t = opts.t0 ?? 0;
+    this.fps = opts.fps ?? [30, 30];
+    this.drop = opts.drop ?? 0;
+    this.rnd = mulberry32(opts.seed ?? 1);
+  }
+
+  private step(): number {
+    const [lo, hi] = this.fps;
+    const fps = lo + (hi - lo) * this.rnd();
+    return 1000 / fps;
+  }
+
+  record(actions: AutoSetAction[]): AutoSetAction[] {
+    for (const action of actions) this.log.push({ t: this.t, action });
+    return actions;
+  }
+
+  /** Push one frame at the current t (never dropped). */
+  frame(
+    phase: RepPhase,
+    angle: number,
+    tracking = true,
+    events: RepEvent[] = [],
+    present?: boolean,
+  ): void {
+    if (this.phase === 'top' && phase !== 'top') this.lastDepartT = this.lastTopT;
+    this.phase = phase;
+    if (phase === 'top' && tracking) this.lastTopT = this.t;
+    const input = { t: this.t, tracking, phase, angle: tracking ? angle : null, events };
+    this.record(this.auto.push(present === undefined ? input : { ...input, present }));
+  }
+
+  /** Frames for `ms` (time advances first, then a frame unless it is dropped). */
+  hold(
+    phase: RepPhase,
+    ms: number,
+    o: {
+      angle?: number | ((f: number) => number);
+      jitter?: number;
+      tracking?: boolean;
+      /** Person detected (default: same as tracking, i.e. the field is omitted). */
+      present?: boolean;
+    } = {},
+  ): void {
+    const end = this.t + ms;
+    const start = this.t;
+    for (;;) {
+      const next = this.t + this.step();
+      if (next > end) break;
+      this.t = next;
+      if (this.rnd() < this.drop) continue;
+      const base =
+        typeof o.angle === 'function' ? o.angle((this.t - start) / ms) : (o.angle ?? TOP);
+      const j = o.jitter ? (this.rnd() * 2 - 1) * o.jitter : 0;
+      this.frame(phase, base + j, o.tracking ?? true, [], o.present);
+    }
+    this.t = end;
+  }
+
+  /** No frames at all for `ms` (camera hiccup). */
+  gap(ms: number): void {
+    this.t += ms;
+  }
+
+  /** One rep: down → bottom → up, then the frame back in the start band carries the event. */
+  rep(o: { downMs?: number; upMs?: number; bottomMs?: number } = {}): RepEvent {
+    const downMs = o.downMs ?? 900;
+    const upMs = o.upMs ?? 900;
+    this.hold('down', downMs, { angle: (f) => TOP - (TOP - BOTTOM) * f });
+    this.hold('bottom', o.bottomMs ?? 150, { angle: BOTTOM });
+    this.hold('up', upMs, { angle: (f) => BOTTOM + (TOP - BOTTOM) * f });
+    this.t += this.step();
+    const ev = repEvent('rep', ++this.reps, this.t, downMs, upMs);
+    this.frame('top', TOP, true, [ev]);
+    return ev;
+  }
+
+  /** A partial that turns around before the far band. */
+  partial(): RepEvent {
+    this.hold('down', 600, { angle: (f) => TOP - 50 * f });
+    this.t += this.step();
+    const ev = repEvent('partial', ++this.partials, this.t, 600, 600);
+    this.frame('top', TOP, true, [ev]);
+    return ev;
+  }
+
+  /** Reps at a steady pace with `pauseMs` at the top between them. */
+  reps_(n: number, pauseMs = 400): RepEvent[] {
+    const out: RepEvent[] = [];
+    for (let i = 0; i < n; i++) {
+      out.push(this.rep());
+      if (i < n - 1) this.hold('top', pauseMs, { jitter: 3 });
+    }
+    return out;
+  }
+
+  undo(): AutoSetAction[] {
+    return this.record(this.auto.undo(this.t));
+  }
+  confirm(): AutoSetAction[] {
+    return this.record(this.auto.confirm(this.t));
+  }
+  session(phase: 'exercise' | 'rest' | 'other', paused = false, restElapsedMs = 0): void {
+    this.record(this.auto.setSession({ phase, paused, restElapsedMs }, this.t));
+  }
+
+  of<K extends AutoSetAction['type']>(type: K): (Logged & { action: { type: K } })[] {
+    return this.log.filter((l) => l.action.type === type) as (Logged & {
+      action: { type: K };
+    })[];
+  }
+  types(): string[] {
+    return this.log.map((l) => l.action.type);
+  }
+}
+
+function repEvent(
+  type: 'rep' | 'partial',
+  index: number,
+  t: number,
+  downMs: number,
+  upMs: number,
+): RepEvent {
+  return {
+    type,
+    index,
+    eccentricMs: Math.round(upMs),
+    concentricMs: Math.round(downMs),
+    minAngle: type === 'rep' ? BOTTOM : TOP - 50,
+    maxAngle: TOP,
+    t,
+    ...(type === 'partial' ? { reason: 'far' as const, shortByDeg: 20 } : {}),
+  };
+}
+
+/** A set already running (manual Start set), counter at the start band. */
+function inSet(opts: SimOpts = {}, config?: Partial<AutoSetConfig>): Sim {
+  const sim = new Sim(createAutoSet({ ...AUTO_SET_DEFAULTS, ...config }), opts);
+  sim.session('exercise');
+  sim.hold('top', 1000);
+  return sim;
+}
+
+/** A rest that has been running `elapsedMs` at the sim's t. */
+function inRest(elapsedMs: number, opts: SimOpts = {}, config?: Partial<AutoSetConfig>): Sim {
+  const sim = new Sim(createAutoSet({ ...AUTO_SET_DEFAULTS, ...config }), opts);
+  sim.session('rest', false, elapsedMs);
+  return sim;
+}
+
+// ---------------------------------------------------------------------------------------------
+
+describe('AUTO_SET_DEFAULTS', () => {
+  it('matches SPEC M5c', () => {
+    expect(AUTO_SET_DEFAULTS).toMatchObject({
+      startReps: 2,
+      startWindowSec: 8,
+      armAfterSec: 10,
+      stopMinReps: 2,
+      stillSec: 6,
+      awaySec: 3,
+      stalledSec: 10,
+      undoSec: 5,
+      undoStillFactor: 2,
+      idleNoPersonSec: 180,
+      idleNoRepSec: 600,
+    });
+  });
+});
+
+describe('auto stop', () => {
+  it('clean set: still 6 s in the start band → stopPending, then commit 5 s later at the last rep', () => {
+    const sim = inSet();
+    const reps = sim.reps_(3);
+    const last = nth(reps, 2);
+    sim.hold('top', 5900, { jitter: 2 });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 200, { jitter: 2 });
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop).toBeDefined();
+    expect(stop.t).toBeGreaterThanOrEqual(last.t + 6000);
+    expect(stop.action).toMatchObject({ reason: 'still', reps: 3, partials: 0, endedAt: last.t });
+    expect(sim.auto.state).toBe('pending');
+    expect(sim.auto.pendingUntil).toBeCloseTo(stop.t + 5000, 6);
+    // Nothing committed inside the window.
+    sim.hold('top', 4900);
+    expect(sim.of('commit')).toEqual([]);
+    sim.hold('top', 200);
+    const commit = nth(sim.of('commit'), 0);
+    expect(commit.t).toBeGreaterThanOrEqual(stop.t + 5000);
+    expect(commit.action).toMatchObject({ endedAt: last.t, reps: 3, partials: 0 });
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+    // After the save the machine waits in rest; more stillness does nothing.
+    expect(sim.auto.state).toBe('rest');
+    expect(sim.auto.pendingUntil).toBeNull();
+    sim.hold('top', 20000, { jitter: 3 });
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+  });
+
+  it('endedAt is the last event, even when it is a partial', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('top', 500);
+    const p = sim.partial();
+    sim.hold('top', 6100);
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop.action).toMatchObject({ reason: 'still', reps: 2, partials: 1, endedAt: p.t });
+  });
+
+  it('away: 3 s without a tracked person → stopPending away', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 300);
+    const lostFrom = sim.t;
+    sim.hold('top', 2900, { tracking: false });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 200, { tracking: false });
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop.action).toMatchObject({ reason: 'away', reps: 2, endedAt: last.t });
+    expect(stop.t).toBeGreaterThanOrEqual(lostFrom + 3000 - 40);
+  });
+
+  it('away also counts time with no frames at all after the person is lost', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('top', 200, { tracking: false });
+    sim.gap(3500);
+    sim.hold('top', 100, { tracking: false });
+    expect(sim.of('stopPending')[0]?.action).toMatchObject({ reason: 'away' });
+  });
+
+  it('stalled: 10 s outside the start band with no event or phase change', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(2), 1);
+    // Push-up done, lying on the floor: the counter sits in the far band.
+    sim.hold('down', 600, { angle: (f) => TOP - 100 * f });
+    const since = sim.t;
+    sim.hold('bottom', 9800, { angle: BOTTOM, jitter: 5 });
+    expect(sim.log).toEqual([]);
+    sim.hold('bottom', 400, { angle: BOTTOM, jitter: 5 });
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop.action).toMatchObject({ reason: 'stalled', reps: 2, endedAt: last.t });
+    expect(stop.t).toBeGreaterThanOrEqual(since + 10000 - 40);
+  });
+
+  it('never stops with fewer than 2 reps (one rep, partials only, nothing)', () => {
+    const one = inSet();
+    one.rep();
+    one.hold('top', 30000, { jitter: 3 });
+    one.hold('top', 10000, { tracking: false });
+    expect(one.log).toEqual([]);
+
+    const partials = inSet();
+    partials.partial();
+    partials.hold('top', 500);
+    partials.partial();
+    partials.hold('top', 500);
+    partials.partial();
+    partials.hold('top', 20000);
+    expect(partials.log).toEqual([]);
+
+    const none = inSet();
+    none.hold('setup', 20000, { angle: 120 });
+    expect(none.log).toEqual([]);
+  });
+
+  it('a phase change resets the still timer (stepping in and out of the start band)', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 4000);
+    sim.hold('setup', 500, { angle: 140 }); // posture gate dropped the attempt
+    sim.hold('top', 4000);
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 2100);
+    expect(sim.of('stopPending')[0]?.action).toMatchObject({
+      reason: 'still',
+      endedAt: last.t,
+    });
+  });
+});
+
+describe('undo window', () => {
+  function pendingSet(): { sim: Sim; stopT: number; lastT: number } {
+    const sim = inSet();
+    const last = nth(sim.reps_(3), 2);
+    sim.hold('top', 6100);
+    const stop = nth(sim.of('stopPending'), 0);
+    return { sim, stopT: stop.t, lastT: last.t };
+  }
+
+  it('Undo cancels the stop, nothing is committed, and the next still stop needs 12 s', () => {
+    const { sim } = pendingSet();
+    sim.hold('top', 2000);
+    expect(sim.undo()).toEqual([{ type: 'stopCancelled', reason: 'undo' }]);
+    const undoT = sim.t;
+    expect(sim.auto.state).toBe('set');
+    expect(sim.auto.pendingUntil).toBeNull();
+    sim.hold('top', 11800, { jitter: 3 });
+    expect(sim.types()).toEqual(['stopPending', 'stopCancelled']);
+    sim.hold('top', 300, { jitter: 3 });
+    const stops = sim.of('stopPending');
+    expect(stops).toHaveLength(2);
+    expect(nth(stops, 1).t).toBeGreaterThanOrEqual(undoT + 12000);
+    expect(nth(stops, 1).action).toMatchObject({ reason: 'still', reps: 3 });
+  });
+
+  it('a rep inside the window cancels without a tap and counting continues', () => {
+    const { sim, stopT } = pendingSet();
+    sim.hold('top', 500);
+    const rep4 = sim.rep();
+    expect(rep4.t).toBeLessThan(stopT + 5000);
+    expect(sim.types()).toEqual(['stopPending', 'stopCancelled']);
+    expect(nth(sim.of('stopCancelled'), 0).action).toEqual({
+      type: 'stopCancelled',
+      reason: 'rep',
+    });
+    expect(sim.auto.counts).toEqual({ reps: 4, partials: 0 });
+    // The doubled still time applies for the rest of the set.
+    sim.hold('top', 11900);
+    expect(sim.of('stopPending')).toHaveLength(1);
+    sim.hold('top', 200);
+    const stops = sim.of('stopPending');
+    expect(stops).toHaveLength(2);
+    expect(nth(stops, 1).action).toMatchObject({ reason: 'still', reps: 4, endedAt: rep4.t });
+    sim.hold('top', 5100);
+    expect(nth(sim.of('commit'), 0).action).toMatchObject({ endedAt: rep4.t, reps: 4 });
+  });
+
+  it('a partial inside the window does not cancel', () => {
+    const { sim } = pendingSet();
+    sim.hold('top', 300);
+    sim.partial();
+    sim.hold('top', 5000);
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+  });
+
+  it('away and stalled stops are not doubled after a cancel', () => {
+    const { sim } = pendingSet();
+    sim.undo();
+    const t = sim.t;
+    sim.hold('top', 3100, { tracking: false });
+    const stops = sim.of('stopPending');
+    expect(stops).toHaveLength(2);
+    expect(nth(stops, 1).action).toMatchObject({ reason: 'away' });
+    expect(nth(stops, 1).t - t).toBeLessThan(3200);
+  });
+
+  it('confirm() commits at once with the backdated end', () => {
+    const { sim, lastT } = pendingSet();
+    sim.hold('top', 1000);
+    expect(sim.confirm()).toEqual([{ type: 'commit', endedAt: lastT, reps: 3, partials: 0 }]);
+    sim.hold('top', 10000);
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+  });
+
+  it('undo() and confirm() outside a pending stop do nothing', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    expect(sim.undo()).toEqual([]);
+    expect(sim.confirm()).toEqual([]);
+    expect(sim.auto.state).toBe('set');
+  });
+
+  it('a new set (manual Start set) gets the normal still time again', () => {
+    const { sim } = pendingSet();
+    sim.undo();
+    sim.session('rest', false, 0); // manual Set done
+    sim.session('exercise'); // manual Start set
+    sim.hold('top', 500);
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 6100);
+    const stops = sim.of('stopPending');
+    expect(stops).toHaveLength(2);
+    expect(nth(stops, 1).t - last.t).toBeLessThan(6200);
+    expect(nth(stops, 1).action).toMatchObject({ reps: 2 });
+  });
+});
+
+describe('auto start in rest', () => {
+  it('no start before 10 s of rest (reps before arming are ignored)', () => {
+    const sim = inRest(0);
+    sim.hold('top', 1000);
+    sim.rep();
+    sim.hold('top', 500);
+    sim.rep();
+    sim.hold('top', 500);
+    sim.rep();
+    expect(sim.t).toBeLessThan(10000);
+    sim.hold('top', 3000);
+    expect(sim.log).toEqual([]);
+    expect(sim.auto.state).toBe('rest');
+  });
+
+  it('arming counts the rest already elapsed when the camera opens', () => {
+    const sim = inRest(9000);
+    sim.hold('top', 1200);
+    sim.rep();
+    sim.hold('top', 500);
+    const second = sim.rep();
+    expect(sim.of('start')).toHaveLength(1);
+    expect(nth(sim.of('start'), 0).t).toBe(second.t);
+  });
+
+  it('a lone phantom rep does not start a set', () => {
+    const sim = inRest(30000, { fps: [15, 30], drop: 0.1, seed: 7 });
+    sim.hold('top', 2000, { jitter: 5 });
+    sim.rep();
+    sim.hold('top', 60000, { jitter: 5 });
+    expect(sim.log).toEqual([]);
+  });
+
+  it('two reps 9 s apart do not start; a third within 8 s starts from the second', () => {
+    const sim = inRest(30000);
+    sim.hold('top', 1000);
+    const first = sim.rep();
+    sim.hold('top', 9000 - 1950 - 33);
+    const second = sim.rep();
+    expect(second.t - first.t).toBeGreaterThan(8000);
+    expect(sim.log).toEqual([]);
+    const departSecond = sim.lastDepartT;
+    sim.hold('top', 400);
+    sim.rep();
+    const start = nth(sim.of('start'), 0);
+    expect(start.action).toEqual({ type: 'start', at: departSecond, reps: 2, partials: 0 });
+  });
+
+  it('two reps within 8 s start the set, backdated to the first departure, with partials in between', () => {
+    const sim = inRest(20000);
+    sim.hold('top', 1000);
+    sim.partial(); // before the first rep's departure: not part of the set
+    sim.hold('top', 2000);
+    sim.rep();
+    const departFirst = sim.lastDepartT;
+    sim.hold('top', 400);
+    sim.partial();
+    sim.hold('top', 400);
+    const second = sim.rep();
+    const start = nth(sim.of('start'), 0);
+    expect(start.t).toBe(second.t);
+    expect(start.action).toEqual({ type: 'start', at: departFirst, reps: 2, partials: 1 });
+    expect(departFirst).toBeLessThan(second.t - 2000);
+    expect(sim.auto.state).toBe('set');
+    expect(sim.auto.counts).toEqual({ reps: 2, partials: 1 });
+  });
+
+  it('partials alone never start a set', () => {
+    const sim = inRest(20000);
+    for (let i = 0; i < 6; i++) {
+      sim.hold('top', 300);
+      sim.partial();
+    }
+    sim.hold('top', 2000);
+    expect(sim.log).toEqual([]);
+  });
+
+  it('an auto-started set keeps its counts when the session switches to exercise, then stops as usual', () => {
+    const sim = inRest(20000);
+    sim.hold('top', 500);
+    sim.reps_(2);
+    expect(sim.types()).toEqual(['start']);
+    sim.session('exercise'); // the app dispatched START_SET
+    expect(sim.auto.counts).toEqual({ reps: 2, partials: 0 });
+    sim.hold('top', 400);
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 6100);
+    expect(nth(sim.of('stopPending'), 0).action).toMatchObject({
+      reason: 'still',
+      reps: 4,
+      endedAt: last.t,
+    });
+  });
+
+  it('after a commit the next rest arms 10 s after the backdated end', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 11200); // still stop at +6 s, commit at +11 s
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+    expect(sim.auto.state).toBe('rest');
+    // The app saves and resets the counter; rest started at the backdated end.
+    sim.session('rest', false, sim.t - last.t);
+    sim.hold('top', 200);
+    sim.reps_(2);
+    expect(sim.types()).toEqual(['stopPending', 'commit', 'start']);
+  });
+});
+
+describe('pause and phase other', () => {
+  it('paused set: no auto stop; after resume the timers restart', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.session('exercise', true);
+    sim.hold('top', 20000);
+    sim.hold('top', 5000, { tracking: false });
+    sim.hold('top', 1000);
+    expect(sim.log).toEqual([]);
+    sim.session('exercise', false);
+    const resumeT = sim.t;
+    sim.hold('top', 5900);
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 200);
+    expect(nth(sim.of('stopPending'), 0).t).toBeGreaterThanOrEqual(resumeT + 6000);
+  });
+
+  it('paused rest: reps never start a set', () => {
+    const sim = inRest(30000);
+    sim.session('rest', true, 30000);
+    sim.reps_(4);
+    sim.hold('top', 1000);
+    expect(sim.log).toEqual([]);
+    sim.session('rest', false, 30000);
+    sim.hold('top', 500);
+    sim.rep(); // within 8 s of the last paused rep, but reps seen while paused don't pair
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 400);
+    sim.rep();
+    expect(sim.types()).toEqual(['start']);
+  });
+
+  it('Pause during the undo window cancels the stop (the user is at the screen)', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('top', 6100);
+    sim.session('exercise', true);
+    expect(nth(sim.of('stopCancelled'), 0).action).toEqual({
+      type: 'stopCancelled',
+      reason: 'paused',
+    });
+    sim.hold('top', 10000);
+    expect(sim.of('commit')).toEqual([]);
+  });
+
+  it('nothing is proposed while paused; after resume: 6 s still from the resume, endedAt ≥ the resume', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('top', 6100); // stop pending
+    sim.session('exercise', true); // Pause inside the window → cancelled
+    sim.hold('top', 30000, { jitter: 3 });
+    sim.hold('top', 5000, { tracking: false });
+    sim.hold('top', 1000);
+    expect(sim.types()).toEqual(['stopPending', 'stopCancelled']);
+    sim.session('exercise', false);
+    const resumeT = sim.t;
+    sim.hold('top', 5900, { jitter: 3 }); // a pause is not "Keep going": normal still time
+    expect(sim.of('stopPending')).toHaveLength(1);
+    sim.hold('top', 200, { jitter: 3 });
+    const stop = nth(sim.of('stopPending'), 1);
+    expect(stop.t).toBeGreaterThanOrEqual(resumeT + 6000);
+    // The reducer doesn't record pauses: the set can't be backdated into the pause.
+    expect(stop.action).toMatchObject({ reason: 'still', reps: 2, endedAt: resumeT });
+    sim.hold('top', 5100);
+    expect(nth(sim.of('commit'), 0).action).toMatchObject({ endedAt: resumeT, reps: 2 });
+  });
+
+  it('a rep after the resume backdates normally (endedAt = that rep)', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.session('exercise', true);
+    sim.hold('top', 5000);
+    sim.session('exercise', false);
+    sim.hold('top', 500);
+    const rep3 = sim.rep();
+    sim.hold('top', 6100);
+    expect(nth(sim.of('stopPending'), 0).action).toMatchObject({ reps: 3, endedAt: rep3.t });
+  });
+
+  it('a start is never backdated before the last resume', () => {
+    const sim = inRest(30000);
+    sim.session('rest', true, 30000);
+    sim.hold('top', 500);
+    sim.hold('down', 600, { angle: (f) => TOP - 100 * f }); // first rep departs while paused…
+    sim.session('rest', false, 30000);
+    const resumeT = sim.t;
+    sim.hold('bottom', 150, { angle: BOTTOM });
+    sim.hold('up', 900, { angle: (f) => BOTTOM + (TOP - BOTTOM) * f });
+    sim.t += 33;
+    sim.frame('top', TOP, true, [repEvent('rep', 1, sim.t, 600, 900)]); // …and ends after resume
+    sim.hold('top', 400);
+    sim.rep();
+    expect(nth(sim.of('start'), 0).action).toMatchObject({ at: resumeT, reps: 2 });
+  });
+
+  it("phase 'other' (summary, manual exercise): no actions at all", () => {
+    const auto = createAutoSet(AUTO_SET_DEFAULTS);
+    const sim = new Sim(auto);
+    sim.session('other');
+    expect(auto.state).toBe('off');
+    sim.hold('top', 1000);
+    sim.reps_(4);
+    sim.hold('top', 30000);
+    sim.hold('top', 200000, { tracking: false });
+    expect(sim.log).toEqual([]);
+    expect(sim.undo()).toEqual([]);
+    expect(sim.confirm()).toEqual([]);
+  });
+
+  it('a manual Set done during the window (session → rest) drops the pending stop silently', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('top', 6100);
+    sim.session('rest', false, 0);
+    sim.hold('top', 6000);
+    expect(sim.types()).toEqual(['stopPending']);
+    expect(sim.auto.state).toBe('rest');
+  });
+});
+
+describe('gated but in frame (posture / body-line gate)', () => {
+  it('counter not tracking while a person is detected: no away stop', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(2), 1);
+    // Sat down / knelt: the counter's lean gate fails (tracking false, back to setup).
+    sim.hold('setup', 5500, { tracking: false, present: true });
+    expect(sim.log).toEqual([]);
+    sim.hold('setup', 1000, { tracking: false, present: true });
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop.action).toMatchObject({ reason: 'still', endedAt: last.t });
+  });
+
+  it('kneeling mid-set for 4 s then carrying on: no stop at all', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('setup', 4000, { tracking: false, present: true });
+    sim.hold('setup', 600, { angle: TOP });
+    sim.hold('top', 400);
+    sim.reps_(2);
+    expect(sim.log).toEqual([]);
+  });
+
+  it('present: false is out of frame even if a stale tracking flag says otherwise', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('top', 3100, { tracking: false, present: false });
+    expect(nth(sim.of('stopPending'), 0).action).toMatchObject({ reason: 'away' });
+  });
+
+  it('idle noPerson uses presence: a gated but visible person keeps the camera open', () => {
+    const sim = inRest(5000);
+    sim.hold('setup', 200000, { tracking: false, present: true });
+    expect(sim.log).toEqual([]);
+  });
+});
+
+describe('personInFrame', () => {
+  const frame = (visible: number): LandmarkFrame => ({
+    t: 0,
+    landmarks: Array.from({ length: 33 }, (_, i) => ({
+      x: 0.5,
+      y: 0.5,
+      z: 0,
+      visibility: i < visible ? 0.9 : 0.1,
+    })),
+  });
+
+  it('is false for no pose and for a few stray landmarks', () => {
+    expect(personInFrame({ t: 0, landmarks: [] })).toBe(false);
+    expect(personInFrame(frame(3))).toBe(false);
+  });
+
+  it('is true for a pose with enough visible landmarks (seated, partly cropped)', () => {
+    expect(personInFrame(frame(12))).toBe(true);
+    expect(personInFrame(frame(33))).toBe(true);
+  });
+
+  it('treats NaN visibility as not visible', () => {
+    const f = frame(33);
+    for (const l of f.landmarks) l.visibility = Number.NaN;
+    expect(personInFrame(f)).toBe(false);
+  });
+});
+
+describe('idle close', () => {
+  it('closes after 180 s with no tracked person (rest)', () => {
+    const sim = inRest(5000);
+    sim.hold('top', 1000);
+    const lost = sim.t;
+    sim.hold('top', 179000, { tracking: false });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 1100, { tracking: false });
+    const close = nth(sim.of('close'), 0);
+    expect(close.action).toEqual({ type: 'close', reason: 'noPerson' });
+    expect(close.t).toBeGreaterThanOrEqual(lost + 180000 - 40);
+    expect(sim.auto.state).toBe('closed');
+    sim.hold('top', 2000);
+    sim.reps_(3);
+    sim.hold('top', 10000);
+    expect(sim.types()).toEqual(['close']);
+  });
+
+  it('closes after 600 s without a counted rep while the person is visible', () => {
+    const sim = inRest(5000);
+    sim.hold('top', 2000);
+    sim.partial();
+    sim.hold('top', 598000 - 650, { jitter: 4 });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 2000, { jitter: 4 });
+    expect(nth(sim.of('close'), 0).action).toEqual({ type: 'close', reason: 'noRep' });
+  });
+
+  it('a rep restarts the no-rep idle time', () => {
+    const sim = inRest(5000);
+    sim.hold('top', 300000);
+    sim.rep();
+    sim.hold('top', 590000);
+    expect(sim.log).toEqual([]);
+  });
+
+  it('a set with < 2 reps can idle-close (no person for 180 s)', () => {
+    const sim = inSet();
+    sim.rep();
+    sim.hold('top', 181000, { tracking: false });
+    expect(sim.types()).toEqual(['close']);
+  });
+
+  it('never closes during a pending stop', () => {
+    // Idle limit (8 s) passes inside the window (still stop at 6 s, window until 11 s).
+    const sim = inSet({}, { idleNoRepSec: 8 });
+    sim.reps_(2);
+    sim.hold('top', 10900);
+    expect(sim.types()).toEqual(['stopPending']);
+    sim.hold('top', 200);
+    expect(sim.types().slice(0, 2)).toEqual(['stopPending', 'commit']);
+  });
+
+  it('paused: no idle close; resuming restarts the idle time', () => {
+    const sim = inRest(5000);
+    sim.session('rest', true, 5000);
+    sim.hold('top', 400000, { tracking: false });
+    expect(sim.log).toEqual([]);
+    sim.session('rest', false, 5000);
+    sim.hold('top', 179000, { tracking: false });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 1100, { tracking: false });
+    expect(sim.types()).toEqual(['close']);
+  });
+});
+
+describe('noise built like real data', () => {
+  it('±5° jitter in the start band at 15–30 fps with dropped frames: still timer not reset', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const sim = inSet({ fps: [15, 30], drop: 0.15, seed });
+      const last = nth(sim.reps_(2), 1);
+      sim.hold('top', 5800, { jitter: 5 });
+      expect(sim.log).toEqual([]);
+      sim.hold('top', 400, { jitter: 5 });
+      const stop = nth(sim.of('stopPending'), 0);
+      expect(stop.action).toMatchObject({ reason: 'still', endedAt: last.t });
+      expect(stop.t - last.t).toBeLessThan(6000 + 150);
+    }
+  });
+
+  it('±5° jitter in rest at 15–30 fps with dropped frames: no start', () => {
+    for (const seed of [11, 12, 13]) {
+      const sim = inRest(30000, { fps: [15, 30], drop: 0.2, seed });
+      sim.hold('top', 120000, { jitter: 5 });
+      expect(sim.log).toEqual([]);
+    }
+  });
+
+  it('1–2 gated frames mid-set, again and again: no away stop', () => {
+    const sim = inSet({ fps: [15, 30], drop: 0.1, seed: 21 });
+    for (let i = 0; i < 6; i++) {
+      sim.rep();
+      sim.hold('top', 70, { tracking: false });
+      sim.hold('top', 300, { jitter: 4 });
+      sim.frame('top', TOP, false);
+      sim.hold('top', 300, { jitter: 4 });
+    }
+    expect(sim.log).toEqual([]);
+    expect(sim.auto.counts.reps).toBe(6);
+  });
+
+  it('a 450 ms tracking gap mid-rep does not stop or lose the set', () => {
+    const sim = inSet({ fps: [15, 30], seed: 31 });
+    sim.reps_(2);
+    sim.hold('top', 400);
+    sim.hold('down', 500, { angle: (f) => TOP - 60 * f });
+    sim.gap(450);
+    sim.hold('down', 400, { angle: (f) => TOP - 60 - 55 * f });
+    sim.hold('bottom', 150, { angle: BOTTOM });
+    sim.hold('up', 900, { angle: (f) => BOTTOM + (TOP - BOTTOM) * f });
+    sim.t += 40;
+    sim.frame('top', TOP, true, [repEvent('rep', 3, sim.t, 900, 900)]);
+    expect(sim.log).toEqual([]);
+    expect(sim.auto.counts.reps).toBe(3);
+  });
+
+  it('a 450 ms gap while still at the top does not reset the still timer', () => {
+    const sim = inSet({ fps: [20, 30], seed: 41 });
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 3000, { jitter: 4 });
+    sim.gap(450);
+    sim.hold('top', 2400, { jitter: 4 });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 300, { jitter: 4 });
+    expect(nth(sim.of('stopPending'), 0).t - last.t).toBeLessThan(6150);
+  });
+
+  it('slow 3 s lowering after a long pause at the top: no still stop mid-rep', () => {
+    const sim = inSet({ fps: [15, 30], drop: 0.1, seed: 51 });
+    sim.reps_(2);
+    sim.hold('top', 4500, { jitter: 5 }); // catching breath, 4.5 s of the 6 s still time used
+    sim.rep({ downMs: 1000, upMs: 3000 }); // slow 3 s lowering right after the pause
+    sim.hold('top', 600, { jitter: 5 });
+    const rep4 = sim.rep({ downMs: 3000, upMs: 3000, bottomMs: 600 });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 6200, { jitter: 5 });
+    expect(nth(sim.of('stopPending'), 0).action).toMatchObject({ reps: 4, endedAt: rep4.t });
+  });
+
+  it('a slow drift inside the start band (getting into the next rep) resets the still timer', () => {
+    // Press-like: the counter is still in 'top' while the angle has clearly started moving.
+    const sim = inSet({ fps: [15, 30], drop: 0.1, seed: 61 });
+    sim.reps_(2);
+    sim.hold('top', 3500, { jitter: 4 });
+    sim.hold('top', 3000, { angle: (f) => TOP - 25 * f, jitter: 2 });
+    expect(sim.log).toEqual([]);
+  });
+
+  it('a slow lowering for a start-extended exercise sits in down/bottom/up, never still', () => {
+    const sim = inSet({ fps: [15, 30], drop: 0.1, seed: 71 });
+    sim.reps_(2);
+    sim.hold('down', 3000, { angle: (f) => TOP - (TOP - BOTTOM) * f, jitter: 3 });
+    sim.hold('bottom', 1500, { angle: BOTTOM, jitter: 3 });
+    sim.hold('up', 3000, { angle: (f) => BOTTOM + (TOP - BOTTOM) * f, jitter: 3 });
+    expect(sim.log).toEqual([]);
+  });
+});
