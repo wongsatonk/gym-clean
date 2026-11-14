@@ -438,6 +438,15 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-13: **Wongsaton's answers to the open questions.**
+  - **(1) Lateral raise height.** He has no preference and left it to research. Coaching sources say shoulder height (arms parallel) is the usual cue. Going somewhat higher, up to ~45° above parallel, is described as shifting work to the traps rather than being harmful. No peer-reviewed limit was found.
+    - **Decision:** `raiseTooHigh` threshold 100° → **120°** (clearly above shoulder height). Enable it for the lateral raise if the task 7 replay of his 4 real clips gives 0 fires (his peaks are 91–109°).
+    - Coaching wording stays "Stop at shoulder height." with no injury language.
+  - **(2) Press.** He doesn't want "first press = positioning". The counter stays as is (8 on his set), and the press synthetic fixtures and demo are unchanged.
+  - **(3) Push-up rest-pause** (sit down, then more push-ups) is **one set**, and "the next set should be confirmed to go". The exact behaviour is still to be confirmed with him (see Blockers). The M5c defaults stay until then.
+  - **(4) M5 enablement and score weights:** explained to him, decision pending after his gym test.
+  - **(5) M4e design: mix all three directions, screen by screen.** A step 1b mockup of the mix is being made before tokens are written.
+
 - 2026-11-13: **M5 form rules (task 5), departures from the SPEC wording.** No threshold values changed (20°, 100°, 25°, 15°, 160°).
   - **`formHoldSec: 0.2`.** A form measure must hold 0.2 s before it counts. On clean clips the raw left/right gap spikes to 28–42° for single frames.
   - **elbowDrift is measured relative to the lift start, not as an absolute angle to the torso line.** On the clean synthetic curl a hanging arm already reads 17–29° from the torso line, so an absolute 25° would nearly fire on clean reps.
