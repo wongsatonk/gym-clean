@@ -23,8 +23,19 @@ export const pushUp: ExerciseRule = {
     extended: 150,
     contracted: 125,
     minHipAngleDeg: 140,
+    // Head-on ranges vary 39–78° rep to rep; hips sag is never judged from the front.
+    focus: { shrinkingRange: false },
   },
   viewYawDeg: { frontBelow: 40, sideAbove: 50 },
+  // Hips sag: off until real side-view push-up fixtures pass (M5 Decision).
+  focus: {
+    rushedLowering: true,
+    shrinkingRange: true,
+    stalled: true,
+    outOfFrame: true,
+    lowFps: true,
+    hipSag: false,
+  },
   hints: { far: 'Go lower.', start: 'Push all the way up.' },
   placement: {
     view: 'side',

@@ -18,6 +18,17 @@ export const lateralRaise: ExerciseRule = {
   // Push A log: bending to pick up / put down the dumbbells leaned 50–131° from the settle;
   // while raising, the torso stayed within 18° of it.
   maxTorsoLeanDeg: 35,
+  // Arms out of sync / raise too high: off until task 7's replay of the 4 real clips decides
+  // (pre-registered criteria in the M5 Decision).
+  focus: {
+    rushedLowering: true,
+    shrinkingRange: true,
+    stalled: true,
+    outOfFrame: true,
+    lowFps: true,
+    armsOutOfSync: false,
+    raiseTooHigh: false,
+  },
   hints: { far: 'Raise to shoulder height.', start: 'Lower your arms fully.' },
   placement: {
     view: 'front',

@@ -14,6 +14,15 @@ export const row: ExerciseRule = {
   start: 'extended',
   eccentric: 'toExtended',
   sideMode: 'best',
+  // Body swing: off until real row fixtures pass (M5 Decision).
+  focus: {
+    rushedLowering: true,
+    shrinkingRange: true,
+    stalled: true,
+    outOfFrame: true,
+    lowFps: true,
+    bodySwing: false,
+  },
   hints: { far: 'Pull your elbow higher.', start: 'Let the arm hang straight.' },
   placement: {
     view: 'side',

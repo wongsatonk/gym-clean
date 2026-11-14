@@ -14,6 +14,16 @@ export const curl: ExerciseRule = {
   start: 'extended',
   eccentric: 'toExtended',
   sideMode: 'best',
+  // Elbow drift / body swing: off until real curl fixtures pass (M5 Decision).
+  focus: {
+    rushedLowering: true,
+    shrinkingRange: true,
+    stalled: true,
+    outOfFrame: true,
+    lowFps: true,
+    elbowDrift: false,
+    bodySwing: false,
+  },
   hints: { far: 'Curl higher.', start: 'Straighten your arm at the bottom.' },
   placement: {
     view: 'side',

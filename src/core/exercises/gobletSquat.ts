@@ -14,6 +14,14 @@ export const gobletSquat: ExerciseRule = {
   start: 'extended',
   eccentric: 'toContracted',
   sideMode: 'best',
+  // M5 focus rules only (SPEC M5 lists no form rule for the squat).
+  focus: {
+    rushedLowering: true,
+    shrinkingRange: true,
+    stalled: true,
+    outOfFrame: true,
+    lowFps: true,
+  },
   hints: { far: 'Sit deeper.', start: 'Stand all the way up.' },
   placement: {
     view: 'side',

@@ -118,7 +118,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - db: `updateSet` takes an optional `focusScore`.
   - Done when tests cover: the weights and the clamp; a manual set → no score; a camera set with no cues → 100 − 5 × partials; recompute on correction (state and the DB row); reset on the next set; rest and paused ignored; every existing session and db test still passes.
   - Deps: 1.
-- [ ] 5. [core-engineer, after 2 + 3] `focus.ts` part 2: the geometry (form) rules, **tests first**. All rules use world landmarks, are visibility-gated (unknown = no fire) and need 2 reps in a row.
+- [x] 5. [core-engineer, after 2 + 3] `focus.ts` part 2: the geometry (form) rules, **tests first**. All rules use world landmarks, are visibility-gated (unknown = no fire) and need 2 reps in a row.
   - Files: src/core/focus.ts(+test).
   - `armsOutOfSync` (rules with `sideMode: 'both'`): |left − right| > 20° held ≥ 0.5 s while mid-rep (counter phase down/bottom/up). Uses `sideAngles`.
   - `raiseTooHigh`: rep `maxAngle` > 100°.
@@ -130,7 +130,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - one bad rep doesn't fire;
     - every clean `synthetic-01` fixture (all six) fires none of the geometry rules with every flag forced on.
   - Deps: 2, 3.
-- [ ] 6. [core-engineer, after 3] Rule flags as data.
+- [x] 6. [core-engineer, after 3] Rule flags as data.
   - Files: src/core/exercises/types.ts (`focus?: FocusRuleFlags` on `ExerciseRule` and `ViewVariant`), the six rule files, src/core/exercises/index.ts (`focusFlagsFor(rule, active)`: the variant's flags override the rule's), index.test.ts.
   - Starting flags: the Decision table "M5 rule enablement". The lateral-raise geometry flags stay **false** until task 7.
   - Done when index.test asserts:
@@ -437,6 +437,32 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-13: **M5 form rules (task 5), departures from the SPEC wording.** No threshold values changed (20°, 100°, 25°, 15°, 160°).
+  - **`formHoldSec: 0.2`.** A form measure must hold 0.2 s before it counts. On clean clips the raw left/right gap spikes to 28–42° for single frames.
+  - **elbowDrift is measured relative to the lift start, not as an absolute angle to the torso line.** On the clean synthetic curl a hanging arm already reads 17–29° from the torso line, so an absolute 25° would nearly fire on clean reps.
+    - Known gap: hip–shoulder–elbow is an unsigned 3D angle, so an elbow flaring out to the side also counts.
+    - Project it onto the sagittal plane before this rule is enabled.
+  - **bodySwing is measured against the frame just before the lift**, so a steady lean or a tilted phone never fires.
+    - Both references are single frames (a glitch can shift a rep), and a swing that starts in the start band is missed.
+    - Average a few start-band frames before enabling.
+  - Both rules are off, so neither gap affects anyone yet.
+- 2026-11-13: **Real lateral raise vs the form rules (task 5 replay, flags forced on).**
+  - **armsOutOfSync:** the largest gap held 0.5 s is 10°, so 0 fires.
+  - **raiseTooHigh:** rep peaks are 91–109°, so it would fire on 3 of 4 clips. It stays off, and the press-height question goes to Wongsaton.
+- 2026-11-13: **Drill-sergeant coach voice** (Wongsaton's request; design in `docs/superpowers/specs/2026-11-13-drill-sergeant-voice-design.md`; approach A, built-in iPhone voice).
+  - **Rewrite point.** The rewrite happens at `voice.speak`, the single choke point. Counts are never rewritten, and calm mode is byte-identical to before.
+  - **Rudeness levels.** Three levels, tested by word lists: Tough (no swearing), Rude (mild words), Savage (all words).
+  - **Hard limits at every level:** no slurs or identity insults, no jokes about body or looks, no pain or injury words, form cues keep their fix, at most 14 words.
+  - **Settings stored** as `coachVoice` `{persona, rudeness, voiceName}`, default calm / 2 / null.
+  - **Core→data import.** `personas.ts` imports `src/data/cues.json`, the first core→data import. It's accepted for now: plain JSON, no Dexie. `db.ts` imports the Rudeness type from core, so the dependency goes both ways.
+  - **Follow-ups:**
+    - inject the exercise cue lines instead of importing them;
+    - drill next-time tips drop the exercise name (keep `{name}`);
+    - the dev log records the calm line, not the spoken one;
+    - Settings has two test-voice buttons;
+    - `Rudeness` is declared twice (voiceNames.ts and personas.ts).
+- 2026-11-13: The task 6 real-fixture guard globs files on disk, not git. A clean CI checkout enforces "committed".
 
 - 2026-11-13 — **M5 rule enablement (planner).** Rules come in two groups:
   - **Focus rules** are computed from the counter's own rep events, relative to the set's own baseline, or from presence/fps: rushed lowering, shrinking range, stalled, out of frame, low fps.

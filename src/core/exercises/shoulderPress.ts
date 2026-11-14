@@ -23,6 +23,16 @@ export const shoulderPress: ExerciseRule = {
     upper: { left: L.LEFT_WRIST, right: L.RIGHT_WRIST },
     lower: { left: L.LEFT_SHOULDER, right: L.RIGHT_SHOULDER },
   },
+  // Shrinking range, arms out of sync: off until press fixtures are committed (M5
+  // Decision: real image-plane ranges ~83–111° straddle 85% of a baseline).
+  focus: {
+    rushedLowering: true,
+    shrinkingRange: false,
+    stalled: true,
+    outOfFrame: true,
+    lowFps: true,
+    armsOutOfSync: false,
+  },
   hints: { far: 'Press all the way up.', start: 'Lower the weights to your shoulders.' },
   placement: {
     view: 'front',

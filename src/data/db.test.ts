@@ -6,6 +6,7 @@ import {
   GymDb,
   finishSession,
   getCoachTips,
+  getCoachVoice,
   getExerciseNote,
   getHandsFree,
   getSpokenCount,
@@ -17,6 +18,7 @@ import {
   saveSet,
   sessionNotes,
   setCoachTips,
+  setCoachVoice,
   setHandsFree,
   setSpokenCount,
   setUnit,
@@ -349,5 +351,40 @@ describe('GymDb hands-free sets setting (M5c)', () => {
     await setHandsFree(db, true);
     expect(await getCoachTips(db)).toBe(false);
     expect(await getHandsFree(db)).toBe(true);
+  });
+});
+
+describe('GymDb coach voice setting (drill-sergeant design)', () => {
+  it('defaults to the calm voice, Rude level, no chosen voice', async () => {
+    expect(await getCoachVoice(db)).toEqual({ persona: 'calm', rudeness: 2, voiceName: null });
+  });
+
+  it('remembers persona, rudeness and voice name', async () => {
+    await setCoachVoice(db, { persona: 'drill', rudeness: 3, voiceName: 'Daniel' });
+    expect(await getCoachVoice(db)).toEqual({ persona: 'drill', rudeness: 3, voiceName: 'Daniel' });
+    await setCoachVoice(db, { persona: 'calm', rudeness: 1, voiceName: null });
+    expect(await getCoachVoice(db)).toEqual({ persona: 'calm', rudeness: 1, voiceName: null });
+  });
+
+  it('falls back field by field on a bad stored value', async () => {
+    await db.settings.put({ key: 'coachVoice', value: 'drill' });
+    expect(await getCoachVoice(db)).toEqual({ persona: 'calm', rudeness: 2, voiceName: null });
+    await db.settings.put({
+      key: 'coachVoice',
+      value: { persona: 'drill', rudeness: 7, voiceName: 42 },
+    });
+    expect(await getCoachVoice(db)).toEqual({ persona: 'drill', rudeness: 2, voiceName: null });
+    await db.settings.put({
+      key: 'coachVoice',
+      value: { persona: 'shouty', rudeness: 1, voiceName: 'Arthur' },
+    });
+    expect(await getCoachVoice(db)).toEqual({ persona: 'calm', rudeness: 1, voiceName: 'Arthur' });
+  });
+
+  it('stores a copy, not the caller object', async () => {
+    const v = { persona: 'drill' as const, rudeness: 1 as const, voiceName: 'Fred' };
+    await setCoachVoice(db, v);
+    v.voiceName = 'Tom';
+    expect((await getCoachVoice(db)).voiceName).toBe('Fred');
   });
 });

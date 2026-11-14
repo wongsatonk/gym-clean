@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ADVICE_BANNED_WORDS } from './advice';
 import { AUTO_SET_DEFAULTS, createAutoSet, type AutoSet, type AutoSetAction } from './autoSet';
-import { ruleFor, type ExerciseRule } from './exercises';
+import { ruleFor, ruleForFolder, type ExerciseRule } from './exercises';
 import { FpsMeter } from './fps';
 import {
   CUE_TEXT,
@@ -10,11 +10,13 @@ import {
   cueText,
   type FocusCue,
   type FocusInput,
+  type FormMeasures,
   type FocusRuleFlags,
   type FocusTracker,
 } from './focus';
-import type { RepPhase } from './repCounter';
-import type { FocusCueId, RepEvent } from './types';
+import { LANDMARK, LANDMARK_COUNT } from './poseTopology';
+import { createRepCounter, type RepPhase } from './repCounter';
+import type { FocusCueId, LandmarkFrame, RepEvent } from './types';
 
 // ---------------------------------------------------------------------------------------------
 // A stream simulator shaped like the camera loop: counter snapshots at 30 fps (or an irregular
@@ -54,8 +56,16 @@ type RepOpts = {
   min?: number;
   max?: number;
   holdMs?: number;
+  /** Dwell at the far band (ms). */
+  farMs?: number;
   type?: 'rep' | 'partial';
 };
+
+/** A fixed input, or one computed per frame from the phase and the progress u (0 → 1). */
+type Input = Partial<FocusInput> | ((phase: RepPhase, u: number) => Partial<FocusInput>);
+function resolve(input: Input, phase: RepPhase, u: number): Partial<FocusInput> {
+  return typeof input === 'function' ? input(phase, u) : input;
+}
 
 type SimOpts = {
   /** Frame-rate range; a fixed rate when both ends are equal. */
@@ -139,20 +149,24 @@ class Sim {
     return out;
   }
 
-  /** Frames for `ms` at the current phase (or `phase`). */
-  hold(ms: number, input: Partial<FocusInput> = {}, phase?: RepPhase): void {
+  /**
+   * Frames for `ms` at the current phase (or `phase`). `input` may be a function of the phase
+   * and the progress u (0 → 1) through the hold, for per-frame geometry.
+   */
+  hold(ms: number, input: Input = {}, phase?: RepPhase): void {
     if (phase) this.phase = phase;
+    const start = this.t;
     const end = this.t + ms;
-    while (this.t < end) this.frame(input);
+    while (this.t < end) this.frame(resolve(input, this.phase, (this.t - start) / ms));
   }
 
   /** One rep (or partial): lift, a short dwell, the lowering, the event, then a hold at the top. */
-  rep(o: RepOpts = {}, input: Partial<FocusInput> = {}): void {
+  rep(o: RepOpts = {}, input: Input = {}): void {
     const ecc = o.eccMs ?? 2000;
     const con = o.conMs ?? 1000;
     const type = o.type ?? 'rep';
     this.hold(con, input, 'down');
-    this.hold(100, input, 'bottom');
+    this.hold(o.farMs ?? 100, input, 'bottom');
     this.hold(ecc, input, 'up');
     this.phase = 'top';
     const index = type === 'rep' ? ++this.reps : ++this.partials;
@@ -167,7 +181,7 @@ class Sim {
       ...(type === 'partial' ? { reason: 'far' as const } : {}),
     };
     this.lastEventT = this.t;
-    this.frame({ ...input, events: [ev] }, true);
+    this.frame({ ...resolve(input, 'top', 0), events: [ev] }, true);
     this.hold(o.holdMs ?? 800, input);
   }
 
@@ -781,6 +795,13 @@ describe('config', () => {
       outOfFrameSec: 2,
       lowFps: 15,
       lowFpsSec: 3,
+      armsOutOfSyncDeg: 20,
+      armsOutOfSyncSec: 0.5,
+      raiseTooHighDeg: 100,
+      elbowDriftDeg: 25,
+      bodySwingDeg: 15,
+      hipSagMinDeg: 160,
+      formHoldSec: 0.2,
     });
   });
 
@@ -808,4 +829,619 @@ describe('config', () => {
     s.hold(4500, {}, 'bottom');
     expect(s.ids()).toEqual(['stalled']);
   });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Part 2: form rules (geometry). Landmark frames are built from a few body angles, in world
+// coordinates (x forward, y down, z to the right), like repCounter.test builds angle curves.
+// ---------------------------------------------------------------------------------------------
+
+function mustRule(id: string): ExerciseRule {
+  const r = ruleFor(id);
+  if (!r) throw new Error(`no rule for ${id}`);
+  return r;
+}
+const RAISE = mustRule('Side_Lateral_Raise');
+const PUSH_UP = mustRule('Pushups');
+
+const FORM_IDS: readonly FocusCueId[] = [
+  'armsOutOfSync',
+  'raiseTooHigh',
+  'elbowDrift',
+  'bodySwing',
+  'hipSag',
+];
+
+type Body = {
+  /** Torso tilt forward from its rest direction (deg). */
+  lean?: number;
+  /** Upper arm (shoulder → elbow) forward of the torso line (deg), both arms. */
+  arm?: number;
+  /** Shoulder–hip–ankle angle (deg; 180 = straight). */
+  hip?: number;
+  /** Left-side overrides (the far side of a side view can read nonsense at high visibility). */
+  armL?: number;
+  hipL?: number;
+  /** Visibility of the left / right landmarks. */
+  visL?: number;
+  visR?: number;
+  noWorld?: boolean;
+};
+
+type V3 = { x: number; y: number; z: number };
+const add = (a: V3, b: V3, k = 1): V3 => ({ x: a.x + b.x * k, y: a.y + b.y * k, z: a.z + b.z * k });
+/** Rotate an x-y vector by `deg` from down (+y) toward forward (+x). */
+function rot(v: V3, deg: number): V3 {
+  const th = (deg * Math.PI) / 180;
+  return {
+    x: v.x * Math.cos(th) + v.y * Math.sin(th),
+    y: -v.x * Math.sin(th) + v.y * Math.cos(th),
+    z: v.z,
+  };
+}
+
+function bodyFrame(t: number, b: Body = {}): LandmarkFrame {
+  const L = LANDMARK;
+  const lean = ((b.lean ?? 0) * Math.PI) / 180;
+  const up: V3 = { x: Math.sin(lean), y: -Math.cos(lean), z: 0 };
+  const down: V3 = { x: -up.x, y: -up.y, z: 0 };
+  const world: V3[] = Array.from({ length: LANDMARK_COUNT }, () => ({ x: 0, y: -0.6, z: 0 }));
+  const vis: number[] = Array.from({ length: LANDMARK_COUNT }, () => 0.9);
+  const sides = [
+    {
+      z: -0.18,
+      v: b.visL ?? 0.95,
+      s: L.LEFT_SHOULDER,
+      e: L.LEFT_ELBOW,
+      w: L.LEFT_WRIST,
+      h: L.LEFT_HIP,
+      k: L.LEFT_KNEE,
+      a: L.LEFT_ANKLE,
+    },
+    {
+      z: 0.18,
+      v: b.visR ?? 0.95,
+      s: L.RIGHT_SHOULDER,
+      e: L.RIGHT_ELBOW,
+      w: L.RIGHT_WRIST,
+      h: L.RIGHT_HIP,
+      k: L.RIGHT_KNEE,
+      a: L.RIGHT_ANKLE,
+    },
+  ];
+  for (const sd of sides) {
+    const left = sd.s === L.LEFT_SHOULDER;
+    const armDeg = (left ? b.armL : undefined) ?? b.arm ?? 5;
+    const hipDeg = (left ? b.hipL : undefined) ?? b.hip ?? 178;
+    const hip: V3 = { x: 0, y: 0, z: sd.z };
+    const sh = add(hip, up, 0.5);
+    const armDir = rot(down, armDeg);
+    const el = add(sh, armDir, 0.3);
+    const wr = add(el, rot(down, armDeg + 90), 0.25);
+    const legDir = rot(down, 180 - hipDeg);
+    world[sd.s] = sh;
+    world[sd.e] = el;
+    world[sd.w] = wr;
+    world[sd.h] = hip;
+    world[sd.k] = add(hip, legDir, 0.45);
+    world[sd.a] = add(hip, legDir, 0.9);
+    for (const i of [sd.s, sd.e, sd.w, sd.h, sd.k, sd.a]) vis[i] = sd.v;
+  }
+  const landmarks = world.map((p, i) => ({
+    x: 0.5 + p.x / 2,
+    y: 0.5 + p.y / 2,
+    z: 0,
+    visibility: vis[i] ?? 0,
+  }));
+  const frame: LandmarkFrame = { t, landmarks };
+  if (!b.noWorld) frame.world = world;
+  return frame;
+}
+
+function formTracker(rule: ExerciseRule, flags: FocusRuleFlags, config = {}): Sim {
+  return new Sim(createFocusTracker(rule, { flags, targetReps: 20, autoSet: null, config }));
+}
+
+/** Per-frame input: a body frame at the Sim's current t, from the phase and progress u. */
+function geo(s: Sim, fn: (phase: RepPhase, u: number) => Body) {
+  return (phase: RepPhase, u: number): Partial<FocusInput> => ({
+    frame: bodyFrame(s.t, fn(phase, u)),
+  });
+}
+
+/** Half a second at the start position, as a real stream settles before the first rep. */
+function settle(s: Sim, b: Body = {}): void {
+  s.hold(
+    500,
+    geo(s, () => b),
+    'top',
+  );
+}
+
+const LIFT_CURL: readonly RepPhase[] = ['down', 'bottom'];
+const MID: readonly RepPhase[] = ['down', 'bottom', 'up'];
+
+describe('form: arms out of sync', () => {
+  /** Per-side angles: left = right + diff during `phases`, equal elsewhere. */
+  const sides =
+    (diff: number, phases: readonly RepPhase[] = MID) =>
+    (phase: RepPhase): Partial<FocusInput> => ({
+      sides: { left: 50 + (phases.includes(phase) ? diff : 0), right: 50 },
+    });
+
+  it('fires when |L − R| > 20° is held mid-rep on 2 reps in a row (21° fires, 20° not)', () => {
+    const s = formTracker(RAISE, { armsOutOfSync: true });
+    s.rep({}, sides(21));
+    expect(s.cues).toEqual([]);
+    s.rep({}, sides(21));
+    expect(s.cues).toMatchObject([
+      { id: 'armsOutOfSync', reps: 2, baseline: null, threshold: 20, text: 'Both arms together.' },
+    ]);
+    expect(s.cues[0]?.value).toBeCloseTo(21, 5);
+
+    const quiet = formTracker(RAISE, { armsOutOfSync: true });
+    for (let i = 0; i < 6; i++) quiet.rep({}, sides(20));
+    expect(quiet.cues).toEqual([]);
+    expect(quiet.tr.lastForm?.armsOutOfSync).toBeCloseTo(20, 5);
+  });
+
+  it('works with either arm ahead', () => {
+    const s = formTracker(RAISE, { armsOutOfSync: true });
+    s.rep({}, sides(-25));
+    s.rep({}, sides(-25));
+    expect(s.ids()).toEqual(['armsOutOfSync']);
+  });
+
+  it('needs the gap held ≥ 0.5 s: a 0.4 s gap does not fire, 0.55 s does', () => {
+    const spell =
+      (ms: number) =>
+      (phase: RepPhase, u: number): Partial<FocusInput> => {
+        // The gap opens at the start of the far dwell and lasts `ms` (dwell is 1000 ms).
+        const on = phase === 'bottom' && u * 1000 < ms;
+        return { sides: { left: on ? 80 : 50, right: 50 } };
+      };
+    const short = formTracker(RAISE, { armsOutOfSync: true });
+    for (let i = 0; i < 4; i++) short.rep({ farMs: 1000 }, spell(400));
+    expect(short.cues).toEqual([]);
+    const long = formTracker(RAISE, { armsOutOfSync: true });
+    for (let i = 0; i < 2; i++) long.rep({ farMs: 1000 }, spell(560));
+    expect(long.ids()).toEqual(['armsOutOfSync']);
+  });
+
+  it('only mid-rep counts: a gap at the start position never fires', () => {
+    const s = formTracker(RAISE, { armsOutOfSync: true });
+    for (let i = 0; i < 4; i++) s.rep({ holdMs: 2000 }, sides(40, ['top']));
+    expect(s.cues).toEqual([]);
+  });
+
+  it('one bad rep does not fire; bad, clean, bad does not either', () => {
+    const s = formTracker(RAISE, { armsOutOfSync: true });
+    s.rep({}, sides(30));
+    s.rep({}, sides(0));
+    s.rep({}, sides(30));
+    s.rep({}, sides(0));
+    expect(s.cues).toEqual([]);
+  });
+
+  it('a hidden arm is unknown: no fire, and it breaks the streak', () => {
+    const s = formTracker(RAISE, { armsOutOfSync: true });
+    s.rep({}, sides(30));
+    s.rep({}, () => ({ sides: { left: null, right: 50 } }));
+    s.rep({}, sides(30));
+    s.rep({}, () => ({ sides: null }));
+    expect(s.cues).toEqual([]);
+    expect(s.tr.lastForm?.armsOutOfSync).toBeNull();
+  });
+});
+
+describe('form: raise too high', () => {
+  it('fires on a rep maxAngle > 100° on 2 reps in a row (101 fires, 100 not)', () => {
+    const s = formTracker(RAISE, { raiseTooHigh: true });
+    s.rep({ min: 20, max: 101 });
+    s.rep({ min: 20, max: 101 });
+    expect(s.cues).toMatchObject([
+      { id: 'raiseTooHigh', reps: 2, value: 101, threshold: 100, text: 'Stop at shoulder height.' },
+    ]);
+    const quiet = formTracker(RAISE, { raiseTooHigh: true });
+    for (let i = 0; i < 6; i++) quiet.rep({ min: 20, max: 100 });
+    expect(quiet.cues).toEqual([]);
+  });
+
+  it('one high rep does not fire; partials neither extend nor break the streak', () => {
+    const s = formTracker(RAISE, { raiseTooHigh: true });
+    s.rep({ min: 20, max: 110 });
+    s.rep({ min: 20, max: 90 });
+    s.rep({ min: 20, max: 110 });
+    s.rep({ min: 20, max: 120, type: 'partial' });
+    expect(s.cues).toEqual([]);
+    s.rep({ min: 20, max: 110 });
+    expect(s.ids()).toEqual(['raiseTooHigh']);
+  });
+});
+
+describe('form: elbow drift', () => {
+  it('fires when the upper arm swings > 25° away from where the lift started, 2 reps (26 fires, 24 not)', () => {
+    const s = formTracker(CURL, { elbowDrift: true });
+    settle(s);
+    s.rep(
+      {},
+      geo(s, (p) => ({ arm: LIFT_CURL.includes(p) ? 31 : 5 })),
+    );
+    expect(s.cues).toEqual([]);
+    s.rep(
+      {},
+      geo(s, (p) => ({ arm: LIFT_CURL.includes(p) ? 31 : 5 })),
+    );
+    expect(s.cues).toMatchObject([
+      { id: 'elbowDrift', reps: 2, threshold: 25, text: 'Keep your elbow still.' },
+    ]);
+    expect(s.cues[0]?.value).toBeCloseTo(26, 3);
+
+    const quiet = formTracker(CURL, { elbowDrift: true });
+    settle(quiet);
+    for (let i = 0; i < 6; i++)
+      quiet.rep(
+        {},
+        geo(quiet, (p) => ({ arm: LIFT_CURL.includes(p) ? 29 : 5 })),
+      );
+    expect(quiet.cues).toEqual([]);
+    expect(quiet.tr.lastForm?.elbowDrift).toBeCloseTo(24, 3);
+  });
+
+  it('a steady arm angle (the world model reads a hanging arm at 17–29° on the clean curl) is no drift', () => {
+    const s = formTracker(CURL, { elbowDrift: true });
+    for (let i = 0; i < 4; i++)
+      s.rep(
+        {},
+        geo(s, () => ({ arm: 40 })),
+      );
+    expect(s.cues).toEqual([]);
+    expect(s.tr.lastForm?.elbowDrift).toBeCloseTo(0, 3);
+  });
+
+  it('the arm moving closer to the torso line is not a drift', () => {
+    const s = formTracker(CURL, { elbowDrift: true });
+    for (let i = 0; i < 4; i++)
+      s.rep(
+        {},
+        geo(s, (p) => ({ arm: LIFT_CURL.includes(p) ? 0 : 40 })),
+      );
+    expect(s.cues).toEqual([]);
+  });
+
+  it('a swing only during the lowering is not judged', () => {
+    const s = formTracker(CURL, { elbowDrift: true });
+    for (let i = 0; i < 4; i++)
+      s.rep(
+        {},
+        geo(s, (p) => ({ arm: p === 'up' ? 45 : 5 })),
+      );
+    expect(s.cues).toEqual([]);
+  });
+
+  it('a one-frame glitch is not a drift', () => {
+    const s = formTracker(CURL, { elbowDrift: true });
+    for (let i = 0; i < 4; i++)
+      s.rep(
+        {},
+        geo(s, (p, u) => ({ arm: p === 'down' && u > 0.5 && u < 0.54 ? 60 : 5 })),
+      );
+    expect(s.cues).toEqual([]);
+  });
+
+  it('hidden arms or no world landmarks are unknown (no fire)', () => {
+    const hidden = formTracker(CURL, { elbowDrift: true });
+    for (let i = 0; i < 4; i++)
+      hidden.rep(
+        {},
+        geo(hidden, () => ({ arm: 40, visL: 0.3, visR: 0.3 })),
+      );
+    expect(hidden.cues).toEqual([]);
+    expect(hidden.tr.lastForm?.elbowDrift).toBeNull();
+    const flat = formTracker(CURL, { elbowDrift: true });
+    for (let i = 0; i < 4; i++)
+      flat.rep(
+        {},
+        geo(flat, () => ({ arm: 40, noWorld: true })),
+      );
+    expect(flat.cues).toEqual([]);
+  });
+
+  it("uses the counter's tracked arm when given", () => {
+    const s = formTracker(CURL, { elbowDrift: true });
+    const body = (p: RepPhase): Body => ({
+      arm: 5,
+      armL: LIFT_CURL.includes(p) ? 45 : 5,
+      visL: 0.97,
+      visR: 0.9,
+    });
+    s.hold(500, () => ({ frame: bodyFrame(s.t, body('top')), side: 'right' }), 'top');
+    for (let i = 0; i < 4; i++)
+      s.rep({}, (p) => ({ frame: bodyFrame(s.t, body(p)), side: 'right' }));
+    expect(s.cues).toEqual([]);
+  });
+
+  it('uses the better-visible arm', () => {
+    const s = formTracker(CURL, { elbowDrift: true });
+    settle(s, { visL: 0.55, visR: 0.95 });
+    for (let i = 0; i < 2; i++)
+      s.rep(
+        {},
+        geo(s, (p) => ({ arm: LIFT_CURL.includes(p) ? 35 : 5, visL: 0.55, visR: 0.95 })),
+      );
+    expect(s.ids()).toEqual(['elbowDrift']);
+  });
+});
+
+describe('form: body swing', () => {
+  it('fires when the torso turns > 15° from where the lift started, 2 reps (16 fires, 14 not)', () => {
+    // Leans back over the first half of the lift, then holds it to the far end.
+    const swing =
+      (deg: number) =>
+      (p: RepPhase, u: number): Body => ({
+        lean: p === 'down' ? -deg * Math.min(1, 2 * u) : p === 'bottom' ? -deg : 0,
+      });
+    const s = formTracker(CURL, { bodySwing: true });
+    s.rep({}, geo(s, swing(16)));
+    s.rep({}, geo(s, swing(16)));
+    expect(s.cues).toMatchObject([
+      { id: 'bodySwing', reps: 2, threshold: 15, text: 'Keep your body still.' },
+    ]);
+    expect(s.cues[0]?.value).toBeCloseTo(16, 3);
+    const quiet = formTracker(CURL, { bodySwing: true });
+    for (let i = 0; i < 6; i++) quiet.rep({}, geo(quiet, swing(14)));
+    expect(quiet.cues).toEqual([]);
+  });
+
+  it('a steady lean (phone pitched, or leaning on a bench) is not a swing', () => {
+    const s = formTracker(CURL, { bodySwing: true });
+    for (let i = 0; i < 4; i++)
+      s.rep(
+        {},
+        geo(s, () => ({ lean: 35 })),
+      );
+    expect(s.cues).toEqual([]);
+    expect(s.tr.lastForm?.bodySwing).toBeCloseTo(0, 3);
+  });
+
+  it('a lean that only happens in the lowering is not judged', () => {
+    const s = formTracker(CURL, { bodySwing: true });
+    for (let i = 0; i < 4; i++)
+      s.rep(
+        {},
+        geo(s, (p) => ({ lean: p === 'up' ? 30 : 0 })),
+      );
+    expect(s.cues).toEqual([]);
+  });
+});
+
+describe('form: hips sag', () => {
+  const sag =
+    (deg: number) =>
+    (p: RepPhase): Body => ({ hip: MID.includes(p) ? deg : 178 });
+
+  it('fires when shoulder–hip–ankle < 160° mid-rep on 2 reps, side view (159 fires, 161 not)', () => {
+    const s = formTracker(PUSH_UP, { hipSag: true });
+    const input = (p: RepPhase) => ({ ...geo(s, sag(159))(p, 0), view: 'side' as const });
+    s.rep({}, input);
+    s.rep({}, input);
+    expect(s.cues).toMatchObject([
+      { id: 'hipSag', reps: 2, threshold: 160, text: 'Keep your body straight.' },
+    ]);
+    expect(s.cues[0]?.value).toBeCloseTo(159, 3);
+    const quiet = formTracker(PUSH_UP, { hipSag: true });
+    for (let i = 0; i < 6; i++)
+      quiet.rep({}, (p) => ({ ...geo(quiet, sag(161))(p, 0), view: 'side' as const }));
+    expect(quiet.cues).toEqual([]);
+  });
+
+  it('is never judged in the front view, nor when the view is unknown on a rule with another view', () => {
+    const front = formTracker(PUSH_UP, { hipSag: true });
+    for (let i = 0; i < 4; i++)
+      front.rep({}, (p) => ({ ...geo(front, sag(130))(p, 0), view: 'front' as const }));
+    expect(front.cues).toEqual([]);
+    expect(front.tr.lastForm?.hipSag).toBeNull();
+    const unknown = formTracker(PUSH_UP, { hipSag: true });
+    for (let i = 0; i < 4; i++) unknown.rep({}, geo(unknown, sag(130)));
+    expect(unknown.cues).toEqual([]);
+  });
+
+  it("uses the counter's tracked side when given, not a far side that reads nonsense", () => {
+    const farSag = (p: RepPhase): Body => ({
+      hip: 178,
+      hipL: MID.includes(p) ? 100 : 178,
+      visL: 0.97,
+      visR: 0.9,
+    });
+    const counterSide = formTracker(PUSH_UP, { hipSag: true });
+    for (let i = 0; i < 4; i++)
+      counterSide.rep({}, (p) => ({
+        frame: bodyFrame(counterSide.t, farSag(p)),
+        view: 'side',
+        side: 'right',
+      }));
+    expect(counterSide.cues).toEqual([]);
+    expect(counterSide.tr.lastForm?.hipSag).toBeCloseTo(178, 3);
+    // Without a side, the better-visible (here the bad) side is used.
+    const guess = formTracker(PUSH_UP, { hipSag: true });
+    for (let i = 0; i < 2; i++)
+      guess.rep({}, (p) => ({ frame: bodyFrame(guess.t, farSag(p)), view: 'side' }));
+    expect(guess.ids()).toEqual(['hipSag']);
+  });
+
+  it("the counter's side failing the visibility gate is unknown (no fallback to the other side)", () => {
+    const s = formTracker(PUSH_UP, { hipSag: true });
+    for (let i = 0; i < 4; i++)
+      s.rep({}, (p) => ({
+        frame: bodyFrame(s.t, { hip: MID.includes(p) ? 130 : 178, visR: 0.3, visL: 0.95 }),
+        view: 'side',
+        side: 'right',
+      }));
+    expect(s.cues).toEqual([]);
+    expect(s.tr.lastForm?.hipSag).toBeNull();
+  });
+
+  it('hidden ankles are unknown', () => {
+    const s = formTracker(PUSH_UP, { hipSag: true });
+    for (let i = 0; i < 4; i++)
+      s.rep({}, (p) => ({
+        ...geo(s, (q) => ({ ...sag(130)(q), visL: 0.2, visR: 0.2 }))(p, 0),
+        view: 'side' as const,
+      }));
+    expect(s.cues).toEqual([]);
+  });
+});
+
+describe('form rules: shared mechanics', () => {
+  it('a false or missing flag never fires', () => {
+    const s = formTracker(CURL, { elbowDrift: false });
+    for (let i = 0; i < 4; i++)
+      s.rep(
+        {},
+        geo(s, () => ({ arm: 50, lean: 0 })),
+      );
+    expect(s.cues).toEqual([]);
+  });
+
+  it('at most twice per set, the streak restarting after a fire', () => {
+    const s = formTracker(RAISE, { raiseTooHigh: true });
+    for (let i = 0; i < 8; i++) s.rep({ min: 20, max: 115 });
+    expect(s.cues.map((c) => c.reps)).toEqual([2, 4]);
+  });
+
+  it('form beats rushed lowering on the same rep; rushed fires on its next bad rep', () => {
+    const s = formTracker(RAISE, { raiseTooHigh: true, rushedLowering: true });
+    s.rep({ eccMs: 2000, min: 20, max: 90 });
+    s.rep({ eccMs: 2000, min: 20, max: 90 });
+    s.rep({ eccMs: 700, min: 20, max: 110 });
+    s.rep({ eccMs: 700, min: 20, max: 110 });
+    expect(s.ids()).toEqual(['raiseTooHigh']);
+    s.rep({ eccMs: 700, min: 20, max: 90 });
+    expect(s.ids()).toEqual(['raiseTooHigh', 'rushedLowering']);
+  });
+
+  it('form rules judge from the first rep (no baseline needed)', () => {
+    const s = formTracker(RAISE, { raiseTooHigh: true });
+    s.rep({ min: 20, max: 110 });
+    s.rep({ min: 20, max: 110 });
+    expect(s.cues.map((c) => c.reps)).toEqual([2]);
+  });
+
+  it('nothing in the Undo window or while paused', () => {
+    const pending = formTracker(RAISE, { raiseTooHigh: true });
+    for (let i = 0; i < 4; i++) pending.rep({ min: 20, max: 115 }, { autoState: 'pending' });
+    expect(pending.cues).toEqual([]);
+    const paused = formTracker(RAISE, { raiseTooHigh: true });
+    for (let i = 0; i < 4; i++) paused.rep({ min: 20, max: 115 }, { paused: true });
+    expect(paused.cues).toEqual([]);
+  });
+
+  it('a reset clears the form streaks', () => {
+    const s = formTracker(RAISE, { raiseTooHigh: true });
+    s.rep({ min: 20, max: 115 });
+    s.tr.reset({ targetReps: 20 });
+    s.rep({ min: 20, max: 115 });
+    expect(s.cues).toEqual([]);
+  });
+
+  it('lastForm reports every measure of the latest rep (null = unknown)', () => {
+    const s = formTracker(CURL, {});
+    expect(s.tr.lastForm).toBeNull();
+    settle(s);
+    s.rep(
+      { max: 160 },
+      geo(s, (p) => ({ arm: LIFT_CURL.includes(p) ? 12 : 5 })),
+    );
+    const m: FormMeasures | null = s.tr.lastForm;
+    expect(m?.raiseTooHigh).toBe(160);
+    expect(m?.elbowDrift).toBeCloseTo(7, 3);
+    expect(m?.bodySwing).toBeCloseTo(0, 3);
+    expect(m?.armsOutOfSync).toBeNull(); // no per-side angles on a 'best' rule
+    expect(m?.hipSag).toBeCloseTo(178, 3); // curl: no otherView, so the rule's side view stands
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Landmark fixtures: counter + tracker on recorded / rendered clips, every flag forced on.
+// ---------------------------------------------------------------------------------------------
+
+const LANDMARK_FIXTURES = import.meta.glob<LandmarkFrame[]>('../../fixtures/landmarks/**/*.json', {
+  eager: true,
+  import: 'default',
+});
+
+function replay(path: string): { cues: FocusCue[]; forms: FormMeasures[] } {
+  const rel = path.replace(/^.*fixtures\/landmarks\//, '');
+  const folder = rel.split('/')[0] ?? '';
+  const rule = ruleForFolder(folder);
+  const frames = LANDMARK_FIXTURES[path];
+  if (!rule || !frames) throw new Error(`no rule or frames for ${rel}`);
+  const counter = createRepCounter(rule);
+  const tr = createFocusTracker(rule, { flags: flagsFor(path), targetReps: 99, autoSet: null });
+  const cues: FocusCue[] = [];
+  const forms: FormMeasures[] = [];
+  for (const frame of frames) {
+    const events = counter.push(frame);
+    cues.push(
+      ...tr.push({
+        t: frame.t,
+        present: frame.landmarks.length > 0,
+        tracking: counter.tracking,
+        untracked: counter.untracked,
+        phase: counter.phase,
+        angle: counter.angle,
+        sides: counter.sideAngles,
+        frame,
+        view: counter.rule.view,
+        side: counter.side,
+        events,
+        fps: 30,
+        autoState: null,
+        paused: false,
+      }),
+    );
+    if (events.some((e) => e.type === 'rep') && tr.lastForm) forms.push(tr.lastForm);
+  }
+  return { cues, forms };
+}
+
+const pathsMatching = (re: RegExp) =>
+  Object.keys(LANDMARK_FIXTURES)
+    .filter((p) => re.test(p))
+    .sort();
+
+/**
+ * The form rules SPEC M5 lists per exercise folder. "Every flag forced on" means these plus every
+ * focus rule: a form rule outside its exercise measures something else (a curl's elbow angle is
+ * no lateral raise height), which is why flags are data on the exercise rule.
+ */
+const SPEC_FORM: Record<string, readonly FocusCueId[]> = {
+  curl: ['elbowDrift', 'bodySwing'],
+  row: ['bodySwing'],
+  'push-up': ['hipSag'],
+  'shoulder-press': ['armsOutOfSync'],
+  'lateral-raise': ['armsOutOfSync', 'raiseTooHigh'],
+  'goblet-squat': [],
+};
+const folderOf = (path: string) => path.replace(/^.*fixtures\/landmarks\//, '').split('/')[0] ?? '';
+const flagsFor = (path: string): FocusRuleFlags => ({
+  ...ALL_FOCUS,
+  ...Object.fromEntries((SPEC_FORM[folderOf(path)] ?? []).map((id) => [id, true])),
+});
+
+describe('form rules on landmark fixtures (every flag forced on)', () => {
+  const clean = pathsMatching(/\/synthetic-01__/);
+
+  it('has a clean synthetic-01 clip for all six exercises', () => {
+    expect(clean.length).toBe(6);
+  });
+
+  for (const path of clean) {
+    it(`clean ${path.replace(/^.*landmarks\//, '')} fires no form rule`, () => {
+      const { cues, forms } = replay(path);
+      const reps = Number(/__reps-(\d+)__/.exec(path)?.[1]);
+      expect(forms.length).toBe(reps); // a measure per counted rep
+      expect(cues.filter((c) => FORM_IDS.includes(c.id))).toEqual([]);
+    });
+  }
 });

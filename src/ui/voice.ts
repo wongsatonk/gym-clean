@@ -1,5 +1,17 @@
 // Spoken prompts via the Web Speech API. Silently does nothing where unsupported.
 
+import { createDrillSergeant } from '../core/personas';
+import {
+  DRILL_PITCH,
+  DRILL_RATE,
+  listMaleVoices,
+  pickDrillVoice,
+  type MaleVoice,
+  type VoiceConfig,
+} from './voiceNames';
+
+export * from './voiceNames';
+
 function synth(): SpeechSynthesis | null {
   return typeof window !== 'undefined' && 'speechSynthesis' in window
     ? window.speechSynthesis
@@ -10,6 +22,40 @@ function synth(): SpeechSynthesis | null {
 export type SpeechKind = 'count' | 'hint' | 'cue';
 
 export type SpeakOptions = { kind?: SpeechKind; cancel?: boolean };
+
+/** Variant picker for the persona: a random index in [0, n). */
+const randomPick = (n: number): number => Math.floor(Math.random() * n);
+
+let config: VoiceConfig = { persona: 'calm', rudeness: 2, voiceName: null };
+let persona: ReturnType<typeof createDrillSergeant> | null = null;
+/** undefined = not resolved yet (or invalidated by voiceschanged / configure). */
+let drillVoice: SpeechSynthesisVoice | null | undefined;
+let watchedSynth: SpeechSynthesis | null = null;
+const voicesListeners = new Set<() => void>();
+
+function getVoices(s: SpeechSynthesis): SpeechSynthesisVoice[] {
+  return typeof s.getVoices === 'function' ? s.getVoices() : [];
+}
+
+/** iOS fills getVoices() late: re-resolve the drill voice whenever the list changes. */
+function watchVoices(s: SpeechSynthesis): void {
+  if (watchedSynth === s || typeof s.addEventListener !== 'function') return;
+  watchedSynth = s;
+  s.addEventListener('voiceschanged', () => {
+    drillVoice = undefined;
+    for (const cb of voicesListeners) cb();
+  });
+}
+
+function resolveDrillVoice(s: SpeechSynthesis): SpeechSynthesisVoice | null {
+  if (drillVoice === undefined) {
+    const v = pickDrillVoice(getVoices(s), config.voiceName);
+    // Voices not loaded yet: don't cache the miss, try again next time.
+    if (!v) return null;
+    drillVoice = v;
+  }
+  return drillVoice;
+}
 
 /**
  * Utterances queued or speaking. Holding a strong reference matters on iOS/WebKit (and Chrome):
@@ -63,13 +109,63 @@ export const voice = {
       s.cancel();
       inFlight.clear();
     }
-    const u = new SpeechSynthesisUtterance(text);
+    const drill = config.persona === 'drill';
+    const kind = opts.kind ?? 'cue';
+    let line = text;
+    if (drill && kind !== 'count') {
+      persona ??= createDrillSergeant();
+      line = persona.line(text, kind, config.rudeness, randomPick);
+    }
+    const u = new SpeechSynthesisUtterance(line);
     u.lang = 'en-US';
     u.rate = 1;
+    if (drill) {
+      watchVoices(s);
+      const v = resolveDrillVoice(s);
+      if (v) {
+        u.voice = v;
+        u.lang = v.lang;
+      }
+      u.rate = DRILL_RATE;
+      u.pitch = DRILL_PITCH;
+    }
     hold(u);
     resume(s); // iOS/Chrome can leave the synth paused; harmless otherwise
     s.speak(u);
     return u;
+  },
+
+  /**
+   * Coach persona and voice. 'calm' is the original voice (en-US, rate 1, browser default
+   * voice). 'drill' rewrites every non-count line through the drill-sergeant script at
+   * `rudeness`, and speaks in `voiceName` (or the default male voice) faster and lower.
+   */
+  configure(next: VoiceConfig): void {
+    if (next.voiceName !== config.voiceName) drillVoice = undefined;
+    config = { ...next };
+    const s = synth();
+    if (s && config.persona === 'drill') watchVoices(s);
+  },
+
+  /** The current coach persona settings (a copy). */
+  get config(): VoiceConfig {
+    return { ...config };
+  },
+
+  /** Installed male English voices from the known list, with an accent label, for the picker. */
+  maleVoices(): MaleVoice[] {
+    const s = synth();
+    if (!s) return [];
+    watchVoices(s);
+    return listMaleVoices(getVoices(s));
+  },
+
+  /** Calls `cb` when the browser's voice list changes (iOS loads it late). Returns unsubscribe. */
+  onVoicesChanged(cb: () => void): () => void {
+    const s = synth();
+    if (s) watchVoices(s);
+    voicesListeners.add(cb);
+    return () => voicesListeners.delete(cb);
   },
 
   /** Drops whatever is speaking or queued. */

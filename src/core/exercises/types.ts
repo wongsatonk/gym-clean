@@ -2,8 +2,9 @@
 // ExerciseRule: it never branches on the exercise id.
 import type { Side, SidePair, Triplet } from '../angles';
 import type { AutoSetConfig } from '../autoSet';
+import type { FocusRuleFlags } from '../focus';
 
-export type { Side, SidePair, Triplet };
+export type { FocusRuleFlags, Side, SidePair, Triplet };
 
 /** Why a partial missed (RepEvent.reason): the far end or the return to the start. */
 export type MissReason = 'far' | 'start';
@@ -34,7 +35,7 @@ export type PhonePlacement = {
  */
 export type ViewVariant = Pick<
   ExerciseRule,
-  'view' | 'sideMode' | 'extended' | 'contracted' | 'minHipAngleDeg'
+  'view' | 'sideMode' | 'extended' | 'contracted' | 'minHipAngleDeg' | 'focus'
 >;
 
 export type ExerciseRule = {
@@ -114,6 +115,13 @@ export type ExerciseRule = {
    * any).
    */
   autoSet?: Partial<AutoSetConfig>;
+  /**
+   * Which live focus / form rules are on for this exercise (M5; only `true` is on). Read through
+   * focusFlagsFor, which lets an otherView's `focus` override these key by key. Form rules
+   * (FORM_RULE_IDS) may be true only once the exercise has committed real fixtures that pass the
+   * pre-registered criteria (PROGRESS Decision "M5 rule enablement").
+   */
+  focus?: FocusRuleFlags;
   /** EMA smoothing factor for the angle (SPEC §3: 0.4). */
   emaAlpha: number;
   /** Hysteresis (deg): leave a band only once past its threshold by this much (SPEC §3: 10). */

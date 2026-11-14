@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { RepEvent, SetLog } from '../core/types';
+import type { Rudeness } from '../core/personas';
 import type { Unit } from '../core/units';
 
 export type SessionRow = {
@@ -245,6 +246,40 @@ export async function getHandsFree(db: GymDb): Promise<boolean> {
 
 export async function setHandsFree(db: GymDb, on: boolean): Promise<void> {
   await db.settings.put({ key: 'handsFree', value: on });
+}
+
+/** Coach voice (drill-sergeant design 2026-11-13): persona, its rudeness level, chosen voice. */
+export type CoachVoice = {
+  persona: 'calm' | 'drill';
+  rudeness: Rudeness;
+  /** SpeechSynthesisVoice.name picked in Settings; null = the default order. */
+  voiceName: string | null;
+};
+
+export const COACH_VOICE_DEFAULT: Readonly<CoachVoice> = Object.freeze({
+  persona: 'calm',
+  rudeness: 2,
+  voiceName: null,
+});
+
+/** Stored coach voice; each bad or missing field falls back to its default. */
+export async function getCoachVoice(db: GymDb): Promise<CoachVoice> {
+  const row = await db.settings.get('coachVoice');
+  const v: Record<string, unknown> =
+    typeof row?.value === 'object' && row.value !== null
+      ? (row.value as Record<string, unknown>)
+      : {};
+  const d = COACH_VOICE_DEFAULT;
+  return {
+    persona: v.persona === 'drill' || v.persona === 'calm' ? v.persona : d.persona,
+    rudeness: v.rudeness === 1 || v.rudeness === 2 || v.rudeness === 3 ? v.rudeness : d.rudeness,
+    voiceName: typeof v.voiceName === 'string' ? v.voiceName : d.voiceName,
+  };
+}
+
+export async function setCoachVoice(db: GymDb, v: CoachVoice): Promise<void> {
+  const value: CoachVoice = { persona: v.persona, rudeness: v.rudeness, voiceName: v.voiceName };
+  await db.settings.put({ key: 'coachVoice', value });
 }
 
 /** For each exercise, the sets from the most recent session other than `excludeSessionId`. */

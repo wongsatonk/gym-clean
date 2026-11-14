@@ -3,7 +3,20 @@ import program from '../../data/program.json';
 import { LANDMARK, LANDMARK_COUNT } from '../poseTopology';
 import type { LandmarkFrame } from '../types';
 import { AUTO_SET_DEFAULTS } from '../autoSet';
-import { autoSetConfigFor, extendedGatePasses, RULES, ruleFor, ruleForFolder } from './index';
+import { CUE_TEXT } from '../focus';
+import type { FocusCueId } from '../types';
+import {
+  autoSetConfigFor,
+  extendedGatePasses,
+  FOCUS_RULE_IDS,
+  focusFlagsFor,
+  FORM_RULE_EXERCISES,
+  FORM_RULE_IDS,
+  formRulesWithoutRealFixtures,
+  RULES,
+  ruleFor,
+  ruleForFolder,
+} from './index';
 import type { ExerciseRule } from './types';
 
 const L = LANDMARK;
@@ -343,4 +356,171 @@ describe('autoSetConfigFor (M5c per-exercise hands-free override)', () => {
       }
     },
   );
+});
+
+// M5 task 6: which focus/form rules are on is data on each rule (PROGRESS Decision "M5 rule
+// enablement", SPEC M5 "Plan decisions").
+describe('focus rule flags (M5)', () => {
+  const get = (folder: string): ExerciseRule => {
+    const r = ruleForFolder(folder);
+    if (!r) throw new Error(folder);
+    return r;
+  };
+  const KNOWN = Object.keys(CUE_TEXT) as FocusCueId[];
+
+  /** Folders with real fixtures on disk (`fixtures/landmarks/<folder>/real-*.json`). */
+  const REAL = import.meta.glob('../../../fixtures/landmarks/*/real-*.json');
+  const realFolders = new Set(
+    Object.keys(REAL).map((p) => /fixtures\/landmarks\/([^/]+)\//.exec(p)?.[1] ?? ''),
+  );
+
+  /** Every flag set a rule declares: its own and its other-view variant's. */
+  const flagSets = (r: ExerciseRule) =>
+    [
+      ['rule', r.focus],
+      ['otherView', r.otherView?.focus],
+    ] as const;
+
+  it('FOCUS_RULE_IDS + FORM_RULE_IDS are exactly the known cue ids, disjoint', () => {
+    expect([...FOCUS_RULE_IDS, ...FORM_RULE_IDS].sort()).toEqual([...KNOWN].sort());
+    for (const id of FORM_RULE_IDS) expect(FOCUS_RULE_IDS).not.toContain(id);
+  });
+
+  it.each(RULES.map((r) => [r.folder, r] as const))(
+    '%s: declares flags, every key a known cue id with a boolean value',
+    (_f, r) => {
+      expect(r.focus, 'rule.focus').toBeDefined();
+      for (const [where, flags] of flagSets(r)) {
+        for (const [k, v] of Object.entries(flags ?? {})) {
+          expect(KNOWN, `${where}.${k}`).toContain(k);
+          expect(typeof v, `${where}.${k}`).toBe('boolean');
+        }
+      }
+    },
+  );
+
+  it('each form rule is only set on the exercises SPEC M5 lists for it', () => {
+    for (const r of RULES) {
+      for (const [where, flags] of flagSets(r)) {
+        for (const id of Object.keys(flags ?? {}) as FocusCueId[]) {
+          if (!FORM_RULE_IDS.includes(id)) continue;
+          expect(FORM_RULE_EXERCISES[id], `${r.folder} ${where}.${id}`).toContain(r.folder);
+        }
+      }
+    }
+    expect(FORM_RULE_EXERCISES).toEqual({
+      armsOutOfSync: ['shoulder-press', 'lateral-raise'],
+      raiseTooHigh: ['lateral-raise'],
+      elbowDrift: ['curl'],
+      bodySwing: ['curl', 'row'],
+      hipSag: ['push-up'],
+    });
+  });
+
+  it("arms out of sync is only declared on 'both'-arm rules", () => {
+    for (const r of RULES) {
+      if (r.focus?.armsOutOfSync !== undefined) expect(r.sideMode, r.folder).toBe('both');
+    }
+  });
+
+  it('a form rule is on only where real fixtures exist (fixtures/landmarks/<folder>/real-*)', () => {
+    expect(formRulesWithoutRealFixtures(RULES, realFolders)).toEqual([]);
+  });
+
+  it('the real-fixture guard catches a form rule switched on without real fixtures', () => {
+    const curl = get('curl');
+    const on = { ...curl, focus: { ...curl.focus, elbowDrift: true } };
+    expect(formRulesWithoutRealFixtures([on], realFolders)).toEqual(['curl: elbowDrift']);
+    const pu = get('push-up');
+    if (!pu.otherView) throw new Error('push-up otherView missing');
+    const variantOn: ExerciseRule = {
+      ...pu,
+      otherView: { ...pu.otherView, focus: { ...pu.otherView.focus, hipSag: true } },
+    };
+    expect(formRulesWithoutRealFixtures([variantOn], new Set())).toEqual([
+      'push-up (otherView): hipSag',
+    ]);
+    // With real fixtures for the folder, a form rule may be on.
+    expect(formRulesWithoutRealFixtures([on], new Set(['curl']))).toEqual([]);
+    // Focus rules (not form rules) never need real fixtures.
+    expect(
+      formRulesWithoutRealFixtures([{ ...curl, focus: { rushedLowering: true } }], new Set()),
+    ).toEqual([]);
+  });
+
+  it('lateral raise has real fixtures; its geometry flags stay off until task 7', () => {
+    expect(realFolders.has('lateral-raise')).toBe(true);
+    expect(get('lateral-raise').focus).toMatchObject({
+      armsOutOfSync: false,
+      raiseTooHigh: false,
+    });
+  });
+
+  // The Decision table "M5 rule enablement" (starting flags).
+  const ALL_FOCUS = { rushedLowering: true, stalled: true, outOfFrame: true, lowFps: true };
+  it.each([
+    ['curl', { ...ALL_FOCUS, shrinkingRange: true, elbowDrift: false, bodySwing: false }],
+    ['push-up', { ...ALL_FOCUS, shrinkingRange: true, hipSag: false }],
+    ['shoulder-press', { ...ALL_FOCUS, shrinkingRange: false, armsOutOfSync: false }],
+    ['row', { ...ALL_FOCUS, shrinkingRange: true, bodySwing: false }],
+    ['goblet-squat', { ...ALL_FOCUS, shrinkingRange: true }],
+    [
+      'lateral-raise',
+      { ...ALL_FOCUS, shrinkingRange: true, armsOutOfSync: false, raiseTooHigh: false },
+    ],
+  ] as const)('%s starting flags', (folder, flags) => {
+    expect(get(folder).focus).toEqual(flags);
+  });
+
+  it('push-up front variant: shrinking range off, no hips sag', () => {
+    const v = get('push-up').otherView?.focus;
+    expect(v).toEqual({ shrinkingRange: false });
+    expect(v).not.toHaveProperty('hipSag');
+  });
+
+  it('only the push-up has variant flags', () => {
+    for (const r of RULES) {
+      if (r.folder !== 'push-up') expect(r.otherView?.focus, r.folder).toBeUndefined();
+    }
+  });
+});
+
+describe('focusFlagsFor', () => {
+  const pu = ruleForFolder('push-up');
+  const curl = ruleForFolder('curl');
+  if (!pu || !curl) throw new Error('rules missing');
+
+  it("is the rule's own flags (a copy) without an active view, or in the rule's view", () => {
+    expect(focusFlagsFor(pu)).toEqual(pu.focus);
+    expect(focusFlagsFor(pu)).not.toBe(pu.focus);
+    expect(focusFlagsFor(pu, pu)).toEqual(pu.focus);
+    expect(focusFlagsFor(pu, 'side')).toEqual(pu.focus);
+  });
+
+  it("in the other view, the variant's flags override the rule's, key by key", () => {
+    const front = focusFlagsFor(pu, 'front');
+    expect(front.shrinkingRange).toBe(false);
+    expect(front.rushedLowering).toBe(true);
+    expect(front.stalled).toBe(true);
+  });
+
+  it("takes the counter's active rule (the rule merged with otherView) as the active view", () => {
+    // repCounter's `rule` getter: { ...rule, ...rule.otherView } once the other view is seen.
+    const active = { ...pu, ...pu.otherView } as ExerciseRule;
+    expect(focusFlagsFor(pu, active)).toEqual(focusFlagsFor(pu, 'front'));
+  });
+
+  it('hips sag is never on in a front view, even if a flag says so', () => {
+    const r = { ...pu, focus: { ...pu.focus, hipSag: true } };
+    expect(focusFlagsFor(r, 'side').hipSag).toBe(true);
+    expect(focusFlagsFor(r, 'front').hipSag).not.toBe(true);
+  });
+
+  it('a rule without flags or without a variant gives what it has', () => {
+    const bare: ExerciseRule = { ...curl };
+    delete bare.focus;
+    expect(focusFlagsFor(bare)).toEqual({});
+    // No otherView: an unexpected view keeps the rule's own flags.
+    expect(focusFlagsFor(curl, 'front')).toEqual(curl.focus);
+  });
 });

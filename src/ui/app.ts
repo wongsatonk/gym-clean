@@ -27,7 +27,11 @@ import {
   finishSession,
   getExerciseNote,
   getCoachTips,
+  getCoachVoice,
   getHandsFree,
+  COACH_VOICE_DEFAULT,
+  setCoachVoice,
+  type CoachVoice,
   getSpokenCount,
   getUnit,
   lastSessionSets,
@@ -62,6 +66,7 @@ import { createCoachSummary } from './coachSummary';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
 import { h } from './dom';
+import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
 
@@ -87,6 +92,7 @@ export function mountApp(root: HTMLElement): void {
   let spokenCount = true;
   let coachTips = true;
   let handsFree = true;
+  let coachVoice: CoachVoice = { ...COACH_VOICE_DEFAULT };
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
 
@@ -626,6 +632,21 @@ export function mountApp(root: HTMLElement): void {
         h('span', { class: 'switch-label' }, 'Coach tips after a set'),
         h('span', { class: 'switch-state', 'aria-hidden': 'true' }, coachTips ? 'On' : 'Off'),
       ),
+      createCoachVoiceSettings({
+        value: coachVoice,
+        voices: voice.maleVoices(),
+        onChange: (v) => {
+          coachVoice = { ...v };
+          voice.configure(coachVoice);
+          void setCoachVoice(db, coachVoice).catch(logDbError);
+          render();
+        },
+        onTest: (v) => {
+          voice.unlock(); // inside the tap (iOS)
+          voice.configure(v);
+          voice.speak('Keep going.', { kind: 'cue' });
+        },
+      }).el,
       voiceTest(),
       audioTestPanel(),
       h('p', { class: 'field-label' }, 'Camera sets'),
@@ -1428,6 +1449,17 @@ export function mountApp(root: HTMLElement): void {
       if (view.screen === 'settings') render();
     })
     .catch(logDbError);
+  void getCoachVoice(db)
+    .then((v) => {
+      coachVoice = v;
+      voice.configure(v);
+      if (view.screen === 'settings') render();
+    })
+    .catch(logDbError);
+  // iOS loads its voice list late: refresh the picker when it arrives.
+  voice.onVoicesChanged(() => {
+    if (view.screen === 'settings') render();
+  });
   void getHandsFree(db)
     .then((on) => {
       handsFree = on;
