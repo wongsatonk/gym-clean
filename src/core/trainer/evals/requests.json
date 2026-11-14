@@ -129,6 +129,20 @@
       "ruleSupported": true
     },
     {
+      "text": "skip leg day",
+      "intent": "postpone",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "can I skip push day tomorrow?",
+      "intent": "postpone",
+      "slots": { "date": "tomorrow" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
       "text": "skip legs today",
       "intent": "avoidArea",
       "slots": { "area": "legs", "date": "today" },

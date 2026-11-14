@@ -7,7 +7,7 @@
  *
  * Order of rules (first hit wins):
  *  1. red flag → `help`, no slots, `safety: 'redFlag'` (never a training proposal);
- *  2. deload, 3. swap, 4. postpone;
+ *  2. deload, 3. swap, 4. postpone (incl. "skip leg day" / "skip <plan day name>");
  *  5. an area word with a discomfort or "avoid" word → avoidArea;
  *  6. stall, 7. lighter, 8. food;
  *  9. discomfort with no area → avoidArea without an area (the coach asks which area);
@@ -42,6 +42,8 @@ export type MatchContext = {
   exercises?: readonly { id: string; name: string }[];
   /** Today's exercise ids: a generic word ("curls", "rows") prefers one of these. */
   todayExerciseIds?: readonly string[];
+  /** The plan's day names ("Push A"): "skip <day name>" is a postpone. */
+  dayNames?: readonly string[];
 };
 
 type Span = { start: number; end: number };
@@ -133,6 +135,11 @@ const DAYS = (Object.keys(P.days) as DayWord[]).map((day) => ({
 const MOVE_BEFORE = P.moveTo.before.map((w) => normalizeText(w));
 const MOVE_AFTER = P.moveTo.after.map((w) => normalizeText(w));
 const DAY_FILLERS = ['next', 'this', 'on', 'the', 'วัน'];
+const SKIP_WORDS = compileList(P.skipDay.skip);
+const SKIP_FILLERS = P.skipDay.fillers.map((w) => normalizeText(w));
+const SKIP_DAYS = P.skipDay.days.map((w) => normalizeText(w));
+const SKIP_BARE = P.skipDay.bare.map((w) => normalizeText(w));
+const SKIP_BARE_FOLLOWERS = compileList(P.skipDay.bareFollowers);
 const SCOPE_PLAN = compileList(P.scope.plan);
 const SCOPE_TODAY = compileList(P.scope.today);
 const DISCOMFORT = compileList(P.safety.discomfort);
@@ -222,6 +229,36 @@ function daysOf(text: string): { date?: DayWord; moveTo?: DayWord } {
   return out;
 }
 
+function stripLeading(rest: string, fillers: readonly string[]): string {
+  let r = rest.trimStart();
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const f of fillers) {
+      if (startsWithWord(r, f)) {
+        r = r.slice(f.length).trimStart();
+        changed = true;
+      }
+    }
+  }
+  return r;
+}
+
+/** "skip leg day", "skip push", "skip <plan day name>": a skip word, then a training-day name. */
+function skipsDay(text: string, ctx: MatchContext): boolean {
+  const named = (ctx.dayNames ?? []).map(normalizeText).filter((n) => n !== '');
+  const days = [...SKIP_DAYS, ...named].sort((a, b) => b.length - a.length);
+  return SKIP_WORDS(text).some((s) => {
+    const rest = stripLeading(text.slice(s.end), SKIP_FILLERS);
+    if (days.some((d) => startsWithWord(rest, d))) return true;
+    const bare = SKIP_BARE.find((d) => startsWithWord(rest, d));
+    if (bare === undefined) return false;
+    const after = rest.slice(bare.length).trimStart();
+    if (after === '') return true;
+    const span = [...SKIP_BARE_FOLLOWERS(after), ...DAYS.flatMap(({ m }) => m(after))];
+    return span.some((x) => x.start === 0);
+  });
+}
+
 function scopeOf(text: string): 'today' | 'plan' | undefined {
   if (has(SCOPE_PLAN, text)) return 'plan';
   if (has(SCOPE_TODAY, text)) return 'today';
@@ -287,7 +324,7 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   let intent: Intent;
   if (has(INTENTS.deload, t)) intent = 'deload';
   else if (has(INTENTS.swap, t)) intent = 'swap';
-  else if (has(INTENTS.postpone, t)) intent = 'postpone';
+  else if (has(INTENTS.postpone, t) || skipsDay(t, ctx)) intent = 'postpone';
   else if (area && (safety === 'discomfort' || area.viaAvoidBefore || has(AVOID_ANYWHERE, t)))
     intent = 'avoidArea';
   else if (has(INTENTS.stall, t)) intent = 'stall';

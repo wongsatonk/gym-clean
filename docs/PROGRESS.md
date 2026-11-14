@@ -409,7 +409,7 @@ M10-q8.
     - no network or DOM;
     - the eval file has no personal data.
   - Deps: 1.
-- [ ] 11. [core-engineer, after 6–10] Replies, safety copy and the coach controller, **tests first**.
+- [x] 11. [core-engineer, after 6–10] Replies, safety copy and the coach controller, **tests first**.
   - Files: src/core/trainer/replies.ts(+test), src/core/trainer/coach.ts(+test).
   - `replies.ts` turns a Proposal into title, lines, why and `say` (≤ 8 words), and holds:
     - the fixed referral line;

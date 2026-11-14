@@ -119,6 +119,32 @@ describe('matchIntent basics', () => {
     expect(matchIntent("can't train on monday", ctx).slots).toEqual({ date: 'mon' });
   });
 
+  it('"skip leg day" / "skip <day name>" postpones the session instead of avoiding an area', () => {
+    for (const text of [
+      'skip leg day',
+      'Skip legs day today',
+      'can I skip push day?',
+      'skip pull today',
+    ]) {
+      expect(matchIntent(text, ctx).intent, text).toBe('postpone');
+      expect(matchIntent(text, ctx).slots.area, text).toBeUndefined();
+    }
+    // A plan day name from the context counts too.
+    const named: MatchContext = { exercises: CATALOG, dayNames: ['Upper Power', 'Legs A'] };
+    expect(matchIntent('skip upper power', named).intent).toBe('postpone');
+    expect(matchIntent('skip legs a tomorrow', named)).toEqual({
+      intent: 'postpone',
+      slots: { date: 'tomorrow' },
+      safety: 'none',
+    });
+    // Without "day" or a plan day name, "skip legs" is still "go easy on legs".
+    expect(matchIntent('skip legs today', ctx)).toEqual({
+      intent: 'avoidArea',
+      slots: { area: 'legs', date: 'today' },
+      safety: 'none',
+    });
+  });
+
   it('reads the scope', () => {
     expect(matchIntent('swap pushups from now on', ctx).slots.scope).toBe('plan');
     expect(matchIntent('swap pushups just for today', ctx).slots.scope).toBe('today');

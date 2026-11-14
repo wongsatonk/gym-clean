@@ -418,6 +418,50 @@
     ],
     "after": ["instead", "แทน"]
   },
+  "skipDay": {
+    "note": "'skip' word, then (after 'my'/'the'/'todays'/'this') a training-day name -> postpone, not avoidArea. 'days' always count; 'bare' words only when nothing follows but a day word or 'please'/'session'/'workout' (so 'skip pull ups' stays a swap/help). The coach also passes its plan day names (e.g. 'Push A'). 'skip legs' without 'day' stays 'go easy on legs'.",
+    "skip": [
+      "skip",
+      "skipping",
+      "miss",
+      "missing",
+      "not doing",
+      "dont do",
+      "cant do",
+      "drop",
+      "ข้าม",
+      "งด",
+      "ไม่เล่น",
+      "ไม่ทำ"
+    ],
+    "fillers": ["my", "the", "todays", "today", "tomorrows", "this", "this weeks"],
+    "days": [
+      "leg day",
+      "legs day",
+      "push day",
+      "pull day",
+      "arm day",
+      "arms day",
+      "chest day",
+      "back day",
+      "shoulder day",
+      "shoulders day",
+      "upper day",
+      "lower day",
+      "upper body day",
+      "lower body day",
+      "วันขา",
+      "วันเล่นขา",
+      "วันอก",
+      "วันเล่นอก",
+      "วันแขน",
+      "วันไหล่",
+      "วันพุช",
+      "วันพูล"
+    ],
+    "bare": ["push", "pull"],
+    "bareFollowers": ["please", "session", "workout", "pls"]
+  },
   "scope": {
     "plan": [
       "from now on",
