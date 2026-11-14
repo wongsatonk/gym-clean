@@ -1,0 +1,329 @@
+/* M6 History screen (src/ui/screens/history.ts). Track mood: black page, ruled lanes, caps
+   labels, numbers first. Tokens from src/styles.css only. Nothing here is orange except the
+   latest trend bar (the "where you are now" marker) and the active tab; the values it marks are
+   also written as text. */
+
+.history {
+  gap: 14px;
+}
+
+.history ul,
+.history ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history p,
+.history h2,
+.history figure,
+.history figcaption {
+  margin: 0;
+}
+
+.hist-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.hist-head {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.hist-sub {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+/* Scoreboard: two number tiles. Sessions takes what it needs; volume gets the rest. */
+.hist-stats {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+}
+
+.hist-stat,
+.hist-best {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 10px 14px 12px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.hist-stat-label {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.hist-stat-value,
+.hist-best-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.hist-best-num {
+  font-size: var(--fs-num);
+}
+
+.hist-stat-unit {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+/* Session rows: ruled lanes, not cards. */
+.hist-days {
+  display: flex;
+  flex-direction: column;
+}
+
+.hist-day,
+.hist-session {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 0 12px;
+  border-bottom: var(--line-w) solid var(--line);
+  min-width: 0;
+}
+
+.hist-day:first-child,
+.hist-session:first-child {
+  border-top: var(--line-w) solid var(--line);
+}
+
+.hist-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.hist-day-name,
+.hist-session-date {
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.hist-focus {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.hist-focus-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-focus-lbl,
+.hist-day-when {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.hist-day-stats,
+.hist-session-sets {
+  font-size: var(--fs-cue);
+  overflow-wrap: anywhere;
+}
+
+.hist-session-sets {
+  font-weight: 700;
+}
+
+/* Exercise rows: big neutral buttons (orange stays for "press this" CTAs). */
+.hist-exercises {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hist-ex {
+  width: 100%;
+  min-height: var(--tap-cta);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 8px 14px;
+  text-align: left;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.hist-ex-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hist-ex-name {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.hist-ex-meta {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.hist-ex-top {
+  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.hist-ex-go {
+  display: inline-flex;
+  color: var(--text-2);
+  transform: scaleX(-1);
+}
+
+/* Detail view */
+.hist-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 18px 0 10px;
+  background: transparent;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.hist-title {
+  overflow-wrap: anywhere;
+}
+
+.hist-trend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.hist-bars {
+  display: block;
+  width: 100%;
+  height: 120px;
+}
+
+.hist-bars-base {
+  stroke: var(--line);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.hist-bar {
+  fill: var(--edge);
+}
+
+.hist-bar.latest {
+  fill: var(--cta);
+}
+
+.hist-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hist-end {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hist-end-latest {
+  margin-left: auto;
+  text-align: right;
+}
+
+.hist-end-date {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.hist-end-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-trend-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hist-change {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.hist-change .ic {
+  flex: 0 0 auto;
+  color: var(--text-2);
+}
+
+.hist-change[data-trend-change='up'] .ic {
+  color: var(--success);
+}
+
+/* Empty states */
+.hist-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.hist-empty-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+}
+
+.hist-empty-body {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+}
+
+.hist-empty-btn {
+  margin-top: 4px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}

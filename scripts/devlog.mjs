@@ -166,9 +166,9 @@ function autoEventsOf(session) {
  * "next" when another set of the session starts at the commit (Start next set: START_SET right
  * after it), else "save" (Save set, Set done, Close, idle limits). The break clock runs from
  * the end of the last rep (`endedAtFt`) on the frame clock, else from the hold, else wall time.
- * Returns "hold:<reason> <sec>s → continue|next|save|?".
+ * Returns { reason, ms, how }; fmtHold prints "hold:<reason> <sec>s → continue|next|save|?".
  */
-function holdSummary(hold, autoEvents, setStarts) {
+function holdInfo(hold, autoEvents, setStarts) {
   const end = autoEvents.find(
     (e) => e.t >= hold.t && e !== hold && ['holdEnded', 'commit', 'close'].includes(e.action),
   );
@@ -182,25 +182,28 @@ function holdSummary(hold, autoEvents, setStarts) {
   if (end && end.ft != null && (hold.endedAtFt ?? hold.ft) != null) {
     ms = end.ft - (hold.endedAtFt ?? hold.ft);
   } else if (end) ms = end.t - hold.t;
-  const sec = ms == null || ms < 0 ? '?' : `${(ms / 1000).toFixed(1)}s`;
-  return `hold:${hold.reason ?? '?'} ${sec} → ${how}`;
+  return { reason: hold.reason ?? '?', ms: ms == null || ms < 0 ? null : ms, how };
 }
 
+const fmtHold = (h) =>
+  `hold:${h.reason} ${h.ms == null ? '?' : `${(h.ms / 1000).toFixed(1)}s`} → ${h.how}`;
+
 /**
- * One-line summary of a set's auto actions, e.g. "start:auto stop:still undo:1", or with a
- * break "start:tap stop:hold hold:away 12.0s → next". Events go to the set with the latest
- * start ≤ t + slack, except a commit, which goes to the set with the latest end ≤ t + slack
- * (after Start next set the commit lands at the next set's start, but it saves the held one).
- * '-' when the session logged no autoSet events (hands-free off).
+ * A set's auto actions as { start: 'auto'|'tap', stop, stopsProposed, undo, rep, holds, close }
+ * (enum words and numbers only), or null when the session logged no autoSet events (hands-free
+ * off). `stop` is the stop that saved the set: 'still' | 'stalled' | 'hold' | 'auto' (commit
+ * without a logged stop) | 'tap' (ended, no commit) | '?' (non-word reason) | '-' (never ended).
+ * Events go to the set with the latest start ≤ t + slack, except a commit, which goes to the set
+ * with the latest end ≤ t + slack (after Start next set the commit lands at the next set's start,
+ * but it saves the held one).
  */
-function autoSummary(autoEvents, setStarts, setEnds, set) {
-  if (autoEvents.length === 0 || !Number.isFinite(set?.startedAt)) return '-';
+function autoInfo(autoEvents, setStarts, setEnds, set) {
+  if (autoEvents.length === 0 || !Number.isFinite(set?.startedAt)) return null;
   const mine = autoEvents.filter((e) =>
     e.action === 'commit' && setEnds.length > 0
       ? ownerAt(setEnds, e.t) === set.endedAt
       : ownerAt(setStarts, e.t) === set.startedAt,
   );
-  const started = mine.some((e) => e.action === 'start');
   const commitAt = mine.findIndex((e) => e.action === 'commit');
   const beforeCommit = mine.slice(0, commitAt < 0 ? mine.length : commitAt);
   const lastStop = beforeCommit
@@ -218,14 +221,29 @@ function autoSummary(autoEvents, setStarts, setEnds, set) {
         : '-';
   const cancels = (why) =>
     mine.filter((e) => e.action === 'stopCancelled' && e.reason === why).length;
-  const parts = [`start:${started ? 'auto' : 'tap'}`, `stop:${stop}`];
-  if (cancels('undo')) parts.push(`undo:${cancels('undo')}`);
-  if (cancels('rep')) parts.push(`rep:${cancels('rep')}`);
-  for (const h of mine.filter((e) => e.action === 'hold')) {
-    parts.push(holdSummary(h, autoEvents, setStarts));
-  }
   const close = mine.find((e) => e.action === 'close');
-  if (close) parts.push(`close:${close.reason ?? '?'}`);
+  return {
+    start: mine.some((e) => e.action === 'start') ? 'auto' : 'tap',
+    stop,
+    stopsProposed: mine.filter((e) => e.action === 'stopPending').length,
+    undo: cancels('undo'),
+    rep: cancels('rep'),
+    holds: mine.filter((e) => e.action === 'hold').map((h) => holdInfo(h, autoEvents, setStarts)),
+    close: close ? (close.reason ?? '?') : null,
+  };
+}
+
+/**
+ * One-line summary of a set's auto actions, e.g. "start:auto stop:still undo:1", or with a
+ * break "start:tap stop:hold hold:away 12.0s → next". '-' when hands-free was off.
+ */
+function fmtAuto(info) {
+  if (!info) return '-';
+  const parts = [`start:${info.start}`, `stop:${info.stop}`];
+  if (info.undo) parts.push(`undo:${info.undo}`);
+  if (info.rep) parts.push(`rep:${info.rep}`);
+  for (const h of info.holds) parts.push(fmtHold(h));
+  if (info.close) parts.push(`close:${info.close}`);
   return parts.join(' ');
 }
 
@@ -288,11 +306,34 @@ function focusOf(focusEvents, setStarts, setEnds, set) {
   return { cues, score: scores.length ? strip(scores.at(-1)) : null };
 }
 
+const SPEECH_KINDS = ['count', 'hint', 'cue', 'placement'];
+
+/** Spoken lines per kind of a set's camera.speech (kinds only, never the text); `dropped` = not said. */
+function speechOf(set) {
+  const out = { count: 0, hint: 0, cue: 0, placement: 0, dropped: 0 };
+  const list = Array.isArray(set?.camera?.speech) ? set.camera.speech : [];
+  for (const s of list) {
+    if (!SPEECH_KINDS.includes(s?.kind)) continue;
+    if (s.dropped) out.dropped++;
+    else out[s.kind]++;
+  }
+  return out;
+}
+
+/** The set's camera.fps sample values (finite, > 0). */
+function fpsSamplesOf(set) {
+  const list = Array.isArray(set?.camera?.fps) ? set.camera.fps : [];
+  return list
+    .map((s) => s?.fps)
+    .filter((v) => typeof v === 'number' && Number.isFinite(v) && v > 0);
+}
+
 /**
  * Plans the conversion without touching the disk.
  * Returns { label, items: [{ session, exerciseId, setIndex, folder, counted, logged, frames,
- * personFrames, fps, prerollMs, auto, focus, rel, fixture } | { …, skip: reason }] } where `rel`
- * is `<folder>/<file>`. `focus` (M5) is report-only and never reaches a fixture.
+ * personFrames, fps, prerollMs, auto, autoInfo, ended, focus, speech, fpsSamples, rel, fixture } |
+ * { …, skip: reason }] } where `rel` is `<folder>/<file>`. `auto`, `autoInfo`, `focus`, `speech`
+ * and `fpsSamples` are report-only and never reach a fixture.
  */
 export function planConversion(exp, opts = {}) {
   const label = opts.label;
@@ -326,7 +367,10 @@ export function planConversion(exp, opts = {}) {
         personFrames: 0,
         fps: null,
         prerollMs: null,
-        auto: autoSummary(autoEvents, setStarts, setEnds, set),
+        autoInfo: autoInfo(autoEvents, setStarts, setEnds, set),
+        ended: set?.endedAt != null,
+        speech: speechOf(set),
+        fpsSamples: fpsSamplesOf(set),
         focus: focusOf(focusEvents, setStarts, setEnds, set),
       };
       // Frame-clock times (one clock may span several sets): sort, never assume t starts near 0.
@@ -334,6 +378,7 @@ export function planConversion(exp, opts = {}) {
         ? set.camera.frames.filter((f) => f && Number.isFinite(f.t)).sort((a, b) => a.t - b.t)
         : [];
       const person = all.filter((f) => Array.isArray(f.landmarks) && f.landmarks.length > 0);
+      base.auto = fmtAuto(base.autoInfo);
       base.personFrames = person.length;
       base.fps = fpsOf(all);
       const wallT0 = set?.camera?.wallT0;
@@ -412,6 +457,106 @@ export function formatFocus(results) {
     }
   }
   return lines.length ? ['Focus cues:', ...lines].join('\n') : '';
+}
+
+const EXERCISE_ID = /^[A-Za-z0-9_.-]{1,64}$/; // exercises.json ids; anything else prints "?"
+const idOf = (r) => (EXERCISE_ID.test(r.exerciseId) ? r.exerciseId : '?');
+const isMiscount = (r) =>
+  r.counted && r.logged
+    ? r.counted.reps !== r.logged.reps || r.counted.partials !== r.logged.partials
+    : null;
+const setRef = (r) => `s${r.session} #${r.setIndex ?? '?'} ${idOf(r)}`;
+/** Start/stop of a set: the auto summary, or tap/tap (or tap/-) with hands-free off. */
+const startStop = (r) =>
+  r.autoInfo ? fmtAuto(r.autoInfo) : `start:tap stop:${r.ended ? 'tap' : '-'}`;
+const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+const median = (xs) => {
+  if (!xs.length) return null;
+  const v = [...xs].sort((a, b) => a - b);
+  const m = v.length >> 1;
+  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+};
+/** Rounded to a whole number (fps), '-' for null. */
+const fmtInt = (v) => (v == null ? '-' : String(Math.round(v)));
+
+/**
+ * Retune view: one line per set, ids and numbers only.
+ *   s<session> #<set> <exerciseId>  <counted> vs <logged> ok|MISCOUNT  start:… stop:… [undo/rep/
+ *   hold/close]  focus <score>[: <cueId>@r<rep> …]  fps <avg>  speech count:n hint:n cue:n
+ *   [placement:n] [dropped:n]
+ * Average fps = mean of the camera.fps samples, else the set's frame rate.
+ */
+export function formatSets(results) {
+  const lines = results.map((r) => {
+    const counts =
+      r.counted && r.logged
+        ? `${fmtCount(r.counted)} vs ${fmtCount(r.logged)} ${isMiscount(r) ? 'MISCOUNT' : 'ok'}`
+        : `${fmtCount(r.counted)} vs ${fmtCount(r.logged)}`;
+    const f = r.focus;
+    let focus = `focus ${f?.score?.score == null ? '-' : fmtNum(f.score.score)}`;
+    if (f?.cues.length)
+      focus += `: ${f.cues.map((c) => `${c.id ?? '?'}@r${fmtNum(c.reps)}`).join(' ')}`;
+    const fps = mean(r.fpsSamples ?? []) ?? r.fps;
+    const sp = r.speech ?? { count: 0, hint: 0, cue: 0, placement: 0, dropped: 0 };
+    let speech = `speech count:${sp.count} hint:${sp.hint} cue:${sp.cue}`;
+    if (sp.placement) speech += ` placement:${sp.placement}`;
+    if (sp.dropped) speech += ` dropped:${sp.dropped}`;
+    return `  ${[setRef(r), counts, startStop(r), focus, `fps ${fmtInt(fps)}`, speech].join('  ')}`;
+  });
+  return ['Sets:', ...lines].join('\n');
+}
+
+/** "a 2, b 1" in first-seen order (or the given key order), '-' when empty. */
+const tally = (keys, order = []) => {
+  const m = new Map(order.map((k) => [k, 0]));
+  for (const k of keys) m.set(k, (m.get(k) ?? 0) + 1);
+  return m.size ? [...m].map(([k, n]) => `${k} ${n}`).join(', ') : '-';
+};
+
+/**
+ * Session summary over every set of the export: sets per exercise, miscounts, auto start / stop
+ * success (success = no Undo tapped), holds and how they ended, cues per rule, spoken lines per
+ * kind, fps min / median over all camera.fps samples. Ids and numbers only.
+ */
+export function formatSummary(results) {
+  const sum = (k) => results.reduce((n, r) => n + (r.speech?.[k] ?? 0), 0);
+  const checked = results.filter((r) => isMiscount(r) != null);
+  const missed = checked.filter(isMiscount);
+  const auto = results.filter((r) => r.autoInfo);
+  const autoStarted = auto.filter((r) => r.autoInfo.start === 'auto');
+  const proposed = auto.reduce((n, r) => n + r.autoInfo.stopsProposed, 0);
+  const undo = auto.reduce((n, r) => n + r.autoInfo.undo, 0);
+  const repCancel = auto.reduce((n, r) => n + r.autoInfo.rep, 0);
+  const stops = results
+    .map((r) => (r.autoInfo ? r.autoInfo.stop : r.ended ? 'tap' : '-'))
+    .filter((s) => s !== '-');
+  const holds = auto.flatMap((r) => r.autoInfo.holds);
+  const cues = results.flatMap((r) => r.focus?.cues ?? []).map((c) => c.id ?? '?');
+  const samples = results.flatMap((r) => r.fpsSamples ?? []);
+  const miss = missed.length
+    ? ` (${missed.map((r) => `${setRef(r)} ${fmtCount(r.counted)} vs ${fmtCount(r.logged)}`).join('; ')})`
+    : '';
+  const lines = [
+    `sets: ${tally(results.map(idOf))}`,
+    `miscounts: ${missed.length} of ${checked.length}${miss}`,
+    `auto-start: ${autoStarted.length} of ${results.length} sets, ` +
+      `${autoStarted.filter((r) => r.autoInfo.undo === 0).length} without Undo`,
+    `auto-stop: ${proposed} proposed, ${proposed - undo} without Undo (undo ${undo}, rep ${repCancel}); ` +
+      `stops ${tally(stops, ['still', 'stalled', 'hold', 'tap'])}`,
+    `holds: ${holds.length}` +
+      (holds.length ? ` (${tally(holds.map((h) => h.reason))})` : '') +
+      ` → ${tally(
+        holds.map((h) => h.how),
+        ['continue', 'next', 'save', '?'],
+      )}`,
+    `cues: ${tally(cues)}`,
+    `speech: count ${sum('count')}, hint ${sum('hint')}, cue ${sum('cue')}, ` +
+      `placement ${sum('placement')}, dropped ${sum('dropped')}`,
+    samples.length
+      ? `fps: min ${fmtInt(Math.min(...samples))}, median ${fmtInt(median(samples))} (${samples.length} samples)`
+      : 'fps: - (0 samples)',
+  ];
+  return ['Summary:', ...lines.map((l) => `  ${l}`)].join('\n');
 }
 
 /** Summary table (plain text, fixed width). */
@@ -519,6 +664,8 @@ async function main() {
   if (written > 0) {
     console.log("Review before committing — real-gym fixtures need Wongsaton's OK.");
   }
+  console.log(`\n${formatSets(results)}`);
+  console.log(`\n${formatSummary(results)}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

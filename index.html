@@ -9,6 +9,13 @@
          usage logging (odml.pa.googleapis.com), which has no off switch. -->
     <meta http-equiv="Content-Security-Policy" content="connect-src 'self' blob: data:" />
     <title>Gym Clean</title>
+    <!-- M6 install: the web manifest link is added at build time by vite-plugin-pwa. iOS reads
+         these tags instead; the dark page runs under the status bar (safe-area insets apply). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Gym Clean" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d0f12'/%3E%3Crect x='10' y='26' width='8' height='12' rx='2' fill='%23ff7a1a'/%3E%3Crect x='46' y='26' width='8' height='12' rx='2' fill='%23ff7a1a'/%3E%3Crect x='18' y='30' width='28' height='4' fill='%23ff7a1a'/%3E%3C/svg%3E"

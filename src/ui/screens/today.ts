@@ -13,7 +13,7 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
-import { dayMuscles, estimateMinutes, muscleLabel, type DayMuscles } from './dayInfo';
+import { dayMuscles, estimateMinutes, muscleLabel, type DayMuscles } from '../../core/dayInfo';
 
 /** The last finished session, as the Last time tile shows it. */
 export type TodayLast = {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   STREAK_MIN_PER_WEEK,
   type StatsSession,
+  doneDaysThisWeek,
   lastSession,
   newBests,
   previousSameDaySession,
@@ -337,5 +338,44 @@ describe('newBests', () => {
 describe('purity', () => {
   it('runs without a DOM', () => {
     expect(typeof (globalThis as { document?: unknown }).document).toBe('undefined');
+  });
+});
+
+describe('doneDaysThisWeek', () => {
+  const today = at(11, 13, 18); // Fri 13 Nov 2026
+
+  it('maps each day id finished this Mon–Sun week to its start time', () => {
+    const push = sess(at(11, 9), { dayId: 'push-a' });
+    const pull = sess(at(11, 11), { dayId: 'pull-a' });
+    expect(doneDaysThisWeek([push, pull], today)).toEqual({
+      'push-a': at(11, 9),
+      'pull-a': at(11, 11),
+    });
+  });
+
+  it('ignores unfinished sessions and sessions from earlier or later weeks', () => {
+    const rows = [
+      sess(at(11, 12), { dayId: 'legs-a', endedAt: undefined }),
+      sess(at(11, 8, 23, 59), { dayId: 'push-a' }), // Sunday of last week
+      sess(at(11, 16, 0, 0), { dayId: 'pull-a' }), // Monday of next week
+    ];
+    expect(doneDaysThisWeek(rows, today)).toEqual({});
+  });
+
+  it('counts a session starting exactly at Monday midnight', () => {
+    expect(doneDaysThisWeek([sess(at(11, 9, 0, 0), { dayId: 'push-a' })], today)).toEqual({
+      'push-a': at(11, 9, 0, 0),
+    });
+  });
+
+  it('keeps the latest start when a day id is done twice, whatever the row order', () => {
+    const later = sess(at(11, 12), { dayId: 'push-a' });
+    const earlier = sess(at(11, 9), { dayId: 'push-a' });
+    expect(doneDaysThisWeek([later, earlier], today)).toEqual({ 'push-a': at(11, 12) });
+    expect(doneDaysThisWeek([earlier, later], today)).toEqual({ 'push-a': at(11, 12) });
+  });
+
+  it('returns an empty record with no sessions', () => {
+    expect(doneDaysThisWeek([], today)).toEqual({});
   });
 });

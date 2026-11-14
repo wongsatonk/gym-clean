@@ -212,3 +212,72 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
 
   expect(errors).toEqual([]);
 });
+
+test('Pause sheet while resting: Skip moves to the next exercise and stays in rest; Escape resumes', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  await installMocks(page);
+  await page.clock.install({ time: new Date('2026-11-13T18:00:00Z') });
+  await page.goto('/');
+  await page.clock.pauseAt(new Date('2026-11-13T18:00:05Z'));
+
+  await page.getByRole('button', { name: /Push A/ }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
+  await page.clock.runFor(30_000);
+  await page.getByRole('button', { name: 'Set done' }).click();
+
+  // Rest before bench set 2.
+  const clock = page.locator('[data-rest-clock]');
+  const nextName = page.locator('.rest-next-name');
+  await expect(clock).toHaveText('2:00');
+  await expect(nextName).toHaveText('Dumbbell Bench Press');
+  await page.clock.runFor(20_000);
+  await expect(clock).toHaveText('1:40');
+
+  // The sheet names what Resume returns to; focus starts on Resume and Tab stays in the sheet.
+  await openPause(page);
+  const sheet = page.getByRole('dialog', { name: 'Paused' });
+  await expect(sheet.locator('.pause-context')).toHaveText('Resting · next Dumbbell Bench Press');
+  await expect(sheet.getByRole('button', { name: 'Resume' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.getByRole('button', { name: 'Skip exercise' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.getByRole('button', { name: 'End workout' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.getByRole('button', { name: 'Resume' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(sheet.getByRole('button', { name: 'End workout' })).toBeFocused();
+
+  // Skip: the upcoming exercise moves on, the screen stays Rest and the clock keeps running.
+  await sheet.getByRole('button', { name: 'Skip exercise' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.locator('[data-screen="rest"]')).toBeVisible();
+  await expect(nextName).toHaveText('Incline Dumbbell Press');
+  await expect(page.locator('.rest-eyebrow')).toHaveText('Next · Set 1 of 4');
+  await expect(clock).toHaveText('1:40');
+  await page.clock.runFor(10_000);
+  await expect(clock).toHaveText('1:30');
+
+  // Escape resumes: the sheet closes, the rest clock was frozen while paused, then runs on.
+  await openPause(page);
+  await expect(sheet.locator('.pause-context')).toHaveText('Resting · next Incline Dumbbell Press');
+  await page.clock.runFor(30_000);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await expect(page.locator('[data-screen="rest"]')).toBeVisible();
+  await expect(clock).toHaveText('1:30');
+
+  // The voice follows the skip: the 10 s cue names the new exercise.
+  await page.clock.runFor(80_000);
+  await expect
+    .poll(async () => (await spoken(page)).at(-1))
+    .toBe('Ten seconds. Next: Incline Dumbbell Press, set 1.');
+  expect(await spoken(page)).not.toContain('Ten seconds. Next: Dumbbell Bench Press, set 2.');
+
+  expect(errors).toEqual([]);
+});

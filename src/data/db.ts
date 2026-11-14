@@ -348,3 +348,21 @@ export async function setsForExercises(db: GymDb, exerciseIds: string[]): Promis
     .anyOf([...new Set(exerciseIds)])
     .sortBy('startedAt');
 }
+
+// ---------- M6: History (src/core/history.ts) ----------
+
+/**
+ * Finished sessions started at or after `sinceMs` (oldest first) and only their sets (start
+ * order). Feed `sinceMs` from `historyWindowStart` / `lastDaysStart` in src/core/history.ts.
+ */
+export async function finishedHistorySince(
+  db: GymDb,
+  sinceMs: number,
+): Promise<{ sessions: SessionRow[]; sets: SetRow[] }> {
+  const sessions = (await sessionsSince(db, sinceMs)).filter((s) => s.endedAt !== undefined);
+  const sets = await setsForSessions(
+    db,
+    sessions.map((s) => s.sessionId),
+  );
+  return { sessions, sets };
+}

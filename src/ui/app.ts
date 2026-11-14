@@ -26,6 +26,7 @@ import {
   finishSession,
   getExerciseNote,
   getCoachTips,
+  finishedHistorySince,
   getAccent,
   setAccent,
   getCoachVoice,
@@ -72,13 +73,23 @@ import { createFocusSummary } from './focusSummary';
 import { exerciseScreen as renderExercise } from './screens/exercise';
 import { pauseSheet as renderPauseSheet } from './screens/pauseSheet';
 import { previewScreen as renderPreview } from './screens/preview';
+import { historyScreen as renderHistory } from './screens/history';
 import { restScreen as renderRest } from './screens/rest';
+import {
+  exercisesWithHistory,
+  exerciseHistory,
+  historyWindowStart,
+  lastDays,
+  lastDaysStart,
+} from '../core/history';
 import { settingsScreen as renderSettings } from './screens/settings';
 import { summaryScreen as renderSummary } from './screens/summary';
 import { todayScreen as renderToday, type TodayLast } from './screens/today';
 import { icon } from './icons';
+import type { TabId } from './tabBar';
 import { applyAccent } from './tokens';
 import {
+  doneDaysThisWeek,
   lastSession,
   newBests,
   sessionVolume,
@@ -112,9 +123,13 @@ type TodayStats = {
   doneThisWeek: Record<string, number>;
 };
 
+/** M6 History: finished sessions and their sets in the window (loaded when the tab opens). */
+type HistoryData = { sessions: SessionRow[]; sets: SetRow[]; today: number } | 'error';
+
 type View =
   | { screen: 'today'; upNextDayId: string | null; stats: TodayStats | null }
   | { screen: 'settings' }
+  | { screen: 'history'; exerciseId: string | null; data: HistoryData | null }
   | { screen: 'preview'; day: ProgramDay; loading: boolean }
   | { screen: 'session'; s: SessionState; sheet: Sheet };
 
@@ -490,11 +505,85 @@ export function mountApp(root: HTMLElement): void {
         return todayScreen(v.upNextDayId, v.stats);
       case 'settings':
         return settingsScreen();
+      case 'history':
+        return historyView(v.exerciseId, v.data);
       case 'preview':
         return previewScreen(v.day, v.loading);
       case 'session':
         return sessionScreen(v.s, v.sheet);
     }
+  }
+
+  /** Tab bar: every tab is handled here, so a new tab id fails to compile until it's wired. */
+  function goTab(tab: TabId): void {
+    switch (tab) {
+      case 'today':
+        if (view.screen !== 'today') goToday();
+        return;
+      case 'settings':
+        if (view.screen !== 'settings') {
+          view = { screen: 'settings' };
+          render();
+        }
+        return;
+      case 'history':
+        if (view.screen !== 'history') openHistory();
+        return;
+      default: {
+        const unhandled: never = tab;
+        throw new Error(`Unhandled tab: ${String(unhandled)}`);
+      }
+    }
+  }
+
+  function openHistory(): void {
+    view = { screen: 'history', exerciseId: null, data: null };
+    render();
+    const t = now();
+    void finishedHistorySince(db, Math.min(historyWindowStart(t), lastDaysStart(t)))
+      .then(({ sessions, sets }) => {
+        if (view.screen !== 'history') return;
+        view = { ...view, data: { sessions, sets, today: t } };
+        render();
+      })
+      .catch((err: unknown) => {
+        logDbError(err);
+        if (view.screen === 'history') {
+          view = { ...view, data: 'error' };
+          render();
+        }
+      });
+  }
+
+  function historyView(exerciseId: string | null, data: HistoryData | null): HTMLElement {
+    const ok = data !== null && data !== 'error' ? data : null;
+    const sets = ok?.sets ?? [];
+    const today = ok?.today ?? now();
+    return renderHistory(
+      {
+        loading: data === null,
+        error: data === 'error',
+        unit,
+        days: ok ? lastDays(ok.sessions, sets, today) : [],
+        exercises: exercisesWithHistory(sets, today).map((id) => exerciseHistory(sets, id, today)),
+        detail: exerciseId ? exerciseHistory(sets, exerciseId, today) : null,
+        dayName: (id) => program.days.find((d) => d.id === id)?.name ?? id,
+        name: exerciseName,
+      },
+      {
+        onOpenExercise: (id) => {
+          if (view.screen !== 'history') return;
+          view = { ...view, exerciseId: id };
+          render();
+        },
+        onBack: () => {
+          if (view.screen !== 'history') return;
+          view = { ...view, exerciseId: null };
+          render();
+        },
+        onTab: (t) => goTab(t),
+      },
+    );
   }
 
   function goToday(): void {
@@ -544,10 +633,7 @@ export function mountApp(root: HTMLElement): void {
 
   function todayStats(sessions: SessionRow[], sets: SetRow[], t: number): TodayStats {
     const dots = weekDots(sessions, t);
-    const weekStart = dots[0]?.dayStart ?? t;
-    const doneThisWeek: Record<string, number> = {};
-    for (const x of sessions)
-      if (x.endedAt !== undefined && x.startedAt >= weekStart) doneThisWeek[x.dayId] = x.startedAt;
+    const doneThisWeek = doneDaysThisWeek(sessions, t);
     const info = lastSession(sessions, sets);
     let last: TodayLast | null = null;
     if (info) {
@@ -587,12 +673,7 @@ export function mountApp(root: HTMLElement): void {
         // The hero goes through the preview, which loads last time's weights for the defaults.
         onStart: (day) => void openPreview(day),
         onOpenDay: (day) => void openPreview(day),
-        onTab: (tab) => {
-          if (tab === 'settings') {
-            view = { screen: 'settings' };
-            render();
-          }
-        },
+        onTab: (tab) => goTab(tab),
       },
     );
   }
@@ -712,9 +793,7 @@ export function mountApp(root: HTMLElement): void {
           render();
         },
         onCameraTest: () => openCameraView('Camera test'),
-        onTab: (t) => {
-          if (t === 'today') goToday();
-        },
+        onTab: (t) => goTab(t),
       },
     );
   }
@@ -893,6 +972,9 @@ export function mountApp(root: HTMLElement): void {
     render();
     // Pause sheet: move focus into the dialog (the Pause button it came from is gone).
     if (s.paused && !prev.paused) root.querySelector<HTMLElement>('[data-pause="resume"]')?.focus();
+    // Back from the sheet: focus the Pause button it came from (the sheet is gone).
+    if (prev.paused && !s.paused) root.querySelector<HTMLElement>('[data-pause-open]')?.focus();
+    if (camera) camera.el.inert = s.paused; // the Pause sheet is modal over the camera too
     speakFocusCue(prev, s);
   }
 
@@ -1008,7 +1090,10 @@ export function mountApp(root: HTMLElement): void {
     if (s.phase !== 'rest') restView = null; // the tick only updates a live Rest screen
     if (s.phase === 'summary') return summaryScreen(s);
     const body = s.phase === 'rest' ? restScreen(s) : exerciseScreen(s);
-    if (s.paused) return h('div', { class: 'stack' }, body, pausedOverlay(s));
+    if (s.paused) {
+      body.inert = true; // the Pause sheet is modal: nothing behind it takes taps or focus
+      return h('div', { class: 'stack' }, body, pausedOverlay(s));
+    }
     if (sheet?.kind === 'list') return h('div', { class: 'stack' }, body, listSheet(s));
     if (sheet?.kind === 'notes')
       return h('div', { class: 'stack' }, body, notesSheet(s, sheet.exerciseId));

@@ -699,6 +699,198 @@ PWA from M6).
 - 🧍 **Checkpoint D:** I collect/label my meal photos (via the save-photos setting), run the
   training, import the model, and test a week of real meals.
 
+### M9 — Native iOS shell (outline only, added 2026-11-14; not planned yet)
+Referenced by the 2026-11-13 music-ducking Decision and by M10 phase B. A Capacitor iOS app that wraps the
+same web build, adds AVAudioSession `.playback` + `.duckOthers` for spoken cues, and hosts native plugins
+(M10's on-device brain). Scope, distribution (personal device / TestFlight) and owner are open questions
+(PROGRESS Blockers, M10-q9). M10 phase A doesn't need it.
+
+### M10 — AI trainer: plan actions, coach chat, on-device brain (added 2026-11-14)
+Wongsaton: "same feature as real personal training such as suggest me the food, I can ask to postpone the
+session when have another task to do on that day, ask to adjust the plan if today I hurt my arms, etc."
+Free and local where possible. His phone is an iPhone 17 Pro (Apple Intelligence, iOS 26 Foundation Models).
+
+**Three layers, built in this order:**
+- **Phase A (web, ships before M9): trainer actions + coach chat.** Deterministic, pure core functions on an
+  editable plan and schedule. A small rule-based intent matcher plus quick-action buttons. No AI.
+- **Phase B (with M9): the on-device brain.** A Capacitor Swift plugin uses Apple's Foundation Models
+  framework with tool calling. Each tool maps 1:1 to a phase A action. Data stays on the phone.
+- **Phase C (optional, opt-in, off by default): a Claude API brain** with Wongsaton's own key, stored only on
+  the phone. Needs a paid Anthropic account, so it waits for his explicit yes (CLAUDE.md rule 7).
+
+**Core principle: the brain only proposes, the app decides.** Every action, whether it comes from a button,
+the rule matcher, Apple's model or Claude, goes through the same pure `propose*` function. That function
+validates it and returns a **Proposal**: a plain before → after list plus a why line. Nothing changes
+until he taps **Apply**. Every applied change is **undoable**: an Undo button on the confirmation, and
+Settings → Plan changes. A model's text never changes data by itself.
+
+#### Goals
+1. **Editable plan.** The program stops being read-only at runtime. On first run, `program.json` seeds a
+   stored **user plan** (Dexie). There is also a **schedule**: the rotation order, plus which weekdays are rest
+   days. **Day overrides** are dated, today-only changes. Today's workout = `effectiveDay(plan, schedule,
+   overrides, date)`. "Up next" comes from a pure **calendar** projection: the next training weekday gets
+   the next rotation day after the last finished session. This replaces today's "last session + 1".
+2. **Trainer actions (phase A, pure, tests first)**, each returns a Proposal:
+
+| Action | What it proposes | Scope |
+|---|---|---|
+| **Not today / move session** | Today becomes rest and the rotation continues on the next training day. Two modes: **use the rest day** (this week's next rest weekday becomes a training day, so the week still gets all its sessions) or **push the week** (everything slides one day; the last session spills into next week). Also "Move to <day>". A 7-day preview shows before → after. | dated override |
+| **Go easy on a body area** (arms, shoulders, chest, back, legs, core; joint words map to areas as data) | For each of today's exercises: an exercise whose **primary** muscles are in the area is **swapped** for the best catalog candidate that hits the same other muscles and doesn't load the area, or **removed** if no candidate fits. An exercise with the area only in **secondary** muscles is **lightened** (default; see M10-q2). | today |
+| **Lighter today** | Every exercise: −1 set (minimum 2), weight −10% snapped **down** to the unit step; bodyweight: the rep target −20%. | today |
+| **Deload week** | 7 days from today: sets halved (rounded up), weight −10%. | dated overrides |
+| **Swap an exercise** | The top 3 catalog candidates: same primary muscle group, equipment he has, not already in the day. Today only or from now on. | today or plan |
+| **Stalled → adjust** | Builds on M5b. An exercise whose top set (weight, reps at that weight) hasn't improved for 3 finished sessions in a row (lighter/deload sessions excluded) gets two options: **−10% and build back up** (weight down, the rep range top +2), or **+1 set** (maximum 5). Shown on Summary under the M5b coach line and in the chat. | plan |
+| **Food suggestion** | **Later, needs M7:** from today's remaining kcal/protein, pick 3 items from favorites, recipes and Thai dishes that fit, each with Log. Until M7 the chip says "Food tips come with Fuel." | — |
+
+3. **Mid-workout.** From the Pause sheet, the coach can swap or remove exercises that have **no logged sets
+   yet** (new session event `REPLACE_UPCOMING`). Logged sets are never rewritten. "Lighter" mid-workout only
+   affects sets that haven't started.
+4. **Coach chat (phase A).** A **Coach** sheet opens from Today, the day preview and the Pause sheet. It has:
+   - **quick-action chips** (≥ 56px): Not today · Go easy on… (area chips) · Lighter today · Swap an exercise ·
+     Adjust my plan · What should I eat? (later);
+   - an optional text box for free text, matched by the rule-based intent matcher. Typing never happens
+     mid-set (M1b rule): the sheet isn't reachable from the Exercise screen during a set or from the camera;
+   - Proposal cards with a before → after list, a why line, **Apply** (the CTA) and **Not now**;
+   - after Apply, a confirmation with **Undo** (≥ 56px, 10 s) and a line in Settings → Plan changes;
+   - text it doesn't understand gets "I can help with:" plus the chips, never a guess.
+5. **Voice.** Replies are shown, not spoken, on Today and the preview (he's holding the phone). When a change
+   is applied during a workout, a short confirmation of ≤ 8 words is spoken as kind `cue`, for example
+   "Done. Curls swapped for hammer curls." It never cancels speech and never plays during a set.
+6. **Visible everywhere.** Today and the preview show "Adjusted today: <summary>" with Undo. The week strip
+   follows the calendar (a postponed day moves). A rest weekday shows "Rest day" with **Train anyway**:
+   Start is never disabled, per Decision.
+
+#### Phase B — on-device brain (with M9)
+- A **`GymBrain` Capacitor plugin** (Swift) with `availability()` and `respond({ instructions, context,
+  messages })` → `{ text, toolCalls[] }`. It uses `LanguageModelSession` with tools. Each tool's arguments
+  are `@Generable` structs **generated** from the TS tool definitions, which are the single source. A Swift
+  tool's `call` only **records** the call and returns "Proposed; the app will ask the user to confirm." The
+  app validates the call through the phase A `propose*` function and shows the Proposal. An invalid call
+  gets "I couldn't do that" plus the chips.
+- **Tools (1:1 with actions):** `postponeSession`, `avoidBodyArea`, `lighterToday`, `deloadWeek`,
+  `swapExercise`, `adjustStalledExercise`, `suggestFood` (after M7). The read context (today's plan, the
+  next 7 days, 4 weeks of per-exercise top sets, active overrides) is a compact serialized block. It fits a
+  token budget well inside the on-device model's context window, and a test enforces the budget.
+- **Fallback chain:** quick-action chips always use the rules directly. Free text goes to Apple's model when
+  `availability` is `.available`. Otherwise it goes to Claude when phase C is on, otherwise to the rule
+  matcher. The reason is shown once in Settings, e.g. "Apple Intelligence is off" / "not ready yet" / "this
+  device can't run it". Model errors (guardrail, context too long, unsupported language, timeout) fall back
+  to the rules with a one-line note. The PWA in Safari always uses rules (or Claude).
+- **Check current docs before building** (CLAUDE.md rule 8): Foundation Models' API is new and changes.
+
+#### Phase C — Claude brain (optional)
+- Settings → **Cloud coach (Claude)**, off by default. Before it turns on, it explains plainly: "Your
+  messages, your plan and your recent workout numbers (exercises, sets, reps, weights, dates) are sent to
+  Anthropic to answer. Your notes, camera and developer log are never sent." It takes his own API key,
+  pasted and stored only in IndexedDB on the phone. The key is never in the repo, the build, exports or the
+  dev log. There's a model picker (default `claude-opus-5-5`; a cheaper model if he picks one), Test key and
+  Remove key.
+- It uses the same tool definitions, instructions and validation as phase B, through the Messages API with
+  tool use, called from the browser. It falls back to rules on any error. CSP `connect-src` gains
+  `https://api.anthropic.com`, and requests only happen while the setting is on.
+- Food suggestions with phase C would also send today's nutrition totals. They're listed in the explainer
+  once M7 exists.
+
+#### Safety (all phases)
+- **Coaching language only, no medical claims.** The coach never diagnoses or names conditions, never
+  suggests treatment (ice, stretches, medication, "rest N days"), and never says training is "safe". The
+  M5b banned words list applies, plus diagnosis terms as data (e.g. strain, sprain, tear, tendinitis,
+  inflammation). All of these are checked on every reply: rule texts at test time, model replies at runtime
+  by `sanitizeReply`, which swaps a failing reply for a fixed safe line.
+- **Discomfort words** ("hurt", "sore", "pain", "เจ็บ", "ปวด" … as data) always add the fixed referral line:
+  **"If something doesn't feel right, check with a doctor or physio."** Then the avoid-area proposal.
+- **Red-flag phrases** (e.g. chest pain, dizzy, numb, can't move it, as data) get **"Stop the workout for
+  today and get checked by a doctor."** The only buttons offered are End workout / Not today, and no
+  training proposal is made.
+- A guardrail **instructions** text shared by B and C: role (strength coach for one person), act only
+  through tools, every change needs his confirmation, replies ≤ 3 short sentences, the referral line
+  verbatim, no medical content, no promises about results, and "I can help with…" for anything else.
+
+#### Privacy
+- Phases A and B: everything stays on the phone, with no network request (the e2e test checks this).
+- Chat text isn't stored beyond the open sheet, unless M10-q12 says keep a history. The dev log stores ids
+  and numbers only: intent id, action id, proposal accepted/dismissed/undone, brain used, latency. It never
+  stores message text.
+- Phase C sends only what the explainer lists, and only while it's on. The repo is public: no personal
+  numbers in tests, fixtures, evals or docs.
+
+#### Non-goals
+AI-generated programs (§6 still applies: the coach edits the plan, it doesn't write new ones), a full manual
+plan editor, speech recognition in the app (iOS keyboard dictation is his choice), calendar sync, push
+reminders, applying anything without a tap, medical or injury advice, and running Apple's model in the
+Safari PWA.
+
+#### Data model (adds to §4)
+```ts
+type BodyArea = 'arms' | 'shoulders' | 'chest' | 'back' | 'legs' | 'core';
+type UserPlan = { days: ProgramDay[]; seededFrom: string /* program.json hash */; edited: boolean };
+type Schedule = { rotation: string[] /* dayIds */; restWeekdays: number[] /* 0 = Sun */ };
+type DayAdjust = {
+  kind: 'avoidArea' | 'lighter' | 'deload' | 'swap';
+  area?: BodyArea;
+  exercises: PlannedExercise[];          // the day as it will run
+};
+type DayOverride = { date: string /* local YYYY-MM-DD */; rest?: true; dayId?: string; adjust?: DayAdjust };
+type TrainerState = { version: number; plan: UserPlan; schedule: Schedule; overrides: DayOverride[] };
+// PlannedExercise gains: weightKgToday?: number  (a lighter/deload default that wins over last time)
+//                        adjusted?: 'lighter' | 'deload' | 'swap' | 'avoidArea'
+type Proposal = {
+  action: 'postpone' | 'avoidArea' | 'lighter' | 'deload' | 'swap' | 'stall' | 'food';
+  scope: 'today' | 'dated' | 'plan';
+  title: string; lines: { before: string; after: string }[]; why: string; say?: string;
+  next: TrainerState;                    // the state after Apply (validated, pure)
+  baseVersion: number;                   // stale if the state changed since
+};
+type PlanChange = {
+  id?: number; createdAt: number; action: Proposal['action']; title: string;
+  source: 'chip' | 'rules' | 'apple' | 'claude';
+  before: TrainerState; after: TrainerState; undoneAt?: number;
+};
+// SessionRow gains: adjust?: Proposal['action'][]  (lighter/deload sessions are excluded from stall/bests)
+```
+
+#### Accept
+- **Phase A:**
+  - Unit tests, written first, for:
+    - the calendar: rotation after the last finished session, rest weekdays, missed days, both postpone
+      modes, postpone twice, postponing on a rest day, Monday/Sunday edges and DST;
+    - every action, including: no candidate → remove; never swaps into an exercise that loads the area;
+      lighter/deload stepping down in kg and lb; the stall rule excluding lighter sessions;
+    - Apply/Undo round trip (LIFO), stale `baseVersion` rejected, and seeding/re-seeding;
+    - `REPLACE_UPCOMING` rejecting exercises with logged sets, and `weightKgToday` beating last time;
+    - the intent matcher on the eval set: ≥ 90% of the rule-supported items get the right intent and slots,
+      and **100%** of discomfort and red-flag items get the safety flag;
+    - every reply text: ≤ 12 words for spoken lines, no banned or diagnosis words, and the referral line
+      present when discomfort is flagged.
+  - Every catalog exercise (including the new swap pool) has muscles, a cue and 2–3 how-to lines, and every
+    program exercise has ≥ 1 swap candidate.
+  - E2E (390×844):
+    - Not today → the preview shows the moved week → Apply → Today shows the next day → Undo restores it;
+    - "my arms hurt" → referral line + avoid-arms proposal → Apply → the preview shows the swaps → the
+      workout runs the swapped day;
+    - Lighter today → Exercise shows −10% weights;
+    - a mid-workout swap from the Pause sheet;
+    - a stall proposal on Summary from seeded history;
+    - a red-flag phrase → no training proposal;
+    - no text box on the Exercise screen during a set, every button ≥ 56px, and no off-device request.
+  - 390×844 screenshots of the coach sheet, a proposal, the confirmation with Undo, Today adjusted, the rest
+    day, and Plan changes.
+- **Phase B:**
+  - A contract test: the generated Swift tool file and `tools.contract.json` are up to date with the TS
+    tool definitions (a CI diff check), and every tool maps to exactly one action.
+  - Validation tests: invalid tool arguments are rejected, a tool call never applies anything, and
+    `sanitizeReply` replaces medical wording. The context serializer stays within budget on a heavy
+    4-week history.
+  - Fallback tests for every availability reason and error code.
+  - An on-device eval run (dev-only screen in the native build) over the eval set: right action and
+    arguments on ≥ 85% (threshold: M10-q10), 100% safe replies, 0 changes without a tap, p50 latency
+    reported. The report holds ids and numbers only.
+- **Phase C:** with a mocked API, the request body contains exactly the listed fields (no notes, no dev log,
+  no key in the body); setting off → 0 requests to api.anthropic.com; errors fall back to rules. A local,
+  never-in-CI eval run with his key reports the same metrics as phase B.
+- 🧍 **Checkpoint E (after phase A):** Wongsaton uses the coach for a week: at least one "Not today", one
+  "Go easy on…" and one swap. He reports what felt off. Phase B gets its own checkpoint with M9.
+
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).

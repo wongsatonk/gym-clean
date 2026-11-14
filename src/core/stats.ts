@@ -39,24 +39,25 @@ export type NewBest = {
 };
 
 /** Weights within this many kg are the same (lb-entered weights are stored as odd kg). */
-const WEIGHT_EPS_KG = 0.01;
+export const WEIGHT_EPS_KG = 0.01;
 
-const isFinished = (s: StatsSession): boolean => s.endedAt !== undefined;
+export const isFinished = (s: StatsSession): boolean => s.endedAt !== undefined;
 
-function dayStartOf(ms: number): number {
+/** Local midnight of the day that holds `ms`. */
+export function dayStartOf(ms: number): number {
   const d = new Date(ms);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
 
 /** Local midnight of the Monday starting the week that holds `ms`. */
-function weekStartOf(ms: number): number {
+export function weekStartOf(ms: number): number {
   const d = new Date(ms);
   const sinceMonday = (d.getDay() + 6) % 7;
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() - sinceMonday).getTime();
 }
 
 /** `n` local days after the local midnight `dayStart` (DST-safe). */
-function addDays(dayStart: number, n: number): number {
+export function addDays(dayStart: number, n: number): number {
   const d = new Date(dayStart);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n).getTime();
 }
@@ -105,6 +106,26 @@ export function weekDots(sessions: readonly StatsSession[], today: number): Week
           : 'future';
     return { dayStart, state };
   });
+}
+
+/**
+ * Program day ids finished in the current Mon–Sun week (local time) → that session's
+ * `startedAt` (ms). A day done twice keeps its latest start. Sessions from later weeks are
+ * ignored too, so clock skew can't mark a day done early.
+ */
+export function doneDaysThisWeek(
+  sessions: readonly StatsSession[],
+  today: number,
+): Record<string, number> {
+  const start = weekStartOf(today);
+  const end = addDays(start, 7);
+  const out: Record<string, number> = {};
+  for (const s of sessions) {
+    if (!isFinished(s) || s.startedAt < start || s.startedAt >= end) continue;
+    const prev = out[s.dayId];
+    if (prev === undefined || s.startedAt > prev) out[s.dayId] = s.startedAt;
+  }
+  return out;
 }
 
 /** Σ reps × kg. Bodyweight sets (0 kg) add 0. */
@@ -158,10 +179,10 @@ export function lastSession(
   };
 }
 
-type Top = { weightKg: number; reps: number };
+export type Top = { weightKg: number; reps: number };
 
 /** Heaviest set, then most reps at that weight (0-rep sets ignored). */
-function topSet(logs: readonly SetLog[]): Top | null {
+export function topSet(logs: readonly SetLog[]): Top | null {
   let top: Top | null = null;
   for (const l of logs) {
     if (l.reps <= 0) continue;
