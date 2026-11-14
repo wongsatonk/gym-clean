@@ -224,6 +224,7 @@ describe('AUTO_SET_DEFAULTS', () => {
       undoStillFactor: 2,
       idleNoPersonSec: 180,
       idleNoRepSec: 600,
+      armAfterAutoStopSec: 5,
     });
   });
 });
@@ -392,6 +393,18 @@ describe('undo window', () => {
     sim.partial();
     sim.hold('top', 5000);
     expect(sim.types()).toEqual(['stopPending', 'commit']);
+    // Counts are frozen at the proposal: the window's partial isn't in the saved set.
+    expect(nth(sim.of('commit'), 0).action).toMatchObject({ reps: 3, partials: 0 });
+  });
+
+  it('a cancelled window keeps the partials seen inside it', () => {
+    const { sim } = pendingSet();
+    sim.hold('top', 300);
+    sim.partial();
+    sim.hold('top', 300);
+    sim.rep();
+    expect(sim.types()).toEqual(['stopPending', 'stopCancelled']);
+    expect(sim.auto.counts).toEqual({ reps: 4, partials: 1 });
   });
 
   it('away and stalled stops are not doubled after a cancel', () => {
@@ -530,17 +543,176 @@ describe('auto start in rest', () => {
     });
   });
 
-  it('after a commit the next rest arms 10 s after the backdated end', () => {
+  it('after an auto stop the rest arms at max(end + 10 s, commit + 5 s)', () => {
     const sim = inSet();
     const last = nth(sim.reps_(2), 1);
     sim.hold('top', 11200); // still stop at +6 s, commit at +11 s
     expect(sim.types()).toEqual(['stopPending', 'commit']);
+    const commitT = nth(sim.of('commit'), 0).t;
     expect(sim.auto.state).toBe('rest');
-    // The app saves and resets the counter; rest started at the backdated end.
+    // The app saves and resets the counter; rest started at the backdated end (≈ 11 s ago).
     sim.session('rest', false, sim.t - last.t);
+    // Walking to the rack / picking the dumbbells up right after "Set done": two rep-like moves.
     sim.hold('top', 200);
+    const pickUps = sim.reps_(2);
+    expect(nth(pickUps, 1).t).toBeLessThan(commitT + 5000);
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+    // Later real reps start the next set.
+    sim.hold('top', 3000);
     sim.reps_(2);
     expect(sim.types()).toEqual(['stopPending', 'commit', 'start']);
+  });
+
+  it('the commit + 5 s floor survives later setSession(rest) refreshes', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 11100);
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+    for (let i = 0; i < 3; i++) {
+      sim.session('rest', false, sim.t - last.t + 12000); // even a rest that claims to be long
+      sim.hold('top', 100);
+    }
+    sim.reps_(2);
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+  });
+
+  it('a rep that left the start band before the commit is not a start candidate', () => {
+    const sim = inSet();
+    sim.reps_(3);
+    sim.hold('top', 6100);
+    expect(sim.types()).toEqual(['stopPending']);
+    // A slow rep starts in the window and Set done is tapped mid-rep.
+    sim.hold('top', 500);
+    sim.hold('down', 1000, { angle: (f) => TOP - 40 * f });
+    const endedAt = nth(sim.confirm(), 0);
+    expect(endedAt.type).toBe('commit');
+    sim.session('rest', false, 7000);
+    sim.hold('down', 2000, { angle: (f) => TOP - 40 - 75 * f });
+    sim.hold('bottom', 1000, { angle: BOTTOM });
+    sim.hold('up', 3000, { angle: (f) => BOTTOM + (TOP - BOTTOM) * f });
+    sim.t += 33;
+    const slow = repEvent('rep', 4, sim.t, 3000, 3000);
+    sim.frame('top', TOP, true, [slow]); // completes after commit + 5 s
+    expect(slow.t).toBeGreaterThan(nth(sim.of('commit'), 0).t + 5000);
+    sim.hold('top', 400);
+    sim.rep(); // within 8 s of the slow one, but the slow one doesn't count
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+    sim.hold('top', 400);
+    sim.rep();
+    expect(sim.types()).toEqual(['stopPending', 'commit', 'start']);
+  });
+});
+
+describe("don't commit mid-rep", () => {
+  it('slow 3.5 s rep starting 2 s into the window: no commit mid-rep, the rep cancels', () => {
+    const sim = inSet();
+    sim.reps_(3);
+    sim.hold('top', 6100); // 6 s lockout breath
+    const stop = nth(sim.of('stopPending'), 0);
+    sim.hold('top', stop.t + 2000 - sim.t);
+    const rep4 = sim.rep({ downMs: 1500, bottomMs: 500, upMs: 1500 });
+    expect(rep4.t).toBeGreaterThan(stop.t + 5400);
+    expect(sim.of('commit')).toEqual([]);
+    const cancelled = nth(sim.of('stopCancelled'), 0);
+    expect(cancelled.action).toEqual({ type: 'stopCancelled', reason: 'rep' });
+    expect(cancelled.t).toBe(rep4.t);
+    expect(sim.auto.state).toBe('set');
+    expect(sim.auto.counts.reps).toBe(4);
+  });
+
+  it('an attempt in the window that returns without a rep commits on the return', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(3), 2);
+    sim.hold('top', 6100);
+    const stop = nth(sim.of('stopPending'), 0);
+    sim.hold('top', stop.t + 1500 - sim.t);
+    sim.hold('down', 4000, { angle: (f) => TOP - 30 * f }); // until 5.5 s into the window
+    expect(sim.of('commit')).toEqual([]);
+    sim.hold('top', 300); // back without a counted rep
+    const commit = nth(sim.of('commit'), 0);
+    expect(commit.t).toBeLessThan(stop.t + 5500 + 100);
+    expect(commit.action).toMatchObject({ endedAt: last.t, reps: 3 });
+  });
+
+  it('an attempt in the window that leaves the frame commits after the away time', () => {
+    const sim = inSet();
+    sim.reps_(3);
+    sim.hold('top', 6100);
+    const stop = nth(sim.of('stopPending'), 0);
+    sim.hold('top', stop.t + 4000 - sim.t);
+    sim.hold('down', 1500, { angle: (f) => TOP - 30 * f });
+    const goneT = sim.t;
+    sim.hold('down', 2900, { tracking: false, present: false });
+    expect(sim.of('commit')).toEqual([]);
+    sim.hold('down', 300, { tracking: false, present: false });
+    expect(nth(sim.of('commit'), 0).t).toBeGreaterThanOrEqual(goneT + 3000 - 40);
+  });
+
+  it('a stalled stop (already outside the band) still commits when the window ends', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('down', 600, { angle: (f) => TOP - 100 * f });
+    sim.hold('bottom', 10100, { angle: BOTTOM, jitter: 4 });
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop.action).toMatchObject({ reason: 'stalled' });
+    sim.hold('bottom', 5100, { angle: BOTTOM, jitter: 4 });
+    expect(nth(sim.of('commit'), 0).t).toBeLessThan(stop.t + 5100);
+  });
+});
+
+describe('clock going backwards (stream restart, new t0)', () => {
+  it('idle noPerson still fires after a restart (no stale last-seen time)', () => {
+    const sim = inRest(5000);
+    sim.hold('top', 60000, { jitter: 3 });
+    sim.t = 0;
+    sim.hold('top', 179000, { tracking: false, present: false });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 1100, { tracking: false, present: false });
+    expect(sim.types()).toEqual(['close']);
+  });
+
+  it('a set keeps going: the still stop comes 6 s after the restart', () => {
+    const sim = inSet({ t0: 50000 });
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 3000);
+    sim.t = 0;
+    sim.hold('top', 5900);
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 200);
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop.t).toBeGreaterThanOrEqual(6000 - 40);
+    // endedAt is on the new clock, before the restart.
+    expect(stop.action.endedAt).toBeLessThanOrEqual(0);
+    expect(stop.action.endedAt).toBeGreaterThan(-3100); // last rep ≈ 3 s before the restart
+    void last;
+  });
+
+  it('a pending window continues on the new clock and commits ≈ on time', () => {
+    const sim = inSet({ t0: 50000 });
+    sim.reps_(2);
+    sim.hold('top', 6100);
+    const stop = nth(sim.of('stopPending'), 0);
+    sim.hold('top', stop.t + 2000 - sim.t);
+    sim.t = 0;
+    sim.hold('top', 2800);
+    expect(sim.of('commit')).toEqual([]);
+    expect(sim.auto.pendingUntil).toBeLessThan(3100);
+    sim.hold('top', 400);
+    const commit = nth(sim.of('commit'), 0);
+    expect(commit.t).toBeLessThan(3200);
+    expect(commit.action.endedAt).toBeLessThan(commit.t);
+  });
+
+  it('rest arming carries over to the new clock', () => {
+    const sim = inRest(4000, { t0: 60000 });
+    sim.hold('top', 1000);
+    sim.t = 0; // 5 s of rest so far; armed 5 s from here
+    sim.hold('top', 300);
+    sim.reps_(2); // done by ≈ 4.6 s
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 1500);
+    sim.reps_(2);
+    expect(sim.types()).toEqual(['start']);
   });
 });
 

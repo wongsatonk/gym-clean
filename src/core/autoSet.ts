@@ -7,6 +7,17 @@
 //
 // The Undo window delays the save: `stopPending` is only a proposal; `commit` (when the window
 // expires, or on confirm()) is when the caller dispatches SET_DONE, backdated to `endedAt`.
+// Counts are frozen at the proposal (a partial in the window isn't saved) unless it is cancelled.
+// If an attempt leaves the start band during the window, the commit waits for it to end: a counted
+// rep cancels ("Keep going."), a return to the band without one commits then.
+//
+// Caller contract:
+// - push() every camera tick, including frames with no pose (tracking false, present false);
+//   away stops, idle closes and window expiry only happen inside push().
+// - After a `start` action, dispatch START_SET (now = at) synchronously, before any
+//   setSession({ phase: 'rest' }) call; otherwise the started set is dropped as a manual Set done.
+// - If the frame clock restarts (t goes backwards), stored times are rebased onto the new clock as
+//   if no time passed, and the stop/idle timers restart from the first new frame.
 import type { RepPhase } from './repCounter';
 import type { LandmarkFrame, RepEvent } from './types';
 
@@ -18,6 +29,11 @@ export type AutoSetConfig = {
   startWindowSec: number;
   /** Rest must have run this long before reps can start a set. */
   armAfterSec: number;
+  /**
+   * After an auto stop, rest also stays unarmed until this long after the commit (walking to the
+   * rack / picking the dumbbells up right after "Set done" mustn't start a set).
+   */
+  armAfterAutoStopSec: number;
   /** A set never auto-stops with fewer reps than this. */
   stopMinReps: number;
   /** `still`: in the start band (or setup), no event, no phase change, for this long. */
@@ -46,6 +62,7 @@ export const AUTO_SET_DEFAULTS: Readonly<AutoSetConfig> = Object.freeze({
   startReps: 2,
   startWindowSec: 8,
   armAfterSec: 10,
+  armAfterAutoStopSec: 5,
   stopMinReps: 2,
   stillSec: 6,
   awaySec: 3,
@@ -90,7 +107,10 @@ export type AutoSetSession = {
   restElapsedMs: number;
 };
 
-/** One camera frame, after the rep counter has seen it. */
+/**
+ * One camera frame, after the rep counter has seen it. Push one for every camera tick, including
+ * ticks with no pose (tracking false, present false), or away / idle / commit never fire.
+ */
 export type AutoSetInput = {
   t: number;
   /** The counter's visibility gate passed on this frame. */
@@ -111,7 +131,7 @@ export type AutoSetInput = {
 export type AutoSet = {
   /** Tell the machine the session phase (call on every dispatch and when (un)pausing). */
   setSession(session: AutoSetSession, t: number): AutoSetAction[];
-  /** Feed one frame (in time order). */
+  /** Feed one frame per camera tick (in time order; see AutoSetInput). */
   push(input: AutoSetInput): AutoSetAction[];
   /** Undo tapped: cancels a pending stop. */
   undo(t: number): AutoSetAction[];
@@ -147,8 +167,8 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
 
   let state: AutoSetState = 'off';
   let paused = false;
-  /** First time seen (idle timers start here). */
-  let opened: number | null = null;
+  /** Latest t seen (push or setSession), to detect a frame-clock restart. */
+  let lastT: number | null = null;
   /** Last frame with a person in frame (away / noPerson). */
   let lastPresentT = -Infinity;
   /**
@@ -157,7 +177,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
    */
   let resumeT = -Infinity;
   let lastRepT = -Infinity;
-  /** Idle timers never count from before this (open, resume). */
+  /** Idle timers never count from before this (open, resume, clock restart). */
   let idleFloor = -Infinity;
 
   // Counter phase bookkeeping.
@@ -168,6 +188,10 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
 
   // Rest: candidate reps (completed after arming, not paused) and partials, for the start.
   let armAt = Infinity;
+  /** After an auto stop: commit + armAfterAutoStopSec; armAt never goes below it. */
+  let armFloor = -Infinity;
+  /** When rest began here: reps that left the start band before it belong to the set. */
+  let restEnteredAt = -Infinity;
   let restReps: { t: number; departT: number }[] = [];
   let restPartials: number[] = [];
 
@@ -180,19 +204,52 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
   /** Last time the angle moved past stillMoveDeg from its anchor (still timer only). */
   let movedT = -Infinity;
   let anchorAngle: number | null = null;
-  /** Stop timers never count from before this (set start, resume, cancel). */
+  /** Stop timers never count from before this (set start, resume, cancel, clock restart). */
   let stopFloor = -Infinity;
   let stillFactor = 1;
+
+  // Pending stop (Undo window).
   let pendingUntil: number | null = null;
   let pendingEndedAt = 0;
+  /** Counts frozen at the proposal. */
+  let pendingReps = 0;
+  let pendingPartials = 0;
+  /** The counter left the start band during the window: an attempt is in progress. */
+  let attemptInWindow = false;
 
-  function touch(t: number): void {
-    if (opened === null) {
-      opened = t;
-      idleFloor = t;
-    }
+  function see(t: number): void {
+    if (lastT === null) idleFloor = t;
+    else if (t < lastT) rebase(t - lastT, t);
+    lastT = t;
   }
 
+  /**
+   * Frame clock restarted (new t0): move every stored time onto the new clock as if no time
+   * passed, forget the phase history, and restart the stop/idle timers at `t`.
+   */
+  function rebase(shift: number, t: number): void {
+    lastPresentT += shift;
+    resumeT += shift;
+    lastRepT += shift;
+    armAt += shift;
+    armFloor += shift;
+    restEnteredAt += shift;
+    if (lastEventT !== null) lastEventT += shift;
+    activityT += shift;
+    movedT += shift;
+    if (pendingUntil !== null) pendingUntil += shift;
+    pendingEndedAt += shift;
+    restReps = restReps.map((r) => ({ t: r.t + shift, departT: r.departT + shift }));
+    restPartials = restPartials.map((p) => p + shift);
+    prevPhase = null;
+    lastTopT = null;
+    departT = null;
+    anchorAngle = null;
+    stopFloor = t;
+    idleFloor = t;
+  }
+
+  /** Enter rest at `t`, the rest having run `restElapsedMs` already. */
   function enterRest(t: number, restElapsedMs: number): void {
     state = 'rest';
     pendingUntil = null;
@@ -200,14 +257,16 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     partials = 0;
     restReps = [];
     restPartials = [];
+    restEnteredAt = t;
+    armFloor = -Infinity;
     armAt = t - restElapsedMs + ms(config.armAfterSec);
   }
 
-  function enterSet(t: number, startReps: number, startPartials: number, lastT: number | null) {
+  function enterSet(t: number, startReps: number, startPartials: number, lastEvT: number | null) {
     state = 'set';
     reps = startReps;
     partials = startPartials;
-    lastEventT = lastT;
+    lastEventT = lastEvT;
     activityT = t;
     movedT = t;
     anchorAngle = null;
@@ -225,16 +284,23 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     return [{ type: 'stopCancelled', reason }];
   }
 
-  function commit(): AutoSetAction[] {
-    const action: AutoSetAction = { type: 'commit', endedAt: pendingEndedAt, reps, partials };
-    // The rest started at the backdated end; the caller's setSession refines it.
+  function commit(t: number): AutoSetAction[] {
     const end = pendingEndedAt;
-    enterRest(end, 0);
+    const action: AutoSetAction = {
+      type: 'commit',
+      endedAt: end,
+      reps: pendingReps,
+      partials: pendingPartials,
+    };
+    // The rest started at the backdated end; the caller's setSession refines it.
+    enterRest(t, t - end);
+    armFloor = t + ms(config.armAfterAutoStopSec);
+    armAt = Math.max(armAt, armFloor);
     return [action];
   }
 
   function setSession(session: AutoSetSession, t: number): AutoSetAction[] {
-    touch(t);
+    see(t);
     if (state === 'closed') return [];
     const out: AutoSetAction[] = [];
     const wasPaused = paused;
@@ -246,7 +312,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     }
     if (session.phase === 'rest') {
       if (state !== 'rest') enterRest(t, session.restElapsedMs);
-      else armAt = t - session.restElapsedMs + ms(config.armAfterSec);
+      else armAt = Math.max(t - session.restElapsedMs + ms(config.armAfterSec), armFloor);
       if (paused) {
         restReps = [];
         restPartials = [];
@@ -283,6 +349,8 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
         continue;
       }
       const depart = departT ?? ev.t - ev.eccentricMs - ev.concentricMs;
+      // Left the start band before rest began here: the end of the last set, not a new one.
+      if (depart < restEnteredAt) continue;
       const last = restReps[restReps.length - 1];
       if (last && ev.t - last.t > ms(config.startWindowSec)) restReps = [];
       restReps.push({ t: ev.t, departT: depart });
@@ -301,6 +369,19 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     restPartials = restPartials.filter((p) => p >= oldest);
     if (paused) return [];
     return idle(t);
+  }
+
+  /** In the window: cancel on a rep; commit at expiry unless an attempt is still in progress. */
+  function pendingFrame(input: AutoSetInput, repSeen: boolean): AutoSetAction[] {
+    const { t } = input;
+    if (repSeen) return cancel(t, 'rep');
+    if (pendingUntil === null || t < pendingUntil || paused) return [];
+    if (!attemptInWindow || START_BAND.has(input.phase)) return commit(t);
+    // Held for an attempt in progress; give up on it like a stop would (away / stalled).
+    const since = Math.max(activityT, pendingUntil);
+    if (t - Math.max(lastPresentT, pendingUntil) >= ms(config.awaySec)) return commit(t);
+    if (t - since >= ms(config.stalledSec)) return commit(t);
+    return [];
   }
 
   function setFrame(input: AutoSetInput, phaseChanged: boolean): AutoSetAction[] {
@@ -326,9 +407,8 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     }
 
     if (state === 'pending') {
-      if (repSeen) return cancel(t, 'rep');
-      if (pendingUntil !== null && t >= pendingUntil && !paused) return commit();
-      return [];
+      if (phaseChanged && !START_BAND.has(input.phase)) attemptInWindow = true;
+      return pendingFrame(input, repSeen);
     }
     if (paused) return [];
 
@@ -343,6 +423,9 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
         state = 'pending';
         pendingUntil = t + ms(config.undoSec);
         pendingEndedAt = Math.max(lastEventT, resumeT);
+        pendingReps = reps;
+        pendingPartials = partials;
+        attemptInWindow = false;
         return [
           {
             type: 'stopPending',
@@ -360,7 +443,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
 
   function push(input: AutoSetInput): AutoSetAction[] {
     const { t } = input;
-    touch(t);
+    see(t);
     if (input.present ?? input.tracking) lastPresentT = t;
     for (const ev of input.events) if (ev.type === 'rep') lastRepT = Math.max(lastRepT, ev.t);
     const phaseChanged = prevPhase !== null && prevPhase !== input.phase;
@@ -374,13 +457,15 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
   }
 
   function undo(t: number): AutoSetAction[] {
+    see(t);
     if (state !== 'pending') return [];
     return cancel(t, 'undo');
   }
 
-  function confirm(): AutoSetAction[] {
+  function confirm(t: number): AutoSetAction[] {
+    see(t);
     if (state !== 'pending') return [];
-    return commit();
+    return commit(t);
   }
 
   return {
