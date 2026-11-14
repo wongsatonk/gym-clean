@@ -118,10 +118,16 @@ phone-size screenshot reviewed, PROGRESS.md updated, branch committed.
 |---|---|---|---|---|
 | Dumbbell curl | side | elbow (shoulder–elbow–wrist) | > 150° | < 70° |
 | Push-up | side | elbow | > 150° | < 95° |
-| Seated DB shoulder press | front | elbow + wrist above shoulder | > 155° | < 100° |
+| Push-up, filmed head-on (front-view variant, both arms) | front | elbow | > 150° | < 125° |
+| Seated DB shoulder press | front | elbow, **image-space** + wrist above shoulder | > 143° | < 80° |
 | One-arm DB row | side | elbow | > 145° | < 90° |
 | Goblet squat | side | knee (hip–knee–ankle) | > 160° | < 100° |
-| Lateral raise | front | shoulder (hip–shoulder–elbow) | < 25° | > 75° |
+| Lateral raise | front | shoulder (hip–shoulder–elbow) + posture gate (torso ≤ 35° from settle) | < 25° | > 75° |
+
+  Press, push-up front variant and lateral-raise posture gate: tuned on Wongsaton's real session
+  2026-11-13 (Push A log; see PROGRESS Decisions). The press lockout line (143°) sits midway between
+  the synthetic partials (136–139°) and his real lockouts (≥ 148°). Side-on stays the recommended push-up placement; the front variant is picked
+  automatically while settling (§3).
 
   Lying exercises (bench press, flyes) are **experimental**: implement only if fixtures show
   the landmarks are stable; otherwise keep them manual-count.
@@ -605,8 +611,21 @@ PWA from M6).
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).
-- Joint angles use the 3D `world` landmarks when the frame has them, else 2D x/y;
-  visibility always comes from the normalized landmarks.
+- Joint angles use the 3D `world` landmarks by default when the frame has them, else 2D x/y;
+  visibility always comes from the normalized landmarks. A rule may say `angleSpace: 'image'`
+  (seated press): then the angle is measured in the 2D image plane, aspect-corrected (normalized
+  x scaled by the video aspect, which is estimated from the pose by fitting image vs world offsets
+  when the frame doesn't carry it). Use it for front-view movements in the camera's plane, where
+  the world model's depth guess compresses the angle.
+- (Optional, per rule) Posture gate `maxTorsoLeanDeg` (lateral raise: 35°): once settled, frames
+  where the torso (hip mid → shoulder mid, world) has turned more than N° from its direction at
+  the settle are ignored like a visibility miss, and the rep in progress is dropped (back to
+  setup, counts kept, no partial). Relative to the settle, so phone pitch doesn't matter.
+- (Optional, per rule) View variants `otherView` (push-up: front variant): while settling, the
+  counter judges the camera view from the world shoulder-line yaw (mean over recent frames;
+  < 45° = front, else side) and uses that view's thresholds and side mode; switching restarts
+  the settle. The choice has hysteresis so a borderline yaw doesn't flip it, and it is locked once
+  settled. Hints and placement stay the rule's own; the gauge follows the active variant.
 - Smooth the joint angle with an EMA (α ≈ 0.4) before thresholds.
 - Hysteresis: enter BOTTOM only below the contracted threshold, leave only above
   threshold + 10°; same idea at TOP. Prevents double counts from jitter.

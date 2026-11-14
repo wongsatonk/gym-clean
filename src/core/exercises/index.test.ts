@@ -114,7 +114,7 @@ describe('per-exercise data (SPEC §2 M4 table)', () => {
   it.each([
     ['curl', 'Dumbbell_Bicep_Curl', 'side', 150, 70],
     ['push-up', 'Pushups', 'side', 150, 95],
-    ['shoulder-press', 'Seated_Dumbbell_Press', 'front', 142, 80],
+    ['shoulder-press', 'Seated_Dumbbell_Press', 'front', 143, 80],
     ['row', 'One-Arm_Dumbbell_Row', 'side', 145, 90],
     ['goblet-squat', 'Goblet_Squat', 'side', 160, 100],
     ['lateral-raise', 'Side_Lateral_Raise', 'front', 25, 75],

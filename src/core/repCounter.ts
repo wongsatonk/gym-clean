@@ -75,8 +75,10 @@ export type RepCounter = {
 const SIDE_WINDOW = 15;
 /** After a gap longer than this (no tracked frames), the EMA restarts from the raw angle. */
 const RESEED_GAP_MS = 500;
-/** Mean shoulder-line yaw (deg) below which the camera sees the body from the front. */
-const FRONT_MAX_YAW = 45;
+/** View cut-offs (mean shoulder-line yaw, deg) when a rule with otherView doesn't set them. */
+const DEFAULT_VIEW_YAW = { frontBelow: 40, sideAbove: 50 } as const;
+/** After the posture gate has failed this long without a break, re-take the reference posture. */
+const LEAN_RELOCK_MS = 3000;
 
 type Reading = { angle: number; side: TrackedSide; gate: boolean };
 
@@ -167,6 +169,10 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   const aspect = createAspectEstimator();
   /** Torso direction at the settle, for the posture gate (rule.maxTorsoLeanDeg). */
   let refTorso: Vec3 | null = null;
+  /** Since when (frame t) the posture gate has failed without a break; null while it passes. */
+  let leanFailSince: number | null = null;
+  /** Since when the raw angle has been in the start band while the posture gate fails. */
+  let leanStartSince: number | null = null;
   /** Recent shoulder-line yaws while settling, to judge the camera view (rule.otherView). */
   let yaws: number[] = [];
 
@@ -184,13 +190,16 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     prevTracked = false;
     aspect.reset(); // a restarted stream may be another camera
     refTorso = null;
+    leanFailSince = null;
+    leanStartSince = null;
     yaws = [];
     applyRule(rule);
   }
 
   /**
    * While settling: which view does the camera see? Mean shoulder-line yaw over the recent
-   * frames under FRONT_MAX_YAW = front, else side. Switching thresholds restarts the settle.
+   * frames below `frontBelow` = front, above `sideAbove` = side, in between = keep the current
+   * view (dead band against flip-flopping). Switching thresholds restarts the settle.
    */
   function judgeView(frame: LandmarkFrame): void {
     if (!variant) return;
@@ -199,7 +208,8 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     yaws.push(yaw);
     if (yaws.length > SIDE_WINDOW) yaws.shift();
     const mean = yaws.reduce((sum, y) => sum + y, 0) / yaws.length;
-    const seen = mean < FRONT_MAX_YAW ? 'front' : 'side';
+    const cut = rule.viewYawDeg ?? DEFAULT_VIEW_YAW;
+    const seen = mean < cut.frontBelow ? 'front' : mean > cut.sideAbove ? 'side' : active.view;
     const target = seen === rule.view ? rule : variant;
     if (target === active) return;
     applyRule(target);
@@ -232,18 +242,42 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     return d === null || angleBetweenDeg(d, refTorso) <= rule.maxTorsoLeanDeg;
   }
 
-  /** Angle + side for this frame, or null when the visibility or posture gate fails. */
+  /**
+   * Angle + side for this frame, or null when the visibility or posture gate fails.
+   * Posture gate: leaving the posture (bending to pick up or put down the weights) drops the
+   * attempt in progress: back to setup, counts, side and reference posture kept. If the gate
+   * keeps failing (phone knocked or re-seated, so "upright" now reads as a lean), the reference
+   * is re-taken once the arms hold the start band for minPhaseMs, or after LEAN_RELOCK_MS.
+   */
   function read(frame: LandmarkFrame): Reading | null {
     if (rule.angleSpace === 'image') aspect.push(frame);
     if (phase === 'setup') judgeView(frame);
-    if (!postureOk(frame)) {
-      // Left the exercise posture (bending to pick up or put down the weights): whatever was
-      // in progress is not an attempt. Settle again at the start (counts, side and the
-      // reference posture are kept).
-      phase = 'setup';
-      settleSince = null;
-      return null;
+    const r = readAngle(frame);
+    if (postureOk(frame)) {
+      leanFailSince = null;
+      leanStartSince = null;
+      return r;
     }
+    const t = frame.t;
+    leanFailSince ??= t;
+    if (r !== null && inStart(sign * r.angle, r.gate)) leanStartSince ??= t;
+    else leanStartSince = null;
+    if (
+      t - leanFailSince >= LEAN_RELOCK_MS ||
+      (leanStartSince !== null && t - leanStartSince >= rule.minPhaseMs)
+    ) {
+      refTorso = torsoDirection(frame);
+      leanFailSince = null;
+      leanStartSince = null;
+      return r;
+    }
+    phase = 'setup';
+    settleSince = null;
+    return null;
+  }
+
+  /** Angle + side for this frame from the visible limb(s), or null when visibility fails. */
+  function readAngle(frame: LandmarkFrame): Reading | null {
     if (active.sideMode === 'both') {
       const l = readSide(frame, 'left');
       const r = readSide(frame, 'right');

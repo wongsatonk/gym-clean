@@ -241,7 +241,7 @@ describe('createRepCounter: clean reps', () => {
     expect(counter.reps).toBe(2);
     expect(counter.partials).toBe(0);
     // Eccentric = lowering back to the shoulders (toward contracted, 1300 ms) — timed
-    // threshold to threshold (142° → 80° = 62/120 of each leg, ~670 ms).
+    // threshold to threshold (143° → 80° = 63/120 of each leg, ~680 ms).
     const first = events[0];
     expect(first?.eccentricMs).toBeGreaterThan(first?.concentricMs ?? Infinity);
     expect(first?.eccentricMs).toBeGreaterThan(550);
@@ -1459,6 +1459,41 @@ describe('createRepCounter: torso posture gate (rule.maxTorsoLeanDeg)', () => {
     });
     expect(runAll(RAISE, frames).counter.reps).toBe(1);
   });
+
+  it('a permanent lean shift (phone knocked) re-takes the reference once the arms hold the start band', () => {
+    const raise: [number, number][] = [
+      [900, 95],
+      [300, 95],
+      [1200, 10],
+      [600, 10],
+    ];
+    const keys = curve(10, [[800, 10], ...raise, [800, 10], ...raise, ...raise]);
+    const shiftAt = 3800; // after the first rep, arms down
+    const frames = sample(RAISE, keys, { anchor: 'below' }).map((f) =>
+      leanWorld(f, f.t >= shiftAt ? 40 : 0),
+    );
+    const { counter } = runAll(RAISE, frames);
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 3, partials: 0 });
+  });
+
+  it('after ~3 s of the gate failing, the reference is re-taken anywhere (arms not at the start)', () => {
+    const keys = curve(10, [
+      [800, 10],
+      [200, 50],
+      [5000, 50],
+    ]);
+    const shiftAt = 1000;
+    const counter = createRepCounter(RAISE);
+    const trackedAt: [number, boolean][] = [];
+    for (const f of sample(RAISE, keys, { anchor: 'below' })) {
+      counter.push(leanWorld(f, f.t >= shiftAt ? 40 : 0));
+      trackedAt.push([f.t, counter.tracking]);
+    }
+    const at = (t: number) => trackedAt.find(([ft]) => ft >= t)?.[1];
+    expect(at(shiftAt + 100)).toBe(false);
+    expect(at(shiftAt + 2700)).toBe(false);
+    expect(at(shiftAt + 3300)).toBe(true);
+  });
 });
 
 describe('createRepCounter: camera view variant (rule.otherView, push-up filmed head-on)', () => {
@@ -1522,6 +1557,48 @@ describe('createRepCounter: camera view variant (rule.otherView, push-up filmed 
     expect(counter.reps).toBe(2); // counts kept
     counter.reset();
     expect(counter.rule).toBe(PUSHUP);
+  });
+
+  /** Turn the world body about the vertical axis so the shoulder line has this yaw. */
+  function yawed(f: LandmarkFrame, deg: number): LandmarkFrame {
+    const th = (deg * Math.PI) / 180;
+    const world = f.world?.map((p) => ({
+      x: p.x * Math.cos(th) - p.z * Math.sin(th),
+      y: p.y,
+      z: p.x * Math.sin(th) + p.z * Math.cos(th),
+    }));
+    return world ? { ...f, world } : f;
+  }
+
+  it('view cut-offs are rule data with a dead band: front below 40°, side above 50°', () => {
+    expect(PUSHUP.viewYawDeg).toEqual({ frontBelow: 40, sideAbove: 50 });
+  });
+
+  it('a yaw inside the dead band keeps the view already chosen while settling', () => {
+    // Head-on while getting into position (arms bent, not yet at the start), then the body
+    // reads 47° (inside the band) for the rest of the setup and the set.
+    const setupKeys = curve(120, [[1000, 120], [1000, 120], [300, 165], ...segsOf(keys)]);
+    const frames = sample(PUSHUP, setupKeys).map((f) => (f.t < 1000 ? f : yawed(f, 47)));
+    const { counter } = runAll(PUSHUP, frames);
+    expect(counter.rule.view).toBe('front');
+    expect(counter.reps).toBe(2);
+    // Starting inside the band from the beginning: the rule as written (side).
+    const fromStart = runAll(
+      PUSHUP,
+      sample(PUSHUP, setupKeys).map((f) => yawed(f, 47)),
+    );
+    expect(fromStart.counter.rule).toBe(PUSHUP);
+  });
+
+  it('turning from head-on to side-on mid-set keeps the front thresholds until the next settle', () => {
+    const turnAt = 2600; // after the first push-up, at the top
+    const frames = sample(PUSHUP, keys).map((f) => (f.t < turnAt ? f : sideOn(f)));
+    const counter = createRepCounter(PUSHUP);
+    for (const f of frames) {
+      counter.push(f);
+      if (f.t >= turnAt) expect(counter.rule.view).toBe('front');
+    }
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 0 });
   });
 
   it('rules without a variant never switch', () => {

@@ -17,6 +17,7 @@ export const pushUp: ExerciseRule = {
   // Head-on (phone in front, on the floor): both elbows are visible, and the world elbow angle
   // bottoms out at 93–118° smoothed on 11 clean push-ups (Push A log). Tops stay 157–171°.
   otherView: { view: 'front', sideMode: 'both', extended: 150, contracted: 125 },
+  viewYawDeg: { frontBelow: 40, sideAbove: 50 },
   hints: { far: 'Go lower.', start: 'Push all the way up.' },
   placement: {
     view: 'side',

@@ -90,6 +90,12 @@ export type ExerciseRule = {
    * the world elbow angle bottoms out at 93–118° instead of < 95° (Push A log, 2026-11-13).
    */
   otherView?: ViewVariant;
+  /**
+   * View cut-offs for otherView (mean world shoulder-line yaw while settling, deg): front below
+   * `frontBelow`, side above `sideAbove`, in between keep the current view. Default 40 / 50.
+   * The Push A log read 0–10° head-on; the synthetic side clips 49–89°.
+   */
+  viewYawDeg?: { frontBelow: number; sideAbove: number };
   /** EMA smoothing factor for the angle (SPEC §3: 0.4). */
   emaAlpha: number;
   /** Hysteresis (deg): leave a band only once past its threshold by this much (SPEC §3: 10). */

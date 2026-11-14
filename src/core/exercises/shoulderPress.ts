@@ -13,7 +13,7 @@ export const shoulderPress: ExerciseRule = {
   // Image-plane angles (see angleSpace): real reps top out at 147–161° smoothed and sit at
   // 51–65° at the shoulders (Push A log, 2026-11-13); synthetic partials turn at 136–139°.
   angleSpace: 'image',
-  extended: 142,
+  extended: 143,
   contracted: 80,
   direction: 'decreasing',
   start: 'contracted',
