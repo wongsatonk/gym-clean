@@ -42,6 +42,16 @@ export type RepPhase = 'setup' | 'top' | 'down' | 'bottom' | 'up';
 /** Which limb the angle comes from: one side, or the average of both (front views). */
 export type TrackedSide = Side | 'both';
 
+/**
+ * Why the last frame wasn't tracked: `visibility` = the rule's joints failed the visibility gate
+ * (or no pose); `posture` = the torso leaned past rule.maxTorsoLeanDeg; `bodyLine` = the hip
+ * angle failed the active rule's minHipAngleDeg (push-up front variant: sitting, kneeling up).
+ */
+export type UntrackedReason = 'visibility' | 'posture' | 'bodyLine';
+
+/** Raw (pre-EMA) joint angle per side in the rule's angle space; null = that side not visible. */
+export type SideAngles = { left: number | null; right: number | null };
+
 export type RepCounter = {
   /** Feed one frame (in time order). Returns the events it completed (usually none). */
   push(frame: LandmarkFrame): RepEvent[];
@@ -68,6 +78,17 @@ export type RepCounter = {
   readonly lastMiss: MissReason | null;
   /** The most recent partial event (kept across later reps); null before any. */
   readonly lastPartial: RepEvent | null;
+  /**
+   * Why the last frame wasn't tracked; null when it was (and before any frame). The body-line
+   * gate is checked first, then posture, then visibility.
+   */
+  readonly untracked: UntrackedReason | null;
+  /**
+   * This frame's per-side joint angles in the rule's angle space (image plane for the press),
+   * before the EMA, read whatever the gates say. Only while the active rule is sideMode 'both'
+   * (null otherwise, and before any frame).
+   */
+  readonly sideAngles: SideAngles | null;
   /** Back to the initial state (counts 0, phase setup, side unlocked, no last miss). */
   reset(): void;
 };
@@ -166,6 +187,8 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   let fromStartPartial = false;
   let lastMiss: MissReason | null = null;
   let lastPartial: RepEvent | null = null;
+  let untracked: UntrackedReason | null = null;
+  let sideAngles: SideAngles | null = null;
   /** Video aspect from the pose, for image-plane angles (rule.angleSpace 'image'). */
   const aspect = createAspectEstimator();
   /** Torso direction at the settle, for the posture gate (rule.maxTorsoLeanDeg). */
@@ -225,6 +248,8 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     partials = 0;
     lastMiss = null;
     lastPartial = null;
+    untracked = null;
+    sideAngles = null;
     restartTracking();
   }
 
@@ -260,13 +285,19 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   function read(frame: LandmarkFrame): Reading | null {
     if (rule.angleSpace === 'image') aspect.push(frame);
     if (phase === 'setup') judgeView(frame);
+    sideAngles =
+      active.sideMode === 'both'
+        ? { left: readSide(frame, 'left'), right: readSide(frame, 'right') }
+        : null;
     if (!bodyLineOk(frame)) {
       // Not in the exercise's body position (sitting, kneeling up): no attempt in progress.
       phase = 'setup';
       settleSince = null;
+      untracked = 'bodyLine';
       return null;
     }
     const r = readAngle(frame);
+    untracked = r === null ? 'visibility' : null;
     if (postureOk(frame)) {
       leanFailSince = null;
       leanStartSince = null;
@@ -287,14 +318,15 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     }
     phase = 'setup';
     settleSince = null;
+    untracked = 'posture';
     return null;
   }
 
   /** Angle + side for this frame from the visible limb(s), or null when visibility fails. */
   function readAngle(frame: LandmarkFrame): Reading | null {
     if (active.sideMode === 'both') {
-      const l = readSide(frame, 'left');
-      const r = readSide(frame, 'right');
+      const l = sideAngles?.left ?? null;
+      const r = sideAngles?.right ?? null;
       if (l !== null && r !== null) {
         const gate =
           extendedGatePasses(rule, frame, 'left') && extendedGatePasses(rule, frame, 'right');
@@ -564,6 +596,12 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     },
     get lastPartial() {
       return lastPartial;
+    },
+    get untracked() {
+      return untracked;
+    },
+    get sideAngles() {
+      return sideAngles;
     },
   };
 }

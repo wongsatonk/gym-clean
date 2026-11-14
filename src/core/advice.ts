@@ -5,7 +5,8 @@ import type { SessionState } from './session';
 import type { PlannedExercise, SetLog } from './types';
 import { formatWeight, fromUnit, snapToStep, stepFor, toUnit, type Unit } from './units';
 
-export type AdviceRule = 'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'N1' | 'N2' | 'N3' | 'N4' | 'N5' | 'N6';
+export type AdviceRule =
+  'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'N1' | 'N2' | 'T1' | 'N3' | 'N4' | 'N5' | 'N6';
 
 export type Advice = {
   exerciseId: string;
@@ -28,6 +29,9 @@ export type CoachSummaryEntry = {
 
 /** Coaching language only (CLAUDE.md): advice never uses these stems. */
 export const ADVICE_BANNED_WORDS = ['pain', 'injur', 'hurt', 'damage', 'safe', 'risk'] as const;
+
+/** M5b T1: this many of today's sets of the exercise had rushed lowering. */
+const T1_MIN_RUSHED_SETS = 2;
 
 /** Rest may run this long past the previous exercise's target before it counts as overrun (M1). */
 const OVERRUN_GRACE_SEC = 30;
@@ -85,6 +89,8 @@ const isBodyweight = (w: number) => w === 0;
 const tooBigJump = (w: number, unit: Unit) => stepFor(unit) > MAX_JUMP_SHARE * disp(w, unit) + 1e-9;
 const partialsOf = (l: SetLog) => l.partials ?? 0;
 const isClean = (l: SetLog) => partialsOf(l) === 0;
+/** M5: the set had at least one "Slow the lowering." detection (old rows have no `cues`). */
+const wasRushed = (l: SetLog) => l.cues?.includes('rushedLowering') ?? false;
 
 /** Today's sets of the exercise at the last set's weight (display-unit rounding). */
 function setsAtLastWeight(L: readonly SetLog[], unit: Unit): SetLog[] {
@@ -210,7 +216,7 @@ function duringExerciseAdvice(
 // ---------------------------------------------------------------------------------------------
 // (b) Next time
 
-/** Next-time advice for one exercise (N1–N6); null when it has no sets today or isn't planned. */
+/** Next-time advice for one exercise (N1, N2, T1, N3–N6); null when it has no sets today or isn't planned. */
 export function nextTimeAdvice(
   s: SessionState,
   exerciseId: string,
@@ -244,6 +250,12 @@ export function nextTimeAdvice(
     return bw
       ? mk('N2', `aim for ${min} reps.`)
       : mk('N2', `repeat ${shown(w, unit)}.`, `repeat ${spoken(w, unit)}.`);
+  }
+  // T1 (M5): control before load, so it comes before "+step" but after below-range problems.
+  const rushed = L.filter(wasRushed).length;
+  if (rushed >= T1_MIN_RUSHED_SETS) {
+    const w2 = `Slow the lowering: ${rushed} of ${L.length} sets`;
+    return mk('T1', 'lower for 2 seconds.', 'lower for two seconds.', w2);
   }
   const allTop = L.every((l) => l.reps >= max);
   // All planned sets done, and the sets at the final weight (≥ 2, or all of a 1-set plan) were

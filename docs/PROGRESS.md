@@ -58,7 +58,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Change `SetLog.cues?: FocusCueId[]`: one entry per detection, ids not text. The field stays optional and isn't indexed, so there is no Dexie version bump and old rows still read.
   - Done when: `npm run typecheck` passes.
   - Deps: none.
-- [ ] 2. [core-engineer ∥A] Counter getters, **tests first**.
+- [x] 2. [core-engineer ∥A] Counter getters, **tests first**.
   - Files: src/core/repCounter.ts(+test).
   - `untracked: 'visibility' | 'posture' | 'bodyLine' | null`: why the last frame wasn't tracked; null when it was.
   - `sideAngles: { left: number | null; right: number | null } | null`: this frame's per-side joint angles in the rule's angle space (image plane for the press), before the EMA. Only for `sideMode: 'both'`.
@@ -70,7 +70,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - per-side angles on a both-arms frame, in world space (lateral raise) and image space (press);
     - the fixture suite still has 17 cases with unchanged counts.
   - Deps: none.
-- [ ] 3. [core-engineer ∥B] `src/core/focus.ts`(+test) part 1: the tracker and the focus rules. **Tests first**, pure, no DOM.
+- [x] 3. [core-engineer ∥B] `src/core/focus.ts`(+test) part 1: the tracker and the focus rules. **Tests first**, pure, no DOM.
   - Files: src/core/focus.ts(+test).
   - **Config:** `FocusConfig` + `FOCUS_DEFAULTS`: `baselineReps` 2, `rushedRatio` 0.5, `rangeRatio` 0.85, `streakReps` 2, `maxFiresPerRule` 2, `stalledSec` 8, `stalledHandsFreeFraction` 0.5, `outOfFrameSec` 2, `lowFps` 15, `lowFpsSec` 3, plus the geometry values used by task 5.
   - **Types:** `FocusRuleFlags = Partial<Record<FocusCueId, boolean>>`. `CUE_TEXT`: shown = spoken, ≤ 6 words, no banned words; the stalled cue is "Stay with it. {N} to go.".
@@ -108,7 +108,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - absent with hands-free off → cue after 2 s;
     - before the set's first rep → none.
   - Deps: 1. It uses task 2's getters only through the input shape, so it can start on stubs.
-- [ ] 4. [core-engineer ∥C] Focus score + reducer + DB, **tests first**.
+- [x] 4. [core-engineer ∥C] Focus score + reducer + DB, **tests first**.
   - Files: src/core/focusScore.ts(+test), src/core/session.ts(+test), src/data/db.ts(+test).
   - `focusScore(cues, partials)`: start at 100; −10 per tempo/range/form cue, −5 per `stalled`, −5 per partial; `outOfFrame` and `lowFps` cost 0; clamped to 0–100. Also `cueWeight(id)`.
   - Reducer:
@@ -148,7 +148,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Write the numbers and the outcome as a Decision. A criterion that fails = the rule stays off, plus a question for Wongsaton. No silent threshold change: a retune is its own Decision, with the numbers.
   - Done when: the replay test is green, the flags match the criteria, and the Decision is written.
   - Deps: 5, 6, 9.
-- [ ] 8. [core-engineer ∥C, after 4] M5b tempo rule **T1**, **tests first**.
+- [x] 8. [core-engineer ∥C, after 4] M5b tempo rule **T1**, **tests first**.
   - Files: src/core/advice.ts(+test).
   - Text: "Next time on {Name}: lower for 2 seconds." Spoken: "… lower for two seconds.". Why: "Slow the lowering: {k} of {n} sets". No Apply.
   - Fires when ≥ 2 of today's sets of the exercise have `rushedLowering` in `cues`.
@@ -197,7 +197,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - the existing camera e2e specs (camera-layout, rep-panel, rep-count, hands-free, devlog-camera) still pass;
     - by hand on the fixture landmarker, "Slow the lowering." is spoken after a count word, never over it.
   - Deps: 2, 3, 6. Task 5 lands behind the same interface.
-- [ ] 12. [ui-engineer, second instance ∥] Summary focus component.
+- [x] 12. [ui-engineer, second instance ∥] Summary focus component.
   - Files: src/ui/focusSummary.ts(+test), src/styles.css.
   - `createFocusSummary(logs, name)`, per exercise with camera sets:
     - "Set 2 · Focus 80" (score ≥ 28px);

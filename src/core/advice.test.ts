@@ -10,7 +10,7 @@ import {
   wordCount,
 } from './advice';
 import type { SessionState } from './session';
-import type { ProgramDay, SetLog } from './types';
+import type { FocusCueId, ProgramDay, SetLog } from './types';
 import { fromUnit, toUnit, type Unit } from './units';
 
 // Made-up plan; numbers chosen to exercise the rules, not anyone's real training.
@@ -44,7 +44,7 @@ function lg(
   exerciseId: string,
   reps: number,
   weightKg: number,
-  opts: { partials?: number; rest?: number } = {},
+  opts: { partials?: number; rest?: number; cues?: FocusCueId[] } = {},
 ): SetLog {
   t += 100_000;
   return {
@@ -55,6 +55,7 @@ function lg(
     ...(opts.partials ? { partials: opts.partials } : {}),
     weightKg,
     restTakenSec: opts.rest ?? 60,
+    ...(opts.cues ? { cues: opts.cues } : {}),
     startedAt: t,
     endedAt: t + 30_000,
   };
@@ -78,6 +79,7 @@ function state(logs: SetLog[], unit: Unit = 'kg'): SessionState {
     setIndex: 0,
     reps: 8,
     partials: 0,
+    focusCues: null,
     weightKg: 0,
     setStartedAt: 0,
     lastRestTakenSec: 0,
@@ -522,6 +524,106 @@ describe('nextTimeAdvice', () => {
   });
 });
 
+describe('nextTimeAdvice T1: rushed lowering on ≥ 2 sets (M5)', () => {
+  const rushed: { cues: FocusCueId[] } = { cues: ['rushedLowering'] };
+  const nt = (logs: SetLog[], last: SetLog[] = [], id = logs[0]?.exerciseId ?? 'curl') =>
+    nextTimeAdvice(state(logs), id, last, name);
+
+  it('1 rushed set → no T1; 2 rushed sets → T1', () => {
+    expect(rule(nt([lg('curl', 10, 10, rushed), lg('curl', 10, 10), lg('curl', 10, 10)]))).toBe(
+      'N5',
+    );
+    const a = nt([lg('curl', 10, 10, rushed), lg('curl', 10, 10), lg('curl', 10, 10, rushed)]);
+    expect(rule(a)).toBe('T1');
+    expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: lower for 2 seconds.');
+    expect(a?.say).toBe('Next time on Dumbbell Bicep Curl: lower for two seconds.');
+    expect(a?.why).toBe('Slow the lowering: 2 of 3 sets');
+    expect(a?.apply).toBeUndefined();
+  });
+
+  it('counts sets, not detections: one set with two rushed cues is still 1 set', () => {
+    const twice: { cues: FocusCueId[] } = { cues: ['rushedLowering', 'rushedLowering'] };
+    expect(rule(nt([lg('curl', 10, 10, twice), lg('curl', 10, 10)]))).toBe('N5');
+  });
+
+  it('other cues never trigger T1', () => {
+    const other: { cues: FocusCueId[] } = { cues: ['shrinkingRange', 'stalled'] };
+    expect(rule(nt([lg('curl', 10, 10, other), lg('curl', 10, 10, other)]))).toBe('N5');
+  });
+
+  it('N1 and N2 still win (below-range problems first)', () => {
+    expect(rule(nt([lg('curl', 7, 10, rushed), lg('curl', 10, 10, rushed)]))).toBe('N2');
+    expect(
+      rule(nt([lg('curl', 7, 10, rushed), lg('curl', 10, 10, rushed)], [lg('curl', 6, 10)])),
+    ).toBe('N1');
+  });
+
+  it('T1 beats N3 (all top reps, clean, but rushed)', () => {
+    const top = [lg('curl', 12, 10, rushed), lg('curl', 12, 10, rushed), lg('curl', 12, 10)];
+    expect(rule(nt(top))).toBe('T1');
+    const plain = top.map((l) => ({ ...l, cues: [] }));
+    expect(rule(nt(plain))).toBe('N3');
+  });
+
+  it('T1 beats N4 (partials) too', () => {
+    const logs = [lg('curl', 10, 10, { partials: 2, ...rushed }), lg('curl', 10, 10, rushed)];
+    expect(rule(nt(logs))).toBe('T1');
+  });
+
+  it('bodyweight gets T1 as well (tempo needs no weight)', () => {
+    const a = nt([lg('pushup', 15, 0, rushed), lg('pushup', 15, 0, rushed)]);
+    expect(rule(a)).toBe('T1');
+    expect(a?.text).toBe('Next time on Pushups: lower for 2 seconds.');
+  });
+
+  it('old rows without cues never give T1', () => {
+    expect(rule(nt([lg('curl', 12, 10), lg('curl', 12, 10), lg('curl', 12, 10)]))).toBe('N3');
+  });
+
+  it('only today’s sets of this exercise count', () => {
+    const logs = [lg('bench', 8, 20, rushed), lg('curl', 10, 10, rushed), lg('curl', 10, 10)];
+    expect(rule(nt(logs, [], 'curl'))).toBe('N5');
+    // Last session's rushed sets don't count either.
+    const last = [lg('curl', 10, 10, rushed), lg('curl', 10, 10, rushed)];
+    expect(rule(nt([lg('curl', 10, 10, rushed), lg('curl', 10, 10)], last))).toBe('N5');
+  });
+
+  it('after the final set, afterSetAdvice gives T1', () => {
+    const s = state([
+      lg('curl', 12, 10, rushed),
+      lg('curl', 12, 10, rushed),
+      lg('curl', 12, 10, rushed),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBe('T1');
+  });
+
+  it('mid-exercise A rules are unchanged by rushed cues', () => {
+    const s = state([lg('curl', 12, 10, rushed), lg('curl', 12, 10, rushed)]);
+    expect(rule(afterSetAdvice(s, name))).toBe('A3');
+  });
+
+  it('coachSummary shows T1', () => {
+    const s = state([lg('raise', 15, 5, rushed), lg('raise', 15, 5, rushed)]);
+    const [e] = coachSummary(s, {}, name);
+    expect(e?.next?.rule).toBe('T1');
+    expect(e?.next?.text).toBe('Next time on Side Lateral Raise: lower for 2 seconds.');
+  });
+
+  it('≤ 12 words with the longest name, no banned words', () => {
+    const a = nextTimeAdvice(
+      state([lg('curl', 10, 10, rushed), lg('curl', 10, 10, rushed)]),
+      'curl',
+      [],
+      longName,
+    );
+    expect(rule(a)).toBe('T1');
+    for (const str of [a?.text ?? '', a?.say ?? '']) {
+      expect(wordCount(str), str).toBeLessThanOrEqual(12);
+      expect(str).not.toMatch(/\b(pain|injur\w*|hurt\w*|damage\w*|safe\w*|risk\w*)\b/i);
+    }
+  });
+});
+
 describe('coachSummary', () => {
   it('no logs → empty', () => {
     expect(coachSummary(state([]), {}, name)).toEqual([]);
@@ -634,6 +736,11 @@ describe('wording', () => {
         [lg('pushup', 12, 0, { partials: 2 }), lg('pushup', 11, 0)],
         [lg('pushup', 11, 0), lg('pushup', 11, 0)],
         [lg('bench', 8, w), lg('bench', 8, w)],
+        [
+          lg('curl', 12, w, { cues: ['rushedLowering'] }),
+          lg('curl', 12, w, { cues: ['rushedLowering'] }),
+          lg('curl', 12, w),
+        ],
       ];
       const last = {
         curl: [lg('curl', 5, w)],
@@ -668,7 +775,7 @@ describe('wording', () => {
         seen.add(n6.rule);
       }
       expect([...seen].sort()).toEqual(
-        ['A1', 'A2', 'A3', 'A4', 'A5', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6'].sort(),
+        ['A1', 'A2', 'A3', 'A4', 'A5', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'T1'].sort(),
       );
     }
     expect(progress.length).toBeGreaterThan(0);

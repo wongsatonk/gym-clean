@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PlannedExercise, ProgramDay } from './types';
+import type { FocusCueId, PlannedExercise, ProgramDay } from './types';
 import {
   REST_OVERRUN_GRACE_SEC,
   currentPlanned,
@@ -786,5 +786,157 @@ describe('backdated START_SET / SET_DONE times (M5c hands-free)', () => {
     expect(done.phase).toBe('summary');
     expect(done.logs[0]).toMatchObject({ startedAt: sec(50), endedAt: sec(50) });
     expect(done.endedAt).toBe(sec(50));
+  });
+});
+
+describe('SET_FOCUS and the focus score (M5)', () => {
+  const focus = (...cues: FocusCueId[]): SessionEvent => ({ type: 'SET_FOCUS', cues });
+  const counted = (reps: number, partials: number): SessionEvent => ({
+    type: 'SET_COUNTED',
+    reps,
+    partials,
+  });
+  const done = (s: number): SessionEvent => ({ type: 'SET_DONE', now: sec(s) });
+  const correct = (reps: number, partials: number): SessionEvent => ({
+    type: 'CORRECT_LAST_SET',
+    reps,
+    partials,
+  });
+
+  it('starts every session with no focus cues', () => {
+    expect(fresh().focusCues).toBeNull();
+  });
+
+  it('overwrites the set’s cues during a set (a copy, not the caller’s array)', () => {
+    const cues: FocusCueId[] = ['rushedLowering'];
+    const s = run(fresh(), focus('stalled'), { type: 'SET_FOCUS', cues });
+    expect(s.focusCues).toEqual(['rushedLowering']);
+    cues.push('hipSag');
+    expect(s.focusCues).toEqual(['rushedLowering']);
+  });
+
+  it('drops unknown ids and ignores a non-array payload', () => {
+    const odd = { type: 'SET_FOCUS', cues: ['stalled', 'bogus'] } as unknown as SessionEvent;
+    expect(run(fresh(), odd).focusCues).toEqual(['stalled']);
+    const before = run(fresh(), focus('stalled'));
+    const bad = { type: 'SET_FOCUS', cues: 'stalled' } as unknown as SessionEvent;
+    expect(run(before, bad)).toBe(before);
+  });
+
+  it('a manual set (no SET_FOCUS) logs no score and no cues', () => {
+    const s = run(fresh(), counted(8, 1), done(30));
+    expect(s.logs[0]).not.toHaveProperty('focusScore');
+    expect(s.logs[0]).not.toHaveProperty('cues');
+  });
+
+  it('a camera set with no cues scores 100 − 5 × partials', () => {
+    expect(run(fresh(), counted(10, 0), focus(), done(30)).logs[0]).toMatchObject({
+      focusScore: 100,
+      cues: [],
+    });
+    expect(run(fresh(), counted(10, 3), focus(), done(30)).logs[0]).toMatchObject({
+      focusScore: 85,
+    });
+  });
+
+  it('logs the cue ids and their score with the set', () => {
+    const s = run(
+      fresh(),
+      counted(9, 1),
+      focus('rushedLowering', 'rushedLowering', 'stalled', 'outOfFrame'),
+      done(30),
+    );
+    expect(s.logs[0]).toMatchObject({
+      reps: 9,
+      partials: 1,
+      cues: ['rushedLowering', 'rushedLowering', 'stalled', 'outOfFrame'],
+      focusScore: 100 - 20 - 5 - 0 - 5,
+    });
+  });
+
+  it('gives no score to a camera set with 0 reps, but keeps its cues', () => {
+    const s = run(fresh(), counted(0, 2), focus('outOfFrame'), done(30));
+    expect(s.logs[0]).not.toHaveProperty('focusScore');
+    expect(s.logs[0]).toMatchObject({ cues: ['outOfFrame'] });
+  });
+
+  it('scores the reps as logged, after a stepper fix during the set', () => {
+    const s = run(
+      fresh(),
+      counted(0, 0),
+      focus(),
+      { type: 'ADJUST', field: 'reps', delta: 1 },
+      done(30),
+    );
+    expect(s.logs[0]).toMatchObject({ reps: 1, focusScore: 100 });
+  });
+
+  it('clears the cues for the next set, so a manual next set has no score', () => {
+    const rest = run(fresh(), counted(8, 0), focus('rushedLowering'), done(30));
+    expect(rest.focusCues).toBeNull();
+    const s = run(rest, { type: 'START_SET', now: sec(90) }, done(120));
+    expect(s.logs[1]).not.toHaveProperty('focusScore');
+    expect(s.logs[0]).toMatchObject({ focusScore: 90 });
+  });
+
+  it('clears the cues when moving to another exercise (last set, skip or jump)', () => {
+    const lastOfA = run(
+      fresh(),
+      done(30),
+      { type: 'START_SET', now: sec(90) },
+      focus('stalled'),
+      done(120),
+    );
+    expect(lastOfA.exIndex).toBe(1);
+    expect(lastOfA.focusCues).toBeNull();
+    expect(
+      run(fresh(), focus('stalled'), { type: 'SKIP_EXERCISE', now: sec(5) }).focusCues,
+    ).toBeNull();
+    expect(
+      run(fresh(), focus('stalled'), { type: 'GO_TO_EXERCISE', exIndex: 2, now: sec(5) }).focusCues,
+    ).toBeNull();
+  });
+
+  it('is ignored on Rest, while paused, and on Summary', () => {
+    const rest = run(fresh(), done(30));
+    expect(run(rest, focus('stalled'))).toBe(rest);
+    const paused = run(fresh(), { type: 'PAUSE', now: sec(5) });
+    expect(run(paused, focus('stalled'))).toBe(paused);
+    const summary = run(fresh(), { type: 'FINISH', now: sec(5) });
+    expect(run(summary, focus('stalled'))).toBe(summary);
+  });
+
+  it('CORRECT_LAST_SET recomputes the score from the stored cues and the corrected partials', () => {
+    const rest = run(fresh(), counted(10, 1), focus('shrinkingRange'), done(30));
+    expect(rest.logs[0]).toMatchObject({ focusScore: 85 });
+    const fixed = run(rest, correct(10, 3));
+    expect(fixed.logs[0]).toMatchObject({ partials: 3, cues: ['shrinkingRange'], focusScore: 75 });
+    expect(run(fixed, correct(11, 0)).logs[0]).toMatchObject({ reps: 11, focusScore: 90 });
+  });
+
+  it('CORRECT_LAST_SET drops the score at 0 reps and restores it above 0', () => {
+    const rest = run(fresh(), counted(10, 0), focus(), done(30));
+    const zero = run(rest, correct(0, 1));
+    expect(zero.logs[0]).not.toHaveProperty('focusScore');
+    expect(zero.logs[0]).toMatchObject({ cues: [] });
+    expect(run(zero, correct(4, 1)).logs[0]).toMatchObject({ focusScore: 95 });
+  });
+
+  it('CORRECT_LAST_SET never gives a manual set a score', () => {
+    const rest = run(fresh(), counted(10, 0), done(30));
+    const fixed = run(rest, correct(9, 2));
+    expect(fixed.logs[0]).not.toHaveProperty('focusScore');
+    expect(fixed.logs[0]).not.toHaveProperty('cues');
+  });
+
+  it('CORRECT_LAST_SET recomputes on Summary too', () => {
+    const s = run(
+      startSession({ ...day, exercises: [exC] }, 's1', T0),
+      counted(3, 0),
+      focus('rushedLowering'),
+      done(30),
+    );
+    expect(s.phase).toBe('summary');
+    expect(run(s, correct(5, 2)).logs[0]).toMatchObject({ focusScore: 80 });
   });
 });

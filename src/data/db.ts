@@ -150,15 +150,19 @@ export type SetRef = Pick<SetLog, 'sessionId' | 'exerciseId' | 'setIndex'>;
 
 /**
  * M4c last-set correction: writes the corrected reps/partials to the logged row (partials 0 →
- * field removed, like a fresh log). Returns the number of rows changed (0 if none matched).
+ * field removed, like a fresh log). M5: `focusScore` (the reducer's recomputed value, see
+ * CORRECT_LAST_SET) is written when given, clamped to 0–100; `null` removes it; omitted or
+ * non-finite leaves the stored score alone. `cues` are never changed here.
+ * Returns the number of rows changed (0 if none matched).
  */
 export async function updateSet(
   db: GymDb,
   ref: SetRef,
-  counts: { reps: number; partials: number },
+  counts: { reps: number; partials: number; focusScore?: number | null },
 ): Promise<number> {
   const reps = Math.max(0, Math.round(counts.reps));
   const partials = Math.max(0, Math.round(counts.partials));
+  const score = counts.focusScore;
   return db.sets
     .where('sessionId')
     .equals(ref.sessionId)
@@ -167,6 +171,9 @@ export async function updateSet(
       r.reps = reps;
       if (partials > 0) r.partials = partials;
       else delete r.partials;
+      if (score === null) delete r.focusScore;
+      else if (score !== undefined && Number.isFinite(score))
+        r.focusScore = Math.min(100, Math.max(0, Math.round(score)));
     });
 }
 

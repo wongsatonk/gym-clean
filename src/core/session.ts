@@ -1,5 +1,6 @@
 // Workout session state machine (SPEC M1). Pure: every event carries its own timestamp.
-import type { PlannedExercise, ProgramDay, SetLog } from './types';
+import { focusScore, isFocusCueId } from './focusScore';
+import type { FocusCueId, PlannedExercise, ProgramDay, SetLog } from './types';
 import { fromUnit, snapToStep, toUnit, type Unit } from './units';
 
 /** Rest may run this long past target before it counts as an overrun / triggers nudges. */
@@ -20,6 +21,11 @@ export type SessionState = {
   readonly reps: number;
   /** Partial reps the rep counter saw in the current set (M4); logged only when > 0. */
   readonly partials: number;
+  /**
+   * M5 focus/form detections of the current set (SET_FOCUS); null = the set got no SET_FOCUS
+   * (manual set), so it is logged without cues or a score. Cleared for every new set.
+   */
+  readonly focusCues: readonly FocusCueId[] | null;
   readonly weightKg: number;
   readonly setStartedAt: number;
   /** Rest before the current set, logged with it. */
@@ -49,6 +55,13 @@ export type SessionEvent =
   | { type: 'SET_DONE'; now: number }
   /** Live count from the rep counter: overwrites reps/partials of the current set. */
   | { type: 'SET_COUNTED'; reps: number; partials: number }
+  /**
+   * M5 live trainer: every focus/form detection of the current set so far (one id per
+   * detection, repeats included). Overwrites like SET_COUNTED; only in the exercise phase, not
+   * paused. Unknown ids are dropped. SET_DONE then logs `cues` + `focusScore` (score only with
+   * ≥ 1 rep); sets that never got a SET_FOCUS log neither.
+   */
+  | { type: 'SET_FOCUS'; cues: readonly FocusCueId[] }
   /**
    * M4c ground truth: fix the just-logged set's reps/partials on Rest (the camera's Set done
    * logs immediately). Ignored outside Rest, while paused, or with no logged set.
@@ -95,9 +108,9 @@ const loggedFor = (s: Pick<SessionState, 'logs'>, exerciseId: string) =>
 /** Values for the next set of exercise `exIndex`: today's last set, else last time, else the plan. */
 function defaultsFor(s: Pick<SessionState, 'logs' | 'unit' | 'lastWeightKg'>, p: PlannedExercise) {
   const last = loggedFor(s, p.exerciseId).at(-1);
-  if (last) return { reps: last.reps, partials: 0, weightKg: last.weightKg };
+  if (last) return { reps: last.reps, partials: 0, focusCues: null, weightKg: last.weightKg };
   const weightKg = s.lastWeightKg[p.exerciseId] ?? snapToStep(p.startWeightKg ?? 0, s.unit);
-  return { reps: p.targetReps[1], partials: 0, weightKg };
+  return { reps: p.targetReps[1], partials: 0, focusCues: null, weightKg };
 }
 
 function isFinished(s: SessionState, exIndex: number): boolean {
@@ -155,6 +168,15 @@ export function restElapsedMs(s: SessionState, now: number): number {
   return s.restAccumMs + (s.restRunningSince === null ? 0 : now - s.restRunningSince);
 }
 
+/**
+ * Score fields of a logged set: a camera set (has `cues`) with ≥ 1 rep gets
+ * focusScore(cues, partials); otherwise no score. Mutates `log`.
+ */
+function applyScore(log: SetLog): void {
+  if (log.cues && log.reps >= 1) log.focusScore = focusScore(log.cues, log.partials ?? 0);
+  else delete log.focusScore;
+}
+
 function toSummary(s: SessionState, now: number): SessionState {
   return { ...s, phase: 'summary', endedAt: now, paused: false, restRunningSince: null };
 }
@@ -187,6 +209,7 @@ function correctLast(
   const fixed: SetLog = { ...last, reps };
   if (partials > 0) fixed.partials = partials;
   else delete fixed.partials;
+  applyScore(fixed);
   // Reps carry over to the next set of the same exercise, so carry the corrected value.
   const sameExercise = currentPlanned(s).exerciseId === last.exerciseId;
   return {
@@ -240,6 +263,11 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       };
     }
 
+    case 'SET_FOCUS': {
+      if (s.phase !== 'exercise' || !Array.isArray(e.cues)) return s;
+      return { ...s, focusCues: e.cues.filter(isFocusCueId) };
+    }
+
     case 'CORRECT_LAST_SET':
       return s.phase === 'rest' ? correctLast(s, e) : s;
 
@@ -260,13 +288,15 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
         ...(s.partials > 0 ? { partials: s.partials } : {}),
         weightKg: s.weightKg,
         restTakenSec: s.lastRestTakenSec,
+        ...(s.focusCues ? { cues: [...s.focusCues] } : {}),
         startedAt: s.setStartedAt,
         endedAt: now,
       };
+      applyScore(log);
       const logged = { ...s, logs: [...s.logs, log] };
       const moved =
         s.setIndex + 1 < p.sets
-          ? { ...logged, setIndex: s.setIndex + 1, partials: 0 } // keep reps/weight for the next set
+          ? { ...logged, setIndex: s.setIndex + 1, partials: 0, focusCues: null } // keep reps/weight for the next set
           : goToExercise(logged, nextUnfinished(logged, s.exIndex), now);
       if (moved.phase === 'summary') return moved;
       return {

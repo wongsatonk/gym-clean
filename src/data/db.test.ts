@@ -231,6 +231,56 @@ describe('updateSet (M4c last-set correction)', () => {
   });
 });
 
+describe('updateSet with a focus score (M5)', () => {
+  const ref = { sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0 };
+
+  it('stores cue ids and a focus score with the set', async () => {
+    await saveSet(db, log({ cues: ['rushedLowering', 'stalled'], focusScore: 85 }));
+    expect((await setsForSession(db, 's1'))[0]).toMatchObject({
+      cues: ['rushedLowering', 'stalled'],
+      focusScore: 85,
+    });
+  });
+
+  it('writes the recomputed score with the corrected counts, leaving the cues alone', async () => {
+    await saveSet(db, log({ partials: 1, cues: ['shrinkingRange'], focusScore: 85 }));
+    expect(await updateSet(db, ref, { reps: 10, partials: 3, focusScore: 75 })).toBe(1);
+    expect((await setsForSession(db, 's1'))[0]).toMatchObject({
+      reps: 10,
+      partials: 3,
+      cues: ['shrinkingRange'],
+      focusScore: 75,
+    });
+  });
+
+  it('removes the score when given null (a camera set corrected to 0 reps)', async () => {
+    await saveSet(db, log({ cues: [], focusScore: 100 }));
+    await updateSet(db, ref, { reps: 0, partials: 1, focusScore: null });
+    const row = (await setsForSession(db, 's1'))[0];
+    expect(row).not.toHaveProperty('focusScore');
+    expect(row).toMatchObject({ reps: 0, partials: 1, cues: [] });
+  });
+
+  it('keeps the stored score when none is given (old callers, manual sets)', async () => {
+    await saveSet(db, log({ focusScore: 90 }));
+    await updateSet(db, ref, { reps: 8, partials: 0 });
+    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ reps: 8, focusScore: 90 });
+    await saveSet(db, log({ setIndex: 1, startedAt: 3000 }));
+    await updateSet(db, { ...ref, setIndex: 1 }, { reps: 7, partials: 0 });
+    expect((await setsForSession(db, 's1'))[1]).not.toHaveProperty('focusScore');
+  });
+
+  it('ignores a non-finite score and clamps to 0–100', async () => {
+    await saveSet(db, log({ focusScore: 90 }));
+    await updateSet(db, ref, { reps: 8, partials: 0, focusScore: Number.NaN });
+    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ focusScore: 90 });
+    await updateSet(db, ref, { reps: 8, partials: 0, focusScore: 140 });
+    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ focusScore: 100 });
+    await updateSet(db, ref, { reps: 8, partials: 0, focusScore: -5 });
+    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ focusScore: 0 });
+  });
+});
+
 describe('GymDb coach tips setting (M5b)', () => {
   it('shows coach tips by default, and remembers when turned off and on', async () => {
     expect(await getCoachTips(db)).toBe(true);

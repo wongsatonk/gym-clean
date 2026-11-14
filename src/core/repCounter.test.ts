@@ -1442,6 +1442,19 @@ describe('createRepCounter: torso posture gate (rule.maxTorsoLeanDeg)', () => {
     expect(trackedDuringBend).toBe(false);
   });
 
+  it('untracked reads posture while leaning past the gate, null once upright again (M5)', () => {
+    const counter = createRepCounter(RAISE);
+    const seen = new Set<string | null>();
+    for (const f of bendFrames()) {
+      counter.push(f);
+      if (leanAt(f.t) > (RAISE.maxTorsoLeanDeg ?? 0) + 1) expect(counter.untracked).toBe('posture');
+      seen.add(counter.untracked);
+    }
+    expect(seen).toEqual(new Set(['posture', null]));
+    expect(counter.untracked).toBeNull();
+    expect(counter.reps).toBe(1);
+  });
+
   it('a stream restart takes a new reference posture at the next settle', () => {
     const first = sample(RAISE, curve(10, [[800, 10]]), { anchor: 'below' });
     // Second segment (t restarts at 0) is filmed 40° pitched: still counts its rep.
@@ -1657,6 +1670,23 @@ describe('createRepCounter: camera view variant (rule.otherView, push-up filmed 
     });
   });
 
+  it('untracked reads bodyLine while sitting on the front variant, null back in the plank (M5)', () => {
+    const sitAt = 2600;
+    const frames = sample(PUSHUP, keys).map((f) => withHip(f, f.t < sitAt ? 175 : 45));
+    const counter = createRepCounter(PUSHUP);
+    for (const f of frames) {
+      counter.push(f);
+      if (f.t < sitAt) expect(counter.untracked).toBeNull();
+      else expect(counter.untracked).toBe('bodyLine');
+    }
+    expect(counter.tracking).toBe(false);
+    const last = frames[frames.length - 1];
+    if (!last) throw new Error('no frames');
+    counter.push(withHip(last, 175));
+    expect(counter.untracked).toBeNull();
+    expect(counter.tracking).toBe(true);
+  });
+
   it('hidden knees (head-on, legs cropped or behind the torso) leave the body line unknown: counts', () => {
     // World knees guessed bent at 45°, but the knees are at visibility 0.2 in the image.
     const sitAt = 2600;
@@ -1690,5 +1720,154 @@ describe('createRepCounter: camera view variant (rule.otherView, push-up filmed 
   it('rules without a variant never switch', () => {
     const { counter } = runAll(CURL, sample(CURL, curlReps(1)));
     expect(counter.rule).toBe(CURL);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// M5 getters for the focus tracker: why a frame wasn't tracked, and per-side raw angles.
+// ---------------------------------------------------------------------------------------------
+
+describe('createRepCounter: untracked reason (M5)', () => {
+  it('is null before any frame and while tracking', () => {
+    const counter = createRepCounter(CURL);
+    expect(counter.untracked).toBeNull();
+    counter.push(makeFrame(CURL, { t: 0, left: { angle: 170 }, right: { angle: 170 } }));
+    expect(counter.tracking).toBe(true);
+    expect(counter.untracked).toBeNull();
+  });
+
+  it('a hidden wrist reads visibility', () => {
+    const counter = createRepCounter(RAISE);
+    const raise = (t: number, v: number) =>
+      makeFrame(RAISE, {
+        t,
+        left: { angle: 10, anchor: 'below', visibility: v },
+        right: { angle: 10, anchor: 'below', visibility: v },
+      });
+    counter.push(raise(0, 0.95));
+    expect(counter.untracked).toBeNull();
+    // Hide just the wrists (third triplet point) on both sides.
+    const f = raise(DT, 0.95);
+    const hidden = f.landmarks.map((p, i) =>
+      i === RAISE.triplets.left[2] || i === RAISE.triplets.right[2] ? { ...p, visibility: 0.1 } : p,
+    );
+    counter.push({ ...f, landmarks: hidden });
+    expect(counter.tracking).toBe(false);
+    expect(counter.untracked).toBe('visibility');
+    counter.push(raise(2 * DT, 0.95));
+    expect(counter.untracked).toBeNull();
+  });
+
+  it('a frame with no landmarks reads visibility', () => {
+    const counter = createRepCounter(CURL);
+    counter.push({ t: 0, landmarks: [] });
+    expect(counter.untracked).toBe('visibility');
+  });
+
+  it('reset() clears it', () => {
+    const counter = createRepCounter(CURL);
+    counter.push({ t: 0, landmarks: [] });
+    counter.reset();
+    expect(counter.untracked).toBeNull();
+  });
+});
+
+describe('createRepCounter: per-side angles (M5 sideAngles)', () => {
+  it("both-arms rule in world space: this frame's raw angles per side, before the EMA", () => {
+    const counter = createRepCounter(RAISE);
+    expect(counter.sideAngles).toBeNull();
+    counter.push(
+      makeFrame(RAISE, {
+        t: 0,
+        left: { angle: 10, anchor: 'below' },
+        right: { angle: 10, anchor: 'below' },
+      }),
+    );
+    counter.push(
+      makeFrame(RAISE, {
+        t: DT,
+        left: { angle: 30, anchor: 'below' },
+        right: { angle: 60, anchor: 'below' },
+      }),
+    );
+    const s = counter.sideAngles;
+    expect(s?.left).toBeCloseTo(30, 4);
+    expect(s?.right).toBeCloseTo(60, 4);
+    // The smoothed angle lags behind the raw mean (45°).
+    expect(counter.angle).toBeLessThan(40);
+  });
+
+  it('a hidden side reads null, the visible side keeps its angle', () => {
+    const counter = createRepCounter(RAISE);
+    counter.push(
+      makeFrame(RAISE, {
+        t: 0,
+        left: { angle: 20, anchor: 'below', visibility: 0.1 },
+        right: { angle: 50, anchor: 'below' },
+      }),
+    );
+    expect(counter.sideAngles?.left).toBeNull();
+    expect(counter.sideAngles?.right).toBeCloseTo(50, 4);
+    counter.push({ t: DT, landmarks: [] });
+    expect(counter.sideAngles).toEqual({ left: null, right: null });
+  });
+
+  it('both-arms rule in image space (press): the image-plane angles, not the world ones', () => {
+    expect(PRESS.angleSpace).toBe('image');
+    const f = tiltWristInWorld(
+      PRESS,
+      makeFrame(PRESS, {
+        t: 0,
+        left: { angle: 150, anchor: 'below' },
+        right: { angle: 120, anchor: 'below' },
+      }),
+      -0.1,
+    );
+    const image = createRepCounter(PRESS);
+    image.push(f);
+    expect(image.sideAngles?.left).toBeCloseTo(150, 4);
+    expect(image.sideAngles?.right).toBeCloseTo(120, 4);
+    // The world model reads the tilted forearms differently.
+    const world = createRepCounter({ ...PRESS, angleSpace: 'world' });
+    world.push(f);
+    expect(Math.abs((world.sideAngles?.left ?? 0) - 150)).toBeGreaterThan(5);
+  });
+
+  it('is null for one-side rules (best side mode)', () => {
+    const counter = createRepCounter(CURL);
+    counter.push(makeFrame(CURL, { t: 0, left: { angle: 170 }, right: { angle: 170 } }));
+    expect(counter.sideAngles).toBeNull();
+  });
+
+  it('reset() clears it', () => {
+    const counter = createRepCounter(RAISE);
+    counter.push(makeFrame(RAISE, { t: 0, left: { angle: 10, anchor: 'below' } }));
+    counter.reset();
+    expect(counter.sideAngles).toBeNull();
+  });
+
+  it('getters never change counting (same events with or without reading them)', () => {
+    const frames = sample(
+      RAISE,
+      curve(10, [
+        [600, 10],
+        [900, 95],
+        [300, 95],
+        [1200, 10],
+        [500, 10],
+      ]),
+      {
+        anchor: 'below',
+      },
+    );
+    const plain = runAll(RAISE, frames).events;
+    const counter = createRepCounter(RAISE);
+    const read: RepEvent[] = [];
+    for (const f of frames) {
+      read.push(...counter.push(f));
+      void counter.sideAngles;
+      void counter.untracked;
+    }
+    expect(read).toEqual(plain);
   });
 });
