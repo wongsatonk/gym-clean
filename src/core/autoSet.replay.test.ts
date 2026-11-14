@@ -67,6 +67,18 @@ function tail(frames: readonly LandmarkFrame[], ms: number, kind: 'hold' | 'empt
   return out;
 }
 
+/**
+ * Empty scene appended at the clip's end (4.3–6.0 s after rep 20): which stop comes first, and
+ * when (s after rep 20). Clips 0 and 3: still (their still timer runs out before 3 s away);
+ * clips 1 and 2: away, 3 s after the last person frame.
+ */
+const OUT_OF_FRAME: Record<string, { reason: 'still' | 'away'; afterRep20Sec: number }> = {
+  'real-2026-11-13-s1-0': { reason: 'still', afterRep20Sec: 6.0 },
+  'real-2026-11-13-s1-1': { reason: 'away', afterRep20Sec: 7.43 },
+  'real-2026-11-13-s1-2': { reason: 'away', afterRep20Sec: 8.27 },
+  'real-2026-11-13-s1-3': { reason: 'still', afterRep20Sec: 8.87 },
+};
+
 const reps = (run: Run) => run.events.filter((e) => e.type === 'rep');
 
 describe('autoSet on the real lateral-raise clips (real counter)', () => {
@@ -103,16 +115,27 @@ describe('autoSet on the real lateral-raise clips (real counter)', () => {
         expect(commit?.t).toBeGreaterThanOrEqual((stop?.t ?? 0) + 5000);
       });
 
-      it('walking out of frame after the clip: away stop', () => {
+      it('walking out of frame after the clip: the expected stop reason and time', () => {
+        const expected = OUT_OF_FRAME[clip.name.replace(/__.*$/, '')];
+        if (!expected) throw new Error(`no expectation for ${clip.name}`);
         const run = replay(clip.frames, 'exercise');
+        const lastRep = reps(run)[19];
+        if (!lastRep) throw new Error('no rep 20');
         const end = clip.frames[clip.frames.length - 1]?.t ?? 0;
         replay(tail(clip.frames, 3500, 'empty'), 'exercise', run);
+        expect(run.log.map((l) => l.action.type)).toEqual(['stopPending']);
         const stop = run.log[0];
-        expect(stop?.action).toMatchObject({ type: 'stopPending', reps: 20 });
-        // Away (3 s after the last person frame) unless the still stop came first.
-        if (stop?.action.type === 'stopPending' && stop.action.reason === 'away')
-          expect(stop.t).toBeGreaterThanOrEqual(end + 3000 - 40);
-        else expect(stop?.action).toMatchObject({ reason: 'still' });
+        expect(stop?.action).toMatchObject({
+          reason: expected.reason,
+          reps: 20,
+          endedAt: lastRep.t,
+        });
+        const after = ((stop?.t ?? 0) - lastRep.t) / 1000;
+        expect(after).toBeGreaterThanOrEqual(expected.afterRep20Sec - 0.25);
+        expect(after).toBeLessThanOrEqual(expected.afterRep20Sec + 0.25);
+        // Away = 3 s after the last frame with a person (the clip's end).
+        if (expected.reason === 'away') expect(stop?.t).toBeGreaterThanOrEqual(end + 3000 - 40);
+        else expect(stop?.t).toBeLessThan(end + 3000);
       });
 
       it('in rest before the first rep: no false start', () => {

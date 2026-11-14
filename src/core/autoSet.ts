@@ -16,7 +16,7 @@
 //   away stops, idle closes and window expiry only happen inside push().
 // - After a `start` action, dispatch START_SET (now = at) synchronously, before any
 //   setSession({ phase: 'rest' }) call; otherwise the started set is dropped as a manual Set done.
-// - If the frame clock restarts (t goes backwards), stored times are rebased onto the new clock as
+// - If the frame clock restarts (t goes back ≥ 100 ms; smaller steps back are ignored), stored times are rebased onto the new clock as
 //   if no time passed, and the stop/idle timers restart from the first new frame.
 import type { RepPhase } from './repCounter';
 import type { LandmarkFrame, RepEvent } from './types';
@@ -160,6 +160,9 @@ export function personInFrame(frame: LandmarkFrame): boolean {
   return n >= PRESENT_MIN_LANDMARKS;
 }
 
+/** A backwards step in t this big or bigger is a stream restart; smaller ones are jitter. */
+const RESTART_REGRESSION_MS = 100;
+
 const START_BAND: ReadonlySet<RepPhase> = new Set<RepPhase>(['top', 'setup']);
 
 export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSet {
@@ -219,7 +222,8 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
 
   function see(t: number): void {
     if (lastT === null) idleFloor = t;
-    else if (t < lastT) rebase(t - lastT, t);
+    else if (t <= lastT - RESTART_REGRESSION_MS) rebase(t - lastT, t);
+    else if (t < lastT) return; // out-of-order timestamp jitter: keep the clock as it was
     lastT = t;
   }
 
@@ -377,7 +381,9 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     if (repSeen) return cancel(t, 'rep');
     if (pendingUntil === null || t < pendingUntil || paused) return [];
     if (!attemptInWindow || START_BAND.has(input.phase)) return commit(t);
-    // Held for an attempt in progress; give up on it like a stop would (away / stalled).
+    // Held for an attempt in progress; give up on it like a stop would (away / stalled), and
+    // never hold past pendingUntil + stalledSec (a counter flapping between phases).
+    if (t >= pendingUntil + ms(config.stalledSec)) return commit(t);
     const since = Math.max(activityT, pendingUntil);
     if (t - Math.max(lastPresentT, pendingUntil) >= ms(config.awaySec)) return commit(t);
     if (t - since >= ms(config.stalledSec)) return commit(t);

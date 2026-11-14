@@ -648,6 +648,25 @@ describe("don't commit mid-rep", () => {
     expect(nth(sim.of('commit'), 0).t).toBeGreaterThanOrEqual(goneT + 3000 - 40);
   });
 
+  it('the hold has a hard cap: commit by pendingUntil + stalledSec even if the counter flaps', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(3), 2);
+    sim.hold('top', 6100);
+    const stop = nth(sim.of('stopPending'), 0);
+    sim.hold('top', stop.t + 2000 - sim.t);
+    // An attempt that never comes back: down ⇄ bottom ⇄ up flapping, each a phase change.
+    for (let i = 0; i < 20 && sim.of('commit').length === 0; i++) {
+      sim.hold('down', 400, { angle: TOP - 60 });
+      sim.hold('bottom', 400, { angle: BOTTOM });
+      sim.hold('up', 400, { angle: TOP - 60 });
+    }
+    const commit = nth(sim.of('commit'), 0);
+    const until = stop.t + 5000;
+    expect(commit.t).toBeGreaterThanOrEqual(until + 10000 - 40);
+    expect(commit.t).toBeLessThan(until + 10000 + 100);
+    expect(commit.action).toMatchObject({ endedAt: last.t, reps: 3 });
+  });
+
   it('a stalled stop (already outside the band) still commits when the window ends', () => {
     const sim = inSet();
     sim.reps_(2);
@@ -661,6 +680,31 @@ describe("don't commit mid-rep", () => {
 });
 
 describe('clock going backwards (stream restart, new t0)', () => {
+  it('a jitter regression under 100 ms is ignored (no rebase, timers keep running)', () => {
+    const sim = inSet();
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 3000);
+    sim.t -= 60; // out-of-order camera timestamp
+    sim.frame('top', TOP);
+    sim.t += 60;
+    sim.hold('top', 3150);
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop.t - last.t).toBeLessThan(6100); // not 6 s after the regression
+  });
+
+  it('a regression of 100 ms or more is a restart (timers restart)', () => {
+    const sim = inSet();
+    sim.reps_(2);
+    sim.hold('top', 3000);
+    const before = sim.t;
+    sim.t -= 150;
+    sim.frame('top', TOP);
+    sim.hold('top', 5700);
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 400);
+    expect(nth(sim.of('stopPending'), 0).t).toBeGreaterThan(before + 5700);
+  });
+
   it('idle noPerson still fires after a restart (no stale last-seen time)', () => {
     const sim = inRest(5000);
     sim.hold('top', 60000, { jitter: 3 });
