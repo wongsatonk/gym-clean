@@ -15,7 +15,7 @@
 import { h } from './dom';
 import './handsfree.css';
 
-export type AutoStopReason = 'still' | 'away' | 'stalled';
+export type AutoStopReason = 'still' | 'stalled';
 
 export type AutoStopBannerOptions = {
   reps: number;

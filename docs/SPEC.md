@@ -530,7 +530,9 @@ auto start simply falls back to tapping Start set).
   - **A break** is, inside a set with ≥ `stopMinReps` reps, either: the counter untracked for a
     **posture or body-line** reason (`counter.untracked` = `posture` / `bodyLine`, e.g. sitting down,
     bending over) continuously for `breakGateSec` (5 s) while a person is in frame; or no person in frame
-    (`personInFrame` false) for `awaySec` (3 s). A visibility-gate failure (hands out of frame) is not a
+    (`personInFrame` false) for `awaySec` (3 s). *In practice only body-line breaks (sitting down in a
+    front-view push-up) and walk-aways hold: the posture gate re-locks after 3 s (`LEAN_RELOCK_MS`), so a
+    long bend falls back to plain rest (still stop + Undo). See Decision 2026-11-14.* A visibility-gate failure (hands out of frame) is not a
     break. Fewer than `stopMinReps` reps: no break and no stop (unchanged).
   - **A break doesn't end the set.** It replaces the M5c `away` stop. Posture/body-line-gated frames don't
     count toward the `still` or `stalled` timers, so a sit-down can't turn into a still stop. The set is

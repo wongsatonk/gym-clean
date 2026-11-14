@@ -515,7 +515,7 @@ test('(vii) "Hands-free sets" off (persisted) → no auto stop; Set done closes 
   expect(w.errors).toEqual([]);
 });
 
-test('out of frame: no person for 3 s after 2 reps → "away" stop, saved after the window', async ({
+test('out of frame: no person for 3 s after 2 reps → the set goes on hold (M5c break), nothing saved', async ({
   page,
 }) => {
   const w = watch(page);
@@ -523,19 +523,36 @@ test('out of frame: no person for 3 s after 2 reps → "away" stop, saved after 
   await page.goto('/');
   const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
   await repsThenFreeze(page, cam, 2);
+  const lastRepAt = await page.evaluate(() => window.__repsAt[2] ?? 0);
   const goneAt = await page.evaluate(() => {
     window.__noPerson = true;
     return Date.now();
   });
-  await expect(banner(cam)).toBeVisible({ timeout: 6_000 });
-  await expect(banner(cam)).toHaveAttribute('data-reason', 'away');
-  const done = (await said(page)).find((s) => s.text === 'Set done. 2 reps.');
-  expect((done?.at ?? 0) - goneAt).toBeGreaterThanOrEqual(2_500);
-  expect((done?.at ?? 0) - goneAt).toBeLessThan(5_500); // before a still stop could fire
-  await expect
-    .poll(async () => (await setRows(page)).map((r) => r.reps), { timeout: 8_000 })
-    .toEqual([2]);
+  const hold = cam.locator('[data-hold]');
+  await expect(hold).toBeVisible({ timeout: 6_000 });
+  await expect(hold).toHaveAttribute('data-reason', 'away');
+  await expect(hold.locator('[data-hold-title]')).toHaveText('On hold · 2 reps');
+  await expect(hold.locator('[data-hold-clock]')).toBeVisible();
+  const prompt = (await said(page)).find((s) => s.text === 'Set on hold. Tap to continue.');
+  expect((prompt?.at ?? 0) - goneAt).toBeGreaterThanOrEqual(2_500);
+  expect((prompt?.at ?? 0) - goneAt).toBeLessThan(5_500);
+  for (const name of ['Continue set', 'Start next set']) {
+    const box = await hold.getByRole('button', { name }).boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(56);
+  }
+  // Past the Undo window's length: still on hold, no "Set done", no stop banner, no row.
+  await page.waitForTimeout(6_000);
+  await expect(hold).toBeVisible();
+  await expect(cam.locator('[data-auto-stop]')).toHaveCount(0);
+  expect((await texts(page)).filter((t) => t.startsWith('Set done'))).toEqual([]);
+  expect(await setRows(page)).toEqual([]);
+  // Set done while held saves the held set, backdated to its last rep.
+  await cam.getByRole('button', { name: 'Set done' }).click();
+  await expect.poll(async () => (await setRows(page)).map((r) => r.reps)).toEqual([2]);
+  const [row] = await setRows(page);
+  expect(Math.abs((row?.endedAt ?? 0) - lastRepAt)).toBeLessThan(500);
   await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+  await expect(hold).toHaveCount(0);
   expect(w.thirdParty).toEqual([]);
   expect(w.errors).toEqual([]);
 });

@@ -6,6 +6,7 @@ import {
   personInFrame,
   type AutoCancelReason,
   type AutoCloseReason,
+  type AutoHoldReason,
   type AutoSetAction,
   type AutoSetConfig,
   type AutoStopReason,
@@ -27,6 +28,7 @@ import type { DevLogRecorder } from '../data/devlog';
 import { openCamera, stopStream, type Facing } from '../pose/camera';
 import type { PoseTracker } from '../pose/landmarker';
 import { createAutoStopBanner, type AutoStopBannerHandle } from './autoStopBanner';
+import { createHoldPanel, type HoldPanelHandle } from './holdPanel';
 import {
   createCameraRestPanel,
   type CameraRestPanelHandle,
@@ -90,6 +92,18 @@ export type HandsFreeOptions = {
     endedAt: number;
     until: number;
   }): void;
+  /**
+   * M5c break: the set went on hold ("Set on hold. Tap to continue." was said, the hold panel is
+   * up, the shown count is frozen). Nothing to save yet.
+   */
+  onHold?(e: { reason: AutoHoldReason; reps: number; partials: number; endedAt: number }): void;
+  /**
+   * "Start next set" tapped on the hold panel: dispatch SET_DONE { now: endedAt } (the held set,
+   * backdated to the end of its last rep), then START_SET { now: Date.now() }, then setSession.
+   * Called instead of onCommit for this path; without it the view falls back to onCommit.
+   * ("Save set" on the last set, Set done, Close and the idle limits use onCommit as usual.)
+   */
+  onHoldNext?(e: { endedAt: number; reps: number; partials: number }): void;
   /** The pending stop is off (Undo tapped, a rep, or Pause); the set goes on. */
   onStopCancelled?(e: { reason: AutoCancelReason }): void;
   /** Idle limit hit: "Camera off." was said and the camera/model are stopped. Call stop(). */
@@ -250,6 +264,11 @@ export type RepPanel = {
    * autoSet's counts, not reps the counter saw earlier in rest). Reset() clears it.
    */
   setBase(reps: number, partials: number): void;
+  /**
+   * Hands-free hold: show these counts whatever the counter does (null = live again). Combine
+   * with `quiet` so the counter runs silently underneath.
+   */
+  freeze(counts: { reps: number; partials: number } | null): void;
   /** New set number / planned reps (hands-free: the sheet stays open across sets). */
   setTarget(target: CameraTarget): void;
   /** Speak the count word for `reps` now (the first word of an auto-started set). */
@@ -424,10 +443,12 @@ export function createRepPanel(
   let quiet = false;
   let baseReps = 0;
   let basePartials = 0;
-  const shownCounts = () => ({
-    reps: Math.max(0, counter.reps - baseReps),
-    partials: Math.max(0, counter.partials - basePartials),
-  });
+  let frozen: { reps: number; partials: number } | null = null;
+  const shownCounts = () =>
+    frozen ?? {
+      reps: Math.max(0, counter.reps - baseReps),
+      partials: Math.max(0, counter.partials - basePartials),
+    };
 
   const sideText = (s: RepCounter['side']): string => {
     if (!s) return '';
@@ -576,6 +597,7 @@ export function createRepPanel(
       counter.reset();
       baseReps = 0;
       basePartials = 0;
+      frozen = null;
       clearCoach();
       render(false);
     },
@@ -589,6 +611,10 @@ export function createRepPanel(
     setBase(reps, partials) {
       baseReps = reps;
       basePartials = partials;
+      render(inFrame);
+    },
+    freeze(counts) {
+      frozen = counts ? { ...counts } : null;
       render(inFrame);
     },
     setTarget(next) {
@@ -706,6 +732,16 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   const frameNow = () => performance.now() - t0;
   let mode: 'set' | 'rest' = 'set';
   let banner: AutoStopBannerHandle | null = null;
+  /** M5c break: the hold panel while autoSet holds the set, with the hold's backdated end. */
+  let holdPanel: HoldPanelHandle | null = null;
+  let heldEndedAt = 0;
+  /** Counts frozen at the hold (Continue resumes the shown count from them). */
+  let heldCounts = { reps: 0, partials: 0 };
+  /** Last "Tap Continue to count." (frame clock), at most once per HOLD_REMIND_MS. */
+  let holdRemindAt = -Infinity;
+  /** The next commit comes from "Start next set" on the hold panel (→ onHoldNext). */
+  let holdNextTap = false;
+  const HOLD_REMIND_MS = 10_000;
   let restPanel: CameraRestPanelHandle | null = null;
   let disposed = false;
   let recWarned = false;
@@ -729,6 +765,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   let sessionPhase: CameraSession['phase'] = 'exercise';
   /** Top of the planned range ("/ 12"): the stalled cue's "N to go"; 0 = unknown (no stalled). */
   let targetTop = opts.target?.targetReps ?? 0;
+  /** Set number / planned sets (the hold panel's Save set on the exercise's last set). */
+  let curTarget = opts.target;
   let focus: FocusTracker | null = null;
   let focusFlagsKey = '';
   let focusView: string | null = null;
@@ -809,7 +847,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     seededNow = null;
     const fresh = seeded ? events.filter((e) => !seeded.has(e)) : events;
     const autoState = auto ? auto.state : 'off';
-    if (mode === 'set' && autoState !== 'rest') {
+    // Reps seen while held don't belong to the set (they're never counted).
+    if (mode === 'set' && autoState !== 'rest' && autoState !== 'held') {
       for (const e of fresh) if (e.type === 'rep') setRepEvents.push(e);
     }
     const cues = focus.push({
@@ -1029,8 +1068,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           onclick: () => {
             // Silence first so a late count word can't cut off the rest cue that follows.
             counter.silence();
-            // Hands-free Undo window: save at once, with the same backdated end.
-            if (auto?.state === 'pending') {
+            // Hands-free Undo window or hold: save at once, with the same backdated end.
+            if (auto?.state === 'pending' || auto?.state === 'held') {
               handleAuto(auto.confirm(frameNow()));
               return;
             }
@@ -1043,8 +1082,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
 
   const closeSheet = () => {
     counter?.silence();
-    // Hands-free Undo window: Close saves the set as the window would have (backdated end).
-    if (auto?.state === 'pending') handleAuto(auto.confirm(frameNow()));
+    // Hands-free Undo window or hold: Close saves the set as the window would have (backdated).
+    if (auto?.state === 'pending' || auto?.state === 'held') handleAuto(auto.confirm(frameNow()));
     if (disposed) return;
     opts.onClose();
   };
@@ -1112,13 +1151,56 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         ...counts,
         ft: Math.round(ft),
         ...(a.type === 'start' ? { atFt: Math.round(a.at) } : {}),
-        ...(a.type === 'stopPending' || a.type === 'commit'
+        ...(a.type === 'stopPending' || a.type === 'commit' || a.type === 'hold'
           ? { endedAtFt: Math.round(a.endedAt) }
           : {}),
+        ...(a.type === 'holdEnded' ? { how: a.how } : {}),
         phase: repCounter?.phase,
         angle: repCounter?.angle == null ? null : Math.round(repCounter.angle * 10) / 10,
       }),
     );
+  }
+
+  /** Unmount the hold panel and show the live count again (the counter stays as it is). */
+  function dropHold(): void {
+    const p = holdPanel;
+    holdPanel = null;
+    counter?.freeze(null);
+    p?.dispose();
+  }
+
+  function showHold(a: Extract<AutoSetAction, { type: 'hold' }>): void {
+    if (!counter || !auto) return;
+    dropHold();
+    heldEndedAt = a.endedAt;
+    heldCounts = { reps: a.reps, partials: a.partials };
+    holdRemindAt = -Infinity;
+    counter.freeze(heldCounts);
+    counter.quiet = true; // counts on silently underneath; no hints, no focus cues
+    const lastSet = curTarget !== undefined && curTarget.setNumber >= curTarget.sets;
+    const p = createHoldPanel({
+      reps: a.reps,
+      partials: a.partials,
+      lastSet,
+      reason: a.reason,
+      onContinue: () => handleAuto(auto.continueSet(frameNow())),
+      onNext: () => {
+        if (lastSet) {
+          handleAuto(auto.confirm(frameNow()));
+          return;
+        }
+        holdNextTap = true;
+        try {
+          handleAuto(auto.nextSet(frameNow()));
+        } finally {
+          holdNextTap = false;
+        }
+      },
+      focusAfter: focusTarget,
+    });
+    holdPanel = p;
+    stage.append(p.el);
+    p.setClock(frameNow() - a.endedAt);
   }
 
   /** Where focus goes when the banner or rest panel takes away the focused control. */
@@ -1144,6 +1226,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     counter.quiet = true;
     restPanel ??= createCameraRestPanel({ onStartSet: () => hf.onStartSet(), onClose: closeSheet });
     stage.append(restPanel.el);
+    dropHold();
     dropBanner(); // focus moves to Start set if it was on Undo
     if (focusWasOnSetDone) focusTarget()?.focus();
   }
@@ -1215,6 +1298,30 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           });
           break;
         }
+        case 'hold': {
+          dropBanner();
+          showHold(a);
+          // A cue, also with the spoken count off; queued after a count word, never cancelling it.
+          say('Set on hold. Tap to continue.');
+          hf.onHold?.({
+            reason: a.reason,
+            reps: a.reps,
+            partials: a.partials,
+            endedAt: toWall(a.endedAt),
+          });
+          break;
+        }
+        case 'holdEnded': {
+          // The count resumes from N: reps the counter saw while held are absorbed in the base.
+          dropHold();
+          counter.setBase(
+            repCounter.reps - heldCounts.reps,
+            repCounter.partials - heldCounts.partials,
+          );
+          counter.quiet = false;
+          say('Keep going.');
+          break;
+        }
         case 'stopCancelled': {
           if (a.reason === 'paused') dropBanner();
           else {
@@ -1226,9 +1333,24 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         }
         case 'commit': {
           const b = banner;
-          hf.onCommit({ endedAt: toWall(a.endedAt), reps: a.reps, partials: a.partials });
-          // The app normally switched to rest mode (banner gone) or closed the sheet.
-          if (!disposed && banner === b) dropBanner();
+          const wasHeld = holdPanel !== null;
+          const e = { endedAt: toWall(a.endedAt), reps: a.reps, partials: a.partials };
+          dropHold();
+          const next = holdNextTap && hf.onHoldNext !== undefined;
+          holdNextTap = false;
+          if (next) hf.onHoldNext?.(e);
+          else hf.onCommit(e);
+          if (disposed) return;
+          // The app normally switched to rest mode (quiet counter) or closed the sheet. If it
+          // went straight to the next set (Start next set), start it here: live, from 0.
+          if (wasHeld && mode === 'set') {
+            counter.quiet = false;
+            if (next) {
+              counter.reset();
+              startFocusSet();
+            }
+          }
+          if (banner === b) dropBanner();
           break;
         }
         case 'close': {
@@ -1267,6 +1389,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
             t: ft,
             tracking: frame !== null && repCounter.tracking,
             present: frame !== null && personInFrame(frame),
+            // No pose: unknown (null), never a posture / body-line break.
+            untracked: frame !== null ? repCounter.untracked : null,
             phase: repCounter.phase,
             angle: repCounter.angle,
             events,
@@ -1274,6 +1398,13 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         );
         if (!running) return; // idle close, or the app closed the sheet in a callback
         if (banner && auto.pendingUntil !== null) banner.tick(auto.pendingUntil - ft);
+        if (holdPanel && auto.state === 'held') {
+          holdPanel.setClock(ft - heldEndedAt);
+          if (events.some((e) => e.type === 'rep') && ft - holdRemindAt >= HOLD_REMIND_MS) {
+            holdRemindAt = ft;
+            say('Tap Continue to count.');
+          }
+        }
       }
       feedFocus(frame, ft, events);
       if (!running) return; // onFocus dispatches into the app; never tick a closed sheet
@@ -1411,6 +1542,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       counter?.silence();
       halt();
       disposed = true;
+      dropHold();
       dropBanner();
       restPanel?.dispose();
       restPanel = null;
@@ -1421,7 +1553,10 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       if (disposed) return;
       sessionPaused = session.paused;
       sessionPhase = session.phase;
-      if (session.target) targetTop = session.target.targetReps;
+      if (session.target) {
+        targetTop = session.target.targetReps;
+        curTarget = session.target;
+      }
       if (!auto || !counter) return;
       if (session.target) counter.setTarget(session.target);
       const actions = auto.setSession(

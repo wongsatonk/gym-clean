@@ -326,6 +326,13 @@ export function mountApp(root: HTMLElement): void {
           lastCueElapsedMs = restElapsedMs(view.s, now());
         speakAdviceOnCommit();
       },
+      // M5c break hold: "Start next set" saves the held set (backdated to its last rep) and
+      // starts the next one now; the break counts as that set's rest. No coach tip here — the
+      // lifter is already starting.
+      onHoldNext: ({ endedAt }) => {
+        dispatch({ type: 'SET_DONE', now: endedAt });
+        dispatch({ type: 'START_SET', now: now() });
+      },
       onIdleClose: () => closeCameraView(),
       onStartSet: () => dispatch({ type: 'START_SET', now: now() }),
     };

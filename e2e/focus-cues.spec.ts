@@ -582,7 +582,7 @@ test('(2, 3) hands-free: rushed reps in rest mode → no cue; auto-started set s
   expect(w.errors).toEqual([]);
 });
 
-test('(4, 5) hands-free: held outside the band → stalled cue ~5 s then stop ~10 s; in the band → only "Set done"; walking away → only "Set done"', async ({
+test('(4, 5) hands-free: held outside the band → stalled cue ~5 s then stop ~10 s; in the band → only "Set done"; walking away → only the hold prompt', async ({
   page,
 }) => {
   const w = watch(page);
@@ -617,18 +617,32 @@ test('(4, 5) hands-free: held outside the band → stalled cue ~5 s then stop ~1
   expect((await texts(page)).slice(from).filter(isFocusText)).toEqual([]);
   await expect(cam).toHaveAttribute('data-cam-mode', 'rest', { timeout: 10_000 });
 
-  // Set 3: after the auto start, walk away → the 3 s away stop speaks; no "Step back into frame."
+  // Set 3 (the curl's last): after the auto start, walk away → the 3 s away break puts the set
+  // on hold and speaks only the prompt (no "Set done", no "Step back into frame."). Nothing is
+  // saved until a tap: Save set saves it.
   await page.waitForTimeout(5_500);
   from = (await said(page)).length;
   await freezeWhenReps(page, 2);
   await play(page);
   await expect(cam).toHaveAttribute('data-cam-mode', 'set', { timeout: 15_000 });
+  const goneAt = await wallNow(page);
   await setHook(page, 'noPerson', true);
-  await waitSaid(page, 'Set done. 2 reps.', 10_000, from);
+  const prompt = await waitSaid(page, 'Set on hold. Tap to continue.', 10_000, from);
+  expect(prompt.at - goneAt).toBeGreaterThan(2_500);
+  expect(prompt.at - goneAt).toBeLessThan(5_500);
+  const hold = cam.locator('[data-hold]');
+  await expect(hold).toBeVisible();
+  await expect(hold).toHaveAttribute('data-reason', 'away');
+  await expect(hold).toHaveAttribute('data-last-set', 'true');
   await page.waitForTimeout(3_000);
   expect((await texts(page)).slice(from).filter(isFocusText)).toEqual([]);
+  expect((await texts(page)).slice(from).filter((t) => t.startsWith('Set done'))).toEqual([]);
+  expect((await curlRows(page)).length).toBe(2);
+  await hold.getByRole('button', { name: 'Save set' }).click();
   await expect.poll(async () => (await curlRows(page)).length, { timeout: 10_000 }).toBe(3);
+  expect((await curlRows(page))[2]?.reps).toBe(2);
   expect((await curlRows(page)).map((r) => r.focusScore)).toEqual([95, 100, 100]);
+  expect((await texts(page)).slice(from).filter(isFocusText)).toEqual([]);
 
   await commonSpeechChecks(page);
   expect(w.thirdParty).toEqual([]);

@@ -97,7 +97,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - a solid backing over the video.
   - Done when: 390×844 harness screenshots of both labels, text ≥ 20px, nothing overflowing, typecheck + lint clean.
   - Deps: none (shape from this plan).
-- [ ] B5. [ui-engineer, after B1 + B2 + B4 and the branch cut] Camera view hold flow.
+- [x] B5. [ui-engineer, after B1 + B2 + B4 and the branch cut] Camera view hold flow.
   - Files: src/ui/cameraView.ts.
   - Feed: pass `counter.untracked` into autoSet, and autoState `held` into the focus tracker.
   - On `hold`:
@@ -117,13 +117,13 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - the existing camera e2e specs (camera-layout, rep-panel, rep-count, hands-free, devlog-camera, focus-cues) pass;
     - a manual run on the fixture landmarker shows reps → no person 3 s → hold panel + prompt.
   - Deps: B1, B2, B4.
-- [ ] B6. [main] Wiring.
+- [x] B6. [main] Wiring.
   - Files: src/ui/app.ts (and playwright.config.ts for a new spec).
   - `onHoldNext`: SET_DONE `{ now: endedAt }`, then (`startNext`) START_SET `{ now }`, then `camera.setSession(...)` + `beginLoggedSet`.
   - Save set on the last set: the existing commit path, so the camera closes.
   - Done when, by hand on Push A with the fixture landmarker: hold → Start next set → the DB row for set 1 is backdated, and set 2's `restTakenSec` ≈ the break.
   - Deps: B5.
-- [ ] B7. [ui-engineer] E2E `e2e/hands-free-break.spec.ts`.
+- [x] B7. [ui-engineer] E2E `e2e/hands-free-break.spec.ts`.
   - Fixture landmarker and hooks as in hands-free.spec.ts, plus a gate hook: a seated/leaning frame that fails the posture or body-line gate. Real timers, mocked speech.
   - Cases:
     1. 2 reps → `__noPerson` → hold at ~3 s, the prompt spoken, no "Set done", no DB row;
@@ -144,7 +144,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - A set with a hold converts to **one** fixture.
   - Done when: a synthetic export with a hold mid-set converts to one fixture the suite counts, and the script tests pass.
   - Deps: none (event shapes from B1/B5 in this plan).
-- [ ] B9. [reviewer] Review the branch diff against CLAUDE.md:
+- [x] B9. [reviewer] Review the branch diff against CLAUDE.md:
   - pure core;
   - break thresholds are data;
   - prompt spoken, never cancelling a count;
@@ -835,6 +835,18 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-14: **M5c break hold B5–B7 done** (review PASS).
+  - **e2e/hands-free-break.spec.ts:** 7 tests, 21/21 with `--repeat-each=3`. It runs in the `mobile-clips` project (workers: 1) with focus-cues. Full `npm run e2e`: 75/75. `npm run check` green (1164 unit, 19 script).
+  - **Screenshots** taken by the spec: m5c-hold, m5c-hold-last-set. The verifier re-shoots them into docs/screenshots.
+  - **The B5/B6 hand run on the fixture landmarker was done as e2e,** not by hand: Continue, Start next set, Save set, Set done, Close and idle all save backdated.
+  - **Posture breaks don't happen in practice.** The posture gate re-locks after 3 s (`LEAN_RELOCK_MS`), which is shorter than `breakGateSec` 5 s, so only body-line breaks (the front push-up sit-down, his real case) and walk-aways hold. A long bend falls back to plain rest (still stop + Undo). SPEC is annotated. Retune at Checkpoint B3 if bends should hold too; that would need a longer re-lock while in a set, which changes M2 counting and needs its own tests.
+  - **Open, non-blocking:**
+    - hide the footer Set done while held (M4e);
+    - the 3-min idle e2e lengthens every run;
+    - the visibility-gap test should also assert nothing is saved;
+    - pause-while-held is untested;
+    - check that held-period rep events don't skew the focus baseline after Continue.
 
 - 2026-11-14: **M5 deployed:** 4bda987 is live. CI passed: test (e2e 63 passed), build and deploy, all success. Next human step: 🧍 Checkpoint C, a full camera session at the gym, together with Checkpoint B3 (hands-free).
 

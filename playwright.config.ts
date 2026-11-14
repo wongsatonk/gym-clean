@@ -26,7 +26,7 @@ export default defineConfig({
       // live-camera project (CI already runs workers: 1).
       name: 'mobile-clips',
       workers: 1,
-      testMatch: /focus-cues\.spec\.ts/,
+      testMatch: /(focus-cues|hands-free-break)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -41,7 +41,7 @@ export default defineConfig({
     },
     {
       name: 'mobile',
-      testIgnore: /(camera-person|rep-count|devlog-camera|hands-free-live|focus-cues)\.spec\.ts/,
+      testIgnore: /(camera-person|rep-count|devlog-camera|hands-free-live|focus-cues|hands-free-break)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
