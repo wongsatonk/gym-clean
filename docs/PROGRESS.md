@@ -225,6 +225,9 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 - **Evidence, wave 1 tasks 1–5, 8 (2026-11-14):** M4d batch 2 committed first (bb227b2, reviewer PASS). Then tasks 1–5, 8 and the task-10 howto.spec update, reviewer PASS: `npm run check` on the exact staged tree → vitest 51 files / 1802 tests, scripts 24/24; `e2e/howto.spec.ts` 3/3. Task 5 changed one demo keyframe: bent-over row far elbow 80° → 75° (15° past the < 90° threshold). Not shippable yet: tasks 6, 7, 9, 10 (synthetic fixtures, converter, camera chip/setup line, `ruleStatus` into `beginSet`) must land before any push.
 
+- **Verification, wave 1 (2026-11-14, verifier re-run on 96b0971):** PASS on SPEC M4f wave-1 Accept and tasks 1–11. `npm run check` 52 files / 1836 tests, scripts 29/29; `npm run build` OK (main 107.22 kB gzip); full e2e 111 passed, 1 skipped (opt-in HISTORY_SHOTS), no flakes; learning.spec ×3 33/33. Screenshots `docs/screenshots/m4f-*.png`. First verifier run FAILED (setup card clipped at 390×844, e2e gaps) → fixed in 80f9f3d.
+  - **Known limitation (main, decided):** at 375×667 the camera set-up card is a short scroll box (content cut; "Got it" stays fully visible, 56px, and the rep number is never covered). This also affects tuned exercises and predates M4f; the target phone is 390×844+ (CLAUDE.md, iPhone 17 Pro). Follow-up: make the set-up card fit small phones (ui-engineer), and assert scrollHeight ≤ clientHeight in learning.spec:328.
+
 #### Wave 2 — the doable nine (after Checkpoint F1 and his answers to M4f-q2/q6/q7, or their defaults)
 - [ ] 19. [core-engineer] New triplets, **tests first**.
   - Files: src/core/exercises/triplets.ts, index.test.ts, src/core/angles.test.ts if needed.

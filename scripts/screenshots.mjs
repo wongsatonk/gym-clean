@@ -17,6 +17,8 @@
 //                                            # M4e redesign: every screen per accent
 //   node scripts/screenshots.mjs m4f        # M4f wave 1 learning rules: badges, camera chip +
 //                                            #   setup line, Rest/Summary/hands-free Fix note, export
+//   node scripts/screenshots.mjs m4f-setup  # M4f set-up card at 390x844 + 375x667 (triceps,
+//                                            #   hammer, tuned curl): card/Got it/count geometry
 //   node scripts/screenshots.mjs m5c-hold    # M5c breaks inside a set: body-line hold, Continue →
 //                                            #   one set; last-set hold (Save set); dev-log export
 //                                            #   to test-results/verify-m5c-hold/
@@ -2185,6 +2187,71 @@ async function m4f(browser) {
   }
 }
 
+// M4f re-verify: the camera set-up card at 390×844 and 375×667 for two learning rules and the
+// tuned curl. Whole card in view, "Got it" ≥ 56px and in view, rep number never covered.
+async function m4fSetup(browser) {
+  const cases = [
+    ['Push A', 'Standing Dumbbell Triceps Extension', 'triceps', M4F_TRICEPS],
+    ['Pull A', 'Hammer Curls', 'hammer', M4F_HAMMER],
+    ['Pull A', 'Dumbbell Bicep Curl', 'tuned-curl', M4F_HAMMER],
+  ];
+  for (const [w, h] of [[390, 844], [375, 667]]) {
+    for (const [day, name, slug, fixture] of cases) {
+      const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2,
+        isMobile: true, hasTouch: true, ignoreHTTPSErrors: true, permissions: ['camera'] });
+      const page = await ctx.newPage();
+      const log = [];
+      page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text()}`); });
+      page.on('pageerror', (e) => log.push(`pageerror: ${e.message}`));
+      const offsite = watchOffsite(page);
+      await installM5Mocks(page, fixture);
+      await page.goto(BASE);
+      await m5SeedHandsFreeOff(page);
+      await page.getByRole('button', { name: new RegExp(day) }).click();
+      await page.getByRole('button', { name: 'Start workout' }).click();
+      await openFromList(page, name);
+      await page.evaluate(() => (window.__noPerson = true));
+      await page.getByRole('button', { name: 'Camera', exact: true }).click();
+      const cam = page.getByRole('dialog', { name: 'Camera' });
+      await cam.locator('.cam-setup').waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1200);
+      const m = await page.evaluate(() => {
+        const r = (el) => { if (!el) return null; const b = el.getBoundingClientRect();
+          return { top: Math.round(b.top), bottom: Math.round(b.bottom), h: Math.round(b.height), w: Math.round(b.width) }; };
+        const card = document.querySelector('.cam-setup');
+        const got = [...(card?.querySelectorAll('button') ?? [])].find((b) => b.textContent.trim() === 'Got it');
+        const num = document.querySelector('[role=dialog] .rep-num') ?? document.querySelector('[role=dialog] .rep-count');
+        const cs = card ? getComputedStyle(card) : null;
+        return { vh: innerHeight, scrollWidth: document.documentElement.scrollWidth,
+          card: r(card), cardScrollH: card?.scrollHeight, cardClientH: card?.clientHeight, overflowY: cs?.overflowY,
+          got: r(got), repCount: r(document.querySelector('[role=dialog] .rep-count')), repNum: r(num),
+          repNumFont: num ? parseFloat(getComputedStyle(num).fontSize) : null,
+          stage: r(document.querySelector('.cam-stage')),
+          learningLine: r(document.querySelector('.cam-setup .setup-learning')),
+          learningText: document.querySelector('.cam-setup .setup-learning')?.textContent?.trim() ?? null,
+          chip: document.querySelector('[role=dialog] [data-learning]')?.getAttribute('aria-label') ?? null,
+          placement: [...document.querySelectorAll('.cam-setup .setup-line')].map((e) => e.textContent.trim()) };
+      });
+      const fileName = w === 390 && slug === 'triceps' ? 'm4f-camera-setup-triceps'
+        : w === 390 && slug === 'hammer' ? 'm4f-camera-learning-hammer'
+        : `m4f-camera-setup-${slug}-${w}x${h}`;
+      const ok = m.card && m.got && m.repCount && m.card.top >= 0 && m.card.bottom <= m.vh
+        && m.got.h >= 56 && m.got.top >= m.card.top && m.got.bottom <= m.card.bottom && m.got.bottom <= m.vh
+        && m.card.top >= m.repCount.bottom && m.scrollWidth === w
+        && (!m.learningLine || m.learningLine.bottom <= m.card.bottom);
+      await shot(page, log, fileName, { setupCheck: true });
+      // Click Got it, card should hide.
+      await cam.locator('.cam-setup').getByRole('button', { name: 'Got it' }).click();
+      const hidden = await cam.locator('.cam-setup').isHidden();
+      // Re-shoot before the click is not possible; take the shot of the card first via reopen is costly,
+      // so take a shot before clicking:
+      results.push({ viewport: `${w}x${h}`, name, ok, hiddenAfterGotIt: hidden, m, offsite, console: log });
+      await ctx.close();
+      void fileName;
+    }
+  }
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -2216,6 +2283,7 @@ try {
   else if (milestone === 'm5') await m5(browser);
   else if (milestone === 'm4e') await m4e(browser, process.argv[3]);
   else if (milestone === 'm4f') await m4f(browser);
+  else if (milestone === 'm4f-setup') await m4fSetup(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
