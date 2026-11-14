@@ -247,6 +247,12 @@ describe('phaseLabel', () => {
     ['Wide-Grip_Lat_Pulldown', 'lift', 'Pull'],
     ['Wide-Grip_Lat_Pulldown', 'lower', 'Return'],
     ['Wide-Grip_Lat_Pulldown', 'hold', 'Hold'],
+    ['Triceps_Pushdown', 'lift', 'Push'],
+    ['Triceps_Pushdown', 'lower', 'Return'],
+    ['Cable_Crossover', 'lift', 'Pull'],
+    ['Lying_Leg_Curls', 'hold', 'Hold'],
+    ['Bench_Dips', 'lower', 'Down'],
+    ['Stiff-Legged_Dumbbell_Deadlift', 'lift', 'Up'],
   ];
   it.each(cases)('%s %s -> %s', (id, phase, label) => {
     expect(phaseLabel(demo(id), phase)).toBe(label);
@@ -254,24 +260,42 @@ describe('phaseLabel', () => {
 });
 
 describe('moving machine parts', () => {
-  it('pulldown: the bounds hold the bar, cables and weight stack through the loop', () => {
-    const m = demo('Wide-Grip_Lat_Pulldown');
-    const box = demoBounds(m);
-    const T = cycleSeconds(m);
-    for (let i = 0; i <= 20; i++) {
-      const p = poseAt(m, (T * i) / 20);
-      const pts = [
-        ...(p.rods ?? []).flatMap((r) => [r.a, r.b]),
-        ...(p.blocks ?? []).map((b) => b.at),
-      ];
-      expect(pts.length).toBeGreaterThan(0);
-      for (const q of pts)
-        for (let k = 0; k < 3; k++) {
-          expect(q[k]).toBeGreaterThanOrEqual((box.min[k] ?? 0) - 1e-9);
-          expect(q[k]).toBeLessThanOrEqual((box.max[k] ?? 0) + 1e-9);
-        }
-    }
+  const machines = DEMOS.filter((d) => (d.pose(d.start).rods ?? d.pose(d.start).blocks)?.length);
+  it('the machine demos are the pulldown, leg curl, calf raise, crossover and pushdown', () => {
+    expect(machines.map((d) => d.exerciseId).sort()).toEqual(
+      [
+        'Wide-Grip_Lat_Pulldown',
+        'Lying_Leg_Curls',
+        'Standing_Calf_Raises',
+        'Cable_Crossover',
+        'Triceps_Pushdown',
+      ].sort(),
+    );
   });
+
+  it.each(machines.map((d) => [d.exerciseId, d] as const))(
+    '%s: the bounds hold every moving part, counts fixed',
+    (_id, m) => {
+      const box = demoBounds(m);
+      const p0 = poseAt(m, 0);
+      const T = cycleSeconds(m);
+      for (let i = 0; i <= 20; i++) {
+        const p = poseAt(m, (T * i) / 20);
+        expect(p.rods?.length ?? 0).toBe(p0.rods?.length ?? 0);
+        expect(p.blocks?.length ?? 0).toBe(p0.blocks?.length ?? 0);
+        const pts = [
+          ...(p.rods ?? []).flatMap((r) => [r.a, r.b]),
+          ...(p.blocks ?? []).map((b) => b.at),
+        ];
+        expect(pts.length).toBeGreaterThan(0);
+        for (const q of pts)
+          for (let k = 0; k < 3; k++) {
+            expect(q[k]).toBeGreaterThanOrEqual((box.min[k] ?? 0) - 1e-9);
+            expect(q[k]).toBeLessThanOrEqual((box.max[k] ?? 0) + 1e-9);
+          }
+      }
+    },
+  );
 });
 
 describe('openingView', () => {

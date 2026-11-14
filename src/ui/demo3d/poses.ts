@@ -623,9 +623,547 @@ export const PULLDOWN_MACHINE: readonly DemoProp[] = (() => {
   ];
 })();
 
+// --- M4d Legs A + Push B (original poses) -----------------------------------------------------
+
+const FOOT = 0.2;
+const clamp1 = (x: number) => Math.max(-1, Math.min(1, x));
+
+/**
+ * Stiff-legged dumbbell deadlift layout: knees fixed with a slight bend, the thighs tip back
+ * `thighBack` x the torso hinge (the hips go back), and the dumbbells travel straight down at
+ * `handX`, just in front of the legs ("lower the weights along your legs").
+ */
+export const SLDL = {
+  knee: v(0.06, 0.5),
+  ankle: v(0, 0.09),
+  thighBack: 0.25,
+  handX: 0.19,
+  handZ: 0.15,
+} as const;
+
+/** Pose at torso hinge `lam` deg from vertical (the hip angle is measured from it). */
+function sldlAt(lam: number): DemoPose {
+  const delta = SLDL.thighBack * lam;
+  const hip = addS(SLDL.knee, v(-Math.sin(rad(delta)), Math.cos(rad(delta))), THIGH);
+  const u = v(Math.sin(rad(lam)), Math.cos(rad(lam)));
+  const neck = addS(hip, u, SPINE);
+  const reach = U + F + HAND;
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const dx = SLDL.handX - s[0];
+    const dz = SLDL.handZ * sg - s[2];
+    const d = norm(v(dx, -Math.sqrt(Math.max(0, reach * reach - dx * dx - dz * dz)), dz));
+    const e = addS(s, d, U);
+    const w = addS(e, d, F);
+    return {
+      s,
+      e,
+      w,
+      h: addS(w, d, HAND),
+      k: at(SLDL.knee, DEFAULT_HIP_W * sg),
+      a: at(SLDL.ankle, DEFAULT_HIP_W * sg),
+      toe: v(0.2, 0.03, DEFAULT_HIP_W * sg),
+    };
+  });
+  return {
+    hip,
+    neck,
+    face: v(Math.cos(rad(lam)), -Math.sin(rad(lam))),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [r, l].map(bellAtHand(v(0, 0, 1))),
+  };
+}
+
+const sldlHingeFor = inverseTable(0, 90, 360, (lam) => measuredAngle(sldlAt(lam), 'hip', 'r'));
+
+/**
+ * Stiff-legged dumbbell deadlift, side view, hip angle (shoulder-hip-knee): straight arms, flat
+ * back, slight fixed knee bend; the hips go back as the torso hinges toward horizontal.
+ */
+export function stiffLegDeadliftPose(theta: number): DemoPose {
+  return sldlAt(sldlHingeFor(theta));
+}
+
+/**
+ * Dumbbell lunge layout: a split stance (right foot forward flat, left foot back on its ball),
+ * hips straight down between the feet, torso upright. `w` = hip/foot width each side.
+ */
+export const LUNGE = {
+  front: v(0.36, 0.09),
+  back: v(-0.4, 0.13),
+  backToe: v(-0.22, 0.05),
+  w: 0.11,
+  lean: 4,
+} as const;
+
+const LUNGE_TOP = LUNGE.front[1] + Math.sqrt((THIGH + SHIN - 0.004) ** 2 - LUNGE.front[0] ** 2);
+
+function lungeAt(y: number): DemoPose {
+  const hip = v(0, y);
+  const u = v(Math.sin(rad(LUNGE.lean)), Math.cos(rad(LUNGE.lean)));
+  const neck = addS(hip, u, SPINE);
+  const leg = (ankle: V3, sg: number) => {
+    const hj = at(hip, LUNGE.w * sg);
+    const a = at(ankle, LUNGE.w * sg);
+    // Knees bend forward on both legs.
+    return {
+      a,
+      k: at(
+        joint(hj, THIGH, a, SHIN, (p) => p[0]),
+        LUNGE.w * sg,
+      ),
+    };
+  };
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = add(s, v(0, -U));
+    const w = add(e, v(0, -F));
+    const lg =
+      sg > 0
+        ? { ...leg(LUNGE.front, 1), toe: v(LUNGE.front[0] + 0.2, 0.03, LUNGE.w) }
+        : { ...leg(LUNGE.back, -1), toe: at(LUNGE.backToe, -LUNGE.w) };
+    return { s, e, w, h: add(w, v(0, -HAND)), ...lg };
+  });
+  return {
+    hip,
+    neck,
+    face: v(Math.cos(rad(LUNGE.lean)), -Math.sin(rad(LUNGE.lean))),
+    hipW: LUNGE.w,
+    r,
+    l,
+    bells: [r, l].map(bellAtHand(v(1, 0, 0))),
+  };
+}
+
+const lungeHipFor = inverseTable(0.3, LUNGE_TOP, 400, (y) =>
+  measuredAngle(lungeAt(y), 'knee', 'r'),
+);
+
+/**
+ * Dumbbell lunge, side view, front (right) knee angle: from the split stance the hips go
+ * straight down until both knees are bent, a dumbbell hanging in each hand.
+ */
+export function lungePose(theta: number): DemoPose {
+  return lungeAt(lungeHipFor(theta));
+}
+
+/**
+ * Lying leg curl machine layout: face down, hips on the pad, knees just past its end; the ankle
+ * roller sits on the back of the ankles and turns about the knee axis; the stack is at the side.
+ */
+export const LEG_CURL = {
+  hip: v(0, 0.64),
+  padTop: 0.53,
+  padEnd: -0.36,
+  /** Roller offset from the ankle, out from the back of the shin. */
+  roller: 0.09,
+  stack: v(-0.15, 0, -0.55),
+  /** Stack rise (m) over the whole curl (180 -> 60 deg). */
+  stackRise: 0.24,
+} as const;
+
+/** Lying leg curl, side view, knee angle: thighs flat on the pad, heels curl toward the glutes. */
+export function legCurlPose(theta: number): DemoPose {
+  const { hip, roller, stack, stackRise } = LEG_CURL;
+  const neck = add(hip, v(SPINE, 0));
+  const knee = v(hip[0] - THIGH, hip[1]);
+  const shin = dir(theta); // knee -> ankle; 180 = straight back
+  const ankle = addS(knee, shin, SHIN);
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    // Hands hold the handles under the front of the pad.
+    const w = v(neck[0] + 0.24, 0.45, 0.2 * sg);
+    const e = at(
+      joint(s, U, w, F, (p) => -p[1]),
+      0.2 * sg,
+    );
+    return {
+      s,
+      e,
+      w,
+      h: handPast(e, w),
+      k: at(knee, DEFAULT_HIP_W * sg),
+      a: at(ankle, DEFAULT_HIP_W * sg),
+      toe: at(addS(ankle, dir(theta + 90), FOOT), DEFAULT_HIP_W * sg),
+    };
+  });
+  const pad = addS(addS(ankle, dir(theta - 90), roller), shin, -0.04);
+  const rise = (stackRise * (180 - theta)) / 120;
+  const stackTop = 0.32 + rise;
+  return {
+    hip,
+    neck,
+    face: v(0, -1),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [],
+    rods: [
+      { a: at(pad, -0.25), b: at(pad, 0.25), r: 0.045 }, // ankle roller
+      { a: at(knee, -0.3), b: at(pad, -0.3), r: 0.02 }, // lever arm
+      { a: v(stack[0], stackTop, stack[2]), b: v(stack[0], 1.05, stack[2]), r: 0.006 }, // cable
+    ],
+    blocks: [{ at: v(stack[0], stackTop - 0.15, stack[2]), size: v(0.2, 0.3, 0.2) }],
+    load: v(stack[0], stackTop, stack[2]),
+  };
+}
+
+/** Leg curl bench: pad (hips to just above the knees), post, base, lever housing and stack column. */
+export const LEG_CURL_MACHINE: readonly DemoProp[] = (() => {
+  const { padTop, padEnd, stack, hip } = LEG_CURL;
+  const front = 0.9;
+  return [
+    { at: v((padEnd + front) / 2, padTop - 0.05, 0), size: v(front - padEnd, 0.1, 0.32) },
+    { at: v(0.25, (padTop - 0.1) / 2, 0), size: v(0.1, padTop - 0.1, 0.1) },
+    { at: v(0.25, 0.025, 0), size: v(1.1, 0.05, 0.4) },
+    { at: v(hip[0] - THIGH, hip[1], -0.3), size: v(0.1, 0.1, 0.04) },
+    { at: v(stack[0] - 0.15, 0.55, stack[2]), size: v(0.06, 1.1, 0.06) },
+  ];
+})();
+
+/**
+ * Standing calf raise machine: the balls of the feet on the step edge (the pivot), knees and body
+ * straight, shoulders under the pads; the whole body rises as the heels lift.
+ */
+export const CALF = { toe: v(0.14, 0.15), stepTop: 0.11, stepEdge: 0.12, columnX: -0.36 } as const;
+
+/** Standing calf raise, side view, ankle angle (knee-ankle-toe): 90 = foot level. */
+export function calfRaisePose(theta: number): DemoPose {
+  const beta = theta - 90; // foot pitch, toes below the ankle
+  const ankle = addS(CALF.toe, dir(-beta), -FOOT);
+  const knee = add(ankle, v(0, SHIN));
+  const hip = add(knee, v(0, THIGH));
+  const neck = add(hip, v(0, SPINE));
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    // Hands hold the pad handles in front of the shoulders.
+    const w = add(s, v(0.2, 0.03, 0));
+    const e = at(
+      joint(s, U, w, F, (p) => -p[1]),
+      0.2 * sg,
+    );
+    return {
+      s,
+      e,
+      w,
+      h: handPast(e, w),
+      k: at(knee, DEFAULT_HIP_W * sg),
+      a: at(ankle, DEFAULT_HIP_W * sg),
+      toe: at(CALF.toe, DEFAULT_HIP_W * sg),
+    };
+  });
+  const padY = neck[1] + 0.085;
+  const pads = [1, -1].map((sg) => ({ at: v(neck[0], padY, 0.17 * sg), size: v(0.2, 0.07, 0.14) }));
+  return {
+    hip,
+    neck,
+    face: v(1, 0),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [],
+    rods: [
+      // Pad arms back to the carriage on the column.
+      ...[1, -1].map((sg) => ({
+        a: v(neck[0] - 0.08, padY, 0.17 * sg),
+        b: v(CALF.columnX, padY, 0.17 * sg),
+        r: 0.02,
+      })),
+      // Handles from the front of each pad down to the hands.
+      ...[r, l].map((sd, i) => ({
+        a: v(neck[0] + 0.1, padY, 0.17 * (i === 0 ? 1 : -1)),
+        b: sd.h,
+        r: 0.016,
+      })),
+    ],
+    blocks: [...pads, { at: v(CALF.columnX, padY, 0), size: v(0.12, 0.16, 0.46) }],
+    load: v(neck[0], padY, 0),
+  };
+}
+
+/** Calf raise machine: the step (feet on its front edge) and the column the pads ride on. */
+export const CALF_MACHINE: readonly DemoProp[] = [
+  { at: v(CALF.stepEdge + 0.18, CALF.stepTop / 2, 0), size: v(0.36, CALF.stepTop, 0.6) },
+  { at: v(CALF.columnX - 0.1, 1.05, 0), size: v(0.08, 2.1, 0.5) },
+];
+
+/**
+ * Dumbbell fly on the flat bench, shoulder opening angle (`armOpen`, other shoulder - shoulder -
+ * elbow): 90 = upper arms straight up, 180 = out level with the shoulders. The arms swing in the
+ * plane across the chest with a fixed soft elbow (forearms trail `bend` deg inward, a hug).
+ */
+export const FLY = { bend: 20 } as const;
+
+export function flyPose(theta: number): DemoPose {
+  const hip = BENCH.hip;
+  const neck = addS(hip, v(1, 0), SPINE);
+  const phi = deg(Math.asin(clamp1(-Math.cos(rad(theta)))));
+  const arc = (a: number, sg: number): V3 => v(0, Math.cos(rad(a)), Math.sin(rad(a)) * sg);
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = addS(s, arc(phi, sg), U);
+    const fd = arc(phi - FLY.bend, sg);
+    const w = addS(e, fd, F);
+    return { s, e, w, h: addS(w, fd, HAND), ...benchLegs(sg) };
+  });
+  // Neutral grip: palms face each other, handles along the bench.
+  return {
+    hip,
+    neck,
+    face: v(0, 1),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [r, l].map(bellAtHand(v(1, 0, 0))),
+  };
+}
+
+/** Upright bench for the dumbbell shoulder press: the seated press seat plus a back pad. */
+export const SHOULDER_PRESS_BENCH: readonly DemoProp[] = [
+  { at: v(-0.02, 0.24, 0), size: v(0.46, 0.48, 0.42) },
+  { at: v(-0.16, 0.92, 0), size: v(0.08, 0.72, 0.34) },
+  { at: v(-0.16, 0.28, 0), size: v(0.06, 0.56, 0.06) },
+];
+
+/**
+ * Cable crossover layout: standing between two high pulleys, staggered stance, torso leaning
+ * `lean` deg forward. The arms sweep in a plane that runs from out-and-slightly-up (toward the
+ * pulleys) to down-and-forward, where the hands meet in front of the lower chest.
+ */
+export const CROSSOVER = {
+  hip: v(0, 0.92),
+  lean: 15,
+  bend: 20,
+  pulley: v(-0.1, 2.0, 0.88),
+  towerX: -0.26,
+} as const;
+
+const CROSS_A = norm(v(1, -0.55, 0));
+const crossB = (sg: number): V3 => {
+  const b0 = v(0, 0.25, sg);
+  return norm(addS(b0, CROSS_A, -dot(b0, CROSS_A)));
+};
+const crossDir = (phi: number, sg: number): V3 =>
+  add(scale(CROSS_A, Math.cos(rad(phi))), scale(crossB(sg), Math.sin(rad(phi))));
+
+function crossoverAt(phi: number): DemoPose {
+  const { hip, lean, bend, pulley } = CROSSOVER;
+  const u = v(Math.sin(rad(lean)), Math.cos(rad(lean)));
+  const neck = addS(hip, u, SPINE);
+  const legs: Record<'r' | 'l', Pick<DemoSide, 'k' | 'a' | 'toe'>> = {
+    r: { k: v(0.13, 0.5, 0.11), a: v(0.12, 0.09, 0.11), toe: v(0.32, 0.03, 0.11) },
+    l: { k: v(-0.08, 0.51, -0.09), a: v(-0.16, 0.09, -0.09), toe: v(0.04, 0.03, -0.09) },
+  };
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = addS(s, crossDir(phi, sg), U);
+    const fd = crossDir(phi - bend, sg);
+    const w = addS(e, fd, F);
+    return { s, e, w, h: addS(w, fd, HAND), ...legs[sg > 0 ? 'r' : 'l'] };
+  });
+  const travel = (sd: DemoSide, sg: number) => dist(sd.h, at(pulley, pulley[2] * sg));
+  const rise = travel(r, 1) - CROSS_REST;
+  const stackTop = 0.32 + rise;
+  const rods: Rod[] = [];
+  const blocks: DemoProp[] = [];
+  for (const [sd, sg] of [
+    [r, 1],
+    [l, -1],
+  ] as const) {
+    const p = at(pulley, pulley[2] * sg);
+    rods.push(
+      { a: sd.h, b: p, r: 0.006 }, // cable
+      { a: add(sd.h, v(0, -0.06, 0)), b: add(sd.h, v(0, 0.06, 0)), r: 0.016 }, // handle
+      { a: v(p[0], stackTop, p[2]), b: p, r: 0.006 }, // cable down to the stack
+    );
+    blocks.push({ at: v(p[0], stackTop - 0.15, p[2]), size: v(0.2, 0.3, 0.2) });
+  }
+  return {
+    hip,
+    neck,
+    face: v(Math.cos(rad(lean)), -Math.sin(rad(lean))),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [],
+    rods,
+    blocks,
+    load: v(pulley[0], stackTop, pulley[2]),
+  };
+}
+
+/** Hand-to-pulley distance at the open end (the stack rests there). */
+const CROSS_OPEN_PHI = 80;
+const CROSS_REST: number = (() => {
+  const { hip, lean, pulley } = CROSSOVER;
+  const neck = addS(hip, v(Math.sin(rad(lean)), Math.cos(rad(lean))), SPINE);
+  const s = at(neck, 0.2);
+  const e = addS(s, crossDir(CROSS_OPEN_PHI, 1), U);
+  const fd = crossDir(CROSS_OPEN_PHI - CROSSOVER.bend, 1);
+  return dist(addS(addS(e, fd, F), fd, HAND), pulley);
+})();
+
+/**
+ * Cable crossover, front view, shoulder opening angle (`armOpen`): soft elbows, the hands sweep
+ * from out at the sides down and in until they meet in front. Closed form: for the arm direction
+ * cos(phi) A + sin(phi) B, the angle to the other shoulder is acos(-B.z sin(phi)).
+ */
+export function crossoverPose(theta: number): DemoPose {
+  const bz = crossB(1)[2];
+  return crossoverAt(deg(Math.asin(clamp1(-Math.cos(rad(theta)) / bz))));
+}
+
+/** Two pulley towers either side, pulleys at the top. */
+export const CROSSOVER_MACHINE: readonly DemoProp[] = [1, -1].flatMap((sg) => {
+  const { pulley, towerX } = CROSSOVER;
+  return [
+    { at: v(towerX, 1.05, pulley[2] * sg), size: v(0.08, 2.1, 0.08) },
+    {
+      at: v((towerX + pulley[0]) / 2, pulley[1] + 0.05, pulley[2] * sg),
+      size: v(0.26, 0.06, 0.06),
+    },
+    { at: v(pulley[0], pulley[1], pulley[2] * sg), size: v(0.08, 0.08, 0.04) },
+  ];
+});
+
+/**
+ * Triceps pushdown layout: standing at a high pulley in front of the figure, straight bar,
+ * upper arms pinned at the sides (slightly forward), torso `lean` deg forward.
+ */
+export const PUSHDOWN = {
+  hip: v(0, 0.92),
+  lean: 8,
+  upperArm: -84,
+  pulley: v(0.32, 2.05, 0),
+  stackX: 0.64,
+  barHalf: 0.3,
+} as const;
+
+function pushdownTorso() {
+  const u = v(Math.sin(rad(PUSHDOWN.lean)), Math.cos(rad(PUSHDOWN.lean)));
+  return { u, neck: addS(PUSHDOWN.hip, u, SPINE) };
+}
+
+/** Bar centre for an elbow angle (the hands are on the bar, the bar centred between them). */
+function pushdownArms(theta: number) {
+  const { neck } = pushdownTorso();
+  return sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = addS(s, dir(PUSHDOWN.upperArm), U);
+    const w = addS(e, dir(ang2(sub(s, e)) - theta), F);
+    return { s, e, w, h: handPast(e, w), ...standLegs(sg) };
+  });
+}
+
+const PUSHDOWN_REST: number = (() => {
+  const { r } = pushdownArms(75);
+  return dist(at(r.h, 0), PUSHDOWN.pulley);
+})();
+
+/** Triceps pushdown, side view, elbow angle: the forearms push the bar from chest height down. */
+export function pushdownPose(theta: number): DemoPose {
+  const { neck } = pushdownTorso();
+  const { r, l } = pushdownArms(theta);
+  const { pulley, stackX, barHalf, hip, lean } = PUSHDOWN;
+  const bar = at(r.h, 0);
+  const stackTop = 0.32 + dist(bar, pulley) - PUSHDOWN_REST;
+  return {
+    hip,
+    neck,
+    face: v(Math.cos(rad(lean)), -Math.sin(rad(lean))),
+    hipW: DEFAULT_HIP_W,
+    r,
+    l,
+    bells: [],
+    rods: [
+      { a: at(bar, -barHalf), b: at(bar, barHalf), r: 0.014 }, // bar
+      { a: bar, b: pulley, r: 0.006 }, // cable to the pulley
+      { a: v(stackX, stackTop, 0), b: v(stackX, pulley[1], 0), r: 0.006 }, // down to the stack
+    ],
+    blocks: [{ at: v(stackX, stackTop - 0.15, 0), size: v(0.2, 0.3, 0.22) }],
+    load: v(stackX, stackTop, 0),
+  };
+}
+
+/** Cable station in front of the figure: column, top arm out to the pulley, pulley block. */
+export const PUSHDOWN_MACHINE: readonly DemoProp[] = (() => {
+  const { pulley, stackX } = PUSHDOWN;
+  const colX = stackX + 0.16;
+  return [
+    { at: v(colX, 1.08, 0), size: v(0.08, 2.16, 0.3) },
+    {
+      at: v((pulley[0] + colX) / 2, pulley[1] + 0.06, 0),
+      size: v(colX - pulley[0] + 0.04, 0.06, 0.08),
+    },
+    { at: v(pulley[0], pulley[1], 0), size: v(0.08, 0.08, 0.04) },
+  ];
+})();
+
+/**
+ * Bench dips layout: wrists on the bench edge behind the figure, fingers forward over the edge,
+ * torso leaning `lean` deg back, legs out in front with the heels on the floor. The shoulders
+ * stay `dx` in front of the wrists and go straight down as the elbows bend back.
+ */
+export const DIPS = {
+  wrist: v(-0.2, 0.47),
+  benchTop: 0.45,
+  edge: -0.17,
+  dx: 0.04,
+  lean: 12,
+  ankle: v(0.55, 0.09),
+  w: 0.1,
+} as const;
+
+/** Bench dips, side view, elbow angle: the body lowers in front of the bench, elbows back. */
+export function benchDipPose(theta: number): DemoPose {
+  const { wrist, dx, lean, ankle, w: hw } = DIPS;
+  const d = Math.sqrt(U * U + F * F - 2 * U * F * Math.cos(rad(theta)));
+  const neck = v(wrist[0] + dx, wrist[1] + Math.sqrt(Math.max(0, d * d - dx * dx)));
+  const u = v(-Math.sin(rad(lean)), Math.cos(rad(lean)));
+  const hip = addS(neck, u, -SPINE);
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const w = at(wrist, 0.2 * sg);
+    const e = at(
+      joint(s, U, w, F, (p) => -p[0]),
+      0.2 * sg,
+    );
+    const hj = at(hip, hw * sg);
+    const a = at(ankle, hw * sg);
+    const k = at(
+      joint(hj, THIGH, a, SHIN, (p) => p[1]),
+      hw * sg,
+    );
+    return { s, e, w, h: add(w, v(HAND, 0, 0)), k, a, toe: addS(a, dir(80), FOOT) };
+  });
+  return {
+    hip,
+    neck,
+    face: v(Math.cos(rad(lean)), Math.sin(rad(lean))),
+    hipW: hw,
+    r,
+    l,
+    bells: [],
+    load: neck,
+  };
+}
+
+/** The bench behind the figure: its front edge just in front of the wrists. */
+export const DIP_BENCH: readonly DemoProp[] = [
+  { at: v(DIPS.edge - 0.25, DIPS.benchTop / 2, 0), size: v(0.5, DIPS.benchTop, 0.56) },
+];
+
 // --- measuring a pose (tests, and later the ROM caption) --------------------------------------
 
-export type MeasuredJoint = 'elbow' | 'shoulder' | 'knee';
+/**
+ * The joint angle a demo is driven by. `elbow`, `shoulder` (hip-shoulder-elbow) and `knee` are the
+ * rep counter's angles; the M4d demos add `hip` (shoulder-hip-knee, a hinge), `ankle`
+ * (knee-ankle-toe, 90 = foot level) and `armOpen` (other shoulder-shoulder-elbow: 90 = upper arm
+ * straight ahead of the chest, 180 = out to the side; a fly's opening).
+ */
+export type MeasuredJoint = 'elbow' | 'shoulder' | 'knee' | 'hip' | 'ankle' | 'armOpen';
 export type SideKey = 'r' | 'l';
 
 /** Hip joint of one side. */
@@ -645,6 +1183,9 @@ export function measuredAngle(p: DemoPose, joint: MeasuredJoint, side: SideKey):
   const sd = p[side];
   if (joint === 'elbow') return angleAtJoint(sd.s, sd.e, sd.w);
   if (joint === 'shoulder') return angleAtJoint(hipJoint(p, side), sd.s, sd.e);
+  if (joint === 'hip') return angleAtJoint(sd.s, hipJoint(p, side), sd.k);
+  if (joint === 'ankle') return angleAtJoint(sd.k, sd.a, sd.toe);
+  if (joint === 'armOpen') return angleAtJoint(p[side === 'r' ? 'l' : 'r'].s, sd.s, sd.e);
   return angleAtJoint(hipJoint(p, side), sd.k, sd.a);
 }
 

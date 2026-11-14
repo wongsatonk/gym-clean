@@ -3,6 +3,20 @@
 // without loading the 3D chunk. The player (player.ts, scene.ts) draws DemoPose as
 // spheres, ellipsoids and tapered cylinders.
 import {
+  benchDipPose,
+  CALF_MACHINE,
+  calfRaisePose,
+  CROSSOVER_MACHINE,
+  crossoverPose,
+  DIP_BENCH,
+  flyPose,
+  LEG_CURL_MACHINE,
+  legCurlPose,
+  lungePose,
+  PUSHDOWN_MACHINE,
+  pushdownPose,
+  SHOULDER_PRESS_BENCH,
+  stiffLegDeadliftPose,
   FLAT_BENCH,
   INCLINE_BENCH,
   ROW_BENCH,
@@ -28,7 +42,10 @@ import {
 
 export type { DemoPose, DemoProp, DemoSide, MeasuredJoint, SideKey, V3 } from './poses';
 
-/** Seconds per phase (SPEC M4b): lift 1 s, hold 0.3 s, lower 2 s, pause 0.5 s at the start. */
+/**
+ * Seconds per phase (SPEC M4b): lift 1 s, hold 0.3 s, lower 2 s, pause 0.5 s at the start. A demo
+ * whose how-to tempo line has a hold ("Hold 1 s") overrides the hold (DemoMove.hold).
+ */
 export const TEMPO = { lift: 1, hold: 0.3, lower: 2, pause: 0.5 } as const;
 
 export type Leg = 'lift' | 'lower';
@@ -64,6 +81,11 @@ export type DemoMove = {
    * the reverse fly opens on a 3/4 rear view of the rear shoulders. Front/Side still work.
    */
   openYaw?: number;
+  /**
+   * Seconds held at the far end when the how-to tempo line asks for a hold ("Lift 1 s · Hold 1 s ·
+   * Lower 2 s"); shown in the tempo text. Default: TEMPO.hold, not shown.
+   */
+  hold?: number;
 };
 
 export type Key = { t: number; angle: number };
@@ -212,6 +234,121 @@ export const DEMOS: readonly DemoMove[] = [
     props: PULLDOWN_MACHINE,
     words: { lift: 'Pull', lower: 'Return' },
   },
+  // M4d Legs A, manual count: original poses, declared start/far angles.
+  {
+    exerciseId: 'Stiff-Legged_Dumbbell_Deadlift',
+    view: 'side',
+    // Hip angle (shoulder-hip-knee): the hinge is the exercise; the knees keep a fixed slight bend.
+    measure: { joint: 'hip', side: 'r' },
+    // Standing tall (the shoulders sit 11 cm outside the hip joints, so straight reads ~168).
+    start: 167,
+    // Torso ~70 deg forward, dumbbells just below the knees.
+    far: 90,
+    outward: 'lower',
+    pose: stiffLegDeadliftPose,
+    props: [],
+  },
+  {
+    exerciseId: 'Dumbbell_Lunges',
+    view: 'side',
+    // Front (right) knee. The demo stays in the split stance (no step in/out, right leg forward
+    // only): the lowering and rising are what the how-to lines coach.
+    measure: { joint: 'knee', side: 'r' },
+    // Top of the split stance: the front leg all but straight.
+    start: 165,
+    far: 90,
+    outward: 'lower',
+    pose: lungePose,
+    props: [],
+  },
+  {
+    exerciseId: 'Lying_Leg_Curls',
+    view: 'side',
+    measure: { joint: 'knee', side: 'r' },
+    start: 175,
+    // Heels well up toward the glutes.
+    far: 60,
+    outward: 'lift',
+    pose: legCurlPose,
+    props: LEG_CURL_MACHINE,
+    hold: 1,
+  },
+  {
+    exerciseId: 'Standing_Calf_Raises',
+    view: 'side',
+    // Ankle angle (knee-ankle-toe): 75 = heels below the step (stretch), 130 = high on the toes.
+    measure: { joint: 'ankle', side: 'r' },
+    start: 75,
+    far: 130,
+    outward: 'lift',
+    pose: calfRaisePose,
+    props: CALF_MACHINE,
+    hold: 1,
+    // The calves are on the back of the shins, a sliver from either preset: open on a 3/4 rear
+    // view from the right (the column is far enough back not to hide them). Side is the nearest
+    // preset.
+    openYaw: 0.6,
+  },
+  // M4d Push B, manual count (Incline_Dumbbell_Press already has its Push A demo).
+  {
+    exerciseId: 'Dumbbell_Flyes',
+    // Front: the arms open and close across the camera's view.
+    view: 'front',
+    measure: { joint: 'armOpen', side: 'r' },
+    // Starts open like the presses start low (the how-to tempo line lifts first).
+    start: 165,
+    far: 95,
+    outward: 'lift',
+    pose: flyPose,
+    props: FLAT_BENCH,
+  },
+  {
+    exerciseId: 'Dumbbell_Shoulder_Press',
+    view: 'front',
+    measure: { joint: 'elbow', side: 'r' },
+    // Dumbbells at shoulder height -> arms straight overhead (the seated press arm path).
+    start: 50,
+    far: 178,
+    outward: 'lift',
+    pose: seatedPressPose,
+    props: SHOULDER_PRESS_BENCH,
+  },
+  {
+    exerciseId: 'Cable_Crossover',
+    view: 'front',
+    measure: { joint: 'armOpen', side: 'r' },
+    // Arms open toward the high pulleys -> hands meeting in front of the lower chest.
+    start: 160,
+    far: 80,
+    outward: 'lift',
+    pose: crossoverPose,
+    props: CROSSOVER_MACHINE,
+    words: { lift: 'Pull', lower: 'Return' },
+    hold: 1,
+  },
+  {
+    exerciseId: 'Triceps_Pushdown',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    // Bar at chest height -> arms straight down.
+    start: 75,
+    far: 175,
+    outward: 'lift',
+    pose: pushdownPose,
+    props: PUSHDOWN_MACHINE,
+    words: { lift: 'Push', lower: 'Return' },
+    hold: 1,
+  },
+  {
+    exerciseId: 'Bench_Dips',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    start: 175,
+    far: 85,
+    outward: 'lower',
+    pose: benchDipPose,
+    props: DIP_BENCH,
+  },
 ];
 
 const BY_ID = new Map(DEMOS.map((d) => [d.exerciseId, d]));
@@ -233,9 +370,15 @@ export function hasDemo(exerciseId: string): boolean {
  * starts with the lowering (push-up), "Lift 1 s · Lower 2 s" when it starts with the lift.
  */
 export function tempoLabel(m: DemoMove): string {
-  if (m.outward === 'lower') return `Down ${TEMPO.lower} s · Up ${TEMPO.lift} s`;
+  const hold = m.hold === undefined ? '' : ` · Hold ${m.hold} s`;
+  if (m.outward === 'lower') return `Down ${TEMPO.lower} s${hold} · Up ${TEMPO.lift} s`;
   const w = m.words ?? { lift: 'Lift', lower: 'Lower' };
-  return `${w.lift} ${TEMPO.lift} s · ${w.lower} ${TEMPO.lower} s`;
+  return `${w.lift} ${TEMPO.lift} s${hold} · ${w.lower} ${TEMPO.lower} s`;
+}
+
+/** Seconds held at the far end of the rep. */
+export function holdSeconds(m: DemoMove): number {
+  return m.hold ?? TEMPO.hold;
 }
 
 const back = (l: Leg): Leg => (l === 'lift' ? 'lower' : 'lift');
@@ -245,7 +388,7 @@ function phases(m: DemoMove): { phase: Phase; dur: number; to: number }[] {
   return [
     { phase: 'pause', dur: TEMPO.pause, to: m.start },
     { phase: m.outward, dur: TEMPO[m.outward], to: m.far },
-    { phase: 'hold', dur: TEMPO.hold, to: m.far },
+    { phase: 'hold', dur: holdSeconds(m), to: m.far },
     { phase: back(m.outward), dur: TEMPO[back(m.outward)], to: m.start },
   ];
 }

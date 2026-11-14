@@ -12,6 +12,7 @@ import {
   cycleSeconds,
   demoFor,
   hasDemo,
+  holdSeconds,
   phaseAt,
   poseAt,
   tempoLabel,
@@ -19,7 +20,18 @@ import {
   type DemoMove,
   type Phase,
 } from './moves';
-import { PULLDOWN, boneLengths, hipJoint, measuredAngle, type DemoPose, type V3 } from './poses';
+import {
+  CALF,
+  DIPS,
+  LEG_CURL,
+  PULLDOWN,
+  angleAtJoint,
+  boneLengths,
+  hipJoint,
+  measuredAngle,
+  type DemoPose,
+  type V3,
+} from './poses';
 
 const PUSH_A_TRACKED = ['Pushups', 'Seated_Dumbbell_Press', 'Side_Lateral_Raise'];
 const M4D_TRACKED = ['Dumbbell_Bicep_Curl', 'One-Arm_Dumbbell_Row', 'Goblet_Squat'];
@@ -31,7 +43,19 @@ const MANUAL = [
 ];
 /** M4d Pull A manual exercises. */
 const PULL_A_MANUAL = ['Hammer_Curls', 'Reverse_Flyes', 'Wide-Grip_Lat_Pulldown'];
-const ALL_MANUAL = [...MANUAL, ...PULL_A_MANUAL];
+/** M4d batch 2: the Legs A and Push B exercises that had no demo yet. */
+const LEGS_PUSH_B = [
+  'Stiff-Legged_Dumbbell_Deadlift',
+  'Dumbbell_Lunges',
+  'Lying_Leg_Curls',
+  'Standing_Calf_Raises',
+  'Dumbbell_Flyes',
+  'Dumbbell_Shoulder_Press',
+  'Cable_Crossover',
+  'Triceps_Pushdown',
+  'Bench_Dips',
+];
+const ALL_MANUAL = [...MANUAL, ...PULL_A_MANUAL, ...LEGS_PUSH_B];
 const HOWTO = howto as Record<string, { tempo: string; focus: string } | undefined>;
 const STEP = 1 / 60;
 
@@ -79,6 +103,15 @@ describe('demo registry', () => {
     for (const e of pullA?.exercises ?? []) expect(hasDemo(e.exerciseId), e.exerciseId).toBe(true);
   });
 
+  it('demos every Legs A and Push B exercise', () => {
+    for (const day of ['legs-a', 'push-b']) {
+      const d = program.days.find((x) => x.id === day);
+      expect(d, day).toBeDefined();
+      for (const e of d?.exercises ?? []) expect(hasDemo(e.exerciseId), e.exerciseId).toBe(true);
+    }
+    for (const id of LEGS_PUSH_B) expect(demoFor(id)?.exerciseId).toBe(id);
+  });
+
   it('has no demo for an exercise not built yet (Legs B) or an unknown id', () => {
     expect(hasDemo('Leg_Press')).toBe(false);
     expect(hasDemo('nope')).toBe(false);
@@ -114,6 +147,26 @@ describe('tempo', () => {
     expect(tempoLabel(must(demoFor('Hammer_Curls')))).toBe('Lift 1 s · Lower 2 s');
     expect(tempoLabel(must(demoFor('Reverse_Flyes')))).toBe('Lift 1 s · Lower 2 s');
     expect(tempoLabel(must(demoFor('Wide-Grip_Lat_Pulldown')))).toBe('Pull 1 s · Return 2 s');
+    expect(tempoLabel(must(demoFor('Stiff-Legged_Dumbbell_Deadlift')))).toBe('Down 2 s · Up 1 s');
+    expect(tempoLabel(must(demoFor('Dumbbell_Lunges')))).toBe('Down 2 s · Up 1 s');
+    expect(tempoLabel(must(demoFor('Lying_Leg_Curls')))).toBe('Lift 1 s · Hold 1 s · Lower 2 s');
+    expect(tempoLabel(must(demoFor('Standing_Calf_Raises')))).toBe(
+      'Lift 1 s · Hold 1 s · Lower 2 s',
+    );
+    expect(tempoLabel(must(demoFor('Dumbbell_Flyes')))).toBe('Lift 1 s · Lower 2 s');
+    expect(tempoLabel(must(demoFor('Dumbbell_Shoulder_Press')))).toBe('Lift 1 s · Lower 2 s');
+    expect(tempoLabel(must(demoFor('Cable_Crossover')))).toBe('Pull 1 s · Hold 1 s · Return 2 s');
+    expect(tempoLabel(must(demoFor('Triceps_Pushdown')))).toBe('Push 1 s · Hold 1 s · Return 2 s');
+    expect(tempoLabel(must(demoFor('Bench_Dips')))).toBe('Down 2 s · Up 1 s');
+  });
+
+  it('holds 1 s at the top when the how-to tempo line says so, 0.3 s otherwise', () => {
+    for (const m of DEMOS) {
+      const says = /Hold 1 s/.test(HOWTO[m.exerciseId]?.tempo ?? '');
+      expect(holdSeconds(m), m.exerciseId).toBe(says ? 1 : TEMPO.hold);
+    }
+    expect(holdSeconds(must(demoFor('Lying_Leg_Curls')))).toBe(1);
+    expect(holdSeconds(must(demoFor('Pushups')))).toBe(TEMPO.hold);
   });
 
   for (const m of DEMOS) {
@@ -145,12 +198,12 @@ describe('tempo', () => {
   for (const m of DEMOS) {
     it(`${m.exerciseId}: the lowering phase lasts longer than the lift`, () => {
       const total = cycleSeconds(m);
-      expect(total).toBeCloseTo(TEMPO.lift + TEMPO.hold + TEMPO.lower + TEMPO.pause, 9);
+      expect(total).toBeCloseTo(TEMPO.lift + holdSeconds(m) + TEMPO.lower + TEMPO.pause, 9);
       const time: Record<Phase, number> = { lift: 0, hold: 0, lower: 0, pause: 0 };
       for (let t = STEP / 2; t < total; t += STEP) time[phaseAt(m, t)] += STEP;
       expect(time.lift).toBeCloseTo(TEMPO.lift, 1);
       expect(time.lower).toBeCloseTo(TEMPO.lower, 1);
-      expect(time.hold).toBeCloseTo(TEMPO.hold, 1);
+      expect(time.hold).toBeCloseTo(holdSeconds(m), 1);
       expect(time.pause).toBeCloseTo(TEMPO.pause, 1);
       expect(time.lower).toBeGreaterThan(time.lift);
     });
@@ -567,5 +620,323 @@ describe('M4d Pull A demos (hammer curl, reverse fly, lat pulldown)', () => {
       expect(low[k].e[1]).toBeLessThan(low[k].s[1] - 0.2);
       expect(Math.abs(low[k].e[2])).toBeGreaterThan(Math.abs(hipJoint(low, k)[2]) + 0.1);
     }
+  });
+});
+
+describe('M4d Legs A + Push B demos (posture)', () => {
+  const close = (a: readonly number[], b: readonly number[], what: string, digits = 9) =>
+    a.forEach((x, i) => expect(x, what).toBeCloseTo(b[i] ?? NaN, digits));
+  const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dist = (a: V3, b: V3) => Math.hypot(...sub(a, b));
+  const SIDES = ['r', 'l'] as const;
+  /** Degrees between the spine and vertical. */
+  const tilt = (p: DemoPose) => {
+    const d = sub(p.neck, p.hip);
+    return (Math.acos(d[1] / Math.hypot(...d)) * 180) / Math.PI;
+  };
+  const fixedFeet = (pose: DemoPose, ref: DemoPose) => {
+    for (const k of SIDES) {
+      close(pose[k].a, ref[k].a, `${k}.a`);
+      close(pose[k].toe, ref[k].toe, `${k}.toe`);
+    }
+  };
+
+  it('Stiff-Legged_Dumbbell_Deadlift: soft fixed knees, straight arms, hips back, weights along the legs', () => {
+    const m = must(demoFor('Stiff-Legged_Dumbbell_Deadlift'));
+    const ref = m.pose(m.start);
+    let lowestBell = Infinity;
+    for (const { pose, t } of sampleLoop(m)) {
+      fixedFeet(pose, ref);
+      for (const k of SIDES) {
+        close(pose[k].k, ref[k].k, `${k}.k`);
+        // Knees slightly bent, never locked, never a squat.
+        const knee = measuredAngle(pose, 'knee', k);
+        expect(knee, `t=${t}`).toBeGreaterThan(150);
+        expect(knee).toBeLessThan(178);
+        // Straight arms; the dumbbells travel just in front of the legs.
+        expect(measuredAngle(pose, 'elbow', k)).toBeGreaterThan(179);
+        expect(pose[k].h[0] - pose[k].k[0]).toBeGreaterThan(0.08);
+        expect(pose[k].h[0] - pose[k].k[0]).toBeLessThan(0.2);
+        expect(pose[k].toe[1]).toBeLessThan(0.05);
+      }
+      expect(pose.bells).toHaveLength(2);
+      for (const b of pose.bells) lowestBell = Math.min(lowestBell, b.pos[1]);
+    }
+    const low = m.pose(m.far);
+    // Hinged well forward, hips pushed back, dumbbells down to about the knees.
+    expect(tilt(ref)).toBeLessThan(15);
+    expect(tilt(low)).toBeGreaterThan(60);
+    expect(low.hip[0]).toBeLessThan(ref.hip[0] - 0.08);
+    expect(must(ref.bells[0]).pos[1] - lowestBell).toBeGreaterThan(0.25);
+    expect(lowestBell).toBeLessThan(low.r.k[1] + 0.05);
+    expect(lowestBell).toBeGreaterThan(0.2);
+  });
+
+  it('Dumbbell_Lunges: split stance, hips straight down, torso upright, back knee to the floor', () => {
+    const m = must(demoFor('Dumbbell_Lunges'));
+    const ref = m.pose(m.start);
+    let lowestHip = Infinity;
+    for (const { pose } of sampleLoop(m)) {
+      fixedFeet(pose, ref);
+      expect(pose.r.a[0] - pose.l.a[0]).toBeGreaterThan(0.6); // a real split stance
+      expect(pose.l.a[1]).toBeGreaterThan(pose.l.toe[1]); // back foot on its ball
+      expect(pose.hip[0]).toBeCloseTo(ref.hip[0], 9); // straight down
+      expect(tilt(pose)).toBeLessThan(10);
+      // Front knee over the foot, not past the toes; back knee never through the floor.
+      expect(pose.r.k[0]).toBeLessThan(pose.r.toe[0]);
+      expect(pose.l.k[1]).toBeGreaterThan(0.06);
+      for (const k of SIDES) {
+        // Dumbbells hang straight under the shoulders.
+        expect(pose[k].h[0]).toBeCloseTo(pose[k].s[0], 9);
+        expect(pose[k].h[2]).toBeCloseTo(pose[k].s[2], 9);
+      }
+      expect(pose.bells).toHaveLength(2);
+      for (const b of pose.bells) expect(b.pos[1]).toBeGreaterThan(0.2);
+      lowestHip = Math.min(lowestHip, pose.hip[1]);
+    }
+    const low = m.pose(m.far);
+    expect(ref.hip[1] - lowestHip).toBeGreaterThan(0.25);
+    expect(measuredAngle(low, 'knee', 'l')).toBeLessThan(110); // both knees bent
+    expect(low.l.k[1]).toBeLessThan(0.16);
+  });
+
+  it('Lying_Leg_Curls: hips and thighs stay on the pad, the roller stays on the ankles, heels come up', () => {
+    const m = must(demoFor('Lying_Leg_Curls'));
+    const ref = m.pose(m.start);
+    const rollerRef = must(ref.rods?.[0]);
+    for (const { pose, t } of sampleLoop(m)) {
+      close(pose.hip, ref.hip, 'hip');
+      close(pose.neck, ref.neck, 'neck');
+      expect(pose.hip[1] - LEG_CURL.padTop).toBeGreaterThan(0.05);
+      expect(pose.hip[1] - LEG_CURL.padTop).toBeLessThan(0.15);
+      for (const k of SIDES) {
+        close(pose[k].k, ref[k].k, `${k}.k`);
+        // Knees just past the end of the pad, so they can bend.
+        expect(pose[k].k[0]).toBeLessThan(LEG_CURL.padEnd);
+        expect(pose[k].k[0]).toBeGreaterThan(LEG_CURL.padEnd - 0.12);
+        close(pose[k].h, ref[k].h, `${k}.h`); // hands on the handles
+      }
+      expect(pose.rods).toHaveLength(3);
+      expect(pose.blocks).toHaveLength(1);
+      // Roller across both ankles, a fixed distance from them (on the back of the ankle).
+      const roller = must(pose.rods?.[0]);
+      const mid: V3 = [
+        (roller.a[0] + roller.b[0]) / 2,
+        (roller.a[1] + roller.b[1]) / 2,
+        (roller.a[2] + roller.b[2]) / 2,
+      ];
+      expect(dist(roller.a, roller.b)).toBeCloseTo(dist(rollerRef.a, rollerRef.b), 9);
+      expect(dist([mid[0], mid[1], 0], [pose.r.a[0], pose.r.a[1], 0]), `t=${t}`).toBeCloseTo(
+        Math.hypot(LEG_CURL.roller, 0.04),
+        9,
+      );
+      expect(Math.min(roller.a[2], roller.b[2])).toBeLessThan(pose.l.a[2]);
+      expect(Math.max(roller.a[2], roller.b[2])).toBeGreaterThan(pose.r.a[2]);
+      // The lever turns about the knee axis: rigid arm from a fixed pivot.
+      const lever = must(pose.rods?.[1]);
+      close(lever.a, must(ref.rods?.[1]).a, 'pivot');
+      expect(dist(lever.a, lever.b)).toBeCloseTo(
+        dist(must(ref.rods?.[1]).a, must(ref.rods?.[1]).b),
+        9,
+      );
+    }
+    // Straight legs at the start, heels well above the knees at the top.
+    expect(ref.r.a[1]).toBeCloseTo(ref.r.k[1], 1);
+    const top = m.pose(m.far);
+    expect(top.r.a[1]).toBeGreaterThan(top.r.k[1] + 0.3);
+  });
+
+  it('Standing_Calf_Raises: balls of the feet on the step edge, straight body, heels from below to high', () => {
+    const m = must(demoFor('Standing_Calf_Raises'));
+    const ref = m.pose(m.start);
+    for (const { pose } of sampleLoop(m)) {
+      for (const k of SIDES) {
+        close(pose[k].toe, ref[k].toe, `${k}.toe`);
+        expect(pose[k].toe[0]).toBeGreaterThan(CALF.stepEdge);
+        expect(pose[k].toe[1] - CALF.stepTop).toBeGreaterThan(0);
+        expect(pose[k].toe[1] - CALF.stepTop).toBeLessThan(0.06);
+        expect(measuredAngle(pose, 'knee', k)).toBeGreaterThan(179); // knees straight
+        // Heels hang behind the step edge.
+        expect(pose[k].a[0]).toBeLessThan(CALF.stepEdge);
+      }
+      expect(tilt(pose)).toBeLessThan(1);
+      // Shoulder pads ride on the shoulders.
+      for (const b of (pose.blocks ?? []).slice(0, 2)) {
+        expect(b.at[1] - pose.r.s[1]).toBeCloseTo(must(ref.blocks?.[0]).at[1] - ref.r.s[1], 9);
+      }
+      // Hands stay on the pad handles.
+      expect(must(pose.rods?.[2]).b).toEqual(pose.r.h);
+      expect(must(pose.rods?.[3]).b).toEqual(pose.l.h);
+    }
+    // Stretch: heels below the step top. Top: up on the toes, body ~15 cm higher.
+    expect(ref.r.a[1]).toBeLessThan(CALF.stepTop);
+    const top = m.pose(m.far);
+    expect(top.r.a[1]).toBeGreaterThan(CALF.stepTop + 0.1);
+    expect(top.neck[1] - ref.neck[1]).toBeGreaterThan(0.12);
+  });
+
+  it('Dumbbell_Flyes: lying flat, soft fixed elbows, a wide arc from level with the shoulders to over the chest', () => {
+    const m = must(demoFor('Dumbbell_Flyes'));
+    const ref = m.pose(m.start);
+    const benchTop = Math.max(...m.props.map((p) => p.at[1] + p.size[1] / 2));
+    for (const { pose } of sampleLoop(m)) {
+      close(pose.hip, ref.hip, 'hip');
+      close(pose.neck, ref.neck, 'neck');
+      expect(pose.hip[1]).toBeGreaterThan(benchTop);
+      expect(Math.abs(pose.neck[1] - pose.hip[1])).toBeLessThan(1e-9); // flat
+      for (const k of SIDES) {
+        expect(measuredAngle(pose, 'elbow', k)).toBeCloseTo(160, 6);
+        expect(pose[k].e[0]).toBeCloseTo(pose[k].s[0], 9); // the arc runs across the chest
+      }
+      expect(measuredAngle(pose, 'armOpen', 'l')).toBeCloseTo(
+        measuredAngle(pose, 'armOpen', 'r'),
+        6,
+      );
+      expect(pose.r.h[2]).toBeGreaterThan(0.05);
+      expect(pose.l.h[2]).toBeLessThan(-0.05);
+      expect(pose.bells).toHaveLength(2);
+      for (const b of pose.bells) expect(b.pos[1]).toBeGreaterThan(benchTop);
+    }
+    // Open: elbows about level with the shoulders and far out. Top: hands close over the chest.
+    for (const k of SIDES) {
+      expect(Math.abs(ref[k].e[1] - ref[k].s[1])).toBeLessThan(0.12);
+      expect(Math.abs(ref[k].e[2])).toBeGreaterThan(Math.abs(ref[k].s[2]) + 0.25);
+    }
+    const top = m.pose(m.far);
+    expect(Math.abs(top.r.h[2])).toBeLessThan(0.2);
+    expect(top.r.h[1]).toBeGreaterThan(top.r.s[1] + 0.45);
+  });
+
+  it('Dumbbell_Shoulder_Press: back on the upright pad, forearms vertical, shoulders -> straight overhead', () => {
+    const m = must(demoFor('Dumbbell_Shoulder_Press'));
+    const ref = m.pose(m.start);
+    const [seat, back] = m.props;
+    const seatTop = must(seat).at[1] + must(seat).size[1] / 2;
+    const padFront = must(back).at[0] + must(back).size[0] / 2;
+    for (const { pose } of sampleLoop(m)) {
+      close(pose.hip, ref.hip, 'hip');
+      close(pose.neck, ref.neck, 'neck');
+      expect(pose.hip[1] - seatTop).toBeGreaterThan(0);
+      expect(pose.hip[1] - seatTop).toBeLessThan(0.12);
+      // The torso's back surface (11 cm behind the spine) rests against the pad.
+      expect(pose.neck[0] - 0.11 - padFront).toBeGreaterThan(-0.01);
+      expect(pose.neck[0] - 0.11 - padFront).toBeLessThan(0.06);
+      expect(tilt(pose)).toBeLessThan(1);
+      for (const k of SIDES) {
+        expect(pose[k].w[0]).toBeCloseTo(pose[k].e[0], 9);
+        expect(pose[k].w[2]).toBeCloseTo(pose[k].e[2], 9);
+      }
+    }
+    // Dumbbells start at about shoulder height and end straight over the shoulders.
+    for (const b of ref.bells) expect(Math.abs(b.pos[1] - ref.r.s[1])).toBeLessThan(0.2);
+    const top = m.pose(m.far);
+    for (const k of SIDES) {
+      expect(top[k].h[1]).toBeGreaterThan(top[k].s[1] + 0.5);
+      expect(Math.abs(top[k].h[2] - top[k].s[2])).toBeLessThan(0.05);
+    }
+  });
+
+  it('Cable_Crossover: staggered and still, soft elbows, hands on the cables, meeting in front', () => {
+    const m = must(demoFor('Cable_Crossover'));
+    const ref = m.pose(m.start);
+    for (const { pose } of sampleLoop(m)) {
+      close(pose.hip, ref.hip, 'hip');
+      close(pose.neck, ref.neck, 'neck');
+      fixedFeet(pose, ref);
+      expect(pose.r.a[0] - pose.l.a[0]).toBeGreaterThan(0.2); // one foot forward
+      const lean = tilt(pose);
+      expect(lean).toBeGreaterThan(5);
+      expect(lean).toBeLessThan(25);
+      for (const k of SIDES) expect(measuredAngle(pose, 'elbow', k)).toBeCloseTo(160, 6);
+      expect(measuredAngle(pose, 'armOpen', 'l')).toBeCloseTo(
+        measuredAngle(pose, 'armOpen', 'r'),
+        6,
+      );
+      // Each hand holds a cable from its own high pulley; both stacks at the same height.
+      expect(pose.rods).toHaveLength(6);
+      expect(pose.blocks).toHaveLength(2);
+      const [rc, , , lc] = pose.rods ?? [];
+      expect(must(rc).a).toEqual(pose.r.h);
+      expect(must(lc).a).toEqual(pose.l.h);
+      expect(must(rc).b[1]).toBeGreaterThan(pose.neck[1] + 0.4);
+      expect(must(rc).b[2]).toBeGreaterThan(0.6);
+      expect(must(lc).b[2]).toBeLessThan(-0.6);
+      expect(must(pose.blocks?.[0]).at[1]).toBeCloseTo(must(pose.blocks?.[1]).at[1], 9);
+    }
+    // Open: hands out wide at about shoulder height. Closed: hands meet in front, lower chest.
+    for (const k of SIDES) {
+      expect(Math.abs(ref[k].h[2])).toBeGreaterThan(0.6);
+      expect(Math.abs(ref[k].h[1] - ref[k].s[1])).toBeLessThan(0.15);
+    }
+    const shut = m.pose(m.far);
+    expect(Math.abs(shut.r.h[2] - shut.l.h[2])).toBeLessThan(0.06);
+    expect(shut.r.h[0]).toBeGreaterThan(shut.neck[0] + 0.3);
+    expect(shut.r.h[1]).toBeLessThan(shut.neck[1] - 0.15);
+    expect(shut.r.h[1]).toBeGreaterThan(shut.hip[1]);
+  });
+
+  it('Triceps_Pushdown: elbows pinned, hands on the bar, chest height -> arms straight, cable clear of the face', () => {
+    const m = must(demoFor('Triceps_Pushdown'));
+    const ref = m.pose(m.start);
+    for (const { pose, t } of sampleLoop(m)) {
+      close(pose.hip, ref.hip, 'hip');
+      close(pose.neck, ref.neck, 'neck');
+      fixedFeet(pose, ref);
+      for (const k of SIDES) {
+        close(pose[k].s, ref[k].s, `${k}.s`);
+        close(pose[k].e, ref[k].e, `${k}.e`);
+        // Elbows at the sides, a little in front of the shoulders, below them.
+        expect(pose[k].e[1]).toBeLessThan(pose[k].s[1] - 0.25);
+      }
+      const [bar, cable] = pose.rods ?? [];
+      expect(pose.rods).toHaveLength(3);
+      expect(must(bar).a[1]).toBeCloseTo(pose.r.h[1], 9);
+      expect(must(bar).a[0]).toBeCloseTo(pose.r.h[0], 9);
+      expect(Math.abs(must(bar).a[2])).toBeGreaterThan(Math.abs(pose.r.h[2]));
+      // At the height of the face the cable is in front of it (head front ~ neck + 0.13).
+      const c = must(cable);
+      const faceY = pose.neck[1] + 0.25;
+      const u = (faceY - c.a[1]) / (c.b[1] - c.a[1]);
+      if (u > 0 && u < 1)
+        expect(c.a[0] + u * (c.b[0] - c.a[0]), `t=${t}`).toBeGreaterThan(pose.neck[0] + 0.17);
+    }
+    // Start: bar at chest height (between elbows and shoulders). End: arms straight down.
+    expect(ref.r.h[1]).toBeGreaterThan(ref.r.e[1]);
+    expect(ref.r.h[1]).toBeLessThan(ref.r.s[1]);
+    const low = m.pose(m.far);
+    expect(low.r.h[1]).toBeLessThan(low.r.e[1] - 0.25);
+  });
+
+  it('Bench_Dips: hands on the bench edge, heels down in front, hips drop in front of the bench, elbows back', () => {
+    const m = must(demoFor('Bench_Dips'));
+    const ref = m.pose(m.start);
+    const bench = must(m.props[0]);
+    const edge = bench.at[0] + bench.size[0] / 2;
+    const top = bench.at[1] + bench.size[1] / 2;
+    expect(edge).toBeCloseTo(DIPS.edge, 9);
+    for (const { pose, t } of sampleLoop(m)) {
+      fixedFeet(pose, ref);
+      for (const k of SIDES) {
+        close(pose[k].w, ref[k].w, `${k}.w`);
+        // Heel of the hand on the bench top, fingers over the edge.
+        expect(pose[k].w[0]).toBeLessThan(edge);
+        expect(pose[k].h[0]).toBeGreaterThan(edge);
+        expect(pose[k].w[1] - top).toBeGreaterThan(0);
+        expect(pose[k].w[1] - top).toBeLessThan(0.05);
+        // Elbows point back, over the bench.
+        expect(pose[k].e[0]).toBeLessThan(pose[k].s[0]);
+        expect(pose[k].e[1]).toBeGreaterThan(top);
+        expect(pose[k].toe[1]).toBeGreaterThan(pose[k].a[1]); // heels down, toes up
+      }
+      // The pelvis (10.5 cm deep) stays in front of the bench edge, above the floor.
+      expect(pose.hip[0] - 0.105, `t=${t}`).toBeGreaterThan(edge - 0.005);
+      expect(pose.hip[1]).toBeGreaterThan(0.25);
+      expect(tilt(pose)).toBeLessThan(20);
+      expect(pose.bells).toHaveLength(0);
+    }
+    const low = m.pose(m.far);
+    expect(ref.neck[1] - low.neck[1]).toBeGreaterThan(0.15);
+    expect(low.hip[1]).toBeLessThan(top);
+    expect(angleAtJoint(low.r.s, low.r.e, low.r.w)).toBeCloseTo(m.far, 6);
   });
 });

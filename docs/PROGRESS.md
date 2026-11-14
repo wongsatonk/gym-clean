@@ -4,10 +4,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Live:** 4bda987 on main, deployed 2026-11-14. Through **M5** (live focus and form cues, focus score, Summary Focus) plus the drill-sergeant coach voice.
-- **Built and verified, NOT deployed** (waiting for Wongsaton's OK to push): branch `m4e-redesign` at e600af5, which contains both:
-  - **M5c follow-up "tap to continue"** (B1–B10). A sit or walk-away mid-set holds the set, and Continue / Start next set / Save set resolves it. Verifier PASS.
-  - **M4e redesign** (A1–A22 plus the cleanup round): the mix (Energy for Today and Summary, Pro for Exercise, Camera and Settings, Track for Rest), the Orange / Volt / Yellow accent picker, +30 s on Rest, and Skip / End moved into the Pause sheet. Verifier PASS: e2e 90/90, Lighthouse a11y 100 on Today, 57 screenshots in `docs/screenshots/m4e-*`.
+- **Live:** eb16eed on main, deployed 2026-11-14. It has everything through M5, the drill voice, **M5c "tap to continue"** and the **M4e redesign**. Wongsaton OK'd it; it took 3 CI rounds: a Rest-with-Apply margin on Linux fonts, and the low-fps cue on GPU-less runners in a camera-layout test.
+- **In progress:** M4d 3D demos for the remaining 18 exercises, on branch `m4d-demos`. Batch 1 is Legs A + Push B.
 - **Next step:** Wongsaton reviews the screenshots and OKs a deploy (fast-forward main to m4e-redesign). After that, 🧍 Checkpoint C / B3 at the gym.
 - **Waiting on Wongsaton:**
   - Deploy OK for m4e-redesign.
@@ -851,6 +849,18 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4d batch 1, Legs A + Push B, 9 demos** (review PASS; check 1488 tests; anatomy/howto e2e 7/7): stiff-legged deadlift, lunges, lying leg curls, standing calf raises, dumbbell flyes, dumbbell shoulder press, cable crossover, triceps pushdown, bench dips. New measured joints: `hip`, `ankle`, `armOpen`. New optional `hold` (1 s, matching the how-to tempo lines).
+  - **Deviations (accepted):**
+    - Lunges use a fixed split stance, right leg forward only, with no step or switch.
+    - Deadlift "standing" reads 167°.
+    - Flyes start open.
+    - Shoulder press reuses the seated-press path with a 50° start and a back pad.
+    - Calf raise opens on a 3/4 rear view.
+    - Machines are simplified boxes.
+    - Bench dips measure the load at the neck.
+  - **Follow-ups:**
+    - `poses.ts` is in the main chunk through `hasDemo`, and its inverse tables build eagerly. Move to an id-only module or build lazily.
+    - Verifier: check that the flyes front view and the calf column don't hide the movement, and that the long tempo labels fit.
 - 2026-11-14: **M4e cleanup round done** (review PASS). check 1358; full e2e 90/90 (adds layout-dock.spec and a camera header test).
   - **Camera:** exercise names wrap to at most 2 lines, and the video stays ≥ 600px.
   - **Rest:** while a coach Apply is up, the ring is 264px and the clock 120px, so Apply clears Start set by ≥ 16px.
