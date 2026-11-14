@@ -3,7 +3,7 @@ import exercises from '../../data/exercises.json';
 import { MUSCLES } from '../bodyMap';
 import { MANNEQUIN_SEGMENTS, MUSCLE_TO_PARTS, highlightFor, partsFor } from './highlight';
 import { DEMO_IDS, demoFor, poseAt } from './moves';
-import { armTwist, patchesFor, segmentFrames } from './rig';
+import { armTwist, bodyAxes, patchesFor, segmentFrames } from './rig';
 
 const byId = new Map(exercises.map((e) => [e.id, e]));
 
@@ -93,5 +93,56 @@ describe('M4d Legs A + Push B: the primary muscle lights on both sides of the ma
         patches.filter((p) => p.muscle === s).every((p) => p.level === 'secondary'),
         s,
       ).toBe(true);
+  });
+});
+
+describe('M4d Pull B + Legs B: muscles from the exercise data light the right parts', () => {
+  const cases: [string, string, string[]][] = [
+    ['Bent_Over_Two-Dumbbell_Row', 'middle back', ['biceps', 'lats', 'shoulders']],
+    ['Seated_Cable_Rows', 'middle back', ['biceps', 'lats', 'shoulders']],
+    ['Face_Pull', 'shoulders', ['middle back']],
+    ['Incline_Dumbbell_Curl', 'biceps', []],
+    ['Concentration_Curls', 'biceps', ['forearms']],
+    ['Leg_Press', 'quadriceps', ['calves', 'glutes', 'hamstrings']],
+    ['Dumbbell_Step_Ups', 'quadriceps', ['calves', 'glutes', 'hamstrings']],
+    ['Leg_Extensions', 'quadriceps', []],
+    ['Dumbbell_Seated_One-Leg_Calf_Raise', 'calves', []],
+  ];
+  it.each(cases)('%s: %s primary, the data secondaries secondary', (id, primary, secondary) => {
+    const ex = byId.get(id);
+    const m = demoFor(id);
+    expect(ex && m, id).toBeTruthy();
+    if (!ex || !m) return;
+    // Exactly the exercise data: these demos add no helper muscles.
+    expect(ex.primaryMuscles).toEqual([primary]);
+    expect([...ex.secondaryMuscles].sort()).toEqual([...secondary].sort());
+    expect(m.helpers).toBeUndefined();
+    const pose = poseAt(m, 1.5);
+    const lit = highlightFor(ex.primaryMuscles, ex.secondaryMuscles);
+    const patches = patchesFor(segmentFrames(pose, armTwist(m)), lit);
+    const prim = patches.filter((p) => p.muscle === primary);
+    expect(prim.length).toBeGreaterThan(0);
+    expect(prim.every((p) => p.level === 'primary')).toBe(true);
+    if (primary === 'middle back') {
+      // One torso patch, on the back (away from the way the chest faces).
+      const front = bodyAxes(pose).front;
+      for (const p of prim)
+        expect(
+          p.normal[0] * front[0] + p.normal[1] * front[1] + p.normal[2] * front[2],
+        ).toBeLessThan(-0.9);
+    } else {
+      // Limb muscles light both limbs, either side of the pelvis.
+      expect(new Set(prim.map((p) => Math.sign(p.centre[2] - pose.hip[2])))).toEqual(
+        new Set([1, -1]),
+      );
+    }
+    for (const sname of secondary) {
+      const sec = patches.filter((p) => p.muscle === sname);
+      expect(sec.length, sname).toBeGreaterThan(0);
+      expect(
+        sec.every((p) => p.level === 'secondary'),
+        sname,
+      ).toBe(true);
+    }
   });
 });

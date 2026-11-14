@@ -1,7 +1,8 @@
 // M4b exercise demo player: a looping 3D mannequin for the "How to" sheet.
 //
-// This module is light (no three.js import): createDemoPlayer() loads ./scene (and three.js with
-// it) on demand, so importing the player from a sheet doesn't grow the main bundle.
+// This module is light (no three.js import, no pose math): createDemoPlayer() loads ./scene (and
+// three.js with it) plus the demo data (moves, poses, rig, highlight) on demand, so importing the
+// player from a sheet doesn't grow the main bundle. ids.ts answers "is there a demo?" up front.
 //
 // Each player owns its own WebGL renderer, created on open and freed in dispose() (PROGRESS
 // Decisions, M4b). The animation loop only runs while playing, on screen and the page is
@@ -10,9 +11,8 @@
 // button still plays the loop when the user asks for it.
 import { exerciseById } from '../../data/catalog';
 import { cssVar, stageBackground } from '../body3d/palette';
-import { highlightFor } from './highlight';
-import { demoFor, phaseAt, tempoLabel, type Phase } from './moves';
-import { openingView, phaseLabel } from './rig';
+import { hasDemo } from './ids';
+import type { DemoMove, Phase } from './moves';
 import type { DemoScene } from './scene';
 
 export type DemoView = 'front' | 'side';
@@ -76,27 +76,31 @@ export async function createDemoPlayer(
   exerciseId: string,
   opts: DemoPlayerOptions = {},
 ): Promise<DemoPlayer | null> {
-  const found = demoFor(exerciseId);
-  if (!found || !canUseWebGL()) return null;
-  const move = found;
+  if (!hasDemo(exerciseId) || !canUseWebGL()) return null;
   const reducedMotion =
     opts.reducedMotion ?? window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const ex = exerciseById(exerciseId);
-  // The how-to focus line's helper muscles (move.helpers) light as secondary too.
-  const muscles = opts.muscles ?? {
-    primary: ex?.primaryMuscles ?? [],
-    secondary: [...(ex?.secondaryMuscles ?? []), ...(move.helpers ?? [])],
-  };
 
   let scene: DemoScene;
+  let move: DemoMove;
+  let lib: typeof import('./scene');
   try {
-    const mod = await import('./scene');
+    lib = await import('./scene');
     if (opts.signal?.aborted) return null;
-    scene = mod.createDemoScene(move, highlightFor(muscles.primary, muscles.secondary));
+    const found = lib.demoFor(exerciseId);
+    if (!found) return null;
+    move = found;
+    // The how-to focus line's helper muscles (move.helpers) light as secondary too.
+    const muscles = opts.muscles ?? {
+      primary: ex?.primaryMuscles ?? [],
+      secondary: [...(ex?.secondaryMuscles ?? []), ...(move.helpers ?? [])],
+    };
+    scene = lib.createDemoScene(move, lib.highlightFor(muscles.primary, muscles.secondary));
   } catch (err) {
     console.warn('3D demo unavailable, using the muscle map', err);
     return null;
   }
+  const { openingView, phaseAt, phaseLabel, tempoLabel } = lib;
 
   // --- DOM ------------------------------------------------------------------------------------
   const el = document.createElement('div');

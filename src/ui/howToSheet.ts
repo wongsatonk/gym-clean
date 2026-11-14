@@ -7,7 +7,7 @@ import type { PlannedExercise } from '../core/types';
 import { cueFor, exerciseById, exerciseName, howToFor } from '../data/catalog';
 import { badgesFor } from './badges';
 import { bodyMapSvg, pickView } from './bodyMap';
-import { demoFor, hasDemo, tempoLabel } from './demo3d/moves';
+import { hasDemo } from './demo3d/ids';
 import { createDemoPlayer, type DemoPlayer } from './demo3d/player';
 import { h } from './dom';
 import { icon } from './icons';
@@ -42,12 +42,12 @@ export type HowToContent = {
 /** Pure: the sheet's text for one exercise. Missing data gives empty strings, never a throw. */
 export function howToContent(exerciseId: string): HowToContent {
   const how = howToFor(exerciseId);
-  const demo = demoFor(exerciseId);
   const ex = exerciseById(exerciseId);
   return {
     title: exerciseName(exerciseId),
     hasDemo: hasDemo(exerciseId),
-    tempo: how?.tempo ?? (demo ? tempoLabel(demo) : ''),
+    // Every demo's tempo text equals its how-to tempo line (moves.test), so the line is enough.
+    tempo: how?.tempo ?? '',
     lines: how?.lines.slice(0, 3) ?? [],
     focus: how?.focus ?? '',
     cue: cueFor(exerciseId),

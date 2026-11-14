@@ -31,6 +31,12 @@ import type { Highlight } from './highlight';
 import { poseAt, type DemoMove, type DemoPose, type V3 } from './moves';
 import { SIZES, armTwist, bodyAxes, demoBounds, fitCamera, patchesFor, segmentFrames } from './rig';
 
+// The demo data the player needs once three.js is here: re-exported so it loads in this one chunk
+// (player.ts imports only this module, lazily; the main chunk asks ids.ts).
+export { highlightFor } from './highlight';
+export { demoFor, phaseAt, tempoLabel } from './moves';
+export { openingView, phaseLabel } from './rig';
+
 const FOV = 32;
 const PITCH = 0.12; // radians the camera looks down
 const UP = new Vector3(0, 1, 0);

@@ -2,7 +2,7 @@
 // pose-tracked exercises. Computed from data (hasDemo, tracking), never from a hard-coded list.
 
 import type { PlannedExercise } from '../core/types';
-import { hasDemo } from './demo3d/moves';
+import { hasDemo } from './demo3d/ids';
 import { h } from './dom';
 import { icon, type IconName } from './icons';
 import './howto.css';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { program } from '../data/catalog';
 import { badgeList } from './badges';
-import { DEMO_IDS } from './demo3d/moves';
+import { DEMO_IDS } from './demo3d/ids';
 import { howToContent } from './howToSheet';
 
 describe('badgeList', () => {
@@ -13,7 +13,8 @@ describe('badgeList', () => {
   });
 
   it('shows "Info" without a demo, and no "Camera" for manual tracking', () => {
-    expect(badgeList({ exerciseId: 'Leg_Press', tracking: 'manual' })).toEqual([
+    // Every program exercise has a demo since M4d batch 2; an id without one still says "Info".
+    expect(badgeList({ exerciseId: 'not-a-real-id', tracking: 'manual' })).toEqual([
       { kind: 'info', label: 'Info' },
     ]);
   });
@@ -43,7 +44,7 @@ describe('howToContent', () => {
 
   it('marks demo exercises and gives an empty, safe result for an unknown id', () => {
     expect(howToContent('Pushups').hasDemo).toBe(true);
-    expect(howToContent('Leg_Press').hasDemo).toBe(false);
+    expect(howToContent('Leg_Press').hasDemo).toBe(true);
     const none = howToContent('not-a-real-id');
     expect(none).toMatchObject({ hasDemo: false, tempo: '', lines: [], focus: '', cue: '' });
   });

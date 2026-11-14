@@ -253,6 +253,13 @@ describe('phaseLabel', () => {
     ['Lying_Leg_Curls', 'hold', 'Hold'],
     ['Bench_Dips', 'lower', 'Down'],
     ['Stiff-Legged_Dumbbell_Deadlift', 'lift', 'Up'],
+    ['Seated_Cable_Rows', 'lift', 'Pull'],
+    ['Seated_Cable_Rows', 'lower', 'Return'],
+    ['Face_Pull', 'hold', 'Hold'],
+    ['Dumbbell_Step_Ups', 'lift', 'Up'],
+    ['Dumbbell_Step_Ups', 'lower', 'Down'],
+    ['Leg_Press', 'lower', 'Down'],
+    ['Leg_Extensions', 'hold', 'Hold'],
   ];
   it.each(cases)('%s %s -> %s', (id, phase, label) => {
     expect(phaseLabel(demo(id), phase)).toBe(label);
@@ -261,7 +268,7 @@ describe('phaseLabel', () => {
 
 describe('moving machine parts', () => {
   const machines = DEMOS.filter((d) => (d.pose(d.start).rods ?? d.pose(d.start).blocks)?.length);
-  it('the machine demos are the pulldown, leg curl, calf raise, crossover and pushdown', () => {
+  it('the machine demos are the pulldown, leg curl, calf raise, crossover, pushdown, cable row, face pull, leg press and leg extension', () => {
     expect(machines.map((d) => d.exerciseId).sort()).toEqual(
       [
         'Wide-Grip_Lat_Pulldown',
@@ -269,6 +276,10 @@ describe('moving machine parts', () => {
         'Standing_Calf_Raises',
         'Cable_Crossover',
         'Triceps_Pushdown',
+        'Seated_Cable_Rows',
+        'Face_Pull',
+        'Leg_Press',
+        'Leg_Extensions',
       ].sort(),
     );
   });

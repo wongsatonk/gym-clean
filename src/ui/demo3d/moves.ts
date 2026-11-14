@@ -1,8 +1,26 @@
-// M4b exercise demos as data: which exercises have a demo, each demo's angle keyframes and tempo,
-// and the mannequin pose at any time in the loop. Pure, no three.js import: badges call hasDemo()
-// without loading the 3D chunk. The player (player.ts, scene.ts) draws DemoPose as
+// M4b exercise demos as data: each demo's angle keyframes and tempo, and the mannequin pose at any
+// time in the loop. Pure, no three.js import. Loaded lazily with the 3D chunk (player.ts); badges
+// and the How-to sheet ask ids.ts (hasDemo) instead, which a test keeps in sync with DEMOS. The player (player.ts, scene.ts) draws DemoPose as
 // spheres, ellipsoids and tapered cylinders.
 import {
+  BENT_ROW,
+  bentOverRowPose,
+  CABLE_ROW_MACHINE,
+  cableRowPose,
+  concentrationCurlPose,
+  FACE_PULL_MACHINE,
+  facePullPose,
+  INCLINE_CURL_BENCH,
+  inclineCurlPose,
+  LEG_EXT_MACHINE,
+  LEG_PRESS_MACHINE,
+  legExtensionPose,
+  legPressPose,
+  SEAT_BENCH,
+  SEATED_CALF_PROPS,
+  seatedCalfRaisePose,
+  STEP_BOX,
+  stepUpPose,
   benchDipPose,
   CALF_MACHINE,
   calfRaisePose,
@@ -349,20 +367,127 @@ export const DEMOS: readonly DemoMove[] = [
     pose: benchDipPose,
     props: DIP_BENCH,
   },
+  // M4d Pull B, manual count: original poses, declared start/far angles.
+  {
+    exerciseId: 'Bent_Over_Two-Dumbbell_Row',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    start: 180,
+    // Elbows up and back past the torso line (hinged BENT_ROW.hinge deg), as the one-arm row.
+    far: 180 - BENT_ROW.hinge - 35,
+    outward: 'lift',
+    pose: bentOverRowPose,
+    props: [],
+  },
+  {
+    exerciseId: 'Seated_Cable_Rows',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    // Arms reaching for the handle -> handle at the stomach.
+    start: 172,
+    far: 78,
+    outward: 'lift',
+    pose: cableRowPose,
+    props: CABLE_ROW_MACHINE,
+    words: { lift: 'Pull', lower: 'Return' },
+  },
+  {
+    exerciseId: 'Face_Pull',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    // Arms (all but) straight toward the pulley -> hands beside the face, elbows high.
+    start: 165,
+    far: 62,
+    outward: 'lift',
+    pose: facePullPose,
+    props: FACE_PULL_MACHINE,
+    words: { lift: 'Pull', lower: 'Return' },
+    hold: 1,
+    // Rear shoulders: open on a 3/4 view from behind the right shoulder (as the reverse fly).
+    openYaw: 0.6,
+  },
+  {
+    exerciseId: 'Incline_Dumbbell_Curl',
+    view: 'side',
+    measure: { joint: 'elbow', side: 'r' },
+    // Arms hanging straight (the long stretch) -> dumbbells at the shoulders.
+    start: 178,
+    far: 40,
+    outward: 'lift',
+    pose: inclineCurlPose,
+    props: INCLINE_CURL_BENCH,
+  },
+  {
+    exerciseId: 'Concentration_Curls',
+    // Front: the forearm curls across, toward the chest. Right arm only (no switch).
+    view: 'front',
+    measure: { joint: 'elbow', side: 'r' },
+    start: 165,
+    // Dumbbell in front of the chest (a tighter fold would bring it into the leaning torso).
+    far: 50,
+    outward: 'lift',
+    pose: concentrationCurlPose,
+    props: SEAT_BENCH,
+    hold: 1,
+  },
+  // M4d Legs B, manual count (Lying_Leg_Curls already has its Legs A demo).
+  {
+    exerciseId: 'Leg_Press',
+    view: 'side',
+    measure: { joint: 'knee', side: 'r' },
+    // Just short of locked knees -> knees at about 90 deg.
+    start: 165,
+    far: 90,
+    outward: 'lower',
+    pose: legPressPose,
+    props: LEG_PRESS_MACHINE,
+  },
+  {
+    exerciseId: 'Dumbbell_Step_Ups',
+    view: 'side',
+    // Right (box) knee. Right leg only: the demo doesn't switch legs.
+    measure: { joint: 'knee', side: 'r' },
+    start: 95,
+    far: 175,
+    outward: 'lift',
+    pose: stepUpPose,
+    props: STEP_BOX,
+    words: { lift: 'Up', lower: 'Down' },
+  },
+  {
+    exerciseId: 'Leg_Extensions',
+    view: 'side',
+    measure: { joint: 'knee', side: 'r' },
+    start: 90,
+    far: 175,
+    outward: 'lift',
+    pose: legExtensionPose,
+    props: LEG_EXT_MACHINE,
+    hold: 1,
+  },
+  {
+    exerciseId: 'Dumbbell_Seated_One-Leg_Calf_Raise',
+    view: 'side',
+    // Right ankle (knee-ankle-toe): heel below the block -> high on the toes. Right leg only.
+    measure: { joint: 'ankle', side: 'r' },
+    start: 75,
+    far: 125,
+    outward: 'lift',
+    pose: seatedCalfRaisePose,
+    props: SEATED_CALF_PROPS,
+    hold: 1,
+    // Calves are on the back of the shins: open on a 3/4 rear view, as the standing calf raise.
+    openYaw: 0.6,
+  },
 ];
 
 const BY_ID = new Map(DEMOS.map((d) => [d.exerciseId, d]));
 
-/** Exercise ids that have an animated demo, in registry order. */
-export const DEMO_IDS: readonly string[] = DEMOS.map((d) => d.exerciseId);
+// The id list lives in ids.ts (main chunk); moves.test checks it equals DEMOS' ids, in order.
+export { DEMO_IDS, hasDemo } from './ids';
 
 export function demoFor(exerciseId: string): DemoMove | undefined {
   return BY_ID.get(exerciseId);
-}
-
-/** Drives the "3D demo" / "Info" badges. */
-export function hasDemo(exerciseId: string): boolean {
-  return BY_ID.has(exerciseId);
 }
 
 /**

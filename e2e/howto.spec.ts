@@ -55,7 +55,7 @@ const hasWebGL = (page: Page) =>
     return Boolean(c.getContext('webgl2') ?? c.getContext('webgl'));
   });
 
-test('badges: Push A has six 3D demos, Camera on the tracked three; Pull A all 3D demo, Leg Press Info', async ({
+test('badges: Push A has six 3D demos, Camera on the tracked three; Pull A and Legs B all 3D demo', async ({
   page,
 }) => {
   const errors = watchErrors(page);
@@ -79,13 +79,13 @@ test('badges: Push A has six 3D demos, Camera on the tracked three; Pull A all 3
   expect(fontPx).toBeGreaterThanOrEqual(20);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 
-  // Legs B preview: Leg Press (manual, no demo yet) shows only "Info".
+  // Legs B preview (M4d batch 2): every row, Leg Press included, has a 3D demo and no Camera.
   await page.getByRole('button', { name: '‹ Back' }).click();
   await page.getByRole('button', { name: /Legs B/ }).click();
   const legPress = page.locator('.ex-row', { hasText: 'Leg Press' });
-  await expect(legPress.locator('[data-badge="info"]')).toHaveText('Info');
-  await expect(legPress.locator('[data-badge="3d"]')).toHaveCount(0);
+  await expect(legPress.locator('[data-badge="3d"]')).toHaveText('3D demo');
   await expect(legPress.locator('[data-badge="camera"]')).toHaveCount(0);
+  await expect(page.locator('.ex-row [data-badge="info"]')).toHaveCount(0);
 
   // Pull A in-session list: every exercise has a 3D demo (M4d); the manual ones no Camera.
   await page.getByRole('button', { name: '‹ Back' }).click();
