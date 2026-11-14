@@ -115,8 +115,11 @@ test('curl camera: big video, "0 / 12" + set line, set-up card spoken once, 3D c
   expect(await px('.setup-line')).toBeGreaterThanOrEqual(22);
   await expect(card.locator('svg.setup-pic')).toHaveAttribute('data-view', 'side');
   const said = await speech(page);
-  expect(said.filter((t) => t !== '<cancel>')).toHaveLength(1);
-  expect(said[0]).toMatch(/phone/i);
+  // The placement sentence is said exactly once. On a slow (GPU-less CI) runner the M5 low-fps
+  // cue "Move closer to the light." may also be spoken; that's correct behaviour, so ignore it.
+  const lines = said.filter((t) => t !== '<cancel>' && t !== 'Move closer to the light.');
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toMatch(/phone/i);
   // "Got it" hides it; "Phone position" brings it back.
   await card.getByRole('button', { name: 'Got it' }).click();
   await expect(card).toBeHidden();
