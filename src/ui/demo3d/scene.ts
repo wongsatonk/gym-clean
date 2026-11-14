@@ -194,8 +194,10 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
 
   // Moving machine parts (pulldown bar, cables, weight stack): counts are fixed for the loop.
   const pose0 = poseAt(move, 0);
-  const rodMeshes = (pose0.rods ?? []).map(() => mesh(cylinder, ironMat));
-  const blockMeshes = (pose0.blocks ?? []).map(() => mesh(box, propMat));
+  // Closed rods (the open limb cylinder would show the bar's hollow ends); metal weight stack.
+  const solidRod = geo(new CylinderGeometry(1, 1, 1, 16, 1, false));
+  const rodMeshes = (pose0.rods ?? []).map(() => mesh(solidRod, ironMat));
+  const blockMeshes = (pose0.blocks ?? []).map(() => mesh(box, ironMat));
 
   // Muscle patches: one mesh per patch, created once (the count doesn't change with the pose).
   const twist = armTwist(move);

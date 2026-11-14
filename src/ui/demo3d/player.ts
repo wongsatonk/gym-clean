@@ -11,7 +11,7 @@
 import { exerciseById } from '../../data/catalog';
 import { highlightFor } from './highlight';
 import { demoFor, phaseAt, tempoLabel, type Phase } from './moves';
-import { phaseLabel } from './rig';
+import { openingView, phaseLabel } from './rig';
 import type { DemoScene } from './scene';
 
 export type DemoView = 'front' | 'side';
@@ -273,8 +273,15 @@ export async function createDemoPlayer(
 
   // --- start ----------------------------------------------------------------------------------
   setView(view);
-  // A demo whose muscles neither preset shows opens on its own turn (reverse fly: 3/4 rear).
-  if (move.openYaw !== undefined) targetYaw = move.openYaw;
+  // A demo whose muscles neither preset shows opens on its own turn (reverse fly: 3/4 rear), with
+  // neither Front nor Side pressed until the user picks one.
+  const opening = openingView(move);
+  if (opening.yaw !== null) {
+    targetYaw = opening.yaw;
+    frontBtn.setAttribute('aria-pressed', 'false');
+    sideBtn.setAttribute('aria-pressed', 'false');
+    delete el.dataset.view;
+  }
   yaw = targetYaw;
   setPlaying(!reducedMotion);
 

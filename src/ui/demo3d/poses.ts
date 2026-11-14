@@ -424,26 +424,53 @@ export const REVERSE_FLY = { incline: 40, hip: v(0, 0.82), hipW: 0.1, bend: 20 }
 const flyDir = (phi: number, sg: number): V3 => v(0, -Math.cos(rad(phi)), Math.sin(rad(phi)) * sg);
 
 /**
+ * Inverse of a monotonic sampled function: given samples (x[i], y[i]) with y strictly increasing
+ * or decreasing, returns y -> x by binary search + linear interpolation, clamped to the ends.
+ * Built once per demo at module load, so a frame costs a few comparisons instead of re-posing.
+ */
+function inverseTable(x0: number, x1: number, n: number, f: (x: number) => number) {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const x = x0 + ((x1 - x0) * i) / n;
+    xs.push(x);
+    ys.push(f(x));
+  }
+  const up = (ys[n] ?? 0) > (ys[0] ?? 0);
+  return (y: number): number => {
+    let lo = 0;
+    let hi = n;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if ((ys[mid] ?? 0) < y === up) lo = mid;
+      else hi = mid;
+    }
+    const ya = ys[lo] ?? 0;
+    const yb = ys[hi] ?? 0;
+    const u = Math.max(0, Math.min(1, yb === ya ? 0 : (y - ya) / (yb - ya)));
+    return (xs[lo] ?? 0) + ((xs[hi] ?? 0) - (xs[lo] ?? 0)) * u;
+  };
+}
+
+/** Raise angle (deg) for a reverse-fly shoulder angle; the angle grows with the raise. */
+const flyRaiseFor = (() => {
+  const { incline, hip, hipW } = REVERSE_FLY;
+  const sR = at(addS(hip, dir(incline), SPINE), 0.2);
+  const hjR = at(hip, hipW);
+  return inverseTable(-15, 100, 460, (phi) => angleAtJoint(hjR, sR, addS(sR, flyDir(phi, 1), U)));
+})();
+
+/**
  * Reverse fly (rear delts), shoulder angle (hip-shoulder-elbow): both arms swing out to the sides
  * in the vertical plane across the body, soft elbows, until level with the back. The raise angle
- * for `theta` is found by bisection (the angle grows monotonically with the raise).
+ * for `theta` comes from a table built once (flyRaiseFor).
  */
 export function reverseFlyPose(theta: number): DemoPose {
   const { incline, hip, hipW, bend } = REVERSE_FLY;
   const u = dir(incline); // spine, hip -> neck
   const chest = dir(incline - 90); // chest normal, toward the pad (down and forward)
   const neck = addS(hip, u, SPINE);
-  const sR = at(neck, 0.2);
-  const hjR = at(hip, hipW);
-  const shoulderAt = (phi: number) => angleAtJoint(hjR, sR, addS(sR, flyDir(phi, 1), U));
-  let lo = -15;
-  let hi = 100;
-  for (let i = 0; i < 50; i++) {
-    const mid = (lo + hi) / 2;
-    if (shoulderAt(mid) < theta) lo = mid;
-    else hi = mid;
-  }
-  const phi = (lo + hi) / 2;
+  const phi = flyRaiseFor(theta);
   const ankleX = -0.35;
   const { r, l } = sides((sg) => {
     const s = at(neck, 0.2 * sg);
@@ -567,21 +594,19 @@ function pulldownAtBar(b: number): DemoPose {
   };
 }
 
+/** Bar height for a pulldown shoulder angle (table over the bar's travel, built once). */
+const pulldownBarFor = inverseTable(PULLDOWN.barLow - 0.05, PULLDOWN_BAR_TOP, 300, (b) =>
+  measuredAngle(pulldownAtBar(b), 'shoulder', 'r'),
+);
+
 /**
  * Wide-grip lat pulldown, front view, shoulder angle (hip-shoulder-elbow): seated, thighs under
  * the pad, the bar comes from arms straight overhead down to the upper chest, elbows down and out.
- * The bar height for `theta` is found by bisection (the shoulder angle shrinks as the bar drops).
+ * The bar height for `theta` comes from a table built once (the shoulder angle shrinks as the
+ * bar drops).
  */
 export function pulldownPose(theta: number): DemoPose {
-  const angle = (b: number) => measuredAngle(pulldownAtBar(b), 'shoulder', 'r');
-  let lo = PULLDOWN.barLow - 0.05;
-  let hi = PULLDOWN_BAR_TOP;
-  for (let i = 0; i < 50; i++) {
-    const mid = (lo + hi) / 2;
-    if (angle(mid) < theta) lo = mid;
-    else hi = mid;
-  }
-  return pulldownAtBar((lo + hi) / 2);
+  return pulldownAtBar(pulldownBarFor(theta));
 }
 
 /** Static pulldown machine: seat, thigh pad on a post, column and top beam over the bar. */

@@ -8,6 +8,7 @@ import {
   demoBounds,
   fitCamera,
   limbFrame,
+  openingView,
   patchesFor,
   phaseLabel,
   segmentFrames,
@@ -270,5 +271,18 @@ describe('moving machine parts', () => {
           expect(q[k]).toBeLessThanOrEqual((box.max[k] ?? 0) + 1e-9);
         }
     }
+  });
+});
+
+describe('openingView', () => {
+  it('opens a demo with its own turn on that turn, no preset pressed', () => {
+    const m = demo('Reverse_Flyes');
+    expect(m.openYaw).toBeDefined();
+    expect(openingView(m)).toEqual({ pressed: null, yaw: m.openYaw });
+  });
+
+  it('opens every other demo on its default preset', () => {
+    for (const m of DEMOS.filter((d) => d.openYaw === undefined))
+      expect(openingView(m), m.exerciseId).toEqual({ pressed: m.view, yaw: null });
   });
 });

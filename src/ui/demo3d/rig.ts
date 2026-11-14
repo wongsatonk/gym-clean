@@ -366,3 +366,17 @@ export function phaseLabel(m: DemoMove, phase: Phase): string {
   const w = m.words ?? { lift: 'Lift', lower: 'Lower' };
   return phase === 'lift' ? w.lift : w.lower;
 }
+
+/**
+ * How the player opens a demo: on its default preset (that button pressed), or, for a demo with
+ * its own opening turn (`openYaw`, reverse fly 3/4 rear), on that turn with no preset pressed
+ * until the user picks Front or Side.
+ */
+export function openingView(m: DemoMove): {
+  pressed: DemoMove['view'] | null;
+  yaw: number | null;
+} {
+  return m.openYaw === undefined
+    ? { pressed: m.view, yaw: null }
+    : { pressed: null, yaw: m.openYaw };
+}
