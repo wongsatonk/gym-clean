@@ -269,7 +269,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - bodyMap tests pass;
     - these files have no colour literal.
   - Deps: A2's token names (can start from the README table).
-- [ ] A7b. [ui-engineer, after A7] Remove the 3D entries from the tokens test allow-list. Files: src/ui/tokens.test.ts. Done when: green. Deps: A2, A7.
+- [x] A7b. [ui-engineer, after A7] Remove the 3D entries from the tokens test allow-list. Files: src/ui/tokens.test.ts. Done when: green. Deps: A2, A7.
 - [x] A8. [ui-engineer] **Today** (Energy) + day preview + tab bar.
   - Files: src/ui/screens/today.ts, src/ui/screens/preview.ts, src/ui/tabBar.ts, src/styles.css.
   - Hero:
@@ -392,7 +392,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - no third-party request.
   - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
   - Deps: A9, A11b, A13, A15, A16, A18.
-- [ ] A21. [reviewer] Review the branch diff against CLAUDE.md:
+- [x] A21. [reviewer] Review the branch diff against CLAUDE.md:
   - sizes (64 / 20 / 56; the label bend only next to an icon or number);
   - contrast;
   - colour never alone;
@@ -404,7 +404,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - tokens the only source;
   - no medical words.
   - Deps: A7b, A19, A20.
-- [ ] A22. [verifier] Verify against SPEC M4e Accept.
+- [x] A22. [verifier] Verify against SPEC M4e Accept.
   - `npm run check` (tokens test included), `npm run e2e`, `npm run build`.
   - **Every screen × Orange / Volt / Yellow at 390×844**, via `scripts/screenshots.mjs m4e`: Today, preview, Exercise, Pause sheet, Rest, Rest +30 s, Summary, Camera set / Undo / rest / hold, Settings, How-to. Output `docs/screenshots/m4e-<screen>-<accent>.png`, console clean.
   - **Lighthouse accessibility ≥ 95 on Today** (built app, `vite preview`, mobile).
@@ -846,6 +846,29 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e A22 verifier PASS** (56c5d1a).
+  - **Checks:** `npm run check` 1358 tests + 19 scripts; full e2e 87/87; m4e-theme ×5 35/35.
+  - **Lighthouse accessibility on Today: 100.**
+  - **Build:** 4 self-hosted woff2 fonts and no external URLs in dist.
+  - **Accents:** computed tokens match each accent; Volt success is gold.
+  - **Screenshots:** 57 at 390×844 in `docs/screenshots/m4e-<screen>-<accent>.png`; scrollWidth 390 everywhere.
+  - **Bundle:** main is 108.9 kB gzip, +28.4 kB since M4c, which includes M5/M5b/M5c.
+  - **Cleanup round (non-blocking):**
+    - the camera header truncates long exercise names ("Dumbbel…"), which breaks a gym rule;
+    - the notes row starts under the sticky Set done;
+    - Rest shows two filled CTAs when a coach Apply is up;
+    - `--warn` sits too close to the Yellow CTA and to Volt gold (design call A-q6).
+- 2026-11-14: **M4e A21: branch review PASS** (`git diff 06bfa4d..HEAD`, 10 commits, 81 files; nothing blocking).
+  - **Confirmed:** CSP, fonts and privacy; tokens-only guard (allow-list down to `body3d/palette.ts`, so A7b is done); sizes; reduced motion; voice; pure core; nothing lost from the old screens.
+  - **Cleanup after A22:**
+    - remove the dead old-screen CSS (`.set-counter`, `.stepper-label`, `.footer-row`, `.rest-label`, `.nowrap`, `.top-bar.end`, `.list-btn`, `.rest-next`, base `.stepper` / `.rest-clock` / `.next-up`);
+    - retire or rename the transitional font tokens, and drop the unused `--fs-count`;
+    - font-weight 800 → 700 (only 700 is loaded);
+    - notes-sheet Save → `.cta-btn`;
+    - accessible names should contain the visible label (+30 s, the list button);
+    - the list status words are 18px with no icon;
+    - `--muscle-2` on body is 2.47:1.
+  - **Question for Wongsaton:** A-q6, whether Volt gold is too close to the over-rest/hold amber.
 - 2026-11-14: **M4e A20 done.** e2e/m4e-theme.spec.ts: 7 tests, 42/42 with repeat-each 6; with settings.spec, 30/30 ×3 after the fix.
   - **Covers:** the accent persisting before first paint; Volt gold vs green; +30 s moving "Ten seconds" back 30 s; Skip/End only in Pause; self-hosted fonts; Today tiles after seeded and finished sessions; no third-party requests.
   - **Race fixed:** the accent's localStorage copy is written only after the IndexedDB save lands. Before, reloading within milliseconds of a pick flipped back to the old accent.

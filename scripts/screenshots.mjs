@@ -13,6 +13,8 @@
 //   node scripts/screenshots.mjs m5b [coach|s2|m4d|silent]
 //                                            # m4d-next round: M5b coach click-through, S2 gauge,
 //                                            #   M4d demos + Pull A badges, silent hint (iOS UA)
+//   node scripts/screenshots.mjs m4e [orange|volt|yellow]
+//                                            # M4e redesign: every screen per accent
 //   node scripts/screenshots.mjs m5c-hold    # M5c breaks inside a set: body-line hold, Continue →
 //                                            #   one set; last-set hold (Save set); dev-log export
 //                                            #   to test-results/verify-m5c-hold/
@@ -1749,6 +1751,208 @@ async function m5cHold(browser) {
   }
 }
 
+// ---------------------------------------------------------------- M4e (visual redesign)
+
+const M4E_ACCENTS = ['orange', 'volt', 'yellow'];
+
+/** Picks the accent in Settings, waits for the localStorage copy, then returns to Today. */
+async function m4eSetAccent(page, accent) {
+  await page.locator('[data-tab="settings"]').click();
+  await page.locator('main.settings').waitFor();
+  await page.locator(`[data-accent-option="${accent}"]`).click();
+  await pollUntil(async () => (await page.evaluate(() => localStorage.getItem('gc-accent'))) === accent, 5_000);
+  await page.waitForTimeout(400); // IndexedDB write
+}
+
+async function m4eTheme(page) {
+  return page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    return {
+      accentAttr: document.documentElement.getAttribute('data-accent'),
+      cta: cs.getPropertyValue('--cta').trim(),
+      success: cs.getPropertyValue('--success').trim(),
+      mood: document.querySelector('.mood-energy') ? 'energy' : document.querySelector('.mood-track') ? 'track' : document.querySelector('.mood-pro') ? 'pro' : null,
+      moods: [...document.querySelectorAll('.mood-energy,.mood-pro,.mood-track')].map((e) => e.className.match(/mood-\w+/)[0]),
+    };
+  });
+}
+
+async function m4eShot(page, log, screen, accent, root = 'body') {
+  await page.waitForTimeout(500);
+  await shot(page, log, `m4e-${screen}-${accent}`, {
+    theme: await m4eTheme(page),
+    sizes: await textSizes(page, root),
+  });
+  log.length = 0; // console per screen
+}
+
+async function m4eCloseDialog(page, name) {
+  const d = page.getByRole('dialog', { name });
+  await d.getByRole('button', { name: /^(Close|Cancel)$/ }).first().click();
+  await d.waitFor({ state: 'detached' });
+}
+
+async function m4e(browser, only) {
+  const accents = only ? [only] : M4E_ACCENTS;
+  for (const accent of accents) {
+    // A. Today (empty), Settings, preview, Exercise and its overlays, Pause.
+    {
+      const { ctx, page, log } = await newPhone(browser);
+      const offsite = watchOffsite(page);
+      await installSpeechSpy(page);
+      await page.goto(BASE);
+      await page.locator('.day-btn').first().waitFor();
+      await m4eSetAccent(page, accent);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await m4eShot(page, log, 'settings', accent, 'main');
+      await page.locator('[data-tab="today"]').click();
+      await page.locator('.day-btn').first().waitFor();
+      await m4eShot(page, log, 'today-empty', accent, 'main');
+      await page.getByRole('button', { name: /Push A/ }).click();
+      await page.getByRole('button', { name: 'Start workout' }).waitFor();
+      await m4eShot(page, log, 'preview', accent, 'main');
+      await page.getByRole('button', { name: 'Start workout' }).click();
+      await page.getByRole('heading', { name: 'Dumbbell Bench Press' }).waitFor();
+      await m4eShot(page, log, 'exercise', accent, 'main');
+      // Body sheet
+      await page.getByRole('button', { name: 'Show target muscles in 3D' }).first().click();
+      await page.getByRole('dialog', { name: 'Target muscles' }).waitFor();
+      await page.waitForTimeout(1500);
+      await m4eShot(page, log, 'body-sheet', accent, '[role=dialog][aria-label="Target muscles"]');
+      await m4eCloseDialog(page, 'Target muscles');
+      // How-to
+      await page.locator('[data-howto-open]').click();
+      const how = page.locator('[data-howto=sheet]');
+      await how.waitFor();
+      await pollUntil(async () => (await how.locator('[data-howto=stage]').getAttribute('data-mode')) === '3d', 15_000);
+      await page.waitForTimeout(1200);
+      await m4eShot(page, log, 'howto', accent, '[data-howto=sheet]');
+      await how.locator('[data-howto=close]').click();
+      await how.waitFor({ state: 'detached' });
+      // Notes
+      await page.getByRole('button', { name: 'Notes and machine setting' }).click();
+      await page.getByRole('dialog', { name: 'Notes' }).waitFor();
+      await m4eShot(page, log, 'notes', accent, '[role=dialog][aria-label="Notes"]');
+      await m4eCloseDialog(page, 'Notes');
+      // Exercise list
+      await page.getByRole('button', { name: 'Exercise list' }).click();
+      await page.getByRole('dialog', { name: 'Exercise list' }).waitFor();
+      await m4eShot(page, log, 'exercise-list', accent, '[role=dialog][aria-label="Exercise list"]');
+      await m4eCloseDialog(page, 'Exercise list');
+      // Pause
+      await page.getByRole('button', { name: 'Pause', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Paused' }).waitFor();
+      await m4eShot(page, log, 'pause', accent, '[role=dialog][aria-label="Paused"]');
+      results.push({ m4eA: accent, offsite });
+      await ctx.close();
+    }
+    // B. Fake clock: Rest, Rest +30 s, over rest; two sessions → Summary with "vs last"; Today tiles.
+    {
+      const { ctx, page, log } = await newPhone(browser);
+      const offsite = watchOffsite(page);
+      await installSpeechSpy(page);
+      await page.clock.install({ time: new Date('2026-11-13T18:00:00Z') });
+      await page.goto(BASE);
+      await page.clock.pauseAt(new Date('2026-11-13T18:00:05Z'));
+      await page.locator('.day-btn').first().waitFor();
+      await m4eSetAccent(page, accent);
+      await page.locator('[data-tab="today"]').click();
+      const oneSession = async (sets) => {
+        await page.getByRole('button', { name: /Push A/ }).click();
+        await page.getByRole('button', { name: 'Start workout' }).click();
+        await page.getByRole('heading', { name: 'Dumbbell Bench Press' }).waitFor();
+        for (let i = 0; i < sets; i++) {
+          await page.clock.runFor(30_000);
+          await page.getByRole('button', { name: 'Set done' }).click();
+          await page.locator('[data-rest-clock]').waitFor();
+          if (i < sets - 1) {
+            await page.clock.runFor(10_000);
+            await page.getByRole('button', { name: 'Start set' }).click();
+          }
+        }
+      };
+      await oneSession(1);
+      await page.clock.runFor(10_000);
+      await page.getByRole('button', { name: 'Pause', exact: true }).click();
+      const sheet = page.getByRole('dialog', { name: 'Paused' });
+      await sheet.getByRole('button', { name: 'End workout' }).click();
+      await sheet.getByRole('button', { name: 'Tap again to end' }).click();
+      await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+      await page.getByRole('button', { name: 'Done' }).click();
+      await page.clock.runFor(3600_000);
+      // Session 2: two sets, shots of Rest along the way.
+      await oneSession(2);
+      await page.clock.runFor(5_000);
+      await m4eShot(page, log, 'rest', accent, 'main');
+      await page.getByRole('button', { name: 'Add 30 seconds of rest' }).click();
+      await m4eShot(page, log, 'rest-plus30', accent, 'main');
+      await page.clock.runFor(160_000);
+      await page.locator('[data-rest-timer][data-state="over"]').waitFor();
+      await m4eShot(page, log, 'rest-over', accent, 'main');
+      await page.getByRole('button', { name: 'Pause', exact: true }).click();
+      await sheet.getByRole('button', { name: 'End workout' }).click();
+      await sheet.getByRole('button', { name: 'Tap again to end' }).click();
+      await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+      await m4eShot(page, log, 'summary', accent, 'main');
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await m4eShot(page, log, 'summary-bottom', accent, 'main');
+      await page.getByRole('button', { name: 'Done' }).click();
+      await page.locator('.day-btn').first().waitFor();
+      await m4eShot(page, log, 'today', accent, 'main');
+      results.push({ m4eB: accent, offsite });
+      await ctx.close();
+    }
+    // C. Camera (hands-free curl fixture): set mode, pending Undo, rest mode.
+    {
+      const { ctx, page, log } = await newPhone(browser);
+      const offsite = watchOffsite(page);
+      await installHandsFreeMocks(page, HF_CURL);
+      await page.goto(BASE);
+      await page.locator('.day-btn').first().waitFor();
+      await m4eSetAccent(page, accent);
+      await page.locator('[data-tab="today"]').click();
+      await page.getByRole('button', { name: /Pull A/ }).click();
+      await page.getByRole('button', { name: 'Start workout' }).click();
+      await openFromList(page, 'Dumbbell Bicep Curl');
+      await page.getByRole('button', { name: 'Camera', exact: true }).click();
+      const cam = page.getByRole('dialog', { name: 'Camera' });
+      await cam.and(page.locator('[data-person="true"]')).waitFor({ timeout: 15_000 });
+      await page.waitForTimeout(1000);
+      await page.evaluate(() => window.__freezeWhenReps(2));
+      await page.evaluate(() => window.__play());
+      await cam.locator('.rep-num[data-reps="1"]').waitFor({ timeout: 20_000 });
+      await m4eShot(page, log, 'camera-set', accent, '[role=dialog][aria-label="Camera"]');
+      await cam.locator('[data-auto-stop="pending"]').waitFor({ timeout: 20_000 });
+      await page.waitForTimeout(200);
+      await shot(page, log, `m4e-camera-undo-${accent}`, { theme: await m4eTheme(page), hf: await handsFreeSizes(page) });
+      log.length = 0;
+      await cam.and(page.locator('[data-cam-mode="rest"]')).waitFor({ timeout: 10_000 });
+      await m4eShot(page, log, 'camera-rest', accent, '[role=dialog][aria-label="Camera"]');
+      results.push({ m4eC: accent, offsite });
+      await ctx.close();
+    }
+    // D. Camera hold (push-ups, body-line gate).
+    {
+      const { ctx, page, log } = await newPhone(browser);
+      const offsite = watchOffsite(page);
+      await installHoldMocks(page);
+      await page.goto(BASE);
+      await page.locator('.day-btn').first().waitFor();
+      await m4eSetAccent(page, accent);
+      const cam = await holdOpenPushups(page);
+      await holdRepsThenFreeze(page, cam, 2);
+      const from = await holdSaidLen(page);
+      await page.evaluate(() => (window.__sit = true));
+      await holdWaitSaid(page, 'Set on hold. Tap to continue.', from, 10_000);
+      await cam.locator('[data-hold]').waitFor();
+      await page.waitForTimeout(1500);
+      await shot(page, log, `m4e-camera-hold-${accent}`, { theme: await m4eTheme(page), hold: await holdSizes(page) });
+      results.push({ m4eD: accent, offsite });
+      await ctx.close();
+    }
+  }
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -1778,6 +1982,7 @@ try {
   else if (milestone === 'm5c') await m5c(browser);
   else if (milestone === 'm5c-hold') await m5cHold(browser);
   else if (milestone === 'm5') await m5(browser);
+  else if (milestone === 'm4e') await m4e(browser, process.argv[3]);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
