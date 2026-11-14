@@ -343,7 +343,7 @@ M10-q8.
   - Done when tests cover: default precedence, replace/remove before and after the current index, rejection
     with logged sets, rest phase, the summary after a removal, and every existing session test passing.
   - Deps: 1.
-- [x] 6. [core-engineer, after 3+4] Action: Not today / move session, **tests first**.
+- [ ] 6. [core-engineer, after 3+4] Action: Not today / move session, **tests first**.
   - Files: src/core/trainer/actions/postpone.ts(+test).
   - `proposePostpone(state, sessions, today, { mode: 'useRestDay' | 'pushWeek', to?: date })` → a Proposal
     with a 7-day before → after preview and a why.
@@ -355,7 +355,7 @@ M10-q8.
     - "move to <date>" onto a date that already has a session;
     - a session already started today → no proposal ("finish or end today's workout first").
   - Deps: 3, 4.
-- [x] 7. [core-engineer, after 2+4] Action: go easy on an area, **tests first**.
+- [ ] 7. [core-engineer, after 2+4] Action: go easy on an area, **tests first**.
   - Files: src/core/trainer/actions/avoidArea.ts(+test), src/core/trainer/swapCandidates.ts(+test).
   - `swapCandidates(exercise, catalog, { avoid?: BodyArea, exclude: ids, equipment })`: ranked by overlap of
     primary muscles, then secondary, then the same `tracking`. `tracking: 'pose'` only when a rule exists.
@@ -383,7 +383,7 @@ M10-q8.
     exercises, deload spanning a rest day, swap scope `plan` changing every day that has the exercise, and
     swap excluding exercises already in the day.
   - Deps: 2, 4, 5 (`weightKgToday`).
-- [x] 9. [core-engineer, after 4] Action: stalled → adjust, **tests first**.
+- [ ] 9. [core-engineer, after 4] Action: stalled → adjust, **tests first**.
   - Files: src/core/trainer/actions/stall.ts(+test). Reuses src/core/history.ts / stats.ts `topSet`.
   - `detectStalls(sets, sessions, plan)`: 3 finished sessions of the exercise in a row with no top-set gain
     (more weight, or more reps at the same weight), skipping sessions whose `adjust` is set.
@@ -391,7 +391,7 @@ M10-q8.
   - Done when tests cover: 2 sessions → none, 3 → stall, a lighter session in between is skipped, a gain
     resets it, bodyweight exercises, and the M5b N1 "drop" coexisting with it (one line each).
   - Deps: 4.
-- [x] 10. [core-engineer ∥A] Intent matcher + eval set, **tests first**.
+- [ ] 10. [core-engineer ∥A] Intent matcher + eval set, **tests first**.
   - Files: src/core/trainer/intents.ts(+test), src/core/trainer/phrases.json (keywords per intent, area
     words, day words, discomfort and red-flag lists, diagnosis-term list; English + Thai per M10-q5),
     src/core/trainer/evals/requests.json (≥ 60 made-up requests: `{ text, intent, slots, safety,
@@ -406,7 +406,7 @@ M10-q8.
     - no network or DOM;
     - the eval file has no personal data.
   - Deps: 1.
-- [x] 11. [core-engineer, after 6–10] Replies, safety copy and the coach controller, **tests first**.
+- [ ] 11. [core-engineer, after 6–10] Replies, safety copy and the coach controller, **tests first**.
   - Files: src/core/trainer/replies.ts(+test), src/core/trainer/coach.ts(+test).
   - `replies.ts` turns a Proposal into title, lines, why and `say` (≤ 8 words), and holds:
     - the fixed referral line;
@@ -1331,9 +1331,9 @@ Round 1 of M5b, ahead of M5 (reps/partials/rest/weight rules only). The exact ru
 - [x] 6. [main] Wiring. Files: src/ui/app.ts (and playwright.config.ts if the new spec needs a project). Rest: when tips are on, `afterSetAdvice(s, exerciseName)` → mount the coach tip under the rest clock; Apply (shown only while the upcoming set is the advice's exercise) → `APPLY_NEXT_WEIGHT` → "Next" line shows the new weight. `tick()`: `adviceSpeakDue(lastCueElapsedMs, elapsed, s.restTargetSec)` → `voice.speak(advice.say, { kind: 'cue' })` once per `sessionId:logs.length`. Rest cues stay unchanged (they queue; nothing cancels). Summary: mount `createCoachSummary(coachSummary(s, lastTime, exerciseName))` above the set list. Settings: "Coach tips" switch (persisted via task 3, loaded at start). Dev log: `logEvent('advice', { rule, shown | spoken | applied })`. Done when: by hand on Push A, the second clean Bench set shows "Strong set. Try +2.5 kg next set.", it's spoken once ~2 s into rest, Apply changes "Next" to the new weight, and Summary shows a Coach section. Deps: 1, 2, 3, 4, 5.
 - [x] 7. [ui-engineer] E2E `e2e/coach.spec.ts` (fake clock, mocked speech, no camera). Cases: (i) two clean sets at the top → Rest tip A3 visible, spoken exactly once ~2 s in, never cancelling the rest cues (mock records order), Apply → next weight +2.5 kg on Rest and on the Exercise stepper after Start set; (ii) a set below `min` → "Keep the weight. Aim for N reps."; (iii) lb mode → "+5 lb"; (iv) "Coach tips" off (after reload) → no tip, nothing spoken; (v) Summary Coach section has one next-time line per logged exercise; a second session with more reps shows "+N reps vs last time"; (vi) no third-party request. Done when: passes with `--repeat-each=3` and the full `npm run e2e` is green. Deps: 6.
 - [ ] 8. [reviewer] Review the branch diff against CLAUDE.md (pure core, no medical words, voice-over-screen, 56px/20px, never automatic). Deps: 7.
-- [x] 9. [verifier] Verify against SPEC M5b round-1 table + the M5b Accept line: `npm run check` (fixture suite still 12/12), `npm run e2e`, `npm run build`, 390×844 screenshots `docs/screenshots/m5b-rest-tip.png`, `m5b-rest-applied.png`, `m5b-summary-coach.png`, `m5b-settings-coach.png`, console clean; evidence into PROGRESS. Deps: 8.
-- [x] 10. [main] Merge `m5b-coach`, then **ask Wongsaton before pushing** (push = deploy). Deps: 9.
-- [x] 11. 🧍 (no SPEC checkpoint; informal) Wongsaton tries the coach tips at his next session and sends notes via `/feedback`.
+- [ ] 9. [verifier] Verify against SPEC M5b round-1 table + the M5b Accept line: `npm run check` (fixture suite still 12/12), `npm run e2e`, `npm run build`, 390×844 screenshots `docs/screenshots/m5b-rest-tip.png`, `m5b-rest-applied.png`, `m5b-summary-coach.png`, `m5b-settings-coach.png`, console clean; evidence into PROGRESS. Deps: 8.
+- [ ] 10. [main] Merge `m5b-coach`, then **ask Wongsaton before pushing** (push = deploy). Deps: 9.
+- [ ] 11. 🧍 (no SPEC checkpoint; informal) Wongsaton tries the coach tips at his next session and sends notes via `/feedback`.
 
 **Parallel waves:** Wave 1: 1 [core ∥A], 2 → 3 [core ∥B], 4 [ui] (from the planned Advice shape). Wave 2: 5 [ui, after 4: shared styles.css]. Then 6 → 7 → 8 → 9 → 10.
 
