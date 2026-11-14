@@ -38,9 +38,18 @@ export type ViewVariant = Pick<
   'view' | 'sideMode' | 'extended' | 'contracted' | 'minHipAngleDeg' | 'focus'
 >;
 
+/**
+ * SPEC M4f. `tuned`: thresholds confirmed (the original six are grandfathered). `learning`: a
+ * new rule that counts and times reps but judges nothing else until committed real fixtures pass
+ * the pre-registered criteria (focusFlagsFor masks it; rulesTunedWithoutRealFixtures guards it).
+ */
+export type RuleStatus = 'learning' | 'tuned';
+
 export type ExerciseRule = {
   /** Id in exercises.json / program.json. */
   exerciseId: string;
+  /** Learning or tuned (SPEC M4f). Required: a new rule must say which it is. */
+  status: RuleStatus;
   /** Folder under fixtures/landmarks/ and fixtures/synthetic/. */
   folder: string;
   /** Camera view the user is asked to film from. */

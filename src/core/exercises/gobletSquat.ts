@@ -5,6 +5,7 @@ export const gobletSquat: ExerciseRule = {
   ...COUNTER_DEFAULTS,
   exerciseId: 'Goblet_Squat',
   folder: 'goblet-squat',
+  status: 'tuned',
   view: 'side',
   limb: 'leg',
   triplets: KNEE,

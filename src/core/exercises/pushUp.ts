@@ -5,6 +5,7 @@ export const pushUp: ExerciseRule = {
   ...COUNTER_DEFAULTS,
   exerciseId: 'Pushups',
   folder: 'push-up',
+  status: 'tuned',
   view: 'side',
   limb: 'arm',
   triplets: ELBOW,

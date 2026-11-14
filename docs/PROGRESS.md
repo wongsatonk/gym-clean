@@ -15,6 +15,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - **Exercise first screen:** the notes row sits about 30px under the sticky Set done until you scroll. Shrinking the content would fix it.
   - The B-q and A-q questions under "Blockers / questions".
   - The 🧍 gym checkpoints.
+  - **M4f Camera for more exercises (planned 2026-11-14):** the M4f-q questions under "Blockers / questions" are not blocking; their defaults get built.
   - **M10 AI trainer (planned 2026-11-14):** the M10-q questions under "Blockers / questions". Phase A can start once q1–q3 and q8 have answers, or on the defaults if he says so.
 
 ## Milestone checklist
@@ -29,6 +30,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [x] M4b 3D exercise demos: the six Push A exercises + "3D demo"/"Info"/"Camera" badges (live)
 - [~] M4d 3D demos for the other 24 exercises: Pull A done and live (curl, row, goblet squat, hammer curls, reverse flyes, lat pulldown); the rest are open. Doesn't gate M5
 - [~] M4e Visual redesign: the mix (docs/design/m4e-mix) was picked 2026-11-13 night. Steps 2–3 planned below
+- [ ] M4f Camera for more exercises: **planned 2026-11-14** (approved by Wongsaton). Wave 1 (6 easy exercises, `learning` status) starts when the M4d batch merges → 🧍 Checkpoint F1. Wave 2 (9 doable exercises) comes after F1 → 🧍 F2
 - [ ] M5 Live trainer: focus & form cues (partial cues moved to M4c) → 🧍 Checkpoint C (gym test with camera). **In progress, plan below**
 - [~] M5b Trainer recommendations after the set: round 1 is live. The tempo rule (T1) is built in M5 (task 8)
 - [~] M5c Hands-free sets: **built and live** (c3c1f85, verifier PASS) → waiting for 🧍 Checkpoint B3 (hands-free gym test). Follow-up "Breaks inside a set: tap to continue" planned below
@@ -39,6 +41,237 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
 
 ## Current milestone plan
+
+### M4f — Camera for more exercises (planned 2026-11-14; wave 1 first, wave 2 after Checkpoint F1)
+**Contract:** SPEC M4f (both rule tables, the `learning` status, the UI copy, Accept) and the Decision "M4f scope and the learning state" (2026-11-14).
+- All logic and rule data is **tests first**.
+- Nothing is pushed or deployed without Wongsaton's OK.
+
+**Branch:** `m4f-camera-more`, cut from `m4d-demos` once the M4d batch the 3D engineer is building now has merged. Until then nobody edits `src/ui/demo3d/**`.
+
+**Fit with the current code (why the plan looks like this):**
+- `tracking: 'pose'` lives per planned exercise in `src/data/program.json`. The Camera badge, the Camera button and the Rest Camera button all follow it. `ruleFor(id)` gives the rule, and `index.test` already checks the pose ids and the rules one to one.
+- **Tests that hard-code "the six" break as soon as a seventh rule exists:**
+  - `index.test.ts`: the pose-id list; "only the press starts contracted / has an extended gate"; "only the lateral raise is increasing"; "leg only for the squat". Wave 2 also breaks "triplets mirrored by +1", because of the cross-body reverse-fly triplet.
+  - `moves.test.ts`: `ALL_MANUAL` must have no rule, and `POSE_TRACKED` is a fixed list.
+  - `catalog.test.ts`: every tracked exercise's tempo matches `Lift 1 s · Lower 2 s | Down 2 s · Up 1 s`. Concentration curls is `Lift 1 s · Hold 1 s · Lower 2 s`.
+  - `e2e/howto.spec.ts`: the Push A badge table and the Pull A "3D demo only" rows (Hammer Curls).
+- **The fixture suite** fails on a `fixtures/landmarks/<folder>/` that has no rule. The synthetic JSON can be rendered at any time, but it lands in the same commit as its rule or after it.
+- `scripts/devlog.mjs` keeps `KNOWN_FOLDERS` by hand, and `devlog.test.mjs` checks it against the rules.
+- The learning limit needs no change in `cameraView`'s focus tracker. It already reads `focusFlagsFor(rule, counter.rule)`, so masking in core is enough.
+
+**Ownership:**
+- core-engineer: `src/core/exercises/**`, `src/data/program.json`, `src/data/catalog.test.ts`, `src/data/devlog.ts`.
+- pose-engineer: `tools/synthetic.ts`, `scripts/synthetic.mjs`, `fixtures/**`, `scripts/devlog.mjs`, `e2e/camera.spec.ts`.
+- anatomy-3d-engineer: `src/ui/demo3d/**`.
+- ui-engineer: badges, the camera page, the "Last set" fix, styles, the other e2e specs.
+- main: `playwright.config.ts`, `app.ts` (only if needed), git.
+
+#### Wave 1 — the easy six (starts when the M4d batch merges)
+- [x] 1. [core-engineer ∥A] Rule status + learning mask, **tests first**.
+  - Files: src/core/exercises/types.ts, index.ts, the six existing rule files (one line each), index.test.ts.
+  - `RuleStatus = 'learning' | 'tuned'`, plus a **required** `status` on `ExerciseRule`. The six existing rules get `'tuned'`.
+  - In index.ts:
+    - `LEARNING_FOCUS_IDS = ['rushedLowering', 'stalled', 'outOfFrame', 'lowFps']`;
+    - `focusFlagsFor` turns off every other id for a learning rule (`shrinkingRange` + the form rules);
+    - `GRANDFATHERED_TUNED` = the six original folders;
+    - `rulesTunedWithoutRealFixtures(rules, realFolders)`, the same shape as `formRulesWithoutRealFixtures`;
+    - `ruleStatus(exerciseId): RuleStatus | undefined`.
+  - Done when index.test covers:
+    - every rule declares a status;
+    - a learning rule declares only `LEARNING_FOCUS_IDS` flags and no form key;
+    - `focusFlagsFor` on a learning rule with `shrinkingRange: true` forced → false, while `rushedLowering` stays true;
+    - the guard returns `['<folder>']` for a fake tuned new rule without `real-*` files and `[]` for the grandfathered six;
+    - the six are tuned, and their flags and fixture counts are unchanged (23 cases).
+  - Deps: none.
+- [x] 2. [core-engineer ∥A, after 1] The six wave 1 rules as data, **tests first**.
+  - Files: src/core/exercises/{hammerCurl,concentrationCurl,inclineCurl,dbShoulderPress,bentOverRow,tricepsExtension}.ts, index.ts (`RULES`), index.test.ts, repCounter.test.ts.
+  - Values: exactly the SPEC M4f wave 1 tables (folder, view, triplet, start/eccentric, thresholds, gates, hints, placement), with `status: 'learning'` and the learning focus flags.
+  - Rewrite the "only X" tests in index.test as per-folder tables: start, direction, extended gate, limb.
+  - Done when:
+    - index.test covers the SPEC value table, every hint ≤ 6 words, placement lines ≤ 8 words, and the spoken sentence (with the distance);
+    - repCounter.test, from built angle curves for each new rule: 4 clean reps → 4, a turn 15° past start but short of far → one `far` partial, ±8° jitter in the start band → nothing;
+    - for triceps extension and the DB press, hanging arms (wrist below shoulder) curled up to the start → 0 reps;
+    - `npm run check` is green with task 5 applied. **This lands together with or after task 5**: the rules break `moves.test` line 97 until then.
+  - Deps: 1, 5.
+- [x] 3. [core-engineer ∥A, after 2] Program flip + data tests.
+  - Files: src/data/program.json (`tracking: "pose"` for the six), src/data/catalog.test.ts, index.test.ts.
+  - `catalog.test.ts`: widen the tempo check to allow an optional `Hold 1 s` (the demo timing test still pins eccentric 2 s / concentric 1 s).
+  - `index.test.ts`: the pose-id list becomes the 12.
+  - Done when `npm run check` is green **in one commit with task 10's howto.spec update** (the main session integrates).
+  - Deps: 2.
+- [x] 4. [core-engineer ∥B] `ruleStatus` in the dev log, **tests first**.
+  - Files: src/data/devlog.ts(+test), and src/data/db.ts if the row type needs it.
+  - `DevLogSetStart.ruleStatus?: RuleStatus` is stored, then exported in the set's `camera` block.
+  - Done when: a round-trip test covers it; an old row without it still exports; the size test still holds.
+  - Deps: 1 (type only; can start on the literal union).
+- [x] 5. [anatomy-3d-engineer] Make `moves.test.ts` data-driven.
+  - Files: src/ui/demo3d/moves.test.ts, plus moves.ts only if a newly tracked demo misses its thresholds.
+  - Changes:
+    - `POSE_TRACKED` = every demo whose exercise has a rule. Keep the original six as a floor (`toEqual` superset).
+    - "Manual has no rule" becomes "program `tracking: 'manual'` ⇒ `ruleFor` undefined".
+    - The manual-range block keeps filtering by `!ruleFor`.
+  - The newly tracked demos must then pass "≥ 10° past both thresholds", "starts where the rule starts, lowers the way it says" and "eccentric 2 s".
+  - Checked by hand: Hammer 180→30 vs 150/70, DB shoulder press 50→178 vs 143/80, triceps extension 180→45 vs 150/80 all clear. Also check the Pull B demos (concentration, incline, bent-over row) if the batch built them.
+  - Done when: moves.test passes with task 2's rules applied (a local patch is enough to check), and all other demo tests are unchanged.
+  - Deps: **the M4d batch merged**.
+- [ ] 6. [pose-engineer ∥] Synthetic clips for the six.
+  - Files: tools/synthetic.ts (six `EX` entries, original mannequin poses), scripts/synthetic.mjs, `fixtures/synthetic/<folder>/synthetic-0{1,2}*.webm`, `fixtures/landmarks/<folder>/synthetic-01__reps-4__partials-0.json` and `synthetic-02__reps-3__partials-2.json`.
+  - Poses:
+    - hammer: the curl pose, thumbs up;
+    - concentration: seated, elbow on the inner thigh, camera at ~3/4 from the working side;
+    - incline curl: torso reclined ~45°, arm hanging behind the torso line;
+    - DB shoulder press: the seated-press pose with a back pad;
+    - bent-over row: hinged ~45–60°, both arms rowing, no bench;
+    - triceps extension: standing, both hands on one dumbbell overhead, side camera.
+  - Partial turns land ≥ 15° past the start threshold and ≥ 10° short of the far one *as MediaPipe reads them* (it reads bent ends ~8–10° shallow).
+  - Rules:
+    - existing clips stay byte-identical;
+    - a clip under ~90% detection isn't committed (report it);
+    - thresholds are not touched: a clip the counter miscounts goes back to core-engineer.
+  - Done when: 12 JSON files with their detection rates, and the fixture suite counts each one by its filename (35 cases).
+  - Deps: none to start rendering (thresholds are in the SPEC). The JSON lands with or after task 2.
+- [ ] 7. [pose-engineer, after 2 + 4] Converter + camera e2e.
+  - Files: scripts/devlog.mjs, scripts/devlog.test.mjs, e2e/camera.spec.ts.
+  - `KNOWN_FOLDERS` += the six. The report prints "learning" on those sets.
+  - camera.spec: Hammer Curls now offers the camera, and Dumbbell Bench Press still doesn't.
+  - Done when: `npm run test:scripts` passes (including a learning set in a synthetic export), and camera.spec is green.
+  - Deps: 2, 4.
+- [x] 8. [ui-engineer ∥C] "Learning" badge.
+  - Files: src/ui/badges.ts, src/ui/howto.test.ts, src/ui/howto.css (tokens only), src/ui/icons.ts if a glyph is added (original, same 24 grid).
+  - `BadgeKind` += `'learning'`. `badgeList` appends `{ kind: 'learning', label: 'Learning' }` when `tracking === 'pose'` and `ruleStatus(id) === 'learning'`.
+  - Neutral pill, ≥ 20px. Not amber, not `--cta`.
+  - Done when unit tests show:
+    - Hammer (pose) → `['3D demo', 'Camera', 'Learning']`;
+    - Dumbbell Bicep Curl → `['3D demo', 'Camera']`;
+    - a learning rule with `tracking: 'manual'` → no Learning;
+    - typecheck and lint clean.
+  - Deps: 1 (can start on a stubbed `ruleStatus`).
+- [ ] 9. [ui-engineer, after 8] Learning note on the camera page and the "Last set" fix.
+  - Files: src/ui/cameraView.ts, src/ui/lastSetCorrection.ts, src/ui/screens/rest.ts and summary.ts (only if the fix row needs the status passed in), src/styles.css / handsfree.css (tokens).
+  - Camera page:
+    - a "Learning" chip in the top band (`data-learning`, accessible name per the SPEC);
+    - the setup-card line "Still learning: fix the count on Rest." (`.setup-learning`, after the placement lines);
+    - pass `ruleStatus` to `recorder.beginSet`.
+  - Fix row: "Camera still learning. Fix it if it's off." under a learning camera set's "Last set", on Rest, in the camera rest mode and on Summary.
+  - Nothing spoken.
+  - Done when:
+    - typecheck and lint clean;
+    - camera-layout, rep-panel, hands-free, devlog-camera and focus-cues are still green;
+    - the chip fits next to the title at 390×844 and 375×667 without wrapping the Close button.
+  - Deps: 1, 4, 8.
+- [ ] 10. [ui-engineer, after 3 + 6 + 9] E2E.
+  - Files: `e2e/learning.spec.ts` (new), e2e/howto.spec.ts.
+  - Cases:
+    1. Pull A preview: Hammer Curls `['3D demo', 'Camera', 'Learning']`, Dumbbell Bicep Curl without Learning. Push A table: Triceps Extension gets Camera + Learning.
+    2. The in-session list sheet and the Exercise header show the same badges.
+    3. Hammer Curls camera with the fixture landmarker on `hammer-curl/synthetic-01`: the chip and the setup line are visible, 4 reps are counted, and the gauge is present.
+    4. Set done → Rest shows the learning line beside Fix; Fix changes the row.
+    5. The dev-log export has `ruleStatus: 'learning'` on that set and `'tuned'` on a curl set.
+    6. The Bicep Curl camera has no chip.
+    7. No third-party request.
+  - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
+  - Deps: 3, 6, 9, 11.
+- [ ] 11. [main] Integration.
+  - Files: playwright.config.ts (put learning.spec in the fixture-landmarker project), app.ts only if the fix row needs the status passed in.
+  - Commit order: 5 → 1 → 2 + 6's JSON → 3 + 10's howto.spec → 4, 7, 8, 9.
+  - Done when `npm run check` and `npm run e2e` are green after each commit.
+  - Deps: as listed.
+- [ ] 12. [reviewer] Review the branch diff against CLAUDE.md:
+  - rules are data, with no `if (exercise === …)`;
+  - learning is enforced in core, not only in the UI;
+  - no form flag on a new folder, and no `tuned` without `real-*`;
+  - hints and placement use coaching words only;
+  - sizes (20 / 56 / 64px), and colour roles (Learning is neutral, not warn or cta);
+  - nothing new spoken;
+  - privacy: `ruleStatus` is an enum only.
+  - Deps: 7, 10.
+- [ ] 13. [verifier] Verify wave 1 against SPEC M4f Accept.
+  - `npm run check`: the fixture suite has 35 cases with unchanged old counts, and the guard and mask tests are green. Also `npm run e2e` and `npm run build`.
+  - 390×844 screenshots, console clean: `docs/screenshots/m4f-badges-pull-a.png`, `m4f-camera-learning-hammer.png`, `m4f-camera-setup-triceps.png`, `m4f-rest-learning-fix.png`, `m4f-handsfree-rest-learning.png`.
+  - `npm run devlog -- --dry-run` on an export marks the learning set.
+  - Evidence goes into PROGRESS.
+  - Deps: 12.
+- [ ] 14. [main] Merge `m4f-camera-more`, then **ask Wongsaton before pushing** (push = deploy). Deps: 13.
+- [ ] 15. 🧍 **Checkpoint F1 (wave 1 gym data).**
+  - Wongsaton trains with hands-free on: Pull A (hammer), Pull B (concentration, incline curl, bent-over row), Push A (triceps extension), Push B (DB shoulder press).
+  - He does ≥ 2 camera sets per new exercise, fixes every miscount on Rest, notes any placement that didn't work, then exports the dev log.
+  - Deps: 14.
+- [ ] 16. [pose-engineer, after 15] Convert the agreed sets.
+  - Run `npm run devlog` → `fixtures/landmarks/<folder>/real-<date>-s<n>__reps-<logged>__partials-<logged>.json`, landmarks only, **only sets Wongsaton OKs** (M4f-q8).
+  - Done when: the files are committed-ready, with a per-set report of counted vs logged.
+  - Deps: 15.
+- [ ] 17. [core-engineer, after 16] Replay, retune, promote, **tests first**.
+  - Replay each real set through the counter (and the focus tracker with timing rules on).
+  - Retune thresholds only as a Decision with the numbers.
+  - Flip `status: 'tuned'` per folder that meets the SPEC M4f criteria. `shrinkingRange` goes on only if ≤ 1 fire per real clip.
+  - Done when: the fixture suite counts every real set, the guard test is green, and the Decision table (folder × criterion × result) is written.
+  - Deps: 16.
+- [ ] 18. [reviewer] then [verifier] on the promotion diff (badge gone for the promoted exercises; screenshots). [main] then merges and asks to push. Deps: 17.
+
+**Wave 1, parallel lanes:**
+- **Right away, before the batch merges (no demo3d files):**
+  - 1 [core ∥A];
+  - 4 [core ∥B];
+  - 6 [pose], rendering only;
+  - 8 [ui ∥C], on a stubbed `ruleStatus`.
+- **When the batch merges:** 5 [anatomy-3d]. Then 2 [core ∥A, after 1 + 5].
+- **Then:**
+  - 3 [core ∥A];
+  - 7 [pose, after 2 + 4];
+  - 9 [ui, after 1 + 4 + 8].
+- **Last:** 11 → 10 → 12 → 13 → 14 → 🧍 15 → 16 → 17 → 18.
+- **Critical path:** batch merge → 5 → 2 → 3 → 10 → 12 → 13. Core ∥A and ∥B never share a file (exercises/* vs devlog.ts).
+
+- **Evidence, wave 1 tasks 1–5, 8 (2026-11-14):** M4d batch 2 committed first (bb227b2, reviewer PASS). Then tasks 1–5, 8 and the task-10 howto.spec update, reviewer PASS: `npm run check` on the exact staged tree → vitest 51 files / 1802 tests, scripts 24/24; `e2e/howto.spec.ts` 3/3. Task 5 changed one demo keyframe: bent-over row far elbow 80° → 75° (15° past the < 90° threshold). Not shippable yet: tasks 6, 7, 9, 10 (synthetic fixtures, converter, camera chip/setup line, `ruleStatus` into `beginSet`) must land before any push.
+
+#### Wave 2 — the doable nine (after Checkpoint F1 and his answers to M4f-q2/q6/q7, or their defaults)
+- [ ] 19. [core-engineer] New triplets, **tests first**.
+  - Files: src/core/exercises/triplets.ts, index.test.ts, src/core/angles.test.ts if needed.
+  - New triplets:
+    - `HIP` (shoulder–hip–knee);
+    - `ANKLE` (knee–ankle–foot index);
+    - `SHOULDER_LINE` (other shoulder–shoulder–elbow, cross-body).
+  - The "mirrored by +1" test allows a declared cross-body triplet: the joint and the end stay mirrored, and the far point is the twin of the joint.
+  - Done when: angle tests on built landmarks (hinge 90°, a standing hip ~170°, ankle 75→130, arm hanging vs level ~95→175) pass and the fixture suite is unchanged.
+  - Deps: 15.
+- [ ] 20. [core-engineer, after 19] The nine wave 2 rules as data, **tests first**, exactly as SPEC M4f wave 2 (all `learning`).
+  - Same test shape as task 2, plus:
+    - the calf raise and reverse fly as `increasing` rules;
+    - step-up and pushdown starting contracted;
+    - lunge, step-up, deadlift and calf as `leg`.
+  - Calf raise: the 25° span leaves exactly the hysteresis room; check the partial depth (15 < 25) still holds.
+  - Done when: `npm run check` is green with task 22 applied. Same landing rule as task 2 / task 5.
+  - Deps: 19.
+- [ ] 21. [core-engineer, after 20] Program flip for the nine + catalog tempo check.
+  - Allow `Pull … · Return …` / `Push … · Return …` and the Hold variants.
+  - Lunge targets per M4f-q6 (default: 10–12 → 20–24 total).
+  - Done when check is green with task 25's howto.spec update.
+  - Deps: 20.
+- [ ] 22. [anatomy-3d-engineer] Demos vs the wave 2 thresholds.
+  - Files: src/ui/demo3d/**.
+  - The demos must pass the ≥ 10° test:
+    - lunge 165→90 vs 155/110;
+    - deadlift 167→90 vs 155/115;
+    - calf 75→130 vs 90/115;
+    - pushdown 75→175 vs 155/105;
+    - pulldown 152→35 vs 140/70;
+    - plus face pull, cable row and step-ups if the batch built them.
+  - **The reverse fly demo measures hip–shoulder–elbow, but the rule measures the upper arm against the shoulder line.** Add a `shoulderLine` measure, or map it in the test.
+  - Done when moves.test passes with task 20's rules.
+  - Deps: 20 (values), any later M4d batch merged.
+- [ ] 23. [pose-engineer ∥] Synthetic clips for the nine (machines as box props, like the row bench). Same rules as task 6. 18 JSON files, and the suite is at 53 cases. The JSON lands with or after task 20. Deps: none to render.
+- [ ] 24. [pose-engineer, after 20] Converter `KNOWN_FOLDERS` += the nine, and camera.spec adds a leg exercise (Lunges) offering the camera. Deps: 20.
+- [ ] 25. [ui-engineer, after 21 + 23] E2E + labels.
+  - Update howto.spec for Legs A/B and Pull B.
+  - learning.spec gets a leg case: the Lunges camera with `lunge/synthetic-01` shows "Right leg"/"Left leg" and the chip.
+  - The lat pulldown setup card reads "Phone behind you": the pictogram stays front, and the text says behind.
+  - Done when: `--repeat-each=3` passes and the full e2e is green.
+  - Deps: 21, 23.
+- [ ] 26. [reviewer] → 27. [verifier] (same checks as 12/13; suite 53 cases; screenshots `m4f-w2-badges-legs-b.png`, `m4f-w2-camera-lunge.png`, `m4f-w2-setup-pulldown.png`) → 28. [main] merge + ask to push. Deps: 24, 25, 22.
+- [ ] 29. 🧍 **Checkpoint F2 (wave 2 gym data).** Legs A, Legs B, Pull A, Pull B and Push B; the same routine as F1. Then 30. [pose-engineer] convert → 31. [core-engineer] replay, retune, promote → 32. [reviewer]/[verifier]/[main], as tasks 16–18.
+
+**Wave 2, parallel lanes:** 19 and 23 right after F1; then 20; then 21, 22 and 24 in parallel; then 25 → 26 → 27 → 28 → 🧍 29.
 
 ### M10 — AI trainer (planned 2026-11-14; phase A first, B with M9, C optional)
 **Contract:** SPEC M10 and the Decision "M10 direction" (2026-11-14). All logic is **tests first**. Ownership
@@ -1196,6 +1429,31 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4f scope and the learning state (planner).** Wongsaton approved "Camera for more exercises" ("Yes, plan to do it") and said "I confirm everything you need right now". So the open points below use the defaults in Blockers M4f-q1…q9 and the work goes ahead. Contract: SPEC M4f.
+  - **Groups as agreed:**
+    - wave 1 (easy): hammer, concentration and incline curls, DB shoulder press, bent-over two-DB row, standing DB triceps extension;
+    - wave 2 (doable): lunges, step-ups, stiff-legged deadlift, standing calf raises, reverse flyes, face pull, triceps pushdown, lat pulldown, seated cable rows;
+    - manual: bench press, incline press, flyes, bench dips, cable crossover, leg press, leg extensions, lying leg curls, seated one-leg calf raise.
+    - Wave 1 starts once the M4d batch merges; wave 2 after his wave 1 gym data (Checkpoint F1).
+  - **Status is a required rule field, `status: 'learning' | 'tuned'`.**
+    - The six existing rules are **grandfathered as `tuned`**, including the curl, row and squat, which have no real fixtures. They shipped through M4/M5 with their M5 flags, and marking them learning now would silently turn their `shrinkingRange` off. Their form rules keep the M5 guard. (M4f-q5 asks whether he wants them marked too.)
+    - **A learning rule** counts as usual, speaks counts and the M4c partial hints, runs hands-free and gets a focus score. Its focus rules are limited to timing (`rushedLowering`, `stalled`) plus the presence/fps reports (`outOfFrame`, `lowFps`). `shrinkingRange` and every form rule are off.
+    - The limit is enforced in core twice: a data test, and a run-time mask in `focusFlagsFor`. The UI never decides it.
+  - **Promotion to tuned follows the M5 rule ("uncommitted data can only switch a rule off"):**
+    - the folder needs committed `real-*` fixtures meeting the pre-registered criteria in SPEC M4f (≥ 2 sets, ≥ 16 reps, counted exactly against his corrected labels, retunes logged as Decisions with every synthetic fixture still passing);
+    - a guard test fails on any non-grandfathered `tuned` folder without `real-*` files;
+    - `shrinkingRange` then turns on only under the M5 "≤ 1 fire per real clip" criterion.
+    - The SPEC M5 "Reliable from: all 6" wording now reads as "all tuned rules"; learning rules get the timing subset only.
+  - **UI copy:**
+    - "Learning" badge after "Camera" (data-driven);
+    - "Learning" chip in the camera top band;
+    - setup-card line "Still learning: fix the count on Rest.";
+    - fix-row line "Camera still learning. Fix it if it's off."
+    - None of it is spoken: it asks for no mid-set reaction, so it doesn't fall under "voice over screen".
+    - Neutral colour role: not warn, not the action colour.
+  - **Views and thresholds** are the SPEC M4f tables. They are starting values derived from the tuned neighbours (curl 150/70, row 145/90, press 143/80 in the image plane with the wrist-above-shoulder gate), with extra room at bent ends because world angles read bent ends shallow (M4 Decision). The triceps extension gets the press's extended gate, so lifting the dumbbell up from hanging arms isn't a rep. The DB shoulder press reuses the seated-press convention: shoulders start, the first press counts (Decision 2026-11-13, answer 2). No `otherView` on any new rule.
+  - **Wave 2 needs three new triplets** (hip, ankle, a cross-body shoulder line for reverse flyes, because the incline bench hides the hips). It also needs a looser "mirrored triplets" test. The reverse fly demo measures a different angle than its rule and must be reconciled (task 22).
+  - **Ordering note:** CLAUDE.md says to finish milestones in order. M4 is still provisional (Checkpoint B) and Checkpoints C/B3 are open. M4f proceeds on his explicit approval, like M5 did. Every new rule ships `learning`, so nothing unverified is presented as tuned.
 - 2026-11-14: **M4d batch 1, Legs A + Push B, 9 demos** (review PASS; check 1488 tests; anatomy/howto e2e 7/7): stiff-legged deadlift, lunges, lying leg curls, standing calf raises, dumbbell flyes, dumbbell shoulder press, cable crossover, triceps pushdown, bench dips. New measured joints: `hip`, `ankle`, `armOpen`. New optional `hold` (1 s, matching the how-to tempo lines).
   - **Deviations (accepted):**
     - Lunges use a fixed split stance, right leg forward only, with no step or switch.
@@ -1749,6 +2007,20 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - Non-blocking observations: (1) after Apply, set 3 at 40 lb (sets 8×35, 8×35, 8×40) gets A3 again, "+5 lb → 45 lb". That matches the rule table (A3 looks at reps only, all of today's sets), but it suggests a second jump after one set at the new weight; product call for Wongsaton (e.g. only count sets at the current weight). (2) The one-arm row demo has the hand on the bench but both feet on the floor, while how-to line 1 says "One knee and hand on the bench" (anatomy-3d-engineer or the how-to text). (3) In headless Chrome the gauge screenshot shows count "0 · Get into start position" while the gauge moves (counter still settling at 14 fps); expected.
 
 ## Blockers / questions for Wongsaton
+- **New (M4f Camera for more exercises, planned 2026-11-14; not blocking. Per "I confirm everything you need right now", the defaults below are what gets built unless you say otherwise):**
+  - **(M4f-q1) Curl and row style.** Hammer curls, incline curls and the bent-over row: do you move both arms together, or alternate? **Default: both together.** The phone sees you side-on and counts the near arm, so alternating would count only half your reps.
+  - **(M4f-q2) One arm or leg at a time** (concentration curls; step-ups in wave 2). **Default:**
+    - the camera counts the arm or leg nearest the phone, and reps are per side, as the plan already reads (10–12);
+    - do that side first: hands-free says "Set done" about 6 s after it, and the other side isn't counted;
+    - known cost: the rest clock starts when the first side ends, so "rest taken" includes the second side.
+    - Alternative: you turn around between sides and the camera counts both sides into one set. That's more work and needs your OK.
+  - **(M4f-q3) Partial hints while learning.** **Default: spoken as usual** ("Curl higher."), so you know why a rep didn't count and can fix it on Rest. Alternative: shown only, until the exercise is tuned.
+  - **(M4f-q4) Hands-free and the focus score while learning.** **Default: both on.** A wrong auto stop still has Undo, and a wrong count has Fix. Alternative: hands-free off for learning exercises.
+  - **(M4f-q5) The original six.** The curl, row and squat have never seen your real reps either. **Default: they stay as they are, with no "Learning" badge.** Alternative: mark them Learning too, which also turns their "Full range." cue off until real data confirms them.
+  - **(M4f-q6) Lunges (wave 2).** The camera counts every lunge, left and right. **Default: the target becomes the total**: 10–12 per leg → 20–24 per set in the plan. Alternative: keep per-leg targets and halve the count (an odd count rounds up).
+  - **(M4f-q7) Phone spots in your gym (wave 2).** The lat pulldown needs the phone **2–3 m behind you** at head height, because the machine blocks the front. Face pull, pushdown and the cable row need it **side-on, 2–3 m from the cable station**. Is there room? **Default: yes.** If not, that exercise stays manual.
+  - **(M4f-q8) Committing your real sets.** **Default:** after each gym checkpoint we commit, as landmark numbers only (never video), just the sets you OK, like B-q5. Those sets are what moves an exercise from Learning to tuned.
+  - **(M4f-q9) Triceps extension.** **Default: one dumbbell overhead with both hands** (the how-to). Alternative: one arm at a time, which would follow M4f-q2.
 - **New (M10 AI trainer, planned 2026-11-14; the defaults are what gets built if you say "go"):**
   - **(M10-q1) Rest days and "Not today".** Which weekday(s) are your rest days? Default: Sunday. When you postpone, should the coach use this week's rest day so you still get 6 sessions ("use rest day", the default), or slide the whole week by a day ("push week")? Both are offered; which one should be preselected?
   - **(M10-q2) "Go easy on my arms".** Exercises where arms are the **main** target (curls, triceps work) get swapped or removed. What about exercises where arms only **help** (rows, presses, pulldowns)? Default: keep them, 10% lighter. Alternatives: swap those too, or leave them as planned.

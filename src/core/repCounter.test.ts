@@ -1716,3 +1716,110 @@ describe('createRepCounter: per-side angles (M5 sideAngles)', () => {
     expect(read).toEqual(plain);
   });
 });
+
+// SPEC M4f wave 1: every new rule counts through the same generic counter. Built angle curves
+// per rule, read from the rule's own data (start/far thresholds, direction), never hard-coded.
+describe.each([
+  ['Hammer_Curls', 'above'],
+  ['Concentration_Curls', 'above'],
+  ['Incline_Dumbbell_Curl', 'above'],
+  ['Dumbbell_Shoulder_Press', 'below'],
+  ['Bent_Over_Two-Dumbbell_Row', 'above'],
+  ['Standing_Dumbbell_Triceps_Extension', 'below'],
+] as const)('createRepCounter: M4f wave 1 rule %s', (id, anchor) => {
+  const rule = mustRule(id);
+  // Toward the far end = the sign that moves the angle from the start threshold to the far one.
+  const startThr = rule[rule.start];
+  const farThr = rule.start === 'extended' ? rule.contracted : rule.extended;
+  const sign = Math.sign(farThr - startThr);
+  /** Well inside the start band and well past the far threshold. */
+  const home = startThr - sign * 25;
+  const far = farThr + sign * 25;
+  /** A turnaround past the start band by more than the partial depth, short of the far end. */
+  const turn = startThr + sign * (rule.minPartialDepthDeg + 5);
+  const toFarMs =
+    rule.eccentric === (rule.start === 'extended' ? 'toContracted' : 'toExtended') ? 1200 : 800;
+  const backMs = toFarMs === 1200 ? 800 : 1200;
+  const rep: [number, number][] = [
+    [toFarMs, far],
+    [300, far],
+    [backMs, home],
+    [500, home],
+  ];
+  const settle: [number, number][] = [[600, home]];
+
+  it('is a learning rule', () => {
+    expect(rule.status).toBe('learning');
+    expect(Math.abs(turn - farThr)).toBeGreaterThanOrEqual(10);
+  });
+
+  it('counts 4 clean reps, no partials', () => {
+    const keys = curve(home, [...settle, ...rep, ...rep, ...rep, ...rep]);
+    const { counter, events } = runAll(rule, sample(rule, keys, { anchor }));
+    expect(reps(events)).toHaveLength(4);
+    expect(partials(events)).toHaveLength(0);
+    expect(counter.reps).toBe(4);
+    // Lowering is the slow leg (1200 ms) in every curve here.
+    const first = reps(events)[0];
+    expect(first?.eccentricMs).toBeGreaterThan(first?.concentricMs ?? Infinity);
+  });
+
+  it('a turn past the start band but short of the far end is one far partial', () => {
+    const keys = curve(home, [
+      ...settle,
+      ...rep,
+      [700, turn],
+      [200, turn],
+      [700, home],
+      [500, home],
+      ...rep,
+    ]);
+    const { counter, events } = runAll(rule, sample(rule, keys, { anchor }));
+    expect(events.map((e) => e.type)).toEqual(['rep', 'partial', 'rep']);
+    expect(events[1]?.reason).toBe('far');
+    expect(counter.reps).toBe(2);
+    expect(counter.partials).toBe(1);
+  });
+
+  it('±8° jitter in the start band makes nothing', () => {
+    const keys = curve(home, [[6000, home]]);
+    const noise = (i: number) => (i % 2 === 0 ? 8 : -8);
+    const { counter, events } = runAll(rule, sample(rule, keys, { anchor, noise }));
+    expect(events).toHaveLength(0);
+    expect(counter.reps).toBe(0);
+    expect(counter.partials).toBe(0);
+  });
+});
+
+// SPEC M4f gates: for the DB press and the triceps extension the extended end only counts with
+// the wrist above the shoulder, so curling the dumbbells up from hanging arms is never a rep.
+describe.each(['Dumbbell_Shoulder_Press', 'Standing_Dumbbell_Triceps_Extension'] as const)(
+  'createRepCounter: %s extended gate',
+  (id) => {
+    const rule = mustRule(id);
+    // Arms hanging (anchor above: wrist below the shoulder), curled up to the bent end and back,
+    // as if lifting the dumbbells into place. Same angles as clean reps.
+    const keys = curve(175, [
+      [600, 175],
+      [900, 45],
+      [300, 45],
+      [1200, 175],
+      [500, 175],
+      [900, 45],
+      [300, 45],
+      [1200, 175],
+      [500, 175],
+    ]);
+
+    it('hanging arms curled up to the start and back count 0 reps', () => {
+      const { counter, events } = runAll(rule, sample(rule, keys, { anchor: 'above' }));
+      expect(reps(events)).toHaveLength(0);
+      expect(counter.reps).toBe(0);
+    });
+
+    it('the same angles overhead (wrist above the shoulder) count', () => {
+      const { counter } = runAll(rule, sample(rule, keys, { anchor: 'below' }));
+      expect(counter.reps).toBeGreaterThan(0);
+    });
+  },
+);

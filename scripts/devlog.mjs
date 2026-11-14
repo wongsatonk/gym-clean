@@ -40,6 +40,12 @@ export const KNOWN_FOLDERS = [
   'row',
   'goblet-squat',
   'lateral-raise',
+  'hammer-curl',
+  'concentration-curl',
+  'incline-curl',
+  'db-shoulder-press',
+  'bent-over-row',
+  'triceps-extension',
 ];
 
 const LABEL_RE = /^[a-z0-9][a-z0-9.-]*$/;

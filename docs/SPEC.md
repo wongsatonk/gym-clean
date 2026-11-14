@@ -311,6 +311,163 @@ to the gym and work out: clean, visual, sporty. Themes are OK if needed." Owner:
     persisting, Volt → gold success, `+30 s`, Skip/End only in the Pause sheet, fonts same-origin, and no
     third-party request.
 
+### M4f — Camera for more exercises (added 2026-11-14)
+Wongsaton approved it ("Yes, plan to do it"). Camera rep counting (the M4 counter, the M4c camera page,
+M5c hands-free and the M5 timing cues) is extended beyond the six tracked exercises. No new counting
+logic: each new exercise is one rule as data in `src/core/exercises/`, read by the same generic counter.
+The groups and their order:
+- **Wave 1, easy (first):** Hammer curls, Concentration curls, Incline dumbbell curl, Dumbbell shoulder
+  press, Bent-over two-dumbbell row, Standing dumbbell triceps extension. These use the elbow, in the same
+  views as the curl, row and press that already count. Wave 1 starts once the M4d 3D demo batch has merged.
+- **Wave 2, doable (later):** lunges, step-ups, stiff-legged deadlift, standing calf raises, reverse flyes,
+  face pull, triceps pushdown, lat pulldown, seated cable rows. They need new joints (hip, ankle, upper
+  arm against the shoulder line), a machine in the way, or an unusual phone spot. Wave 2 starts after
+  Wongsaton's wave 1 gym data (Checkpoint F1).
+- **Stays manual:** bench press, incline press, flyes, bench dips, cable crossover, leg press, leg
+  extensions, lying leg curls, seated one-leg calf raise. Reasons:
+  - Lying exercises stay manual (M4 rule).
+  - On the seated/lying machines the pads and frame hide the joints.
+  - Bench dips and the crossover put the body side-on to a bench or between two stacks, which hides an arm.
+  - The seated calf raise moves a small range under a weight on the knee.
+
+**Rule status: `learning` or `tuned`.** Each rule has a required field `status: 'learning' | 'tuned'`.
+- **The six existing rules are `tuned`** (grandfathered). They shipped through M4/M5, and their form rules
+  keep the M5 guard.
+- **Every M4f rule starts as `learning`.**
+- **What a learning rule does:** it counts reps and partials, speaks the count words and the M4c partial
+  hints, shows the gauge, and runs hands-free auto start/stop. Focus rules are limited to timing:
+  `rushedLowering` and `stalled` are on. `outOfFrame` and `lowFps` are also on; they only report
+  presence and light, never judge a rep. `shrinkingRange` and every form rule are off.
+- **The limit is enforced twice:** a data test on the rule's flags, and `focusFlagsFor` masks a learning
+  rule at run time.
+- **The focus score** is computed as for any camera set.
+- **Learning → tuned uses the M5 guard.** The folder must have committed real fixtures
+  (`fixtures/landmarks/<folder>/real-*.json`) that pass these pre-registered criteria:
+  1. ≥ 2 real sets with ≥ 16 reps in total;
+  2. the fixture suite counts every real set exactly. The labels are his logged numbers after any
+     "Fix last set" correction;
+  3. any threshold change needed to get there is a Decision with the numbers, and every synthetic
+     fixture still passes.
+- **A test fails** if a non-grandfathered rule is `tuned` without real fixtures.
+- **When a rule becomes tuned,** `shrinkingRange` turns on only if it fires ≤ 1 time per real clip (M5
+  criterion). Form rules still need their own SPEC M5 rows and criteria; none exist for these
+  exercises yet.
+
+**What the user sees for a learning exercise.** All of it is computed from data (`ruleFor(id)?.status` +
+`tracking`), never from a hard-coded list. None of it is spoken, because there is nothing to react to
+mid-set.
+- **Badge:** a fourth badge, **"Learning"** (`data-badge="learning"`), after "Camera". It shows in the
+  day preview, the in-session list sheet and the Exercise header. Neutral pill, ≥ 20px, not amber, not
+  the action colour.
+- **Camera page:** a small **"Learning"** chip in the top band next to the title (`data-learning`,
+  ≥ 20px, neutral). Its accessible name is "Learning: camera counting is new for this exercise". The
+  "Set up your phone" card gets one extra line under the placement lines: **"Still learning: fix the
+  count on Rest."**
+- **Rest, the camera rest mode and Summary:** the "Last set" fix of a learning camera set shows one line:
+  **"Camera still learning. Fix it if it's off."** Those corrected numbers are the labels that tune the
+  rule.
+- **Dev log:** each camera set records `ruleStatus`. The `npm run devlog` report marks learning sets, and
+  its known folders include the new ones.
+
+**Wave 1 rules** (all use world angles unless noted; thresholds are starting values, retuned on real sets):
+
+| Exercise (id) | Folder | View (otherView) | Angle | Start → far, lowering | Extended / contracted | Gates |
+|---|---|---|---|---|---|---|
+| Hammer curls (`Hammer_Curls`) | `hammer-curl` | side, best side (none) | elbow (shoulder–elbow–wrist) | extended → contracted; lowering toward extended | > 150° / < 70° | visibility only |
+| Concentration curls (`Concentration_Curls`) | `concentration-curl` | side, about 3/4 from the working arm's side, best side (none) | elbow | extended → contracted; lowering toward extended | > 145° / < 70° | visibility only (the arm braced on the thigh rarely locks out, hence 145) |
+| Incline dumbbell curl (`Incline_Dumbbell_Curl`) | `incline-curl` | side, best side (none) | elbow | extended → contracted; lowering toward extended | > 150° / < 70° | visibility only |
+| Dumbbell shoulder press (`Dumbbell_Shoulder_Press`) | `db-shoulder-press` | front, both arms (none) | elbow, **image plane** (as the seated press) | contracted → extended; lowering toward contracted | > 143° / < 80° | extended gate: wrist above shoulder |
+| Bent-over two-dumbbell row (`Bent_Over_Two-Dumbbell_Row`) | `bent-over-row` | side, best side (none) | elbow | extended → contracted; lowering toward extended | > 145° / < 90° | visibility only (a posture gate is the fallback if standing up between reps makes phantom reps) |
+| Standing DB triceps extension (`Standing_Dumbbell_Triceps_Extension`) | `triceps-extension` | side, best side (none) | elbow | extended (overhead) → contracted (behind the head); lowering toward contracted | > 150° / < 80° | extended gate: wrist above shoulder (lifting the dumbbell up from hanging arms isn't a rep) |
+
+| Folder | Hint: far / start (≤ 6 words) | Placement lines (≤ 8 words each) | Spoken placement sentence |
+|---|---|---|---|
+| `hammer-curl` | "Curl to shoulder height." / "Straighten your arm at the bottom." | Phone at waist height, side-on · Curling arm faces the phone · Shoulder to hand in frame, 2–3 m | "Stand side-on, 2 to 3 metres from the phone, with your curling arm in view." |
+| `concentration-curl` | "Curl up to your shoulder." / "Lower until your arm is straight." | Phone at seat height, 2–3 m · Working arm nearest the phone · Turn a little toward the phone | "Sit 2 to 3 metres from the phone, turned a little toward it, working arm nearest." |
+| `incline-curl` | "Curl higher." / "Lower all the way down." | Phone at bench height, side-on · Curling arm faces the phone · Shoulder to hand in frame, 2–3 m | "Put the phone at bench height, 2 to 3 metres away, side-on, with your arm in view." |
+| `db-shoulder-press` | "Press all the way up." / "Lower the weights to your shoulders." | Phone in front of you, chest height · Both arms and hips in frame · Leave room above your hands | "Face the phone at chest height, 2 to 3 metres away, with room above your hands." |
+| `bent-over-row` | "Pull your elbows higher." / "Let the arms hang straight." | Phone at hip height, side-on · Hinge with your side to the phone · Shoulders to hands in frame, 2–3 m | "Stand side-on, 2 to 3 metres from the phone, with your hinged back and arms in view." |
+| `triceps-extension` | "Lower it further behind your head." / "Straighten your arms overhead." | Phone at chest height, side-on · Arms overhead, room above the hands · Head to hips in frame, 2–3 m | "Stand side-on, 2 to 3 metres from the phone, with room above your hands." |
+
+  Notes:
+  - **Bilateral curls and the bent-over row:** both arms move together, and a side view counts the
+    near arm (M4f-q1).
+  - **Concentration curls:** the camera counts the arm nearest the phone. Reps are per arm, as in the
+    plan (M4f-q2).
+  - **Dumbbell shoulder press:** the seated-press counting convention applies; the first press from the
+    shoulders counts (Decision 2026-11-13, answer 2).
+  - **Triceps extension:** one dumbbell held overhead with both hands, as in the how-to (M4f-q9).
+
+**Wave 2 rules** (same columns; planned after Checkpoint F1, values may change with the wave 1 data):
+
+| Exercise (id) | Folder | View (otherView) | Angle | Start → far, lowering | Extended / contracted | Gates |
+|---|---|---|---|---|---|---|
+| Lunges (`Dumbbell_Lunges`) | `lunge` | side, best side, leg (none) | knee (hip–knee–ankle) of the near leg; it bends on every lunge, left or right | extended → contracted; lowering toward contracted | > 155° / < 110° | visibility only |
+| Step-ups (`Dumbbell_Step_Ups`) | `step-up` | side, best side, leg (none) | knee of the working leg (nearest the phone) | contracted (foot on the box) → extended (standing on it); lowering toward contracted | > 160° / < 120° | visibility only |
+| Stiff-legged deadlift (`Stiff-Legged_Dumbbell_Deadlift`) | `stiff-leg-deadlift` | side, best side, leg (none) | **hip** (shoulder–hip–knee), new triplet | extended → contracted; lowering toward contracted | > 155° / < 115° | visibility only. Back rounding and knee bend are not judged |
+| Standing calf raises (`Standing_Calf_Raises`) | `calf-raise` | side, best side, leg (none) | **ankle** (knee–ankle–foot index), new triplet; angle **increases** as the heels rise | extended (heels down) → contracted (on the toes); lowering toward extended | < 90° / > 115° | visibility of the foot points; small range, foot landmarks are noisy |
+| Reverse flyes (`Reverse_Flyes`) | `reverse-fly` | front (phone in front of the incline bench), both arms (none) | **upper arm vs shoulder line** (other shoulder–shoulder–elbow), new cross-body triplet (the bench hides the hips); increasing | extended (hanging) → contracted (level with the back); lowering toward extended | < 115° / > 145° | visibility only |
+| Face pull (`Face_Pull`) | `face-pull` | side, best side (none) | elbow | extended → contracted; return toward extended | > 145° / < 100° | visibility only (the 1 s hold is dwell, not timed) |
+| Triceps pushdown (`Triceps_Pushdown`) | `triceps-pushdown` | side, best side (none) | elbow | contracted (bar at chest) → extended; return toward contracted | > 155° / < 105° | visibility only (the stack may hide the far arm) |
+| Lat pulldown (`Wide-Grip_Lat_Pulldown`) | `lat-pulldown` | front, **phone behind him** (the machine blocks the front), both arms (none) | shoulder (hip–shoulder–elbow) | extended (arms up) → contracted (elbows down); return toward extended | > 140° / < 70° | visibility only. Seen from behind, MediaPipe may swap left/right; the both-arm mean doesn't care |
+| Seated cable rows (`Seated_Cable_Rows`) | `cable-row` | side, best side (none) | elbow | extended → contracted; return toward extended | > 145° / < 95° | visibility only |
+
+| Folder | Hint: far / start | Placement lines | Spoken placement sentence |
+|---|---|---|---|
+| `lunge` | "Sink a little lower." / "Stand all the way up." | Phone at hip height, side-on · Room to step forward · Whole body in frame, 2.5–3 m | "Stand side-on, 2.5 to 3 metres from the phone, with room to step forward." |
+| `step-up` | "Stand tall on the box." / "Step all the way down." | Phone at hip height, side-on · Working leg nearest the phone · Box and whole body in frame | "Stand side-on, 2.5 to 3 metres from the phone, working leg nearest, box in view." |
+| `stiff-leg-deadlift` | "Hinge a little deeper." / "Stand tall at the top." | Phone at hip height, side-on · One side faces the phone · Whole body in frame, 2.5–3 m | "Stand side-on, 2.5 to 3 metres from the phone, with your whole body in view." |
+| `calf-raise` | "Rise higher on your toes." / "Lower your heels all the way." | Phone on the floor, side-on · Feet and shins in frame · 2–3 m from the phone | "Put the phone on the floor, 2 to 3 metres away, side-on, feet in view." |
+| `reverse-fly` | "Open up to shoulder level." / "Let your arms hang down." | Phone in front of the bench · Both arms and shoulders in frame · Leave room beside your hands | "Put the phone in front of the bench, 2 to 3 metres away, both arms in view." |
+| `face-pull` | "Pull the rope to your face." / "Let your arms reach straight." | Phone at chest height, side-on · Pulling arm faces the phone · Head to hips in frame, 2–3 m | "Stand side-on, 2 to 3 metres from the phone, with your arms and the rope in view." |
+| `triceps-pushdown` | "Push until your arms are straight." / "Let the bar rise to chest." | Phone at chest height, side-on · Near arm faces the phone · Head to hips in frame, 2–3 m | "Stand side-on, 2 to 3 metres from the phone, with your arm and the bar in view." |
+| `lat-pulldown` | "Pull the bar to your chest." / "Let your arms go straight up." | Phone behind you, head height · Both arms and hips in frame · Leave room above the bar | "Put the phone 2 to 3 metres behind you at head height, both arms in view." |
+| `cable-row` | "Pull to your stomach." / "Let your arms reach forward." | Phone at seat height, side-on · Rowing arm faces the phone · Shoulder to hand in frame, 2–3 m | "Put the phone at seat height, 2 to 3 metres away, side-on, arms in view." |
+
+  Wave 2 open points:
+  - **Lunges:** every lunge is counted, so the plan's target becomes the total (M4f-q6).
+  - **Step-ups:** reps are per leg, like the concentration curl (M4f-q2).
+  - **Cable stations:** is there room side-on or behind (M4f-q7)?
+
+- **Fixtures:**
+  - Every new folder gets two synthetic clips, `synthetic-01__reps-4__partials-0` and
+    `synthetic-02__reps-3__partials-2`, rendered by our own mannequin (`npm run synthetic`) and
+    counted by the fixture suite.
+  - Real sets come from the dev log after each gym checkpoint. They are committed only with Wongsaton's
+    OK, as landmarks only, never video.
+  - SPEC §5 applies to the new folders.
+- **Accept (per wave):**
+  - **Rule tests, written first** for every new rule:
+    - threshold order and hysteresis room;
+    - SPEC values match the data;
+    - hints and placement checked as data (word limits, no banned words, distance in the spoken sentence);
+    - built angle curves: 4 clean reps → 4, a shallow turn → a `far` partial, ±8° jitter → nothing;
+    - for the gated rules, hanging arms brought up → 0 reps.
+  - **Status tests:**
+    - every rule declares a status;
+    - learning rules declare only the timing/presence flags and no form flag;
+    - `focusFlagsFor` masks a forced `shrinkingRange` on a learning rule;
+    - the tuned-without-real-fixtures guard fails on a fake promotion.
+  - **Fixture suite:** each new folder's two synthetic clips count exactly, and the existing counts are
+    unchanged.
+  - **3D demos:** every demo of a newly tracked exercise passes the M4b "≥ 10° past both thresholds,
+    starts where the rule starts" test.
+  - **Unit test:** the Learning badge comes from data.
+  - **E2E:**
+    - badges ("Learning" on a learning exercise, not on the curl);
+    - the camera page for a learning exercise with the fixture landmarker: chip, setup line, reps counted;
+    - the Rest learning line next to Fix;
+    - `ruleStatus` in the dev-log export;
+    - no third-party request.
+  - 390×844 screenshots.
+- 🧍 **Checkpoint F1 (after wave 1) / F2 (after wave 2):**
+  - Wongsaton trains the days with the new camera exercises: Pull A, Pull B, Push A and Push B for
+    wave 1; Legs A, Legs B, Pull A, Pull B and Push B for wave 2.
+  - He does ≥ 2 camera sets per new exercise, fixes every miscounted set on Rest, and notes placement
+    trouble.
+  - He exports the dev log. We convert it, commit the sets he OKs as `real-*` fixtures, retune, and
+    promote each rule that meets the criteria to `tuned`.
+
 ### M5 — Live trainer: focus & form cues
 - `src/core/focus.ts` consumes rep events (and per-frame landmarks where a rule needs them) and produces
   cues, following the coaching principle in §1. Baseline = first 2 reps of the set.

@@ -5,6 +5,7 @@ export const row: ExerciseRule = {
   ...COUNTER_DEFAULTS,
   exerciseId: 'One-Arm_Dumbbell_Row',
   folder: 'row',
+  status: 'tuned',
   view: 'side',
   limb: 'arm',
   triplets: ELBOW,

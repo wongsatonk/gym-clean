@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import exercisesJson from '../../data/exercises.json';
 import program from '../../data/program.json';
 import { LANDMARK, LANDMARK_COUNT } from '../poseTopology';
 import type { LandmarkFrame } from '../types';
@@ -13,11 +14,15 @@ import {
   FORM_RULE_EXERCISES,
   FORM_RULE_IDS,
   formRulesWithoutRealFixtures,
+  GRANDFATHERED_TUNED,
+  LEARNING_FOCUS_IDS,
   RULES,
   ruleFor,
   ruleForFolder,
+  ruleStatus,
+  rulesTunedWithoutRealFixtures,
 } from './index';
-import type { ExerciseRule } from './types';
+import type { ExerciseRule, FocusRuleFlags, RuleStatus } from './types';
 
 const L = LANDMARK;
 
@@ -28,9 +33,121 @@ const poseIds = [
     ),
   ),
 ];
+const programIds = [...new Set(program.days.flatMap((d) => d.exercises.map((e) => e.exerciseId)))];
+
+type Gate = 'wristAboveShoulder' | null;
+type Joint = 'elbow' | 'knee' | 'shoulder';
+/**
+ * SPEC §2 M4 table (as tuned in M4 task 7, Decision 2026-11-13) and the SPEC M4f wave 1 table:
+ * folder, id, status, view, joint, extended, contracted, direction, start, eccentric, sideMode,
+ * angleSpace, extended gate, limb. One row per rule, so a new rule is a new row, never an
+ * "only X" exception.
+ */
+type SpecRow = readonly [
+  folder: string,
+  id: string,
+  status: RuleStatus,
+  view: 'side' | 'front',
+  joint: Joint,
+  extended: number,
+  contracted: number,
+  direction: ExerciseRule['direction'],
+  start: ExerciseRule['start'],
+  eccentric: ExerciseRule['eccentric'],
+  sideMode: ExerciseRule['sideMode'],
+  angleSpace: 'world' | 'image',
+  gate: Gate,
+  limb: ExerciseRule['limb'],
+];
+// prettier-ignore
+const SPEC_RULES: readonly SpecRow[] = [
+  ['curl', 'Dumbbell_Bicep_Curl', 'tuned', 'side', 'elbow', 150, 70, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
+  ['push-up', 'Pushups', 'tuned', 'side', 'elbow', 150, 95, 'decreasing', 'extended', 'toContracted', 'best', 'world', null, 'arm'],
+  ['shoulder-press', 'Seated_Dumbbell_Press', 'tuned', 'front', 'elbow', 143, 80, 'decreasing', 'contracted', 'toContracted', 'both', 'image', 'wristAboveShoulder', 'arm'],
+  ['row', 'One-Arm_Dumbbell_Row', 'tuned', 'side', 'elbow', 145, 90, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
+  ['goblet-squat', 'Goblet_Squat', 'tuned', 'side', 'knee', 160, 100, 'decreasing', 'extended', 'toContracted', 'best', 'world', null, 'leg'],
+  ['lateral-raise', 'Side_Lateral_Raise', 'tuned', 'front', 'shoulder', 25, 75, 'increasing', 'extended', 'toExtended', 'both', 'world', null, 'arm'],
+  // SPEC M4f wave 1 (all learning).
+  ['hammer-curl', 'Hammer_Curls', 'learning', 'side', 'elbow', 150, 70, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
+  ['concentration-curl', 'Concentration_Curls', 'learning', 'side', 'elbow', 145, 70, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
+  ['incline-curl', 'Incline_Dumbbell_Curl', 'learning', 'side', 'elbow', 150, 70, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
+  ['db-shoulder-press', 'Dumbbell_Shoulder_Press', 'learning', 'front', 'elbow', 143, 80, 'decreasing', 'contracted', 'toContracted', 'both', 'image', 'wristAboveShoulder', 'arm'],
+  ['bent-over-row', 'Bent_Over_Two-Dumbbell_Row', 'learning', 'side', 'elbow', 145, 90, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
+  ['triceps-extension', 'Standing_Dumbbell_Triceps_Extension', 'learning', 'side', 'elbow', 150, 80, 'decreasing', 'extended', 'toContracted', 'best', 'world', 'wristAboveShoulder', 'arm'],
+];
+
+/** SPEC M4f wave 1 coaching table: folder, hint far / start, placement lines, spoken sentence. */
+const SPEC_M4F_COACHING = [
+  [
+    'hammer-curl',
+    'Curl to shoulder height.',
+    'Straighten your arm at the bottom.',
+    [
+      'Phone at waist height, side-on',
+      'Curling arm faces the phone',
+      'Shoulder to hand in frame, 2–3 m',
+    ],
+    'Stand side-on, 2 to 3 metres from the phone, with your curling arm in view.',
+  ],
+  [
+    'concentration-curl',
+    'Curl up to your shoulder.',
+    'Lower until your arm is straight.',
+    [
+      'Phone at seat height, 2–3 m',
+      'Working arm nearest the phone',
+      'Turn a little toward the phone',
+    ],
+    'Sit 2 to 3 metres from the phone, turned a little toward it, working arm nearest.',
+  ],
+  [
+    'incline-curl',
+    'Curl higher.',
+    'Lower all the way down.',
+    [
+      'Phone at bench height, side-on',
+      'Curling arm faces the phone',
+      'Shoulder to hand in frame, 2–3 m',
+    ],
+    'Put the phone at bench height, 2 to 3 metres away, side-on, with your arm in view.',
+  ],
+  [
+    'db-shoulder-press',
+    'Press all the way up.',
+    'Lower the weights to your shoulders.',
+    [
+      'Phone in front of you, chest height',
+      'Both arms and hips in frame',
+      'Leave room above your hands',
+    ],
+    'Face the phone at chest height, 2 to 3 metres away, with room above your hands.',
+  ],
+  [
+    'bent-over-row',
+    'Pull your elbows higher.',
+    'Let the arms hang straight.',
+    [
+      'Phone at hip height, side-on',
+      'Hinge with your side to the phone',
+      'Shoulders to hands in frame, 2–3 m',
+    ],
+    'Stand side-on, 2 to 3 metres from the phone, with your hinged back and arms in view.',
+  ],
+  [
+    'triceps-extension',
+    'Lower it further behind your head.',
+    'Straighten your arms overhead.',
+    [
+      'Phone at chest height, side-on',
+      'Arms overhead, room above the hands',
+      'Head to hips in frame, 2–3 m',
+    ],
+    'Stand side-on, 2 to 3 metres from the phone, with room above your hands.',
+  ],
+] as const;
 
 describe('rule coverage', () => {
-  it('program has the six pose-tracked exercises', () => {
+  it('program has the twelve pose-tracked exercises (original six + M4f wave 1)', () => {
     expect(poseIds.sort()).toEqual(
       [
         'Dumbbell_Bicep_Curl',
@@ -39,6 +156,13 @@ describe('rule coverage', () => {
         'Pushups',
         'Seated_Dumbbell_Press',
         'Side_Lateral_Raise',
+        // M4f wave 1 (learning)
+        'Bent_Over_Two-Dumbbell_Row',
+        'Concentration_Curls',
+        'Dumbbell_Shoulder_Press',
+        'Hammer_Curls',
+        'Incline_Dumbbell_Curl',
+        'Standing_Dumbbell_Triceps_Extension',
       ].sort(),
     );
   });
@@ -53,16 +177,23 @@ describe('rule coverage', () => {
     }
   });
 
-  it("every rule's exerciseId is a pose exercise", () => {
-    for (const r of RULES) expect(poseIds).toContain(r.exerciseId);
+  it("every rule's exerciseId is a catalog exercise in the program", () => {
+    const catalog = new Set((exercisesJson as { id: string }[]).map((e) => e.id));
+    for (const r of RULES) {
+      expect(catalog.has(r.exerciseId), r.exerciseId).toBe(true);
+      expect(programIds, r.exerciseId).toContain(r.exerciseId);
+    }
   });
 
-  it('folder names are unique and match the fixture folders', () => {
+  it("every rule's exerciseId is camera-tracked in the program (rules and pose ids are 1:1)", () => {
+    for (const r of RULES) expect(poseIds, r.exerciseId).toContain(r.exerciseId);
+    expect(RULES).toHaveLength(poseIds.length);
+  });
+
+  it('folder names are unique and match the SPEC M4/M4f fixture folders', () => {
     const folders = RULES.map((r) => r.folder);
     expect(new Set(folders).size).toBe(folders.length);
-    expect([...folders].sort()).toEqual(
-      ['curl', 'goblet-squat', 'lateral-raise', 'push-up', 'row', 'shoulder-press'].sort(),
-    );
+    expect([...folders].sort()).toEqual(SPEC_RULES.map(([folder]) => folder).sort());
     for (const r of RULES) expect(ruleForFolder(r.folder)).toBe(r);
   });
 
@@ -125,77 +256,76 @@ describe('per-exercise data (SPEC §2 M4 table)', () => {
     return r;
   };
 
-  it.each([
-    ['curl', 'Dumbbell_Bicep_Curl', 'side', 150, 70],
-    ['push-up', 'Pushups', 'side', 150, 95],
-    ['shoulder-press', 'Seated_Dumbbell_Press', 'front', 143, 80],
-    ['row', 'One-Arm_Dumbbell_Row', 'side', 145, 90],
-    ['goblet-squat', 'Goblet_Squat', 'side', 160, 100],
-    ['lateral-raise', 'Side_Lateral_Raise', 'front', 25, 75],
-  ] as const)('%s → %s, %s view, extended %d, contracted %d', (folder, id, view, ext, con) => {
-    const r = get(folder);
-    expect(r.exerciseId).toBe(id);
-    expect(r.view).toBe(view);
-    expect(r.extended).toBe(ext);
-    expect(r.contracted).toBe(con);
-  });
-
-  it('joint triplets: elbow for arms, knee for squat, shoulder for lateral raise', () => {
-    const elbow = {
+  const TRIPLETS: Record<Joint, ExerciseRule['triplets']> = {
+    elbow: {
       left: [L.LEFT_SHOULDER, L.LEFT_ELBOW, L.LEFT_WRIST],
       right: [L.RIGHT_SHOULDER, L.RIGHT_ELBOW, L.RIGHT_WRIST],
-    };
-    for (const f of ['curl', 'push-up', 'shoulder-press', 'row'])
-      expect(get(f).triplets).toEqual(elbow);
-    expect(get('goblet-squat').triplets).toEqual({
+    },
+    knee: {
       left: [L.LEFT_HIP, L.LEFT_KNEE, L.LEFT_ANKLE],
       right: [L.RIGHT_HIP, L.RIGHT_KNEE, L.RIGHT_ANKLE],
-    });
-    expect(get('lateral-raise').triplets).toEqual({
+    },
+    shoulder: {
       left: [L.LEFT_HIP, L.LEFT_SHOULDER, L.LEFT_ELBOW],
       right: [L.RIGHT_HIP, L.RIGHT_SHOULDER, L.RIGHT_ELBOW],
-    });
-  });
+    },
+  };
+  const WRIST_ABOVE_SHOULDER = {
+    upper: { left: L.LEFT_WRIST, right: L.RIGHT_WRIST },
+    lower: { left: L.LEFT_SHOULDER, right: L.RIGHT_SHOULDER },
+  };
 
-  it('lateral raise is the only inverted (increasing) rule', () => {
-    for (const r of RULES) {
-      expect(r.direction).toBe(r.folder === 'lateral-raise' ? 'increasing' : 'decreasing');
-    }
-  });
+  it.each(SPEC_RULES.map((row) => [row.slice(0, 2).join(' → '), row] as const))(
+    '%s matches its SPEC row',
+    (_name, row) => {
+      const [
+        folder,
+        id,
+        status,
+        view,
+        joint,
+        ext,
+        con,
+        dir,
+        start,
+        ecc,
+        sideMode,
+        space,
+        gate,
+        limb,
+      ] = row;
+      const r = get(folder);
+      expect(r.exerciseId).toBe(id);
+      expect(r.status).toBe(status);
+      expect(r.view).toBe(view);
+      expect(r.triplets).toEqual(TRIPLETS[joint]);
+      expect(r.extended).toBe(ext);
+      expect(r.contracted).toBe(con);
+      expect(r.direction).toBe(dir);
+      expect(r.start).toBe(start);
+      expect(r.eccentric).toBe(ecc);
+      expect(r.sideMode).toBe(sideMode);
+      expect(r.angleSpace ?? 'world').toBe(space);
+      if (gate === 'wristAboveShoulder') expect(r.extendedGate).toEqual(WRIST_ABOVE_SHOULDER);
+      else expect(r.extendedGate).toBeUndefined();
+      expect(r.limb).toBe(limb);
+    },
+  );
 
-  it('shoulder press starts contracted, the rest start extended', () => {
-    for (const r of RULES) {
-      expect(r.start).toBe(r.folder === 'shoulder-press' ? 'contracted' : 'extended');
-    }
-  });
-
-  it('eccentric (lowering) phase: toward extended for curl/row/raise, toward contracted for push-up/squat/press', () => {
-    expect(get('curl').eccentric).toBe('toExtended');
-    expect(get('row').eccentric).toBe('toExtended');
-    expect(get('lateral-raise').eccentric).toBe('toExtended');
-    expect(get('push-up').eccentric).toBe('toContracted');
-    expect(get('goblet-squat').eccentric).toBe('toContracted');
-    expect(get('shoulder-press').eccentric).toBe('toContracted');
+  it('the table covers every rule', () => {
+    expect(SPEC_RULES.map(([f]) => f).sort()).toEqual(RULES.map((r) => r.folder).sort());
   });
 
   it('side views use the best-visible side, front views use both', () => {
     for (const r of RULES) expect(r.sideMode).toBe(r.view === 'side' ? 'best' : 'both');
   });
 
-  it('limb label: leg for squat, arm otherwise', () => {
-    for (const r of RULES) expect(r.limb).toBe(r.folder === 'goblet-squat' ? 'leg' : 'arm');
-  });
-
-  it('only the shoulder press has an extended gate (wrist above shoulder)', () => {
-    for (const r of RULES) {
-      if (r.folder === 'shoulder-press') {
-        expect(r.extendedGate).toEqual({
-          upper: { left: L.LEFT_WRIST, right: L.RIGHT_WRIST },
-          lower: { left: L.LEFT_SHOULDER, right: L.RIGHT_SHOULDER },
-        });
-      } else {
-        expect(r.extendedGate).toBeUndefined();
-      }
+  it('M4f rules add no other view, posture gate, body-line gate or hands-free override', () => {
+    for (const r of RULES.filter((x) => !GRANDFATHERED_TUNED.includes(x.folder))) {
+      expect(r.otherView, r.folder).toBeUndefined();
+      expect(r.maxTorsoLeanDeg, r.folder).toBeUndefined();
+      expect(r.minHipAngleDeg, r.folder).toBeUndefined();
+      expect(r.autoSet, r.folder).toBeUndefined();
     }
   });
 
@@ -243,6 +373,15 @@ describe('extendedGatePasses', () => {
 
   it('fails when the gate landmarks are missing', () => {
     expect(extendedGatePasses(press, { t: 0, landmarks: [] }, 'right')).toBe(false);
+  });
+
+  it('the triceps extension and the DB press share the press gate: hanging arms fail it', () => {
+    for (const f of ['triceps-extension', 'db-shoulder-press']) {
+      const r = ruleForFolder(f);
+      if (!r) throw new Error(f);
+      expect(extendedGatePasses(r, frameWith(0.1, 0.3), 'right'), f).toBe(true);
+      expect(extendedGatePasses(r, frameWith(0.6, 0.3), 'left'), f).toBe(false);
+    }
   });
 
   it('always passes for rules without a gate', () => {
@@ -307,6 +446,17 @@ describe('coaching data per exercise', () => {
   ] as const)('%s: far "%s", start "%s"', (folder, far, start) => {
     expect(get(folder).hints).toEqual({ far, start });
   });
+
+  it.each(SPEC_M4F_COACHING)(
+    'SPEC M4f %s: far "%s", start "%s", placement lines and spoken sentence',
+    (folder, far, start, lines, spoken) => {
+      const r = get(folder);
+      expect(r.hints).toEqual({ far, start });
+      expect(r.placement.lines).toEqual(lines);
+      expect(r.placement.spoken).toBe(spoken);
+      expect(r.placement.distanceM).toEqual([2, 3]);
+    },
+  );
 
   it('push-up placement puts the phone on the floor, 2.5–3 m away (a lying body fits a portrait frame)', () => {
     const p = get('push-up').placement;
@@ -469,6 +619,13 @@ describe('focus rule flags (M5)', () => {
       'lateral-raise',
       { ...ALL_FOCUS, shrinkingRange: true, armsOutOfSync: true, raiseTooHigh: true },
     ],
+    // SPEC M4f: learning rules run the timing rules and presence/fps reports only.
+    ['hammer-curl', ALL_FOCUS],
+    ['concentration-curl', ALL_FOCUS],
+    ['incline-curl', ALL_FOCUS],
+    ['db-shoulder-press', ALL_FOCUS],
+    ['bent-over-row', ALL_FOCUS],
+    ['triceps-extension', ALL_FOCUS],
   ] as const)('%s flags', (folder, flags) => {
     expect(get(folder).focus).toEqual(flags);
   });
@@ -523,5 +680,144 @@ describe('focusFlagsFor', () => {
     expect(focusFlagsFor(bare)).toEqual({});
     // No otherView: an unexpected view keeps the rule's own flags.
     expect(focusFlagsFor(curl, 'front')).toEqual(curl.focus);
+  });
+});
+
+// M4f task 1: rule status `learning` | `tuned` (SPEC M4f, Decision "M4f scope and the learning
+// state"). A learning rule judges reps by timing only; promotion to tuned needs real fixtures.
+describe('rule status (M4f)', () => {
+  const get = (folder: string): ExerciseRule => {
+    const r = ruleForFolder(folder);
+    if (!r) throw new Error(folder);
+    return r;
+  };
+  const SIX = ['curl', 'push-up', 'shoulder-press', 'row', 'goblet-squat', 'lateral-raise'];
+
+  /** Folders with real fixtures on disk (`fixtures/landmarks/<folder>/real-*.json`). */
+  const REAL = import.meta.glob('../../../fixtures/landmarks/*/real-*.json');
+  const realFolders = new Set(
+    Object.keys(REAL).map((p) => /fixtures\/landmarks\/([^/]+)\//.exec(p)?.[1] ?? ''),
+  );
+
+  /** A made-up new rule (not in RULES) for the guard and mask tests. */
+  const fakeNew = (status: RuleStatus, focus: FocusRuleFlags): ExerciseRule => ({
+    ...get('curl'),
+    exerciseId: 'Hammer_Curls',
+    folder: 'hammer-curl-test',
+    status,
+    focus,
+  });
+
+  it('every rule declares a status: learning or tuned', () => {
+    for (const r of RULES) expect(['learning', 'tuned'], r.folder).toContain(r.status);
+  });
+
+  it('every rule outside the grandfathered six is learning (SPEC M4f wave 1)', () => {
+    const fresh = RULES.filter((r) => !GRANDFATHERED_TUNED.includes(r.folder));
+    expect(fresh.map((r) => r.folder).sort()).toEqual(
+      [
+        'bent-over-row',
+        'concentration-curl',
+        'db-shoulder-press',
+        'hammer-curl',
+        'incline-curl',
+        'triceps-extension',
+      ].sort(),
+    );
+    for (const r of fresh) expect(r.status, r.folder).toBe('learning');
+    expect(ruleStatus('Hammer_Curls')).toBe('learning');
+  });
+
+  it('the original six are grandfathered as tuned', () => {
+    expect([...GRANDFATHERED_TUNED].sort()).toEqual([...SIX].sort());
+    for (const f of SIX) expect(get(f).status, f).toBe('tuned');
+  });
+
+  it('learning focus ids are the timing rules plus the presence/fps reports', () => {
+    expect([...LEARNING_FOCUS_IDS].sort()).toEqual(
+      ['lowFps', 'outOfFrame', 'rushedLowering', 'stalled'].sort(),
+    );
+    for (const id of LEARNING_FOCUS_IDS) expect(FORM_RULE_IDS).not.toContain(id);
+    expect(LEARNING_FOCUS_IDS).not.toContain('shrinkingRange');
+  });
+
+  it('a learning rule declares only learning focus flags, no form key, no variant flags', () => {
+    for (const r of RULES.filter((x) => x.status === 'learning')) {
+      for (const k of Object.keys(r.focus ?? {}) as FocusCueId[]) {
+        expect(LEARNING_FOCUS_IDS, `${r.folder}.${k}`).toContain(k);
+      }
+      expect(r.otherView?.focus, r.folder).toBeUndefined();
+    }
+  });
+
+  it('focusFlagsFor masks a learning rule: shrinking range and form rules off, timing stays', () => {
+    const r = fakeNew('learning', {
+      rushedLowering: true,
+      stalled: true,
+      outOfFrame: true,
+      lowFps: true,
+      shrinkingRange: true,
+      elbowDrift: true,
+      bodySwing: true,
+    });
+    const f = focusFlagsFor(r);
+    expect(f.shrinkingRange).toBe(false);
+    expect(f.elbowDrift).toBe(false);
+    expect(f.bodySwing).toBe(false);
+    expect(f.rushedLowering).toBe(true);
+    expect(f.stalled).toBe(true);
+    expect(f.outOfFrame).toBe(true);
+    expect(f.lowFps).toBe(true);
+    // In every view, and with an otherView's flags trying to switch them back on.
+    const withVariant: ExerciseRule = {
+      ...r,
+      otherView: {
+        view: 'front',
+        sideMode: 'both',
+        extended: r.extended,
+        contracted: r.contracted,
+        focus: { shrinkingRange: true, armsOutOfSync: true },
+      },
+    };
+    const front = focusFlagsFor(withVariant, 'front');
+    expect(front.shrinkingRange).toBe(false);
+    expect(front.armsOutOfSync).toBe(false);
+    expect(front.rushedLowering).toBe(true);
+  });
+
+  it('focusFlagsFor leaves a tuned rule as it was', () => {
+    const r = fakeNew('tuned', { rushedLowering: true, shrinkingRange: true });
+    expect(focusFlagsFor(r)).toEqual({ rushedLowering: true, shrinkingRange: true });
+    for (const f of SIX) expect(focusFlagsFor(get(f))).toEqual(get(f).focus);
+  });
+
+  it('every non-grandfathered tuned rule has committed real fixtures', () => {
+    expect(rulesTunedWithoutRealFixtures(RULES, realFolders)).toEqual([]);
+  });
+
+  it('the promotion guard catches a new rule marked tuned without real fixtures', () => {
+    const tuned = fakeNew('tuned', { rushedLowering: true });
+    expect(rulesTunedWithoutRealFixtures([tuned], new Set())).toEqual(['hammer-curl-test']);
+    // With real fixtures for its folder it may be tuned.
+    expect(rulesTunedWithoutRealFixtures([tuned], new Set(['hammer-curl-test']))).toEqual([]);
+    // Learning rules never need real fixtures.
+    expect(
+      rulesTunedWithoutRealFixtures([fakeNew('learning', { stalled: true })], new Set()),
+    ).toEqual([]);
+    // The grandfathered six pass even with no real fixtures at all.
+    expect(
+      rulesTunedWithoutRealFixtures(
+        SIX.map((f) => get(f)),
+        new Set(),
+      ),
+    ).toEqual([]);
+  });
+
+  it('ruleStatus gives the status by exercise id, undefined without a rule', () => {
+    expect(ruleStatus('Dumbbell_Bicep_Curl')).toBe('tuned');
+    expect(ruleStatus('Side_Lateral_Raise')).toBe('tuned');
+    for (const r of RULES) expect(ruleStatus(r.exerciseId)).toBe(r.status);
+    expect(ruleStatus('Dumbbell_Bench_Press')).toBeUndefined();
+    expect(ruleStatus('')).toBeUndefined();
   });
 });

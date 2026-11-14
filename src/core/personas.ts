@@ -377,6 +377,86 @@ const EXERCISE_CUES: Template = {
 // Phone placement (exercise rules' `placement.spoken`), shortened to stay ≤ 14 words.
 
 const PLACEMENT: Template[] = [
+  // SPEC M4f wave 1 sentences. Before placement.sideOn: the bent-over row's would match it but
+  // run past 14 words.
+  {
+    id: 'placement.hinge',
+    match: re(
+      /^Stand side-on, (?<dist>.+?) from the phone, with your hinged back and arms in view\.$/,
+    ),
+    lines: {
+      1: [
+        'Side-on, {dist} out, hinged, arms in view. Move it!',
+        'Hinge side-on, recruit! {dist} out, arms in view.',
+      ],
+      2: [
+        'Side-on, damn it! {dist} out, hinged, arms in view.',
+        'Hinge side-on, {dist} out, arms in view. Hell, move!',
+      ],
+      3: [
+        'Fucking side-on! {dist} out, hinged, arms in view.',
+        'Hinge side-on, {dist} out, arms in view. Fucking move!',
+      ],
+    },
+  },
+  {
+    id: 'placement.sideOnRoom',
+    match: re(/^Stand side-on, (?<dist>.+?) from the phone, with room above your hands\.$/),
+    lines: {
+      1: [
+        'Side-on, {dist} out, room above your hands. Move it!',
+        'Side-on, recruit! {dist} out, room above your hands.',
+      ],
+      2: [
+        'Side-on, damn it! {dist} out, room above your hands.',
+        'Side-on, {dist} out, room above your hands. Hell, move!',
+      ],
+      3: [
+        'Fucking side-on! {dist} out, room above your hands.',
+        'Side-on, {dist} out, room above your hands. Fucking move!',
+      ],
+    },
+  },
+  {
+    id: 'placement.seatedTurned',
+    match: re(
+      /^Sit (?<dist>.+?) from the phone, turned a little toward it, working arm nearest\.$/,
+    ),
+    lines: {
+      1: [
+        'Sit {dist} out, turned in, working arm nearest. Move!',
+        'Sit, recruit! {dist} out, working arm nearest.',
+      ],
+      2: [
+        'Sit {dist} out, turned in, working arm nearest. Damn, move!',
+        'Sit, damn it! {dist} out, working arm nearest.',
+      ],
+      3: [
+        'Sit {dist} out, turned in, working arm nearest. Fucking move!',
+        'Fucking sit! {dist} out, working arm nearest.',
+      ],
+    },
+  },
+  {
+    id: 'placement.benchSideOn',
+    match: re(
+      /^Put the phone at bench height, (?<dist>.+?) away, side-on, with your arm in view\.$/,
+    ),
+    lines: {
+      1: [
+        'Bench-high phone, {dist} out, side-on, arm in view. Move!',
+        'Phone at bench height, {dist} away, side-on, recruit!',
+      ],
+      2: [
+        'Bench-high phone, {dist} out, side-on, arm in view. Damn, move!',
+        'Bench-high phone, {dist} out, side-on. Hell yes!',
+      ],
+      3: [
+        'Bench-high phone, {dist} out, side-on, arm in view. Fucking move!',
+        "Bench-high phone, {dist} out, side-on, for fuck's sake!",
+      ],
+    },
+  },
   {
     id: 'placement.sideOn',
     match: re(/^Stand side-on, (?<dist>.+?) from the phone, with (?<what>.+) in view\.$/),

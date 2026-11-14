@@ -3,6 +3,9 @@ import howtoJson from './howto.json';
 import { cueFor, exerciseById, howToFor, program, programDay } from './catalog';
 
 const allPlanned = program.days.flatMap((d) => d.exercises);
+// Tracked exercises: the demo timing pins eccentric 2 s / concentric 1 s. The only extra allowed
+// is a 1 s squeeze between lift and lower (concentration curl).
+const TRACKED_TEMPO = /^(Lift 1 s · (Hold 1 s · )?Lower 2 s|Down 2 s · Up 1 s)$/;
 
 describe('program data', () => {
   it('has six PPL days with unique ids', () => {
@@ -99,11 +102,25 @@ describe('how-to text (M4b)', () => {
   });
 
   it('uses the SPEC default tempo for every tracked exercise (matches the demo timing)', () => {
+    // Lift 1 s / Lower 2 s (or Down 2 s / Up 1 s) is what the demo timing pins. The only extra
+    // allowed is a 1 s squeeze between lift and lower ("Hold 1 s", concentration curl): it adds a
+    // pause at the top but leaves eccentric 2 s / concentric 1 s unchanged.
     for (const p of allPlanned.filter((x) => x.tracking === 'pose')) {
-      expect(howToFor(p.exerciseId)?.tempo, p.exerciseId).toMatch(
-        /^(Lift 1 s · Lower 2 s|Down 2 s · Up 1 s)$/,
-      );
+      expect(howToFor(p.exerciseId)?.tempo, p.exerciseId).toMatch(TRACKED_TEMPO);
     }
+  });
+
+  it('the tracked tempo check accepts a top hold and nothing looser', () => {
+    expect('Lift 1 s · Hold 1 s · Lower 2 s').toMatch(TRACKED_TEMPO);
+    for (const bad of [
+      'Lift 1 s · Hold 2 s · Lower 2 s',
+      'Lift 1 s · Lower 3 s',
+      'Down 2 s · Hold 1 s · Up 1 s',
+      'Lift 1 s · Hold 1 s · Hold 1 s · Lower 2 s',
+      'Hold 1 s · Lift 1 s · Lower 2 s',
+    ])
+      expect(bad).not.toMatch(TRACKED_TEMPO);
+    expect(howToFor('Concentration_Curls')?.tempo).toBe('Lift 1 s · Hold 1 s · Lower 2 s');
   });
 
   it('returns undefined for an unknown id', () => {

@@ -7,6 +7,7 @@ export const shoulderPress: ExerciseRule = {
   ...COUNTER_DEFAULTS,
   exerciseId: 'Seated_Dumbbell_Press',
   folder: 'shoulder-press',
+  status: 'tuned',
   view: 'front',
   limb: 'arm',
   triplets: ELBOW,

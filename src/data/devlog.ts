@@ -7,6 +7,7 @@
 
 import Dexie from 'dexie';
 import { FrameEncoder, decodeFrames, type DevLogFrame } from '../core/devlogCodec';
+import type { RuleStatus } from '../core/exercises/types';
 import type { LandmarkFrame, RepEvent } from '../core/types';
 import type {
   DevLogCameraMeta,
@@ -42,6 +43,8 @@ export type DevLogSetExport = {
   endedAt?: number;
   restTakenSec?: number;
   camera?: DevLogCameraMeta & {
+    /** M4f: the rule's status at set start; missing on sets logged before M4f. */
+    ruleStatus?: RuleStatus;
     fps: { t: number; fps: number }[];
     repEvents: RepEvent[];
     speech: DevLogSpeech[];
@@ -112,6 +115,8 @@ export type DevLogSetStart = {
   weightKg: number;
   /** Wall clock ms; default now. */
   startedAt?: number;
+  /** M4f: camera sets pass `ruleStatus(exerciseId)`; exported in the set's `camera` block. */
+  ruleStatus?: RuleStatus;
 };
 
 export type DevLogSetEnd = {
@@ -289,6 +294,7 @@ class Recorder implements DevLogRecorder {
       weightKg: info.weightKg,
       startedAt: info.startedAt ?? this.now(),
     };
+    if (info.ruleStatus !== undefined) row.ruleStatus = info.ruleStatus;
     const enc = new FrameEncoder();
     let angles: { t: number; angle: number | null }[] = [];
     const from = opts.prerollFromT;
@@ -643,7 +649,7 @@ function setRowsFor(db: GymDb, sessionId: string): Promise<DevLogSetRow[]> {
 }
 
 async function setExport(db: GymDb, row: DevLogSetRow): Promise<DevLogSetExport> {
-  const { key, camera, ...rest } = row;
+  const { key, camera, ruleStatus, ...rest } = row;
   const out: DevLogSetExport = { ...rest };
   delete (out as Partial<DevLogSetRow>).seq;
   const chunks = await db.devlogChunks.where('setKey').equals(key).toArray();
@@ -655,6 +661,7 @@ async function setExport(db: GymDb, row: DevLogSetRow): Promise<DevLogSetExport>
       delegate: camera?.delegate ?? '',
       side: camera?.side ?? null,
       ...(camera?.wallT0 !== undefined ? { wallT0: camera.wallT0 } : {}),
+      ...(ruleStatus !== undefined ? { ruleStatus } : {}),
       fps: chunks.flatMap((c) => c.fps ?? []),
       repEvents: chunks.flatMap((c) => c.repEvents ?? []),
       speech: chunks.flatMap((c) => c.speech ?? []),

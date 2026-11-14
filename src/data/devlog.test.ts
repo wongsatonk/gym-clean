@@ -307,6 +307,74 @@ describe('developer log recorder', () => {
   });
 });
 
+describe('developer log rule status (M4f)', () => {
+  it('stores the rule status given at set start and exports it in the camera block', async () => {
+    const r = await start({ id: 'rs1' });
+    r.beginSet({
+      exerciseId: 'Hammer_Curls',
+      setIndex: 0,
+      targetReps: [10, 12],
+      weightKg: 8,
+      ruleStatus: 'learning',
+    });
+    r.camera({ folder: 'hammer-curl', delegate: 'GPU', side: 'left' });
+    r.frame(frame(0), 0);
+    r.angle(0, 160);
+    await r.endSet({
+      counted: { reps: 1, partials: 0 },
+      logged: { reps: 2, partials: 0 },
+      weightKg: 8,
+    });
+    await r.finish();
+    const set = await firstSet(db, 'rs1');
+    expect(must(set.camera).ruleStatus).toBe('learning');
+    expect(must(set.camera)).toMatchObject({ folder: 'hammer-curl', side: 'left' });
+    // Only in the camera block, not repeated at the set's top level.
+    expect(Object.keys(set)).not.toContain('ruleStatus');
+  });
+
+  it('round-trips a tuned status through IndexedDB', async () => {
+    const r = await start({ id: 'rs2' });
+    r.beginSet({
+      exerciseId: 'Pushups',
+      setIndex: 1,
+      targetReps: [8, 12],
+      weightKg: 0,
+      ruleStatus: 'tuned',
+    });
+    r.camera({ folder: 'push-up', delegate: 'CPU', side: 'right' });
+    await r.endSet({ logged: { reps: 8, partials: 0 }, weightKg: 0 });
+    await r.finish();
+    const rows = await db.devlogSets.where('sessionId').equals('rs2').toArray();
+    expect(must(rows[0]).ruleStatus).toBe('tuned');
+    expect(must((await firstSet(db, 'rs2')).camera).ruleStatus).toBe('tuned');
+  });
+
+  it('an old row without a status still exports, with no ruleStatus key', async () => {
+    const r = await start({ id: 'rs3' });
+    await cameraSet(r);
+    await r.finish();
+    const cam = must((await firstSet(db, 'rs3')).camera);
+    expect(cam).toMatchObject({ folder: 'push-up', delegate: 'GPU', side: 'right' });
+    expect(Object.keys(cam)).not.toContain('ruleStatus');
+  });
+
+  it('a manual set (no status) has no camera block and no ruleStatus', async () => {
+    const r = await start({ id: 'rs4' });
+    r.beginSet({
+      exerciseId: 'Dumbbell_Bench_Press',
+      setIndex: 0,
+      targetReps: [8, 12],
+      weightKg: 20,
+    });
+    await r.endSet({ logged: { reps: 9, partials: 0 }, weightKg: 20 });
+    await r.finish();
+    const set = await firstSet(db, 'rs4');
+    expect(set.camera).toBeUndefined();
+    expect(Object.keys(set)).not.toContain('ruleStatus');
+  });
+});
+
 describe('developer log size, rotation, export, clear', () => {
   it('reports stored size and session count', async () => {
     expect(await devLogStats(db)).toEqual({ bytes: 0, sessions: 0 });

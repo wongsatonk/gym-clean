@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ruleFor } from '../../core/exercises';
+import { RULES, ruleFor, type ExerciseRule } from '../../core/exercises';
 import exercises from '../../data/exercises.json';
 import howto from '../../data/howto.json';
 import program from '../../data/program.json';
@@ -45,7 +45,109 @@ import {
 
 const PUSH_A_TRACKED = ['Pushups', 'Seated_Dumbbell_Press', 'Side_Lateral_Raise'];
 const M4D_TRACKED = ['Dumbbell_Bicep_Curl', 'One-Arm_Dumbbell_Row', 'Goblet_Squat'];
-const POSE_TRACKED = [...PUSH_A_TRACKED, ...M4D_TRACKED];
+/** The six rules that shipped through M4/M5: a floor, never fewer tracked demos than these. */
+const ORIGINAL_TRACKED = [...PUSH_A_TRACKED, ...M4D_TRACKED];
+
+/** What a demo must match to show a countable rep: the counter's thresholds and directions. */
+type CounterSpec = Pick<
+  ExerciseRule,
+  'extended' | 'contracted' | 'direction' | 'start' | 'eccentric' | 'view'
+>;
+
+/**
+ * SPEC M4f wave 1 table, the planned starting values. Used only while an exercise has no rule
+ * yet; once core-engineer adds the rule (src/core/exercises), its own thresholds are read instead
+ * (they get retuned on real sets, so the two may drift apart).
+ */
+const M4F_WAVE1_PLANNED: Readonly<Record<string, CounterSpec>> = {
+  Hammer_Curls: {
+    view: 'side',
+    extended: 150,
+    contracted: 70,
+    direction: 'decreasing',
+    start: 'extended',
+    eccentric: 'toExtended',
+  },
+  Concentration_Curls: {
+    view: 'side',
+    extended: 145,
+    contracted: 70,
+    direction: 'decreasing',
+    start: 'extended',
+    eccentric: 'toExtended',
+  },
+  Incline_Dumbbell_Curl: {
+    view: 'side',
+    extended: 150,
+    contracted: 70,
+    direction: 'decreasing',
+    start: 'extended',
+    eccentric: 'toExtended',
+  },
+  Dumbbell_Shoulder_Press: {
+    view: 'front',
+    extended: 143,
+    contracted: 80,
+    direction: 'decreasing',
+    start: 'contracted',
+    eccentric: 'toContracted',
+  },
+  'Bent_Over_Two-Dumbbell_Row': {
+    view: 'side',
+    extended: 145,
+    contracted: 90,
+    direction: 'decreasing',
+    start: 'extended',
+    eccentric: 'toExtended',
+  },
+  Standing_Dumbbell_Triceps_Extension: {
+    view: 'side',
+    extended: 150,
+    contracted: 80,
+    direction: 'decreasing',
+    start: 'extended',
+    eccentric: 'toContracted',
+  },
+};
+
+/**
+ * SPEC M4f "Stays manual": lying, seated-machine, bench-dip and crossover exercises never get a
+ * camera rule.
+ */
+const STAYS_MANUAL = [
+  'Dumbbell_Bench_Press',
+  'Incline_Dumbbell_Press',
+  'Dumbbell_Flyes',
+  'Bench_Dips',
+  'Cable_Crossover',
+  'Leg_Press',
+  'Leg_Extensions',
+  'Lying_Leg_Curls',
+  'Dumbbell_Seated_One-Leg_Calf_Raise',
+];
+
+/**
+ * Demos whose 3D preset differs from the rule's camera view, with the reason. Concentration
+ * curls: the phone sits about 3/4 from the working side (SPEC M4f), between the two presets; the
+ * demo opens on the front preset, where the forearm curling across toward the chest reads best.
+ */
+const DEMO_VIEW_DIFFERS: Readonly<Record<string, 'side' | 'front'>> = {
+  Concentration_Curls: 'front',
+};
+
+/** The counter spec a demo is checked against: the rule if one exists, else the SPEC plan. */
+function counterSpecFor(id: string): CounterSpec | undefined {
+  return ruleFor(id) ?? M4F_WAVE1_PLANNED[id];
+}
+
+/**
+ * Every demo the camera counts (or will count, per the SPEC M4f wave 1 plan): read from the rule
+ * data, never a fixed list, so each new rule's demo is checked against its thresholds.
+ */
+const POSE_TRACKED = DEMO_IDS.filter((id) => counterSpecFor(id) !== undefined);
+const PROGRAM_TRACKING = new Map(
+  program.days.flatMap((d) => d.exercises.map((e) => [e.exerciseId, e.tracking] as const)),
+);
 const MANUAL = [
   'Dumbbell_Bench_Press',
   'Incline_Dumbbell_Press',
@@ -79,7 +181,6 @@ const LEGS_B = [
   'Leg_Extensions',
   'Dumbbell_Seated_One-Leg_Calf_Raise',
 ];
-const ALL_MANUAL = [...MANUAL, ...PULL_A_MANUAL, ...LEGS_PUSH_B, ...PULL_B, ...LEGS_B];
 const HOWTO = howto as Record<string, { tempo: string; focus: string } | undefined>;
 const STEP = 1 / 60;
 
@@ -108,23 +209,47 @@ const flatPose = (p: DemoPose): number[] => [
 ];
 
 describe('demo registry', () => {
-  it('has demos for all six pose-tracked exercises (Push A + curl, row, goblet squat)', () => {
+  it('has a demo for every exercise with a counter rule (at least the original six)', () => {
+    expect(POSE_TRACKED).toEqual(expect.arrayContaining(ORIGINAL_TRACKED));
+    for (const r of RULES) expect(POSE_TRACKED, r.exerciseId).toContain(r.exerciseId);
     for (const id of POSE_TRACKED) {
       expect(hasDemo(id), id).toBe(true);
-      expect(DEMO_IDS).toContain(id);
       expect(demoFor(id)?.exerciseId).toBe(id);
     }
   });
 
-  it('has demos for all six Push A exercises, and none of the manual ones has a counter rule', () => {
+  it('has demos for all six Push A exercises', () => {
     for (const id of [...PUSH_A_TRACKED, ...MANUAL]) expect(hasDemo(id), id).toBe(true);
-    for (const id of ALL_MANUAL) expect(ruleFor(id), id).toBeUndefined();
+  });
+
+  it('every planned M4f wave 1 exercise is a real exercise with a demo', () => {
+    const catalog = new Set(exercises.map((e) => e.id));
+    for (const id of Object.keys(M4F_WAVE1_PLANNED)) {
+      expect(catalog.has(id), id).toBe(true);
+      expect(hasDemo(id), id).toBe(true);
+    }
+  });
+
+  it('program tracking agrees with the rule data', () => {
+    for (const [id, tracking] of PROGRAM_TRACKING) {
+      // Camera-tracked in the program => a rule exists.
+      if (tracking === 'pose') expect(ruleFor(id), id).toBeDefined();
+      // Manual in the program => no rule, except a planned M4f rule that lands before the
+      // program flips it to the camera (SPEC M4f wave 1).
+      if (tracking === 'manual' && !(id in M4F_WAVE1_PLANNED))
+        expect(ruleFor(id), id).toBeUndefined();
+    }
+    for (const id of STAYS_MANUAL) {
+      expect(ruleFor(id), id).toBeUndefined();
+      expect(PROGRAM_TRACKING.get(id), id).toBe('manual');
+    }
   });
 
   it('demos every Pull A exercise', () => {
     const pullA = program.days.find((d) => d.id === 'pull-a');
     expect(pullA).toBeDefined();
     for (const e of pullA?.exercises ?? []) expect(hasDemo(e.exerciseId), e.exerciseId).toBe(true);
+    for (const id of PULL_A_MANUAL) expect(demoFor(id)?.exerciseId).toBe(id);
   });
 
   it('demos every Legs A and Push B exercise', () => {
@@ -235,7 +360,7 @@ describe('tempo', () => {
   for (const id of POSE_TRACKED) {
     it(`${id}: the eccentric leg (from rule.eccentric) takes 2 s, the other 1 s`, () => {
       const m = must(demoFor(id));
-      const rule = must(ruleFor(id));
+      const rule = must(counterSpecFor(id));
       const [k0, k1, k2, k3, k4] = trackFor(m).map((k) => k);
       const key = (k: { t: number; angle: number } | undefined) => must(k, 'key');
       const outLeg = key(k2).t - key(k1).t; // start -> far
@@ -343,7 +468,7 @@ describe('pose-tracked demos vs the rep counter thresholds', () => {
   for (const id of POSE_TRACKED) {
     it(`${id}: a full rep goes >= 10 deg past both thresholds`, () => {
       const m = must(demoFor(id));
-      const rule = ruleFor(id);
+      const rule = counterSpecFor(id);
       expect(rule, id).toBeDefined();
       if (!rule) return;
       const angles = sampleLoop(m).map((x) => x.angle);
@@ -365,12 +490,12 @@ describe('pose-tracked demos vs the rep counter thresholds', () => {
 
     it(`${id}: starts where the rule's reps start, and lowers the way the rule says`, () => {
       const m = must(demoFor(id));
-      const rule = must(ruleFor(id));
+      const rule = must(counterSpecFor(id));
       const startIsExtended = rule.direction === 'decreasing' ? m.start > m.far : m.start < m.far;
       expect(startIsExtended ? 'extended' : 'contracted').toBe(rule.start);
       const outward = rule.start === 'extended' ? 'toContracted' : 'toExtended';
       expect(m.outward).toBe(outward === rule.eccentric ? 'lower' : 'lift');
-      expect(m.view).toBe(rule.view);
+      expect(m.view).toBe(DEMO_VIEW_DIFFERS[id] ?? rule.view);
     });
   }
 });
@@ -517,12 +642,9 @@ describe('M4d pose-tracked demos (curl, row, goblet squat)', () => {
 });
 
 describe('manual-count demos without a rule: the range comes from the demo itself', () => {
-  const tracking = new Map(
-    program.days.flatMap((d) => d.exercises.map((e) => [e.exerciseId, e.tracking] as const)),
-  );
   for (const m of DEMOS.filter((d) => !ruleFor(d.exerciseId))) {
     it(`${m.exerciseId}: a manual program exercise with a real range of motion`, () => {
-      expect(tracking.get(m.exerciseId)).toBe('manual');
+      expect(PROGRAM_TRACKING.get(m.exerciseId)).toBe('manual');
       expect(Math.abs(m.far - m.start)).toBeGreaterThanOrEqual(30);
       const angles = sampleLoop(m).map((x) => x.angle);
       const lo = Math.min(m.start, m.far);

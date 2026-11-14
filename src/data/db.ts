@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import type { Accent, RepEvent, SetLog } from '../core/types';
+import type { RuleStatus } from '../core/exercises/types';
 import type { Rudeness } from '../core/personas';
 import type { Unit } from '../core/units';
 
@@ -80,6 +81,11 @@ export type DevLogSetRow = {
   endedAt?: number;
   restTakenSec?: number;
   camera?: DevLogCameraMeta;
+  /**
+   * M4f: the camera rule's status when the set started. Exported in the set's `camera` block.
+   * Not indexed, so no schema version bump; rows from before M4f simply lack it.
+   */
+  ruleStatus?: RuleStatus;
 };
 
 /**

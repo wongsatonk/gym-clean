@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { program } from '../data/catalog';
-import { badgeList } from './badges';
+import { BADGE_ICON, badgeList } from './badges';
+import { ICON_NAMES, iconMarkup } from './icons';
 import { DEMO_IDS } from './demo3d/ids';
 import { howToContent } from './howToSheet';
 
@@ -24,6 +25,39 @@ describe('badgeList', () => {
       expect(badgeList({ exerciseId: id, tracking: 'manual' })[0]?.kind, id).toBe('3d');
     }
     expect(badgeList({ exerciseId: 'not-a-real-id', tracking: 'manual' })[0]?.kind).toBe('info');
+  });
+});
+
+describe('badgeList: M4f Learning badge', () => {
+  const labels = (input: Parameters<typeof badgeList>[0]): string[] =>
+    badgeList(input).map((b) => b.label);
+
+  it('adds "Learning" after "Camera" for a pose exercise whose rule is learning', () => {
+    expect(
+      labels({ exerciseId: 'Hammer_Curls', tracking: 'pose', ruleStatus: 'learning' }),
+    ).toEqual(['3D demo', 'Camera', 'Learning']);
+  });
+
+  it('shows no "Learning" for a tuned rule or no rule', () => {
+    expect(
+      labels({ exerciseId: 'Dumbbell_Bicep_Curl', tracking: 'pose', ruleStatus: 'tuned' }),
+    ).toEqual(['3D demo', 'Camera']);
+    expect(labels({ exerciseId: 'Pushups', tracking: 'pose', ruleStatus: null })).toEqual([
+      '3D demo',
+      'Camera',
+    ]);
+  });
+
+  it('shows no "Learning" when the exercise is not camera-tracked', () => {
+    expect(
+      labels({ exerciseId: 'Hammer_Curls', tracking: 'manual', ruleStatus: 'learning' }),
+    ).toEqual(['3D demo']);
+  });
+
+  it('gives the Learning pill its own decorative icon from the shared set', () => {
+    expect(BADGE_ICON.learning).not.toBe(BADGE_ICON.camera);
+    expect(ICON_NAMES).toContain(BADGE_ICON.learning);
+    expect(iconMarkup(BADGE_ICON.learning, 'sm')).toContain('aria-hidden="true"');
   });
 });
 

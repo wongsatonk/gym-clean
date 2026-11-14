@@ -2,13 +2,19 @@
 import { AUTO_SET_DEFAULTS, type AutoSetConfig } from '../autoSet';
 import type { FocusRuleFlags } from '../focus';
 import type { FocusCueId, LandmarkFrame } from '../types';
+import { bentOverRow } from './bentOverRow';
+import { concentrationCurl } from './concentrationCurl';
 import { curl } from './curl';
+import { dbShoulderPress } from './dbShoulderPress';
 import { gobletSquat } from './gobletSquat';
+import { hammerCurl } from './hammerCurl';
+import { inclineCurl } from './inclineCurl';
 import { lateralRaise } from './lateralRaise';
 import { pushUp } from './pushUp';
 import { row } from './row';
 import { shoulderPress } from './shoulderPress';
-import type { ExerciseRule, Side } from './types';
+import { tricepsExtension } from './tricepsExtension';
+import type { ExerciseRule, RuleStatus, Side } from './types';
 
 export type {
   CoachHints,
@@ -16,6 +22,7 @@ export type {
   FocusRuleFlags,
   MissReason,
   PhonePlacement,
+  RuleStatus,
   Side,
   SidePair,
   Triplet,
@@ -30,10 +37,22 @@ export const RULES: readonly ExerciseRule[] = [
   row,
   gobletSquat,
   lateralRaise,
+  // SPEC M4f wave 1 (learning).
+  hammerCurl,
+  concentrationCurl,
+  inclineCurl,
+  dbShoulderPress,
+  bentOverRow,
+  tricepsExtension,
 ];
 
 export function ruleFor(exerciseId: string): ExerciseRule | undefined {
   return RULES.find((r) => r.exerciseId === exerciseId);
+}
+
+/** The rule's status for an exercise id (SPEC M4f), undefined if it has no rule. */
+export function ruleStatus(exerciseId: string): RuleStatus | undefined {
+  return ruleFor(exerciseId)?.status;
 }
 
 export function ruleForFolder(folder: string): ExerciseRule | undefined {
@@ -85,6 +104,31 @@ export const FORM_RULE_EXERCISES: Readonly<Partial<Record<FocusCueId, readonly s
   hipSag: ['push-up'],
 };
 
+/**
+ * SPEC M4f: the only focus rules a `learning` rule may run. Timing (`rushedLowering`, `stalled`)
+ * plus the presence/fps reports, which never judge a rep. `shrinkingRange` and every form rule
+ * are off until the rule is tuned.
+ */
+export const LEARNING_FOCUS_IDS: readonly FocusCueId[] = [
+  'rushedLowering',
+  'stalled',
+  'outOfFrame',
+  'lowFps',
+];
+
+/**
+ * SPEC M4f: folders of the six rules that shipped through M4/M5 and are `tuned` without real
+ * fixtures of their own (Decision "M4f scope and the learning state"). Never add to this list.
+ */
+export const GRANDFATHERED_TUNED: readonly string[] = [
+  'curl',
+  'push-up',
+  'shoulder-press',
+  'row',
+  'goblet-squat',
+  'lateral-raise',
+];
+
 /** Rules a front view can never judge (SPEC M5: hips sag is side view only). */
 const SIDE_VIEW_ONLY: readonly FocusCueId[] = ['hipSag'];
 
@@ -92,7 +136,8 @@ const SIDE_VIEW_ONLY: readonly FocusCueId[] = ['hipSag'];
  * The focus flags in effect (a fresh object). `active`: the camera view the counter settled on,
  * or the counter's active rule (its `rule` getter: the rule merged with otherView). In the rule's
  * otherView, the variant's flags override the rule's key by key; side-view-only rules are off in
- * a front view.
+ * a front view. A `learning` rule (SPEC M4f) keeps only LEARNING_FOCUS_IDS: every other flag is
+ * forced off, whatever the data says.
  */
 export function focusFlagsFor(
   rule: ExerciseRule,
@@ -106,7 +151,31 @@ export function focusFlagsFor(
   if (view === 'front') {
     for (const id of SIDE_VIEW_ONLY) if (id in flags) flags[id] = false;
   }
+  if (rule.status === 'learning') {
+    for (const id of Object.keys(flags) as FocusCueId[]) {
+      if (!LEARNING_FOCUS_IDS.includes(id)) flags[id] = false;
+    }
+  }
   return flags;
+}
+
+/**
+ * Folders of rules marked `tuned` that are neither grandfathered nor backed by committed real
+ * fixtures (SPEC M4f promotion guard). Empty = OK. `realFolders`: folders with
+ * fixtures/landmarks/<folder>/real-*.
+ */
+export function rulesTunedWithoutRealFixtures(
+  rules: readonly ExerciseRule[],
+  realFolders: ReadonlySet<string>,
+): string[] {
+  return rules
+    .filter(
+      (r) =>
+        r.status === 'tuned' &&
+        !GRANDFATHERED_TUNED.includes(r.folder) &&
+        !realFolders.has(r.folder),
+    )
+    .map((r) => r.folder);
 }
 
 /**

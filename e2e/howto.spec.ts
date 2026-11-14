@@ -45,7 +45,7 @@ const PUSH_A = [
   ['Incline Dumbbell Press', false],
   ['Seated Dumbbell Press', true],
   ['Side Lateral Raise', true],
-  ['Standing Dumbbell Triceps Extension', false],
+  ['Standing Dumbbell Triceps Extension', true],
   ['Pushups', true],
 ] as const;
 
@@ -55,7 +55,7 @@ const hasWebGL = (page: Page) =>
     return Boolean(c.getContext('webgl2') ?? c.getContext('webgl'));
   });
 
-test('badges: Push A has six 3D demos, Camera on the tracked three; Pull A and Legs B all 3D demo', async ({
+test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Triceps Extension, still Learning); Pull A and Legs B all 3D demo', async ({
   page,
 }) => {
   const errors = watchErrors(page);
@@ -72,6 +72,13 @@ test('badges: Push A has six 3D demos, Camera on the tracked three; Pull A and L
     await expect(row.locator('[data-badge="info"]')).toHaveCount(0);
     await expect(row.locator('[data-badge="camera"]')).toHaveCount(camera ? 1 : 0);
   }
+  // M4f: only the new wave-1 rule is still learning.
+  await expect(page.locator('.ex-row [data-badge="learning"]')).toHaveCount(1);
+  await expect(
+    rows
+      .filter({ hasText: 'Standing Dumbbell Triceps Extension' })
+      .locator('[data-badge="learning"]'),
+  ).toHaveText('Learning');
   const fontPx = await rows
     .first()
     .locator('[data-badge="3d"]')
@@ -93,7 +100,7 @@ test('badges: Push A has six 3D demos, Camera on the tracked three; Pull A and L
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.getByRole('button', { name: 'Exercise list' }).click();
   const list = page.getByRole('dialog', { name: 'Exercise list' });
-  for (const name of ['Hammer Curls', 'Reverse Flyes', 'Wide-Grip Lat Pulldown']) {
+  for (const name of ['Reverse Flyes', 'Wide-Grip Lat Pulldown']) {
     const row = list.locator('.ex-row-btn', { hasText: name });
     await expect(row.locator('[data-badge]')).toHaveText(['3D demo']);
   }
@@ -101,6 +108,9 @@ test('badges: Push A has six 3D demos, Camera on the tracked three; Pull A and L
   // The pose-tracked curl has a 3D demo (M4d) + Camera.
   const curl = list.locator('.ex-row-btn', { hasText: 'Dumbbell Bicep Curl' });
   await expect(curl.locator('[data-badge]')).toHaveText(['3D demo', 'Camera']);
+  // M4f wave 1: Hammer Curls is camera-tracked and still learning.
+  const hammer = list.locator('.ex-row-btn', { hasText: 'Hammer Curls' });
+  await expect(hammer.locator('[data-badge]')).toHaveText(['3D demo', 'Camera', 'Learning']);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 
   expect(errors).toEqual([]);

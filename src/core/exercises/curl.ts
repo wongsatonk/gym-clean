@@ -5,6 +5,7 @@ export const curl: ExerciseRule = {
   ...COUNTER_DEFAULTS,
   exerciseId: 'Dumbbell_Bicep_Curl',
   folder: 'curl',
+  status: 'tuned',
   view: 'side',
   limb: 'arm',
   triplets: ELBOW,

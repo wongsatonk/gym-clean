@@ -374,7 +374,9 @@ export const DEMOS: readonly DemoMove[] = [
     measure: { joint: 'elbow', side: 'r' },
     start: 180,
     // Elbows up and back past the torso line (hinged BENT_ROW.hinge deg), as the one-arm row.
-    far: 180 - BENT_ROW.hinge - 35,
+    // 75 deg: 15 deg past the SPEC M4f contracted threshold (< 90), so a demo rep clears the
+    // ">= 10 deg past" check with room to spare.
+    far: 180 - BENT_ROW.hinge - 40,
     outward: 'lift',
     pose: bentOverRowPose,
     props: [],

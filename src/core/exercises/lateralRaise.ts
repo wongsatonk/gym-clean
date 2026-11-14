@@ -6,6 +6,7 @@ export const lateralRaise: ExerciseRule = {
   ...COUNTER_DEFAULTS,
   exerciseId: 'Side_Lateral_Raise',
   folder: 'lateral-raise',
+  status: 'tuned',
   view: 'front',
   limb: 'arm',
   triplets: SHOULDER,
