@@ -1,0 +1,263 @@
+[
+  {
+    "scope": "shared",
+    "pair": "text on bg",
+    "fg": "#F2F4F7",
+    "bg": "#0D0F12",
+    "ratio": 17.42,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "text on surface-2",
+    "fg": "#F2F4F7",
+    "bg": "#20242B",
+    "ratio": 14.13,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "text-2 on bg",
+    "fg": "#A9B1BC",
+    "bg": "#0D0F12",
+    "ratio": 8.87,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "text-2 on surface",
+    "fg": "#A9B1BC",
+    "bg": "#16191E",
+    "ratio": 8.14,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "text-2 on surface-2",
+    "fg": "#A9B1BC",
+    "bg": "#20242B",
+    "ratio": 7.19,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "on-cta on cta (button label)",
+    "fg": "#1A0B00",
+    "bg": "#FF7A1A",
+    "ratio": 7.37,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "cta on bg (now marker, tab icon)",
+    "fg": "#FF7A1A",
+    "bg": "#0D0F12",
+    "ratio": 7.36,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "cta on surface (Next day label)",
+    "fg": "#FF7A1A",
+    "bg": "#16191E",
+    "ratio": 6.75,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "on-success on success (green block)",
+    "fg": "#06210F",
+    "bg": "#3BE38B",
+    "ratio": 10.18,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "success on surface",
+    "fg": "#3BE38B",
+    "bg": "#16191E",
+    "ratio": 10.53,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "cue on surface",
+    "fg": "#C5B3FF",
+    "bg": "#16191E",
+    "ratio": 9.45,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "cue on surface-2",
+    "fg": "#C5B3FF",
+    "bg": "#20242B",
+    "ratio": 8.35,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "danger on bg",
+    "fg": "#FF6B6B",
+    "bg": "#0D0F12",
+    "ratio": 6.92,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "bg on text (selected segment / switch on)",
+    "fg": "#0D0F12",
+    "bg": "#F2F4F7",
+    "ratio": 17.42,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "muscle on body (3D/2D highlight)",
+    "fg": "#35C8FF",
+    "bg": "#3A424D",
+    "ratio": 5.25,
+    "need": "≥ 3",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "figure rim (edge) on stage",
+    "fg": "#8D98A6",
+    "bg": "#16191E",
+    "ratio": 6.02,
+    "need": "≥ 3",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "figure rim (edge) on lit stage",
+    "fg": "#8D98A6",
+    "bg": "#2A313B",
+    "ratio": 4.48,
+    "need": "≥ 3",
+    "pass": true
+  },
+  {
+    "scope": "shared",
+    "pair": "cta button edge on bg",
+    "fg": "#FF7A1A",
+    "bg": "#0D0F12",
+    "ratio": 7.36,
+    "need": "≥ 3",
+    "pass": true
+  },
+  {
+    "scope": "energy",
+    "pair": "text on ember (hero)",
+    "fg": "#F2F4F7",
+    "bg": "#3D1C0A",
+    "ratio": 13.92,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "energy",
+    "pair": "text on ember highlight",
+    "fg": "#F2F4F7",
+    "bg": "#5A2A0E",
+    "ratio": 10.75,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "energy",
+    "pair": "text-2 on ember highlight",
+    "fg": "#A9B1BC",
+    "bg": "#5A2A0E",
+    "ratio": 5.47,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "energy",
+    "pair": "cta button edge on ember highlight",
+    "fg": "#FF7A1A",
+    "bg": "#5A2A0E",
+    "ratio": 4.54,
+    "need": "≥ 3",
+    "pass": true
+  },
+  {
+    "scope": "energy",
+    "pair": "figure rim (edge) on ember",
+    "fg": "#8D98A6",
+    "bg": "#3D1C0A",
+    "ratio": 5.24,
+    "need": "≥ 3",
+    "pass": true
+  },
+  {
+    "scope": "energy",
+    "pair": "muscle on ember (chip text)",
+    "fg": "#35C8FF",
+    "bg": "#3D1C0A",
+    "ratio": 7.93,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "track",
+    "pair": "text on black",
+    "fg": "#F2F4F7",
+    "bg": "#000000",
+    "ratio": 19.06,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "track",
+    "pair": "text-2 on black",
+    "fg": "#A9B1BC",
+    "bg": "#000000",
+    "ratio": 9.7,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "track",
+    "pair": "cta on black (ring, now)",
+    "fg": "#FF7A1A",
+    "bg": "#000000",
+    "ratio": 8.05,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "track",
+    "pair": "cue on black",
+    "fg": "#C5B3FF",
+    "bg": "#000000",
+    "ratio": 11.27,
+    "need": "≥ 4.5",
+    "pass": true
+  },
+  {
+    "scope": "track",
+    "pair": "rule on black (lanes, non-text)",
+    "fg": "#3A3A3A",
+    "bg": "#000000",
+    "ratio": 1.85,
+    "need": "decorative",
+    "pass": true
+  }
+]
