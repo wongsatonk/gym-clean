@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ADVICE_BANNED_WORDS } from './advice';
 import { AUTO_SET_DEFAULTS, createAutoSet, type AutoSet, type AutoSetAction } from './autoSet';
-import { ruleFor, ruleForFolder, type ExerciseRule } from './exercises';
+import {
+  FORM_RULE_EXERCISES,
+  FORM_RULE_IDS,
+  RULES,
+  ruleFor,
+  ruleForFolder,
+  type ExerciseRule,
+} from './exercises';
 import { FpsMeter } from './fps';
 import {
   CUE_TEXT,
@@ -1454,18 +1461,17 @@ const pathsMatching = (re: RegExp) =>
     .sort();
 
 /**
- * The form rules SPEC M5 lists per exercise folder. "Every flag forced on" means these plus every
- * focus rule: a form rule outside its exercise measures something else (a curl's elbow angle is
- * no lateral raise height), which is why flags are data on the exercise rule.
+ * The form rules SPEC M5 lists per exercise folder (FORM_RULE_EXERCISES, its "Reliable from"
+ * column), for every rule folder; [] where none applies. "Every flag forced on" means these plus
+ * every focus rule: a form rule outside its exercise measures something else (a curl's elbow
+ * angle is no lateral raise height), which is why flags are data on the exercise rule.
  */
-const SPEC_FORM: Record<string, readonly FocusCueId[]> = {
-  curl: ['elbowDrift', 'bodySwing'],
-  row: ['bodySwing'],
-  'push-up': ['hipSag'],
-  'shoulder-press': ['armsOutOfSync'],
-  'lateral-raise': ['armsOutOfSync', 'raiseTooHigh'],
-  'goblet-squat': [],
-};
+const SPEC_FORM: Record<string, readonly FocusCueId[]> = Object.fromEntries(
+  RULES.map((r) => [
+    r.folder,
+    FORM_RULE_IDS.filter((id) => FORM_RULE_EXERCISES[id]?.includes(r.folder)),
+  ]),
+);
 const folderOf = (path: string) => path.replace(/^.*fixtures\/landmarks\//, '').split('/')[0] ?? '';
 const flagsFor = (path: string): FocusRuleFlags => ({
   ...ALL_FOCUS,
@@ -1475,8 +1481,16 @@ const flagsFor = (path: string): FocusRuleFlags => ({
 describe('form rules on landmark fixtures (every flag forced on)', () => {
   const clean = pathsMatching(/\/synthetic-01__/);
 
-  it('has a clean synthetic-01 clip for all six exercises', () => {
-    expect(clean.length).toBe(6);
+  it('has exactly one clean synthetic-01 clip per exercise rule', () => {
+    expect(clean.map(folderOf).sort()).toEqual(RULES.map((r) => r.folder).sort());
+  });
+
+  it('SPEC_FORM covers every rule folder, with the M5 form rules on the original six only', () => {
+    expect(Object.keys(SPEC_FORM).sort()).toEqual(RULES.map((r) => r.folder).sort());
+    expect(SPEC_FORM.curl).toEqual(['elbowDrift', 'bodySwing']);
+    expect(SPEC_FORM['lateral-raise']).toEqual(['armsOutOfSync', 'raiseTooHigh']);
+    for (const r of RULES.filter((x) => x.status === 'learning'))
+      expect(SPEC_FORM[r.folder], r.folder).toEqual([]);
   });
 
   for (const path of clean) {

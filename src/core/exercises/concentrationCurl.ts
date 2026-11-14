@@ -6,6 +6,11 @@ import { ELBOW } from './triplets';
  * Concentration curls (SPEC M4f wave 1, learning). Seated, elbow braced on the inner thigh, phone
  * about 3/4 from the working arm's side; the camera counts the arm nearest the phone and reps are
  * per arm (M4f-q2). Extended 145, not 150: the braced arm rarely locks out.
+ *
+ * Contracted 85 (was 70; PROGRESS Decision "M4f wave-1 retune from synthetic"): the 3/4 view reads
+ * the curled end shallow (rendered 15° → 61–72° smoothed) and a fast rep bottomed at 72. Partials
+ * turn at 115–120°. The clips count exactly for contracted 74–100 at extended 143–147; a lower
+ * extended fails because a pose glitch at the top hides most of the lowering's timing.
  */
 export const concentrationCurl: ExerciseRule = {
   ...COUNTER_DEFAULTS,
@@ -16,7 +21,7 @@ export const concentrationCurl: ExerciseRule = {
   limb: 'arm',
   triplets: ELBOW,
   extended: 145,
-  contracted: 70,
+  contracted: 85,
   direction: 'decreasing',
   start: 'extended',
   eccentric: 'toExtended',

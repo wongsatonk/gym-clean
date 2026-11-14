@@ -1429,6 +1429,21 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4f wave-1 retune from synthetic (core-engineer).** Two wave 1 rules miscounted their rendered clips (pose-engineer, staged in `fixtures-staging/m4f/`). Both stay `learning`; real sets at 🧍 Checkpoint F1 decide the final values. SPEC M4f wave 1 table updated.
+  - **Watch at 🧍 Checkpoint F1 (reviewer):** the triceps `minVisibility: 0.4` lets MediaPipe guesses of a hidden wrist through; replay his real triceps sets at 0.4 and 0.5 before promoting, and re-check the narrow extended window (136–140 worked, 142 miscounts).
+  - **Triceps extension: 150 / 80 → 138 / 95, visibility gate 0.5 → 0.4** (world angles, side view, best side; extended gate kept).
+    - Clips are filmed ~40° round from the side toward the front, because square side-on the upper arm hides the mannequin's face and detection drops 25–65% of frames.
+    - The bent end reads shallow (rendered 15° → 69–83° smoothed). Straight overhead arms read 150–160°. The rendered 112° partials turn at about 100–108°.
+    - The near wrist sits behind the head at the bottom and reads visibility 0.41–0.49. At the 0.5 gate every bottom was hidden (92/425 and 51/421 frames), so a fast rep whose return was hidden failed the minimum leg time. That is why no threshold pair at 0.5 counted the clips with any margin (only 136–140 × 84–86, which depends on one frame of timing).
+    - With the gate at 0.4 (0 frames dropped), the clips count exactly for extended 136–140 × contracted 90–106. 138 / 95 is the middle of that window. Higher extended values (≥ 142) miscount clip 02 (extra partials or reps), because the mannequin's partial wobbles up to ~150°.
+    - Image-plane angles (as the seated press) were checked and **don't work** from this 3/4 camera: at most 1 rep per clip at every threshold pair tried (extended 130–150 × contracted 70–100, best or both sides), with frame-to-frame jumps of 50–100°.
+    - Before → after: synthetic-01 (4/0) **3 reps 1 partial → 4/0**; synthetic-02 (3/2) **1 rep 3 partials → 3/2**.
+  - **Concentration curl: 145 / 70 → 145 / 85.**
+    - The 3/4 view reads the curled end at 61–72° smoothed. Clip 02's fast last rep bottomed at 72, so it was a partial. The partials turn at 115–120°.
+    - The clips count exactly for contracted 74–100 at extended 143–147. The suggested lower extended value (~135) fails: a pose glitch at the top of each curl, then about 1 s of hidden frames, leaves too little visible lowering time, so the rep reads as rushed. 145 stays.
+    - Before → after: synthetic-01 4/0 → 4/0; synthetic-02 (3/2) **2 reps 3 partials → 3/2**.
+  - All 6 staged triceps / concentration clips are now in `fixtures/landmarks/`, with every other synthetic clip still counting exactly. The 3D demos still clear the new thresholds (`src/ui/demo3d/moves.test.ts`).
+  - **Watch at Checkpoint F1 (pose-engineer's warning, no change now):** the bent-over row's `< 90` and the curls' bent ends read 12–35° shallow in world angles. Real reps may stop short of the contracted threshold and count as partials. Check those folders' real sets first.
 - 2026-11-14: **M4f scope and the learning state (planner).** Wongsaton approved "Camera for more exercises" ("Yes, plan to do it") and said "I confirm everything you need right now". So the open points below use the defaults in Blockers M4f-q1…q9 and the work goes ahead. Contract: SPEC M4f.
   - **Groups as agreed:**
     - wave 1 (easy): hammer, concentration and incline curls, DB shoulder press, bent-over two-DB row, standing DB triceps extension;

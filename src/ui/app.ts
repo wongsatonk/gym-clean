@@ -102,6 +102,7 @@ import {
 } from '../core/stats';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
+import { ruleStatus } from '../core/exercises';
 import { h } from './dom';
 import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { voice } from './voice';
@@ -162,6 +163,8 @@ export function mountApp(root: HTMLElement): void {
   let lastCounted: { reps: number; partials: number } | null = null;
   // A camera set that never counted a rep still logs counted {0, 0} (vs a manual set: none).
   let cameraThisSet = false;
+  // M4f: the last logged set was counted by a learning camera rule (Rest/Summary Fix note).
+  let lastLogLearning = false;
   let pendingSet: Parameters<DevLogRecorder['beginSet']>[0] | null = null;
   // Exercises whose phone-placement sentence was already spoken this workout.
   let placementSpoken = new Set<string>();
@@ -914,9 +917,12 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function openLoggedSet(opts: { prerollFromT?: number } = {}): void {
-    const info = pendingSet;
-    if (!info) return;
+    const set = pendingSet;
+    if (!set) return;
     pendingSet = null;
+    // M4f: camera sets record their rule's status (learning/tuned) in the dev log.
+    const status = cameraThisSet ? ruleStatus(set.exerciseId) : undefined;
+    const info = status === undefined ? set : { ...set, ruleStatus: status };
     rec((r) => r.beginSet(info, opts));
   }
 
@@ -926,6 +932,7 @@ export function mountApp(root: HTMLElement): void {
     const newLog = s.logs.length > prev.logs.length ? s.logs.at(-1) : undefined;
     if (newLog) {
       openLoggedSet();
+      lastLogLearning = cameraThisSet && ruleStatus(newLog.exerciseId) === 'learning';
       const counted = lastCounted ?? (cameraThisSet ? { reps: 0, partials: 0 } : undefined);
       rec(
         (r) =>
@@ -1015,6 +1022,7 @@ export function mountApp(root: HTMLElement): void {
         handle: createLastSetCorrection({
           reps: last.reps,
           partials: last.partials ?? 0,
+          learning: lastLogLearning,
           onCorrect: (reps, partials) => correctLastSet(reps, partials),
         }),
       };

@@ -1,5 +1,5 @@
-// Dev-only: renders an original articulated mannequin doing one of the six pose-tracked exercises
-// (SPEC §2 M4 table, in its SPEC view) and records it to WebM, for exercising the landmark pipeline
+// Dev-only: renders an original articulated mannequin doing one of the pose-tracked exercises
+// (SPEC §2 M4 table and the SPEC M4f wave 1 table, each in its SPEC view) and records it to WebM, for exercising the landmark pipeline
 // and the rep counter without filming anyone. Driven by scripts/synthetic.mjs.
 //
 // Each exercise is a pose function of the tracked joint angle (degrees, the same angle the rep
@@ -141,11 +141,64 @@ type Exercise = {
   props?: (scene: Group) => void;
 };
 
-const box = (g: Group, c: [number, number, number], s: [number, number, number]) => {
+const box = (
+  g: Group,
+  c: [number, number, number],
+  s: [number, number, number],
+  tiltDeg = 0, // rotation about the figure's z axis (sagittal tilt; + = top leans toward -x)
+) => {
   const m = new Mesh(new BoxGeometry(...s), new MeshStandardMaterial({ color: 0x5a4a3c }));
   m.position.set(...c);
+  m.rotation.z = rad(tiltDeg);
   g.add(m);
 };
+
+/**
+ * Wrist position for elbow angle `theta` (between elbow->shoulder and elbow->wrist): the forearm
+ * starts as the upper arm's straight continuation (theta 180) and folds toward `toward` (any
+ * direction not parallel to the upper arm), in the plane the two span. Works off the sagittal plane.
+ */
+function foldForearm(s: Vector3, e: Vector3, theta: number, toward: Vector3): Vector3 {
+  const b = s.clone().sub(e).normalize();
+  const p = toward.clone().addScaledVector(b, -toward.dot(b)).normalize();
+  return e
+    .clone()
+    .addScaledVector(b, F * Math.cos(rad(theta)))
+    .addScaledVector(p, F * Math.sin(rad(theta)));
+}
+
+/**
+ * Seated DB press, front view: forearms vertical, upper arms raised alpha above horizontal, so
+ * cos(theta) = -sin(alpha); wrists stay above the shoulders. Shared by `shoulder-press` (stool)
+ * and `db-shoulder-press` (bench with a back pad, M4f).
+ */
+const seatedPress = (theta: number): Pose => {
+  const hip = v(0, 0.56);
+  const neck = v(0, 1.06);
+  const alpha = Math.asin(-Math.cos(rad(theta)));
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = s.clone().add(v(0, U * Math.sin(alpha), U * Math.cos(alpha) * sg));
+    const w = e.clone().add(v(0, F, 0));
+    return {
+      s,
+      e,
+      w,
+      h: w.clone().add(v(0, 0.04, 0)),
+      k: v(0.42, 0.52, 0.13 * sg),
+      a: v(0.45, 0.09, 0.15 * sg),
+      toe: v(0.62, 0.03, 0.15 * sg),
+    };
+  });
+  return { hip, neck, face: v(1, 0), r, l, bells: [r, l].map(bellAtHand(v(0, 0, 1))) };
+};
+
+/** Seated with thighs forward and feet on the floor (bench exercises, M4f). */
+const seatedLegs = (sgn: number, spread = 0.13) => ({
+  k: v(0.42, 0.52, spread * sgn),
+  a: v(0.45, 0.09, (spread + 0.02) * sgn),
+  toe: v(0.62, 0.03, (spread + 0.02) * sgn),
+});
 
 const EX: Record<string, Exercise> = {
   // Elbow angle, side view. Thresholds > 150 / < 55.
@@ -252,27 +305,7 @@ const EX: Record<string, Exercise> = {
     start: 35,
     full: 180,
     partial: 100,
-    pose: (theta) => {
-      const hip = v(0, 0.56);
-      const neck = v(0, 1.06);
-      // Forearm vertical, upper arm raised alpha above horizontal: cos(theta) = -sin(alpha).
-      const alpha = Math.asin(-Math.cos(rad(theta)));
-      const { r, l } = sides((sg) => {
-        const s = at(neck, 0.2 * sg);
-        const e = s.clone().add(v(0, U * Math.sin(alpha), U * Math.cos(alpha) * sg));
-        const w = e.clone().add(v(0, F, 0));
-        return {
-          s,
-          e,
-          w,
-          h: w.clone().add(v(0, 0.04, 0)),
-          k: v(0.42, 0.52, 0.13 * sg),
-          a: v(0.45, 0.09, 0.15 * sg),
-          toe: v(0.62, 0.03, 0.15 * sg),
-        };
-      });
-      return { hip, neck, face: v(1, 0), r, l, bells: [r, l].map(bellAtHand(v(0, 0, 1))) };
-    },
+    pose: seatedPress,
     props: (g) => box(g, [-0.02, 0.24, 0], [0.46, 0.48, 0.42]),
   },
   // Rowing (near, right) arm elbow angle, side view, torso hinged ~70 deg. Thresholds > 150 / < 90.
@@ -402,6 +435,198 @@ const EX: Record<string, Exercise> = {
         r,
         l,
         bells: [r, l].map(bellAtHand(v(1, 0, 0))),
+      };
+    },
+  },
+
+  // ----- M4f wave 1 (SPEC M4f table). Same keyframe schedules; original poses. -----
+
+  // Elbow angle, side view, both arms together, neutral grip. Thresholds > 150 / < 70.
+  'hammer-curl': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [0.3, 1.0, 4.1], look: [0.1, 0.95, 0], fov: 32 },
+    start: 180,
+    full: 22,
+    partial: 92,
+    pose: (theta) => {
+      const hip = v(0, 0.92);
+      const neck = hip.clone().add(v(0, SPINE));
+      const { r, l } = sides((sg) => {
+        const s = at(neck, 0.2 * sg);
+        const e = s.clone().addScaledVector(dir(-93), U);
+        const w = e.clone().addScaledVector(dir(ang2(s.clone().sub(e)) - theta), F);
+        return { s, e, w, h: w.clone(), ...standLegs(sg) };
+      });
+      // Thumbs up: the handle lies in the sagittal plane, across the forearm.
+      const bells = [r, l].map((sd) => {
+        const f = sd.w.clone().sub(sd.e).normalize();
+        return { pos: sd.h.clone().addScaledVector(f, 0.03), axis: v(-f.y, f.x) };
+      });
+      return { hip, neck, face: v(1, 0), r, l, bells };
+    },
+  },
+  // Right (working, near) elbow, seated, leaning forward, upper arm braced on the inner thigh;
+  // camera ~35 deg round from the working side toward the front. Thresholds > 145 / < 70.
+  'concentration-curl': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [2.15, 0.78, 3.1], look: [0.22, 0.62, 0], fov: 32 },
+    start: 180,
+    full: 15,
+    partial: 95,
+    pose: (theta) => {
+      const lean = 35;
+      const hip = v(0, 0.55);
+      const u = v(Math.sin(rad(lean)), Math.cos(rad(lean)));
+      const neck = hip.clone().addScaledVector(u, SPINE);
+      const sR = at(neck, 0.2);
+      const eR = sR.clone().addScaledVector(v(0.04, -0.29, -0.08).normalize(), U);
+      // Folds forward and a little across the body (toward the other shoulder).
+      const wR = foldForearm(sR, eR, theta, v(1, 0, -0.2));
+      const sL = at(neck, -0.2);
+      // Left forearm rests on the left thigh.
+      const eL = sL.clone().addScaledVector(v(0.15, -0.95, -0.12).normalize(), U);
+      const wL = eL.clone().addScaledVector(v(0.95, -0.2, -0.05).normalize(), F);
+      const r: Side = { s: sR, e: eR, w: wR, h: wR.clone(), ...seatedLegs(1, 0.24) };
+      const l: Side = { s: sL, e: eL, w: wL, h: wL.clone(), ...seatedLegs(-1, 0.24) };
+      return {
+        hip,
+        neck,
+        face: v(Math.cos(rad(lean + 15)), -Math.sin(rad(lean + 15))),
+        hipW: 0.11,
+        r,
+        l,
+        bells: [r].map(bellAtHand(v(0, 0, 1))),
+      };
+    },
+    props: (g) => box(g, [-0.05, 0.24, 0], [0.42, 0.48, 0.36]),
+  },
+  // Elbow angle, side view, torso reclined 45 deg on an incline bench, upper arms hanging straight
+  // down behind the torso line. Thresholds > 150 / < 70.
+  'incline-curl': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [0.05, 0.72, 3.7], look: [0.05, 0.62, 0], fov: 32 },
+    start: 180,
+    full: 22,
+    partial: 92,
+    pose: (theta) => {
+      const recline = 45;
+      const hip = v(0, 0.55);
+      const u = v(-Math.sin(rad(recline)), Math.cos(rad(recline)));
+      const neck = hip.clone().addScaledVector(u, SPINE);
+      const { r, l } = sides((sg) => {
+        const s = at(neck, 0.2 * sg);
+        const e = s.clone().addScaledVector(dir(-90), U);
+        const w = e.clone().addScaledVector(dir(ang2(s.clone().sub(e)) - theta), F);
+        return { s, e, w, h: w.clone(), ...seatedLegs(sg) };
+      });
+      return {
+        hip,
+        neck,
+        face: v(Math.cos(rad(recline)), Math.sin(rad(recline))),
+        r,
+        l,
+        bells: [r, l].map(bellAtHand(v(0, 0, 1))),
+      };
+    },
+    props: (g) => {
+      box(g, [0.02, 0.24, 0], [0.42, 0.48, 0.3]); // seat
+      // Back pad along the torso, just behind it (narrower than the shoulders).
+      box(g, [-0.3, 0.62, 0], [0.06, 0.75, 0.28], 45);
+    },
+  },
+  // Seated DB press on a bench with a back pad: the seated-press pose (front view, elbow angle in
+  // the image plane). Thresholds > 143 / < 80; wrists above the shoulders throughout.
+  'db-shoulder-press': {
+    view: 'front',
+    size: [720, 960],
+    cam: { pos: [0, 0.92, 3.8], look: [0, 0.86, 0], fov: 32 },
+    start: 35,
+    full: 180,
+    partial: 88,
+    pose: seatedPress,
+    props: (g) => {
+      box(g, [-0.02, 0.24, 0], [0.46, 0.48, 0.42]); // seat
+      box(g, [-0.22, 0.85, 0], [0.06, 0.75, 0.34]); // upright back pad
+    },
+  },
+  // Near (right) elbow, side view, both arms rowing, torso hinged 55 deg, knees soft, no bench.
+  // The upper arm swings back 0.8 x the elbow flexion; the forearm folds toward the shoulder.
+  // Thresholds > 145 / < 90.
+  'bent-over-row': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [0.25, 0.8, 3.7], look: [0.25, 0.72, 0], fov: 32 },
+    start: 180,
+    full: 40,
+    partial: 82,
+    pose: (theta) => {
+      const hinge = 55;
+      const hip = v(0, 0.84);
+      const u = v(Math.sin(rad(hinge)), Math.cos(rad(hinge)));
+      const neck = hip.clone().addScaledVector(u, SPINE);
+      const gamma = 0.8 * (180 - theta);
+      const { r, l } = sides((sg) => {
+        const s = at(neck, 0.2 * sg);
+        const e = s.clone().addScaledVector(dir(-90 - gamma), U);
+        const w = e.clone().addScaledVector(dir(ang2(s.clone().sub(e)) - theta), F);
+        return {
+          s,
+          e,
+          w,
+          h: w.clone(),
+          k: v(0.1, 0.48, 0.1 * sg),
+          a: v(-0.02, 0.09, 0.1 * sg),
+          toe: v(0.17, 0.03, 0.1 * sg),
+        };
+      });
+      return {
+        hip,
+        neck,
+        face: v(Math.cos(rad(hinge)), -Math.sin(rad(hinge))),
+        r,
+        l,
+        bells: [r, l].map(bellAtHand(v(0, 0, 1))),
+      };
+    },
+  },
+  // Near (right) elbow, standing; both hands hold one dumbbell overhead, upper arms near
+  // vertical, the forearms fold down behind the head. Thresholds > 150 / < 80, extended gate:
+  // wrist above shoulder (true throughout). The camera sits ~40 deg round from the side toward
+  // the front: square side-on, the near upper arm covers this mannequin's face and MediaPipe
+  // loses 25-65% of frames. MediaPipe still reads the bent end ~55 deg shallow (rendered 15 ->
+  // ~70-76) and straight overhead arms at ~155-160, so these clips miscount (PROGRESS M4f task 6).
+  // Concentration curl (above): rendered 15 reads ~61-72 in its 3/4 view.
+  'triceps-extension': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [2.75, 1.12, 3.3], look: [0, 1.12, 0], fov: 32 },
+    start: 180,
+    full: 15,
+    partial: 112,
+    pose: (theta) => {
+      const hip = v(0, 0.92);
+      const neck = hip.clone().add(v(0, SPINE));
+      const { r, l } = sides((sg) => {
+        const s = at(neck, 0.2 * sg);
+        const e2 = s.clone().addScaledVector(dir(96), U);
+        const w2 = e2.clone().addScaledVector(dir(ang2(s.clone().sub(e2)) - theta), F);
+        // The arms converge on the one dumbbell between the hands.
+        const e = at(e2, 0.17 * sg);
+        const w = at(w2, 0.09 * sg);
+        return { s, e, w, h: w.clone(), ...standLegs(sg) };
+      });
+      const hands = r.w.clone().lerp(l.w, 0.5);
+      const f = r.w.clone().sub(r.e).normalize();
+      return {
+        hip,
+        neck,
+        face: v(1, 0),
+        r,
+        l,
+        bells: [{ pos: hands.addScaledVector(f, 0.05), axis: f }],
       };
     },
   },

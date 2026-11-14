@@ -21,6 +21,10 @@
 // and shown in the "pre" column. Its length needs `camera.wallT0` (wall time of frame clock 0).
 // M5c B8: a set put on hold (a break inside the set) and continued is one devlog set, so one
 // fixture with all its reps. The auto column adds "hold:<reason> <sec> → continue|next|save".
+// M4f: a camera set carries its rule's status (`camera.ruleStatus`: 'learning' | 'tuned'). The
+// table ("rule" column), the per-set block and the summary mark the learning sets, so a later
+// promotion knows which real fixtures were recorded while the rule was learning. Only the enum is
+// read; any other value prints as '-'. Fixtures stay a plain LandmarkFrame[].
 // Existing fixtures are kept unless --force. --dry-run writes nothing.
 // --compact makes fixtures small enough to commit (~5x smaller): coordinates at 3 decimals,
 // visibility at 2, and landmarks src/core never reads (see USED_INDICES) zeroed in place.
@@ -314,6 +318,14 @@ function focusOf(focusEvents, setStarts, setEnds, set) {
 
 const SPEECH_KINDS = ['count', 'hint', 'cue', 'placement'];
 
+const RULE_STATUSES = ['learning', 'tuned'];
+
+/** The set's `camera.ruleStatus` when it is a known enum value, else null (older exports, junk). */
+function ruleStatusOf(set) {
+  const s = set?.camera?.ruleStatus;
+  return RULE_STATUSES.includes(s) ? s : null;
+}
+
 /** Spoken lines per kind of a set's camera.speech (kinds only, never the text); `dropped` = not said. */
 function speechOf(set) {
   const out = { count: 0, hint: 0, cue: 0, placement: 0, dropped: 0 };
@@ -337,9 +349,9 @@ function fpsSamplesOf(set) {
 /**
  * Plans the conversion without touching the disk.
  * Returns { label, items: [{ session, exerciseId, setIndex, folder, counted, logged, frames,
- * personFrames, fps, prerollMs, auto, autoInfo, ended, focus, speech, fpsSamples, rel, fixture } |
- * { …, skip: reason }] } where `rel` is `<folder>/<file>`. `auto`, `autoInfo`, `focus`, `speech`
- * and `fpsSamples` are report-only and never reach a fixture.
+ * personFrames, fps, prerollMs, auto, autoInfo, ended, focus, speech, fpsSamples, ruleStatus, rel,
+ * fixture } | { …, skip: reason }] } where `rel` is `<folder>/<file>`. `auto`, `autoInfo`, `focus`,
+ * `speech`, `fpsSamples` and `ruleStatus` are report-only and never reach a fixture.
  */
 export function planConversion(exp, opts = {}) {
   const label = opts.label;
@@ -378,6 +390,7 @@ export function planConversion(exp, opts = {}) {
         speech: speechOf(set),
         fpsSamples: fpsSamplesOf(set),
         focus: focusOf(focusEvents, setStarts, setEnds, set),
+        ruleStatus: ruleStatusOf(set),
       };
       // Frame-clock times (one clock may span several sets): sort, never assume t starts near 0.
       const all = Array.isArray(set?.camera?.frames)
@@ -489,7 +502,7 @@ const fmtInt = (v) => (v == null ? '-' : String(Math.round(v)));
  * Retune view: one line per set, ids and numbers only.
  *   s<session> #<set> <exerciseId>  <counted> vs <logged> ok|MISCOUNT  start:… stop:… [undo/rep/
  *   hold/close]  focus <score>[: <cueId>@r<rep> …]  fps <avg>  speech count:n hint:n cue:n
- *   [placement:n] [dropped:n]
+ *   [placement:n] [dropped:n]  [learning]
  * Average fps = mean of the camera.fps samples, else the set's frame rate.
  */
 export function formatSets(results) {
@@ -507,7 +520,9 @@ export function formatSets(results) {
     let speech = `speech count:${sp.count} hint:${sp.hint} cue:${sp.cue}`;
     if (sp.placement) speech += ` placement:${sp.placement}`;
     if (sp.dropped) speech += ` dropped:${sp.dropped}`;
-    return `  ${[setRef(r), counts, startStop(r), focus, `fps ${fmtInt(fps)}`, speech].join('  ')}`;
+    const parts = [setRef(r), counts, startStop(r), focus, `fps ${fmtInt(fps)}`, speech];
+    if (r.ruleStatus === 'learning') parts.push('learning');
+    return `  ${parts.join('  ')}`;
   });
   return ['Sets:', ...lines].join('\n');
 }
@@ -522,7 +537,8 @@ const tally = (keys, order = []) => {
 /**
  * Session summary over every set of the export: sets per exercise, miscounts, auto start / stop
  * success (success = no Undo tapped), holds and how they ended, cues per rule, spoken lines per
- * kind, fps min / median over all camera.fps samples. Ids and numbers only.
+ * kind, fps min / median over all camera.fps samples, and the sets recorded while their rule
+ * was learning (with the fixture each became, or "not converted"). Ids and numbers only.
  */
 export function formatSummary(results) {
   const sum = (k) => results.reduce((n, r) => n + (r.speech?.[k] ?? 0), 0);
@@ -539,6 +555,11 @@ export function formatSummary(results) {
   const holds = auto.flatMap((r) => r.autoInfo.holds);
   const cues = results.flatMap((r) => r.focus?.cues ?? []).map((c) => c.id ?? '?');
   const samples = results.flatMap((r) => r.fpsSamples ?? []);
+  const cameraSets = results.filter((r) => r.folder != null);
+  const learning = results.filter((r) => r.ruleStatus === 'learning');
+  const learnList = learning.length
+    ? ` (${learning.map((r) => `${setRef(r)} ${r.rel && !r.skip ? `→ ${r.rel}` : 'not converted'}`).join('; ')})`
+    : '';
   const miss = missed.length
     ? ` (${missed.map((r) => `${setRef(r)} ${fmtCount(r.counted)} vs ${fmtCount(r.logged)}`).join('; ')})`
     : '';
@@ -561,6 +582,7 @@ export function formatSummary(results) {
     samples.length
       ? `fps: min ${fmtInt(Math.min(...samples))}, median ${fmtInt(median(samples))} (${samples.length} samples)`
       : 'fps: - (0 samples)',
+    `learning: ${learning.length} of ${cameraSets.length} camera sets${learnList}`,
   ];
   return ['Summary:', ...lines.map((l) => `  ${l}`)].join('\n');
 }
@@ -574,6 +596,7 @@ export function formatTable(results, cwd = process.cwd()) {
     'counted',
     'logged',
     'miss',
+    'rule',
     'frames',
     'pose',
     'fps',
@@ -596,6 +619,7 @@ export function formatTable(results, cwd = process.cwd()) {
       fmtCount(r.counted),
       fmtCount(r.logged),
       miss,
+      r.ruleStatus ?? '-',
       String(r.frames),
       String(r.personFrames),
       r.fps == null ? '-' : r.fps.toFixed(1),

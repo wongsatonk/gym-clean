@@ -95,6 +95,14 @@
   white-space: nowrap;
 }
 
+/* M4f: a learning camera set's note under "Last set" (neutral, body size, not spoken). */
+.lsc-learning {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
 .lsc-summary {
   flex: 1;
   min-width: 0;

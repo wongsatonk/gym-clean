@@ -374,11 +374,11 @@ mid-set.
 | Exercise (id) | Folder | View (otherView) | Angle | Start → far, lowering | Extended / contracted | Gates |
 |---|---|---|---|---|---|---|
 | Hammer curls (`Hammer_Curls`) | `hammer-curl` | side, best side (none) | elbow (shoulder–elbow–wrist) | extended → contracted; lowering toward extended | > 150° / < 70° | visibility only |
-| Concentration curls (`Concentration_Curls`) | `concentration-curl` | side, about 3/4 from the working arm's side, best side (none) | elbow | extended → contracted; lowering toward extended | > 145° / < 70° | visibility only (the arm braced on the thigh rarely locks out, hence 145) |
+| Concentration curls (`Concentration_Curls`) | `concentration-curl` | side, about 3/4 from the working arm's side, best side (none) | elbow | extended → contracted; lowering toward extended | > 145° / < 85° (retuned from 70 on the synthetic clips, PROGRESS Decision "M4f wave-1 retune from synthetic") | visibility only (the arm braced on the thigh rarely locks out, hence 145) |
 | Incline dumbbell curl (`Incline_Dumbbell_Curl`) | `incline-curl` | side, best side (none) | elbow | extended → contracted; lowering toward extended | > 150° / < 70° | visibility only |
 | Dumbbell shoulder press (`Dumbbell_Shoulder_Press`) | `db-shoulder-press` | front, both arms (none) | elbow, **image plane** (as the seated press) | contracted → extended; lowering toward contracted | > 143° / < 80° | extended gate: wrist above shoulder |
 | Bent-over two-dumbbell row (`Bent_Over_Two-Dumbbell_Row`) | `bent-over-row` | side, best side (none) | elbow | extended → contracted; lowering toward extended | > 145° / < 90° | visibility only (a posture gate is the fallback if standing up between reps makes phantom reps) |
-| Standing DB triceps extension (`Standing_Dumbbell_Triceps_Extension`) | `triceps-extension` | side, best side (none) | elbow | extended (overhead) → contracted (behind the head); lowering toward contracted | > 150° / < 80° | extended gate: wrist above shoulder (lifting the dumbbell up from hanging arms isn't a rep) |
+| Standing DB triceps extension (`Standing_Dumbbell_Triceps_Extension`) | `triceps-extension` | side, best side (none) | elbow | extended (overhead) → contracted (behind the head); lowering toward contracted | > 138° / < 95° (retuned from 150 / 80 on the synthetic clips, PROGRESS Decision "M4f wave-1 retune from synthetic") | extended gate: wrist above shoulder (lifting the dumbbell up from hanging arms isn't a rep); visibility gate 0.4, not 0.5 (the wrist behind the head reads 0.41–0.49 at the bottom) |
 
 | Folder | Hint: far / start (≤ 6 words) | Placement lines (≤ 8 words each) | Spoken placement sentence |
 |---|---|---|---|

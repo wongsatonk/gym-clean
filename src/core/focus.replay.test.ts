@@ -6,7 +6,14 @@
 // The numbers behind the Decision are in PROGRESS ("M5 task 7 replay").
 import { describe, expect, it } from 'vitest';
 import { AUTO_SET_DEFAULTS, personInFrame } from './autoSet';
-import { focusFlagsFor, ruleForFolder, type ExerciseRule } from './exercises';
+import {
+  focusFlagsFor,
+  FORM_RULE_EXERCISES,
+  FORM_RULE_IDS,
+  RULES,
+  ruleForFolder,
+  type ExerciseRule,
+} from './exercises';
 import {
   createFocusTracker,
   createHold,
@@ -132,15 +139,13 @@ const FOCUS_ON: FocusRuleFlags = {
   lowFps: true,
 };
 
-/** SPEC M5 form rules per exercise folder. */
-const SPEC_FORM: Record<string, readonly FocusCueId[]> = {
-  curl: ['elbowDrift', 'bodySwing'],
-  row: ['bodySwing'],
-  'push-up': ['hipSag'],
-  'shoulder-press': ['armsOutOfSync'],
-  'lateral-raise': ['armsOutOfSync', 'raiseTooHigh'],
-  'goblet-squat': [],
-};
+/** SPEC M5 form rules per rule folder (FORM_RULE_EXERCISES, "Reliable from"); [] where none. */
+const SPEC_FORM: Record<string, readonly FocusCueId[]> = Object.fromEntries(
+  RULES.map((r) => [
+    r.folder,
+    FORM_RULE_IDS.filter((id) => FORM_RULE_EXERCISES[id]?.includes(r.folder)),
+  ]),
+);
 
 /** Every focus rule plus the folder's SPEC form rules. */
 const allOn = (folder: string): FocusRuleFlags => ({
@@ -198,9 +203,11 @@ function preSetSyncHeld(c: Clip, holdMs: number): number | null {
 // ---------------------------------------------------------------------------------------------
 
 describe('replay inventory', () => {
-  it('has the 4 real lateral-raise clips, 12 clean synthetic clips and 6 flaw clips', () => {
+  it('has the 4 real lateral-raise clips, a clean 01 + 02 per rule and 6 flaw clips', () => {
     expect(REAL.map((c) => c.label)).toEqual([0, 1, 2, 3].map((i) => `real-2026-11-13-s1-${i}`));
-    expect(CLEAN.length).toBe(12);
+    const cleanKeys = CLEAN.map((c) => `${c.folder}/${c.label}`).sort();
+    const perRule = RULES.flatMap((r) => [`${r.folder}/synthetic-01`, `${r.folder}/synthetic-02`]);
+    expect(cleanKeys).toEqual(perRule.sort());
     expect(FLAWED.length).toBe(6);
   });
 

@@ -905,6 +905,7 @@ describe('scripts/devlog.mjs, retune report (per-set block + summary)', () => {
       '  cues: rushedLowering 1, stalled 1, ? 1',
       '  speech: count 14, hint 1, cue 5, placement 1, dropped 1',
       '  fps: min 20, median 26 (7 samples)',
+      '  learning: 0 of 4 camera sets',
     ]);
   });
 
@@ -936,5 +937,109 @@ describe('scripts/devlog.mjs, retune report (per-set block + summary)', () => {
     assert.match(stdout, /^exercise\s+sess\s+set\s+counted/m);
     assert.match(stdout, /Focus cues:/);
     assert.match(stdout, /4 would be written, 0 kept \(exists\), 0 skipped/);
+  });
+});
+
+// M4f: a camera set records its rule's status (`camera.ruleStatus`, src/data/devlog.ts). The
+// report marks the sets recorded while the rule was still learning, so a later promotion knows
+// which real fixtures came from them. The fixture itself stays landmarks only.
+describe('scripts/devlog.mjs, learning sets (M4f)', () => {
+  const HAMMER = 'Hammer_Curls';
+  const BOGUS = 'SECRET-STATUS';
+
+  function learningExport() {
+    const exp = buildExport();
+    const frames = loggedFrames();
+    const cam = (folder, ruleStatus) => ({
+      ...camera(folder, frames),
+      ...(ruleStatus === undefined ? {} : { ruleStatus }),
+    });
+    const same = { counted: { reps: 3, partials: 1 }, logged: { reps: 3, partials: 1 } };
+    exp.sessions[0].sets = [
+      set(0, { ...same, exerciseId: HAMMER, camera: cam('hammer-curl', 'learning') }),
+      set(1, { ...same, camera: cam('curl', 'tuned') }),
+      set(2, { ...same, camera: cam('curl') }), // an export from before M4f
+      set(3, { ...same, exerciseId: HAMMER, camera: cam('hammer-curl', BOGUS) }),
+      set(4, {
+        ...same,
+        exerciseId: HAMMER,
+        camera: cam('hammer-curl', 'learning'),
+        endedAt: undefined,
+      }),
+    ];
+    return exp;
+  }
+
+  let dir;
+  let stdout;
+  before(() => {
+    dir = mkdtempSync(join(tmpdir(), 'devlog-learning-'));
+    const file = join(dir, 'learning.json.gz');
+    writeFileSync(file, gzipSync(JSON.stringify(learningExport())));
+    stdout = run(file, '--out', join(dir, 'out'), '--label', 'lt');
+  });
+  after(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('knows every wave 1 folder', () => {
+    for (const f of [
+      'hammer-curl',
+      'concentration-curl',
+      'incline-curl',
+      'db-shoulder-press',
+      'bent-over-row',
+      'triceps-extension',
+    ]) {
+      assert.ok(KNOWN_FOLDERS.includes(f), f);
+    }
+  });
+
+  it('plans ruleStatus as an enum only: learning, tuned or null', () => {
+    const items = planConversion(learningExport(), { label: 'lt' }).items;
+    assert.deepEqual(
+      items.map((i) => i.ruleStatus),
+      ['learning', 'tuned', null, null, 'learning'],
+    );
+    assert.equal(items[0].rel, 'hammer-curl/lt-1805-s1-0__reps-3__partials-1.json');
+    assert.equal(items[4].skip, 'set never ended');
+  });
+
+  it('writes a learning set to its folder as a plain LandmarkFrame[] (no status inside)', () => {
+    const file = join(dir, 'out/hammer-curl/lt-1805-s1-0__reps-3__partials-1.json');
+    const text = readFileSync(file, 'utf8');
+    const frames = JSON.parse(text);
+    assert.ok(Array.isArray(frames) && frames.length === original.length);
+    assert.equal(text.includes('learning'), false);
+    assert.deepEqual(Object.keys(frames[0]).sort(), Object.keys(original[0]).sort());
+  });
+
+  it('marks learning sets in the table, the per-set block and the summary', () => {
+    assert.match(stdout, /^exercise\s+sess\s+set\s+counted\s+logged\s+miss\s+rule\s+frames/m);
+    assert.match(
+      stdout,
+      /^Hammer_Curls\s+1\s+0\s+3\/1\s+3\/1\s+ok\s+learning\s+\d+\s.*\swritten: /m,
+    );
+    assert.match(
+      stdout,
+      /^Dumbbell_Bicep_Curl\s+1\s+1\s+3\/1\s+3\/1\s+ok\s+tuned\s+\d+\s.*\swritten: /m,
+    );
+    assert.match(
+      stdout,
+      /^Dumbbell_Bicep_Curl\s+1\s+2\s+3\/1\s+3\/1\s+ok\s+-\s+\d+\s.*\swritten: /m,
+    );
+    const lines = stdout.split('\n');
+    const sets = lines.slice(lines.indexOf('Sets:') + 1, lines.indexOf('Sets:') + 6);
+    assert.match(sets[0], /^ {2}s1 #0 Hammer_Curls {2}3\/1 vs 3\/1 ok .* {2}learning$/);
+    assert.equal(sets[1].includes('learning'), false);
+    assert.equal(sets[2].includes('learning'), false);
+    assert.equal(sets[3].includes('learning'), false);
+    assert.match(sets[4], / {2}learning$/);
+    assert.match(
+      stdout,
+      /^ {2}learning: 2 of 5 camera sets \(s1 #0 Hammer_Curls → hammer-curl\/lt-1805-s1-0__reps-3__partials-1\.json; s1 #4 Hammer_Curls not converted\)$/m,
+    );
+  });
+
+  it('never prints a non-enum status', () => {
+    assert.equal(stdout.includes(BOGUS), false);
   });
 });

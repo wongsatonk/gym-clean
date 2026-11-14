@@ -15,7 +15,12 @@ export type LastSetCorrectionOptions = {
   onCorrect: (reps: number, partials: number) => void;
   /** Upper bound for both steppers; default 99. */
   max?: number;
+  /** M4f: the set was counted by a learning camera rule → one note under the line. */
+  learning?: boolean;
 };
+
+/** M4f copy (SPEC): shown, never spoken. */
+export const LEARNING_FIX_LINE = "Camera still learning. Fix it if it's off.";
 
 export type LastSetCorrectionHandle = {
   el: HTMLElement;
@@ -132,6 +137,8 @@ export function createLastSetCorrection(opts: LastSetCorrectionOptions): LastSet
       summary,
       fixBtn,
     ),
+    opts.learning === true &&
+      h('p', { class: 'lsc-learning', 'data-lsc': 'learning' }, LEARNING_FIX_LINE),
     editor,
     status,
   );

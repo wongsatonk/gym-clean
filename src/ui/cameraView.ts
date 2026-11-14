@@ -920,6 +920,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       : null;
   // Where to put the phone for this exercise (rule data); none for the Settings camera test.
   const placement = rule?.placement;
+  // M4f: a learning rule shows a chip in the top band and one setup line (never spoken).
+  const learning = rule?.status === 'learning';
 
   // Video and overlay share one box and one `object-fit: cover`, so the canvas (sized to the
   // video's pixels) is cropped and mirrored exactly like the video and the skeleton stays on the
@@ -946,6 +948,12 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           h('h2', { class: 'setup-title' }, 'Set up your phone'),
         ),
         ...placement.lines.slice(0, 3).map((l) => h('p', { class: 'setup-line' }, l)),
+        learning &&
+          h(
+            'p',
+            { class: 'setup-line setup-learning', 'data-setup-learning': '' },
+            'Still learning: fix the count on Rest.',
+          ),
         h(
           'button',
           {
@@ -1130,8 +1138,20 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     },
     h(
       'header',
-      { class: 'top-bar cam-top' },
+      { class: `top-bar cam-top${learning ? ' has-learning' : ''}` },
       h('p', { class: 'page-title small-title cam-title' }, opts.title),
+      learning &&
+        h(
+          'span',
+          {
+            class: 'cam-learning',
+            role: 'note',
+            'aria-label': 'Learning: camera counting is new for this exercise',
+            'data-learning': '',
+          },
+          icon('trend', 'sm'),
+          'Learning',
+        ),
       btn3d,
       h(
         'button',

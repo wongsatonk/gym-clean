@@ -71,7 +71,7 @@ const M4F_WAVE1_PLANNED: Readonly<Record<string, CounterSpec>> = {
   Concentration_Curls: {
     view: 'side',
     extended: 145,
-    contracted: 70,
+    contracted: 85,
     direction: 'decreasing',
     start: 'extended',
     eccentric: 'toExtended',
@@ -102,8 +102,8 @@ const M4F_WAVE1_PLANNED: Readonly<Record<string, CounterSpec>> = {
   },
   Standing_Dumbbell_Triceps_Extension: {
     view: 'side',
-    extended: 150,
-    contracted: 80,
+    extended: 138,
+    contracted: 95,
     direction: 'decreasing',
     start: 'extended',
     eccentric: 'toContracted',

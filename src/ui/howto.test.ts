@@ -48,6 +48,18 @@ describe('badgeList: M4f Learning badge', () => {
     ]);
   });
 
+  it('looks the status up from the rule data when no override is passed', () => {
+    expect(labels({ exerciseId: 'Hammer_Curls', tracking: 'pose' })).toEqual([
+      '3D demo',
+      'Camera',
+      'Learning',
+    ]);
+    expect(labels({ exerciseId: 'Dumbbell_Bicep_Curl', tracking: 'pose' })).toEqual([
+      '3D demo',
+      'Camera',
+    ]);
+  });
+
   it('shows no "Learning" when the exercise is not camera-tracked', () => {
     expect(
       labels({ exerciseId: 'Hammer_Curls', tracking: 'manual', ruleStatus: 'learning' }),

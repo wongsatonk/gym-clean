@@ -69,12 +69,18 @@ const SPEC_RULES: readonly SpecRow[] = [
   ['lateral-raise', 'Side_Lateral_Raise', 'tuned', 'front', 'shoulder', 25, 75, 'increasing', 'extended', 'toExtended', 'both', 'world', null, 'arm'],
   // SPEC M4f wave 1 (all learning).
   ['hammer-curl', 'Hammer_Curls', 'learning', 'side', 'elbow', 150, 70, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
-  ['concentration-curl', 'Concentration_Curls', 'learning', 'side', 'elbow', 145, 70, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
+  ['concentration-curl', 'Concentration_Curls', 'learning', 'side', 'elbow', 145, 85, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
   ['incline-curl', 'Incline_Dumbbell_Curl', 'learning', 'side', 'elbow', 150, 70, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
   ['db-shoulder-press', 'Dumbbell_Shoulder_Press', 'learning', 'front', 'elbow', 143, 80, 'decreasing', 'contracted', 'toContracted', 'both', 'image', 'wristAboveShoulder', 'arm'],
   ['bent-over-row', 'Bent_Over_Two-Dumbbell_Row', 'learning', 'side', 'elbow', 145, 90, 'decreasing', 'extended', 'toExtended', 'best', 'world', null, 'arm'],
-  ['triceps-extension', 'Standing_Dumbbell_Triceps_Extension', 'learning', 'side', 'elbow', 150, 80, 'decreasing', 'extended', 'toContracted', 'best', 'world', 'wristAboveShoulder', 'arm'],
+  ['triceps-extension', 'Standing_Dumbbell_Triceps_Extension', 'learning', 'side', 'elbow', 138, 95, 'decreasing', 'extended', 'toContracted', 'best', 'world', 'wristAboveShoulder', 'arm'],
 ];
+
+/**
+ * SPEC visibility-gate exceptions to §3's 0.5. Triceps extension (M4f wave-1 retune): the wrist
+ * sits behind the head at the bottom and reads 0.42–0.49 there, so 0.5 dropped every bottom.
+ */
+const SPEC_MIN_VISIBILITY: Readonly<Record<string, number>> = { 'triceps-extension': 0.4 };
 
 /** SPEC M4f wave 1 coaching table: folder, hint far / start, placement lines, spoken sentence. */
 const SPEC_M4F_COACHING = [
@@ -334,7 +340,7 @@ describe('per-exercise data (SPEC §2 M4 table)', () => {
       expect(r.emaAlpha).toBe(0.4);
       expect(r.hysteresisDeg).toBe(10);
       expect(r.minPhaseMs).toBe(250);
-      expect(r.minVisibility).toBe(0.5);
+      expect(r.minVisibility, r.folder).toBe(SPEC_MIN_VISIBILITY[r.folder] ?? 0.5);
     }
   });
 });

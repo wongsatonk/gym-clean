@@ -69,3 +69,25 @@ test('pose-tracked exercises offer the camera; manual ones do not', async ({ pag
   await expect(page.getByRole('heading', { name: 'Wide-Grip Lat Pulldown' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Camera', exact: true })).toHaveCount(0);
 });
+
+// M4f wave 1: the six learning rules make their exercises camera exercises. Bench press stays
+// manual (no rule), so its screen never offers the camera.
+test('Hammer Curls offers the camera; Dumbbell Bench Press does not', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
+  await page.getByRole('button', { name: 'Exercise list' }).click();
+  await page
+    .getByRole('dialog', { name: 'Exercise list' })
+    .locator('.ex-row-btn', { hasText: 'Hammer Curls' })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Hammer Curls' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Camera', exact: true })).toBeVisible();
+
+  await page.goto('/');
+  await page.getByRole('button', { name: /Push A/ }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Camera', exact: true })).toHaveCount(0);
+});
