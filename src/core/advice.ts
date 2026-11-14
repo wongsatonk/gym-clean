@@ -69,6 +69,17 @@ const tooBigJump = (w: number, unit: Unit) => stepFor(unit) > MAX_JUMP_SHARE * d
 const partialsOf = (l: SetLog) => l.partials ?? 0;
 const isClean = (l: SetLog) => partialsOf(l) === 0;
 
+/** Today's sets of the exercise at the last set's weight (display-unit rounding). */
+function setsAtLastWeight(L: readonly SetLog[], unit: Unit): SetLog[] {
+  const last = L.at(-1);
+  if (!last) return [];
+  const wU = disp(last.weightKg, unit);
+  return L.filter((l) => Math.abs(disp(l.weightKg, unit) - wU) < 1e-6);
+}
+/** ≥ `need` sets at the current weight, all at/above `max` reps with no partials. */
+const topAtWeight = (atW: readonly SetLog[], max: number, need: number) =>
+  atW.length >= need && atW.every((l) => l.reps >= max && isClean(l));
+
 /** w ± one step, computed in the display unit and snapped (stored as kg). */
 function stepped(w: number, unit: Unit, dir: 1 | -1): number {
   return snapToStep(fromUnit(disp(w, unit) + dir * stepFor(unit), unit), unit);
@@ -143,7 +154,8 @@ function duringExerciseAdvice(
     const aim = `Aim for ${min} reps.`;
     return advice(id, 'A2', bw ? aim : `Keep the weight. ${aim}`, why);
   }
-  const allTop = L.length >= 2 && L.every((l) => l.reps >= max && isClean(l));
+  // Only sets at the current weight count: one set after a jump doesn't earn the next one.
+  const allTop = topAtWeight(setsAtLastWeight(L, unit), max, 2);
   if (allTop && !bw && !tooBigJump(w, unit)) {
     // Name the real jump to the snapped Apply weight, so text and Apply never disagree
     // (16 kg → 17.5 kg says "+1.5 kg", not "+2.5 kg").
@@ -217,7 +229,10 @@ export function nextTimeAdvice(
       : mk('N2', `repeat ${shown(w, unit)}.`, `repeat ${spoken(w, unit)}.`);
   }
   const allTop = L.every((l) => l.reps >= max);
-  if (L.length >= p.sets && allTop && L.every(isClean)) {
+  // All planned sets done, and the sets at the final weight (≥ 2, or all of a 1-set plan) were
+  // clean and at the top: a single set after a mid-workout jump falls through to "repeat".
+  const atW = setsAtLastWeight(L, unit);
+  if (L.length >= p.sets && topAtWeight(atW, max, Math.min(2, p.sets))) {
     if (bw) {
       // Spoken without "on" so it stays ≤ 12 words with the longest name.
       const say = `Next time, ${name(exerciseId)}: plus one rep per set.`;

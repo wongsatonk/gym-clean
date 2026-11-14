@@ -21,6 +21,7 @@ const day: ProgramDay = {
     { exerciseId: 'curl', sets: 3, targetReps: [8, 12], restSec: 60, tracking: 'pose' },
     { exerciseId: 'pushup', sets: 2, targetReps: [10, 15], restSec: 60, tracking: 'manual' },
     { exerciseId: 'raise', sets: 3, targetReps: [12, 15], restSec: 45, tracking: 'pose' },
+    { exerciseId: 'press', sets: 5, targetReps: [8, 8], restSec: 90, tracking: 'manual' },
   ],
 };
 
@@ -29,6 +30,7 @@ const NAMES: Record<string, string> = {
   curl: 'Dumbbell Bicep Curl',
   pushup: 'Pushups',
   raise: 'Side Lateral Raise',
+  press: 'Dumbbell Shoulder Press',
 };
 const name = (id: string) => NAMES[id] ?? id;
 const LONGEST = 'Dumbbell Seated One-Leg Calf Raise';
@@ -200,6 +202,27 @@ describe('afterSetAdvice A3: ≥ 2 clean sets at the top', () => {
     const s = state([lg('bench', 8, 21), lg('bench', 8, 21)]);
     // 21 + 2.5 = 23.5 → nearest 2.5 step is 22.5
     expect(afterSetAdvice(s, name)?.apply?.weightKg).toBeCloseTo(22.5, 9);
+  });
+
+  it('only counts sets at the current weight: one set after Apply is not enough', () => {
+    // Verifier case: 8×35, 8×35 → Apply 40 → 8×40 must not suggest 45 yet.
+    const three = [lg('press', 8, lb(35)), lg('press', 8, lb(35)), lg('press', 8, lb(40))];
+    expect(rule(afterSetAdvice(state(three, 'lb'), name))).toBeNull();
+    // A second clean set at 40 lb earns the next step.
+    const four = state([...three, lg('press', 8, lb(40))], 'lb');
+    const a = afterSetAdvice(four, name);
+    expect(rule(a)).toBe('A3');
+    expect(a?.text).toBe('Strong set. Try +5 lb next set.');
+    expect(toUnit(a?.apply?.weightKg ?? 0, 'lb')).toBeCloseTo(45, 9);
+  });
+
+  it('earlier sets at another weight do not block A3 at the current weight', () => {
+    const s = state([
+      lg('press', 7, 20, { partials: 1 }),
+      lg('press', 8, 22.5),
+      lg('press', 8, 22.5),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBe('A3');
   });
 
   it('off-grid weight: the text names the real jump to the Apply weight', () => {
@@ -441,6 +464,22 @@ describe('nextTimeAdvice', () => {
   it('N3 false edge: one partial is not clean; < 2 partials skips N4 → N6', () => {
     const a = nt([lg('bench', 8, 20), lg('bench', 8, 20, { partials: 1 }), lg('bench', 8, 20)]);
     expect(rule(a)).toBe('N6');
+  });
+
+  it('N3 needs ≥ 2 clean top sets at the final weight; one set after a mid-workout jump → N6', () => {
+    const one = [lg('bench', 8, lb(35)), lg('bench', 8, lb(35)), lg('bench', 8, lb(40))];
+    const a = nt(one, [], 'lb');
+    expect(rule(a)).toBe('N6');
+    expect(a?.text).toBe('Next time on Dumbbell Bench Press: repeat 40 lb.');
+    const two = [lg('bench', 8, lb(35)), lg('bench', 8, lb(40)), lg('bench', 8, lb(40))];
+    const b = nt(two, [], 'lb');
+    expect(rule(b)).toBe('N3');
+    expect(b?.text).toBe('Next time on Dumbbell Bench Press: +5 lb.');
+  });
+
+  it('N3 still needs every planned set logged', () => {
+    const logs = [lg('press', 8, 20), lg('press', 8, 22.5), lg('press', 8, 22.5)];
+    expect(rule(nt(logs))).toBe('N6');
   });
 
   it('N4: total partials ≥ 2 across sets', () => {

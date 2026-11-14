@@ -351,7 +351,7 @@ the workout's first set never overran). "Clean" = no partials.
 |---|---|---|
 | A1 | this set has partials ≥ 2 | "Keep the weight. Focus on full range." |
 | A2 | this set reps < `min` | "Keep the weight. Aim for {min} reps." |
-| A3 | `L` has ≥ 2 sets, every set reps ≥ `max` and clean, not bodyweight, not too big a jump | "Strong set. Try +{step} {unit} next set." + **Apply** (sets the next set's weight to `w + step`) |
+| A3 | `L` has ≥ 2 sets **at the current weight `w`** (display-unit rounding), every one of those reps ≥ `max` and clean (earlier sets at other weights are ignored), not bodyweight, not too big a jump | "Strong set. Try +{step} {unit} next set." + **Apply** (sets the next set's weight to `w + step`) |
 | A4 | as A3 but bodyweight | "Strong set. Try {reps + 1} reps next set." (no Apply) |
 | A5 | this set's rest overran and ≥ 2 sets in the workout overran (this one included) | "Rest ran long. Start when the timer says go." |
 | — | otherwise | no advice |
@@ -363,10 +363,10 @@ Summary for every exercise with ≥ 1 set today; `last` = `lastSessionSets` for 
 |---|---|---|
 | N1 | some set in `L` reps < `min`, and `last` also had a set < `min` at a weight ≥ `w`, not bodyweight, `w − step` > 0 | "Next time on {Name}: drop to {w − step} {unit}." |
 | N2 | some set in `L` reps < `min` | "Next time on {Name}: repeat {w} {unit}." (bodyweight: "… aim for {min} reps.") |
-| N3 | `L` has all planned sets, every set reps ≥ `max` and clean | "Next time on {Name}: +{step} {unit}." (bodyweight: "… +1 rep per set."; too big a jump: "… {w} {unit}, more reps.") |
+| N3 | `L` has all planned sets, and the sets at the final weight `w` (≥ 2, or all of a 1-set plan) are all reps ≥ `max` and clean | "Next time on {Name}: +{step} {unit}." (bodyweight: "… +1 rep per set."; too big a jump: "… {w} {unit}, more reps.") |
 | N4 | total partials in `L` ≥ 2 | "Next time on {Name}: same weight, full range." |
 | N5 | some set in `L` reps < `max` | "Next time on {Name}: same weight, {max} reps." |
-| N6 | otherwise (all at the top, but sets were skipped) | "Next time on {Name}: repeat {w} {unit}." |
+| N6 | otherwise (all at the top, but sets were skipped or only one set was done at the final weight) | "Next time on {Name}: repeat {w} {unit}." |
 
 **Progress vs last time** (Summary only, positive only, nothing when there's no `last` or no gain;
 weights compared in the display unit, a gain needs ≥ half a step):
