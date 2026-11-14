@@ -4,11 +4,10 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Current milestone:** M4c + M4b **Push A slice** — verified (PASS) and deployed 2026-11-13 → 🧍 **Checkpoint B2: Wongsaton's Push A gym session**
-- **Branch:** main (m4c-coaching merged). Remaining from the slice plan: S2 (gauge on the video), next round.
-- **Remote:** https://github.com/wongsatonk/gym-clean (live: https://wongsatonk.github.io/gym-clean/)
-- **Next step:** after the session Wongsaton exports the developer log (Settings → Developer log → Export last session) and sends it; run `npm run devlog -- <file>` to see counted vs logged per set, convert camera sets to fixtures (commit only with his OK), retune, then S2 gauge + M4e redesign mockups. **Meanwhile (while he trains): build M5b round 1 "After-set coach"** per the plan below (advice on Rest + Summary Coach section, Apply never automatic); merged locally only, push only with his OK.
-- **Waiting on human:** yes. Push A gym session + exported developer log + his notes.
+- **Live:** ec91d2f (Push A slice + iOS voice hotfix + today's Push A targets).
+- **Ready, verified (PASS), not deployed — branch m4d-next:** S2 range-of-motion gauge; 3D demos for curl, one-arm row, goblet squat, hammer curls, reverse flyes, wide-grip lat pulldown (Pull A fully demo'd); Silent-mode reminder; M5b after-set coach (Rest tip spoken once + Apply, Summary Coach section, Coach tips switch); M4e design mockups (docs/design/m4e-directions).
+- **Next step:** Wongsaton reviews → deploy m4d-next on his OK (push = deploy). Then his Push A dev log → `npm run devlog -- <file>` → retune; M4e build after he picks a direction.
+- **Waiting on human:** yes — deploy OK for m4d-next, the exported Push A dev log, a design pick (Energy / Pro / Track), and two coach questions (trust manually logged reps? 25% jump guard for light dumbbells?).
 
 ## Milestone checklist
 
