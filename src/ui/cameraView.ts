@@ -35,7 +35,9 @@ import {
   type CameraRestUpdate,
 } from './cameraRestPanel';
 import { h } from './dom';
+import { icon } from './icons';
 import type { Skeleton3D, SkeletonPreset } from './skeleton3d';
+import { cssToken } from './tokens';
 import { voice } from './voice';
 
 export type CameraView = {
@@ -114,7 +116,26 @@ export type HandsFreeOptions = {
 
 const MIN_VISIBILITY = 0.5;
 
-function drawOverlay(canvas: HTMLCanvasElement, frame: LandmarkFrame | null): void {
+/** Skeleton overlay colours, read from the tokens once per start (never per frame). */
+type OverlayPalette = { bone: string; joint: string; halo: string };
+
+/**
+ * Neutral figure colours, not success or action: light bones and joints with a dark halo, so the
+ * skeleton reads on bright walls and dark corners alike.
+ */
+function readOverlayPalette(el: Element): OverlayPalette {
+  return {
+    bone: cssToken('--text-2', el),
+    joint: cssToken('--text', el),
+    halo: cssToken('--black', el),
+  };
+}
+
+function drawOverlay(
+  canvas: HTMLCanvasElement,
+  frame: LandmarkFrame | null,
+  palette: OverlayPalette,
+): void {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -122,26 +143,36 @@ function drawOverlay(canvas: HTMLCanvasElement, frame: LandmarkFrame | null): vo
   const W = canvas.width;
   const H = canvas.height;
   const lm = frame.landmarks;
-  ctx.lineWidth = Math.max(3, W / 160);
-  ctx.strokeStyle = '#4ade80';
+  const line = Math.max(3, W / 160);
   ctx.lineCap = 'round';
+  // One path for every bone, stroked twice: a dark halo, then the light line on top.
+  ctx.beginPath();
   for (const [a, b] of SKELETON) {
     const p = lm[a];
     const q = lm[b];
     if (!p || !q || p.visibility < MIN_VISIBILITY || q.visibility < MIN_VISIBILITY) continue;
-    ctx.beginPath();
     ctx.moveTo(p.x * W, p.y * H);
     ctx.lineTo(q.x * W, q.y * H);
-    ctx.stroke();
   }
-  ctx.fillStyle = '#f4f6f8';
+  ctx.lineWidth = line * 2.5; // dark halo, readable on a bright wall
+  ctx.strokeStyle = palette.halo;
+  ctx.stroke();
+  ctx.lineWidth = line;
+  ctx.strokeStyle = palette.bone;
+  ctx.stroke();
+  const r = Math.max(4, W / 120);
+  ctx.beginPath();
   for (const i of JOINTS) {
     const p = lm[i];
     if (!p || p.visibility < MIN_VISIBILITY) continue;
-    ctx.beginPath();
-    ctx.arc(p.x * W, p.y * H, Math.max(4, W / 120), 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(p.x * W + r, p.y * H);
+    ctx.arc(p.x * W, p.y * H, r, 0, Math.PI * 2);
   }
+  ctx.fillStyle = palette.joint;
+  ctx.fill();
+  ctx.lineWidth = Math.max(2, line / 2);
+  ctx.strokeStyle = palette.halo;
+  ctx.stroke();
 }
 
 /** Where the set stands, shown next to the count: "3 / 12" and "Set 2 of 3 · 8–12 reps". */
@@ -682,19 +713,6 @@ function placementPictogram(view: 'side' | 'front'): SVGSVGElement {
   return svg;
 }
 
-/** Simple camera-with-arrows icon for the Switch camera button (original, inline). */
-function switchIcon(): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('viewBox', '0 0 24 24');
-  svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('class', 'icon');
-  svg.innerHTML =
-    '<path d="M4 8h3l2-2h6l2 2h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
-    '<path d="M9 12.5a3 3 0 0 1 5.2-2M15 13.5a3 3 0 0 1-5.2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
-    '<path d="M14.6 8.6l-.4 2 2-.2M9.4 17.4l.4-2-2 .2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
-  return svg;
-}
-
 /** Card stays up until tracking has held this long. */
 const SETUP_STABLE_MS = 1500;
 /** Card comes back after the person has been out of frame this long. */
@@ -710,6 +728,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   let skeletonLoading = false;
   let running = false;
   let loopHandle = 0;
+  let palette: OverlayPalette = { bone: '', joint: '', halo: '' };
   let t0 = 0;
   /** Date.now() at the same moment as t0, so the log can line frames up with session events. */
   let wallT0 = 0;
@@ -1045,7 +1064,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       'aria-label': 'Switch camera',
       onclick: () => void switchCamera(),
     },
-    switchIcon(),
+    icon('flip', 'lg', { class: 'icon' }),
   );
 
   // Range-of-motion gauge on the right edge of the video (counting exercises only; the Settings
@@ -1064,7 +1083,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     ? h(
         'button',
         {
-          class: 'primary-btn',
+          type: 'button',
+          class: 'primary-btn cta-btn',
           onclick: () => {
             // Silence first so a late count word can't cut off the rest cue that follows.
             counter.silence();
@@ -1076,6 +1096,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
             opts.onSetDone?.();
           },
         },
+        icon('check', 'lg'),
         'Set done',
       )
     : null;
@@ -1102,7 +1123,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   const el = h(
     'div',
     {
-      class: `overlay sheet camera-sheet${counter ? ' counting' : ''}`,
+      class: `overlay sheet camera-sheet mood-pro${counter ? ' counting' : ''}`,
       role: 'dialog',
       'data-cam-mode': 'set',
       'aria-label': 'Camera',
@@ -1112,7 +1133,12 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       { class: 'top-bar cam-top' },
       h('p', { class: 'page-title small-title cam-title' }, opts.title),
       btn3d,
-      h('button', { class: 'ghost-btn', onclick: closeSheet }, 'Close'),
+      h(
+        'button',
+        { type: 'button', class: 'ghost-btn cam-close', onclick: closeSheet },
+        icon('close', 'md'),
+        'Close',
+      ),
     ),
     stage,
     panel3d,
@@ -1377,7 +1403,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       const ft = now - t0; // frame clock, also the counter's clock
       const frame = tracker.detect(video, ft);
       fps.tick(now);
-      drawOverlay(overlay, frame);
+      drawOverlay(overlay, frame, palette);
       rec((r) => r.frame(frame, ft));
       const events = counter?.update(frame) ?? [];
       if (mode === 'rest' && events.length) {
@@ -1483,6 +1509,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     el,
     async start() {
       running = true;
+      // Overlay colours come from the tokens; read once here, not per frame.
+      palette = readOverlayPalette(el);
       // Start the frame clock first, so everything logged (the placement sentence included) is
       // on it; wallT0 links it to the wall clock.
       if (!hf) {

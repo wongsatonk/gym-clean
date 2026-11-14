@@ -353,7 +353,7 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
   - History for `volumeVsLast` / `newBests`.
   - Done when: by hand, a second session of the same day shows a vs-last % and a best.
   - Deps: A4, A13, A14.
-- [ ] A16. [ui-engineer, after `m5c-break-hold` is merged in] **Camera** (Pro).
+- [x] A16. [ui-engineer, after `m5c-break-hold` is merged in] **Camera** (Pro).
   - Files: src/ui/cameraView.ts, src/ui/autoStopBanner.ts, src/ui/cameraRestPanel.ts, src/ui/holdPanel.ts, src/ui/handsfree.css.
   - Solid `--surface` HUD panels (never translucent).
   - Rep count 120px.
@@ -846,6 +846,14 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e A16 Camera (Pro) done.** Review: one blocking item, fixed. Undo and Continue set are now neutral surface-2 buttons, because white fill is reserved for selected/on states. Set done (and Start set in rest mode) are the only orange fills.
+  - **Overlay:** the canvas skeleton takes its colours from tokens, read once per start, with a 2.5× dark halo.
+  - **Panels and numbers:** solid surfaces; the rep count is 120px.
+  - **Gauge:** neutral, target in --success. "Reached" shows by thickness plus the green fill, not only by colour.
+  - **Allow-list:** cameraView.ts removed; only body3d/palette.ts is left.
+  - **Tests:** all 8 camera specs pass; hands-free and camera-layout re-run 20/20 after the fix.
+  - **Screenshots:** 12 harness shots in the scratchpad; A22 re-shoots them into docs.
+  - **Mockup items not built:** the camera subtitle, the "On device" chip and the "Range" heading.
 - 2026-11-14: **M4e A14 and A15: Summary (Energy) done.**
   - **Review:** one blocking item, fixed. app.ts caches the raw history (`prevLogs`, `history`) and recomputes vs-last % and new bests from the current logs on every render, so a Fix on Summary updates them.
   - **Tests:** new e2e/summary.spec.ts covers vs-last, a new best, a Fix that refreshes both, and a bodyweight-only day; 4/4 with repeat-each 2. Full e2e 74/75: the single failure was focus-cues:341, which passed when re-run alone (load-sensitive, seen before).

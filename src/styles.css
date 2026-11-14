@@ -2074,6 +2074,16 @@ textarea:focus-visible {
   padding: 0;
   gap: 0;
   overflow: hidden;
+  /* M4e Pro: a solid page, never the translucent overlay veil. */
+  background: var(--bg);
+}
+
+.cam-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  font-weight: 700;
 }
 
 .cam-top {
@@ -2151,16 +2161,18 @@ textarea:focus-visible {
   display: none;
 }
 
-/* Vertical bar: target line at the top, start line at the bottom, for every exercise. Dark
-   backing so it reads on bright gym walls. No transitions: it follows the live angle. */
+/* Vertical bar: target line at the top, start line at the bottom, for every exercise. M4e Pro:
+   a solid surface panel (never translucent), neutral fill, the target mark in --success. No
+   transitions: it follows the live angle. */
 .rom-gauge {
   height: 100%;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 6px 4px;
-  border-radius: var(--r-btn);
-  background: var(--scrim);
+  border-radius: var(--r-card);
+  border: var(--line-w) solid var(--line);
+  background: var(--surface);
 }
 
 .rom-gauge[hidden] {
@@ -2183,7 +2195,7 @@ textarea:focus-visible {
   position: absolute;
   inset: 0 12px;
   border-radius: 6px;
-  background: var(--glass-track);
+  background: var(--surface-2);
 }
 
 /* Box from the start line (bottom) to the target line (top): scale 1 = the full range. */
@@ -2206,7 +2218,7 @@ textarea:focus-visible {
   background: var(--success);
 }
 
-/* Current position: a white cap at the end of the fill. */
+/* Current position: a white cap at the end of the fill (the fill itself stays neutral). */
 .gauge-now {
   position: absolute;
   inset: 0 -6px;
@@ -2221,7 +2233,12 @@ textarea:focus-visible {
   right: 0;
   height: 4px;
   transform: translateY(-50%);
-  background: var(--text);
+  background: var(--text-2);
+}
+
+/* The target is what the rep is going for: always marked in --success (and labelled). */
+.gauge-target {
+  background: var(--success);
 }
 
 .gauge-label {
@@ -2230,7 +2247,7 @@ textarea:focus-visible {
   transform: translateX(-50%);
   padding: 0 3px;
   border-radius: 6px;
-  background: var(--scrim);
+  background: var(--surface);
   color: var(--text);
   font-size: var(--fs-body);
   font-weight: 700;
@@ -2240,13 +2257,14 @@ textarea:focus-visible {
 
 .gauge-target .gauge-label {
   bottom: calc(100% + 3px);
+  color: var(--success);
 }
 
 .gauge-start .gauge-label {
   top: calc(100% + 3px);
 }
 
-/* Reached this rep: the target line turns green and thicker (not colour alone). */
+/* Reached this rep: the fill turns green and the target line thicker (not colour alone). */
 .rom-gauge[data-gauge-reached='true'] .gauge-target {
   height: 8px;
   background: var(--success);
@@ -2298,13 +2316,14 @@ textarea:focus-visible {
 .cam-chip {
   min-height: var(--tap-min);
   border-radius: var(--r-btn);
-  border: 1px solid var(--glass-line);
-  background: var(--scrim);
+  border: var(--line-w) solid var(--line);
+  background: var(--surface);
   color: var(--text);
 }
 
 .cam-icon-btn {
-  width: var(--tap-min);
+  width: var(--tap-bar);
+  min-height: var(--tap-bar);
   padding: 0;
   display: grid;
   place-items: center;
@@ -2338,9 +2357,9 @@ textarea:focus-visible {
   max-height: calc(100% - 72px - 16px - var(--hud-h, 200px));
   overflow-y: auto;
   padding: 12px 16px;
-  border-radius: var(--r-btn);
-  background: var(--veil);
-  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2386,12 +2405,13 @@ textarea:focus-visible {
   stroke-width: 2;
 }
 
+/* Neutral: on the camera screen only Set done is orange. */
 .setup-pic .pic-lens {
-  fill: var(--cta);
+  fill: var(--text);
 }
 
 .setup-pic .pic-sight {
-  stroke: var(--cta);
+  stroke: var(--text-2);
   stroke-width: 2;
   stroke-dasharray: 4 4;
 }
@@ -2436,6 +2456,11 @@ textarea:focus-visible {
   margin-top: 0;
 }
 
+/* Set done keeps the mix CTA's 72px, a little taller here for the sweaty-thumb case. */
+.cam-bottom .cta-btn {
+  min-height: var(--tap-hero);
+}
+
 .cam-status,
 .cam-privacy {
   margin: 0;
@@ -2471,28 +2496,32 @@ textarea:focus-visible {
 
 /* ---------- M4: live rep counter (on the video since M4c) ---------- */
 
+/* M4e Pro HUD: a solid --surface panel (never translucent), so contrast holds over any video. */
 .rep-panel {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   max-width: 100%;
-  padding: 6px 14px 8px;
-  background: var(--scrim);
-  border-radius: var(--r-btn);
+  padding: 8px 16px 12px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
 }
 
+/* "7 / 12" on one line, the REPS label under it. */
 .rep-count {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  column-gap: 10px;
 }
 
 .rep-num {
   margin: 0;
   min-width: 1.2ch;
-  font-size: var(--fs-count);
-  font-weight: 800;
-  line-height: 1;
+  font-size: var(--fs-rep);
+  font-weight: 700;
+  line-height: 0.95;
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
@@ -2507,17 +2536,20 @@ textarea:focus-visible {
 .rep-target {
   margin: 0;
   font-size: var(--fs-display);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
-  color: var(--text);
+  color: var(--text-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .rep-label {
+  flex-basis: 100%;
   margin: 0;
-  font-size: var(--fs-lead);
+  font-size: var(--fs-body);
   font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-2);
 }
 
@@ -2551,9 +2583,12 @@ textarea:focus-visible {
   color: var(--warn);
 }
 
-/* The coach line is spoken, so it wears the cue colour. */
+/* The coach line is spoken: the mix cue style, a lavender left bar beside the words. */
 .rep-coach {
-  color: var(--cue);
+  margin-top: 4px;
+  padding: 2px 0 2px 12px;
+  border-left: 6px solid var(--cue);
+  color: var(--text);
 }
 
 .rep-partials {

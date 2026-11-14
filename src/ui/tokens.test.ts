@@ -29,7 +29,6 @@ const CSS_FILES: Record<string, string> = { '../styles.css': stylesCss, ...UI_CS
 const COLOUR_ALLOW_LIST: Record<string, string> = {
   './body3d/palette.ts':
     'FIGURE_TOKEN_FALLBACK: the one fallback copy of the figure tokens (checked below)',
-  './cameraView.ts': 'A16: camera overlay canvas colours from cssToken',
 };
 
 const TOKEN_SELECTORS = new Set([

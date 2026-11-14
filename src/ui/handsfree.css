@@ -1,5 +1,7 @@
 /* M5c hands-free pieces on the camera sheet: the auto-stop Undo banner and the rest-mode panel.
-   Tokens from src/styles.css. Both are positioned inside .cam-stage (position: relative) and
+   Tokens from src/styles.css. M4e Pro (A16): every panel is solid --surface (never translucent,
+   the video behind is unpredictable), and Set done / Start set are the only --cta fills: Undo
+   and Continue set are neutral surface-2 actions (white fill is reserved for selected/on). Both are positioned inside .cam-stage (position: relative) and
    cover it, so the video stays behind them. Gym rules: count/clock ≥ 64px, text ≥ 20px,
    buttons ≥ 56px (Undo ≥ 72px), no colour-only meaning. */
 
@@ -27,8 +29,8 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px 16px 16px;
-  background: var(--veil);
-  border-top: 3px solid var(--cta);
+  background: var(--surface);
+  border-top: 3px solid var(--success); /* achieved: the set is done */
   color: var(--text);
 }
 
@@ -48,8 +50,9 @@
 }
 
 .auto-stop-done {
+  font-family: var(--font-display);
   font-size: var(--fs-title);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.1;
 }
 
@@ -102,9 +105,10 @@
   padding: 0 12px 0 20px;
   font-size: var(--fs-head);
   font-weight: 800;
-  background: var(--text);
-  color: var(--bg);
-  border: none;
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+  color: var(--text);
+  border: 2px solid var(--line);
 }
 
 .auto-stop-undo-text {
@@ -187,15 +191,15 @@
   flex-direction: column;
   gap: 10px;
   padding: 12px 16px 16px;
-  background: var(--veil);
-  border-top: 1px solid var(--line);
+  background: var(--surface);
+  border-top: var(--line-w) solid var(--line);
 }
 
 .cam-rest-label {
   margin: 0;
   font-size: var(--fs-body);
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: center;
   color: var(--text-2);
@@ -204,7 +208,7 @@
 .cam-rest-clock {
   margin: 0;
   font-size: var(--fs-hero);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -252,13 +256,18 @@
   font-weight: 800;
 }
 
+/* Rest mode hides Set done, so Start set is then the screen's one --cta. */
 .cam-rest-start {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
   background: var(--cta);
   color: var(--on-cta);
   border: none;
 }
 
 .cam-rest-close {
+  border: var(--line-w) solid var(--line);
   background: var(--surface-2);
   color: var(--text);
   font-size: var(--fs-cue);
@@ -335,7 +344,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 16px 16px 16px;
-  background: var(--bg);
+  background: var(--surface);
   border-top: 3px solid var(--warn);
   color: var(--text);
 }
@@ -348,8 +357,9 @@
 
 .hold-title {
   margin: 0;
+  font-family: var(--font-display);
   font-size: var(--fs-title);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
@@ -365,7 +375,7 @@
   margin: 4px 0 0;
   font-size: var(--fs-body);
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: center;
   color: var(--text-2);
@@ -374,7 +384,7 @@
 .hold-clock {
   margin: 0;
   font-size: var(--fs-hero);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -401,10 +411,12 @@
   line-height: 1.1;
 }
 
+/* Set done stays visible below the hold panel and is the screen's one --cta, so Continue set is
+   a neutral action, equal in weight to Next / Save. */
 .hold-continue {
-  background: var(--cta);
-  color: var(--on-cta);
-  border: none;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 2px solid var(--line);
 }
 
 .hold-next {
