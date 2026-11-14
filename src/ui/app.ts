@@ -14,13 +14,20 @@ import {
 import type { PlannedExercise, ProgramDay, SetLog } from '../core/types';
 import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
 import { shouldSpeakFocusCue } from '../core/focusCue';
-import { adviceSpeakDue, afterSetAdvice, coachSummary, type Advice } from '../core/advice';
+import {
+  adviceSpeakDue,
+  adviceSpeakOnCommit,
+  afterSetAdvice,
+  coachSummary,
+  type Advice,
+} from '../core/advice';
 import { cueFor, exerciseById, exerciseName, program } from '../data/catalog';
 import {
   GymDb,
   finishSession,
   getExerciseNote,
   getCoachTips,
+  getHandsFree,
   getSpokenCount,
   getUnit,
   lastSessionSets,
@@ -29,6 +36,7 @@ import {
   saveSessionNote,
   saveSet,
   setCoachTips,
+  setHandsFree,
   setSpokenCount,
   setUnit,
   startSessionRow,
@@ -40,7 +48,12 @@ import { startDevLogSession, type DevLogRecorder } from '../data/devlog';
 import { bodyMapSvg, pickView } from './bodyMap';
 import type { Body3D } from './body3d/viewer';
 import { badgesFor } from './badges';
-import { createCameraView, type CameraTarget, type CameraView } from './cameraView';
+import {
+  createCameraView,
+  type CameraTarget,
+  type CameraView,
+  type HandsFreeOptions,
+} from './cameraView';
 import { createHowToSheet } from './howToSheet';
 import { silentHint } from './silentHint';
 import { audioTestPanel, disposeAudioTest } from './audioTest';
@@ -73,6 +86,7 @@ export function mountApp(root: HTMLElement): void {
   let unit: Unit = 'kg';
   let spokenCount = true;
   let coachTips = true;
+  let handsFree = true;
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
 
@@ -238,6 +252,9 @@ export function mountApp(root: HTMLElement): void {
   // ---------- Camera (M3) ----------
 
   let camera: CameraView | null = null;
+  // Hands-free (M5c): the exercise the open camera counts, and the pre-roll for the next set.
+  let cameraExerciseId: string | null = null;
+  let cameraPrerollFromT: number | undefined;
 
   /** `exerciseId` turns on rep counting (M4); leave it out for Settings → Camera test. */
   function openCameraView(title: string, exerciseId?: string): void {
@@ -258,18 +275,106 @@ export function mountApp(root: HTMLElement): void {
             onCount: (reps: number, partials: number) =>
               dispatch({ type: 'SET_COUNTED', reps, partials }),
             onSetDone: () => {
-              closeCameraView();
+              // Hands-free keeps the camera for the next set of the same exercise (syncCamera).
+              if (!handsFree) closeCameraView();
               dispatch({ type: 'SET_DONE', now: now() });
             },
+            ...(handsFree ? { handsFree: handsFreeOptions() } : {}),
           }),
     });
+    cameraExerciseId = exerciseId ?? null;
     if (exerciseId !== undefined) {
       placementSpoken.add(exerciseId);
       cameraThisSet = true;
       openLoggedSet(); // before the camera writes frames
     }
     root.append(camera.el);
+    syncCamera(); // before start(), so the camera knows the phase from its first frame
     void camera.start();
+  }
+
+  function handsFreeOptions(): HandsFreeOptions {
+    return {
+      onAutoStart: ({ at, frameT }) => {
+        // The set's frames from 1.5 s before the first rep go into the dev log (pre-roll).
+        cameraPrerollFromT = frameT - 1500;
+        dispatch({ type: 'START_SET', now: at });
+        cameraPrerollFromT = undefined;
+      },
+      onCommit: ({ endedAt }) => {
+        dispatch({ type: 'SET_DONE', now: endedAt });
+        // The rest is backdated (~11 s in): no rest cue for the seconds already gone.
+        if (view.screen === 'session' && view.s.phase === 'rest')
+          lastCueElapsedMs = restElapsedMs(view.s, now());
+        speakAdviceOnCommit();
+      },
+      onIdleClose: () => closeCameraView(),
+      onStartSet: () => dispatch({ type: 'START_SET', now: now() }),
+    };
+  }
+
+  /**
+   * Hands-free commit: say the coach tip now if it fits before "Ten seconds"; else it is shown
+   * only (the rest is backdated past the usual 2 s moment). Also after an exercise's last set,
+   * when the camera has already closed.
+   */
+  function speakAdviceOnCommit(): void {
+    if (view.screen !== 'session') return;
+    const s = view.s;
+    if (s.phase !== 'rest' || s.paused) return;
+    const key = `${s.sessionId}:${s.logs.length}`;
+    if (adviceSpokenKey === key) return;
+    if (!adviceSpeakOnCommit(restElapsedMs(s, now()), s.restTargetSec)) return;
+    const advice = currentAdvice(s);
+    if (!advice) return;
+    adviceSpokenKey = key;
+    voice.speak(advice.say, { kind: 'cue' });
+    rec((r) =>
+      r.logEvent('advice', {
+        rule: advice.rule,
+        exerciseId: advice.exerciseId,
+        spoken: true,
+        atCommit: true,
+      }),
+    );
+  }
+
+  /**
+   * Hands-free: tell the open camera the session phase (after every dispatch), close it when the
+   * next set is another exercise or the workout ended, and open the dev-log set it now counts.
+   */
+  function syncCamera(): void {
+    if (!camera || cameraExerciseId === null || view.screen !== 'session') return;
+    const s = view.s;
+    const nextId = s.phase === 'summary' ? null : currentPlanned(s).exerciseId;
+    if (handsFree && nextId !== cameraExerciseId) {
+      closeCameraView();
+      return;
+    }
+    camera.setSession({
+      phase: s.phase === 'exercise' ? 'exercise' : s.phase === 'rest' ? 'rest' : 'other',
+      paused: s.paused,
+      restElapsedMs: restElapsedMs(s, now()),
+      ...cameraTarget(),
+    });
+    if (s.phase === 'exercise' && pendingSet) {
+      cameraThisSet = true;
+      openLoggedSet(cameraPrerollFromT === undefined ? {} : { prerollFromT: cameraPrerollFromT });
+      camera.setBegun();
+    }
+    if (camera.mode === 'rest') updateCameraRest(s);
+  }
+
+  /** Hands-free rest panel on the camera: clock, next set, coach tip and Fix. */
+  function updateCameraRest(s: SessionState): void {
+    if (!camera || s.phase !== 'rest') return;
+    const p = currentPlanned(s);
+    camera.setRest({
+      restMs: s.restTargetSec * 1000 - restElapsedMs(s, now()),
+      nextLine: `Next: Set ${s.setIndex + 1} of ${p.sets} · ${s.reps} reps × ${w(s.weightKg)} ${unit}`,
+      coachTipEl: coachTipFor(s),
+      fixEl: lastSetFix(s),
+    });
   }
 
   /** "3 / 12" and "Set 2 of 3 · 8–12 reps" on the camera page, from the current set. */
@@ -290,6 +395,7 @@ export function mountApp(root: HTMLElement): void {
   function closeCameraView(): void {
     camera?.stop();
     camera = null;
+    cameraExerciseId = null;
     render();
   }
 
@@ -511,6 +617,23 @@ export function mountApp(root: HTMLElement): void {
         h('span', { class: 'switch-label' }, 'Coach tips after a set'),
         h('span', { class: 'switch-state', 'aria-hidden': 'true' }, coachTips ? 'On' : 'Off'),
       ),
+      h('p', { class: 'field-label' }, 'Camera sets'),
+      h(
+        'button',
+        {
+          class: `switch-btn${handsFree ? ' on' : ''}`,
+          role: 'switch',
+          'aria-checked': handsFree ? 'true' : 'false',
+          'data-setting': 'hands-free',
+          onclick: () => {
+            handsFree = !handsFree;
+            void setHandsFree(db, handsFree).catch(logDbError);
+            render();
+          },
+        },
+        h('span', { class: 'switch-label' }, 'Hands-free: start and stop sets by moving'),
+        h('span', { class: 'switch-state', 'aria-hidden': 'true' }, handsFree ? 'On' : 'Off'),
+      ),
       voiceTest(),
       audioTestPanel(),
       h('p', { class: 'field-label' }, 'Weight unit'),
@@ -666,15 +789,15 @@ export function mountApp(root: HTMLElement): void {
       setIndex: s.setIndex,
       targetReps: p.targetReps,
       weightKg: s.weightKg,
-      startedAt: now(),
+      startedAt: s.setStartedAt ?? now(), // an auto start is backdated to the first rep
     };
   }
 
-  function openLoggedSet(): void {
+  function openLoggedSet(opts: { prerollFromT?: number } = {}): void {
     const info = pendingSet;
     if (!info) return;
     pendingSet = null;
-    rec((r) => r.beginSet(info));
+    rec((r) => r.beginSet(info, opts));
   }
 
   function logToDevLog(prev: SessionState, s: SessionState, e: SessionEvent): void {
@@ -724,6 +847,7 @@ export function mountApp(root: HTMLElement): void {
     logToDevLog(prev, s, e);
     if (prev.phase !== 'rest' && s.phase === 'rest') lastCueElapsedMs = 0;
     if (s.phase === 'summary' && prev.phase !== 'summary') onFinished(s);
+    syncCamera(); // before render: the rest screen leaves the tip/Fix to the camera's rest panel
     render();
     speakFocusCue(prev, s);
   }
@@ -815,6 +939,7 @@ export function mountApp(root: HTMLElement): void {
     const cue = cues.at(-1);
     if (cue) voice.speak(restCueText(cue.kind, upcoming(s)));
     updateRestClock(s, elapsed);
+    if (camera?.mode === 'rest') updateCameraRest(s);
   }
 
   function upcoming(s: SessionState) {
@@ -1040,8 +1165,8 @@ export function mountApp(root: HTMLElement): void {
         },
         formatRest(remaining),
       ),
-      lastSetFix(s),
-      coachTipFor(s),
+      // Hands-free rest on the camera shows these in its own panel (one element, one place).
+      ...(camera?.mode === 'rest' ? [] : [lastSetFix(s), coachTipFor(s)]),
       h(
         'div',
         { class: 'rest-next' },
@@ -1291,6 +1416,12 @@ export function mountApp(root: HTMLElement): void {
   void getCoachTips(db)
     .then((on) => {
       coachTips = on;
+      if (view.screen === 'settings') render();
+    })
+    .catch(logDbError);
+  void getHandsFree(db)
+    .then((on) => {
+      handsFree = on;
       if (view.screen === 'settings') render();
     })
     .catch(logDbError);

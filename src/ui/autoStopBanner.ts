@@ -137,7 +137,12 @@ export function createAutoStopBanner(opts: AutoStopBannerOptions): AutoStopBanne
   let state: 'pending' | 'undone' | 'gone' = 'pending';
   let goneTimer: ReturnType<typeof setTimeout> | undefined;
   const descId = `auto-stop-desc-${++instances}`;
-  const desc = h('span', { class: 'hf-sr-only', id: descId }, undoDescription(seconds));
+  // aria-hidden keeps it out of the button's name ("Undo"); aria-describedby still reads it.
+  const desc = h(
+    'span',
+    { class: 'hf-sr-only', id: descId, 'aria-hidden': 'true' },
+    undoDescription(seconds),
+  );
 
   const ringFg = svgEl('circle', {
     class: 'auto-stop-ring-fg',

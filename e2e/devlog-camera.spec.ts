@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { seedHandsFreeOff } from './hands-free.helpers';
 
 // M4c gym-session data path: a real camera set (fake camera = synthetic curl clip) is recorded in
 // the developer log with frames, rep events, spoken counts, counted vs corrected numbers, and the
@@ -98,6 +99,8 @@ test('camera set → dev log has frames, rep events, spoken counts and the corre
 
   await installMocks(page);
   await page.goto('/');
+  // M4 per-set camera (Set done closes the sheet): hands-free off.
+  await seedHandsFreeOff(page);
 
   // Pull A → exercise list → Dumbbell Bicep Curl → Camera.
   await page.getByRole('button', { name: /Pull A/ }).click();

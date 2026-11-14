@@ -22,7 +22,7 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile',
-      testIgnore: /(camera-person|rep-count|devlog-camera)\.spec\.ts/,
+      testIgnore: /(camera-person|rep-count|devlog-camera|hands-free-live)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -48,7 +48,7 @@ export default defineConfig({
       // Live pose inference is CPU-heavy: in parallel, pages drop to 3–6 fps and miss the curl
       // bottom (reps read as partials). One at a time they run at ~20 fps.
       workers: 1,
-      testMatch: /(camera-person|rep-count|devlog-camera)\.spec\.ts/,
+      testMatch: /(camera-person|rep-count|devlog-camera|hands-free-live)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },

@@ -6,6 +6,7 @@
 // counter, in camera.spec.ts "pose-tracked exercises offer the camera; manual ones do not"; the
 // Settings camera test has no counter, in rep-panel.spec.ts.
 import { expect, test, type Page } from '@playwright/test';
+import { seedHandsFreeOff } from './hands-free.helpers';
 
 declare global {
   interface Window {
@@ -183,6 +184,8 @@ test('live camera counts curls, speaks the count and logs it on Set done', async
 
   await installMocks(page);
   await page.goto('/');
+  // M4 per-set camera (Set done closes the sheet): hands-free off.
+  await seedHandsFreeOff(page);
   const cam = await openCurlCamera(page);
   await waitForCounts(cam);
 

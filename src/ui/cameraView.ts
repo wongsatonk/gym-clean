@@ -913,6 +913,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     {
       class: `overlay sheet camera-sheet${counter ? ' counting' : ''}`,
       role: 'dialog',
+      'data-cam-mode': 'set',
       'aria-label': 'Camera',
     },
     h(
@@ -1005,6 +1006,14 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     if (hadFocus) setDoneBtn?.focus();
   }
 
+  /**
+   * Frame-clock time → wall clock, measured from now (not wallT0 + t): performance.now() can
+   * stop advancing while iOS suspends the page, so the offset from wallT0 drifts.
+   */
+  function toWall(frameT: number): number {
+    return Date.now() - (frameNow() - frameT);
+  }
+
   function handleAuto(actions: AutoSetAction[]): void {
     if (!hf || !counter || !repCounter || !autoConfig) return;
     for (const a of actions) {
@@ -1015,7 +1024,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           enterSetMode();
           // Show autoSet's counts: reps the counter saw earlier in rest don't belong to the set.
           counter.setBase(repCounter.reps - a.reps, repCounter.partials - a.partials);
-          hf.onAutoStart({ at: wallT0 + a.at, frameT: a.at, reps: a.reps, partials: a.partials });
+          hf.onAutoStart({ at: toWall(a.at), frameT: a.at, reps: a.reps, partials: a.partials });
           if (disposed) return;
           opts.onCount?.(a.reps, a.partials);
           counter.announce(a.reps); // the first word of the set ("Two")
@@ -1042,8 +1051,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
             reason: a.reason,
             reps: a.reps,
             partials: a.partials,
-            endedAt: wallT0 + a.endedAt,
-            until: wallT0 + a.until,
+            endedAt: toWall(a.endedAt),
+            until: toWall(a.until),
           });
           break;
         }
@@ -1058,7 +1067,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         }
         case 'commit': {
           const b = banner;
-          hf.onCommit({ endedAt: wallT0 + a.endedAt, reps: a.reps, partials: a.partials });
+          hf.onCommit({ endedAt: toWall(a.endedAt), reps: a.reps, partials: a.partials });
           // The app normally switched to rest mode (banner gone) or closed the sheet.
           if (!disposed && banner === b) dropBanner();
           break;
@@ -1155,6 +1164,12 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     }
   }
 
+  function releaseStream(): void {
+    stopStream(stream);
+    stream = null;
+    video.srcObject = null;
+  }
+
   /** Stops the loop, the camera tracks and the model; the sheet stays (idle close, stop()). */
   function halt(): void {
     running = false;
@@ -1191,20 +1206,34 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         );
         return;
       }
-      if (counter && placement && opts.speakPlacement !== false && running) {
+      if (!running) {
+        // stop() ran while the camera was opening: release the stream it just got.
+        releaseStream();
+        return;
+      }
+      if (counter && placement && opts.speakPlacement !== false) {
         // The panel owns it: the first count word (or Set done / Close) cuts it off.
         counter.speakPlacement(placement.spoken);
       }
       setStatus('Loading pose model…');
       try {
         const { createPoseTracker } = await import('../pose/landmarker');
-        if (!running) return;
+        if (!running) {
+          releaseStream();
+          return;
+        }
         tracker = await createPoseTracker('GPU');
       } catch (err) {
         setStatus(`Pose model failed to load: ${(err as Error).message}`, { error: 'model' });
         return;
       }
-      if (!running) return;
+      if (!running) {
+        // stop() ran while the model was loading: free its GL context and the stream.
+        tracker.close();
+        tracker = null;
+        releaseStream();
+        return;
+      }
       // Fresh sheet: nothing counted yet, so no onCount(0, 0). Camera switches don't reset.
       counter?.reset();
       const delegate = tracker.delegate;

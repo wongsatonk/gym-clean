@@ -1,0 +1,526 @@
+// M5c task 11: hands-free sets end to end (SPEC M5c Accept). The pose model is replaced by a
+// fixture player served in place of src/pose/landmarker.ts (like camera-layout.spec.ts), with
+// two hooks: window.__freezeAt = i holds fixture frame i (frame 0 = arm down, the curl's start
+// position; setting it back to null replays the clip from frame 0) and window.__noPerson = true
+// returns no pose. Real timers (autoSet runs on the camera frame clock); speech is mocked and
+// recorded in order with wall-clock times. The curl clip completes reps ~3.3 s, ~8.3 s and
+// ~13 s after it starts playing, with partials at ~5.5 s and ~10.3 s.
+import { expect, test, type Locator, type Page } from '@playwright/test';
+
+const CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
+const PRESS = '/fixtures/landmarks/shoulder-press/synthetic-01__reps-4__partials-0.json';
+const ORIGIN_HOSTS = new Set(['localhost', '127.0.0.1']);
+const TIP_A2 = 'Keep the weight. Aim for 8 reps.';
+
+type Said = { text: string; at: number };
+type SetRow = {
+  exerciseId: string;
+  setIndex: number;
+  reps: number;
+  partials?: number;
+  restTakenSec: number;
+  startedAt: number;
+  endedAt: number;
+};
+
+declare global {
+  interface Window {
+    __said: Said[];
+    __freezeAt: number | null;
+    __noPerson: boolean;
+    __fxIdx: number;
+    __repsAt: Record<number, number>;
+    __playedAt: number;
+    __play: () => void;
+    __freezeWhenReps: (n: number) => void;
+  }
+}
+
+async function installMocks(page: Page, fixture: string): Promise<void> {
+  await page.addInitScript(() => {
+    window.__said = [];
+    window.__freezeAt = 0; // start in the start position; tests call __play()
+    window.__noPerson = false;
+    window.__repsAt = {};
+    window.__playedAt = 0;
+    window.__play = () => {
+      window.__playedAt = Date.now();
+      window.__freezeAt = null;
+    };
+    // Freeze in the start position the moment the camera's count reaches n (no test latency:
+    // the arm is back down right after a rep, before the next attempt leaves the start band).
+    window.__freezeWhenReps = (n: number) => {
+      const check = () => {
+        const el = document.querySelector<HTMLElement>('[role=dialog] .rep-num[data-reps]');
+        if (el && Number(el.dataset.reps) >= n) {
+          window.__freezeAt = 0;
+          obs.disconnect();
+        }
+      };
+      const obs = new MutationObserver(check);
+      obs.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-reps'],
+      });
+      check();
+    };
+    // When each count was first shown (wall clock), for the backdated times.
+    new MutationObserver((records) => {
+      for (const r of records) {
+        const el = r.target as HTMLElement;
+        if (!el.matches?.('[role=dialog] .rep-num[data-reps]')) continue;
+        const n = Number(el.dataset.reps);
+        if (n > 0 && !(n in window.__repsAt)) window.__repsAt[n] = Date.now();
+      }
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ['data-reps'] });
+
+    class FakeUtterance extends EventTarget {
+      text: string;
+      lang = '';
+      rate = 1;
+      volume = 1;
+      constructor(text: string) {
+        super();
+        this.text = text;
+      }
+    }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      value: FakeUtterance,
+      configurable: true,
+    });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u: FakeUtterance) => {
+          if (u.volume === 0) return; // the silent iOS unlock
+          window.__said.push({ text: u.text, at: Date.now() });
+          // A short "voice": the coach speech policy waits for 'end'.
+          setTimeout(() => u.dispatchEvent(new Event('end')), 300);
+        },
+        cancel: () => window.__said.push({ text: '<cancel>', at: Date.now() }),
+        resume: () => undefined,
+        getVoices: () => [],
+        speaking: false,
+        pending: false,
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: {
+        request: async () => ({
+          addEventListener: () => undefined,
+          release: async () => undefined,
+        }),
+      },
+    });
+  });
+  await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export async function createPoseTracker() {
+          const frames = await (await fetch(${JSON.stringify(fixture)})).json();
+          let base = null;
+          return {
+            delegate: 'CPU',
+            detect(_video, t) {
+              if (window.__noPerson) { base = null; return null; }
+              if (window.__freezeAt != null) {
+                base = null;
+                return { ...frames[window.__freezeAt], t };
+              }
+              base ??= t;
+              const i = Math.floor((t - base) / 33.333) % frames.length;
+              window.__fxIdx = i;
+              return { ...frames[i], t };
+            },
+            close() {},
+          };
+        }`,
+    }),
+  );
+}
+
+/** Console errors, page errors and any request that leaves the dev server. */
+function watch(page: Page) {
+  const errors: string[] = [];
+  const thirdParty: string[] = [];
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('request', (r) => {
+    const url = new URL(r.url());
+    if (url.protocol.startsWith('http') && !ORIGIN_HOSTS.has(url.hostname))
+      thirdParty.push(r.url());
+  });
+  return { errors, thirdParty };
+}
+
+const said = (page: Page) => page.evaluate(() => window.__said);
+const texts = async (page: Page) => (await said(page)).map((s) => s.text);
+const play = (page: Page) => page.evaluate(() => window.__play());
+const freezeWhenReps = (page: Page, n: number) =>
+  page.evaluate((n) => window.__freezeWhenReps(n), n);
+const wallNow = (page: Page) => page.evaluate(() => Date.now());
+
+/** All rows of the app's IndexedDB `sets` store. */
+function setRows(page: Page): Promise<SetRow[]> {
+  return page.evaluate(
+    () =>
+      new Promise<SetRow[]>((resolve, reject) => {
+        const open = indexedDB.open('gym-clean');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const req = open.result.transaction('sets').objectStore('sets').getAll();
+          req.onsuccess = () => {
+            open.result.close();
+            resolve(req.result as SetRow[]);
+          };
+          req.onerror = () => reject(req.error);
+        };
+      }),
+  );
+}
+
+function readSetting(page: Page, key: string): Promise<unknown> {
+  return page.evaluate(
+    (k) =>
+      new Promise<unknown>((resolve, reject) => {
+        const open = indexedDB.open('gym-clean');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const req = open.result.transaction('settings').objectStore('settings').get(k);
+          req.onsuccess = () => {
+            open.result.close();
+            resolve((req.result as { value?: unknown } | undefined)?.value);
+          };
+          req.onerror = () => reject(req.error);
+        };
+      }),
+    key,
+  );
+}
+
+/** Day → Start workout → Exercise list → `exercise` → Camera (set 1 running). */
+async function openCamera(page: Page, day: RegExp, exercise: string): Promise<Locator> {
+  await page.getByRole('button', { name: day }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await page.getByRole('button', { name: 'Exercise list' }).click();
+  const list = page.getByRole('dialog', { name: 'Exercise list' });
+  await list.locator('.ex-row-btn', { hasText: exercise }).click();
+  await expect(page.getByRole('heading', { name: exercise })).toBeVisible();
+  await page.getByRole('button', { name: 'Camera', exact: true }).click();
+  const cam = page.getByRole('dialog', { name: 'Camera' });
+  await expect(cam).toHaveAttribute('data-person', 'true', { timeout: 15_000 });
+  return cam;
+}
+
+const reps = (cam: Locator) => cam.locator('.rep-num[data-reps]');
+const banner = (cam: Locator) => cam.locator('[data-auto-stop="pending"]');
+
+/** Plays the clip from the start position and holds it once `n` reps are counted. */
+async function repsThenFreeze(page: Page, cam: Locator, n: number): Promise<number> {
+  await freezeWhenReps(page, n);
+  await play(page);
+  await expect(reps(cam)).toHaveAttribute('data-reps', String(n), { timeout: 20_000 });
+  expect(await page.evaluate(() => window.__freezeAt)).toBe(0);
+  return wallNow(page);
+}
+
+/** m:ss → seconds. */
+const clockSec = (text: string) => {
+  const m = /^(\d+):(\d\d)$/.exec(text.trim());
+  if (!m) throw new Error(`not a rest clock: ${text}`);
+  return Number(m[1]) * 60 + Number(m[2]);
+};
+
+test.describe.configure({ timeout: 120_000 });
+
+test('(i, v) still → "Set done. 2 reps." + Undo; saved only after the window, backdated; tip spoken at the save', async ({
+  page,
+}) => {
+  const w = watch(page);
+  await installMocks(page, CURL);
+  await page.goto('/');
+  const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
+  await expect(cam).not.toHaveAttribute('data-cam-mode', 'rest');
+
+  const frozenAt = await repsThenFreeze(page, cam, 2);
+  const lastRepAt = await page.evaluate(() => window.__repsAt[2] ?? 0);
+
+  // ~6 s still in the start band → the stop is proposed and spoken (nothing saved yet).
+  await expect(banner(cam)).toBeVisible({ timeout: 10_000 });
+  await expect(banner(cam)).toHaveAttribute('data-reason', 'still');
+  const doneSaid = (await said(page)).find((s) => s.text === 'Set done. 2 reps.');
+  expect(doneSaid, 'Set done spoken').toBeTruthy();
+  const stillMs = (doneSaid?.at ?? 0) - frozenAt;
+  expect(stillMs).toBeGreaterThanOrEqual(5_500);
+  expect(stillMs).toBeLessThanOrEqual(8_000);
+  await expect(banner(cam).locator('[data-auto-stop="reps"]')).toHaveText('2');
+  const undo = cam.getByRole('button', { name: 'Undo' });
+  await expect(undo).toBeVisible();
+  const box = await undo.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(56);
+  const secs = banner(cam).locator('[data-auto-stop="seconds"]');
+  const firstSecs = Number(await secs.textContent());
+  expect(firstSecs).toBeGreaterThanOrEqual(3);
+  expect(firstSecs).toBeLessThanOrEqual(5);
+  await expect.poll(async () => Number(await secs.textContent())).toBeLessThan(firstSecs);
+  // Delayed save: no row while the window is open.
+  expect(await setRows(page)).toEqual([]);
+  await page.screenshot({ path: test.info().outputPath('hands-free-pending-undo.png') });
+
+  // Window over → the set is saved with the backdated end and the camera is in rest mode.
+  await expect.poll(async () => (await setRows(page)).length, { timeout: 8_000 }).toBe(1);
+  const [row] = await setRows(page);
+  expect(row?.exerciseId).toBe('Dumbbell_Bicep_Curl');
+  expect(row?.reps).toBe(2);
+  expect(Math.abs((row?.endedAt ?? 0) - lastRepAt)).toBeLessThan(500);
+  await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+  await expect(banner(cam)).toHaveCount(0);
+  // Rest clock already ~11 s into the 60 s rest (the time since the last rep).
+  const clock = cam.locator('[data-cam-rest-clock]');
+  await expect(clock).toBeVisible();
+  const left = clockSec((await clock.textContent()) ?? '');
+  const since = Math.round(((await wallNow(page)) - (row?.endedAt ?? 0)) / 1000);
+  expect(since).toBeGreaterThanOrEqual(10);
+  expect(Math.abs(60 - since - left)).toBeLessThanOrEqual(1);
+  expect(left).toBeLessThanOrEqual(50);
+  await expect(cam.locator('[data-cam-rest="next"]')).toContainText('Set 2 of 3');
+
+  // (v) Speech order: last count word → "Set done" → the coach tip at the save, nothing cut off.
+  await expect.poll(() => texts(page)).toContain(TIP_A2);
+  const list = await said(page);
+  const tail = list.slice(list.map((s) => s.text).lastIndexOf('Two'));
+  expect(tail.map((s) => s.text)).toEqual(['Two', 'Set done. 2 reps.', TIP_A2]);
+  const tipAt = tail[2]?.at ?? 0;
+  const savedAt = (doneSaid?.at ?? 0) + 5_000;
+  expect(Math.abs(tipAt - savedAt)).toBeLessThan(1_500); // at the save, not 2 s into a fresh rest
+  // Still once, a few seconds later (the 2 s rest rule doesn't say it again).
+  await page.waitForTimeout(3_000);
+  expect((await texts(page)).filter((t) => t === TIP_A2)).toHaveLength(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
+
+test('(ii) Undo → "Keep going.", nothing saved, counting continues; the next still stop waits 12 s', async ({
+  page,
+}) => {
+  const w = watch(page);
+  await installMocks(page, CURL);
+  await page.goto('/');
+  const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
+  await repsThenFreeze(page, cam, 2);
+  await expect(banner(cam)).toBeVisible({ timeout: 10_000 });
+  await cam.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(() => texts(page)).toContain('Keep going.');
+  // Past the end of the window: still nothing saved, still the set.
+  await page.waitForTimeout(6_000);
+  expect(await setRows(page)).toEqual([]);
+  await expect(cam).not.toHaveAttribute('data-cam-mode', 'rest');
+  await expect(cam.locator('[data-auto-stop="undo"]')).toHaveCount(0);
+
+  // Counting goes on from 2.
+  const frozenAt = await repsThenFreeze(page, cam, 3);
+  await expect(reps(cam)).toHaveText('3');
+  // After a cancel the still stop needs 2 × 6 s.
+  await page.waitForTimeout(9_000);
+  expect((await texts(page)).filter((t) => t.startsWith('Set done'))).toHaveLength(1);
+  await expect.poll(() => texts(page), { timeout: 8_000 }).toContain('Set done. 3 reps.');
+  const second = (await said(page)).find((s) => s.text === 'Set done. 3 reps.');
+  expect((second?.at ?? 0) - frozenAt).toBeGreaterThanOrEqual(11_000);
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
+
+test('(iii) a rep inside the window cancels the stop without a tap', async ({ page }) => {
+  const w = watch(page);
+  await installMocks(page, CURL);
+  await page.goto('/');
+  const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
+  await repsThenFreeze(page, cam, 2);
+  await expect(banner(cam)).toBeVisible({ timeout: 10_000 });
+  // The next rep ends ~3.3 s after playing resumes: inside the 5 s window.
+  await freezeWhenReps(page, 3);
+  await play(page);
+  await expect(reps(cam)).toHaveAttribute('data-reps', '3', { timeout: 8_000 });
+  await expect.poll(() => texts(page)).toContain('Keep going.');
+  const list = await texts(page);
+  expect(list.indexOf('Keep going.')).toBeGreaterThan(list.indexOf('Set done. 2 reps.'));
+  await expect(cam.locator('[data-auto-stop="undo"]')).toHaveCount(0, { timeout: 3_000 });
+  await page.waitForTimeout(3_000);
+  expect(await setRows(page)).toEqual([]);
+  await expect(cam).not.toHaveAttribute('data-cam-mode', 'rest');
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
+
+test('(iv) rest mode: reps before 10 s of rest start nothing; later 2 reps auto-start set 2, backdated', async ({
+  page,
+}) => {
+  const w = watch(page);
+  await installMocks(page, CURL);
+  await page.goto('/');
+  const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
+  await repsThenFreeze(page, cam, 2);
+  // Manual Set done: rest starts now (not backdated); hands-free keeps the camera, in rest mode.
+  await cam.getByRole('button', { name: 'Set done' }).click();
+  await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+  // Two reps at ~4 s and ~9 s of rest (before arming), then hold.
+  await page.evaluate(() => {
+    setTimeout(() => window.__play(), 500);
+    setTimeout(() => (window.__freezeAt = 0), 500 + 8_800);
+  });
+  await expect.poll(async () => (await setRows(page)).length).toBe(1);
+  const [set1] = await setRows(page);
+  await page.waitForTimeout(12_500);
+  await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+  expect(await page.locator('[data-rest-clock]').count()).toBe(1); // still the Rest screen
+  const afterDone = (await texts(page)).slice((await texts(page)).lastIndexOf('Two') + 1);
+  expect(afterDone.filter((t) => /^(One|Two|Three)$/.test(t))).toEqual([]); // rest is silent
+
+  // Armed: two reps ≤ 8 s apart start set 2, the first word being "Two".
+  await play(page);
+  const playedAt = await page.evaluate(() => window.__playedAt);
+  await expect(cam).toHaveAttribute('data-cam-mode', 'set', { timeout: 12_000 });
+  await page.evaluate(() => (window.__freezeAt = 0));
+  await expect(reps(cam)).toHaveText('2');
+  await expect(cam.locator('[data-set]')).toHaveAttribute('data-set', '2/3');
+  await expect(page.locator('[data-rest-clock]')).toHaveCount(0);
+  const counts = (await texts(page)).filter((t) => /^(One|Two|Three)$/.test(t));
+  expect(counts.at(-1)).toBe('Two');
+  expect(counts.filter((t) => t === 'Two')).toHaveLength(2); // set 1's and set 2's
+  await page.screenshot({ path: test.info().outputPath('hands-free-auto-started.png') });
+
+  // Save set 2 by hand: its start and rest taken are the backdated departure of the first rep.
+  await cam.getByRole('button', { name: 'Set done' }).click();
+  await expect.poll(async () => (await setRows(page)).length).toBe(2);
+  const set2 = (await setRows(page))[1];
+  expect(set2?.setIndex).toBe(1);
+  expect(set2?.startedAt ?? 0).toBeGreaterThan(playedAt + 500);
+  expect(set2?.startedAt ?? 0).toBeLessThan(playedAt + 3_300); // before the first rep ended
+  expect(set2?.restTakenSec).toBe(
+    Math.round(((set2?.startedAt ?? 0) - (set1?.endedAt ?? 0)) / 1000),
+  );
+  expect(set2?.restTakenSec ?? 0).toBeGreaterThanOrEqual(14);
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
+
+test("(vi) the exercise's last set closes the camera; Rest's Camera opens the next pose exercise in rest mode", async ({
+  page,
+}) => {
+  const w = watch(page);
+  await installMocks(page, PRESS);
+  await page.goto('/');
+  const cam = await openCamera(page, /Push A/, 'Seated Dumbbell Press');
+  // Sets 1 and 2 by hand; the sheet stays open between them.
+  for (const n of [1, 2]) {
+    await expect(cam.locator('[data-set]')).toHaveAttribute('data-set', `${n}/3`);
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+    await cam.locator('[data-cam-rest="start"]').click();
+    await expect(cam).not.toHaveAttribute('data-cam-mode', 'rest');
+  }
+  await expect(cam.locator('[data-set]')).toHaveAttribute('data-set', '3/3');
+  // Set 3 hands-free: reps, still, window, save → the press is finished → the camera closes.
+  await repsThenFreeze(page, cam, 2);
+  await expect(banner(cam)).toBeVisible({ timeout: 10_000 });
+  await expect(cam).toHaveCount(0, { timeout: 8_000 });
+  await expect.poll(async () => (await setRows(page)).length).toBe(3);
+  await expect(page.locator('[data-rest-clock]')).toBeVisible();
+  // The last set's next-time tip (2 reps < 7 → N2 "repeat 12.5 kg") is spoken at the save,
+  // although the camera closed in the same dispatch: "Set done" → tip, nothing cancelled.
+  await expect(page.locator('[data-coach-tip]')).toHaveAttribute('data-advice-rule', 'N2');
+  await expect(page.locator('[data-coach-tip] [data-coach="text"]')).toHaveText(
+    'Next time on Seated Dumbbell Press: repeat 12.5 kg.',
+  );
+  const NEXT_TIME = /^Next time on Seated Dumbbell Press: repeat 12\.5 /;
+  await expect.poll(async () => (await texts(page)).some((t) => NEXT_TIME.test(t))).toBe(true);
+  {
+    const list = await said(page);
+    const tail = list.slice(list.map((s) => s.text).lastIndexOf('Set done. 2 reps.'));
+    expect(tail.map((s) => s.text)).toHaveLength(2);
+    expect(tail[0]?.text).toBe('Set done. 2 reps.');
+    expect(tail[1]?.text).toMatch(NEXT_TIME);
+    // At the save (end of the 5 s window), not 2 s into a fresh rest.
+    const gap = (tail[1]?.at ?? 0) - (tail[0]?.at ?? 0);
+    expect(gap).toBeGreaterThanOrEqual(4_000);
+    expect(gap).toBeLessThan(6_500);
+  }
+  const camBtn = page.getByRole('button', { name: 'Camera', exact: true });
+  await expect(camBtn).toBeVisible(); // Side Lateral Raise is next and pose-tracked
+  expect((await camBtn.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(56);
+  await page.screenshot({ path: test.info().outputPath('hands-free-rest-camera-button.png') });
+  await camBtn.click();
+  const next = page.getByRole('dialog', { name: 'Camera' });
+  await expect(next).toHaveAttribute('data-cam-mode', 'rest');
+  await expect(next.locator('[data-cam-rest-clock]')).toBeVisible();
+  await expect(next.locator('[data-cam-rest="next"]')).toContainText('Set 1 of 5');
+  await expect(next.locator('[data-cam-rest="start"]')).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('hands-free-camera-rest.png') });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
+
+test('(vii) "Hands-free sets" off (persisted) → no auto stop; Set done closes the camera (M4)', async ({
+  page,
+}) => {
+  const w = watch(page);
+  await installMocks(page, CURL);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const sw = page.locator('[data-setting="hands-free"]');
+  await expect(sw).toHaveAttribute('aria-checked', 'true'); // default on
+  await sw.click();
+  await expect(sw).toHaveAttribute('aria-checked', 'false');
+  await expect.poll(() => readSetting(page, 'handsFree')).toBe(false);
+  await page.reload();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.locator('[data-setting="hands-free"]')).toHaveAttribute(
+    'aria-checked',
+    'false',
+  );
+  await page.screenshot({ path: test.info().outputPath('hands-free-setting-off.png') });
+  await page.getByRole('button', { name: '‹ Back' }).click();
+
+  const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
+  await repsThenFreeze(page, cam, 2);
+  await page.waitForTimeout(15_000);
+  await expect(cam.locator('[data-auto-stop]')).toHaveCount(0);
+  expect((await texts(page)).filter((t) => t.startsWith('Set done'))).toEqual([]);
+  expect(await setRows(page)).toEqual([]);
+  await cam.getByRole('button', { name: 'Set done' }).click();
+  await expect(cam).toHaveCount(0);
+  await expect(page.locator('[data-rest-clock]')).toBeVisible();
+  await expect.poll(async () => (await setRows(page)).map((r) => r.reps)).toEqual([2]);
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
+
+test('out of frame: no person for 3 s after 2 reps → "away" stop, saved after the window', async ({
+  page,
+}) => {
+  const w = watch(page);
+  await installMocks(page, CURL);
+  await page.goto('/');
+  const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
+  await repsThenFreeze(page, cam, 2);
+  const goneAt = await page.evaluate(() => {
+    window.__noPerson = true;
+    return Date.now();
+  });
+  await expect(banner(cam)).toBeVisible({ timeout: 6_000 });
+  await expect(banner(cam)).toHaveAttribute('data-reason', 'away');
+  const done = (await said(page)).find((s) => s.text === 'Set done. 2 reps.');
+  expect((done?.at ?? 0) - goneAt).toBeGreaterThanOrEqual(2_500);
+  expect((done?.at ?? 0) - goneAt).toBeLessThan(5_500); // before a still stop could fire
+  await expect
+    .poll(async () => (await setRows(page)).map((r) => r.reps), { timeout: 8_000 })
+    .toEqual([2]);
+  await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+  expect(w.thirdParty).toEqual([]);
+  expect(w.errors).toEqual([]);
+});
