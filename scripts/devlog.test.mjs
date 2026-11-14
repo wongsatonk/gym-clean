@@ -720,3 +720,221 @@ describe('scripts/devlog.mjs, a set with a hold (M5c B8)', () => {
     assert.match(it.auto, /hold:bodyLine \S+ → \?/);
   });
 });
+
+// Retune report (polish): a per-set block ("Sets:") and a session summary ("Summary:") for
+// the hands-free gym sessions. Session 1 is hands-free: set 0 auto-started, an auto stop undone,
+// then a still stop; set 1 auto-started, a body-line hold continued, a stalled stop, a miscount;
+// set 2 (row) tap-started, an away hold saved, then the idle close. Session 2 is hands-free off.
+// Speech kinds come from camera.speech, fps from camera.fps samples. Ids and numbers only.
+describe('scripts/devlog.mjs, retune report (per-set block + summary)', () => {
+  const WALL_T0 = Date.UTC(2026, 10, 13, 11, 0);
+  const SPAN = original.at(-1).t;
+  const CLOCK = [50_000, 200_000, 350_000];
+  const NOTE = 'SECRET-FREE-TEXT';
+  const ROW = 'Bent_Over_Two-Dumbbell_Row';
+
+  const speech = (kinds) =>
+    kinds.map(([kind, dropped], i) => ({
+      t: i * 100,
+      text: SECRET_SPEECH,
+      kind,
+      ...(dropped ? { dropped } : {}),
+    }));
+  const many = (kind, n) => Array.from({ length: n }, () => [kind]);
+
+  function camSet(setIndex, c, extra, { folder = 'curl', fps = [], talk = [] } = {}) {
+    const frames = decodeFrames(encodeFrames(original.map((f) => ({ ...f, t: f.t + c }))));
+    return set(setIndex, {
+      startedAt: WALL_T0 + c,
+      endedAt: WALL_T0 + c + SPAN,
+      counted: { reps: 3, partials: 1 },
+      logged: { reps: 3, partials: 1 },
+      camera: {
+        ...camera(folder, frames),
+        wallT0: WALL_T0,
+        fps: fps.map((v, i) => ({ t: c + i * 1000, fps: v })),
+        speech: speech(talk),
+      },
+      ...extra,
+    });
+  }
+
+  function retuneExport() {
+    const [c0, c1, c2] = CLOCK;
+    const a = camSet(
+      0,
+      c0,
+      {},
+      {
+        fps: [30, 28, 26],
+        talk: [...many('count', 3), ['hint'], ['hint', 'rate'], ...many('cue', 3)],
+      },
+    );
+    const b = camSet(
+      1,
+      c1,
+      { counted: { reps: 5, partials: 2 }, logged: { reps: 6, partials: 2 } },
+      { fps: [20, 24], talk: [...many('count', 5), ['cue']] },
+    );
+    const r = camSet(
+      2,
+      c2,
+      { exerciseId: ROW },
+      {
+        folder: 'row',
+        fps: [29],
+        talk: [...many('count', 3), ['cue'], ['placement']],
+      },
+    );
+    const ev = (t, data) => ({ t, type: 'autoSet', data: { ...data, note: NOTE } });
+    const cue = (t, data) => ({ t, type: 'focusCue', data: { ...data, text: SECRET_SPEECH } });
+    const score = (t, s) => ({ t, type: 'focusScore', data: { score: s, cues: 0, partials: 0 } });
+    const events = [
+      { t: a.startedAt - 30_000, type: 'note', data: NOTE },
+      // Set 0: auto start, a still stop undone, a still stop saved.
+      ev(a.startedAt - 800, { action: 'start', reps: 2, partials: 0 }),
+      cue(a.startedAt + 1000, { id: 'rushedLowering', reps: 2, value: 0.6, baseline: 2 }),
+      cue(a.startedAt + 2000, { id: 'stalled', reps: 3, value: 5000, baseline: null }),
+      ev(a.endedAt + 3000, { action: 'stopPending', reason: 'still' }),
+      ev(a.endedAt + 4000, { action: 'stopCancelled', reason: 'undo' }),
+      ev(a.endedAt + 10_000, { action: 'stopPending', reason: 'still' }),
+      ev(a.endedAt + 15_000, { action: 'commit' }),
+      score(a.endedAt + 16_000, 85),
+      // Set 1: auto start, body-line hold 16 s → Continue, a stalled stop saved.
+      ev(b.startedAt + 500, { action: 'start', reps: 2, partials: 0 }),
+      cue(b.startedAt + 1500, { id: NOTE, reps: 2, value: 1, baseline: 1 }),
+      ev(WALL_T0 + c1 + 7000, {
+        action: 'hold',
+        reason: 'bodyLine',
+        ft: c1 + 7000,
+        endedAtFt: c1 + 2000,
+      }),
+      ev(WALL_T0 + c1 + 18_000, { action: 'holdEnded', how: 'continue', ft: c1 + 18_000 }),
+      ev(b.endedAt + 20_000, { action: 'stopPending', reason: 'stalled' }),
+      ev(b.endedAt + 26_000, { action: 'commit' }),
+      score(b.endedAt + 27_000, 90),
+      // Set 2 (row): tap start, away hold 12 s → Save set, then the idle close.
+      ev(WALL_T0 + c2 + SPAN + 3000, {
+        action: 'hold',
+        reason: 'away',
+        ft: c2 + SPAN + 3000,
+        endedAtFt: c2 + SPAN,
+      }),
+      ev(WALL_T0 + c2 + SPAN + 12_000, {
+        action: 'commit',
+        ft: c2 + SPAN + 12_000,
+        endedAtFt: c2 + SPAN,
+      }),
+      ev(WALL_T0 + c2 + SPAN + 200_000, { action: 'close', reason: 'noRep' }),
+    ];
+    const off = camSet(0, 600_000, {}, { fps: [25], talk: many('count', 3) });
+    const session = (id, evs, sets) => ({
+      id,
+      startedAt: SESSION_START,
+      appVersion: 'abc123',
+      userAgent: SECRET_UA,
+      settings: { note: SECRET_SETTING },
+      dayId: 'pull-a',
+      events: evs,
+      sets,
+    });
+    return {
+      format: 'gym-clean-devlog',
+      version: 1,
+      exportedAt: WALL_T0 + 900_000,
+      sessions: [session('hf', events, [a, b, r]), session('off', [], [off])],
+    };
+  }
+
+  function dryRun(exp) {
+    const dir = mkdtempSync(join(tmpdir(), 'devlog-retune-'));
+    try {
+      const file = join(dir, 'retune.json.gz');
+      writeFileSync(file, gzipSync(JSON.stringify(exp)));
+      return run(file, '--out', join(dir, 'out'), '--label', 'rt', '--dry-run');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  /** The lines of a block that starts with `head` and ends at the next blank line. */
+  function block(stdout, head) {
+    const lines = stdout.split('\n');
+    const i = lines.indexOf(head);
+    assert.ok(i >= 0, `no "${head}" block`);
+    const end = lines.findIndex((l, n) => n > i && l.trim() === '');
+    return lines.slice(i + 1, end < 0 ? undefined : end);
+  }
+
+  it('prints one line per set: counts, start/stop, holds, focus cues, fps, speech kinds', () => {
+    const stdout = dryRun(retuneExport());
+    const sets = block(stdout, 'Sets:');
+    assert.equal(sets.length, 4);
+    assert.match(
+      sets[0],
+      /^ {2}s1 #0 Dumbbell_Bicep_Curl {2}3\/1 vs 3\/1 ok {2}start:auto stop:still undo:1 {2}focus 85: rushedLowering@r2 stalled@r3 {2}fps 28 {2}speech count:3 hint:1 cue:3 dropped:1$/,
+    );
+    assert.match(
+      sets[1],
+      /^ {2}s1 #1 Dumbbell_Bicep_Curl {2}5\/2 vs 6\/2 MISCOUNT {2}start:auto stop:stalled hold:bodyLine 16\.0s → continue {2}focus 90: \?@r2 {2}fps 22 {2}speech count:5 hint:0 cue:1$/,
+    );
+    assert.match(
+      sets[2],
+      /^ {2}s1 #2 Bent_Over_Two-Dumbbell_Row {2}3\/1 vs 3\/1 ok {2}start:tap stop:hold hold:away 12\.0s → save close:noRep {2}focus - {2}fps 29 {2}speech count:3 hint:0 cue:1 placement:1$/,
+    );
+    // Hands-free off: tap / tap.
+    assert.match(
+      sets[3],
+      /^ {2}s2 #0 Dumbbell_Bicep_Curl {2}3\/1 vs 3\/1 ok {2}start:tap stop:tap {2}focus - {2}fps 25 {2}speech count:3 hint:0 cue:0$/,
+    );
+  });
+
+  it('ends with a session summary: sets, miscounts, auto success, holds, cues, fps', () => {
+    const stdout = dryRun(retuneExport());
+    const lines = stdout.trimEnd().split('\n');
+    const at = lines.indexOf('Summary:');
+    assert.ok(at > lines.indexOf('Sets:'), 'summary after the per-set block');
+    const sum = lines.slice(at + 1);
+    assert.equal(at + 1 + sum.length, lines.length, 'summary is the last block');
+    assert.deepEqual(sum, [
+      `  sets: Dumbbell_Bicep_Curl 3, ${ROW} 1`,
+      '  miscounts: 1 of 4 (s1 #1 Dumbbell_Bicep_Curl 5/2 vs 6/2)',
+      '  auto-start: 2 of 4 sets, 1 without Undo',
+      '  auto-stop: 3 proposed, 2 without Undo (undo 1, rep 0); stops still 1, stalled 1, hold 1, tap 1',
+      '  holds: 2 (bodyLine 1, away 1) → continue 1, next 0, save 1, ? 0',
+      '  cues: rushedLowering 1, stalled 1, ? 1',
+      '  speech: count 14, hint 1, cue 5, placement 1, dropped 1',
+      '  fps: min 20, median 26 (7 samples)',
+    ]);
+  });
+
+  it('prints ids and numbers only: no speech text, notes, settings or user agent', () => {
+    const stdout = dryRun(retuneExport());
+    for (const s of [SECRET_SPEECH, SECRET_UA, SECRET_SETTING, NOTE, 'pull-a', 'abc123']) {
+      assert.equal(stdout.includes(s), false, s);
+    }
+  });
+
+  it('a free-text exercise id prints "?" and an export with no camera sets still summarises', () => {
+    const exp = retuneExport();
+    exp.sessions[1].sets[0].exerciseId = 'My secret note';
+    const sets = block(dryRun(exp), 'Sets:');
+    assert.match(sets[3], /^ {2}s2 #0 \? {2}/);
+    const empty = buildExport();
+    empty.sessions[0].sets = [set(0, {})];
+    const out = dryRun(empty);
+    assert.match(
+      out,
+      /Summary:\n {2}sets: Dumbbell_Bicep_Curl 1\n {2}miscounts: 1 of 1 \(s1 #0 Dumbbell_Bicep_Curl 2\/1 vs 3\/1\)\n/,
+    );
+    assert.match(out, / {2}auto-start: 0 of 1 sets, 0 without Undo\n/);
+    assert.match(out, / {2}fps: - \(0 samples\)$/m);
+  });
+
+  it('keeps the existing table and focus section alongside the new blocks', () => {
+    const stdout = dryRun(retuneExport());
+    assert.match(stdout, /^exercise\s+sess\s+set\s+counted/m);
+    assert.match(stdout, /Focus cues:/);
+    assert.match(stdout, /4 would be written, 0 kept \(exists\), 0 skipped/);
+  });
+});

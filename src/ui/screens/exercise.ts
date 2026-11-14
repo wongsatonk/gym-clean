@@ -18,7 +18,7 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { workoutTopBar } from '../topBar';
-import { muscleLabel } from './dayInfo';
+import { muscleLabel } from '../../core/dayInfo';
 
 export type StepField = 'reps' | 'weight';
 

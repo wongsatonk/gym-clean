@@ -77,8 +77,10 @@ import { settingsScreen as renderSettings } from './screens/settings';
 import { summaryScreen as renderSummary } from './screens/summary';
 import { todayScreen as renderToday, type TodayLast } from './screens/today';
 import { icon } from './icons';
+import type { TabId } from './tabBar';
 import { applyAccent } from './tokens';
 import {
+  doneDaysThisWeek,
   lastSession,
   newBests,
   sessionVolume,
@@ -497,6 +499,25 @@ export function mountApp(root: HTMLElement): void {
     }
   }
 
+  /** Tab bar: every tab is handled here, so a new tab id fails to compile until it's wired. */
+  function goTab(tab: TabId): void {
+    switch (tab) {
+      case 'today':
+        if (view.screen !== 'today') goToday();
+        return;
+      case 'settings':
+        if (view.screen !== 'settings') {
+          view = { screen: 'settings' };
+          render();
+        }
+        return;
+      default: {
+        const unhandled: never = tab;
+        throw new Error(`Unhandled tab: ${String(unhandled)}`);
+      }
+    }
+  }
+
   function goToday(): void {
     if (view.screen === 'session') finishDevLog();
     devLogPanel?.destroy();
@@ -544,10 +565,7 @@ export function mountApp(root: HTMLElement): void {
 
   function todayStats(sessions: SessionRow[], sets: SetRow[], t: number): TodayStats {
     const dots = weekDots(sessions, t);
-    const weekStart = dots[0]?.dayStart ?? t;
-    const doneThisWeek: Record<string, number> = {};
-    for (const x of sessions)
-      if (x.endedAt !== undefined && x.startedAt >= weekStart) doneThisWeek[x.dayId] = x.startedAt;
+    const doneThisWeek = doneDaysThisWeek(sessions, t);
     const info = lastSession(sessions, sets);
     let last: TodayLast | null = null;
     if (info) {
@@ -587,12 +605,7 @@ export function mountApp(root: HTMLElement): void {
         // The hero goes through the preview, which loads last time's weights for the defaults.
         onStart: (day) => void openPreview(day),
         onOpenDay: (day) => void openPreview(day),
-        onTab: (tab) => {
-          if (tab === 'settings') {
-            view = { screen: 'settings' };
-            render();
-          }
-        },
+        onTab: (tab) => goTab(tab),
       },
     );
   }
@@ -712,9 +725,7 @@ export function mountApp(root: HTMLElement): void {
           render();
         },
         onCameraTest: () => openCameraView('Camera test'),
-        onTab: (t) => {
-          if (t === 'today') goToday();
-        },
+        onTab: (t) => goTab(t),
       },
     );
   }
@@ -893,6 +904,9 @@ export function mountApp(root: HTMLElement): void {
     render();
     // Pause sheet: move focus into the dialog (the Pause button it came from is gone).
     if (s.paused && !prev.paused) root.querySelector<HTMLElement>('[data-pause="resume"]')?.focus();
+    // Back from the sheet: focus the Pause button it came from (the sheet is gone).
+    if (prev.paused && !s.paused) root.querySelector<HTMLElement>('[data-pause-open]')?.focus();
+    if (camera) camera.el.inert = s.paused; // the Pause sheet is modal over the camera too
     speakFocusCue(prev, s);
   }
 
@@ -1008,7 +1022,10 @@ export function mountApp(root: HTMLElement): void {
     if (s.phase !== 'rest') restView = null; // the tick only updates a live Rest screen
     if (s.phase === 'summary') return summaryScreen(s);
     const body = s.phase === 'rest' ? restScreen(s) : exerciseScreen(s);
-    if (s.paused) return h('div', { class: 'stack' }, body, pausedOverlay(s));
+    if (s.paused) {
+      body.inert = true; // the Pause sheet is modal: nothing behind it takes taps or focus
+      return h('div', { class: 'stack' }, body, pausedOverlay(s));
+    }
     if (sheet?.kind === 'list') return h('div', { class: 'stack' }, body, listSheet(s));
     if (sheet?.kind === 'notes')
       return h('div', { class: 'stack' }, body, notesSheet(s, sheet.exerciseId));

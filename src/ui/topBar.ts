@@ -52,7 +52,7 @@ export function workoutTopBar(p: WorkoutTopBarProps): HTMLElement {
         : null,
       h(
         'button',
-        { type: 'button', class: 'wtb-btn', onclick: p.onPause },
+        { type: 'button', class: 'wtb-btn', 'data-pause-open': true, onclick: p.onPause },
         icon('pause', 'md'),
         h('span', { class: 'wtb-lbl' }, 'Pause'),
       ),

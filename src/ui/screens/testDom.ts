@@ -7,7 +7,9 @@ export class FakeEl {
   attrs = new Map<string, string>();
   text = '';
   html = '';
-  listeners = new Map<string, (() => void)[]>();
+  listeners = new Map<string, ((ev?: unknown) => void)[]>();
+  /** Tests flip this to simulate removal from the document. */
+  isConnected = true;
   constructor(public tag: string) {}
   setAttribute(k: string, v: string) {
     this.attrs.set(k, v);
@@ -27,11 +29,18 @@ export class FakeEl {
   get innerHTML() {
     return this.html;
   }
-  addEventListener(type: string, cb: () => void) {
+  addEventListener(type: string, cb: (ev?: unknown) => void) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), cb]);
   }
   click() {
     for (const cb of this.listeners.get('click') ?? []) cb();
+  }
+  /** Calls this element's listeners for `type` with `ev` (no bubbling). */
+  dispatch(type: string, ev: unknown) {
+    for (const cb of this.listeners.get(type) ?? []) cb(ev);
+  }
+  focus() {
+    (globalThis as { document: { activeElement: unknown } }).document.activeElement = this;
   }
   append(...nodes: (FakeEl | string)[]) {
     for (const n of nodes) {
@@ -82,6 +91,7 @@ export function useFakeDom(): void {
   beforeEach(() => {
     saved = g.document;
     g.document = {
+      activeElement: null,
       createElement: (tag: string) => new FakeEl(tag),
       createElementNS: (_ns: string, tag: string) => new FakeEl(tag),
     };

@@ -1,7 +1,6 @@
-// Small derived facts about a program day, shared by Today and the day preview (M4e A8).
-// Pure (no DOM). Candidates to move into src/core/ (requested from core-engineer); they stay
-// here until then so the screens can ship.
-import type { Exercise, ProgramDay } from '../../core/types';
+// Small derived facts about a program day, shared by Today, the day preview and the exercise
+// screen (M4e A8). Pure: no DOM, no data imports (the exercise lookup is passed in).
+import type { Exercise, ProgramDay } from './types';
 
 /** Seconds of work assumed per set for the time estimate (setup + reps). */
 export const WORK_SEC_PER_SET = 40;

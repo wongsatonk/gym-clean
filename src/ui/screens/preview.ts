@@ -10,7 +10,7 @@ import { badgesFor } from '../badges';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
-import { dayMuscles, estimateMinutes, muscleLabel } from './dayInfo';
+import { dayMuscles, estimateMinutes, muscleLabel } from '../../core/dayInfo';
 
 export type PreviewRow = {
   exerciseId: string;

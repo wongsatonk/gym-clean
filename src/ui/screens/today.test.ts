@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { WeekDot } from '../../core/stats';
 import type { ProgramDay } from '../../core/types';
+import { dayMuscles, estimateMinutes } from '../../core/dayInfo';
 import { exerciseById, program } from '../../data/catalog';
 import { tabBar, type TabId } from '../tabBar';
 import { FakeEl, asFake, useFakeDom } from './testDom';
-import { dayMuscles, estimateMinutes, muscleLabel } from './dayInfo';
 import { previewScreen, type PreviewRow } from './preview';
 import { dateLabel, todayScreen, volumeLine, whenLabel, type TodayProps } from './today';
 
@@ -60,27 +60,16 @@ function render(over: Partial<TodayProps> = {}) {
 
 // ---------- tests ----------
 
-describe('dayInfo', () => {
-  it('estimates work + rests (no rest after the last set), rounded to 5 min', () => {
-    const day: ProgramDay = {
-      id: 'x',
-      name: 'X',
-      exercises: [
-        { exerciseId: 'a', sets: 3, targetReps: [8, 12], restSec: 90, tracking: 'manual' },
-        { exerciseId: 'b', sets: 2, targetReps: [8, 12], restSec: 60, tracking: 'manual' },
-      ],
-    };
-    // 3 × 130 + 2 × 100 − 60 = 530 s ≈ 8.8 min → 10
-    expect(estimateMinutes(day)).toBe(10);
-    expect(estimateMinutes({ id: 'e', name: 'E', exercises: [] })).toBe(5);
+// The helpers' unit tests live in src/core/dayInfo.test.ts; these check them on the real program.
+describe('dayInfo on the vendored program', () => {
+  it('estimates every day at 30 min or more', () => {
     for (const d of DAYS) expect(estimateMinutes(d)).toBeGreaterThanOrEqual(30);
   });
 
-  it('ranks primary muscles by sets and keeps secondary ones that are not primary', () => {
+  it('finds primary muscles for Pull A, none of them also listed as secondary', () => {
     const m = dayMuscles(PULL_A, exerciseById);
     expect(m.primary.length).toBeGreaterThan(0);
     expect(m.secondary.some((s) => m.primary.includes(s))).toBe(false);
-    expect(muscleLabel('middle back')).toBe('Middle back');
   });
 });
 

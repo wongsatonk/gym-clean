@@ -851,6 +851,18 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **Polish follow-ups on branch `polish-followups`** (from main eb16eed; review PASS; check 1377 unit + 24 script tests).
+  - **Pause sheet:**
+    - Escape resumes, and a focus trap keeps focus inside the sheet.
+    - The armed End timer is cleared when the sheet leaves, via an observer that runs only while armed.
+    - The screen behind (and the camera sheet) is `inert` while paused. Focus goes to Resume on open and back to Pause on resume.
+    - New e2e: Skip while resting.
+  - **Core:** dayInfo helpers moved to `src/core/dayInfo.ts`. New `doneDaysThisWeek`, which now bounds the week and keeps the latest start.
+  - **Tabs:** an exhaustive `goTab` switch.
+  - **Dev-log report:** per-set "Sets:" lines and a "Summary:" block (miscounts, auto start/stop without Undo, holds, cues, speech, fps). Ids and numbers only.
+  - **Open, small:**
+    - devlog "without Undo" also counts stops cancelled by a rep or a pause; the auto-start denominator includes non-hands-free sets;
+    - add an e2e asserting `inert` while paused.
 - 2026-11-14: **M4e cleanup round done** (review PASS). check 1358; full e2e 90/90 (adds layout-dock.spec and a camera header test).
   - **Camera:** exercise names wrap to at most 2 lines, and the video stays ≥ 600px.
   - **Rest:** while a coach Apply is up, the ring is 264px and the clock 120px, so Apply clears Start set by ≥ 16px.

@@ -2,6 +2,10 @@
 // the Exercise and Rest footers (SPEC M4e "Picked") so they can't be hit by accident mid-set.
 // End keeps its two-tap confirmation: the first tap arms it ("Tap again to end", danger fill,
 // flag icon + words), the second ends the workout; it disarms itself after `confirmMs`.
+// Escape resumes. Tab / Shift+Tab cycle Resume → Skip → End inside the sheet (a focus trap; the
+// page behind is made inert by the app). If the sheet leaves the document while End is armed,
+// the disarm timer is cleared: a MutationObserver runs only during that armed window, so the
+// caller needs no dispose call.
 //
 // e2e hooks: dialog named "Paused", buttons "Resume", "Skip exercise", "End workout" →
 // "Tap again to end" (`data-armed` while armed).
@@ -38,30 +42,68 @@ function endButton(onEnd: () => void, confirmMs: number): HTMLElement {
     label,
   );
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let watch: MutationObserver | undefined;
+  const stopArmedWindow = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+    watch?.disconnect();
+    watch = undefined;
+  };
   btn.addEventListener('click', () => {
     if (btn.getAttribute('data-armed') !== null) {
-      if (timer !== undefined) clearTimeout(timer);
+      stopArmedWindow();
       onEnd();
       return;
     }
     btn.setAttribute('data-armed', 'true');
     label.textContent = END_ARMED_LABEL;
     timer = setTimeout(() => {
+      stopArmedWindow();
       btn.removeAttribute('data-armed');
       label.textContent = END_LABEL;
     }, confirmMs);
+    // Sheet removed (Resume, re-render) while armed → drop the pending timer with it.
+    watch = new MutationObserver(() => {
+      if (!btn.isConnected) stopArmedWindow();
+    });
+    watch.observe(document, { childList: true, subtree: true });
   });
   return btn;
 }
 
 export function pauseSheet(p: PauseSheetProps, a: PauseSheetActions): HTMLElement {
-  return h(
+  const resume = h(
+    'button',
+    {
+      type: 'button',
+      class: 'primary-btn cta-btn',
+      'data-pause': 'resume',
+      onclick: a.onResume,
+    },
+    icon('play', 'lg'),
+    'Resume',
+  );
+  const skip =
+    p.canSkip === false
+      ? null
+      : h(
+          'button',
+          { type: 'button', class: 'pause-btn', 'data-pause': 'skip', onclick: a.onSkip },
+          icon('skip', 'md'),
+          h('span', {}, 'Skip exercise'),
+        );
+  const end = endButton(a.onEnd, p.confirmMs ?? END_CONFIRM_MS);
+  const cycle: HTMLElement[] = skip ? [resume, skip, end] : [resume, end];
+
+  const sheet = h(
     'div',
     {
       class: `overlay pause-sheet ${moodClass('pro')}`,
       role: 'dialog',
       'aria-modal': 'true',
       'aria-label': 'Paused',
+      // Focusable (not tabbable) so a tap on the panel keeps focus, and keys, inside the sheet.
+      tabindex: '-1',
       'data-pause-sheet': true,
     },
     h(
@@ -69,26 +111,24 @@ export function pauseSheet(p: PauseSheetProps, a: PauseSheetActions): HTMLElemen
       { class: 'pause-panel' },
       h('p', { class: 'overlay-title' }, icon('pause', 'lg'), 'Paused'),
       p.context ? h('p', { class: 'pause-context muted' }, p.context) : null,
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'primary-btn cta-btn',
-          'data-pause': 'resume',
-          onclick: a.onResume,
-        },
-        icon('play', 'lg'),
-        'Resume',
-      ),
-      p.canSkip === false
-        ? null
-        : h(
-            'button',
-            { type: 'button', class: 'pause-btn', 'data-pause': 'skip', onclick: a.onSkip },
-            icon('skip', 'md'),
-            h('span', {}, 'Skip exercise'),
-          ),
-      endButton(a.onEnd, p.confirmMs ?? END_CONFIRM_MS),
+      resume,
+      skip,
+      end,
     ),
   );
+  sheet.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') {
+      ev.preventDefault();
+      a.onResume();
+      return;
+    }
+    if (ev.key !== 'Tab') return;
+    ev.preventDefault();
+    const at = cycle.indexOf(document.activeElement as HTMLElement);
+    const n = cycle.length;
+    // From the sheet itself (or anywhere else), Tab enters at Resume and Shift+Tab at End.
+    const next = at < 0 ? (ev.shiftKey ? n - 1 : 0) : (at + (ev.shiftKey ? n - 1 : 1)) % n;
+    cycle[next]?.focus();
+  });
+  return sheet;
 }

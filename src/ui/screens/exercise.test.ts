@@ -190,6 +190,27 @@ describe('exerciseScreen', () => {
 describe('pauseSheet', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+  const observers: { cb: () => void; observing: boolean }[] = [];
+  beforeEach(() => {
+    observers.length = 0;
+    vi.stubGlobal(
+      'MutationObserver',
+      class {
+        rec: { cb: () => void; observing: boolean };
+        constructor(cb: () => void) {
+          this.rec = { cb, observing: false };
+          observers.push(this.rec);
+        }
+        observe() {
+          this.rec.observing = true;
+        }
+        disconnect() {
+          this.rec.observing = false;
+        }
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
 
   function mount(canSkip?: boolean) {
     const calls = { resume: 0, skip: 0, end: 0 };
@@ -240,5 +261,92 @@ describe('pauseSheet', () => {
   it('can hide Skip', () => {
     const { el } = mount(false);
     expect(el.byTag('button').map((b) => b.textContent)).toEqual(['Resume', 'End workout']);
+  });
+
+  const key = (k: string, shiftKey = false) => {
+    const ev = { key: k, shiftKey, prevented: false, preventDefault: () => (ev.prevented = true) };
+    return ev;
+  };
+  const active = () =>
+    (globalThis as unknown as { document: { activeElement: unknown } }).document.activeElement;
+
+  it('Escape resumes; other keys do nothing', () => {
+    const { el, calls } = mount();
+    const esc = key('Escape');
+    el.dispatch('keydown', esc);
+    expect(calls).toEqual({ resume: 1, skip: 0, end: 0 });
+    expect(esc.prevented).toBe(true);
+    const enter = key('Enter');
+    el.dispatch('keydown', enter);
+    expect(calls.resume).toBe(1);
+    expect(enter.prevented).toBe(false);
+  });
+
+  it('Tab and Shift+Tab cycle Resume → Skip → End inside the sheet', () => {
+    const { el } = mount();
+    expect(el.getAttribute('tabindex')).toBe('-1');
+    const [resume, skip, end] = ['Resume', 'Skip exercise', 'End workout'].map((t) =>
+      buttonByText(el, t),
+    );
+    const tab = (shift = false) => {
+      const ev = key('Tab', shift);
+      el.dispatch('keydown', ev);
+      expect(ev.prevented).toBe(true);
+      return active();
+    };
+    // Focus on the sheet itself: Tab enters at Resume, Shift+Tab at End.
+    expect(tab()).toBe(resume);
+    expect(tab()).toBe(skip);
+    expect(tab()).toBe(end);
+    expect(tab()).toBe(resume);
+    expect(tab(true)).toBe(end);
+    expect(tab(true)).toBe(skip);
+    expect(tab(true)).toBe(resume);
+    el.focus();
+    expect(tab(true)).toBe(end);
+  });
+
+  it('Tab cycles Resume ↔ End when Skip is hidden', () => {
+    const { el } = mount(false);
+    const resume = buttonByText(el, 'Resume');
+    const end = buttonByText(el, 'End workout');
+    resume.focus();
+    el.dispatch('keydown', key('Tab'));
+    expect(active()).toBe(end);
+    el.dispatch('keydown', key('Tab'));
+    expect(active()).toBe(resume);
+    el.dispatch('keydown', key('Tab', true));
+    expect(active()).toBe(end);
+  });
+
+  describe('armed End and sheet removal', () => {
+    it('removing the sheet while armed clears the timer and stops watching', () => {
+      const { el } = mount();
+      const end = buttonByText(el, 'End workout');
+      end.click();
+      expect(vi.getTimerCount()).toBe(1);
+      expect(observers.filter((o) => o.observing)).toHaveLength(1);
+      // An unrelated mutation while still mounted keeps the window open.
+      observers[0]?.cb();
+      expect(vi.getTimerCount()).toBe(1);
+      end.isConnected = false;
+      observers[0]?.cb();
+      expect(vi.getTimerCount()).toBe(0);
+      expect(observers.filter((o) => o.observing)).toHaveLength(0);
+    });
+
+    it('watches only while armed: disarm and End both disconnect', () => {
+      const { el, calls } = mount();
+      const end = buttonByText(el, 'End workout');
+      expect(observers).toHaveLength(0);
+      end.click();
+      vi.advanceTimersByTime(END_CONFIRM_MS);
+      expect(observers.filter((o) => o.observing)).toHaveLength(0);
+      end.click();
+      end.click();
+      expect(calls.end).toBe(1);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(observers.filter((o) => o.observing)).toHaveLength(0);
+    });
   });
 });

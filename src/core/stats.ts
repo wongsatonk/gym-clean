@@ -107,6 +107,26 @@ export function weekDots(sessions: readonly StatsSession[], today: number): Week
   });
 }
 
+/**
+ * Program day ids finished in the current Mon–Sun week (local time) → that session's
+ * `startedAt` (ms). A day done twice keeps its latest start. Sessions from later weeks are
+ * ignored too, so clock skew can't mark a day done early.
+ */
+export function doneDaysThisWeek(
+  sessions: readonly StatsSession[],
+  today: number,
+): Record<string, number> {
+  const start = weekStartOf(today);
+  const end = addDays(start, 7);
+  const out: Record<string, number> = {};
+  for (const s of sessions) {
+    if (!isFinished(s) || s.startedAt < start || s.startedAt >= end) continue;
+    const prev = out[s.dayId];
+    if (prev === undefined || s.startedAt > prev) out[s.dayId] = s.startedAt;
+  }
+  return out;
+}
+
 /** Σ reps × kg. Bodyweight sets (0 kg) add 0. */
 export function sessionVolume(logs: readonly SetLog[]): number {
   return logs.reduce((sum, l) => sum + l.reps * l.weightKg, 0);
