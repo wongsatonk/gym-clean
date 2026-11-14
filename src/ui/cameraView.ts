@@ -1,7 +1,16 @@
 // Camera screen (camera-first): full-bleed video with the 2D skeleton overlay, the rep count and
 // target on the video, a phone set-up card, camera switch, and a collapsed 3D live skeleton.
 // Privacy: frames are only passed to on-device inference; nothing is recorded or uploaded.
-import { ruleFor } from '../core/exercises';
+import {
+  createAutoSet,
+  personInFrame,
+  type AutoCancelReason,
+  type AutoCloseReason,
+  type AutoSetAction,
+  type AutoSetConfig,
+  type AutoStopReason,
+} from '../core/autoSet';
+import { autoSetConfigFor, ruleFor } from '../core/exercises';
 import { FpsMeter } from '../core/fps';
 import {
   createCoachSpeech,
@@ -16,11 +25,77 @@ import type { LandmarkFrame, RepEvent } from '../core/types';
 import type { DevLogRecorder } from '../data/devlog';
 import { openCamera, stopStream, type Facing } from '../pose/camera';
 import type { PoseTracker } from '../pose/landmarker';
+import { createAutoStopBanner, type AutoStopBannerHandle } from './autoStopBanner';
+import {
+  createCameraRestPanel,
+  type CameraRestPanelHandle,
+  type CameraRestUpdate,
+} from './cameraRestPanel';
 import { h } from './dom';
 import type { Skeleton3D, SkeletonPreset } from './skeleton3d';
 import { voice } from './voice';
 
-export type CameraView = { readonly el: HTMLElement; start(): Promise<void>; stop(): void };
+export type CameraView = {
+  readonly el: HTMLElement;
+  start(): Promise<void>;
+  stop(): void;
+  /**
+   * Hands-free only (no-op otherwise): the app's session state. Call right after creating the
+   * view, after every dispatch, and on pause/resume. 'rest' → rest mode (silent counter, rest
+   * panel); 'exercise' while in rest mode → set mode with the counter at 0 (a manual Start set);
+   * after an auto start the view is already in set mode and keeps its counts.
+   */
+  setSession(session: CameraSession): void;
+  /** Hands-free rest mode: clock, next-set line and the coach tip / Fix elements to show. */
+  setRest(update: CameraRestUpdate): void;
+  /**
+   * Hands-free: call after each recorder.beginSet() so the new set gets the camera meta
+   * (folder, delegate, side, wallT0).
+   */
+  setBegun(): void;
+  /** 'rest' while the rest panel is up (hands-free), else 'set'. */
+  readonly mode: 'set' | 'rest';
+};
+
+/** The session as the camera needs it (hands-free). */
+export type CameraSession = {
+  phase: 'exercise' | 'rest' | 'other';
+  paused: boolean;
+  /** How long the current rest has run (ms; ignored outside rest). */
+  restElapsedMs: number;
+  /** Set line / target for the set being done or coming next ("Set 3 of 4 · 12 reps"). */
+  target?: CameraTarget;
+};
+
+/**
+ * M5c hands-free sets. Times are wall clock (Date.now() ms), converted from the camera frame
+ * clock, except `frameT` (camera frame clock ms, for recorder.beginSet's prerollFromT).
+ */
+export type HandsFreeOptions = {
+  /** Default autoSetConfigFor(rule) (AUTO_SET_DEFAULTS + the exercise's override). */
+  config?: AutoSetConfig;
+  /**
+   * Two reps in rest started a set. Dispatch START_SET { now: at } synchronously, then call
+   * setSession; the view then reports the counts through onCount and speaks the count word.
+   */
+  onAutoStart(e: { at: number; frameT: number; reps: number; partials: number }): void;
+  /** The Undo window ended (or Set done was tapped in it): SET_DONE { now: endedAt }. */
+  onCommit(e: { endedAt: number; reps: number; partials: number }): void;
+  /** "Set done. N reps." was said and Undo shown; nothing to save yet. */
+  onStopPending?(e: {
+    reason: AutoStopReason;
+    reps: number;
+    partials: number;
+    endedAt: number;
+    until: number;
+  }): void;
+  /** The pending stop is off (Undo tapped, a rep, or Pause); the set goes on. */
+  onStopCancelled?(e: { reason: AutoCancelReason }): void;
+  /** Idle limit hit: "Camera off." was said and the camera/model are stopped. Call stop(). */
+  onIdleClose(reason: AutoCloseReason): void;
+  /** "Start set" tapped on the rest panel: dispatch START_SET, then setSession. */
+  onStartSet(): void;
+};
 
 const MIN_VISIBILITY = 0.5;
 
@@ -91,6 +166,11 @@ export type CameraViewOptions = {
   recorder?: DevLogRecorder | null;
   /** Every speech decision (spoken or dropped), for the developer log. */
   onSpeech?: (s: SpeechReport) => void;
+  /**
+   * M5c: keep the sheet open across the exercise's sets with auto start/stop. Only used with a
+   * counting exercise. Without it the view behaves exactly as before (camera per set).
+   */
+  handsFree?: HandsFreeOptions;
 };
 
 /**
@@ -132,6 +212,15 @@ const WORDS = [
   'Twenty',
 ];
 
+/** "Set 2 of 3 · 8–12 reps". */
+function setLineText(target: CameraTarget): string {
+  const range =
+    target.minReps !== undefined && target.minReps < target.targetReps
+      ? `${target.minReps}–${target.targetReps}`
+      : String(target.targetReps);
+  return `Set ${target.setNumber} of ${target.sets} · ${range} reps`;
+}
+
 /** "One", "Two", … for spoken counts; digits past twenty (speech reads them fine). */
 function repWord(n: number): string {
   return WORDS[n] ?? String(n);
@@ -141,9 +230,23 @@ export type RepPanel = {
   readonly el: HTMLElement;
   /** False while the person is missing or not tracked yet (the "Step into frame" state). */
   readonly inFrame: boolean;
-  /** Feed one detector result (null = no person found). */
-  update(frame: LandmarkFrame | null): void;
+  /** Feed one detector result (null = no person found). Returns the counter's events. */
+  update(frame: LandmarkFrame | null): RepEvent[];
   reset(): void;
+  /**
+   * Hands-free rest mode: the counter keeps counting (events still returned and logged) but says
+   * nothing, shows no hints and calls no onCount.
+   */
+  quiet: boolean;
+  /**
+   * Counts shown/spoken/reported are the counter's minus this base (an auto-started set shows
+   * autoSet's counts, not reps the counter saw earlier in rest). Reset() clears it.
+   */
+  setBase(reps: number, partials: number): void;
+  /** New set number / planned reps (hands-free: the sheet stays open across sets). */
+  setTarget(target: CameraTarget): void;
+  /** Speak the count word for `reps` now (the first word of an auto-started set). */
+  announce(reps: number): void;
   /** Stops a count word still speaking or queued (closing the sheet, Set done). */
   silence(): void;
   /** Speaks the phone-placement sentence (not rate-limited); the next count word cuts it off. */
@@ -271,23 +374,17 @@ export function createRepPanel(
     onRepEvent?: (ev: RepEvent) => void;
   },
 ): RepPanel {
-  const target = opts.target;
+  let target = opts.target;
   const num = h('p', { class: 'rep-num', 'data-reps': '0' }, '0');
   const of = target
     ? h('p', { class: 'rep-target', 'data-target': target.targetReps }, `/ ${target.targetReps}`)
     : null;
   const label = h('p', { class: 'rep-label' }, 'reps');
-  const range =
-    target && target.minReps !== undefined && target.minReps < target.targetReps
-      ? `${target.minReps}–${target.targetReps}`
-      : target
-        ? String(target.targetReps)
-        : '';
   const setLine = target
     ? h(
         'p',
         { class: 'rep-set', 'data-set': `${target.setNumber}/${target.sets}` },
-        `Set ${target.setNumber} of ${target.sets} · ${range} reps`,
+        setLineText(target),
       )
     : null;
   const side = h('p', { class: 'rep-side', 'data-side': '' });
@@ -312,6 +409,13 @@ export function createRepPanel(
   let shownSide = '';
   let shownHint = '';
   let inFrame = false;
+  let quiet = false;
+  let baseReps = 0;
+  let basePartials = 0;
+  const shownCounts = () => ({
+    reps: Math.max(0, counter.reps - baseReps),
+    partials: Math.max(0, counter.partials - basePartials),
+  });
 
   const sideText = (s: RepCounter['side']): string => {
     if (!s) return '';
@@ -321,7 +425,7 @@ export function createRepPanel(
   };
 
   function render(present: boolean): void {
-    const { reps, partials: p } = counter;
+    const { reps, partials: p } = shownCounts();
     if (reps !== shownReps || p !== shownPartials) {
       if (reps !== shownReps && shownReps >= 0) {
         num.classList.remove('bump');
@@ -416,13 +520,16 @@ export function createRepPanel(
     },
     update(frame) {
       const now = clock();
+      let events: RepEvent[] = [];
       if (frame) {
         const before = { reps: counter.reps, partials: counter.partials };
-        for (const ev of counter.push(frame)) {
+        events = counter.push(frame);
+        for (const ev of events) {
           opts.onRepEvent?.(ev);
+          if (quiet) continue;
           if (ev.type === 'rep') {
             clearCoach(); // a new full rep replaces the last hint
-            if (opts.spokenCount !== false) apply(policy.count(repWord(ev.index), now));
+            if (opts.spokenCount !== false) apply(policy.count(repWord(ev.index - baseReps), now));
           } else {
             const text = hintFor(counter.rule, ev);
             if (text && ev.reason) {
@@ -431,18 +538,50 @@ export function createRepPanel(
             }
           }
         }
-        if (counter.reps !== before.reps || counter.partials !== before.partials) {
-          opts.onCount?.(counter.reps, counter.partials);
+        if (!quiet && (counter.reps !== before.reps || counter.partials !== before.partials)) {
+          const c = shownCounts();
+          opts.onCount?.(c.reps, c.partials);
         }
       }
       if (shownCoach && now >= coachUntil) clearCoach();
       apply(policy.tick(now));
       render(frame !== null);
+      return events;
     },
     reset() {
       counter.reset();
+      baseReps = 0;
+      basePartials = 0;
       clearCoach();
       render(false);
+    },
+    get quiet() {
+      return quiet;
+    },
+    set quiet(q: boolean) {
+      quiet = q;
+      if (q) clearCoach();
+    },
+    setBase(reps, partials) {
+      baseReps = reps;
+      basePartials = partials;
+      render(inFrame);
+    },
+    setTarget(next) {
+      target = next;
+      if (of) {
+        of.textContent = `/ ${next.targetReps}`;
+        of.dataset.target = String(next.targetReps);
+      }
+      if (setLine) {
+        setLine.textContent = setLineText(next);
+        setLine.dataset.set = `${next.setNumber}/${next.sets}`;
+      }
+      shownReps = -1; // re-check the at-target colour
+      render(inFrame);
+    },
+    announce(reps) {
+      if (opts.spokenCount !== false) apply(policy.count(repWord(reps), clock()));
     },
     silence() {
       if (policy.speaking !== null || policy.pending !== null || placementUtt) voice.cancel();
@@ -526,6 +665,19 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
 
   // ---- Developer log: sync buffer writes; a recorder error never breaks the camera loop ----
   const recorder = repCounter ? (opts.recorder ?? null) : null;
+  const hf = rule && repCounter ? (opts.handsFree ?? null) : null;
+  const autoConfig = hf && rule ? (hf.config ?? autoSetConfigFor(rule)) : null;
+  const auto = autoConfig ? createAutoSet(autoConfig) : null;
+  if (hf) {
+    // Hands-free: setSession() may come before start(), so the frame clock starts now.
+    t0 = performance.now();
+    wallT0 = Date.now();
+  }
+  const frameNow = () => performance.now() - t0;
+  let mode: 'set' | 'rest' = 'set';
+  let banner: AutoStopBannerHandle | null = null;
+  let restPanel: CameraRestPanelHandle | null = null;
+  let disposed = false;
   let recWarned = false;
   function rec(write: (r: DevLogRecorder) => void): void {
     if (!recorder) return;
@@ -720,6 +872,31 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       : null;
   if (hud) hudObserver?.observe(hud);
 
+  const setDoneBtn = counter
+    ? h(
+        'button',
+        {
+          class: 'primary-btn',
+          onclick: () => {
+            // Silence first so a late count word can't cut off the rest cue that follows.
+            counter.silence();
+            // Hands-free Undo window: save at once, with the same backdated end.
+            if (auto?.state === 'pending') {
+              handleAuto(auto.confirm(frameNow()));
+              return;
+            }
+            opts.onSetDone?.();
+          },
+        },
+        'Set done',
+      )
+    : null;
+
+  const closeSheet = () => {
+    counter?.silence();
+    opts.onClose();
+  };
+
   const stage = h(
     'div',
     { class: `cam-stage${setupOpen ? ' setup-open' : ''}`, 'data-facing': facing },
@@ -743,17 +920,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       { class: 'top-bar cam-top' },
       h('p', { class: 'page-title small-title cam-title' }, opts.title),
       btn3d,
-      h(
-        'button',
-        {
-          class: 'ghost-btn',
-          onclick: () => {
-            counter?.silence();
-            opts.onClose();
-          },
-        },
-        'Close',
-      ),
+      h('button', { class: 'ghost-btn', onclick: closeSheet }, 'Close'),
     ),
     stage,
     panel3d,
@@ -762,25 +929,151 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       { class: 'cam-bottom' },
       status,
       !counter && h('p', { class: 'muted cam-privacy' }, 'On-device only. Nothing is recorded.'),
-      counter &&
-        h(
-          'button',
-          {
-            class: 'primary-btn',
-            onclick: () => {
-              // Silence first so a late count word can't cut off the rest cue that follows.
-              counter?.silence();
-              opts.onSetDone?.();
-            },
-          },
-          'Set done',
-        ),
+      setDoneBtn,
     ),
   );
 
   function setStatus(text: string, data: Record<string, string> = {}): void {
     status.textContent = text;
     Object.assign(el.dataset, data);
+  }
+
+  // ---- M5c hands-free: set mode ⇄ rest mode, auto start/stop, Undo window, idle close ----
+
+  /** A short spoken confirmation; queued after any count word (never cancels it). */
+  function say(text: string): void {
+    voice.speak(text, { kind: 'cue' });
+  }
+
+  /** Dev log: one `autoSet` event per action, enum words and numbers only (wall-clock t). */
+  function logAuto(a: AutoSetAction): void {
+    const reason = 'reason' in a ? a.reason : undefined;
+    const counts = 'reps' in a ? { reps: a.reps, partials: a.partials } : {};
+    const ft = frameNow();
+    rec((r) =>
+      r.logEvent('autoSet', {
+        action: a.type,
+        ...(reason ? { reason } : {}),
+        ...counts,
+        ft: Math.round(ft),
+        ...(a.type === 'start' ? { atFt: Math.round(a.at) } : {}),
+        ...(a.type === 'stopPending' || a.type === 'commit'
+          ? { endedAtFt: Math.round(a.endedAt) }
+          : {}),
+        phase: repCounter?.phase,
+        angle: repCounter?.angle == null ? null : Math.round(repCounter.angle * 10) / 10,
+      }),
+    );
+  }
+
+  /** Where focus goes when the banner or rest panel takes away the focused control. */
+  function focusTarget(): HTMLElement | null {
+    if (mode === 'rest')
+      return restPanel?.el.querySelector<HTMLElement>('[data-cam-rest="start"]') ?? null;
+    return setDoneBtn;
+  }
+
+  function dropBanner(): void {
+    const b = banner;
+    banner = null;
+    b?.dispose();
+  }
+
+  function enterRestMode(): void {
+    if (!counter || !hf) return;
+    const focusWasOnSetDone = document.activeElement === setDoneBtn;
+    mode = 'rest';
+    el.classList.add('rest-mode');
+    el.dataset.camMode = 'rest';
+    counter.reset();
+    counter.quiet = true;
+    restPanel ??= createCameraRestPanel({ onStartSet: () => hf.onStartSet(), onClose: closeSheet });
+    stage.append(restPanel.el);
+    dropBanner(); // focus moves to Start set if it was on Undo
+    if (focusWasOnSetDone) focusTarget()?.focus();
+  }
+
+  function enterSetMode(): void {
+    if (!counter) return;
+    const hadFocus = restPanel?.el.contains(document.activeElement) ?? false;
+    mode = 'set';
+    el.classList.remove('rest-mode');
+    el.dataset.camMode = 'set';
+    restPanel?.dispose(); // releases the app's coach tip / Fix elements
+    restPanel = null;
+    counter.quiet = false;
+    if (hadFocus) setDoneBtn?.focus();
+  }
+
+  function handleAuto(actions: AutoSetAction[]): void {
+    if (!hf || !counter || !repCounter || !autoConfig) return;
+    for (const a of actions) {
+      if (disposed) return;
+      logAuto(a);
+      switch (a.type) {
+        case 'start': {
+          enterSetMode();
+          // Show autoSet's counts: reps the counter saw earlier in rest don't belong to the set.
+          counter.setBase(repCounter.reps - a.reps, repCounter.partials - a.partials);
+          hf.onAutoStart({ at: wallT0 + a.at, frameT: a.at, reps: a.reps, partials: a.partials });
+          if (disposed) return;
+          opts.onCount?.(a.reps, a.partials);
+          counter.announce(a.reps); // the first word of the set ("Two")
+          break;
+        }
+        case 'stopPending': {
+          dropBanner();
+          const b = createAutoStopBanner({
+            reps: a.reps,
+            partials: a.partials,
+            seconds: autoConfig.undoSec,
+            reason: a.reason,
+            onUndo: () => handleAuto(auto?.undo(frameNow()) ?? []),
+            onGone: () => {
+              if (banner === b) banner = null;
+            },
+            focusAfter: focusTarget,
+          });
+          banner = b;
+          stage.append(b.el);
+          b.tick(a.until - frameNow());
+          say(`Set done. ${a.reps} ${a.reps === 1 ? 'rep' : 'reps'}.`);
+          hf.onStopPending?.({
+            reason: a.reason,
+            reps: a.reps,
+            partials: a.partials,
+            endedAt: wallT0 + a.endedAt,
+            until: wallT0 + a.until,
+          });
+          break;
+        }
+        case 'stopCancelled': {
+          if (a.reason === 'paused') dropBanner();
+          else {
+            banner?.keepGoing(); // no-op after an Undo tap (already showing it)
+            say('Keep going.');
+          }
+          hf.onStopCancelled?.({ reason: a.reason });
+          break;
+        }
+        case 'commit': {
+          const b = banner;
+          hf.onCommit({ endedAt: wallT0 + a.endedAt, reps: a.reps, partials: a.partials });
+          // The app normally switched to rest mode (banner gone) or closed the sheet.
+          if (!disposed && banner === b) dropBanner();
+          break;
+        }
+        case 'close': {
+          dropBanner();
+          counter.silence();
+          halt();
+          say('Camera off.');
+          setStatus('Camera off.', { person: 'false' });
+          hf.onIdleClose(a.reason);
+          return;
+        }
+      }
+    }
   }
 
   function loop(): void {
@@ -796,7 +1089,21 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       fps.tick(now);
       drawOverlay(overlay, frame);
       rec((r) => r.frame(frame, ft));
-      counter?.update(frame);
+      const events = counter?.update(frame) ?? [];
+      if (auto && repCounter) {
+        handleAuto(
+          auto.push({
+            t: ft,
+            tracking: frame !== null && repCounter.tracking,
+            present: frame !== null && personInFrame(frame),
+            phase: repCounter.phase,
+            angle: repCounter.angle,
+            events,
+          }),
+        );
+        if (!running) return; // idle close, or the app closed the sheet in a callback
+        if (banner && auto.pendingUntil !== null) banner.tick(auto.pendingUntil - ft);
+      }
       if (recorder && repCounter) {
         const side = repCounter.side;
         rec((r) => {
@@ -848,14 +1155,30 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     }
   }
 
+  /** Stops the loop, the camera tracks and the model; the sheet stays (idle close, stop()). */
+  function halt(): void {
+    running = false;
+    if ('cancelVideoFrameCallback' in video) video.cancelVideoFrameCallback(loopHandle);
+    cancelAnimationFrame(loopHandle);
+    stopStream(stream);
+    stream = null;
+    video.srcObject = null;
+    tracker?.close();
+    tracker = null;
+    skeleton?.dispose();
+    skeleton = null;
+  }
+
   return {
     el,
     async start() {
       running = true;
       // Start the frame clock first, so everything logged (the placement sentence included) is
       // on it; wallT0 links it to the wall clock.
-      t0 = performance.now();
-      wallT0 = Date.now();
+      if (!hf) {
+        t0 = performance.now();
+        wallT0 = Date.now();
+      }
       try {
         stream = await openCamera(video, facing);
       } catch (err) {
@@ -891,19 +1214,49 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       schedule();
     },
     stop() {
-      running = false;
       counter?.silence();
-      if ('cancelVideoFrameCallback' in video) video.cancelVideoFrameCallback(loopHandle);
-      cancelAnimationFrame(loopHandle);
-      stopStream(stream);
-      stream = null;
-      video.srcObject = null;
-      tracker?.close();
-      tracker = null;
-      skeleton?.dispose();
-      skeleton = null;
+      halt();
+      disposed = true;
+      dropBanner();
+      restPanel?.dispose();
+      restPanel = null;
       hudObserver?.disconnect();
       el.remove();
+    },
+    setSession(session) {
+      if (!auto || !counter || disposed) return;
+      if (session.target) counter.setTarget(session.target);
+      const actions = auto.setSession(
+        { phase: session.phase, paused: session.paused, restElapsedMs: session.restElapsedMs },
+        frameNow(),
+      );
+      if (session.phase === 'rest') {
+        if (mode !== 'rest') enterRestMode();
+      } else if (session.phase === 'exercise' && mode === 'rest') {
+        // A manual Start set (an auto start has already switched to set mode).
+        enterSetMode();
+        counter.reset();
+      }
+      handleAuto(actions);
+    },
+    setRest(update) {
+      if (mode === 'rest') restPanel?.update(update);
+    },
+    setBegun() {
+      if (!rule || !repCounter) return;
+      const side = repCounter.side;
+      recSide = side;
+      rec((r) =>
+        r.camera({
+          folder: rule.folder,
+          side,
+          wallT0,
+          ...(tracker ? { delegate: tracker.delegate } : {}),
+        }),
+      );
+    },
+    get mode() {
+      return mode;
     },
   };
 }

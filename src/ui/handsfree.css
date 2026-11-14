@@ -283,3 +283,31 @@
     display: none;
   }
 }
+
+/* ---------- camera sheet in rest mode (hands-free) ---------- */
+
+/* The rest panel replaces the set-mode pieces: no count/gauge/set-up card on the video, and no
+   "Set done" band (Start set and Close live in the panel). */
+.camera-sheet.rest-mode .cam-hud,
+.camera-sheet.rest-mode .cam-gauge-slot,
+.camera-sheet.rest-mode .cam-setup,
+.camera-sheet.rest-mode .cam-stage-bottom,
+.camera-sheet.rest-mode .cam-bottom .primary-btn {
+  display: none;
+}
+
+/* The Undo window ran out but the save waits for the rep in progress (autoSet holds it). */
+.auto-stop-hold {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.auto-stop-hold[hidden] {
+  display: none;
+}
+
+.auto-stop.holding .auto-stop-countdown {
+  display: none;
+}

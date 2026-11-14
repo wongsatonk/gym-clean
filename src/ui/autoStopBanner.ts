@@ -7,7 +7,9 @@
 //
 // a11y: role="status" (polite), not "alert": the app already speaks "Set done. 8 reps." and an
 // assertive region would talk over it. The ticking seconds are aria-hidden so screen readers
-// don't announce a bare number every second; the Undo button's label carries them instead.
+// don't announce a bare number every second; the Undo button keeps the static name "Undo" and a
+// non-live description ("Saving in 4 seconds") read on focus. "Keep going." is spoken by the app,
+// so the status region doesn't announce it a second time.
 // Reduced motion: the ring is hidden and only the number counts down (handsfree.css).
 
 import { h } from './dom';
@@ -28,6 +30,11 @@ export type AutoStopBannerOptions = {
   keepGoingMs?: number;
   /** Called after "Keep going." has been shown and the banner removed itself. */
   onGone?: () => void;
+  /**
+   * Where focus goes when the banner removes a control that had focus (Undo after a tap,
+   * dispose). Only used when focus was inside the banner.
+   */
+  focusAfter?: () => HTMLElement | null | undefined;
 };
 
 export type AutoStopBannerHandle = {
@@ -72,9 +79,12 @@ export function autoStopStatusText(reps: number, partials: number): string {
   return `Set done, ${plural(reps, 'rep')}${p}.`;
 }
 
-/** Undo button's accessible name with the seconds left. */
-export function undoAriaLabel(secondsLeft: number): string {
-  return secondsLeft > 0 ? `Undo. Saving in ${plural(secondsLeft, 'second')}` : 'Undo. Saving now';
+/**
+ * The Undo button's description (aria-describedby) with the seconds left. The button's name stays
+ * a static "Undo" so it isn't re-announced every second.
+ */
+export function undoDescription(secondsLeft: number): string {
+  return secondsLeft > 0 ? `Saving in ${plural(secondsLeft, 'second')}` : 'Saving now';
 }
 
 // ---------- icons (original, decorative) ----------
@@ -119,11 +129,15 @@ const RING_C = 2 * Math.PI * RING_R;
 
 // ---------- component ----------
 
+let instances = 0;
+
 export function createAutoStopBanner(opts: AutoStopBannerOptions): AutoStopBannerHandle {
   const seconds = opts.seconds > 0 ? opts.seconds : 5;
   const keepGoingMs = opts.keepGoingMs ?? 1500;
   let state: 'pending' | 'undone' | 'gone' = 'pending';
   let goneTimer: ReturnType<typeof setTimeout> | undefined;
+  const descId = `auto-stop-desc-${++instances}`;
+  const desc = h('span', { class: 'hf-sr-only', id: descId }, undoDescription(seconds));
 
   const ringFg = svgEl('circle', {
     class: 'auto-stop-ring-fg',
@@ -155,7 +169,7 @@ export function createAutoStopBanner(opts: AutoStopBannerOptions): AutoStopBanne
       type: 'button',
       class: 'auto-stop-undo',
       'data-auto-stop': 'undo',
-      'aria-label': undoAriaLabel(seconds),
+      'aria-describedby': descId,
       onclick: () => {
         if (state !== 'pending') return;
         showKeepGoing();
@@ -165,6 +179,7 @@ export function createAutoStopBanner(opts: AutoStopBannerOptions): AutoStopBanne
     undoIcon(),
     h('span', { class: 'auto-stop-undo-text' }, 'Undo'),
     countdown,
+    desc,
   );
 
   const repsNum = h('span', { class: 'auto-stop-num', 'data-auto-stop': 'reps' }, opts.reps);
@@ -178,6 +193,11 @@ export function createAutoStopBanner(opts: AutoStopBannerOptions): AutoStopBanne
       repsNum,
       h('span', { class: 'auto-stop-unit' }, repWord(opts.reps)),
     ),
+  );
+  const holdLine = h(
+    'p',
+    { class: 'auto-stop-hold', 'data-auto-stop': 'hold', 'aria-hidden': 'true', hidden: true },
+    'Finishing rep…',
   );
   const partialText = partialsLine(opts.partials);
   const partials = partialText
@@ -202,6 +222,7 @@ export function createAutoStopBanner(opts: AutoStopBannerOptions): AutoStopBanne
       'aria-label': 'Set done',
     },
     status,
+    holdLine,
     undoBtn,
   );
 
@@ -210,10 +231,14 @@ export function createAutoStopBanner(opts: AutoStopBannerOptions): AutoStopBanne
     state = 'undone';
     el.dataset.autoStop = 'undone';
     el.classList.add('undone');
+    const hadFocus = focusInside();
     undoBtn.remove();
     title.replaceChildren(h('span', { class: 'auto-stop-keep' }, 'Keep going.'));
     partials?.remove();
-    srText.textContent = 'Keep going.';
+    holdLine.remove();
+    // Spoken by the app: emptying the region announces nothing (no double "Keep going.").
+    srText.textContent = '';
+    if (hadFocus) restoreFocus();
     goneTimer = setTimeout(() => {
       dispose();
       opts.onGone?.();
@@ -223,20 +248,40 @@ export function createAutoStopBanner(opts: AutoStopBannerOptions): AutoStopBanne
   function tick(remainingMs: number): void {
     if (state !== 'pending') return;
     const left = undoSecondsLeft(remainingMs);
-    const text = String(left);
+    // The window is over but autoSet holds the save while a rep attempt is in progress: say so
+    // instead of a stuck "0". Undo stays usable until the commit (or a rep) arrives.
+    const holding = left === 0;
+    if (holding !== el.classList.contains('holding')) {
+      el.classList.toggle('holding', holding);
+      el.dataset.autoStop = holding ? 'holding' : 'pending';
+      holdLine.hidden = !holding;
+    }
+    const text = holding ? '' : String(left);
     if (secs.textContent !== text) {
       secs.textContent = text;
-      undoBtn.setAttribute('aria-label', undoAriaLabel(left));
+      desc.textContent = holding ? 'Saving when this rep ends' : undoDescription(left);
     }
     const offset = RING_C * (1 - undoFraction(remainingMs, seconds));
     ringFg.setAttribute('stroke-dashoffset', offset.toFixed(2));
   }
 
+  function focusInside(): boolean {
+    return typeof document !== 'undefined' && el.contains(document.activeElement);
+  }
+
+  function restoreFocus(): void {
+    const target = opts.focusAfter?.();
+    if (target && target.isConnected) target.focus();
+  }
+
   function dispose(): void {
     if (goneTimer !== undefined) clearTimeout(goneTimer);
     goneTimer = undefined;
+    if (state === 'gone') return;
     state = 'gone';
+    const hadFocus = focusInside();
     el.remove();
+    if (hadFocus) restoreFocus();
   }
 
   return { el, tick, keepGoing: showKeepGoing, dispose };

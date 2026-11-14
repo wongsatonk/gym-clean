@@ -3,7 +3,7 @@ import {
   autoStopStatusText,
   partialsLine,
   repWord,
-  undoAriaLabel,
+  undoDescription,
   undoFraction,
   undoSecondsLeft,
 } from './autoStopBanner';
@@ -37,9 +37,9 @@ describe('auto-stop banner helpers', () => {
     expect(partialsLine(2)).toBe('+ 2 partials');
     expect(autoStopStatusText(8, 0)).toBe('Set done, 8 reps.');
     expect(autoStopStatusText(1, 1)).toBe('Set done, 1 rep, 1 partial.');
-    expect(undoAriaLabel(4)).toBe('Undo. Saving in 4 seconds');
-    expect(undoAriaLabel(1)).toBe('Undo. Saving in 1 second');
-    expect(undoAriaLabel(0)).toBe('Undo. Saving now');
+    expect(undoDescription(4)).toBe('Saving in 4 seconds');
+    expect(undoDescription(1)).toBe('Saving in 1 second');
+    expect(undoDescription(0)).toBe('Saving now');
   });
 });
 
