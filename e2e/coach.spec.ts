@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { endWorkout as endViaPause } from './workout.helpers';
+import { endWorkout as endViaPause, leaveSettings } from './workout.helpers';
 
 // M5b task 7: the after-set coach on Rest (tip, speech, Apply), its Settings switch, and the
 // Summary "Coach" section. Fixed clock, mocked speech (volume-0 unlock skipped), no camera.
@@ -106,7 +106,7 @@ async function setUnit(page: Page, unit: 'kg' | 'lb') {
     'aria-pressed',
     'true',
   );
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await leaveSettings(page);
 }
 
 async function startPushA(page: Page) {
@@ -253,7 +253,7 @@ test('"Coach tips" off (persisted) → no tip and no advice speech', async ({ pa
     'aria-checked',
     'false',
   );
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await leaveSettings(page);
   const t = await page.evaluate(() => Date.now());
   await page.clock.pauseAt(t + 1_000);
 

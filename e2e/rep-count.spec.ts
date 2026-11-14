@@ -6,6 +6,7 @@
 // counter, in camera.spec.ts "pose-tracked exercises offer the camera; manual ones do not"; the
 // Settings camera test has no counter, in rep-panel.spec.ts.
 import { expect, test, type Page } from '@playwright/test';
+import { leaveSettings } from './workout.helpers';
 import { seedHandsFreeOff } from './hands-free.helpers';
 
 declare global {
@@ -229,7 +230,7 @@ test('with "Count reps out loud" off, the live count is silent', async ({ page }
   const sw = page.getByRole('switch', { name: /Count reps out loud/ });
   await sw.click();
   await expect(sw).toHaveAttribute('aria-checked', 'false');
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await leaveSettings(page);
 
   const cam = await openCurlCamera(page);
   await waitForCounts(cam);

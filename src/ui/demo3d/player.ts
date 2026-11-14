@@ -64,7 +64,7 @@ function canUseWebGL(): boolean {
 }
 
 const BTN_STYLE =
-  'min-height:56px;min-width:56px;flex:1;font-size:20px;font-weight:600;border-radius:12px;';
+  'min-height:56px;min-width:56px;flex:1;font-size:var(--fs-body);font-weight:600;border-radius:var(--r-btn);';
 
 /**
  * Builds a player for `exerciseId` and appends its element to `container` (if given).
@@ -114,7 +114,7 @@ export async function createDemoPlayer(
   const phaseEl = document.createElement('div');
   phaseEl.className = 'demo3d-phase';
   phaseEl.style.cssText =
-    'position:absolute;left:12px;top:8px;font-size:28px;font-weight:700;pointer-events:none;' +
+    'position:absolute;left:12px;top:8px;font-size:var(--fs-lead);font-weight:700;pointer-events:none;' +
     `color:${cssVar('--text')};text-shadow:0 1px 3px ${cssVar('--stage-2')};`;
   if (opts.phaseOverlay !== false) stage.append(phaseEl);
   el.append(stage);

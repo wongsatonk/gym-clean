@@ -8,7 +8,7 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { endWorkout } from './workout.helpers';
+import { endWorkout, leaveSettings } from './workout.helpers';
 
 const CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
 const PRESS = '/fixtures/landmarks/shoulder-press/synthetic-01__reps-4__partials-0.json';
@@ -500,7 +500,7 @@ test('(vii) "Hands-free sets" off (persisted) → no auto stop; Set done closes 
     'false',
   );
   await page.screenshot({ path: test.info().outputPath('hands-free-setting-off.png') });
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await leaveSettings(page);
 
   const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
   await repsThenFreeze(page, cam, 2);

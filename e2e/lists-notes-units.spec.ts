@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { endWorkout } from './workout.helpers';
+import { endWorkout, leaveSettings } from './workout.helpers';
 
 test('lb units, notes, exercise list jump and last time carry across sessions', async ({
   page,
@@ -16,7 +16,7 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
     'aria-pressed',
     'true',
   );
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await leaveSettings(page);
 
   // Preview: Push A list with lb weights (15 kg plan -> 35 lb)
   await page.getByRole('button', { name: /Push A/ }).click();

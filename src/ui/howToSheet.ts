@@ -10,6 +10,7 @@ import { bodyMapSvg, pickView } from './bodyMap';
 import { demoFor, hasDemo, tempoLabel } from './demo3d/moves';
 import { createDemoPlayer, type DemoPlayer } from './demo3d/player';
 import { h } from './dom';
+import { icon } from './icons';
 import './howto.css';
 
 export type HowToSheetOptions = {
@@ -153,8 +154,24 @@ export function createHowToSheet(opts: HowToSheetOptions): HowToSheetHandle {
           ...c.lines.map((l) => h('li', {}, l)),
         )
       : null,
-    c.focus ? h('p', { class: 'howto-focus', 'data-howto': 'focus' }, c.focus) : null,
-    c.cue ? h('p', { class: 'howto-cue', 'data-howto': 'cue' }, c.cue) : null,
+    // The focus line names the muscles: a cyan dot (the muscle colour) beside plain text.
+    c.focus
+      ? h(
+          'p',
+          { class: 'howto-focus', 'data-howto': 'focus' },
+          h('i', { class: 'swatch-dot', 'aria-hidden': 'true' }),
+          h('span', {}, c.focus),
+        )
+      : null,
+    // The form cue is the line the coach speaks mid-set: the shared lavender cue panel.
+    c.cue
+      ? h(
+          'div',
+          { class: 'cue-panel howto-cue', 'data-howto': 'cue' },
+          icon('speaker', 'md'),
+          h('p', { class: 'cue-text' }, c.cue),
+        )
+      : null,
   );
 
   // Put focus in the sheet once it is attached (Close is the safe first target).

@@ -76,9 +76,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
-  border-radius: var(--r-btn);
+  border-radius: var(--r-card);
   background: var(--surface);
   min-width: 0;
 }
@@ -102,18 +102,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Fix is a secondary action: neutral surface-2 (the screen's CTA is the only orange; Save in
+   the open editor is the press). */
 .lsc-fix {
   flex: none;
   min-width: 88px;
   padding: 0 16px;
-  font-weight: 800;
-  border: none;
-  color: var(--on-cta);
-  background: var(--cta);
-}
-
-/* Open: the editor below is the focus, so the toggle steps back to a neutral button. */
-.lsc.open .lsc-fix {
+  font-weight: 700;
   border: 1px solid var(--line);
   color: var(--text);
   background: var(--surface-2);
@@ -159,8 +154,9 @@
 
 .lsc-value {
   text-align: center;
-  font-size: var(--fs-num-sm);
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: var(--fs-num);
+  font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
@@ -172,13 +168,15 @@
 }
 
 .lsc-cancel {
-  background: transparent;
+  background: var(--surface-2);
+  font-weight: 700;
 }
 
 .lsc-save {
-  min-height: 64px;
+  min-height: var(--tap-bar);
+  font-family: var(--font-display);
   font-size: var(--fs-lead);
-  font-weight: 800;
+  font-weight: 700;
   background: var(--cta);
   color: var(--on-cta);
   border: none;

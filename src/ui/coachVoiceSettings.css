@@ -9,8 +9,9 @@
 
 .cv-title {
   margin: 6px 0 0;
+  color: var(--text-2);
   font-size: var(--fs-body);
-  font-weight: 400;
+  font-weight: 600;
 }
 
 .cv-body {
@@ -20,9 +21,14 @@
   min-width: 0;
 }
 
+/* One outlined track; the chosen option is a white fill with a check (selected, not action). */
 .cv-seg {
   display: grid;
-  gap: 8px;
+  gap: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
 }
 
 .cv-seg-2 {
@@ -34,17 +40,37 @@
 }
 
 .cv-btn {
-  min-height: 64px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap-bar);
   min-width: 0;
   padding: 0 8px;
   font-size: var(--fs-cue);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.15;
   overflow-wrap: anywhere;
   touch-action: manipulation;
 }
 
-.cv-btn.active {
+.cv-seg .cv-btn {
+  border: none;
+  border-radius: calc(var(--r-card) - 6px);
+  background: transparent;
+  color: var(--text-2);
+}
+
+.cv-btn .ic {
+  flex: none;
+}
+
+.cv-btn-label {
+  min-width: 0;
+}
+
+.cv-btn.active,
+.cv-seg .cv-btn.active {
   background: var(--selected);
   color: var(--on-selected);
   border-color: var(--selected);
@@ -52,8 +78,9 @@
 
 .cv-sub {
   margin: 4px 0 0;
+  color: var(--text-2);
   font-size: var(--fs-body);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .cv-note,
@@ -77,9 +104,12 @@
 }
 
 .cv-row {
+  justify-content: flex-start;
   width: 100%;
   min-height: var(--tap-min);
   padding: 8px 16px;
+  border-radius: var(--r-card);
+  background: var(--surface);
   font-size: var(--fs-body);
   font-weight: 700;
   text-align: left;
@@ -87,8 +117,8 @@
 
 .cv-test {
   width: 100%;
-  min-height: 64px;
-  font-size: var(--fs-cue);
-  font-weight: 800;
+  min-height: var(--tap-bar);
+  font-size: var(--fs-body);
+  font-weight: 700;
   background: var(--surface-2);
 }

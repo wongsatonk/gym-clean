@@ -2,6 +2,7 @@
 // records each utterance with its voice, rate and pitch; getVoices() returns window.__cvVoices.
 // The live count part replaces the pose model with a fixture player (like hands-free.spec.ts).
 import { expect, test, type Page } from '@playwright/test';
+import { leaveSettings } from './workout.helpers';
 
 test.describe.configure({ timeout: 90_000 });
 
@@ -232,7 +233,7 @@ test('drill on: live rep counts stay plain numbers; hints are rewritten', async 
   const cv = await openSettings(page);
   await cv.getByRole('button', { name: 'Drill sergeant' }).click();
   await page.locator('[data-coach-voice] [data-rudeness="3"]').click();
-  await page.getByRole('button', { name: /Back/ }).click();
+  await leaveSettings(page);
 
   await page.getByRole('button', { name: /Pull A/ }).click();
   await page.getByRole('button', { name: 'Start workout' }).click();

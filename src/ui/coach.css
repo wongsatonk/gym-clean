@@ -6,10 +6,10 @@
   flex-direction: column;
   gap: 6px;
   min-width: 0;
-  padding: 10px 12px 12px 14px;
+  padding: 12px 14px 14px;
   border: 1px solid var(--line);
   border-left: 6px solid var(--cue);
-  border-radius: var(--r-btn);
+  border-radius: var(--r-card);
   background: var(--surface);
 }
 
@@ -24,9 +24,9 @@
   gap: 8px;
   margin: 0;
   color: var(--cue);
-  font-size: var(--fs-body);
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -37,8 +37,8 @@
 .coach-text {
   margin: 0;
   color: var(--text);
-  font-size: var(--fs-lead);
-  font-weight: 800;
+  font-size: var(--fs-cue);
+  font-weight: 700;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
@@ -54,14 +54,15 @@
 
 .coach-apply {
   align-self: stretch;
-  min-height: var(--tap-min);
+  min-height: var(--tap-bar);
   margin-top: 4px;
   padding: 0 18px;
   border: none;
   background: var(--cta);
   color: var(--on-cta);
-  font-size: var(--fs-cue);
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+  font-weight: 700;
 }
 
 /* After Apply: plain text with a tick, same height as the button so nothing jumps. */

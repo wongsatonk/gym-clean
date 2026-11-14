@@ -23,6 +23,8 @@ class FakeEl {
   getAttribute(k: string) {
     return this.attrs.get(k) ?? null;
   }
+  /** icon() sets its path markup; the stub keeps no text from it. */
+  set innerHTML(_v: string) {}
   addEventListener(type: string, cb: () => void) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), cb]);
   }
@@ -64,7 +66,10 @@ const g = globalThis as { document?: unknown };
 let saved: unknown;
 beforeEach(() => {
   saved = g.document;
-  g.document = { createElement: (tag: string) => new FakeEl(tag) };
+  g.document = {
+    createElement: (tag: string) => new FakeEl(tag),
+    createElementNS: (_ns: string, tag: string) => new FakeEl(tag),
+  };
 });
 afterEach(() => {
   g.document = saved;
@@ -161,6 +166,17 @@ describe('coach voice settings', () => {
     expect(pressed(el.one('data-voice-name', 'Daniel'))).toBe(true);
     handle.update(CALM, VOICES);
     expect(el.all('data-voice-name')).toHaveLength(0);
+  });
+
+  it('marks only the chosen options with a check icon (not the fill alone)', () => {
+    const { el } = mount(DRILL);
+    const checked = el
+      .all('aria-pressed')
+      .filter((b) => b.all('data-icon').some((i) => i.getAttribute('data-icon') === 'check'))
+      .map((b) => b.textContent);
+    expect(checked).toEqual(['Drill sergeant', 'Rude', automaticLabel(VOICES)]);
+    for (const b of el.all('aria-pressed'))
+      expect(b.all('data-icon').length).toBe(pressed(b) ? 1 : 0);
   });
 
   it('automatic label names the default-order voice, if any', () => {

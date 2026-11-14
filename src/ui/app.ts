@@ -10,7 +10,7 @@ import {
   type SessionEvent,
   type SessionState,
 } from '../core/session';
-import type { FocusCueId, PlannedExercise, ProgramDay, SetLog } from '../core/types';
+import type { Accent, FocusCueId, PlannedExercise, ProgramDay, SetLog } from '../core/types';
 import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
 import { shouldSpeakFocusCue } from '../core/focusCue';
 import {
@@ -27,6 +27,7 @@ import {
   getExerciseNote,
   getCoachTips,
   getAccent,
+  setAccent,
   getCoachVoice,
   sessionsSince,
   setsForExercises,
@@ -72,6 +73,7 @@ import { exerciseScreen as renderExercise } from './screens/exercise';
 import { pauseSheet as renderPauseSheet } from './screens/pauseSheet';
 import { previewScreen as renderPreview } from './screens/preview';
 import { restScreen as renderRest } from './screens/rest';
+import { settingsScreen as renderSettings } from './screens/settings';
 import { summaryScreen as renderSummary } from './screens/summary';
 import { todayScreen as renderToday, type TodayLast } from './screens/today';
 import { applyAccent } from './tokens';
@@ -122,6 +124,7 @@ export function mountApp(root: HTMLElement): void {
   let spokenCount = true;
   let coachTips = true;
   let handsFree = true;
+  let accent: Accent = 'orange';
   let coachVoice: CoachVoice = { ...COACH_VOICE_DEFAULT };
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
@@ -651,118 +654,65 @@ export function mountApp(root: HTMLElement): void {
   function settingsScreen(): HTMLElement {
     devLogPanel?.destroy();
     devLogPanel = createDevLogPanel({ db });
-    const unitBtn = (u: Unit, label: string) =>
-      h(
-        'button',
-        {
-          class: `seg-btn${unit === u ? ' active' : ''}`,
-          'aria-pressed': unit === u ? 'true' : 'false',
-          onclick: () => {
-            unit = u;
-            void setUnit(db, u).catch(logDbError);
+    return renderSettings(
+      {
+        accent,
+        spokenCount,
+        coachTips,
+        handsFree,
+        unit,
+        coachVoice: createCoachVoiceSettings({
+          value: coachVoice,
+          voices: voice.maleVoices(),
+          onChange: (v) => {
+            coachVoice = { ...v };
+            voice.configure(coachVoice);
+            void setCoachVoice(db, coachVoice).catch(logDbError);
             render();
           },
-        },
-        label,
-      );
-    return h(
-      'main',
-      { class: 'screen settings' },
-      h(
-        'header',
-        { class: 'top-bar' },
-        h('button', { class: 'ghost-btn', onclick: goToday }, '‹ Back'),
-      ),
-      h('h1', { class: 'page-title' }, 'Settings'),
-      h('p', { class: 'field-label' }, 'Camera'),
-      h(
-        'button',
-        { class: 'ghost-btn wide-btn', onclick: () => openCameraView('Camera test') },
-        'Camera test',
-      ),
-      h('p', { class: 'field-label' }, 'Voice'),
-      h(
-        'button',
-        {
-          class: `switch-btn${spokenCount ? ' on' : ''}`,
-          role: 'switch',
-          'aria-checked': spokenCount ? 'true' : 'false',
-          'data-setting': 'spoken-count',
-          onclick: () => {
-            spokenCount = !spokenCount;
-            void setSpokenCount(db, spokenCount).catch(logDbError);
-            render();
+          onTest: (v) => {
+            voice.unlock(); // inside the tap (iOS)
+            voice.configure(v);
+            voice.speak('Keep going.', { kind: 'cue' });
           },
-        },
-        h('span', { class: 'switch-label' }, 'Count reps out loud'),
-        h('span', { class: 'switch-state', 'aria-hidden': 'true' }, spokenCount ? 'On' : 'Off'),
-      ),
-      h(
-        'button',
-        {
-          class: `switch-btn${coachTips ? ' on' : ''}`,
-          role: 'switch',
-          'aria-checked': coachTips ? 'true' : 'false',
-          'data-setting': 'coach-tips',
-          onclick: () => {
-            coachTips = !coachTips;
-            void setCoachTips(db, coachTips).catch(logDbError);
-            render();
-          },
-        },
-        h('span', { class: 'switch-label' }, 'Coach tips after a set'),
-        h('span', { class: 'switch-state', 'aria-hidden': 'true' }, coachTips ? 'On' : 'Off'),
-      ),
-      createCoachVoiceSettings({
-        value: coachVoice,
-        voices: voice.maleVoices(),
-        onChange: (v) => {
-          coachVoice = { ...v };
-          voice.configure(coachVoice);
-          void setCoachVoice(db, coachVoice).catch(logDbError);
+        }).el,
+        speakerCheck: voiceTest(),
+        audioTest: audioTestPanel(),
+        devLog: devLogPanel.el,
+      },
+      {
+        onAccent: (a) => {
+          accent = a;
+          applyAccent(a); // at once, before the save
+          mirrorAccent(a);
+          void setAccent(db, a).catch(logDbError);
           render();
         },
-        onTest: (v) => {
-          voice.unlock(); // inside the tap (iOS)
-          voice.configure(v);
-          voice.speak('Keep going.', { kind: 'cue' });
+        onSpokenCount: (on) => {
+          spokenCount = on;
+          void setSpokenCount(db, on).catch(logDbError);
+          render();
         },
-      }).el,
-      voiceTest(),
-      audioTestPanel(),
-      h('p', { class: 'field-label' }, 'Camera sets'),
-      h(
-        'button',
-        {
-          class: `switch-btn${handsFree ? ' on' : ''}`,
-          role: 'switch',
-          'aria-checked': handsFree ? 'true' : 'false',
-          'data-setting': 'hands-free',
-          onclick: () => {
-            handsFree = !handsFree;
-            void setHandsFree(db, handsFree).catch(logDbError);
-            render();
-          },
+        onCoachTips: (on) => {
+          coachTips = on;
+          void setCoachTips(db, on).catch(logDbError);
+          render();
         },
-        h('span', { class: 'switch-label' }, 'Hands-free sets'),
-        h('span', { class: 'switch-state', 'aria-hidden': 'true' }, handsFree ? 'On' : 'Off'),
-      ),
-      h('p', { class: 'field-label' }, 'Weight unit'),
-      h(
-        'div',
-        { class: 'segmented', role: 'group', 'aria-label': 'Weight unit' },
-        unitBtn('kg', 'kg'),
-        unitBtn('lb', 'lb'),
-      ),
-      h(
-        'p',
-        { class: 'muted' },
-        unit === 'kg'
-          ? 'Weights step by 2.5 kg.'
-          : 'Weights step by 5 lb. Saved weights are converted, nothing is lost if you switch back.',
-      ),
-      h('p', { class: 'field-label' }, 'Developer log'),
-      devLogPanel.el,
+        onHandsFree: (on) => {
+          handsFree = on;
+          void setHandsFree(db, on).catch(logDbError);
+          render();
+        },
+        onUnit: (u) => {
+          unit = u;
+          void setUnit(db, u).catch(logDbError);
+          render();
+        },
+        onCameraTest: () => openCameraView('Camera test'),
+        onTab: (t) => {
+          if (t === 'today') goToday();
+        },
+      },
     );
   }
 
@@ -1359,6 +1309,15 @@ export function mountApp(root: HTMLElement): void {
     }
   }
 
+  /** A sync copy of the accent for index.html's pre-paint script (IndexedDB stays the source). */
+  function mirrorAccent(a: Accent): void {
+    try {
+      localStorage.setItem('gc-accent', a);
+    } catch {
+      // private mode / storage off: the accent still applies once IndexedDB loads
+    }
+  }
+
   function logDbError(err: unknown): void {
     console.error('Saving to IndexedDB failed', err);
   }
@@ -1383,7 +1342,12 @@ export function mountApp(root: HTMLElement): void {
     })
     .catch(logDbError);
   void getAccent(db)
-    .then((a) => applyAccent(a))
+    .then((a) => {
+      accent = a;
+      applyAccent(a);
+      mirrorAccent(a); // keeps the pre-paint copy in sync (e.g. after clearing site data)
+      if (view.screen === 'settings') render();
+    })
     .catch(logDbError);
   void getCoachVoice(db)
     .then((v) => {

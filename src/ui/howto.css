@@ -11,31 +11,24 @@
 }
 
 .ex-badge {
-  display: inline-block;
-  padding: 2px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px 2px 8px;
   border-radius: var(--r-pill);
-  border: 2px solid currentColor;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
   font-size: var(--fs-body);
   font-weight: 700;
   line-height: 1.3;
   white-space: nowrap;
 }
 
-.ex-badge-3d {
-  color: var(--on-selected);
-  background: var(--selected);
-  border-color: var(--selected);
-}
-
-.ex-badge-info {
-  color: var(--text);
-  background: var(--surface-2);
-  border-color: var(--line);
-}
-
-.ex-badge-camera {
-  color: var(--warn);
-  background: transparent;
+/* Every kind looks the same (neutral): the icon and the word tell them apart. */
+.ex-badge .ic {
+  flex: none;
+  color: var(--text-2);
 }
 
 /* ---------- How to sheet ---------- */
@@ -75,8 +68,9 @@
 
 .howto-title {
   margin: 0;
-  font-size: var(--fs-head);
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
   line-height: 1.1;
   overflow-wrap: anywhere;
 }
@@ -86,16 +80,18 @@
   min-width: 96px;
   min-height: var(--tap-min);
   padding: 0 18px;
-  font-weight: 800;
+  font-weight: 700;
   background: var(--surface-2);
+  border-color: var(--line);
 }
 
 .howto-stage {
   flex: none;
   height: min(44dvh, 420px);
   min-height: 260px;
-  border-radius: var(--r-btn);
-  background: var(--surface);
+  border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  background: radial-gradient(ellipse at 50% 40%, var(--stage-1), var(--stage-2) 70%);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -105,6 +101,7 @@
 /* The player's element holds the canvas stage plus its Front/Side/Play bar. */
 .howto-stage[data-mode='3d'] {
   height: min(52dvh, 480px);
+  border: none;
   background: transparent;
   overflow: visible;
 }
@@ -127,8 +124,9 @@
 }
 
 .howto-phase {
-  font-size: var(--fs-head);
-  font-weight: 800;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
   line-height: 1.1;
   min-height: 1.1em;
   color: var(--text); /* shown, not spoken */
@@ -157,16 +155,21 @@
   line-height: 1.35;
 }
 
+/* Plain text; the cyan dot beside it is the muscle colour (cyan is for muscles only). */
 .howto-focus {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   font-size: var(--fs-cue);
   font-weight: 700;
-  color: var(--muscle);
+  color: var(--text);
 }
 
-.howto-cue {
-  font-size: var(--fs-cue);
-  font-style: italic;
+.howto-focus .swatch-dot {
+  transform: translateY(1px);
 }
+
+/* The cue (.howto-cue) uses the shared .cue-panel from styles.css: lavender bar + speaker icon. */
 
 /* Selected Front / Side view in the demo player: filled + thicker border (not colour alone). */
 .howto-stage .demo3d-btn[aria-pressed='true'] {

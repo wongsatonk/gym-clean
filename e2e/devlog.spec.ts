@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { endWorkout } from './workout.helpers';
+import { endWorkout, leaveSettings } from './workout.helpers';
 
 // M4c developer log + "Last set" correction (task 11, devlog part). A manual Push A set, a fix on
 // Rest and again on Summary, then Settings → export (share sheet mocked) → Clear.
@@ -118,7 +118,7 @@ test('dev log: correct the last set on Rest and Summary, export it, clear it', a
   await expect(panel.locator('[data-devlog=summary]')).toHaveText('Empty');
   await expect(panel.locator('[data-devlog=export-last]')).toBeDisabled();
   await expect(panel.locator('[data-devlog=privacy]')).toContainText('No video');
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await leaveSettings(page);
 
   // Push A, one manual bench press set with a note (free text must never reach the log).
   await page.getByRole('button', { name: /Push A/ }).click();

@@ -26,3 +26,9 @@ export async function endWorkout(page: Page): Promise<void> {
   await sheet.getByRole('button', { name: 'Tap again to end' }).click();
   await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
 }
+
+/** Leaves Settings for Today through the tab bar (M4e: Settings has no "‹ Back"). */
+export async function leaveSettings(page: Page): Promise<void> {
+  await page.locator('[data-tab="today"]').click();
+  await expect(page.locator('[data-screen="settings"], main.settings')).toHaveCount(0);
+}

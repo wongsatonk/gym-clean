@@ -125,6 +125,30 @@ test('How to: the 3D demo loops with phase text, Close returns focus', async ({ 
   expect(await lines.count()).toBeGreaterThanOrEqual(2);
   await expect(sheet.locator('[data-howto=focus]')).toContainText('Focus:');
   await expect(sheet.locator('[data-howto=cue]')).not.toBeEmpty();
+  // M4e A19 roles: the spoken cue is the lavender cue panel with a speaker icon; the focus line
+  // is plain text beside a cyan dot; badges sit on the neutral surface-2 (not white, not amber).
+  await expect(sheet.locator('[data-howto=cue].cue-panel [data-icon="speaker"]')).toHaveCount(1);
+  await expect(sheet.locator('[data-howto=focus] .swatch-dot')).toHaveCount(1);
+  const roles = await sheet.evaluate((el) => {
+    const css = (sel: string, prop: string) =>
+      getComputedStyle(el.querySelector(sel) as Element).getPropertyValue(prop);
+    const probe = (v: string) => {
+      const d = document.createElement('i');
+      d.style.color = `var(${v})`;
+      el.append(d);
+      const c = getComputedStyle(d).color;
+      d.remove();
+      return c;
+    };
+    return {
+      cueBar: css('[data-howto=cue]', 'border-left-color') === probe('--cue'),
+      focusText: css('[data-howto=focus]', 'color') === probe('--text'),
+      badges: [...el.querySelectorAll('.ex-badge')].every(
+        (b) => getComputedStyle(b).backgroundColor === probe('--surface-2'),
+      ),
+    };
+  });
+  expect(roles).toEqual({ cueBar: true, focusText: true, badges: true });
 
   const stage = sheet.locator('[data-howto=stage]');
   if (await hasWebGL(page)) {

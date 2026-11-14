@@ -366,18 +366,18 @@ The real push-up replay showed the still stop at 36 s during the sit, so B3 must
     - the camera e2e specs pass;
     - the tokens test is green with no camera allow-list.
   - Deps: A2, A6, B11 merged.
-- [ ] A17. [ui-engineer] **Settings** (Pro).
+- [x] A17. [ui-engineer] **Settings** (Pro).
   - Files: src/ui/screens/settings.ts, src/ui/accentPicker.ts, src/ui/coachVoiceSettings.ts, src/ui/devLogPanel.ts, src/styles.css.
   - Accent picker: Orange / Volt / Yellow, each a swatch + name, the chosen one in white fill with dark text, ≥ 56px.
   - Existing switches, the unit choice, coach voice and dev log restyled; On/Off words next to the switches.
   - Done when: a render test, screenshots in all 3 accents, typecheck + lint clean.
   - Deps: A2, A6.
-- [ ] A18. [main] Wire Settings.
+- [x] A18. [main] Wire Settings.
   - Files: src/ui/app.ts.
   - A picker change → `setAccent` and set `data-accent` at once.
   - Done when: by hand, the accent survives a reload and success turns gold on Volt.
   - Deps: A4, A15, A17.
-- [ ] A19. [ui-engineer] Overlays (Pro), mostly CSS.
+- [x] A19. [ui-engineer] Overlays (Pro), mostly CSS.
   - Files: src/styles.css, src/ui/howToSheet.ts, src/ui/badges.ts, src/ui/lastSetCorrection.ts, src/ui/coachTip.ts.
   - Covers the exercise list, notes, How-to, body sheet, badges, coach tip and Fix strip.
   - Done when: screenshots, typecheck + lint clean.
@@ -846,6 +846,14 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e A17–A19: Settings (Pro), accent picker, overlays done** (review PASS). check 1358 tests; full e2e 80/80.
+  - **Accent picker:** Orange / Volt / Yellow, with the chosen one in white fill plus a check. The pick applies at once and is saved to IndexedDB.
+  - **No colour flash at startup:** a localStorage copy (`gc-accent`) is applied by an inline script in index.html before first paint. IndexedDB stays the source of truth.
+  - **Settings layout:** the Today tab leaves Settings ("‹ Back" is gone), and switches show On/Off words.
+  - **Overlays:** all badges are neutral; How-to cue uses the lavender panel; the Fix toggle is neutral; Apply is the orange press.
+  - **Guard:** now also catches named colours and literal font sizes in TS.
+  - **Screenshots:** in the scratchpad; A22 re-shoots them into docs.
+  - **Follow-up:** make `onTab` an exhaustive switch once History exists.
 - 2026-11-14: **M4e A16 Camera (Pro) done.** Review: one blocking item, fixed. Undo and Continue set are now neutral surface-2 buttons, because white fill is reserved for selected/on states. Set done (and Start set in rest mode) are the only orange fills.
   - **Overlay:** the canvas skeleton takes its colours from tokens, read once per start, with a 2.5× dark halo.
   - **Panels and numbers:** solid surfaces; the rep count is 120px.

@@ -37,6 +37,10 @@
   --veil-faint: rgb(13 15 18 / 0.2);
   --glass-line: rgb(255 255 255 / 0.25);
   --glass-track: rgb(255 255 255 / 0.14);
+  /* The accent picker's swatches: each theme's --cta, shown whatever the current accent is. */
+  --accent-orange: #ff7a1a;
+  --accent-volt: #c8f31d;
+  --accent-yellow: #ffd60a;
 
   /* Type: one family, two widths (self-hosted, imported in main.ts). */
   --font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
@@ -2622,28 +2626,289 @@ textarea:focus-visible {
   }
 }
 
+/* Switch row (Settings and the developer log): label, the state as a word, and a drawn track.
+   On = white track with a dark knob on the right; Off = dark track, grey knob on the left. The
+   word carries the state too, so it never rests on the knob or the fill alone. */
 .switch-btn {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: var(--tap-min);
-  padding: 0 18px;
+  min-height: var(--tap-bar);
+  padding: 8px 16px 8px 18px;
   text-align: left;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  background: var(--surface);
+  border-radius: var(--r-card);
+}
+
+.switch-label {
+  flex: 1;
+  min-width: 0;
 }
 
 .switch-state {
-  min-width: 64px;
-  padding: 6px 12px;
-  border-radius: var(--r-pill);
-  text-align: center;
-  font-weight: 800;
-  background: var(--surface-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  font-weight: 700;
   color: var(--text-2);
 }
 
+.switch-state::after {
+  content: '';
+  flex: none;
+  width: 60px;
+  height: 34px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--edge);
+  background: radial-gradient(circle at 15px 50%, var(--text-2) 0 11px, transparent 12px)
+    var(--surface-2);
+}
+
 .switch-btn.on .switch-state {
+  color: var(--text);
+}
+
+.switch-btn.on .switch-state::after {
+  border-color: var(--selected);
+  background: radial-gradient(circle at 41px 50%, var(--on-selected) 0 12px, transparent 13px)
+    var(--selected);
+}
+
+/* ---------- Settings (M4e Pro, src/ui/screens/settings.ts) ---------- */
+
+.settings.mood-pro {
+  gap: 18px;
+}
+
+.set-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.set-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.set-note {
+  font-size: var(--fs-body);
+}
+
+/* Neutral actions (Camera test, Speaker check): surface-2, never the action colour. */
+.settings .set-action,
+.settings .voice-test .ghost-btn {
+  width: 100%;
+  min-height: var(--tap-bar);
+  padding: 0 18px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.settings .voice-test {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Segmented choices (unit, coach voice): one outlined track, the chosen one a white fill + check. */
+.settings .segmented {
+  gap: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.settings .seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-bar);
+  border: none;
+  border-radius: calc(var(--r-card) - 6px);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.settings .seg-btn.active {
   background: var(--selected);
   color: var(--on-selected);
+}
+
+/* Accent picker (src/ui/accentPicker.ts). */
+.accent-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.accent-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: var(--tap-bar);
+  padding: 0 6px;
+  border: 2px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.accent-opt.on {
+  background: var(--selected);
+  border-color: var(--selected);
+  color: var(--on-selected);
+}
+
+.accent-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--bg);
+}
+
+.accent-opt.on .accent-swatch {
+  border-color: var(--on-selected);
+}
+
+.accent-swatch-orange {
+  background: var(--accent-orange);
+}
+
+.accent-swatch-volt {
+  background: var(--accent-volt);
+}
+
+.accent-swatch-yellow {
+  background: var(--accent-yellow);
+}
+
+/* Dark on all three swatches (each pair >= 7:1, tokens.test.ts). */
+.accent-check {
+  color: var(--on-selected);
+  width: 18px;
+  height: 18px;
+}
+
+/* One word, never broken mid-word; narrow phones drop to two columns (auto-fit) instead. */
+.accent-name {
+  white-space: nowrap;
+}
+
+/* ---------- Overlays (M4e Pro): exercise list, notes and body sheets (app.ts) ----------
+   Graphite page, neutral Close/Cancel, cards at the Pro radius. The only orange: Save (a press)
+   and the current exercise's outline (where you are now). */
+
+.sheet {
+  gap: 12px;
+}
+
+.sheet > .top-bar {
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sheet .page-title,
+.sheet .page-title.small-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.sheet > .top-bar .ghost-btn {
+  flex: none;
+  min-width: 96px;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.sheet .ex-row-btn {
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--r-card);
+}
+
+.sheet .ex-row-btn strong {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+/* Only the name line makes room for the status word, so the badges get the full width. */
+.sheet .ex-row-btn:has(.status) strong {
+  padding-right: 96px;
+}
+
+.sheet .ex-row-btn.current {
+  border: 2px solid var(--cta);
+}
+
+/* Finished rows step back by colour of the name, not opacity, so the ✓ done stays crisp. */
+.sheet .ex-row-btn.done {
+  opacity: 1;
+}
+
+.sheet .ex-row-btn.done strong {
+  color: var(--text-2);
+}
+
+.sheet .status {
+  top: 14px;
+  right: 16px;
+}
+
+.sheet .field-label {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.sheet input[type='text'],
+.sheet textarea {
+  border-radius: var(--r-btn);
+  background: var(--surface);
+}
+
+.sheet > .primary-btn {
+  min-height: var(--tap-cta);
+  margin-top: 12px;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  border-radius: var(--r-btn);
+}
+
+.body-sheet .muscle-slot.full {
+  border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  background: radial-gradient(ellipse at 50% 40%, var(--stage-1), var(--stage-2) 70%);
+}
+
+.body-sheet .legend {
+  font-weight: 600;
 }

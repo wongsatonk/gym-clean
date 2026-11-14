@@ -38,6 +38,9 @@ export const TOKEN_NAMES = [
   '--veil-faint',
   '--glass-line',
   '--glass-track',
+  '--accent-orange',
+  '--accent-volt',
+  '--accent-yellow',
   // type
   '--font-display',
   '--font-body',

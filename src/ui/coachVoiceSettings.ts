@@ -1,4 +1,5 @@
 import { h } from './dom';
+import { icon } from './icons';
 import { DEFAULT_DRILL_ORDER, type MaleVoice, type Rudeness, type VoiceConfig } from './voiceNames';
 import './coachVoiceSettings.css';
 
@@ -75,7 +76,9 @@ export function createCoachVoiceSettings(
         ...attrs,
         onclick,
       },
-      label,
+      // The chosen option: white fill plus a check, so it isn't shown by fill alone.
+      on ? icon('check', 'sm') : null,
+      h('span', { class: 'cv-btn-label' }, label),
     );
 
   function render(): void {

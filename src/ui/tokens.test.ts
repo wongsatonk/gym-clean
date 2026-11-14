@@ -43,8 +43,33 @@ const TOKEN_SELECTORS = new Set([
 
 const HEX = /#[0-9a-fA-F]{3,8}\b/;
 const FUNC = /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/;
-const NAMED =
-  /:\s*[^;]*\b(?:white|black|red|green|blue|yellow|orange|gray|grey|silver|purple|pink|lime|cyan|magenta)\b/;
+const NAMED_LIST =
+  'white|black|red|green|blue|yellow|orange|gray|grey|silver|purple|pink|lime|cyan|magenta|navy|teal|maroon|olive|aqua|fuchsia|gold';
+const NAMED = new RegExp(`:\\s*[^;]*\\b(?:${NAMED_LIST})\\b`);
+/**
+ * Named colours in TS: a CSS declaration inside a string (`color:white`), a DOM / canvas
+ * property assignment (`.fillStyle = 'red'`), or a colour constructor / attribute
+ * (`new Color('white')`, `setAttribute('fill', 'black')`). The accent ids 'orange' / 'yellow' are
+ * plain strings and don't match.
+ */
+const TS_NAMED = [
+  new RegExp(
+    `\\b(?:color|background(?:-color)?|fill|stroke|border(?:-[a-z]+)*|outline(?:-color)?|box-shadow|text-shadow)\\s*:\\s*(?:${NAMED_LIST})\\b`,
+  ),
+  new RegExp(
+    `\\.(?:color|background(?:Color)?|fill|stroke|fillStyle|strokeStyle|shadowColor|borderColor)\\s*=\\s*['"\`](?:${NAMED_LIST})\\b`,
+  ),
+  new RegExp(
+    `(?:Color\\(|setAttribute\\(\\s*['"\`](?:fill|stroke|color|stop-color)['"\`]\\s*,)\\s*['"\`](?:${NAMED_LIST})['"\`]`,
+  ),
+];
+/** A literal font size in TS: inline CSS (`font-size:20px`), `.fontSize = '20px'`, canvas `ctx.font = 'bold 20px …'`. */
+const TS_FONT_SIZE = [
+  /font-size\s*:\s*\d/,
+  /\.fontSize\s*=\s*['"`]?\d/,
+  /\.font\s*=\s*['"`][^'"`]*\d+(?:px|rem|em|pt)\b/,
+  /\bfont\s*:\s*[^;'"`]*\d+(?:px|rem|em|pt)\b/,
+];
 const COLOUR_PROPS =
   /^(?:color|background(?:-color)?|border(?:-[a-z]+)*|outline(?:-color)?|fill|stroke|box-shadow|text-shadow|caret-color|accent-color|text-decoration(?:-color)?)$/;
 
@@ -179,12 +204,46 @@ describe('design tokens: guard', () => {
       stripTsComments(src)
         .split('\n')
         .forEach((line, i) => {
-          if (HEX.test(line) || FUNC.test(line) || /\b0x[0-9a-fA-F]{6}\b/.test(line)) {
+          if (
+            HEX.test(line) ||
+            FUNC.test(line) ||
+            /\b0x[0-9a-fA-F]{6}\b/.test(line) ||
+            TS_NAMED.some((re) => re.test(line))
+          ) {
             bad.push(`${path}:${i + 1}: ${line.trim()}`);
           }
         });
     }
     expect(bad).toEqual([]);
+  });
+
+  it('no literal font size in src/ui/**/*.ts (inline styles and canvas use tokens)', () => {
+    const bad: string[] = [];
+    for (const [path, src] of Object.entries(UI_TS)) {
+      if (path.endsWith('.test.ts')) continue;
+      stripTsComments(src)
+        .split('\n')
+        .forEach((line, i) => {
+          if (TS_FONT_SIZE.some((re) => re.test(line)))
+            bad.push(`${path}:${i + 1}: ${line.trim()}`);
+        });
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it('the TS guards catch what they are for (and spare accent ids)', () => {
+    const named = (l: string) => TS_NAMED.some((re) => re.test(l));
+    const size = (l: string) => TS_FONT_SIZE.some((re) => re.test(l));
+    expect(named("el.style.cssText = 'color:white;'")).toBe(true);
+    expect(named("ctx.fillStyle = 'red';")).toBe(true);
+    expect(named("new THREE.Color('white')")).toBe(true);
+    expect(named("p.setAttribute('fill', 'black')")).toBe(true);
+    expect(named("export const ACCENTS = ['orange', 'volt', 'yellow'];")).toBe(false);
+    expect(named("{ accent: 'orange', label: 'Orange' }")).toBe(false);
+    expect(size("'flex:1;font-size:20px;'")).toBe(true);
+    expect(size("el.style.fontSize = '28px'")).toBe(true);
+    expect(size("ctx.font = 'bold 20px Barlow'")).toBe(true);
+    expect(size("'font-size:var(--fs-body);'")).toBe(false);
   });
 
   it('every allow-list entry names a file or folder that exists', () => {
@@ -225,6 +284,18 @@ describe('design tokens: themes and moods', () => {
     expect(yellow['--on-cta']?.toLowerCase()).toBe('#000000');
     expect(ROOT['--cta']?.toLowerCase()).toBe('#ff7a1a');
     expect(ROOT['--on-cta']?.toLowerCase()).toBe('#1a0b00');
+  });
+
+  it("the accent picker swatches are each accent's --cta", () => {
+    for (const accent of ACCENTS) {
+      expect(hexOf(`--accent-${accent}`).toLowerCase(), accent).toBe(
+        hexOf('--cta', tokenBlock(`[data-accent='${accent}']`)).toLowerCase(),
+      );
+      // The check drawn on the chosen swatch is --on-selected.
+      expect(contrast(hexOf('--on-selected'), hexOf(`--accent-${accent}`))).toBeGreaterThanOrEqual(
+        7,
+      );
+    }
   });
 
   it('defines the three moods', () => {

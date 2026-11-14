@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { leaveSettings } from './workout.helpers';
 
 /**
  * Settings → Voice → "Audio test (for music)" (src/ui/audioTest.ts), mounted from the real module.
@@ -326,7 +327,7 @@ test('Audio test in the real Settings: survives a re-render, ‹ Back stops the 
   );
   expect(await liveTracks(page)).toBe(1);
 
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await leaveSettings(page);
   await expect(page.locator('[data-audio-test]')).toHaveCount(0);
   expect(await liveTracks(page)).toBe(0);
   expect(

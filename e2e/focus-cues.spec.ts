@@ -18,7 +18,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { seedHandsFreeOff } from './hands-free.helpers';
-import { endWorkout as endViaPause } from './workout.helpers';
+import { endWorkout as endViaPause, leaveSettings } from './workout.helpers';
 
 const RUSHED = '/fixtures/landmarks/curl/synthetic-03-rushed-lowering__reps-8__partials-0.json';
 const CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
@@ -451,7 +451,7 @@ test('(9) drill persona: the cue is spoken rewritten and logged as spoken; dev l
     'aria-pressed',
     'true',
   );
-  await page.getByRole('button', { name: /Back/ }).click();
+  await leaveSettings(page);
   await startPullA(page);
   await goToCurl(page);
 
