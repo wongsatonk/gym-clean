@@ -836,6 +836,8 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-14: **M5 deployed:** 4bda987 is live. CI passed: test (e2e 63 passed), build and deploy, all success. Next human step: 🧍 Checkpoint C, a full camera session at the gym, together with Checkpoint B3 (hands-free).
+
 - 2026-11-14: **M5c break hold: B1–B4 and B8 done** (review PASS).
   - **B3, synthetic run:** the head-on sit reads `untracked = bodyLine` with the person present. The hold fires 5.0–5.6 s into the sit, with no still stop first. With Continue tapped, the set is one commit of 11 reps. A 5.7 s pause in the plank does nothing (a 6.3 s control does stop).
   - **Not confirmed on the real set:** that waits for B-q5 / Checkpoint B3.
