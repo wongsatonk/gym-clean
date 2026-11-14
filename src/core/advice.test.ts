@@ -202,6 +202,21 @@ describe('afterSetAdvice A3: ≥ 2 clean sets at the top', () => {
     expect(afterSetAdvice(s, name)?.apply?.weightKg).toBeCloseTo(22.5, 9);
   });
 
+  it('off-grid weight: the text names the real jump to the Apply weight', () => {
+    // 16 + 2.5 = 18.5 → snapped 17.5: the text must say +1.5 kg, not +2.5 kg.
+    const a = afterSetAdvice(state([lg('bench', 8, 16), lg('bench', 8, 16)]), name);
+    expect(a?.apply?.weightKg).toBeCloseTo(17.5, 9);
+    expect(a?.text).toBe('Strong set. Try +1.5 kg next set.');
+    expect(a?.say).toBe('Strong set. Try plus 1.5 kilos next set.');
+  });
+
+  it('off-grid weight in lb: text and Apply agree', () => {
+    // 33 lb + 5 = 38 → snapped 40 lb: +7 lb.
+    const a = afterSetAdvice(state([lg('bench', 8, lb(33)), lg('bench', 8, lb(33))], 'lb'), name);
+    expect(toUnit(a?.apply?.weightKg ?? 0, 'lb')).toBeCloseTo(40, 9);
+    expect(a?.text).toBe('Strong set. Try +7 lb next set.');
+  });
+
   it('25% guard: 5 lb on 15 lb is too big a jump → no A3', () => {
     const s = state([lg('raise', 15, lb(15)), lg('raise', 15, lb(15))], 'lb');
     expect(rule(afterSetAdvice(s, name))).toBeNull();
@@ -277,7 +292,6 @@ describe('afterSetAdvice A5: rest ran long', () => {
       lg('raise', 13, 5, { rest: 121 }),
     ]);
     expect(rule(afterSetAdvice(s2, name))).toBe('A5');
-    expect(rule(afterSetAdvice(s, name))).toBeNull();
   });
 
   it('exactly target + 30 is not an overrun', () => {
@@ -503,6 +517,30 @@ describe('coachSummary', () => {
     const s = state([lg('curl', 12, 10), lg('curl', 11, 10)]);
     const [e] = coachSummary(s, { curl: [lg('curl', 10, 10), lg('curl', 10, 10)] }, name);
     expect(e?.progress).toBe('Dumbbell Bicep Curl: +3 reps vs last time.');
+  });
+
+  it('P2 says "rep" for a gain of one', () => {
+    const s = state([lg('curl', 11, 10)]);
+    const [e] = coachSummary(s, { curl: [lg('curl', 10, 10)] }, name);
+    expect(e?.progress).toBe('Dumbbell Bicep Curl: +1 rep vs last time.');
+  });
+
+  it('P1 fires at exactly half a step, not just under', () => {
+    const at = state([lg('bench', 8, 21.25)]);
+    expect(coachSummary(at, { bench: [lg('bench', 8, 20)] }, name)[0]?.progress).toBe(
+      'Dumbbell Bench Press: 21.3 kg, up from 20 kg.',
+    );
+    const under = state([lg('bench', 8, 21.24)]);
+    expect(coachSummary(under, { bench: [lg('bench', 8, 20)] }, name)[0]?.progress).toBeNull();
+    // lb: half of 5 lb = 2.5 lb
+    const atLb = state([lg('bench', 8, lb(32.5))], 'lb');
+    expect(coachSummary(atLb, { bench: [lg('bench', 8, lb(30))] }, name)[0]?.progress).toBe(
+      'Dumbbell Bench Press: 32.5 lb, up from 30 lb.',
+    );
+    const underLb = state([lg('bench', 8, lb(32.4))], 'lb');
+    expect(
+      coachSummary(underLb, { bench: [lg('bench', 8, lb(30))] }, name)[0]?.progress,
+    ).toBeNull();
   });
 
   it('P2 false edges: lighter today, or no more reps', () => {

@@ -145,14 +145,17 @@ function duringExerciseAdvice(
   }
   const allTop = L.length >= 2 && L.every((l) => l.reps >= max && isClean(l));
   if (allTop && !bw && !tooBigJump(w, unit)) {
-    const step = fmtStep(unit);
+    // Name the real jump to the snapped Apply weight, so text and Apply never disagree
+    // (16 kg → 17.5 kg says "+1.5 kg", not "+2.5 kg").
+    const next = stepped(w, unit, 1);
+    const jump = formatWeight(fromUnit(disp(next, unit) - disp(w, unit), unit), unit);
     return advice(
       id,
       'A3',
-      `Strong set. Try +${step} ${unit} next set.`,
+      `Strong set. Try +${jump} ${unit} next set.`,
       why,
-      `Strong set. Try plus ${step} ${unitWord(unit)} next set.`,
-      { weightKg: stepped(w, unit, 1) },
+      `Strong set. Try plus ${jump} ${unitWord(unit)} next set.`,
+      { weightKg: next },
     );
   }
   if (allTop && bw) {
@@ -280,7 +283,7 @@ export function progressLine(
   const reps = (ls: readonly SetLog[]) => ls.reduce((n, l) => n + l.reps, 0);
   const gained = reps(L) - reps(last);
   if (diff > -half + 1e-9 && gained > 0) {
-    return `${name(exerciseId)}: +${gained} reps vs last time.`;
+    return `${name(exerciseId)}: +${gained} ${gained === 1 ? 'rep' : 'reps'} vs last time.`;
   }
   return null;
 }
