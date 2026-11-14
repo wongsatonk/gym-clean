@@ -29,8 +29,9 @@ export function workoutTopBar(p: WorkoutTopBarProps): HTMLElement {
         {
           type: 'button',
           class: 'wtb-btn wtb-list',
-          // Kept from the old bar: e2e and screen readers find it by this name.
-          'aria-label': 'Exercise list',
+          // Starts with the visible text (WCAG 2.5.3 label in name); ends with "Exercise list",
+          // the name e2e and screen readers find it by.
+          'aria-label': `${p.dayName}, ${pos}, Exercise list`,
           onclick: p.onList,
         },
         icon('list', 'md'),

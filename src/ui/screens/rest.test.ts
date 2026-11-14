@@ -108,7 +108,8 @@ describe('restScreen', () => {
     const btn = attr(el, 'data-rest-extend');
     expect(btn.tag).toBe('button');
     expect(btn.textContent).toBe('+30 s');
-    expect(btn.getAttribute('aria-label')).toBe('Add 30 seconds of rest');
+    // Label in name: the accessible name starts with the visible "+30 s".
+    expect(btn.getAttribute('aria-label')).toBe('+30 s, add 30 seconds of rest');
     btn.click();
     expect(calls.extend).toBe(1);
   });
@@ -126,7 +127,7 @@ describe('restScreen', () => {
   it('top bar: list / Pause, and Camera only when given', () => {
     const plain = render();
     expect(plain.el.byTag('button').some((b) => b.textContent === 'Camera')).toBe(false);
-    one(plain.el, (e) => e.getAttribute('aria-label') === 'Exercise list', 'list').click();
+    one(plain.el, (e) => (e.getAttribute('aria-label') ?? '').endsWith('Exercise list'), 'list').click();
     buttonByText(plain.el, 'Pause').click();
     expect(plain.calls).toMatchObject({ list: 1, pause: 1 });
     const cam = render({}, true);

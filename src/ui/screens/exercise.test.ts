@@ -76,7 +76,8 @@ describe('workoutTopBar', () => {
         onPause: () => hits.push('pause'),
       }),
     );
-    const list = byLabel(bar, 'Exercise list');
+    // Label in name: the accessible name starts with the visible day text.
+    const list = byLabel(bar, 'Pull A, 3 of 5, Exercise list');
     expect(list.textContent).toBe('Pull A3 of 5');
     list.click();
     buttonByText(bar, 'Camera').click();

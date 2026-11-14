@@ -149,7 +149,7 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
     {
       type: 'button',
       class: 'rest-extend',
-      'aria-label': 'Add 30 seconds of rest',
+      'aria-label': '+30 s, add 30 seconds of rest',
       'data-rest-extend': true,
       onclick: a.onExtend,
     },

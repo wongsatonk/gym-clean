@@ -846,6 +846,18 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-14: **M4e cleanup round done** (review PASS). check 1358; full e2e 90/90 (adds layout-dock.spec and a camera header test).
+  - **Camera:** exercise names wrap to at most 2 lines, and the video stays ≥ 600px.
+  - **Rest:** while a coach Apply is up, the ring is 264px and the clock 120px, so Apply clears Start set by ≥ 16px.
+  - **Dead old-screen CSS removed.** The transitional font tokens are kept as named steps; `--fs-count` is removed. Weights 800 → 700.
+  - **Labels and sizes:**
+    - notes Save is now the standard CTA;
+    - +30 s and the list button have accessible names that contain their visible labels;
+    - list status words are 20px.
+  - **`--muscle-2` is now #2899c8** (3.14:1 on body).
+  - **Screenshots:** all 57 `m4e-*` re-shot in all 3 accents.
+  - **Open, for Wongsaton (A-q6):** `--warn` amber is close to the Yellow CTA (over-rest clock vs buttons) and to Volt gold.
+  - **Open, small:** Exercise's first screen runs ~30px under the sticky Set done until you scroll. Fixing it would mean shrinking content; that's a design call.
 - 2026-11-14: **M4e A22 verifier PASS** (56c5d1a).
   - **Checks:** `npm run check` 1358 tests + 19 scripts; full e2e 87/87; m4e-theme ×5 35/35.
   - **Lighthouse accessibility on Today: 100.**

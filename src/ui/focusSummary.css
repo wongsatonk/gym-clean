@@ -17,7 +17,7 @@
   margin: 0;
   color: var(--text);
   font-size: var(--fs-lead);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .focus-icon {
@@ -88,7 +88,7 @@
 .focus-set-label {
   color: var(--text);
   font-size: var(--fs-cue);
-  font-weight: 800;
+  font-weight: 700;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -97,7 +97,7 @@
   flex: 0 0 auto;
   color: var(--text);
   font-size: var(--fs-num-sm);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }

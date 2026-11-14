@@ -17,7 +17,7 @@
   --success: #3be38b; /* achieved: streak, bests, target reached. Filled green is never a button. */
   --on-success: #06210f;
   --muscle: #35c8ff; /* muscle highlight only, always with a text legend */
-  --muscle-2: #1f86b0; /* secondary muscles (dimmer cyan) */
+  --muscle-2: #2899c8; /* secondary muscles (dimmer cyan): 3.1:1 on --body, 1.7:1 under --muscle */
   --body: #3a424d; /* figure fill */
   --edge: #8d98a6; /* figure rim */
   --stage-1: #2a313b; /* lit stage */
@@ -45,22 +45,22 @@
   /* Type: one family, two widths (self-hosted, imported in main.ts). */
   --font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
   --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  /* The mix scale. */
+  /* The type scale, smallest to largest. The mix README names eight steps; the five marked
+     "between steps" are permanent too: the camera, hands-free, coach, Summary and dev-log
+     layouts were sized on them and still use them. */
   --fs-label: 18px; /* short labels next to an icon or number only */
-  --fs-body: 20px;
-  --fs-cue: 22px;
-  --fs-title: 34px;
+  --fs-body: 20px; /* body floor */
+  --fs-cue: 22px; /* spoken lines, list names */
+  --fs-lead: 26px; /* between steps: sub-heads, small sheet titles, secondary buttons */
+  --fs-head: 32px; /* between steps: exercise names in panels, large button words */
+  --fs-title: 34px; /* screen and sheet titles, the CTA */
+  --fs-display: 44px; /* between steps: page titles, the Summary hero title */
+  --fs-stepper: 54px; /* between steps: the documented stepper exception (hands-free) */
+  --fs-num-sm: 64px; /* between steps: the minimum for a main number (long values) */
   --fs-num: 72px;
   --fs-hero: 84px;
   --fs-rep: 120px;
   --fs-timer: 132px;
-  /* Transitional steps that keep today's layouts; retired as each screen moves to the mix. */
-  --fs-lead: 26px;
-  --fs-head: 32px;
-  --fs-display: 44px;
-  --fs-stepper: 54px; /* documented stepper exception */
-  --fs-num-sm: 64px; /* minimum for main numbers */
-  --fs-count: 96px;
 
   /* Shape. Moods override --r-card and --line-w. */
   --r-btn: 14px;
@@ -137,7 +137,6 @@
 .page-title,
 .summary-title,
 .exercise-name,
-.set-counter,
 .stepper-value,
 .rest-clock,
 .stat-value,
@@ -941,10 +940,6 @@ h1 {
   line-height: 1.25;
 }
 
-.stepper.ex-stepper {
-  display: block;
-}
-
 .st-label {
   display: flex;
   align-items: baseline;
@@ -1022,6 +1017,19 @@ h1 {
   margin: 2px 0;
 }
 
+/* With a coach Apply up (or its "Applied" result, so nothing jumps after the tap), the ring and
+   clock step down one size so the tip ends clear of the sticky Start set on a 390x844 phone:
+   the two filled presses never touch. The clock stays a main number (120px, inside the ring). */
+.rest.mood-track:has(.coach-tip:not([hidden]) :is(.coach-apply, .coach-applied):not([hidden]))
+  .rest-timer {
+  width: min(264px, calc(100% - 58px));
+}
+
+.rest.mood-track:has(.coach-tip:not([hidden]) :is(.coach-apply, .coach-applied):not([hidden]))
+  .rest-clock {
+  font-size: var(--fs-rep);
+}
+
 /* Decorative lanes (no information), clipped to the screen's padding box. */
 .rest-timer::before {
   content: '';
@@ -1073,7 +1081,7 @@ h1 {
 
 .rest-lbl {
   font-size: var(--fs-cue);
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.2em;
   color: var(--text-2);
 }
@@ -1085,6 +1093,8 @@ h1 {
   line-height: 0.95;
   white-space: nowrap;
   color: var(--text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Over the target: amber clock and label, "+0:12" and "Over rest" (words, not colour alone). */
@@ -1329,31 +1339,13 @@ h1 {
 
 .exercise-name {
   font-size: var(--fs-head);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.1;
-}
-
-.set-counter {
-  font-size: var(--fs-num-sm);
-  font-weight: 800;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
 }
 
 .focus-cue {
   color: var(--cue);
   font-style: italic;
-}
-
-.stepper {
-  display: grid;
-  grid-template-columns: 36px 64px minmax(0, 1fr) 64px;
-  align-items: center;
-  gap: 8px;
-}
-
-.stepper-label {
-  color: var(--text-2);
 }
 
 .step-btn {
@@ -1368,53 +1360,19 @@ h1 {
   letter-spacing: -0.04em;
   white-space: nowrap;
   font-size: var(--fs-num-sm);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-}
-
-.stepper-value.long {
-  font-size: var(--fs-stepper);
 }
 
 .primary-btn {
   min-height: 88px;
   font-size: var(--fs-head);
-  font-weight: 800;
+  font-weight: 700;
   background: var(--cta);
   color: var(--on-cta);
   border: none;
   margin-top: auto;
-}
-
-.footer-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.rest-label {
-  margin-top: 24px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  text-align: center;
-}
-
-.rest-clock {
-  font-size: var(--fs-timer);
-  font-weight: 800;
-  line-height: 1;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.rest-clock.overtime {
-  color: var(--warn);
-}
-
-.next-up {
-  text-align: center;
-  margin-top: 12px;
 }
 
 .stack {
@@ -1438,7 +1396,7 @@ h1 {
 
 .overlay-title {
   font-size: var(--fs-num-sm);
-  font-weight: 800;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -1450,7 +1408,7 @@ h1 {
 
 .summary-title {
   font-size: var(--fs-display);
-  font-weight: 800;
+  font-weight: 700;
   margin-top: 16px;
 }
 
@@ -1474,7 +1432,7 @@ h1 {
 
 .stat-value {
   font-size: var(--fs-display);
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1760,23 +1718,11 @@ h1 {
   }
 }
 
-.nowrap {
-  white-space: nowrap;
-}
-
 /* ---------- M1b: lists, notes, settings ---------- */
-
-.top-bar.end {
-  justify-content: flex-end;
-}
-
-.list-btn {
-  font-weight: 600;
-}
 
 .page-title {
   font-size: var(--fs-display);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.1;
 }
 
@@ -1802,7 +1748,7 @@ h1 {
 .seg-btn {
   min-height: 72px;
   font-size: var(--fs-head);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .seg-btn.active {
@@ -1849,11 +1795,12 @@ h1 {
   cursor: default;
 }
 
+/* Body size: these words stand alone (no icon), so they get the 20px floor, not --fs-label. */
 .status {
   position: absolute;
   right: 14px;
   top: 12px;
-  font-size: var(--fs-label);
+  font-size: var(--fs-body);
   font-weight: 700;
 }
 
@@ -1904,6 +1851,8 @@ h1 {
   color: var(--text);
 }
 
+/* Sticky, not fixed: the dock keeps its own place at the end of the flow, so at full scroll
+   nothing sits under it (e2e/layout-dock.spec.ts). Only the first screenful runs under it. */
 .sticky-bottom {
   position: sticky;
   bottom: 0;
@@ -2029,18 +1978,6 @@ textarea:focus-visible {
   fill: var(--muscle);
 }
 
-.rest-next {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 12px;
-  align-items: center;
-}
-
-.rest-next .next-up {
-  text-align: left;
-  margin-top: 0;
-}
-
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -2090,23 +2027,28 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+/* The exercise name wraps beside the buttons instead of clipping ("Dumbbell Bicep Curl" never
+   becomes "Dumbbel…"). At --fs-lead most names take two lines, the height of the 56px buttons,
+   so the video keeps its size; a longer name grows the bar rather than losing letters. */
 .cam-top {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: 8px;
   padding: max(8px, env(safe-area-inset-top)) 12px 8px;
 }
 
-.cam-title {
+.sheet > .cam-top > .page-title.cam-title {
   margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: var(--fs-lead);
+  line-height: 1.08;
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .cam-3d-btn {
   min-width: var(--tap-min);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .cam-3d-btn[aria-expanded='true'] {
@@ -2294,7 +2236,7 @@ textarea:focus-visible {
   margin: 0;
   text-align: center;
   font-size: var(--fs-lead);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.1;
   color: var(--text);
   font-variant-numeric: tabular-nums;
@@ -2382,7 +2324,7 @@ textarea:focus-visible {
 .setup-title {
   margin: 0;
   font-size: var(--fs-lead);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.15;
 }
 
@@ -2848,6 +2790,12 @@ textarea:focus-visible {
   min-width: 96px;
   font-weight: 700;
   background: var(--surface-2);
+}
+
+/* Camera: "3D" is a short word, so its button stays at the tap minimum and leaves the name room. */
+.sheet > .cam-top .cam-3d-btn {
+  min-width: var(--tap-min);
+  padding: 0 14px;
 }
 
 .sheet .ex-row-btn {

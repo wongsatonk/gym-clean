@@ -76,6 +76,7 @@ import { restScreen as renderRest } from './screens/rest';
 import { settingsScreen as renderSettings } from './screens/settings';
 import { summaryScreen as renderSummary } from './screens/summary';
 import { todayScreen as renderToday, type TodayLast } from './screens/today';
+import { icon } from './icons';
 import { applyAccent } from './tokens';
 import {
   lastSession,
@@ -1229,7 +1230,7 @@ export function mountApp(root: HTMLElement): void {
       lasting,
       h('label', { class: 'field-label', for: 'today-input' }, 'Today’s note'),
       today,
-      h('button', { class: 'primary-btn', onclick: save }, 'Save'),
+      h('button', { class: 'primary-btn cta-btn', onclick: save }, icon('check', 'lg'), 'Save'),
     );
   }
 

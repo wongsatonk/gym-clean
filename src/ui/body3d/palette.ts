@@ -17,7 +17,7 @@ export const FIGURE_TOKEN_FALLBACK = {
   '--stage-1': '#2A313B',
   '--stage-2': '#16191E',
   '--muscle': '#35C8FF',
-  '--muscle-2': '#1F86B0',
+  '--muscle-2': '#2899C8',
   '--text': '#F2F4F7',
 } as const;
 

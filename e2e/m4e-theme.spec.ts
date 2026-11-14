@@ -200,7 +200,8 @@ test('+30 s on Rest extends the clock, and "Ten seconds" is spoken 30 s later', 
   const clock = page.locator('[data-rest-clock]');
   await expect(clock).toHaveText('2:00');
   await expect(page.locator('[data-rest-target]')).toHaveText('of 2:00');
-  await page.getByRole('button', { name: 'Add 30 seconds of rest' }).click();
+  // Found by its visible label (label in name), which also carries the longer description.
+  await page.getByRole('button', { name: '+30 s, add 30 seconds of rest', exact: true }).click();
   await expect(clock).toHaveText('2:30');
   await expect(page.locator('[data-rest-target]')).toHaveText('of 2:30');
 

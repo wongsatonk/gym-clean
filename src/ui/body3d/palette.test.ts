@@ -37,7 +37,7 @@ describe('figure palette', () => {
     const tokens: Record<string, string> = { '--muscle': '#ff0000', '--muscle-2': '#800000' };
     const a = figurePalette(none);
     const b = figurePalette((n) => tokens[n] ?? '');
-    expect(a.secondary).toBe(0x1f86b0);
+    expect(a.secondary).toBe(0x2899c8);
     expect(b.secondary).toBe(0x800000);
     expect(b.muscleGlow).not.toBe(a.muscleGlow);
     expect(b.iron).toBe(b.edge);
@@ -49,8 +49,9 @@ describe('figure palette', () => {
     expect(contrast(p.muscle, p.body)).toBeGreaterThanOrEqual(3);
     expect(contrast(p.edge, p.stage2)).toBeGreaterThanOrEqual(3);
     expect(contrast(p.edge, p.stage1)).toBeGreaterThanOrEqual(3);
-    // Secondary sits between body and primary, so the two levels stay apart.
-    expect(contrast(p.secondary, p.body)).toBeGreaterThan(1.4);
+    // Secondary sits between body and primary, so the two levels stay apart; it is also a
+    // non-text graphic on the body, so it keeps 3:1 there (WCAG 1.4.11).
+    expect(contrast(p.secondary, p.body)).toBeGreaterThanOrEqual(3);
     expect(contrast(p.muscle, p.secondary)).toBeGreaterThan(1.4);
   });
 });

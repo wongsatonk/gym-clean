@@ -212,6 +212,69 @@ test('Camera test from Settings: big video, no counter, no set-up card', async (
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
 
+test('header: every tracked exercise name shows in full (wraps, never "Dumbbel…")', async ({
+  page,
+}) => {
+  await mockSpeech(page);
+  await page.goto('/');
+  for (const title of [
+    'Dumbbell Bicep Curl',
+    'Seated Dumbbell Press',
+    'One-Arm Dumbbell Row',
+    'Side Lateral Raise',
+    'Goblet Squat',
+    'Pushups',
+  ]) {
+    const r = await page.evaluate(async (title) => {
+      document.querySelector('[role="dialog"][aria-label="Camera"]')?.remove();
+      const load = (p: string) => import(p) as Promise<Record<string, unknown>>;
+      const ui = await load('/src/ui/cameraView.ts');
+      type View = { el: HTMLElement };
+      const view = (ui.createCameraView as (o: unknown) => View)({
+        title,
+        exerciseId: 'Dumbbell_Bicep_Curl',
+        onClose() {},
+        onSetDone() {},
+        speakPlacement: false,
+        target: { setNumber: 1, sets: 3, targetReps: 12, minReps: 8 },
+      });
+      document.body.append(view.el);
+      const q = (sel: string): HTMLElement => {
+        const e = view.el.querySelector<HTMLElement>(sel);
+        if (!e) throw new Error(`missing ${sel}`);
+        return e;
+      };
+      const t = q('.cam-title');
+      const cs = getComputedStyle(t);
+      const box = t.getBoundingClientRect();
+      const close = q('.cam-close').getBoundingClientRect();
+      const b3d = q('.cam-3d-btn').getBoundingClientRect();
+      const stage = q('.cam-stage').getBoundingClientRect();
+      return {
+        text: t.textContent,
+        fontPx: parseFloat(cs.fontSize),
+        clipped: t.scrollWidth > t.clientWidth || cs.textOverflow === 'ellipsis',
+        lines: Math.round(box.height / parseFloat(cs.lineHeight)),
+        rightEdge: box.right,
+        b3dLeft: b3d.left,
+        btnH: Math.min(close.height, b3d.height),
+        stageH: stage.height,
+      };
+    }, title);
+    expect(r.text, title).toBe(title);
+    expect(r.clipped, title).toBe(false);
+    expect(r.fontPx, title).toBeGreaterThanOrEqual(20);
+    expect(r.lines, title).toBeLessThanOrEqual(2);
+    expect(r.rightEdge, title).toBeLessThanOrEqual(r.b3dLeft);
+    expect(r.btnH, title).toBeGreaterThanOrEqual(56);
+    // Two lines fit beside the 56px buttons, so the video keeps its size.
+    expect(r.stageH, title).toBeGreaterThanOrEqual(600);
+  }
+  // The e2e hook (dialog "Camera") is unchanged.
+  await expect(page.getByRole('dialog', { name: 'Camera' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
+
 test('short phone (375×667): the set-up card never covers the count', async ({ page }) => {
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 375, height: 667 });

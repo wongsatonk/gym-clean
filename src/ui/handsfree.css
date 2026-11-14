@@ -65,7 +65,7 @@
 
 .auto-stop-num {
   font-size: var(--fs-hero);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--success);
@@ -87,7 +87,7 @@
 .auto-stop-keep {
   font-size: var(--fs-stepper);
   white-space: nowrap;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.1;
   color: var(--cue); /* spoken line, not a button */
 }
@@ -104,7 +104,7 @@
   min-height: 88px;
   padding: 0 12px 0 20px;
   font-size: var(--fs-head);
-  font-weight: 800;
+  font-weight: 700;
   border-radius: var(--r-btn);
   background: var(--surface-2);
   color: var(--text);
@@ -155,7 +155,7 @@
 .auto-stop-secs {
   position: relative;
   font-size: var(--fs-head);
-  font-weight: 800;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
@@ -253,7 +253,7 @@
   min-height: 72px;
   padding: 0 12px;
   font-size: var(--fs-lead);
-  font-weight: 800;
+  font-weight: 700;
 }
 
 /* Rest mode hides Set done, so Start set is then the screen's one --cta. */
@@ -407,7 +407,7 @@
   min-height: 80px;
   padding: 0 16px;
   font-size: var(--fs-head);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.1;
 }
 

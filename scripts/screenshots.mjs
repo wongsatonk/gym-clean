@@ -1884,7 +1884,7 @@ async function m4e(browser, only) {
       await oneSession(2);
       await page.clock.runFor(5_000);
       await m4eShot(page, log, 'rest', accent, 'main');
-      await page.getByRole('button', { name: 'Add 30 seconds of rest' }).click();
+      await page.getByRole('button', { name: '+30 s, add 30 seconds of rest', exact: true }).click();
       await m4eShot(page, log, 'rest-plus30', accent, 'main');
       await page.clock.runFor(160_000);
       await page.locator('[data-rest-timer][data-state="over"]').waitFor();
