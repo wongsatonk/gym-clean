@@ -27,10 +27,10 @@ export default defineConfig({
     {
       // M5 focus cues replay a fixture clip on the wall clock over several sets: under parallel
       // load the page drops frames and misses rep turnarounds. One test at a time, like the
-      // live-camera project (CI already runs workers: 1).
+      // live-camera project (CI already runs workers: 1). M4f learning.spec counts a clip too.
       name: 'mobile-clips',
       workers: 1,
-      testMatch: /(focus-cues|hands-free-break)\.spec\.ts/,
+      testMatch: /(focus-cues|hands-free-break|learning)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -46,7 +46,7 @@ export default defineConfig({
     {
       name: 'mobile',
       testIgnore:
-        /(camera-person|rep-count|devlog-camera|hands-free-live|focus-cues|hands-free-break|pwa)\.spec\.ts/,
+        /(camera-person|rep-count|devlog-camera|hands-free-live|focus-cues|hands-free-break|learning|pwa)\.spec\.ts/,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },

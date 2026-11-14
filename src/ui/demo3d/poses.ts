@@ -428,19 +428,25 @@ const flyDir = (phi: number, sg: number): V3 => v(0, -Math.cos(rad(phi)), Math.s
  * Inverse of a monotonic sampled function: given samples (x[i], y[i]) with y strictly increasing
  * or decreasing, returns y -> x by binary search + linear interpolation, clamped to the ends.
  * The samples are taken on the first call (one demo's table, not every demo's at module load), so
- * a frame costs a few comparisons instead of re-posing.
+ * a frame costs a few comparisons instead of re-posing. The table is built into locals and only
+ * published once complete, so a throw part-way leaves it empty (the next call retries) rather
+ * than half filled.
  */
-function inverseTable(x0: number, x1: number, n: number, f: (x: number) => number) {
-  const xs: number[] = [];
-  const ys: number[] = [];
+export function inverseTable(x0: number, x1: number, n: number, f: (x: number) => number) {
+  let xs: readonly number[] = [];
+  let ys: readonly number[] = [];
   let up = true;
   const build = () => {
+    const bx: number[] = [];
+    const by: number[] = [];
     for (let i = 0; i <= n; i++) {
       const x = x0 + ((x1 - x0) * i) / n;
-      xs.push(x);
-      ys.push(f(x));
+      bx.push(x);
+      by.push(f(x));
     }
-    up = (ys[n] ?? 0) > (ys[0] ?? 0);
+    up = (by[n] ?? 0) > (by[0] ?? 0);
+    xs = bx;
+    ys = by;
   };
   return (y: number): number => {
     if (!xs.length) build();
@@ -1722,7 +1728,15 @@ export const LEG_EXT = {
   back: 8,
   thighTilt: -3,
   seatTop: 0.51,
+  /** Roller pad radius (m). */
+  rollerR: 0.045,
+  /** Roller centre in front of the shin line (m): shin surface + pad radius, touching. */
   roller: 0.09,
+  /**
+   * Roller centre up the shin from the ankle (m): low shin, just above the ankle, with the pad's
+   * lower edge clear of the foot (rollerUp - rollerR above the ankle joint).
+   */
+  rollerUp: 0.075,
   stack: v(-0.2, 0, -0.55),
   /** Stack rise (m) over the whole extension (90 -> 175 deg). */
   stackRise: 0.22,
@@ -1730,7 +1744,7 @@ export const LEG_EXT = {
 
 /** Leg extension, side view, knee angle: shins swing from hanging to straight out in front. */
 export function legExtensionPose(theta: number): DemoPose {
-  const { hip, back, thighTilt, roller, stack, stackRise } = LEG_EXT;
+  const { hip, back, thighTilt, roller, rollerR, rollerUp, stack, stackRise } = LEG_EXT;
   const neck = addS(hip, dir(90 + back), SPINE);
   const knee = addS(hip, dir(thighTilt), THIGH);
   // Knee angle theta from the thigh line (tilted thighTilt): 90 = shins hanging, 180 = straight.
@@ -1753,7 +1767,7 @@ export function legExtensionPose(theta: number): DemoPose {
       toe: at(addS(ankle, front, FOOT), DEFAULT_HIP_W * sg),
     };
   });
-  const pad = addS(addS(ankle, front, roller), shin, -0.06);
+  const pad = addS(addS(ankle, front, roller), shin, -rollerUp);
   const stackTop = 0.32 + (stackRise * (theta - 90)) / 85;
   return {
     hip,
@@ -1764,7 +1778,7 @@ export function legExtensionPose(theta: number): DemoPose {
     l,
     bells: [],
     rods: [
-      { a: at(pad, -0.25), b: at(pad, 0.25), r: 0.045 }, // shin roller
+      { a: at(pad, -0.25), b: at(pad, 0.25), r: rollerR }, // shin roller, low on the shins
       { a: at(knee, 0.3), b: at(pad, 0.3), r: 0.02 }, // lever arm
       { a: v(stack[0], stackTop, stack[2]), b: v(stack[0], 1.25, stack[2]), r: 0.006 }, // cable
     ],

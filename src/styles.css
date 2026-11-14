@@ -2052,6 +2052,10 @@ textarea:focus-visible {
 /* M4f "Learning" chip: under the title in the first column (the buttons span both rows), so the
    name keeps its width and the Close button never wraps. Neutral like the exercise badges:
    static information, nothing to press or react to. */
+.cam-top.has-learning {
+  row-gap: 4px; /* the chip row costs the video (and the set-up card) as little as possible */
+}
+
 .cam-top.has-learning > :not(.cam-title, .cam-learning) {
   grid-row: 1 / span 2;
 }
@@ -2326,37 +2330,50 @@ textarea:focus-visible {
   display: none;
 }
 
-/* "Set up your phone": low on the video, clear of the count, above the stage buttons. */
+/* "Set up your phone": low on the video, clear of the count, above the stage buttons.
+   "Got it" sits in the head row (top right), so it stays in view whatever the card's height:
+   a learning chip or a long exercise name makes the top band taller and the stage shorter. */
 .cam-setup {
   position: absolute;
   left: 8px;
   right: 8px;
   bottom: 72px;
-  /* Never over the count: stage minus the HUD (measured, --hud-h) and the gaps around it. */
-  max-height: calc(100% - 72px - 16px - var(--hud-h, 200px));
+  /* Never over the count: stage minus the HUD (measured, --hud-h) and the gaps around it. On a
+     short phone the floor keeps the head row with "Got it" (it may then cover the set line
+     under the count, never the count itself). */
+  max-height: max(80px, calc(100% - 72px - 16px - var(--hud-h, 200px)));
   overflow-y: auto;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-radius: var(--r-card);
   background: var(--surface);
   border: var(--line-w) solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: start;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+
+.cam-setup > * {
+  grid-column: 1 / -1;
 }
 
 .cam-setup[hidden] {
   display: none;
 }
 
-.setup-head {
+.cam-setup > .setup-head {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
 }
 
 .setup-title {
   margin: 0;
-  font-size: var(--fs-lead);
+  font-size: var(--fs-cue);
   font-weight: 700;
   line-height: 1.15;
 }
@@ -2364,7 +2381,7 @@ textarea:focus-visible {
 .setup-line {
   margin: 0;
   font-size: var(--fs-cue);
-  line-height: 1.3;
+  line-height: 1.2;
 }
 
 /* M4f: the learning note sits under the placement lines, secondary (it's not a placement step). */
@@ -2373,15 +2390,17 @@ textarea:focus-visible {
   color: var(--text-2);
 }
 
-.setup-hide {
-  align-self: flex-end;
-  min-width: 120px;
+.cam-setup > .setup-hide {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  padding: 0 16px;
 }
 
 .setup-pic {
   flex: 0 0 auto;
-  width: 96px;
-  height: 64px;
+  width: 84px;
+  height: 56px;
 }
 
 .setup-pic .pic-phone {

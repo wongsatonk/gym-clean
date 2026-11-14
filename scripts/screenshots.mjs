@@ -15,6 +15,8 @@
 //                                            #   M4d demos + Pull A badges, silent hint (iOS UA)
 //   node scripts/screenshots.mjs m4e [orange|volt|yellow]
 //                                            # M4e redesign: every screen per accent
+//   node scripts/screenshots.mjs m4f        # M4f wave 1 learning rules: badges, camera chip +
+//                                            #   setup line, Rest/Summary/hands-free Fix note, export
 //   node scripts/screenshots.mjs m5c-hold    # M5c breaks inside a set: body-line hold, Continue →
 //                                            #   one set; last-set hold (Save set); dev-log export
 //                                            #   to test-results/verify-m5c-hold/
@@ -1953,6 +1955,236 @@ async function m4e(browser, only) {
   }
 }
 
+// ------------------------------- M4f wave 1: learning rules (Hammer Curls etc.)
+
+const M4F_HAMMER = '/fixtures/landmarks/hammer-curl/synthetic-01__reps-4__partials-0.json';
+const M4F_TRICEPS = '/fixtures/landmarks/triceps-extension/synthetic-01__reps-4__partials-0.json';
+const M4F_DEVLOG = 'test-results/verify-m4f/m4f-devlog-export.json';
+
+async function m4fBadges(scope, sel) {
+  return scope.locator(sel).evaluateAll((rows) =>
+    rows.map((r) => ({
+      name: (r.querySelector('.ex-name, h3, strong')?.textContent ?? r.textContent ?? '').trim().slice(0, 40),
+      badges: [...r.querySelectorAll('[data-badge]')].map((b) => b.textContent.trim()),
+    })),
+  );
+}
+
+async function m4fLearningSizes(page) {
+  return page.evaluate(() => {
+    const px = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return { text: el.textContent.trim(), font: parseFloat(cs.fontSize), h: Math.round(r.height),
+        w: Math.round(r.width), left: Math.round(r.left), right: Math.round(r.right),
+        top: Math.round(r.top), color: cs.color, bg: cs.backgroundColor,
+        aria: el.getAttribute('aria-label'), role: el.getAttribute('role') };
+    };
+    return {
+      chip: px('[role=dialog] [data-learning]'),
+      title: px('[role=dialog] .cam-top h2, [role=dialog] .cam-top .cam-title'),
+      close: px('[role=dialog] .cam-close'),
+      setupLearning: px('[role=dialog] .setup-learning'),
+      setupLines: [...document.querySelectorAll('[role=dialog] .cam-setup .setup-line')].map((e) => e.textContent.trim()),
+      lscLearning: px('[data-lsc=learning]'),
+      badgeLearning: px('[data-badge="learning"]'),
+      badgeCamera: px('[data-badge="camera"]'),
+    };
+  });
+}
+
+async function m4f(browser) {
+  // A. Hands-free off. Pull A: preview, list sheet, Hammer header, curl camera (tuned) + Rest,
+  //    Hammer camera (learning, fixture 4 reps) + Rest, Summary, dev-log export.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    const out = {};
+    await installM5Mocks(page, M4F_HAMMER);
+    await page.goto(BASE);
+    await m5SeedHandsFreeOff(page);
+    await page.getByRole('button', { name: /Pull A/ }).click();
+    await page.locator('.ex-row').first().waitFor();
+    out.previewBadges = await m4fBadges(page, '.ex-row');
+    await shot(page, log, 'm4f-badges-pull-a', { badges: out.previewBadges, sizes: await m4fLearningSizes(page) });
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.getByRole('heading', { name: 'One-Arm Dumbbell Row' }).waitFor();
+    await page.getByRole('button', { name: 'Exercise list' }).click();
+    const list = page.getByRole('dialog', { name: 'Exercise list' });
+    await list.locator('.ex-row-btn').first().waitFor();
+    out.listBadges = await m4fBadges(list, '.ex-row-btn');
+    await page.waitForTimeout(400);
+    await shot(page, log, 'm4f-list-pull-a', { badges: out.listBadges });
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    if (await list.isVisible()) await list.getByRole('button', { name: /Close/ }).first().click().catch(() => {});
+
+    // Tuned curl first (so the last set is the learning one for Summary).
+    await openFromList(page, 'Dumbbell Bicep Curl');
+    out.curlHeaderBadges = await page.locator('main [data-badge]').evaluateAll((b) => b.map((e) => e.textContent.trim()));
+    await page.evaluate(() => (window.__noPerson = true));
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    let cam = page.getByRole('dialog', { name: 'Camera' });
+    await cam.locator('.cam-setup').waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(800);
+    out.curlCam = await m4fLearningSizes(page);
+    await shot(page, log, 'm4f-camera-tuned-curl', { sizes: out.curlCam });
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await cam.waitFor({ state: 'detached' });
+    await page.locator('[data-rest-clock]').waitFor();
+    await page.locator('[data-lsc=panel]').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+    out.curlRest = await m4fLearningSizes(page);
+    await shot(page, log, 'm4f-rest-tuned-curl', { sizes: out.curlRest });
+
+    // Hammer Curls (learning): leave Rest via Start set, then pick it from the list.
+    await page.getByRole('button', { name: 'Start set' }).click();
+    await page.getByRole('heading', { name: 'Dumbbell Bicep Curl' }).waitFor();
+    await openFromList(page, 'Hammer Curls');
+    out.hammerHeaderBadges = await page.locator('main [data-badge]').evaluateAll((b) => b.map((e) => e.textContent.trim()));
+    await page.waitForTimeout(400);
+    await shot(page, log, 'm4f-exercise-hammer', { badges: out.hammerHeaderBadges, sizes: await textSizes(page, 'main') });
+    await page.evaluate(() => { window.__noPerson = true; window.__freezeAt = 0; });
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    cam = page.getByRole('dialog', { name: 'Camera' });
+    await cam.locator('.cam-setup').waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(800);
+    out.hammerCam = await m4fLearningSizes(page);
+    await shot(page, log, 'm4f-camera-learning-hammer', { sizes: out.hammerCam,
+      text: await textSizes(page, '[role=dialog][aria-label="Camera"]') });
+    // Person in → play the 4-rep fixture.
+    await page.evaluate(() => (window.__noPerson = false));
+    await cam.and(page.locator('[data-person="true"]')).waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(1000);
+    const t0 = Date.now();
+    await page.evaluate(() => window.__holdWhenReps(4, 0));
+    await page.evaluate(() => window.__play());
+    await cam.locator('.rep-num[data-reps="4"]').waitFor({ timeout: 45_000 }).catch(() => {});
+    await page.waitForTimeout(2500);
+    out.hammerCount = await cameraGeometry(page);
+    out.hammerCount.ms = Date.now() - t0;
+    out.hammerCount.gauge = await cam.locator('[data-gauge], .rep-gauge, .gauge').count();
+    out.hammerCount.chipStill = await cam.locator('[data-learning]').count();
+    await shot(page, log, 'm4f-camera-hammer-counted', { count: out.hammerCount });
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await cam.waitFor({ state: 'detached' });
+    await page.locator('[data-rest-clock]').waitFor();
+    await page.locator('[data-lsc=panel]').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(600);
+    out.hammerRest = await m4fLearningSizes(page);
+    out.hammerRestPanel = await page.locator('[data-lsc=panel]').innerText();
+    await shot(page, log, 'm4f-rest-learning-fix', { sizes: out.hammerRest, panel: out.hammerRestPanel,
+      text: await textSizes(page, 'main') });
+    out.rowsAfterHammer = await m5SetRows(page);
+
+    await page.getByRole('button', { name: 'Pause' }).click();
+    const paused = page.getByRole('dialog', { name: 'Paused' });
+    await paused.getByRole('button', { name: 'End workout' }).click();
+    await paused.getByRole('button', { name: 'Tap again to end' }).click();
+    await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+    const lsc = page.locator('[data-lsc=learning]');
+    out.summaryHasLearning = await lsc.count();
+    if (out.summaryHasLearning) await lsc.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(400);
+    await shot(page, log, 'm4f-summary-learning-fix', { sizes: await m4fLearningSizes(page) });
+
+    // Dev-log export (mocked share sheet).
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const panel = page.locator('[data-devlog=panel]');
+    await panel.locator('[data-devlog=export-last]').click();
+    await panel.locator('[data-devlog=status]', { hasText: 'Shared.' }).waitFor({ timeout: 15_000 });
+    const text = await page.evaluate(async () => {
+      const file = window.__shared.at(-1);
+      if (!file) return '';
+      const stream = file.name.endsWith('.gz')
+        ? file.stream().pipeThrough(new DecompressionStream('gzip'))
+        : file.stream();
+      return new Response(stream).text();
+    });
+    mkdirSync('test-results/verify-m4f', { recursive: true });
+    writeFileSync(M4F_DEVLOG, text);
+    const sets = JSON.parse(text).sessions[0].sets ?? [];
+    out.exportSets = sets.map((s) => ({ exerciseId: s.exerciseId, camera: s.camera ? { ruleStatus: s.camera.ruleStatus, frames: (s.camera.frames ?? []).length } : null, logged: s.logged, counted: s.counted }));
+    out.said = await m5Said(page);
+    out.offsite = offsite;
+    out.console = log;
+    results.push({ m4fA: out });
+    await ctx.close();
+  }
+  // B. Push A triceps extension (learning): setup card with placement + learning line.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    await installM5Mocks(page, M4F_TRICEPS);
+    await page.goto(BASE);
+    await m5SeedHandsFreeOff(page);
+    await page.getByRole('button', { name: /Push A/ }).click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await openFromList(page, 'Standing Dumbbell Triceps Extension');
+    await page.evaluate(() => (window.__noPerson = true));
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    await cam.locator('.cam-setup').waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(800);
+    const setupBox = await cam.locator('.cam-setup').evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      const got = [...el.querySelectorAll('button')].map((b) => {
+        const br = b.getBoundingClientRect();
+        return { text: b.textContent.trim(), top: Math.round(br.top), bottom: Math.round(br.bottom) };
+      });
+      const line = el.querySelector('.setup-learning')?.getBoundingClientRect();
+      return { overflowY: cs.overflowY, maxHeight: cs.maxHeight, clientH: el.clientHeight, scrollH: el.scrollHeight,
+        top: Math.round(r.top), bottom: Math.round(r.bottom), buttons: got,
+        learningLine: line ? { top: Math.round(line.top), bottom: Math.round(line.bottom) } : null };
+    });
+    await shot(page, log, 'm4f-camera-setup-triceps', { setupBox, sizes: await m4fLearningSizes(page),
+      text: await textSizes(page, '[role=dialog][aria-label="Camera"]') });
+    results.push({ m4fB: { offsite, said: await m5Said(page), console: log } });
+    await ctx.close();
+  }
+  // C. Hands-free on (default): Hammer Curls → auto stop → camera rest mode with the learning line.
+  {
+    const { ctx, page, log } = await newPhone(browser);
+    const offsite = watchOffsite(page);
+    await installHandsFreeMocks(page, M4F_HAMMER);
+    await page.goto(BASE);
+    await page.getByRole('button', { name: /Pull A/ }).click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.getByRole('heading', { name: 'One-Arm Dumbbell Row' }).waitFor();
+    await page.getByRole('button', { name: 'Exercise list' }).click();
+    await page.getByRole('dialog', { name: 'Exercise list' }).locator('.ex-row-btn', { hasText: 'Hammer Curls' }).click();
+    const ss = page.getByRole('button', { name: 'Start set' });
+    if (await ss.isVisible().catch(() => false)) await ss.click();
+    await page.getByRole('heading', { name: 'Hammer Curls' }).waitFor().catch(async () => {
+      await page.screenshot({ path: 'test-results/verify-m4f/c-fail.png' });
+      throw new Error('C: no Hammer heading; body=' + (await page.locator('main').innerText()).slice(0, 300));
+    });
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    await cam.and(page.locator('[data-person="true"]')).waitFor({ timeout: 15_000 });
+    await page.waitForTimeout(1500);
+    await page.evaluate(() => window.__freezeWhenReps(4));
+    await page.evaluate(() => window.__play());
+    let mode;
+    try {
+      await cam.and(page.locator('[data-cam-mode="rest"]')).waitFor({ timeout: 40_000 });
+      mode = 'rest';
+    } catch { mode = await cam.getAttribute('data-cam-mode'); }
+    await page.waitForTimeout(1500);
+    const lscIn = cam.locator('[data-lsc=learning]');
+    if (await lscIn.count()) await lscIn.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await shot(page, log, 'm4f-handsfree-rest-learning', { mode, sizes: await m4fLearningSizes(page),
+      hf: await handsFreeSizes(page), learningInCam: await lscIn.count(),
+      repsData: await page.evaluate(() => [...document.querySelectorAll('[data-lsc=panel]')].map((e) => e.getAttribute('data-reps'))) });
+    results.push({ m4fC: { offsite, said: await page.evaluate(() => window.__said.map((s) => s.text)), console: log } });
+    await ctx.close();
+  }
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -1983,6 +2215,7 @@ try {
   else if (milestone === 'm5c-hold') await m5cHold(browser);
   else if (milestone === 'm5') await m5(browser);
   else if (milestone === 'm4e') await m4e(browser, process.argv[3]);
+  else if (milestone === 'm4f') await m4f(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));

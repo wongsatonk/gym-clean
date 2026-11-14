@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RULES, ruleFor, type ExerciseRule } from '../../core/exercises';
+import { RULES, ruleFor } from '../../core/exercises';
 import exercises from '../../data/exercises.json';
 import howto from '../../data/howto.json';
 import program from '../../data/program.json';
@@ -48,67 +48,15 @@ const M4D_TRACKED = ['Dumbbell_Bicep_Curl', 'One-Arm_Dumbbell_Row', 'Goblet_Squa
 /** The six rules that shipped through M4/M5: a floor, never fewer tracked demos than these. */
 const ORIGINAL_TRACKED = [...PUSH_A_TRACKED, ...M4D_TRACKED];
 
-/** What a demo must match to show a countable rep: the counter's thresholds and directions. */
-type CounterSpec = Pick<
-  ExerciseRule,
-  'extended' | 'contracted' | 'direction' | 'start' | 'eccentric' | 'view'
->;
-
-/**
- * SPEC M4f wave 1 table, the planned starting values. Used only while an exercise has no rule
- * yet; once core-engineer adds the rule (src/core/exercises), its own thresholds are read instead
- * (they get retuned on real sets, so the two may drift apart).
- */
-const M4F_WAVE1_PLANNED: Readonly<Record<string, CounterSpec>> = {
-  Hammer_Curls: {
-    view: 'side',
-    extended: 150,
-    contracted: 70,
-    direction: 'decreasing',
-    start: 'extended',
-    eccentric: 'toExtended',
-  },
-  Concentration_Curls: {
-    view: 'side',
-    extended: 145,
-    contracted: 85,
-    direction: 'decreasing',
-    start: 'extended',
-    eccentric: 'toExtended',
-  },
-  Incline_Dumbbell_Curl: {
-    view: 'side',
-    extended: 150,
-    contracted: 70,
-    direction: 'decreasing',
-    start: 'extended',
-    eccentric: 'toExtended',
-  },
-  Dumbbell_Shoulder_Press: {
-    view: 'front',
-    extended: 143,
-    contracted: 80,
-    direction: 'decreasing',
-    start: 'contracted',
-    eccentric: 'toContracted',
-  },
-  'Bent_Over_Two-Dumbbell_Row': {
-    view: 'side',
-    extended: 145,
-    contracted: 90,
-    direction: 'decreasing',
-    start: 'extended',
-    eccentric: 'toExtended',
-  },
-  Standing_Dumbbell_Triceps_Extension: {
-    view: 'side',
-    extended: 138,
-    contracted: 95,
-    direction: 'decreasing',
-    start: 'extended',
-    eccentric: 'toContracted',
-  },
-};
+/** SPEC M4f wave 1: the six exercises that gained a camera rule (and a demo) in that wave. */
+const M4F_WAVE1 = [
+  'Hammer_Curls',
+  'Concentration_Curls',
+  'Incline_Dumbbell_Curl',
+  'Dumbbell_Shoulder_Press',
+  'Bent_Over_Two-Dumbbell_Row',
+  'Standing_Dumbbell_Triceps_Extension',
+];
 
 /**
  * SPEC M4f "Stays manual": lying, seated-machine, bench-dip and crossover exercises never get a
@@ -135,16 +83,11 @@ const DEMO_VIEW_DIFFERS: Readonly<Record<string, 'side' | 'front'>> = {
   Concentration_Curls: 'front',
 };
 
-/** The counter spec a demo is checked against: the rule if one exists, else the SPEC plan. */
-function counterSpecFor(id: string): CounterSpec | undefined {
-  return ruleFor(id) ?? M4F_WAVE1_PLANNED[id];
-}
-
 /**
- * Every demo the camera counts (or will count, per the SPEC M4f wave 1 plan): read from the rule
- * data, never a fixed list, so each new rule's demo is checked against its thresholds.
+ * Every demo the camera counts: read from the rule data, never a fixed list, so each new rule's
+ * demo is checked against its own (retuned) thresholds.
  */
-const POSE_TRACKED = DEMO_IDS.filter((id) => counterSpecFor(id) !== undefined);
+const POSE_TRACKED = DEMO_IDS.filter((id) => ruleFor(id) !== undefined);
 const PROGRAM_TRACKING = new Map(
   program.days.flatMap((d) => d.exercises.map((e) => [e.exerciseId, e.tracking] as const)),
 );
@@ -222,10 +165,11 @@ describe('demo registry', () => {
     for (const id of [...PUSH_A_TRACKED, ...MANUAL]) expect(hasDemo(id), id).toBe(true);
   });
 
-  it('every planned M4f wave 1 exercise is a real exercise with a demo', () => {
+  it('every M4f wave 1 exercise is a real exercise with a rule and a demo', () => {
     const catalog = new Set(exercises.map((e) => e.id));
-    for (const id of Object.keys(M4F_WAVE1_PLANNED)) {
+    for (const id of M4F_WAVE1) {
       expect(catalog.has(id), id).toBe(true);
+      expect(ruleFor(id), id).toBeDefined();
       expect(hasDemo(id), id).toBe(true);
     }
   });
@@ -234,10 +178,8 @@ describe('demo registry', () => {
     for (const [id, tracking] of PROGRAM_TRACKING) {
       // Camera-tracked in the program => a rule exists.
       if (tracking === 'pose') expect(ruleFor(id), id).toBeDefined();
-      // Manual in the program => no rule, except a planned M4f rule that lands before the
-      // program flips it to the camera (SPEC M4f wave 1).
-      if (tracking === 'manual' && !(id in M4F_WAVE1_PLANNED))
-        expect(ruleFor(id), id).toBeUndefined();
+      // Manual in the program => no rule.
+      if (tracking === 'manual') expect(ruleFor(id), id).toBeUndefined();
     }
     for (const id of STAYS_MANUAL) {
       expect(ruleFor(id), id).toBeUndefined();
@@ -360,7 +302,7 @@ describe('tempo', () => {
   for (const id of POSE_TRACKED) {
     it(`${id}: the eccentric leg (from rule.eccentric) takes 2 s, the other 1 s`, () => {
       const m = must(demoFor(id));
-      const rule = must(counterSpecFor(id));
+      const rule = must(ruleFor(id));
       const [k0, k1, k2, k3, k4] = trackFor(m).map((k) => k);
       const key = (k: { t: number; angle: number } | undefined) => must(k, 'key');
       const outLeg = key(k2).t - key(k1).t; // start -> far
@@ -468,9 +410,7 @@ describe('pose-tracked demos vs the rep counter thresholds', () => {
   for (const id of POSE_TRACKED) {
     it(`${id}: a full rep goes >= 10 deg past both thresholds`, () => {
       const m = must(demoFor(id));
-      const rule = counterSpecFor(id);
-      expect(rule, id).toBeDefined();
-      if (!rule) return;
+      const rule = must(ruleFor(id), id);
       const angles = sampleLoop(m).map((x) => x.angle);
       const lo = Math.min(...angles);
       const hi = Math.max(...angles);
@@ -490,7 +430,7 @@ describe('pose-tracked demos vs the rep counter thresholds', () => {
 
     it(`${id}: starts where the rule's reps start, and lowers the way the rule says`, () => {
       const m = must(demoFor(id));
-      const rule = must(counterSpecFor(id));
+      const rule = must(ruleFor(id));
       const startIsExtended = rule.direction === 'decreasing' ? m.start > m.far : m.start < m.far;
       expect(startIsExtended ? 'extended' : 'contracted').toBe(rule.start);
       const outward = rule.start === 'extended' ? 'toContracted' : 'toExtended';
@@ -1427,9 +1367,14 @@ describe('M4d Pull B + Legs B demos (posture)', () => {
         9,
       );
       const shinFront: V3 = sub(pose.r.toe, pose.r.a);
-      expect(dot(sub([c[0], c[1], 0], [pose.r.a[0], pose.r.a[1], 0]), shinFront)).toBeGreaterThan(
-        0,
-      );
+      const fromAnkle: V3 = sub([c[0], c[1], 0], [pose.r.a[0], pose.r.a[1], 0]);
+      expect(dot(fromAnkle, shinFront)).toBeGreaterThan(0);
+      // Low on the shin, just above the ankle: the pad's centre sits in the lower quarter of the
+      // shin (measured up the shin from the ankle), with its lower edge clear of the ankle joint.
+      const shinLen = dist(pose.r.k, pose.r.a);
+      const up = dot(fromAnkle, sub(pose.r.k, pose.r.a)) / shinLen;
+      expect(up, `t=${t}`).toBeGreaterThan(roller.r);
+      expect(up, `t=${t}`).toBeLessThan(shinLen / 4);
       // The lever turns about the knee axis.
       close(must(pose.rods?.[1]).a, must(ref.rods?.[1]).a, 'pivot');
     }

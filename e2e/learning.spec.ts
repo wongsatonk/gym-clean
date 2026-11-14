@@ -2,9 +2,12 @@
 // top band and one line on the "Set up your phone" card; its set's "Last set" Fix on Rest shows
 // "Camera still learning. Fix it if it's off." None of it is spoken. A tuned rule (the curl)
 // shows none of it. The fake camera is a test pattern (no person), so the setup card stays up
-// and Set done saves a 0-rep camera set.
+// and Set done saves a 0-rep camera set. One test swaps the pose model for a fixture player
+// (like hands-free.spec.ts) to count a real clip; it plays on the wall clock, so this spec runs
+// one test at a time (the `mobile-clips` Playwright project).
 import { expect, test, type Page } from '@playwright/test';
 import { seedHandsFreeOff } from './hands-free.helpers';
+import { endWorkout } from './workout.helpers';
 
 const CHIP_NAME = 'Learning: camera counting is new for this exercise';
 const SETUP_LINE = 'Still learning: fix the count on Rest.';
@@ -155,6 +158,366 @@ test('tuned rule (Dumbbell Bicep Curl): no chip, no setup line, no Rest note', a
   await expect(cam).toHaveCount(0);
   await expect(page.locator('[data-lsc=panel]')).toBeVisible();
   await expect(page.locator('[data-lsc=learning]')).toHaveCount(0);
+});
+
+/** Pull A → Start → exercise list → `name` (no camera). */
+async function goToExercise(page: Page, name: string): Promise<void> {
+  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
+  await page.getByRole('button', { name: 'Exercise list' }).click();
+  const list = page.getByRole('dialog', { name: 'Exercise list' });
+  await list.locator('.ex-row-btn', { hasText: name }).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible();
+}
+
+test('manual set on a learning exercise (Hammer Curls, camera never opened): no Rest note', async ({
+  page,
+}) => {
+  await goToExercise(page, 'Hammer Curls');
+  await page.getByRole('button', { name: 'Set done' }).click();
+  await expect(page.locator('[data-rest-clock]')).toBeVisible();
+  await expect(page.locator('[data-lsc=panel]')).toBeVisible();
+  await expect(page.locator('[data-lsc=learning]')).toHaveCount(0);
+});
+
+test('a manual set after a camera set on the same learning exercise drops the Rest note', async ({
+  page,
+}) => {
+  const cam = await openCameraFor(page, 'Hammer Curls');
+  await cam.getByRole('button', { name: 'Set done' }).click();
+  await expect(cam).toHaveCount(0);
+  await expect(page.locator('[data-lsc=learning]')).toHaveText(REST_LINE);
+  // Set 2 by hand, camera closed.
+  await page.getByRole('button', { name: 'Start set' }).click();
+  await expect(page.locator('[data-set-counter]')).toHaveText(/^Set 2 of/);
+  await page.getByRole('button', { name: 'Set done' }).click();
+  await expect(page.locator('[data-rest-clock]')).toBeVisible();
+  await expect(page.locator('[data-lsc=panel]')).toBeVisible();
+  await expect(page.locator('[data-lsc=learning]')).toHaveCount(0);
+});
+
+test.describe('hands-free on (camera stays open in rest mode)', () => {
+  test.beforeEach(async ({ page }) => {
+    // The top-level beforeEach turned hands-free off; turn it back on (the default).
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const open = indexedDB.open('gym-clean');
+          open.onerror = () => reject(new Error('open failed'));
+          open.onsuccess = () => {
+            const d = open.result;
+            const tx = d.transaction('settings', 'readwrite');
+            tx.objectStore('settings').put({ key: 'handsFree', value: true });
+            tx.oncomplete = () => {
+              d.close();
+              resolve();
+            };
+            tx.onerror = () => reject(new Error('put failed'));
+          };
+        }),
+    );
+    await page.reload();
+  });
+
+  test('learning rule: the camera rest panel shows the note under Fix, nothing spoken', async ({
+    page,
+  }, testInfo) => {
+    const cam = await openCameraFor(page, 'Hammer Curls');
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+    const fixSlot = cam.locator('[data-cam-rest="fix"]');
+    await expect(fixSlot).toBeVisible();
+    const note = fixSlot.locator('[data-lsc=learning]');
+    await expect(note).toHaveText(REST_LINE);
+    expect(
+      await note.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+    ).toBeGreaterThanOrEqual(20);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+    await page.screenshot({ path: testInfo.outputPath('learning-camera-rest-390.png') });
+    expect((await spoken(page)).filter((t) => /learning/i.test(t))).toEqual([]);
+  });
+
+  test('tuned rule (Dumbbell Bicep Curl): no note on the camera rest panel', async ({ page }) => {
+    const cam = await openCameraFor(page, 'Dumbbell Bicep Curl');
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
+    await expect(cam.locator('[data-cam-rest="fix"] [data-lsc=panel]')).toBeVisible();
+    await expect(cam.locator('[data-lsc=learning]')).toHaveCount(0);
+  });
+});
+
+// ---- Set-up card fits under a taller top band (Learning chip, long names) ----
+
+/** Push A / Pull A → Start → exercise list → `name` → Camera, set-up card up. */
+async function openCameraOn(page: Page, day: RegExp, first: string, name: string) {
+  await page.getByRole('button', { name: day }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByRole('heading', { name: first })).toBeVisible();
+  await page.getByRole('button', { name: 'Exercise list' }).click();
+  const list = page.getByRole('dialog', { name: 'Exercise list' });
+  await list.locator('.ex-row-btn', { hasText: name }).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible();
+  await page.getByRole('button', { name: 'Camera', exact: true }).click();
+  const cam = page.getByRole('dialog', { name: 'Camera' });
+  await expect(cam.locator('.cam-setup')).toBeVisible();
+  return cam;
+}
+
+for (const [day, first, name] of [
+  [/Push A/, 'Dumbbell Bench Press', 'Standing Dumbbell Triceps Extension'],
+  [/Pull A/, 'One-Arm Dumbbell Row', 'Hammer Curls'],
+] as const) {
+  test(`set-up card fully in view at 390×844, "Got it" ≥ 56px, count uncovered: ${name}`, async ({
+    page,
+  }, testInfo) => {
+    const cam = await openCameraOn(page, day, first, name);
+    await expect(cam.getByRole('note', { name: CHIP_NAME })).toBeVisible();
+    const got = cam.locator('.cam-setup').getByRole('button', { name: 'Got it' });
+    await expect(got).toBeInViewport({ ratio: 1 });
+    // The HUD height feeds the card's max-height through a ResizeObserver: let it settle.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const card = document.querySelector<HTMLElement>('.cam-setup');
+          return card ? card.scrollHeight - card.clientHeight : -1;
+        }),
+      )
+      .toBeLessThanOrEqual(1);
+    const m = await page.evaluate(() => {
+      const box = (sel: string) => {
+        const el = document.querySelector(sel);
+        if (!el) throw new Error(`missing ${sel}`);
+        return el.getBoundingClientRect();
+      };
+      const card = box('.cam-setup');
+      const btn = [...document.querySelectorAll('.cam-setup button')].find(
+        (b) => b.textContent === 'Got it',
+      );
+      if (!btn) throw new Error('no Got it');
+      const g = btn.getBoundingClientRect();
+      return {
+        cardTop: card.top,
+        cardBottom: card.bottom,
+        stageBottom: box('.cam-stage').bottom,
+        countBottom: box('.rep-count').bottom,
+        got: { top: g.top, bottom: g.bottom, h: g.height, w: g.width },
+        learningBottom: box('.cam-setup .setup-learning').bottom,
+        vh: innerHeight,
+        scroll: document.documentElement.scrollWidth,
+      };
+    });
+    expect(m.cardBottom).toBeLessThanOrEqual(m.vh);
+    expect(m.cardBottom).toBeLessThanOrEqual(m.stageBottom);
+    expect(m.got.h).toBeGreaterThanOrEqual(56);
+    expect(m.got.w).toBeGreaterThanOrEqual(56);
+    expect(m.got.top).toBeGreaterThanOrEqual(m.cardTop);
+    expect(m.got.bottom).toBeLessThanOrEqual(m.cardBottom);
+    expect(m.learningBottom).toBeLessThanOrEqual(m.cardBottom); // last line not cut
+    expect(m.cardTop).toBeGreaterThanOrEqual(m.countBottom); // never over the count
+    expect(m.scroll).toBe(390);
+    await page.screenshot({
+      path: testInfo.outputPath(`setup-card-${name.replace(/ /g, '-')}.png`),
+    });
+  });
+}
+
+test.describe('set-up card on a short phone (375×667)', () => {
+  test.use({ viewport: { width: 375, height: 667 } });
+
+  test('Standing Dumbbell Triceps Extension: "Got it" fully visible, count uncovered', async ({
+    page,
+  }) => {
+    const cam = await openCameraOn(
+      page,
+      /Push A/,
+      'Dumbbell Bench Press',
+      'Standing Dumbbell Triceps Extension',
+    );
+    const got = cam.locator('.cam-setup').getByRole('button', { name: 'Got it' });
+    await expect(got).toBeInViewport({ ratio: 1 });
+    const m = await page.evaluate(() => {
+      const card = document.querySelector('.cam-setup')?.getBoundingClientRect();
+      const count = document.querySelector('.rep-count')?.getBoundingClientRect();
+      const btn = [...document.querySelectorAll('.cam-setup button')]
+        .find((b) => b.textContent === 'Got it')
+        ?.getBoundingClientRect();
+      if (!card || !count || !btn) throw new Error('missing card parts');
+      return { card, count, btn };
+    });
+    expect(m.btn.height).toBeGreaterThanOrEqual(56);
+    expect(m.btn.bottom).toBeLessThanOrEqual(m.card.bottom);
+    expect(m.card.top).toBeGreaterThanOrEqual(m.count.bottom);
+    await got.click();
+    await expect(cam.locator('.cam-setup')).toBeHidden();
+  });
+});
+
+// ---- Fixture landmarker: a learning rule counts a clip; dev log carries the rule status ----
+
+const HAMMER = '/fixtures/landmarks/hammer-curl/synthetic-01__reps-4__partials-0.json';
+const ORIGIN_HOSTS = new Set(['localhost', '127.0.0.1']);
+
+type DevLogExport = {
+  sessions: {
+    sets: { exerciseId: string; reps: number; camera?: { folder: string; ruleStatus?: string } }[];
+  }[];
+};
+
+/**
+ * Serves a fixture player in place of src/pose/landmarker.ts. It plays `window.__fixture` once
+ * (holding the last frame, so a clip is counted exactly once) after `window.__play()`; until then
+ * it holds frame 0, and `window.__noPerson` returns no pose. Also keeps shared dev-log files.
+ */
+async function installFixtureLandmarker(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const w = window as unknown as {
+      __fixture: string;
+      __noPerson: boolean;
+      __playing: boolean;
+      __play: () => void;
+      __shared: File[];
+    };
+    w.__fixture = '';
+    w.__noPerson = true;
+    w.__playing = false;
+    w.__play = () => {
+      w.__playing = true;
+    };
+    w.__shared = [];
+    Object.defineProperty(navigator, 'canShare', {
+      configurable: true,
+      value: (d?: ShareData) => Boolean(d?.files?.length),
+    });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async (d: ShareData) => {
+        w.__shared.push(...(d.files ?? []));
+      },
+    });
+  });
+  await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export async function createPoseTracker() {
+          const frames = window.__fixture ? await (await fetch(window.__fixture)).json() : [];
+          let base = null;
+          return {
+            delegate: 'CPU',
+            detect(_video, t) {
+              if (window.__noPerson || !frames.length) { base = null; return null; }
+              if (!window.__playing) return { ...frames[0], t };
+              base ??= t;
+              const i = Math.min(Math.floor((t - base) / 33.333), frames.length - 1);
+              return { ...frames[i], t };
+            },
+            close() {},
+          };
+        }`,
+    }),
+  );
+}
+
+test('fixture landmarker: Hammer Curls counts 4 reps with the chip, Fix works, dev log says learning vs tuned', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  const errors: string[] = [];
+  const thirdParty: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('request', (r) => {
+    const url = new URL(r.url());
+    if (url.protocol.startsWith('http') && !ORIGIN_HOSTS.has(url.hostname))
+      thirdParty.push(r.url());
+  });
+  await installFixtureLandmarker(page);
+  await page.reload(); // the route and init script apply from here
+
+  // A tuned camera set first: Dumbbell Bicep Curl, nobody in frame, Set done (0 reps).
+  const curlCam = await openCameraFor(page, 'Dumbbell Bicep Curl');
+  await expect(curlCam.locator('[data-learning]')).toHaveCount(0);
+  // The model is up (the camera meta reaches the dev log then).
+  await expect(curlCam).toHaveAttribute('data-delegate', 'CPU', { timeout: 15_000 });
+  await curlCam.getByRole('button', { name: 'Set done' }).click();
+  await expect(curlCam).toHaveCount(0);
+  await expect(page.locator('[data-rest-clock]')).toBeVisible();
+
+  // Hammer Curls on the clip: the list jump lands on its rest, then Start set.
+  await page.getByRole('button', { name: 'Exercise list' }).click();
+  await page
+    .getByRole('dialog', { name: 'Exercise list' })
+    .locator('.ex-row-btn', { hasText: 'Hammer Curls' })
+    .click();
+  await expect(page.locator('[data-rest-clock]')).toBeVisible();
+  await page.getByRole('button', { name: 'Start set' }).click();
+  await expect(page.getByRole('heading', { name: 'Hammer Curls' })).toBeVisible();
+  await page.evaluate((f) => {
+    (window as unknown as { __fixture: string }).__fixture = f;
+  }, HAMMER);
+  await page.getByRole('button', { name: 'Camera', exact: true }).click();
+  const cam = page.getByRole('dialog', { name: 'Camera' });
+  await expect(cam).toHaveAttribute('data-delegate', 'CPU', { timeout: 15_000 });
+  await expect(cam.getByRole('note', { name: CHIP_NAME })).toBeVisible();
+  await expect(cam.locator('.cam-setup .setup-learning')).toHaveText(SETUP_LINE);
+  await expect(cam.locator('[data-gauge]')).toHaveCount(1);
+  const count = cam.locator('[data-reps]');
+  await expect(count).toHaveText('0');
+
+  // Step in (start position held), then play the clip once.
+  await page.evaluate(() => {
+    (window as unknown as { __noPerson: boolean }).__noPerson = false;
+  });
+  await expect(cam.locator('.cam-setup')).toBeHidden({ timeout: 10_000 }); // person found
+  await expect(cam.locator('[data-gauge]')).toBeVisible();
+  await page.evaluate(() => (window as unknown as { __play: () => void }).__play());
+  await expect(count).toHaveText('4', { timeout: 30_000 });
+  await page.waitForTimeout(1_500); // the last frame is held: no fifth rep
+  await expect(count).toHaveText('4');
+  await expect(cam.getByRole('note', { name: CHIP_NAME })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('learning-hammer-counted.png') });
+
+  // Set done → Rest: the learning note under Fix; Fix changes the row (4 → 5).
+  await cam.getByRole('button', { name: 'Set done' }).click();
+  await expect(cam).toHaveCount(0);
+  const fix = page.locator('[data-lsc=panel]');
+  await expect(fix).toHaveAttribute('data-reps', '4');
+  await expect(fix.locator('[data-lsc=learning]')).toHaveText(REST_LINE);
+  await fix.locator('[data-lsc=fix]').click();
+  await fix.locator('[data-lsc=reps-plus]').click();
+  await fix.locator('[data-lsc=save]').click();
+  await expect(fix).toHaveAttribute('data-reps', '5');
+
+  // End → Summary → Done → Settings → Export last session (mocked share sheet).
+  await endWorkout(page);
+  await page.getByRole('button', { name: 'Done' }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const panel = page.locator('[data-devlog=panel]');
+  await panel.locator('[data-devlog=export-last]').click();
+  await expect(panel.locator('[data-devlog=status]')).toHaveText('Shared.', { timeout: 15_000 });
+  const text = await page.evaluate(async () => {
+    const file = (window as unknown as { __shared: File[] }).__shared.at(-1);
+    if (!file) return '';
+    const stream = file.name.endsWith('.gz')
+      ? file.stream().pipeThrough(new DecompressionStream('gzip'))
+      : file.stream();
+    return new Response(stream).text();
+  });
+  const sets = (JSON.parse(text) as DevLogExport).sessions[0]?.sets ?? [];
+  const hammer = sets.filter((x) => x.exerciseId === 'Hammer_Curls');
+  const curl = sets.filter((x) => x.exerciseId === 'Dumbbell_Bicep_Curl');
+  expect(hammer).toHaveLength(1);
+  expect(curl).toHaveLength(1);
+  expect(hammer[0]?.camera?.folder).toBe('hammer-curl');
+  expect(hammer[0]?.camera?.ruleStatus).toBe('learning');
+  expect(curl[0]?.camera?.folder).toBe('curl');
+  expect(curl[0]?.camera?.ruleStatus).toBe('tuned');
+
+  // Nothing about learning is spoken; nothing leaves the device.
+  expect((await spoken(page)).filter((t) => /learning/i.test(t))).toEqual([]);
+  expect(thirdParty).toEqual([]);
+  expect(errors).toEqual([]);
 });
 
 test.describe('small phone (375×667)', () => {

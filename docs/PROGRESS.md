@@ -115,7 +115,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Checked by hand: Hammer 180→30 vs 150/70, DB shoulder press 50→178 vs 143/80, triceps extension 180→45 vs 150/80 all clear. Also check the Pull B demos (concentration, incline, bent-over row) if the batch built them.
   - Done when: moves.test passes with task 2's rules applied (a local patch is enough to check), and all other demo tests are unchanged.
   - Deps: **the M4d batch merged**.
-- [ ] 6. [pose-engineer ∥] Synthetic clips for the six.
+- [x] 6. [pose-engineer ∥] Synthetic clips for the six.
   - Files: tools/synthetic.ts (six `EX` entries, original mannequin poses), scripts/synthetic.mjs, `fixtures/synthetic/<folder>/synthetic-0{1,2}*.webm`, `fixtures/landmarks/<folder>/synthetic-01__reps-4__partials-0.json` and `synthetic-02__reps-3__partials-2.json`.
   - Poses:
     - hammer: the curl pose, thumbs up;
@@ -131,7 +131,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - thresholds are not touched: a clip the counter miscounts goes back to core-engineer.
   - Done when: 12 JSON files with their detection rates, and the fixture suite counts each one by its filename (35 cases).
   - Deps: none to start rendering (thresholds are in the SPEC). The JSON lands with or after task 2.
-- [ ] 7. [pose-engineer, after 2 + 4] Converter + camera e2e.
+- [x] 7. [pose-engineer, after 2 + 4] Converter + camera e2e.
   - Files: scripts/devlog.mjs, scripts/devlog.test.mjs, e2e/camera.spec.ts.
   - `KNOWN_FOLDERS` += the six. The report prints "learning" on those sets.
   - camera.spec: Hammer Curls now offers the camera, and Dumbbell Bench Press still doesn't.
@@ -147,7 +147,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - a learning rule with `tracking: 'manual'` → no Learning;
     - typecheck and lint clean.
   - Deps: 1 (can start on a stubbed `ruleStatus`).
-- [ ] 9. [ui-engineer, after 8] Learning note on the camera page and the "Last set" fix.
+- [x] 9. [ui-engineer, after 8] Learning note on the camera page and the "Last set" fix.
   - Files: src/ui/cameraView.ts, src/ui/lastSetCorrection.ts, src/ui/screens/rest.ts and summary.ts (only if the fix row needs the status passed in), src/styles.css / handsfree.css (tokens).
   - Camera page:
     - a "Learning" chip in the top band (`data-learning`, accessible name per the SPEC);
@@ -160,7 +160,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - camera-layout, rep-panel, hands-free, devlog-camera and focus-cues are still green;
     - the chip fits next to the title at 390×844 and 375×667 without wrapping the Close button.
   - Deps: 1, 4, 8.
-- [ ] 10. [ui-engineer, after 3 + 6 + 9] E2E.
+- [x] 10. [ui-engineer, after 3 + 6 + 9] E2E.
   - Files: `e2e/learning.spec.ts` (new), e2e/howto.spec.ts.
   - Cases:
     1. Pull A preview: Hammer Curls `['3D demo', 'Camera', 'Learning']`, Dumbbell Bicep Curl without Learning. Push A table: Triceps Extension gets Camera + Learning.
@@ -172,7 +172,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     7. No third-party request.
   - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
   - Deps: 3, 6, 9, 11.
-- [ ] 11. [main] Integration.
+- [x] 11. [main] Integration.
   - Files: playwright.config.ts (put learning.spec in the fixture-landmarker project), app.ts only if the fix row needs the status passed in.
   - Commit order: 5 → 1 → 2 + 6's JSON → 3 + 10's howto.spec → 4, 7, 8, 9.
   - Done when `npm run check` and `npm run e2e` are green after each commit.
@@ -343,7 +343,7 @@ M10-q8.
   - Done when tests cover: default precedence, replace/remove before and after the current index, rejection
     with logged sets, rest phase, the summary after a removal, and every existing session test passing.
   - Deps: 1.
-- [ ] 6. [core-engineer, after 3+4] Action: Not today / move session, **tests first**.
+- [x] 6. [core-engineer, after 3+4] Action: Not today / move session, **tests first**.
   - Files: src/core/trainer/actions/postpone.ts(+test).
   - `proposePostpone(state, sessions, today, { mode: 'useRestDay' | 'pushWeek', to?: date })` → a Proposal
     with a 7-day before → after preview and a why.
@@ -355,7 +355,7 @@ M10-q8.
     - "move to <date>" onto a date that already has a session;
     - a session already started today → no proposal ("finish or end today's workout first").
   - Deps: 3, 4.
-- [ ] 7. [core-engineer, after 2+4] Action: go easy on an area, **tests first**.
+- [x] 7. [core-engineer, after 2+4] Action: go easy on an area, **tests first**.
   - Files: src/core/trainer/actions/avoidArea.ts(+test), src/core/trainer/swapCandidates.ts(+test).
   - `swapCandidates(exercise, catalog, { avoid?: BodyArea, exclude: ids, equipment })`: ranked by overlap of
     primary muscles, then secondary, then the same `tracking`. `tracking: 'pose'` only when a rule exists.
@@ -383,7 +383,7 @@ M10-q8.
     exercises, deload spanning a rest day, swap scope `plan` changing every day that has the exercise, and
     swap excluding exercises already in the day.
   - Deps: 2, 4, 5 (`weightKgToday`).
-- [ ] 9. [core-engineer, after 4] Action: stalled → adjust, **tests first**.
+- [x] 9. [core-engineer, after 4] Action: stalled → adjust, **tests first**.
   - Files: src/core/trainer/actions/stall.ts(+test). Reuses src/core/history.ts / stats.ts `topSet`.
   - `detectStalls(sets, sessions, plan)`: 3 finished sessions of the exercise in a row with no top-set gain
     (more weight, or more reps at the same weight), skipping sessions whose `adjust` is set.
@@ -391,7 +391,7 @@ M10-q8.
   - Done when tests cover: 2 sessions → none, 3 → stall, a lighter session in between is skipped, a gain
     resets it, bodyweight exercises, and the M5b N1 "drop" coexisting with it (one line each).
   - Deps: 4.
-- [ ] 10. [core-engineer ∥A] Intent matcher + eval set, **tests first**.
+- [x] 10. [core-engineer ∥A] Intent matcher + eval set, **tests first**.
   - Files: src/core/trainer/intents.ts(+test), src/core/trainer/phrases.json (keywords per intent, area
     words, day words, discomfort and red-flag lists, diagnosis-term list; English + Thai per M10-q5),
     src/core/trainer/evals/requests.json (≥ 60 made-up requests: `{ text, intent, slots, safety,
@@ -406,7 +406,7 @@ M10-q8.
     - no network or DOM;
     - the eval file has no personal data.
   - Deps: 1.
-- [ ] 11. [core-engineer, after 6–10] Replies, safety copy and the coach controller, **tests first**.
+- [x] 11. [core-engineer, after 6–10] Replies, safety copy and the coach controller, **tests first**.
   - Files: src/core/trainer/replies.ts(+test), src/core/trainer/coach.ts(+test).
   - `replies.ts` turns a Proposal into title, lines, why and `say` (≤ 8 words), and holds:
     - the fixed referral line;
@@ -1331,9 +1331,9 @@ Round 1 of M5b, ahead of M5 (reps/partials/rest/weight rules only). The exact ru
 - [x] 6. [main] Wiring. Files: src/ui/app.ts (and playwright.config.ts if the new spec needs a project). Rest: when tips are on, `afterSetAdvice(s, exerciseName)` → mount the coach tip under the rest clock; Apply (shown only while the upcoming set is the advice's exercise) → `APPLY_NEXT_WEIGHT` → "Next" line shows the new weight. `tick()`: `adviceSpeakDue(lastCueElapsedMs, elapsed, s.restTargetSec)` → `voice.speak(advice.say, { kind: 'cue' })` once per `sessionId:logs.length`. Rest cues stay unchanged (they queue; nothing cancels). Summary: mount `createCoachSummary(coachSummary(s, lastTime, exerciseName))` above the set list. Settings: "Coach tips" switch (persisted via task 3, loaded at start). Dev log: `logEvent('advice', { rule, shown | spoken | applied })`. Done when: by hand on Push A, the second clean Bench set shows "Strong set. Try +2.5 kg next set.", it's spoken once ~2 s into rest, Apply changes "Next" to the new weight, and Summary shows a Coach section. Deps: 1, 2, 3, 4, 5.
 - [x] 7. [ui-engineer] E2E `e2e/coach.spec.ts` (fake clock, mocked speech, no camera). Cases: (i) two clean sets at the top → Rest tip A3 visible, spoken exactly once ~2 s in, never cancelling the rest cues (mock records order), Apply → next weight +2.5 kg on Rest and on the Exercise stepper after Start set; (ii) a set below `min` → "Keep the weight. Aim for N reps."; (iii) lb mode → "+5 lb"; (iv) "Coach tips" off (after reload) → no tip, nothing spoken; (v) Summary Coach section has one next-time line per logged exercise; a second session with more reps shows "+N reps vs last time"; (vi) no third-party request. Done when: passes with `--repeat-each=3` and the full `npm run e2e` is green. Deps: 6.
 - [ ] 8. [reviewer] Review the branch diff against CLAUDE.md (pure core, no medical words, voice-over-screen, 56px/20px, never automatic). Deps: 7.
-- [ ] 9. [verifier] Verify against SPEC M5b round-1 table + the M5b Accept line: `npm run check` (fixture suite still 12/12), `npm run e2e`, `npm run build`, 390×844 screenshots `docs/screenshots/m5b-rest-tip.png`, `m5b-rest-applied.png`, `m5b-summary-coach.png`, `m5b-settings-coach.png`, console clean; evidence into PROGRESS. Deps: 8.
-- [ ] 10. [main] Merge `m5b-coach`, then **ask Wongsaton before pushing** (push = deploy). Deps: 9.
-- [ ] 11. 🧍 (no SPEC checkpoint; informal) Wongsaton tries the coach tips at his next session and sends notes via `/feedback`.
+- [x] 9. [verifier] Verify against SPEC M5b round-1 table + the M5b Accept line: `npm run check` (fixture suite still 12/12), `npm run e2e`, `npm run build`, 390×844 screenshots `docs/screenshots/m5b-rest-tip.png`, `m5b-rest-applied.png`, `m5b-summary-coach.png`, `m5b-settings-coach.png`, console clean; evidence into PROGRESS. Deps: 8.
+- [x] 10. [main] Merge `m5b-coach`, then **ask Wongsaton before pushing** (push = deploy). Deps: 9.
+- [x] 11. 🧍 (no SPEC checkpoint; informal) Wongsaton tries the coach tips at his next session and sends notes via `/feedback`.
 
 **Parallel waves:** Wave 1: 1 [core ∥A], 2 → 3 [core ∥B], 4 [ui] (from the planned Advice shape). Wave 2: 5 [ui, after 4: shared styles.css]. Then 6 → 7 → 8 → 9 → 10.
 
