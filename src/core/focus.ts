@@ -67,7 +67,10 @@ export type FocusConfig = {
   /** Form: |left − right| angle (deg) above this, held for armsOutOfSyncSec mid-rep. */
   armsOutOfSyncDeg: number;
   armsOutOfSyncSec: number;
-  /** Form: a rep's maxAngle above this (deg; lateral raise). */
+  /**
+   * Form: a rep's maxAngle above this (deg; lateral raise). 120 = clearly above shoulder height
+   * (Wongsaton's answer (1), 2026-11-13; was 100, which his real reps at 91–109° crossed).
+   */
   raiseTooHighDeg: number;
   /** Form: upper arm swinging away from the torso line by more than this (deg) in the lift. */
   elbowDriftDeg: number;
@@ -92,7 +95,7 @@ export const FOCUS_DEFAULTS: Readonly<FocusConfig> = Object.freeze({
   lowFpsSec: 3,
   armsOutOfSyncDeg: 20,
   armsOutOfSyncSec: 0.5,
-  raiseTooHighDeg: 100,
+  raiseTooHighDeg: 120,
   elbowDriftDeg: 25,
   bodySwingDeg: 15,
   hipSagMinDeg: 160,

@@ -448,15 +448,16 @@ describe('focus rule flags (M5)', () => {
     ).toEqual([]);
   });
 
-  it('lateral raise has real fixtures; its geometry flags stay off until task 7', () => {
+  it('lateral raise has real fixtures; task 7 turned both geometry flags on', () => {
     expect(realFolders.has('lateral-raise')).toBe(true);
     expect(get('lateral-raise').focus).toMatchObject({
-      armsOutOfSync: false,
-      raiseTooHigh: false,
+      armsOutOfSync: true,
+      raiseTooHigh: true,
     });
   });
 
-  // The Decision table "M5 rule enablement" (starting flags).
+  // The Decision table "M5 rule enablement" (starting flags), plus the task 7 Decision for the
+  // lateral raise (src/core/focus.replay.test.ts).
   const ALL_FOCUS = { rushedLowering: true, stalled: true, outOfFrame: true, lowFps: true };
   it.each([
     ['curl', { ...ALL_FOCUS, shrinkingRange: true, elbowDrift: false, bodySwing: false }],
@@ -466,9 +467,9 @@ describe('focus rule flags (M5)', () => {
     ['goblet-squat', { ...ALL_FOCUS, shrinkingRange: true }],
     [
       'lateral-raise',
-      { ...ALL_FOCUS, shrinkingRange: true, armsOutOfSync: false, raiseTooHigh: false },
+      { ...ALL_FOCUS, shrinkingRange: true, armsOutOfSync: true, raiseTooHigh: true },
     ],
-  ] as const)('%s starting flags', (folder, flags) => {
+  ] as const)('%s flags', (folder, flags) => {
     expect(get(folder).focus).toEqual(flags);
   });
 

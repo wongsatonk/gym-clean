@@ -378,3 +378,148 @@ describe('scripts/devlog.mjs, hands-free sets (M5c)', () => {
     assert.ok(plan.items.every((i) => i.auto === '-'));
   });
 });
+
+// M5 task 10: the report lists each set's `focusCue` events (id, rep, value / baseline) and its
+// `focusScore`. Shapes from the M5 plan (tasks 11/13): cameraView logs
+// logEvent('focusCue', { id, t, reps, value, baseline, threshold }) while the set runs, app.ts logs
+// logEvent('focusScore', { score, cues, partials }) when the camera set is saved (after endedAt).
+// Event `t` is wall time (recorder default); data.t is the camera frame clock and is not used.
+describe('scripts/devlog.mjs, focus cues and score (M5)', () => {
+  const WALL_T0 = Date.UTC(2026, 10, 13, 11, 0);
+  const CLOCK = [50_000, 200_000];
+  const FREE = 'Slow the lowering.';
+
+  function focusExport() {
+    const sets = CLOCK.map((c, setIndex) => {
+      const lastT = original.at(-1).t + c;
+      return set(setIndex, {
+        startedAt: WALL_T0 + c,
+        endedAt: WALL_T0 + lastT,
+        counted: { reps: 3, partials: 1 },
+        logged: { reps: 3, partials: 1 },
+        camera: {
+          ...camera(
+            'curl',
+            decodeFrames(encodeFrames(original.map((f) => ({ ...f, t: f.t + c })))),
+          ),
+          wallT0: WALL_T0,
+        },
+      });
+    });
+    const [a, b] = sets;
+    const cue = (t, data) => ({ t, type: 'focusCue', data });
+    return {
+      format: 'gym-clean-devlog',
+      version: 1,
+      exportedAt: WALL_T0 + 400_000,
+      sessions: [
+        {
+          id: 'm5',
+          startedAt: SESSION_START,
+          appVersion: 'abc123',
+          userAgent: SECRET_UA,
+          settings: {},
+          dayId: 'pull-a',
+          events: [
+            cue(a.startedAt + 1000, {
+              id: 'rushedLowering',
+              t: 51_000,
+              reps: 2,
+              value: 0.6234,
+              baseline: 2.01,
+              threshold: 0.6,
+            }),
+            cue(a.startedAt + 2000, {
+              id: 'stalled',
+              t: 52_000,
+              reps: 3,
+              value: 5000,
+              baseline: null,
+              threshold: 5000,
+            }),
+            // Free text where an id belongs, and a text field: never printed.
+            cue(a.startedAt + 2500, { id: FREE, reps: 3, value: 1, baseline: 1, text: FREE }),
+            {
+              t: a.endedAt + 11_000,
+              type: 'focusScore',
+              data: { score: 85, cues: 2, partials: 1 },
+            },
+            cue(b.startedAt + 1500, {
+              id: 'shrinkingRange',
+              t: 201_500,
+              reps: 2,
+              value: 'x',
+              baseline: 90,
+              threshold: 0.8,
+            }),
+            // Logged twice (e.g. a re-save): the last one wins.
+            { t: b.endedAt + 5000, type: 'focusScore', data: { score: 90, cues: 1, partials: 0 } },
+            { t: b.endedAt + 9000, type: 'focusScore', data: { score: 95, cues: 1, partials: 0 } },
+          ],
+          sets,
+        },
+      ],
+    };
+  }
+
+  it('assigns cues by set start and the score by set end', () => {
+    const plan = planConversion(focusExport(), { label: 'm5' });
+    const [a, b] = plan.items;
+    assert.deepEqual(
+      a.focus.cues.map((c) => [c.id, c.reps]),
+      [
+        ['rushedLowering', 2],
+        ['stalled', 3],
+        [null, 3],
+      ],
+    );
+    assert.deepEqual(a.focus.score, { score: 85, cues: 2, partials: 1 });
+    assert.deepEqual(
+      b.focus.cues.map((c) => [c.id, c.value, c.baseline]),
+      [['shrinkingRange', null, 90]],
+    );
+    assert.deepEqual(b.focus.score, { score: 95, cues: 1, partials: 0 });
+    // Never in a fixture.
+    for (const it of plan.items) {
+      const text = JSON.stringify(it.fixture);
+      for (const s of ['rushedLowering', 'focus', FREE]) assert.equal(text.includes(s), false, s);
+    }
+  });
+
+  it('prints the score column and one line per cue; ids and numbers only', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devlog-m5-'));
+    try {
+      const file = join(dir, 'm5.json.gz');
+      writeFileSync(file, gzipSync(JSON.stringify(focusExport())));
+      const stdout = run(file, '--out', join(dir, 'out'), '--label', 'm5', '--dry-run');
+      const rows = stdout.split('\n').filter((l) => /^Dumbbell_Bicep_Curl\s.*would write/.test(l));
+      assert.equal(rows.length, 2);
+      assert.match(rows[0], /\s85\s+0\.0s\s+-\s+would write/);
+      assert.match(rows[1], /\s95\s+0\.0s\s+-\s+would write/);
+      assert.match(stdout, /Focus cues:/);
+      assert.match(stdout, /Dumbbell_Bicep_Curl s1 set 0: score 85 \(2 cues, 1 partial\)/);
+      assert.match(stdout, /rep 2\s+rushedLowering\s+0\.62 \/ 2\.01\s+threshold 0\.6/);
+      assert.match(stdout, /rep 3\s+stalled\s+5000 \/ -\s+threshold 5000/);
+      assert.match(stdout, /rep 3\s+\?\s+1 \/ 1/);
+      assert.match(stdout, /Dumbbell_Bicep_Curl s1 set 1: score 95 \(1 cue, 0 partials\)/);
+      assert.match(stdout, /rep 2\s+shrinkingRange\s+- \/ 90\s+threshold 0\.8/);
+      for (const s of [FREE, SECRET_UA, 'lowering.']) assert.equal(stdout.includes(s), false, s);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('no focus events: score column "-" and no focus section', () => {
+    const plan = planConversion(buildExport());
+    assert.ok(plan.items.every((i) => i.focus.cues.length === 0 && i.focus.score === null));
+    const dir = mkdtempSync(join(tmpdir(), 'devlog-m5none-'));
+    try {
+      const file = join(dir, 'x.json');
+      writeFileSync(file, JSON.stringify(buildExport()));
+      const stdout = run(file, '--out', join(dir, 'out'), '--dry-run');
+      assert.equal(stdout.includes('Focus cues:'), false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

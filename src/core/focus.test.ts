@@ -797,7 +797,7 @@ describe('config', () => {
       lowFpsSec: 3,
       armsOutOfSyncDeg: 20,
       armsOutOfSyncSec: 0.5,
-      raiseTooHighDeg: 100,
+      raiseTooHighDeg: 120,
       elbowDriftDeg: 25,
       bodySwingDeg: 15,
       hipSagMinDeg: 160,
@@ -1035,26 +1035,35 @@ describe('form: arms out of sync', () => {
 });
 
 describe('form: raise too high', () => {
-  it('fires on a rep maxAngle > 100° on 2 reps in a row (101 fires, 100 not)', () => {
+  // Threshold 120° (Wongsaton's answer (1), 2026-11-13: clearly above shoulder height).
+  it('fires on a rep maxAngle > 120° on 2 reps in a row (121 fires; 120 and 119 not)', () => {
     const s = formTracker(RAISE, { raiseTooHigh: true });
-    s.rep({ min: 20, max: 101 });
-    s.rep({ min: 20, max: 101 });
+    s.rep({ min: 20, max: 121 });
+    s.rep({ min: 20, max: 121 });
     expect(s.cues).toMatchObject([
-      { id: 'raiseTooHigh', reps: 2, value: 101, threshold: 100, text: 'Stop at shoulder height.' },
+      { id: 'raiseTooHigh', reps: 2, value: 121, threshold: 120, text: 'Stop at shoulder height.' },
     ]);
-    const quiet = formTracker(RAISE, { raiseTooHigh: true });
-    for (let i = 0; i < 6; i++) quiet.rep({ min: 20, max: 100 });
-    expect(quiet.cues).toEqual([]);
+    for (const max of [120, 119]) {
+      const quiet = formTracker(RAISE, { raiseTooHigh: true });
+      for (let i = 0; i < 6; i++) quiet.rep({ min: 20, max });
+      expect(quiet.cues).toEqual([]);
+    }
+  });
+
+  it('the old 100–119° band no longer fires', () => {
+    const s = formTracker(RAISE, { raiseTooHigh: true });
+    for (let i = 0; i < 6; i++) s.rep({ min: 20, max: 101 + i * 3 });
+    expect(s.cues).toEqual([]);
   });
 
   it('one high rep does not fire; partials neither extend nor break the streak', () => {
     const s = formTracker(RAISE, { raiseTooHigh: true });
-    s.rep({ min: 20, max: 110 });
+    s.rep({ min: 20, max: 130 });
     s.rep({ min: 20, max: 90 });
-    s.rep({ min: 20, max: 110 });
-    s.rep({ min: 20, max: 120, type: 'partial' });
+    s.rep({ min: 20, max: 130 });
+    s.rep({ min: 20, max: 140, type: 'partial' });
     expect(s.cues).toEqual([]);
-    s.rep({ min: 20, max: 110 });
+    s.rep({ min: 20, max: 130 });
     expect(s.ids()).toEqual(['raiseTooHigh']);
   });
 });
@@ -1305,7 +1314,7 @@ describe('form rules: shared mechanics', () => {
 
   it('at most twice per set, the streak restarting after a fire', () => {
     const s = formTracker(RAISE, { raiseTooHigh: true });
-    for (let i = 0; i < 8; i++) s.rep({ min: 20, max: 115 });
+    for (let i = 0; i < 8; i++) s.rep({ min: 20, max: 135 });
     expect(s.cues.map((c) => c.reps)).toEqual([2, 4]);
   });
 
@@ -1313,8 +1322,8 @@ describe('form rules: shared mechanics', () => {
     const s = formTracker(RAISE, { raiseTooHigh: true, rushedLowering: true });
     s.rep({ eccMs: 2000, min: 20, max: 90 });
     s.rep({ eccMs: 2000, min: 20, max: 90 });
-    s.rep({ eccMs: 700, min: 20, max: 110 });
-    s.rep({ eccMs: 700, min: 20, max: 110 });
+    s.rep({ eccMs: 700, min: 20, max: 130 });
+    s.rep({ eccMs: 700, min: 20, max: 130 });
     expect(s.ids()).toEqual(['raiseTooHigh']);
     s.rep({ eccMs: 700, min: 20, max: 90 });
     expect(s.ids()).toEqual(['raiseTooHigh', 'rushedLowering']);
@@ -1322,25 +1331,25 @@ describe('form rules: shared mechanics', () => {
 
   it('form rules judge from the first rep (no baseline needed)', () => {
     const s = formTracker(RAISE, { raiseTooHigh: true });
-    s.rep({ min: 20, max: 110 });
-    s.rep({ min: 20, max: 110 });
+    s.rep({ min: 20, max: 130 });
+    s.rep({ min: 20, max: 130 });
     expect(s.cues.map((c) => c.reps)).toEqual([2]);
   });
 
   it('nothing in the Undo window or while paused', () => {
     const pending = formTracker(RAISE, { raiseTooHigh: true });
-    for (let i = 0; i < 4; i++) pending.rep({ min: 20, max: 115 }, { autoState: 'pending' });
+    for (let i = 0; i < 4; i++) pending.rep({ min: 20, max: 135 }, { autoState: 'pending' });
     expect(pending.cues).toEqual([]);
     const paused = formTracker(RAISE, { raiseTooHigh: true });
-    for (let i = 0; i < 4; i++) paused.rep({ min: 20, max: 115 }, { paused: true });
+    for (let i = 0; i < 4; i++) paused.rep({ min: 20, max: 135 }, { paused: true });
     expect(paused.cues).toEqual([]);
   });
 
   it('a reset clears the form streaks', () => {
     const s = formTracker(RAISE, { raiseTooHigh: true });
-    s.rep({ min: 20, max: 115 });
+    s.rep({ min: 20, max: 135 });
     s.tr.reset({ targetReps: 20 });
-    s.rep({ min: 20, max: 115 });
+    s.rep({ min: 20, max: 135 });
     expect(s.cues).toEqual([]);
   });
 

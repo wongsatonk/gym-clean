@@ -140,7 +140,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - the push-up front variant has `shrinkingRange: false` and no `hipSag`;
     - the fixture suite is unchanged.
   - Deps: 3.
-- [ ] 7. [core-engineer, after 5 + 6 + 9] Real-data replay + enable decision.
+- [x] 7. [core-engineer, after 5 + 6 + 9] Real-data replay + enable decision. Done 2026-11-13: `src/core/focus.replay.test.ts` (45 tests), both lateral-raise form flags on; numbers in the Decision "M5 task 7 replay". Open: the raise-too-high flaw clip needs a re-render (see that Decision).
   - Files: src/core/focus.replay.test.ts, src/core/exercises/lateralRaise.ts (flags only).
   - Replay the 4 real lateral-raise clips through counter + focus tracker, with every lateral-raise rule forced on and autoState `set`. Also replay every synthetic fixture (01/02/03).
   - Pin the fire count per clip in the test, and report per rep: eccentric ratio, range ratio, `maxAngle`, the largest |L − R| held ≥ 0.5 s.
@@ -178,11 +178,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - **Plan change:** the lateral-raise mistake is now **two clips**, `arms-out-of-sync` and `raise-too-high`, one rule each. With one arm stopping lower, the two-arm mean can't also cross the height limit.
     - Flaws are rendered about 2× larger than the target, because MediaPipe reads them at about half size (named constants in tools/synthetic.ts). `fixtures/synthetic/flaws.json` holds the rendered values, not the measured ones.
     - The fixture suite now has 23 cases, all counting their filename reps.
-- [ ] 10. [pose-engineer, after 9] Converter report.
+- [x] 10. [pose-engineer, after 9] Converter report.
   - Files: scripts/devlog.mjs(+`scripts/devlog.test.mjs`).
   - The per-set report lists each `focusCue` event (id, rep, value / baseline) and the set's `focusScore` event.
   - Done when: a synthetic export with these events prints them, and the existing script tests pass.
   - Deps: none beyond the event shapes in tasks 11/13 (written in this plan).
+  - Evidence 2026-11-13: `npm run test:scripts` 16/16, including 3 new focus tests. A synthetic export prints each set's cues and score. Only ids and numbers are printed, and none of it goes into fixtures.
 - [ ] 11. [ui-engineer] Focus tracker in the camera view.
   - Files: src/ui/cameraView.ts, src/styles.css.
   - **Lifecycle:**
@@ -443,6 +444,35 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-13: **M5 task 7 replay: lateral raise `armsOutOfSync` and `raiseTooHigh` are ON** (`src/core/focus.replay.test.ts`; counter + focus tracker frame by frame, autoState `set`, hands-free defaults, 30 fps; real clips with every lateral-raise rule forced on).
+  - **Threshold change:** `FOCUS_DEFAULTS.raiseTooHighDeg` 100 → **120** (Wongsaton's answer (1)). Tested at the edges: 121 fires, 120 and 119 don't. The cue text stays "Stop at shoulder height." Accuracy before/after on his 80 real reps: at 100°, 3 of 4 clips would fire (peaks 91.5–109.2°); at 120°, 0 fires, margin 10.8°.
+  - **Real clips (4 × 20 reps, all counted 20/20):**
+
+    | Clip | Fires (every rule on) | Lowest eccentric ratio | Lowest range ratio | Peak `maxAngle` | Largest held \|L − R\| |
+    |---|---|---|---|---|---|
+    | s1-0 | 0 | 0.77 | 1.00 | 101.0–107.3° | 7.3° |
+    | s1-1 | 0 | 1.11 | 1.02 | 94.0–101.8° | 5.9° |
+    | s1-2 | 0 | 1.03 | 1.02 | 96.7–109.2° | 5.5° |
+    | s1-3 | 0 | 0.82 | 0.90 | 91.5–102.1° | 10.4° |
+
+    Ratios are against the set's baseline (the mean of reps 1–2). The lines are: rushed < 0.5, range < 0.85, \|L − R\| > 20° held 0.5 s, peak > 120°.
+  - **Per rule × exercise:**
+
+    | Rule | Exercise | Fires | Margin | Flag | Why |
+    |---|---|---|---|---|---|
+    | Arms out of sync | Lateral raise | real 0/80; out-of-sync clip fires at reps 6 and 8, never on 1–4 | real ≤ 10.4° vs 20° (pre-registered ≤ 15° ✓); the s1-0 one-arm swing reads **39.4°** held 0.5 s (> 20° ✓); clean flaw reps 4.7–5.8°, flawed 23.9–26.1° | **on** | all 3 pre-registered criteria pass |
+    | Raise too high | Lateral raise | real 0/80; raise-too-high clip **0** at 120° (fires at reps 6 and 8 with a 100° override) | real peaks ≤ 109.2° vs 120° | **on** | Wongsaton's criterion (0 real fires) passes. The pre-registered "every peak ≤ 95°" fails (109.2°). That line was a 5° margin under the old 100° threshold, and his answer (1) replaced it |
+    | Rushed lowering | Lateral raise | real 0 per clip | lowest ratio 0.77 vs 0.5 | on (unchanged) | ≤ 1 fire per clip ✓ |
+    | Shrinking range | Lateral raise | real 0 per clip | lowest ratio 0.90 vs 0.85 | on (unchanged) | ≤ 1 fire per clip ✓. Thin margin (s1-3 reps 15–16, fatigue) |
+    | Rushed lowering | Curl (flaw clip) | reps 6, 8; reps 1–4 never | flawed 0.33–0.37, clean ≥ 0.98 | on (unchanged) | positive fixture works |
+    | Shrinking range | Goblet squat (flaw clip) | reps 6, 8; reps 1–4 never | flawed 0.82–0.83 vs 0.85: **thin** | on (unchanged) | positive fixture works; the synthetic dip is only 2–3% past the line |
+    | Elbow drift | Curl (flaw clip) | rep 6 only; reps 1–4 never | flawed 24.4–36.0° vs 25°: rep 7 misses by 0.6° and breaks the streak; clean ≤ 1.1° | off (unchanged) | no real curl fixtures |
+    | Body swing | Curl (flaw clip) | reps 6, 8; reps 1–4 never | flawed 23.2–26.7° vs 15°; clean ≤ 10.7° | off (unchanged) | no real curl/row fixtures |
+    | Hips sag | Push-up side (flaw clip) | rep 6 only; reps 1–4 never | rendered 135° reads 152.6–158.1° on reps 5–7 and 163.9° on rep 8 (vs < 160°); clean ≥ 166.7° | off (unchanged) | no real side push-up fixtures |
+  - **Clean clips:** all 12 synthetic-01/02 clips fire nothing with every rule forced on. With every rule on, the flaw clips also fire only on reps ≥ 5. Cross-talk: the elbow-swing clip also fires `bodySwing`@7 and `shrinkingRange`@8, because the swing shortens the measured curl range to 0.71–0.85.
+  - **The lateral-raise flaw is two clips:** `synthetic-03-arms-out-of-sync` (left arm at ~0.65 of the range, trailing mid-rep; right arm to 110°) and `synthetic-03-raise-too-high` (both arms 90° → 116° rendered). Task 9's plan had one clip.
+  - **Gap (pose-engineer):** the raise-too-high clip was rendered for the old 100° line. 116° rendered reads only 108.2–109.0°, so at 120° it has no positive fixture. The replay test pins this (0 fires at 120°, reps 6 and 8 at a 100° override). **Re-render reps 5–8 to ~135–140° rendered (MediaPipe reads ~8° low)** and tell core-engineer, who will flip `OWN_RULE` in the replay test to expect reps 6 and 8. The enable decision doesn't depend on it, because the rule is a plain `maxAngle > 120` compare that is tested at its edges.
+
 - 2026-11-13: **Wongsaton's answers to the open questions.**
   - **(1) Lateral raise height.** He has no preference and left it to research. Coaching sources say shoulder height (arms parallel) is the usual cue. Going somewhat higher, up to ~45° above parallel, is described as shifting work to the traps rather than being harmful. No peer-reviewed limit was found.
     - **Decision:** `raiseTooHigh` threshold 100° → **120°** (clearly above shoulder height). Enable it for the lateral raise if the task 7 replay of his 4 real clips gives 0 fires (his peaks are 91–109°).
@@ -463,7 +493,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   - Both rules are off, so neither gap affects anyone yet.
 - 2026-11-13: **Real lateral raise vs the form rules (task 5 replay, flags forced on).**
   - **armsOutOfSync:** the largest gap held 0.5 s is 10°, so 0 fires.
-  - **raiseTooHigh:** rep peaks are 91–109°, so it would fire on 3 of 4 clips. It stays off, and the press-height question goes to Wongsaton.
+  - **raiseTooHigh:** rep peaks are 91–109°, so it would fire on 3 of 4 clips. It stays off, and the press-height question goes to Wongsaton. *(Superseded by the M5 task 7 replay: the threshold is now 120° and the rule is on.)*
 - 2026-11-13: **Drill-sergeant coach voice** (Wongsaton's request; design in `docs/superpowers/specs/2026-11-13-drill-sergeant-voice-design.md`; approach A, built-in iPhone voice).
   - **Rewrite point.** The rewrite happens at `voice.speak`, the single choke point. Counts are never rewritten, and calm mode is byte-identical to before.
   - **Rudeness levels.** Three levels, tested by word lists: Tough (no swearing), Rude (mild words), Savage (all words).

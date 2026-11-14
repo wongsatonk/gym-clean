@@ -12,6 +12,8 @@
 //
 // Prints a table with counted vs logged reps/partials per set (the miscount evidence), the
 // pre-roll before the set's start and, for hands-free sets (M5c), the auto start/stop reasons.
+// M5: a "focus" column with the set's focusScore, then a "Focus cues:" section with each
+// focusCue event (rep, id, value / baseline, threshold). Only enum ids and numbers are printed.
 //
 // M5c: the camera can stay open across several sets, so one frame clock spans them; each set is
 // rebased on its own first person frame. An auto-started set's frames begin before its
@@ -176,10 +178,70 @@ function autoSummary(autoEvents, setStarts, set) {
   return parts.join(' ');
 }
 
+/** A finite number or null (focus event fields; anything else is never printed). */
+const finite = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const CUE_ID = /^[A-Za-z]{1,32}$/; // FocusCueId enum words; free text never passes
+
+/**
+ * M5 `focusCue` / `focusScore` session events, numbers and enum ids only. A cue goes to the set
+ * with the latest start ≤ t + slack (it fires while the set runs); a score goes to the set with
+ * the latest end ≤ t + slack (app.ts logs it when the camera set is saved, after `endedAt`).
+ * The cue's own data.t (camera frame clock) is not needed: the event t is wall time.
+ */
+function focusEventsOf(session) {
+  const events = Array.isArray(session?.events) ? session.events : [];
+  const ok = (type) =>
+    events
+      .filter(
+        (e) => e?.type === type && Number.isFinite(e.t) && e.data && typeof e.data === 'object',
+      )
+      .sort((a, b) => a.t - b.t);
+  return {
+    cues: ok('focusCue').map((e) => ({
+      t: e.t,
+      id: typeof e.data.id === 'string' && CUE_ID.test(e.data.id) ? e.data.id : null,
+      reps: finite(e.data.reps),
+      value: finite(e.data.value),
+      baseline: finite(e.data.baseline),
+      threshold: finite(e.data.threshold),
+    })),
+    scores: ok('focusScore').map((e) => ({
+      t: e.t,
+      score: finite(e.data.score),
+      cues: finite(e.data.cues),
+      partials: finite(e.data.partials),
+    })),
+  };
+}
+
+/** The latest of `times` ≤ t + slack, or null. */
+function ownerAt(times, t) {
+  let owner = null;
+  for (const x of times) if (x <= t + AUTO_EVENT_SLACK_MS) owner = x;
+  return owner;
+}
+
+/** { cues: [{ id, reps, value, baseline, threshold }], score: { score, cues, partials } | null } */
+function focusOf(focusEvents, setStarts, setEnds, set) {
+  const strip = (e) => {
+    const out = { ...e };
+    delete out.t; // wall time, only used to find the owning set
+    return out;
+  };
+  const cues = Number.isFinite(set?.startedAt)
+    ? focusEvents.cues.filter((c) => ownerAt(setStarts, c.t) === set.startedAt).map(strip)
+    : [];
+  const scores = Number.isFinite(set?.endedAt)
+    ? focusEvents.scores.filter((s) => ownerAt(setEnds, s.t) === set.endedAt)
+    : [];
+  return { cues, score: scores.length ? strip(scores.at(-1)) : null };
+}
+
 /**
  * Plans the conversion without touching the disk.
  * Returns { label, items: [{ session, exerciseId, setIndex, folder, counted, logged, frames,
- * personFrames, fps, rel, fixture } | { …, skip: reason }] } where `rel` is `<folder>/<file>`.
+ * personFrames, fps, prerollMs, auto, focus, rel, fixture } | { …, skip: reason }] } where `rel`
+ * is `<folder>/<file>`. `focus` (M5) is report-only and never reaches a fixture.
  */
 export function planConversion(exp, opts = {}) {
   const label = opts.label;
@@ -192,8 +254,13 @@ export function planConversion(exp, opts = {}) {
     const prefix = `${label ?? defaultLabel(start)}-${hhmm(start)}-s${si + 1}`;
     const sets = Array.isArray(session?.sets) ? session.sets : [];
     const autoEvents = autoEventsOf(session);
+    const focusEvents = focusEventsOf(session);
     const setStarts = sets
       .map((x) => x?.startedAt)
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+    const setEnds = sets
+      .map((x) => x?.endedAt)
       .filter(Number.isFinite)
       .sort((a, b) => a - b);
     for (const set of sets) {
@@ -209,6 +276,7 @@ export function planConversion(exp, opts = {}) {
         fps: null,
         prerollMs: null,
         auto: autoSummary(autoEvents, setStarts, set),
+        focus: focusOf(focusEvents, setStarts, setEnds, set),
       };
       // Frame-clock times (one clock may span several sets): sort, never assume t starts near 0.
       const all = Array.isArray(set?.camera?.frames)
@@ -264,6 +332,36 @@ const showPath = (p, cwd) => {
 };
 
 const fmtCount = (c) => (c ? `${c.reps}/${c.partials}` : '-');
+/** Up to 2 decimals, '-' for null. */
+const fmtNum = (v) => (v == null ? '-' : String(Math.round(v * 100) / 100));
+const plural = (n, word) => `${fmtNum(n)} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * M5: per set with focus events, its score and one line per `focusCue` (rep, id,
+ * value / baseline, threshold). Empty string when no set has any.
+ */
+export function formatFocus(results) {
+  const lines = [];
+  for (const r of results) {
+    const f = r.focus;
+    if (!f || (f.cues.length === 0 && !f.score)) continue;
+    const s = f.score;
+    const score = s
+      ? `score ${fmtNum(s.score)} (${plural(s.cues, 'cue')}, ${plural(s.partials, 'partial')})`
+      : 'no score';
+    lines.push(`${r.exerciseId} s${r.session} set ${r.setIndex ?? '?'}: ${score}`);
+    for (const c of f.cues) {
+      const parts = [
+        `rep ${fmtNum(c.reps)}`,
+        c.id ?? '?',
+        `${fmtNum(c.value)} / ${fmtNum(c.baseline)}`,
+      ];
+      if (c.threshold != null) parts.push(`threshold ${fmtNum(c.threshold)}`);
+      lines.push(`  ${parts.join('  ')}`);
+    }
+  }
+  return lines.length ? ['Focus cues:', ...lines].join('\n') : '';
+}
 
 /** Summary table (plain text, fixed width). */
 export function formatTable(results, cwd = process.cwd()) {
@@ -277,6 +375,7 @@ export function formatTable(results, cwd = process.cwd()) {
     'frames',
     'pose',
     'fps',
+    'focus',
     'pre',
     'auto',
     'result',
@@ -298,6 +397,7 @@ export function formatTable(results, cwd = process.cwd()) {
       String(r.frames),
       String(r.personFrames),
       r.fps == null ? '-' : r.fps.toFixed(1),
+      r.focus?.score?.score == null ? '-' : fmtNum(r.focus.score.score),
       r.prerollMs == null ? '-' : `${(r.prerollMs / 1000).toFixed(1)}s`,
       r.auto ?? '-',
       r.path ? `${r.status}: ${showPath(r.path, cwd)}` : r.status,
@@ -353,6 +453,8 @@ async function main() {
   const plan = planConversion(exp, { label: opts.label, compact: opts.compact });
   const results = writeFixtures(plan, resolve(opts.out), opts);
   console.log(formatTable(results));
+  const focus = formatFocus(results);
+  if (focus) console.log(`\n${focus}`);
   const written = results.filter((r) => ['written', 'overwritten'].includes(r.status)).length;
   const planned = results.filter((r) => r.status.startsWith('would')).length;
   const skipped = results.filter((r) => r.skip).length;
