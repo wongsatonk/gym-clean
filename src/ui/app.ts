@@ -14,11 +14,13 @@ import {
 import type { PlannedExercise, ProgramDay, SetLog } from '../core/types';
 import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
 import { shouldSpeakFocusCue } from '../core/focusCue';
+import { adviceSpeakDue, afterSetAdvice, coachSummary, type Advice } from '../core/advice';
 import { cueFor, exerciseById, exerciseName, program } from '../data/catalog';
 import {
   GymDb,
   finishSession,
   getExerciseNote,
+  getCoachTips,
   getSpokenCount,
   getUnit,
   lastSessionSets,
@@ -26,6 +28,7 @@ import {
   saveExerciseNote,
   saveSessionNote,
   saveSet,
+  setCoachTips,
   setSpokenCount,
   setUnit,
   startSessionRow,
@@ -40,6 +43,8 @@ import { badgesFor } from './badges';
 import { createCameraView, type CameraTarget, type CameraView } from './cameraView';
 import { createHowToSheet } from './howToSheet';
 import { silentHint } from './silentHint';
+import { createCoachTip } from './coachTip';
+import { createCoachSummary } from './coachSummary';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
 import { h } from './dom';
@@ -66,6 +71,7 @@ export function mountApp(root: HTMLElement): void {
   let view: View = { screen: 'today', upNextDayId: null };
   let unit: Unit = 'kg';
   let spokenCount = true;
+  let coachTips = true;
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
 
@@ -85,6 +91,44 @@ export function mountApp(root: HTMLElement): void {
   let placementSpoken = new Set<string>();
   let devLogPanel: DevLogPanelHandle | null = null;
   let howTo: { el: HTMLElement; dispose(): void } | null = null;
+  // M5b after-set coach: one tip instance per logged set; spoken once per logged set.
+  let coachTip: { key: string; tip: ReturnType<typeof createCoachTip>; applied: boolean } | null =
+    null;
+  let adviceSpokenKey = '';
+
+  function currentAdvice(s: SessionState): Advice | null {
+    return coachTips ? afterSetAdvice(s, exerciseName, lastTime) : null;
+  }
+
+  /** Rest: the coach tip for the set just logged (null when off or nothing to say). */
+  function coachTipFor(s: SessionState): HTMLElement | null {
+    const advice = currentAdvice(s);
+    if (!advice || s.paused) return null;
+    const key = `${s.sessionId}:${s.logs.length}`;
+    // Apply only while the upcoming set is the advice's exercise (the reducer checks this too).
+    const canApply = currentPlanned(s).exerciseId === advice.exerciseId;
+    if (coachTip?.key !== key) {
+      const tip = createCoachTip({
+        advice,
+        unit,
+        canApply,
+        onApply: (weightKg) => {
+          if (coachTip) coachTip.applied = true;
+          // The APPLY_NEXT_WEIGHT event itself is logged by logToDevLog.
+          dispatch({ type: 'APPLY_NEXT_WEIGHT', exerciseId: advice.exerciseId, weightKg });
+        },
+      });
+      coachTip = { key, tip, applied: false };
+      rec((r) =>
+        r.logEvent('advice', { rule: advice.rule, exerciseId: advice.exerciseId, shown: true }),
+      );
+    } else {
+      // `applied` stays true once applied: a Fix can't change the suggested weight, and the
+      // reducer state really holds the applied weight.
+      coachTip.tip.update(advice, { canApply, unit, applied: coachTip.applied });
+    }
+    return coachTip.tip.el;
+  }
 
   /** M4b: full-screen "How to" sheet with the 3D demo (or the muscle map when there's none). */
   function openHowTo(p: PlannedExercise, opener: HTMLElement | null): void {
@@ -449,6 +493,22 @@ export function mountApp(root: HTMLElement): void {
         h('span', { class: 'switch-label' }, 'Count reps out loud'),
         h('span', { class: 'switch-state', 'aria-hidden': 'true' }, spokenCount ? 'On' : 'Off'),
       ),
+      h(
+        'button',
+        {
+          class: `switch-btn${coachTips ? ' on' : ''}`,
+          role: 'switch',
+          'aria-checked': coachTips ? 'true' : 'false',
+          'data-setting': 'coach-tips',
+          onclick: () => {
+            coachTips = !coachTips;
+            void setCoachTips(db, coachTips).catch(logDbError);
+            render();
+          },
+        },
+        h('span', { class: 'switch-label' }, 'Coach tips after a set'),
+        h('span', { class: 'switch-state', 'aria-hidden': 'true' }, coachTips ? 'On' : 'Off'),
+      ),
       voiceTest(),
       h('p', { class: 'field-label' }, 'Weight unit'),
       h(
@@ -736,6 +796,17 @@ export function mountApp(root: HTMLElement): void {
     if (s.phase !== 'rest' || s.paused) return;
     const elapsed = restElapsedMs(s, now());
     const cues = restCuesBetween(s.restTargetSec, lastCueElapsedMs, elapsed);
+    const key = `${s.sessionId}:${s.logs.length}`;
+    if (adviceSpokenKey !== key && adviceSpeakDue(lastCueElapsedMs, elapsed, s.restTargetSec)) {
+      adviceSpokenKey = key; // once per logged set; a later Fix updates the text only
+      const advice = currentAdvice(s);
+      if (advice) {
+        voice.speak(advice.say, { kind: 'cue' });
+        rec((r) =>
+          r.logEvent('advice', { rule: advice.rule, exerciseId: advice.exerciseId, spoken: true }),
+        );
+      }
+    }
     lastCueElapsedMs = elapsed;
     // If the tab was throttled and several cues piled up, only the latest is still relevant.
     const cue = cues.at(-1);
@@ -967,6 +1038,7 @@ export function mountApp(root: HTMLElement): void {
         formatRest(remaining),
       ),
       lastSetFix(s),
+      coachTipFor(s),
       h(
         'div',
         { class: 'rest-next' },
@@ -1162,6 +1234,8 @@ export function mountApp(root: HTMLElement): void {
         stat('rest overruns', String(sum.restOverruns), 'overruns'),
       ),
       lastSetFix(s),
+      createCoachSummary(coachSummary(s, lastTime, exerciseName), exerciseName),
+      h('h2', { class: 'section-title' }, 'Sets'),
       h(
         'ul',
         { class: 'set-list' },
@@ -1208,6 +1282,12 @@ export function mountApp(root: HTMLElement): void {
   void getSpokenCount(db)
     .then((on) => {
       spokenCount = on;
+      if (view.screen === 'settings') render();
+    })
+    .catch(logDbError);
+  void getCoachTips(db)
+    .then((on) => {
+      coachTips = on;
       if (view.screen === 'settings') render();
     })
     .catch(logDbError);

@@ -54,6 +54,7 @@ async function installMocks(page: Page) {
   });
 }
 
+const COACH_TIP = 'Keep the weight. Aim for 8 reps.';
 const spoken = (page: Page) => page.evaluate(() => window.__spoken);
 const BENCH_CUE = 'Squeeze your chest, slow on the way down.';
 const INCLINE_CUE = 'Upper chest drives it, slow lowering.';
@@ -121,12 +122,13 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await expect(clock).toHaveText('2:00');
   await page.clock.runFor(109_000);
   await expect(clock).toHaveText('0:11');
-  expect(await spoken(page)).toEqual([BENCH_CUE]); // focus cue at set start
+  // focus cue at set start, then the after-set coach tip 2 s into rest (6 reps < 8)
+  expect(await spoken(page)).toEqual([BENCH_CUE, COACH_TIP]);
 
   await page.clock.runFor(1_000);
   await expect
     .poll(() => spoken(page))
-    .toEqual([BENCH_CUE, 'Ten seconds. Next: Dumbbell Bench Press, set 2.']);
+    .toEqual([BENCH_CUE, COACH_TIP, 'Ten seconds. Next: Dumbbell Bench Press, set 2.']);
 
   await page.clock.runFor(10_000);
   await expect.poll(() => spoken(page)).toContain('Go.');
