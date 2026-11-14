@@ -3,6 +3,7 @@
 // Pure rendering of core's `coachSummary(...)` output; app.ts mounts it above the set list.
 
 import { h } from './dom';
+import { icon as setIcon } from './icons';
 import './coach.css';
 
 /** The fields of core's `Advice` this section reads (structural: pass `Advice` as is). */
@@ -140,6 +141,78 @@ export function createCoachSummary(
                 h('span', { class: 'coach-progress-text' }, r.progress),
               )
             : null,
+        ),
+      ),
+    ),
+  );
+}
+
+// ---------- M10 stall card ----------
+
+/** core's `StallOption` (structural, so this module stays UI-only). */
+export type StallCardOption = 'lighter' | 'addSet';
+
+/**
+ * One stalled exercise, as app.ts builds it from core's `detectStalls` + `stallLine`:
+ * `line` is "Dumbbell Bench Press: same best set for 3 sessions.", `options` is `Stall.options`
+ * (no `lighter` for bodyweight, no `addSet` at 5 sets).
+ */
+export type StallCardData = {
+  readonly exerciseId: string;
+  readonly line: string;
+  readonly options: readonly StallCardOption[];
+};
+
+export const STALL_OPTION_LABEL: Record<StallCardOption, string> = {
+  lighter: 'Go lighter',
+  addSet: 'Add a set',
+};
+
+/**
+ * The Summary stall cards (under the Coach section), or null when there is none. Each card is the
+ * stall line plus one button per option; a tap calls `onOption(exerciseId, option)`, and app.ts
+ * opens that option's Proposal. Shown, not spoken (the workout is over).
+ */
+export function createStallCards(
+  stalls: readonly StallCardData[],
+  onOption: (exerciseId: string, option: StallCardOption) => void,
+): HTMLElement | null {
+  const shown = stalls.filter((s) => s.options.length > 0);
+  if (shown.length === 0) return null;
+  return h(
+    'div',
+    { class: 'stall-cards', 'data-stall-cards': '' },
+    ...shown.map((s) =>
+      h(
+        'section',
+        {
+          class: 'stall-card',
+          'data-stall': s.exerciseId,
+          'aria-label': `Stalled: ${s.line}`,
+        },
+        h(
+          'p',
+          { class: 'stall-label' },
+          setIcon('bars', 'md', { class: 'coach-icon' }),
+          h('span', {}, 'Stalled'),
+        ),
+        h('p', { class: 'stall-line', 'data-stall-line': '' }, s.line),
+        h(
+          'div',
+          { class: 'stall-options' },
+          ...s.options.map((o) =>
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'stall-opt',
+                'data-stall-option': o,
+                onclick: () => onOption(s.exerciseId, o),
+              },
+              setIcon(o === 'lighter' ? 'minus' : 'plus', 'sm', { class: 'stall-opt-icon' }),
+              h('span', {}, STALL_OPTION_LABEL[o]),
+            ),
+          ),
         ),
       ),
     ),

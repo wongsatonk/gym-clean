@@ -466,7 +466,7 @@ M10-q8.
   - Plan changes list: newest first, Undo on the newest one only, "Reset to default program" (two-tap).
   - Done when: render tests, 390×844 screenshots, typecheck + lint clean.
   - Deps: 1.
-- [ ] 15. [ui-engineer] Pause sheet Coach entry and Summary stall card.
+- [x] 15. [ui-engineer] Pause sheet Coach entry and Summary stall card.
   - Files: src/ui/screens/pauseSheet.ts, src/ui/screens/summary.ts, src/ui/coachSummary.ts.
   - Pause sheet: a "Coach" row that opens the sheet with `allowTyping: true` (the set isn't running while
     paused; Exercise/camera never show it).

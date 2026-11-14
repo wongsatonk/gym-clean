@@ -263,6 +263,68 @@ describe('pauseSheet', () => {
     expect(el.byTag('button').map((b) => b.textContent)).toEqual(['Resume', 'End workout']);
   });
 
+  describe('Coach row (M10)', () => {
+    function mountCoach() {
+      const calls = { resume: 0, skip: 0, end: 0, coach: 0 };
+      const el = asFake(
+        pauseSheet(
+          {},
+          {
+            onResume: () => calls.resume++,
+            onSkip: () => calls.skip++,
+            onEnd: () => calls.end++,
+            onCoach: () => calls.coach++,
+          },
+        ),
+      );
+      return { el, calls };
+    }
+
+    it('is absent without onCoach', () => {
+      const { el } = mount();
+      expect(el.byTag('button').map((b) => b.textContent)).toEqual([
+        'Resume',
+        'Skip exercise',
+        'End workout',
+      ]);
+      expect(el.find((e) => e.getAttribute('data-pause') === 'coach')).toHaveLength(0);
+    });
+
+    it('sits under Resume with a chat icon and the word, and calls onCoach only', () => {
+      const { el, calls } = mountCoach();
+      expect(el.byTag('button').map((b) => b.textContent)).toEqual([
+        'Resume',
+        'Coach',
+        'Skip exercise',
+        'End workout',
+      ]);
+      const coach = buttonByText(el, 'Coach');
+      expect(coach.getAttribute('data-pause')).toBe('coach');
+      expect(coach.classes).toContain('pause-btn');
+      expect(coach.classes).not.toContain('primary-btn');
+      expect(coach.byTag('svg')[0]?.getAttribute('data-icon')).toBe('chat');
+      coach.click();
+      expect(calls).toEqual({ resume: 0, skip: 0, end: 0, coach: 1 });
+    });
+
+    it('joins the Tab cycle after Resume', () => {
+      const { el } = mountCoach();
+      const [resume, coach, skip, end] = ['Resume', 'Coach', 'Skip exercise', 'End workout'].map(
+        (t) => buttonByText(el, t),
+      );
+      const tab = (shift = false) => {
+        el.dispatch('keydown', key('Tab', shift));
+        return active();
+      };
+      expect(tab()).toBe(resume);
+      expect(tab()).toBe(coach);
+      expect(tab()).toBe(skip);
+      expect(tab()).toBe(end);
+      expect(tab(true)).toBe(skip);
+      expect(tab(true)).toBe(coach);
+    });
+  });
+
   const key = (k: string, shiftKey = false) => {
     const ev = { key: k, shiftKey, prevented: false, preventDefault: () => (ev.prevented = true) };
     return ev;

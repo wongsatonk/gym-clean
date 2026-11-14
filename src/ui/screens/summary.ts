@@ -5,7 +5,9 @@
 //
 // Order: hero (trophy, "Pull A done", date · duration) → volume card with vs-last bars →
 // new-best tiles → sets / reps / exercises / long-rest tiles → Fix last set → Focus → the set
-// list with today's notes → Coach ("Next time", kept low-key, last) → Done.
+// list with today's notes → Coach ("Next time", kept low-key, last) → M10 stall cards → Done.
+// Stall cards render only when `stalls` has entries with options and `onStallOption` is passed;
+// otherwise the screen is unchanged.
 //
 // Volume card modes (`volumeMode`):
 // - 'compare': weight was moved and there's a previous same-day session with volume: % pill + bars;
@@ -26,6 +28,7 @@ import { formatDuration } from '../../core/format';
 import { sessionVolume, type NewBest } from '../../core/stats';
 import type { SetLog } from '../../core/types';
 import { formatWeight, toUnit, type Unit } from '../../core/units';
+import { createStallCards, type StallCardData, type StallCardOption } from '../coachSummary';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
@@ -62,9 +65,15 @@ export type SummaryProps = {
   coachEl?: HTMLElement | null | undefined;
   /** `createFocusSummary(...)`; null when no camera set. */
   focusEl?: HTMLElement | null | undefined;
+  /** M10: stalled exercises (core `detectStalls` + `stallLine`); omitted/empty → no card. */
+  stalls?: readonly StallCardData[] | undefined;
 };
 
-export type SummaryActions = { onDone: () => void };
+export type SummaryActions = {
+  onDone: () => void;
+  /** M10: a stall option tapped; app.ts opens its Proposal. Omitted → no stall card. */
+  onStallOption?: ((exerciseId: string, option: StallCardOption) => void) | undefined;
+};
 
 export type VolumeMode = 'compare' | 'first' | 'bodyweight';
 
@@ -320,6 +329,7 @@ export function summaryScreen(p: SummaryProps, a: SummaryActions): HTMLElement {
     h('h2', { class: 'section-title' }, 'Sets'),
     setList(p),
     p.coachEl ?? null,
+    p.stalls && a.onStallOption ? createStallCards(p.stalls, a.onStallOption) : null,
     h(
       'div',
       { class: 'sticky-bottom' },

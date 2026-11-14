@@ -274,3 +274,79 @@ describe('summaryScreen', () => {
     expect(done()).toBe(1);
   });
 });
+
+describe('summaryScreen stall card (M10)', () => {
+  const STALLS = [
+    {
+      exerciseId: 'row',
+      line: 'DB Row: same best set for 3 sessions.',
+      options: ['lighter', 'addSet'] as const,
+    },
+    {
+      exerciseId: 'pu',
+      line: 'Push-up: same best set for 4 sessions.',
+      options: ['addSet'] as const,
+    },
+  ];
+  const coachEl = () => {
+    const c = document.createElement('section');
+    c.setAttribute('data-coach-summary', '');
+    return c;
+  };
+
+  function renderStall(over: Partial<SummaryProps>, withAction = true) {
+    const calls: [string, string][] = [];
+    const el = asFake(
+      summaryScreen(props(over), {
+        onDone: () => {},
+        onStallOption: withAction ? (id, o) => calls.push([id, o]) : undefined,
+      }),
+    );
+    return { el, calls };
+  }
+  const cards = (el: FakeEl) => attr(el, 'data-stall');
+
+  it('nothing changes without stall props or without the callback', () => {
+    const plain = asFake(summaryScreen(props(), { onDone: () => {} }));
+    expect(attr(plain, 'data-stall-cards')).toHaveLength(0);
+    expect(cards(renderStall({ stalls: STALLS }, false).el)).toHaveLength(0);
+    expect(cards(renderStall({ stalls: [] }).el)).toHaveLength(0);
+    expect(
+      cards(renderStall({ stalls: [{ exerciseId: 'row', line: 'x', options: [] }] }).el),
+    ).toHaveLength(0);
+  });
+
+  it('renders right under the Coach section, before Done', () => {
+    const { el } = renderStall({ stalls: STALLS, coachEl: coachEl() });
+    const kids = el.children;
+    const coachAt = kids.findIndex((k) => k.hasAttribute('data-coach-summary'));
+    const stallAt = kids.findIndex((k) => k.hasAttribute('data-stall-cards'));
+    const doneAt = kids.findIndex((k) => k.classes.includes('sticky-bottom'));
+    expect(coachAt).toBeGreaterThan(-1);
+    expect(stallAt).toBe(coachAt + 1);
+    expect(doneAt).toBe(stallAt + 1);
+  });
+
+  it('shows the stall line and only the given options, each calling onStallOption', () => {
+    const { el, calls } = renderStall({ stalls: STALLS });
+    const [row, pu] = cards(el);
+    expect(row?.getAttribute('data-stall')).toBe('row');
+    expect(row?.oneByClass('stall-line').textContent).toBe('DB Row: same best set for 3 sessions.');
+    expect(row?.oneByClass('stall-label').textContent).toBe('Stalled');
+    const rowBtns = row?.byTag('button') ?? [];
+    expect(rowBtns.map((b) => b.textContent)).toEqual(['Go lighter', 'Add a set']);
+    expect(rowBtns.every((b) => b.getAttribute('type') === 'button')).toBe(true);
+    expect(rowBtns.every((b) => b.byTag('svg').length === 1)).toBe(true);
+    // Secondary buttons: Done stays the only action-colour fill.
+    expect(el.byClass('primary-btn')).toHaveLength(1);
+    expect(pu?.byTag('button').map((b) => b.textContent)).toEqual(['Add a set']);
+    rowBtns[0]?.click();
+    rowBtns[1]?.click();
+    pu?.byTag('button')[0]?.click();
+    expect(calls).toEqual([
+      ['row', 'lighter'],
+      ['row', 'addSet'],
+      ['pu', 'addSet'],
+    ]);
+  });
+});

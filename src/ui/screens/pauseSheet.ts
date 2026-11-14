@@ -2,12 +2,15 @@
 // the Exercise and Rest footers (SPEC M4e "Picked") so they can't be hit by accident mid-set.
 // End keeps its two-tap confirmation: the first tap arms it ("Tap again to end", danger fill,
 // flag icon + words), the second ends the workout; it disarms itself after `confirmMs`.
-// Escape resumes. Tab / Shift+Tab cycle Resume → Skip → End inside the sheet (a focus trap; the
+// M10 (task 15): an optional "Coach" row under Resume opens the coach sheet (app.ts passes
+// `onCoach`, and opens it with typing allowed: the set isn't running while paused). Left out when
+// `onCoach` is absent. The Exercise/camera screens themselves never show a Coach entry.
+// Escape resumes. Tab / Shift+Tab cycle Resume → Coach → Skip → End inside the sheet (a focus trap; the
 // page behind is made inert by the app). If the sheet leaves the document while End is armed,
 // the disarm timer is cleared: a MutationObserver runs only during that armed window, so the
 // caller needs no dispose call.
 //
-// e2e hooks: dialog named "Paused", buttons "Resume", "Skip exercise", "End workout" →
+// e2e hooks: dialog named "Paused", buttons "Resume", "Coach" (`data-pause="coach"`), "Skip exercise", "End workout" →
 // "Tap again to end" (`data-armed` while armed).
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -28,6 +31,8 @@ export type PauseSheetActions = {
   onResume: () => void;
   onSkip: () => void;
   onEnd: () => void;
+  /** M10: open the coach sheet. Omitted → no Coach row. */
+  onCoach?: (() => void) | undefined;
 };
 
 const END_LABEL = 'End workout';
@@ -92,8 +97,21 @@ export function pauseSheet(p: PauseSheetProps, a: PauseSheetActions): HTMLElemen
           icon('skip', 'md'),
           h('span', {}, 'Skip exercise'),
         );
+  const coach = a.onCoach
+    ? h(
+        'button',
+        {
+          type: 'button',
+          class: 'pause-btn pause-coach',
+          'data-pause': 'coach',
+          onclick: a.onCoach,
+        },
+        icon('chat', 'md'),
+        h('span', {}, 'Coach'),
+      )
+    : null;
   const end = endButton(a.onEnd, p.confirmMs ?? END_CONFIRM_MS);
-  const cycle: HTMLElement[] = skip ? [resume, skip, end] : [resume, end];
+  const cycle = [resume, coach, skip, end].filter((b): b is HTMLElement => b !== null);
 
   const sheet = h(
     'div',
@@ -112,6 +130,7 @@ export function pauseSheet(p: PauseSheetProps, a: PauseSheetActions): HTMLElemen
       h('p', { class: 'overlay-title' }, icon('pause', 'lg'), 'Paused'),
       p.context ? h('p', { class: 'pause-context muted' }, p.context) : null,
       resume,
+      coach,
       skip,
       end,
     ),

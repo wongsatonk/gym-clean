@@ -186,3 +186,78 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+/* M10 stall card (Summary, under the Coach section). The "Stalled" label + flat-arrow icon mark
+   it, not colour alone; the two options are secondary buttons (Apply stays the only fill). */
+.stall-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 8px;
+}
+
+.stall-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--cue);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.stall-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--cue);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stall-line {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.stall-options {
+  display: grid;
+  /* Side by side only when both labels fit on one line; stacked at phone width. */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.stall-opt {
+  min-width: 0;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-btn);
+}
+
+.stall-opt-icon {
+  flex: 0 0 auto;
+}
+
+.stall-opt span {
+  white-space: nowrap;
+}
