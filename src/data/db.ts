@@ -219,6 +219,16 @@ export async function setSpokenCount(db: GymDb, on: boolean): Promise<void> {
   await db.settings.put({ key: 'spokenCount', value: on });
 }
 
+/** M5b: show (and speak) the after-set coach tip on Rest. Default on; only an explicit false turns it off. */
+export async function getCoachTips(db: GymDb): Promise<boolean> {
+  const row = await db.settings.get('coachTips');
+  return row?.value !== false;
+}
+
+export async function setCoachTips(db: GymDb, on: boolean): Promise<void> {
+  await db.settings.put({ key: 'coachTips', value: on });
+}
+
 /** For each exercise, the sets from the most recent session other than `excludeSessionId`. */
 export async function lastSessionSets(
   db: GymDb,

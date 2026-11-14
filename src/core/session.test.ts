@@ -597,3 +597,115 @@ describe('CORRECT_LAST_SET on Rest (M4c)', () => {
     expect(summarize(s).totalVolumeKg).toBe(5 * 20);
   });
 });
+
+describe('APPLY_NEXT_WEIGHT on Rest (M5b)', () => {
+  const apply = (weightKg: number, exerciseId = 'A'): SessionEvent => ({
+    type: 'APPLY_NEXT_WEIGHT',
+    exerciseId,
+    weightKg,
+  });
+  // Set 1 of A (2 sets, 20 kg) logged → Rest before set 2 of A.
+  const resting = () => run(fresh(), { type: 'SET_DONE', now: sec(30) });
+
+  it('sets the upcoming set’s weight on Rest without touching logs or the rest clock', () => {
+    const before = resting();
+    const s = run(before, apply(22.5));
+    expect(s.phase).toBe('rest');
+    expect(s.weightKg).toBe(22.5);
+    expect(s.logs).toBe(before.logs);
+    expect(s.logs[0]).toMatchObject({ weightKg: 20 });
+    expect(s.reps).toBe(before.reps);
+    expect(s.restAccumMs).toBe(before.restAccumMs);
+    expect(s.restRunningSince).toBe(before.restRunningSince);
+    expect(restElapsedMs(s, sec(50))).toBe(restElapsedMs(before, sec(50)));
+  });
+
+  it('keeps an lb weight stored as odd kg exactly (40 lb)', () => {
+    const lb40 = 40 * 0.45359237;
+    const s = run(startSession(day, 's1', T0, { unit: 'lb' }), { type: 'SET_DONE', now: sec(30) });
+    const a = run(s, apply(lb40));
+    expect(a.weightKg).toBe(lb40);
+    expect(toUnit(a.weightKg, 'lb')).toBeCloseTo(40, 9);
+    expect(formatWeight(a.weightKg, 'lb')).toBe('40');
+  });
+
+  it('is logged with the next set and carries over to the set after', () => {
+    const s = run(
+      resting(),
+      apply(22.5),
+      { type: 'START_SET', now: sec(90) },
+      { type: 'SET_DONE', now: sec(120) },
+    );
+    expect(s.logs.map((l) => l.weightKg)).toEqual([20, 22.5]);
+    // A 3-set exercise: set 3 starts at the applied weight too.
+    const three = startSession({ ...day, exercises: [{ ...exA, sets: 3 }, exC] }, 's1', T0);
+    const t = run(
+      three,
+      { type: 'SET_DONE', now: sec(30) },
+      apply(25),
+      { type: 'START_SET', now: sec(90) },
+      { type: 'SET_DONE', now: sec(120) },
+    );
+    expect(t.phase).toBe('rest');
+    expect(t.setIndex).toBe(2);
+    expect(t.weightKg).toBe(25);
+  });
+
+  it('can be applied again (last one wins) and to 0 kg', () => {
+    expect(run(resting(), apply(22.5), apply(25)).weightKg).toBe(25);
+    expect(run(resting(), apply(0)).weightKg).toBe(0);
+  });
+
+  it('is ignored when the upcoming exercise differs from the advice’s exercise', () => {
+    // After both sets of A, Rest leads to B (10 kg): a tap for A must not change B's weight.
+    const s = run(
+      fresh(),
+      { type: 'SET_DONE', now: sec(30) },
+      { type: 'START_SET', now: sec(90) },
+      { type: 'SET_DONE', now: sec(120) },
+    );
+    expect(s.exIndex).toBe(1);
+    expect(run(s, apply(22.5, 'A'))).toBe(s);
+    expect(run(s, apply(12, 'B')).weightKg).toBe(12);
+    // Rest before A's set 2: an id for another exercise is ignored.
+    const r = resting();
+    expect(run(r, apply(22.5, 'B'))).toBe(r);
+  });
+
+  it('is ignored after SKIP_EXERCISE on Rest (a stale Apply tap)', () => {
+    const skipped = run(resting(), { type: 'SKIP_EXERCISE', now: sec(40) });
+    expect(skipped.phase).toBe('rest');
+    expect(currentPlanned(skipped).exerciseId).toBe('B');
+    expect(run(skipped, apply(22.5, 'A'))).toBe(skipped);
+    expect(skipped.weightKg).toBe(10);
+  });
+
+  it('works after CORRECT_LAST_SET on the same Rest, keeping both changes', () => {
+    const s = run(resting(), { type: 'CORRECT_LAST_SET', reps: 9, partials: 1 }, apply(22.5));
+    expect(s.logs[0]).toMatchObject({ reps: 9, partials: 1, weightKg: 20 });
+    expect(s.reps).toBe(9);
+    expect(s.weightKg).toBe(22.5);
+    const logged = run(s, { type: 'START_SET', now: sec(90) }, { type: 'SET_DONE', now: sec(120) });
+    expect(logged.logs[1]).toMatchObject({ reps: 9, weightKg: 22.5 });
+  });
+
+  it('ignores NaN, Infinity and negative weights', () => {
+    const before = resting();
+    expect(run(before, apply(Number.NaN))).toBe(before);
+    expect(run(before, apply(Number.POSITIVE_INFINITY))).toBe(before);
+    expect(run(before, apply(-2.5))).toBe(before);
+  });
+
+  it('is ignored on the exercise phase, while paused, and on Summary', () => {
+    const start = fresh();
+    expect(run(start, apply(30))).toBe(start);
+    const exercising = run(resting(), { type: 'START_SET', now: sec(90) });
+    expect(run(exercising, apply(30))).toBe(exercising);
+    const paused = run(resting(), { type: 'PAUSE', now: sec(40) });
+    expect(run(paused, apply(30))).toBe(paused);
+    const resumed = run(paused, apply(30), { type: 'RESUME', now: sec(50) });
+    expect(resumed.weightKg).toBe(20);
+    const done = run(resting(), { type: 'FINISH', now: sec(60) });
+    expect(run(done, apply(30))).toBe(done);
+  });
+});

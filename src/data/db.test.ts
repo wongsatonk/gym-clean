@@ -5,6 +5,7 @@ import type { SetLog } from '../core/types';
 import {
   GymDb,
   finishSession,
+  getCoachTips,
   getExerciseNote,
   getSpokenCount,
   getUnit,
@@ -14,6 +15,7 @@ import {
   saveSessionNote,
   saveSet,
   sessionNotes,
+  setCoachTips,
   setSpokenCount,
   setUnit,
   setsForSession,
@@ -224,5 +226,41 @@ describe('updateSet (M4c last-set correction)', () => {
       ),
     ).toBe(0);
     expect((await setsForSession(db, 's1'))[0]).toMatchObject({ reps: 10 });
+  });
+});
+
+describe('GymDb coach tips setting (M5b)', () => {
+  it('shows coach tips by default, and remembers when turned off and on', async () => {
+    expect(await getCoachTips(db)).toBe(true);
+    await setCoachTips(db, false);
+    expect(await getCoachTips(db)).toBe(false);
+    await setCoachTips(db, true);
+    expect(await getCoachTips(db)).toBe(true);
+  });
+
+  it('only an explicit false turns it off', async () => {
+    await db.settings.put({ key: 'coachTips', value: 'off' });
+    expect(await getCoachTips(db)).toBe(true);
+    await db.settings.put({ key: 'coachTips', value: 0 });
+    expect(await getCoachTips(db)).toBe(true);
+  });
+
+  it('is independent of the spoken-count and unit settings', async () => {
+    await setCoachTips(db, false);
+    expect(await getSpokenCount(db)).toBe(true);
+    expect(await getUnit(db)).toBe('kg');
+    await setSpokenCount(db, false);
+    await setCoachTips(db, true);
+    expect(await getSpokenCount(db)).toBe(false);
+    expect(await getCoachTips(db)).toBe(true);
+  });
+
+  it('survives reopening the database', async () => {
+    await setCoachTips(db, false);
+    db.close();
+    const again = new GymDb(db.name);
+    await again.open();
+    expect(await getCoachTips(again)).toBe(false);
+    again.close();
   });
 });

@@ -50,6 +50,13 @@ export type SessionEvent =
    * logs immediately). Ignored outside Rest, while paused, or with no logged set.
    */
   | { type: 'CORRECT_LAST_SET'; reps: number; partials: number }
+  /**
+   * M5b coach "Apply": set the upcoming set's weight (kg, stored as given). Only on Rest, not
+   * paused, and only while the upcoming exercise is `exerciseId` (a stale tap after a skip/jump
+   * is ignored); non-finite or negative values are ignored. Logs are untouched; the weight then
+   * carries over like any other.
+   */
+  | { type: 'APPLY_NEXT_WEIGHT'; exerciseId: string; weightKg: number }
   | { type: 'START_SET'; now: number }
   | { type: 'SKIP_EXERCISE'; now: number }
   | { type: 'PAUSE'; now: number }
@@ -226,6 +233,11 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
 
     case 'CORRECT_LAST_SET':
       return s.phase === 'rest' ? correctLast(s, e) : s;
+
+    case 'APPLY_NEXT_WEIGHT':
+      if (s.phase !== 'rest' || currentPlanned(s).exerciseId !== e.exerciseId) return s;
+      if (!Number.isFinite(e.weightKg) || e.weightKg < 0) return s;
+      return { ...s, weightKg: e.weightKg };
 
     case 'SET_DONE': {
       if (s.phase !== 'exercise') return s;
