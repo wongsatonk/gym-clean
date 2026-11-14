@@ -269,3 +269,112 @@ describe('scripts/devlog.mjs', () => {
     assert.throws(() => planConversion(buildExport(), { label: '../x' }), /label/);
   });
 });
+
+// M5c hands-free: one camera frame clock spans two auto-started sets, each with a 1.5 s pre-roll
+// before its backdated start, and the session logs autoSet events.
+describe('scripts/devlog.mjs, hands-free sets (M5c)', () => {
+  const WALL_T0 = Date.UTC(2026, 10, 13, 11, 0); // wall time of frame clock 0
+  const CLOCK = [50_000, 200_000]; // where each set's frames sit on the shared frame clock
+  const PRE_MS = 1500;
+  const NOTE = 'SECRET-FREE-TEXT';
+
+  function handsFreeExport() {
+    const sets = CLOCK.map((c, setIndex) => {
+      const raw = [{ t: c - 100, landmarks: null }, ...original.map((f) => ({ ...f, t: f.t + c }))];
+      const startedAt = WALL_T0 + c + PRE_MS; // backdated start, after the pre-roll frames
+      const lastT = original.at(-1).t + c;
+      return set(setIndex, {
+        startedAt,
+        endedAt: WALL_T0 + lastT - 500,
+        counted: { reps: 3, partials: 1 },
+        logged: { reps: 3, partials: 1 },
+        camera: { ...camera('curl', decodeFrames(encodeFrames(raw))), wallT0: WALL_T0 },
+      });
+    });
+    const ev = (t, data) => ({ t, type: 'autoSet', data: { ...data, note: NOTE } });
+    const [a, b] = sets;
+    return {
+      format: 'gym-clean-devlog',
+      version: 1,
+      exportedAt: WALL_T0 + 400_000,
+      sessions: [
+        {
+          id: 'hf',
+          startedAt: SESSION_START,
+          appVersion: 'abc123',
+          userAgent: SECRET_UA,
+          settings: { handsFree: true },
+          dayId: 'push-a',
+          events: [
+            { t: a.startedAt - 30_000, type: 'note', data: NOTE },
+            ev(a.startedAt - 800, { action: 'start', reps: 2, partials: 0 }), // clamped start
+            ev(a.endedAt - 4000, { action: 'stopPending', reason: 'still' }),
+            ev(a.endedAt - 2000, { action: 'stopCancelled', reason: 'undo' }),
+            ev(a.endedAt + 6000, { action: 'stopPending', reason: 'still' }),
+            ev(a.endedAt + 11_000, { action: 'commit' }),
+            ev(b.startedAt + 3000, { action: 'start', reps: 2, partials: 0 }),
+            ev(b.endedAt + 3000, { action: 'stopPending', reason: 'away' }),
+            ev(b.endedAt + 4000, { action: 'stopCancelled', reason: 'rep' }),
+            ev(b.endedAt + 9000, { action: 'stopPending', reason: SECRET_SPEECH }),
+            ev(b.endedAt + 14_000, { action: 'commit' }),
+            ev(b.endedAt + 200_000, { action: 'close', reason: 'noRep' }),
+          ],
+          sets,
+        },
+      ],
+    };
+  }
+
+  it('writes one fixture per set, pre-roll kept, each rebased to 0, same frames as the source', () => {
+    const plan = planConversion(handsFreeExport(), { label: 'hf' });
+    const ok = plan.items.filter((i) => !i.skip);
+    assert.deepEqual(
+      ok.map((i) => i.rel),
+      ['curl/hf-1805-s1-0__reps-3__partials-1.json', 'curl/hf-1805-s1-1__reps-3__partials-1.json'],
+    );
+    for (const it of ok) {
+      assert.equal(it.prerollMs, PRE_MS);
+      assert.equal(it.fixture.length, original.length);
+      it.fixture.forEach((f, n) => {
+        const o = original[n];
+        assert.ok(Math.abs(f.t - o.t) <= 0.02, `t ${f.t} vs ${o.t}`);
+        f.landmarks.forEach((p, j) => {
+          for (const k of ['x', 'y', 'z', 'visibility']) {
+            assert.ok(Math.abs(p[k] - o.landmarks[j][k]) <= 1e-4 + 1e-9);
+          }
+        });
+      });
+    }
+  });
+
+  it('reports auto start/stop reasons, undo/rep cancels and the pre-roll; no free text', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'devlog-hf-'));
+    try {
+      const file = join(dir, 'hf.json.gz');
+      writeFileSync(file, gzipSync(JSON.stringify(handsFreeExport())));
+      const stdout = run(file, '--out', join(dir, 'out'), '--label', 'hf', '--compact');
+      const rows = stdout.split('\n').filter((l) => l.startsWith('Dumbbell_Bicep_Curl'));
+      assert.equal(rows.length, 2);
+      assert.match(rows[0], /1\.5s\s+start:auto stop:still undo:1\s+written/);
+      // A non-word reason is never printed (shown as "?"), the close lands on the last set.
+      assert.match(rows[1], /1\.5s\s+start:auto stop:\? rep:1 close:noRep\s+written/);
+      for (const s of [NOTE, SECRET_SPEECH, SECRET_UA]) assert.equal(stdout.includes(s), false, s);
+      for (const n of [0, 1]) {
+        const text = readFileSync(
+          join(dir, `out/curl/hf-1805-s1-${n}__reps-3__partials-1.json`),
+          'utf8',
+        );
+        for (const s of [NOTE, SECRET_SPEECH, SECRET_UA, 'autoSet', 'still']) {
+          assert.equal(text.includes(s), false, s);
+        }
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('a set without autoSet events in its session shows "-" (hands-free off)', () => {
+    const plan = planConversion(buildExport());
+    assert.ok(plan.items.every((i) => i.auto === '-'));
+  });
+});

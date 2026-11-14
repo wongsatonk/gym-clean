@@ -10,7 +10,13 @@
 // Privacy: only pose numbers are written. userAgent, settings, events, speech text and any other
 // free text in the export never reach a fixture. The export file itself must stay out of git.
 //
-// Prints a table with counted vs logged reps/partials per set (the miscount evidence).
+// Prints a table with counted vs logged reps/partials per set (the miscount evidence), the
+// pre-roll before the set's start and, for hands-free sets (M5c), the auto start/stop reasons.
+//
+// M5c: the camera can stay open across several sets, so one frame clock spans them; each set is
+// rebased on its own first person frame. An auto-started set's frames begin before its
+// (backdated) start: that pre-roll is kept in the fixture (the counter must see the starting reps)
+// and shown in the "pre" column. Its length needs `camera.wallT0` (wall time of frame clock 0).
 // Existing fixtures are kept unless --force. --dry-run writes nothing.
 // --compact makes fixtures small enough to commit (~5x smaller): coordinates at 3 decimals,
 // visibility at 2, and landmarks src/core never reads (see USED_INDICES) zeroed in place.
@@ -116,6 +122,60 @@ function fpsOf(frames) {
   return span > 0 ? ((frames.length - 1) * 1000) / span : null;
 }
 
+const AUTO_ACTIONS = new Set(['start', 'stopPending', 'stopCancelled', 'commit', 'close']);
+const WORD = /^[A-Za-z]{1,24}$/; // reasons are enum words; anything else is never printed
+/** An auto event logged just before its set's backdated/clamped start still belongs to it. */
+const AUTO_EVENT_SLACK_MS = 2000;
+
+/** `autoSet` session events as { t, action, reason } (enum words only, nothing else kept). */
+function autoEventsOf(session) {
+  const events = Array.isArray(session?.events) ? session.events : [];
+  return events
+    .filter((e) => e?.type === 'autoSet' && Number.isFinite(e.t) && e.data)
+    .map((e) => ({
+      t: e.t,
+      action: e.data.action,
+      reason: WORD.test(e.data.reason ?? '') ? e.data.reason : null,
+    }))
+    .filter((e) => AUTO_ACTIONS.has(e.action))
+    .sort((a, b) => a.t - b.t);
+}
+
+/**
+ * One-line summary of a set's auto actions, e.g. "start:auto stop:still undo:1". Events go to
+ * the set with the latest start ≤ t + slack. '-' when the session logged no autoSet events
+ * (hands-free off).
+ */
+function autoSummary(autoEvents, setStarts, set) {
+  if (autoEvents.length === 0 || !Number.isFinite(set?.startedAt)) return '-';
+  const mine = autoEvents.filter((e) => {
+    let owner = null;
+    for (const st of setStarts) if (st <= e.t + AUTO_EVENT_SLACK_MS) owner = st;
+    return owner === set.startedAt;
+  });
+  const started = mine.some((e) => e.action === 'start');
+  const commitAt = mine.findIndex((e) => e.action === 'commit');
+  const pending = mine
+    .slice(0, commitAt < 0 ? mine.length : commitAt)
+    .filter((e) => e.action === 'stopPending');
+  const stop =
+    commitAt >= 0
+      ? pending.length
+        ? (pending.at(-1).reason ?? '?')
+        : 'auto'
+      : set.endedAt != null
+        ? 'tap'
+        : '-';
+  const cancels = (why) =>
+    mine.filter((e) => e.action === 'stopCancelled' && e.reason === why).length;
+  const parts = [`start:${started ? 'auto' : 'tap'}`, `stop:${stop}`];
+  if (cancels('undo')) parts.push(`undo:${cancels('undo')}`);
+  if (cancels('rep')) parts.push(`rep:${cancels('rep')}`);
+  const close = mine.find((e) => e.action === 'close');
+  if (close) parts.push(`close:${close.reason ?? '?'}`);
+  return parts.join(' ');
+}
+
 /**
  * Plans the conversion without touching the disk.
  * Returns { label, items: [{ session, exerciseId, setIndex, folder, counted, logged, frames,
@@ -131,6 +191,11 @@ export function planConversion(exp, opts = {}) {
     const start = session?.startedAt ?? exp.exportedAt;
     const prefix = `${label ?? defaultLabel(start)}-${hhmm(start)}-s${si + 1}`;
     const sets = Array.isArray(session?.sets) ? session.sets : [];
+    const autoEvents = autoEventsOf(session);
+    const setStarts = sets
+      .map((x) => x?.startedAt)
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
     for (const set of sets) {
       const base = {
         session: si + 1,
@@ -142,13 +207,20 @@ export function planConversion(exp, opts = {}) {
         frames: Array.isArray(set?.camera?.frames) ? set.camera.frames.length : 0,
         personFrames: 0,
         fps: null,
+        prerollMs: null,
+        auto: autoSummary(autoEvents, setStarts, set),
       };
+      // Frame-clock times (one clock may span several sets): sort, never assume t starts near 0.
       const all = Array.isArray(set?.camera?.frames)
-        ? set.camera.frames.filter((f) => f && Number.isFinite(f.t))
+        ? set.camera.frames.filter((f) => f && Number.isFinite(f.t)).sort((a, b) => a.t - b.t)
         : [];
       const person = all.filter((f) => Array.isArray(f.landmarks) && f.landmarks.length > 0);
       base.personFrames = person.length;
       base.fps = fpsOf(all);
+      const wallT0 = set?.camera?.wallT0;
+      if (person.length > 0 && Number.isFinite(wallT0) && Number.isFinite(set.startedAt)) {
+        base.prerollMs = Math.max(0, set.startedAt - wallT0 - person[0].t);
+      }
       let skip = null;
       if (!set?.camera) skip = 'no camera';
       else if (!Number.isInteger(set.setIndex) || set.setIndex < 0) skip = 'bad setIndex';
@@ -205,6 +277,8 @@ export function formatTable(results, cwd = process.cwd()) {
     'frames',
     'pose',
     'fps',
+    'pre',
+    'auto',
     'result',
   ];
   const rows = results.map((r) => {
@@ -224,6 +298,8 @@ export function formatTable(results, cwd = process.cwd()) {
       String(r.frames),
       String(r.personFrames),
       r.fps == null ? '-' : r.fps.toFixed(1),
+      r.prerollMs == null ? '-' : `${(r.prerollMs / 1000).toFixed(1)}s`,
+      r.auto ?? '-',
       r.path ? `${r.status}: ${showPath(r.path, cwd)}` : r.status,
     ];
   });
