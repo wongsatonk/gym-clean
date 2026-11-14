@@ -6,12 +6,13 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
 import { gzipSync } from 'node:zlib';
 import { decodeFrames, encodeFrames } from '../src/core/devlogCodec.ts';
-import { KNOWN_FOLDERS, parseExport, planConversion } from './devlog.mjs';
+import { LANDMARK } from '../src/core/poseTopology.ts';
+import { KNOWN_FOLDERS, USED_INDICES, parseExport, planConversion } from './devlog.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SCRIPT = join(ROOT, 'scripts/devlog.mjs');
@@ -209,6 +210,57 @@ describe('scripts/devlog.mjs', () => {
       'curl/devlog-2026-11-13-1805-s1-0__reps-3__partials-1.json',
       'curl/devlog-2026-11-13-1940-s1-0__reps-3__partials-1.json',
     ]);
+  });
+
+  it('USED_INDICES covers every landmark src/core reads', () => {
+    const core = join(ROOT, 'src/core');
+    const files = readdirSync(core, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+      .filter((f) => !['poseTopology.ts', 'devlogCodec.ts'].includes(f));
+    const missing = [];
+    for (const f of files) {
+      const src = readFileSync(join(core, f), 'utf8');
+      for (const [name, index] of Object.entries(LANDMARK)) {
+        if (new RegExp(`\\b${name}\\b`).test(src) && !USED_INDICES.includes(index)) {
+          missing.push(`${relative(core, join(core, f))}: ${name} (${index})`);
+        }
+      }
+    }
+    assert.deepEqual(missing, []);
+  });
+
+  it('--compact keeps all 33 indices, rounds the used ones and zeroes the rest', () => {
+    const full = planConversion(buildExport()).items.find((i) => !i.skip).fixture;
+    const compact = planConversion(buildExport(), { compact: true }).items.find(
+      (i) => !i.skip,
+    ).fixture;
+    assert.equal(compact.length, full.length);
+    const decimals = (v) => (String(v).split('.')[1] ?? '').length;
+    compact.forEach((f, n) => {
+      const o = full[n];
+      assert.equal(f.t, o.t);
+      assert.equal(f.landmarks.length, 33);
+      assert.equal(f.world.length, 33);
+      f.landmarks.forEach((p, i) => {
+        if (USED_INDICES.includes(i)) {
+          for (const k of ['x', 'y', 'z']) {
+            assert.ok(Math.abs(p[k] - o.landmarks[i][k]) <= 5e-4 + 1e-9);
+            assert.ok(decimals(p[k]) <= 3);
+          }
+          assert.ok(Math.abs(p.visibility - o.landmarks[i].visibility) <= 5e-3 + 1e-9);
+          assert.ok(decimals(p.visibility) <= 2);
+          for (const k of ['x', 'y', 'z']) {
+            assert.ok(Math.abs(f.world[i][k] - o.world[i][k]) <= 5e-4 + 1e-9);
+          }
+        } else {
+          assert.deepEqual(p, { x: 0, y: 0, z: 0, visibility: 0 });
+          assert.deepEqual(f.world[i], { x: 0, y: 0, z: 0 });
+        }
+      });
+    });
+    const ratio = JSON.stringify(compact).length / JSON.stringify(full).length;
+    assert.ok(ratio < 0.8, `compact/full size ratio ${ratio.toFixed(2)}`);
   });
 
   it('rejects other files and bad labels', () => {

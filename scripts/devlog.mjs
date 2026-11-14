@@ -1,4 +1,4 @@
-// npm run devlog -- <export.json[.gz]> [--out fixtures/landmarks] [--label <label>] [--dry-run] [--force]
+// npm run devlog -- <export.json[.gz]> [--out fixtures/landmarks] [--label <label>] [--dry-run] [--force] [--compact]
 //
 // Turns a developer-log export (M4c, src/data/devlog.ts `exportBlob` / `exportAll`) into
 // landmark fixtures for the rep-counter suite:
@@ -12,6 +12,8 @@
 //
 // Prints a table with counted vs logged reps/partials per set (the miscount evidence).
 // Existing fixtures are kept unless --force. --dry-run writes nothing.
+// --compact makes fixtures small enough to commit (~5x smaller): coordinates at 3 decimals,
+// visibility at 2, and landmarks src/core never reads (see USED_INDICES) zeroed in place.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -66,19 +68,43 @@ const isCount = (c) =>
   Number.isInteger(c.partials) &&
   c.partials >= 0;
 
-/** Copies only the numeric pose fields of one frame (nothing else from the export survives). */
-function cleanFrame(f, t0) {
+/**
+ * Landmark indices src/core reads (BlazePose topology): shoulders 11/12, elbows 13/14,
+ * wrists 15/16, hips 23/24, knees 25/26, ankles 27/28. Sources: exercises/triplets.ts (ELBOW,
+ * KNEE, SHOULDER) and the press extendedGate (wrist/shoulder), angles.ts (torso lean and
+ * shoulder-line yaw: shoulders + hips; hipAngleDeg: shoulders, hips, knees), aspect.ts
+ * (shoulders, elbows, wrists, hips). repCounter only goes through those. If src/core starts
+ * reading another landmark, add it here and re-run with --compact.
+ */
+export const USED_INDICES = [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+const USED = new Set(USED_INDICES);
+
+const round = (v, d) => {
+  const n = num(v);
+  const k = 10 ** d;
+  return Math.round(n * k) / k || 0; // `|| 0` turns -0 into 0
+};
+
+/**
+ * Copies only the numeric pose fields of one frame (nothing else from the export survives).
+ * `compact`: x/y/z at 3 decimals, visibility at 2, and every landmark src/core never reads
+ * replaced by a zero placeholder (visibility 0), keeping all indices in place.
+ */
+function cleanFrame(f, t0, compact = false) {
+  const keep = (i) => !compact || USED.has(i);
+  const c = (v, d) => (compact ? round(v, d) : num(v));
   const out = {
     t: Math.round((f.t - t0) * 100) / 100,
-    landmarks: f.landmarks.map((p) => ({
-      x: num(p.x),
-      y: num(p.y),
-      z: num(p.z),
-      visibility: num(p.visibility),
-    })),
+    landmarks: f.landmarks.map((p, i) =>
+      keep(i)
+        ? { x: c(p.x, 3), y: c(p.y, 3), z: c(p.z, 3), visibility: c(p.visibility, 2) }
+        : { x: 0, y: 0, z: 0, visibility: 0 },
+    ),
   };
   if (Array.isArray(f.world) && f.world.length > 0) {
-    out.world = f.world.map((p) => ({ x: num(p.x), y: num(p.y), z: num(p.z) }));
+    out.world = f.world.map((p, i) =>
+      keep(i) ? { x: c(p.x, 3), y: c(p.y, 3), z: c(p.z, 3) } : { x: 0, y: 0, z: 0 },
+    );
   }
   return out;
 }
@@ -139,7 +165,7 @@ export function planConversion(exp, opts = {}) {
       items.push({
         ...base,
         rel: `${base.folder}/${file}`,
-        fixture: person.map((f) => cleanFrame(f, t0)),
+        fixture: person.map((f) => cleanFrame(f, t0, opts.compact === true)),
       });
     }
   });
@@ -216,12 +242,14 @@ function parseArgs(argv) {
     label: undefined,
     dryRun: false,
     force: false,
+    compact: false,
     input: null,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') opts.dryRun = true;
     else if (a === '--force') opts.force = true;
+    else if (a === '--compact') opts.compact = true;
     else if (a === '--out' || a === '--label') {
       const v = argv[++i];
       if (!v || v.startsWith('--')) throw new Error(`${a} needs a value`);
@@ -241,12 +269,12 @@ async function main() {
   } catch (err) {
     console.error(`devlog: ${err.message}`);
     console.error(
-      'usage: npm run devlog -- <export.json[.gz]> [--out fixtures/landmarks] [--label <label>] [--dry-run] [--force]',
+      'usage: npm run devlog -- <export.json[.gz]> [--out fixtures/landmarks] [--label <label>] [--dry-run] [--force] [--compact]',
     );
     process.exit(2);
   }
   const exp = parseExport(readFileSync(resolve(opts.input)));
-  const plan = planConversion(exp, { label: opts.label });
+  const plan = planConversion(exp, { label: opts.label, compact: opts.compact });
   const results = writeFixtures(plan, resolve(opts.out), opts);
   console.log(formatTable(results));
   const written = results.filter((r) => ['written', 'overwritten'].includes(r.status)).length;
