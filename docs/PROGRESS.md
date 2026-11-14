@@ -281,7 +281,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 follows CLAUDE.md, and shared types are `[main]`. Native/iOS files have no owner in the table yet
 (M10-q9), so those tasks are tagged `[main]` until Wongsaton approves an owner.
 
-**Branch:** `m10a-trainer`, cut from main after M6 merges. The order against M7 and the open checkpoints is
+**Branch:** `m10a-trainer`, cut from main (c5e3a0d) on 2026-11-14 after M4d + M4f wave 1 shipped. The order against M7 and the open checkpoints is
 M10-q8.
 
 **Fit with the current code (why the plan looks like this):**
@@ -293,7 +293,7 @@ M10-q8.
 - `exercises.json` holds only the 30 program exercises, so swaps need a vendored swap pool.
 
 #### Phase A — trainer actions + coach chat (web)
-- [ ] 1. [main] Shared types.
+- [x] 1. [main] Shared types.
   - Files: src/core/types.ts.
   - Add `BodyArea`, `UserPlan`, `Schedule`, `DayAdjust`, `DayOverride`, `TrainerState`, `Proposal`,
     `PlanChange` (SPEC M10 data model).
