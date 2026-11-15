@@ -2707,8 +2707,26 @@ textarea:focus-visible {
      it carries an error (camera blocked, camera or pose-model failure: data-error on the sheet);
    - the card's lines use the 20px body size and tighter spacing.
    The count number and the frame hint stay, and the card never covers them. Everything is back
-   as soon as the card closes. */
+   as soon as the card closes.
+   Always on a short phone, card up or not (no jump when it closes), the top band gives the
+   video more height: the exercise name drops to the list-name size (22px) and Close loses a
+   little side padding, so even "Standing Dumbbell Triceps Extension" takes two lines (four at
+   26px), and the bands sit 4px from the video instead of 12px. Before this the card had ~7px of
+   slack under that name, and one placement line wrapping in Linux's wider text rendering cut
+   the card's last line (CI). Now it keeps ~88px: two extra wrapped lines still fit. */
 @media (max-height: 740px) {
+  .sheet.camera-sheet {
+    gap: 4px;
+  }
+
+  .sheet > .cam-top > .page-title.cam-title {
+    font-size: var(--fs-cue);
+  }
+
+  .sheet > .cam-top > .cam-close {
+    padding: 0 10px;
+  }
+
   .cam-stage.setup-open .cam-stage-bottom {
     top: 8px;
     bottom: auto;

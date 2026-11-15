@@ -72,7 +72,9 @@ async function mountCurlCamera(page: Page, speakPlacement = true): Promise<void>
 test('curl camera: big video, "0 / 12" + set line, set-up card spoken once, 3D collapsed', async ({
   page,
 }) => {
-  test.setTimeout(60_000);
+  // Live pose inference on the CPU plus the software-WebGL 3D skeleton: on a GPU-less 2-core CI
+  // runner each step takes 1–4 s (trace of a CI timeout: ~25 steps, still mid-flow at 60 s).
+  test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await mockSpeech(page);
@@ -291,8 +293,13 @@ test('short phone (375×667): the set-up card never covers the count', async ({ 
   const panel = await rect(page, '.rep-panel');
   const cardBox = await rect(page, '.cam-setup');
   expect(cardBox.top).toBeGreaterThanOrEqual(panel.bottom);
-  // speakPlacement: false → the sentence is not said.
-  expect(await speech(page)).toEqual([]);
+  // speakPlacement: false → the sentence is not said. Like the curl-camera test above, the M5
+  // low-fps cue "Move closer to the light." may be spoken on a slow (GPU-less CI) runner: correct
+  // behaviour, not a placement line, so it is ignored.
+  const said = (await speech(page)).filter(
+    (t) => t !== '<cancel>' && t !== 'Move closer to the light.',
+  );
+  expect(said).toEqual([]);
   await expect(cam.getByRole('button', { name: 'Set done' })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
 });
