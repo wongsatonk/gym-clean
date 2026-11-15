@@ -163,8 +163,7 @@ async function setRestWeekdays(page: Page, restWeekdays: number[]) {
               let wrote = false;
               rq.onsuccess = () => {
                 const row = rq.result as
-                  | { key: string; state: { schedule: { restWeekdays: number[] } } }
-                  | undefined;
+                  { key: string; state: { schedule: { restWeekdays: number[] } } } | undefined;
                 if (!row) return;
                 row.state.schedule.restWeekdays = restWeekdays;
                 store.put(row);
@@ -533,6 +532,100 @@ test('rest day: "Rest day" hero → Train anyway runs the next day; the calendar
   await expect(coach(page).locator('[data-proposal]')).toBeVisible();
   expect(offDevice(requests, baseURL)).toEqual([]);
   expect(errors).toEqual([]);
+});
+
+test('Not today → Train anyway takes the postpone back: the week is as before, Undo rests again', async ({
+  page,
+  baseURL,
+}) => {
+  const { requests, errors } = record(page);
+  await openApp(page, at(13, 18));
+  await setRestWeekdays(page, [0]);
+  const week = () =>
+    page
+      .locator('[data-cal]')
+      .evaluateAll((els) =>
+        els.map((e) => `${e.getAttribute('data-cal')}:${e.getAttribute('data-day') ?? 'rest'}`),
+      );
+  await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
+  const before = await week();
+
+  await openCoach(page);
+  await coach(page).locator('[data-coach-chip="notToday"]').click();
+  await coach(page).locator('[data-proposal]').getByRole('button', { name: 'Apply' }).click();
+  await expect(page.locator('[data-hero="rest"]')).toBeVisible();
+  // useRestDay turned Sunday into a training day.
+  await expect(page.locator('[data-cal="2026-11-15"]')).not.toHaveAttribute('data-rest');
+
+  await page.locator('[data-hero="rest"]').getByRole('button', { name: 'Train anyway' }).click();
+  await expect(page.locator('[data-screen="preview"] h1')).toHaveText('Push A');
+  const toast = page.locator('[data-undo-toast]');
+  await expect(toast).toContainText('Today is a training day');
+  await page.getByRole('button', { name: '‹ Back' }).click();
+  // The postpone is taken back: Sunday rests again, no extra session, no "Adjusted" banner.
+  await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
+  await expect(page.locator('[data-cal="2026-11-15"]')).toHaveAttribute('data-rest');
+  expect(await week()).toEqual(before);
+  await expect(page.locator('[data-adjusted]')).toHaveCount(0);
+  await expect(page.locator('[data-notice]')).toHaveCount(0);
+
+  // The normal Undo: today rests again as the postpone left it, with no conflict notice.
+  await toast.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('[data-hero="rest"]')).toBeVisible();
+  await expect(page.locator('[data-cal="2026-11-15"]')).not.toHaveAttribute('data-rest');
+  await expect(page.locator('[data-notice]')).toHaveCount(0);
+
+  // Plan changes lists both, newest first.
+  await page.locator('[data-tab="settings"]').click();
+  await page.locator('[data-plan-changes-open]').click();
+  const rows = page.locator('[data-screen="plan-changes"] li.plan-change');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText('Train anyway today');
+
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offDevice(requests, baseURL)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('mid-workout Lighter today after a logged set: the confirmation says only unstarted lifts change', async ({
+  page,
+}) => {
+  await openApp(page, at(13, 18));
+  await page.locator('[data-hero="push-a"] [data-start]').click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await page.getByRole('button', { name: 'Set done' }).click();
+  await openPause(page);
+  await page.locator('[data-pause="coach"]').click();
+  await coach(page).locator('[data-coach-chip="lighter"]').click();
+  const spokenBefore = await page.evaluate(() => window.__spoken.length);
+  await coach(page).locator('[data-proposal]').getByRole('button', { name: 'Apply' }).click();
+  await expect(coach(page)).toHaveCount(0);
+  const line = 'Done. Lifts not started yet are lighter.';
+  await expect(page.locator('[data-undo-toast]')).toContainText(line);
+  expect(await page.evaluate((n) => window.__spoken.slice(n), spokenBefore)).toEqual([line]);
+});
+
+test('the Pause sheet has no Coach row while the camera view is open', async ({ page }) => {
+  await openApp(page, at(13, 18));
+  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
+  await openPause(page);
+  await expect(page.locator('[data-pause="coach"]')).toBeVisible();
+  await page
+    .getByRole('dialog', { name: 'Paused' })
+    .getByRole('button', { name: 'Resume' })
+    .click();
+
+  await page.getByRole('button', { name: 'Camera', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Camera' })).toBeVisible();
+  // The camera sheet covers the top bar; the Pause sheet is modal over the camera when the
+  // session pauses under it, so the click goes to the top bar's Pause button directly.
+  await page.getByRole('button', { name: 'Pause', exact: true }).dispatchEvent('click');
+  const paused = page.getByRole('dialog', { name: 'Paused' });
+  await expect(paused).toBeVisible();
+  await expect(paused.getByRole('button', { name: 'Resume' })).toBeVisible();
+  await expect(page.locator('[data-pause="coach"]')).toHaveCount(0);
 });
 
 test('Plan changes: newest first, Reset to default (two taps) → Undo brings the change back', async ({

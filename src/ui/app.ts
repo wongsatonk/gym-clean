@@ -14,6 +14,7 @@ import {
 import type {
   Accent,
   DayAdjust,
+  DayOverride,
   FocusCueId,
   PlanChange,
   PlannedExercise,
@@ -254,7 +255,7 @@ export function mountApp(root: HTMLElement): void {
   let changes: PlanChange[] = [];
   let newProgram = false;
   let coach: CoachUi | null = null;
-  let toast: HTMLElement | null = null;
+  let toast: (HTMLElement & { dispose?: () => void }) | null = null;
   // The running session's adjustments (SessionRow.adjust): lighter/deload sessions skip stalls.
   let sessionAdjust: ProposalAction[] = [];
   let summaryStalls: { sessionId: string; stalls: StallCardData[] } | null = null;
@@ -876,6 +877,12 @@ export function mountApp(root: HTMLElement): void {
   function trainAnyway(day: ProgramDay): void {
     if (trainer) {
       const date = todayDate();
+      // Rest only because of a standing "Not today": take that postpone back as a change.
+      const postponed = postponeRestingToday(trainer, date);
+      if (postponed) {
+        void trainAnywayRevert(trainer, postponed, date, day);
+        return;
+      }
       saveTrainer({
         ...trainer,
         version: trainer.version + 1,
@@ -886,6 +893,72 @@ export function mountApp(root: HTMLElement): void {
       return;
     }
     void openPreview(day);
+  }
+
+  /**
+   * The newest standing postpone whose rest override on `date` is still in the state, or null
+   * (today is a genuine rest weekday, or the rest came from somewhere else).
+   */
+  function postponeRestingToday(state: TrainerState, date: string): PlanChange | null {
+    const resting = (os: readonly DayOverride[]) => os.some((o) => o.date === date && o.rest);
+    if (!resting(state.overrides)) return null;
+    let found: PlanChange | null = null;
+    for (const c of changes) {
+      if (c.action !== 'postpone' || c.undoneAt !== undefined) continue;
+      if (!resting(c.after.overrides) || resting(c.before.overrides)) continue;
+      if (!found || c.createdAt > found.createdAt) found = c;
+    }
+    return found;
+  }
+
+  /**
+   * Train anyway after a "Not today": the dates that postpone touched go back to what they were
+   * before it (where they still are as it left them), so the rest day it turned into a training
+   * day doesn't stay an extra session. Stored as its own change, with the normal Undo toast.
+   */
+  async function trainAnywayRevert(
+    state: TrainerState,
+    postpone: PlanChange,
+    date: string,
+    day: ProgramDay,
+  ): Promise<void> {
+    const key = (o: DayOverride | undefined) => (o ? JSON.stringify(o) : '');
+    const byDate = (os: readonly DayOverride[], d: string) => os.find((o) => o.date === d);
+    const touched = new Set(
+      [...postpone.before.overrides, ...postpone.after.overrides]
+        .map((o) => o.date)
+        .filter(
+          (d) =>
+            key(byDate(postpone.before.overrides, d)) !== key(byDate(postpone.after.overrides, d)),
+        )
+        .filter(
+          (d) => key(byDate(state.overrides, d)) === key(byDate(postpone.after.overrides, d)),
+        ),
+    );
+    touched.add(date);
+    const restored = [...touched].flatMap((d) => {
+      const o = byDate(postpone.before.overrides, d);
+      return o ? [structuredClone(o)] : [];
+    });
+    const next: TrainerState = {
+      ...structuredClone(state),
+      version: state.version + 1,
+      overrides: [...state.overrides.filter((o) => !touched.has(o.date)), ...restored],
+    };
+    trainer = next;
+    const change = await saveChangeRecord(next, {
+      createdAt: now(),
+      action: 'postpone',
+      title: 'Train anyway today',
+      source: 'chip',
+      before: structuredClone(state),
+      after: structuredClone(next),
+    });
+    changes = [change, ...changes];
+    trainerLog('trainAnyway', 'postpone', 'applied', 'chip');
+    showUndoToast('Done. Today is a training day.', change.id);
+    const eff = effectiveDay(next, trainerSessions, date);
+    void openPreview(eff.day ?? day);
   }
 
   /** M10-q11 "Keep mine": his plan stays; the prompt goes until program.json changes again. */
@@ -1014,15 +1087,26 @@ export function mountApp(root: HTMLElement): void {
     changes = [change, ...changes];
     trainerLog(entry.intent, entry.proposal.action, 'applied', entry.source);
     const workout = c.phase === 'workout';
+    // Mid-workout Lighter today only changes lifts with no logged set: say so once any are logged.
+    const say =
+      workout &&
+      entry.proposal.action === 'lighter' &&
+      view.screen === 'session' &&
+      view.s.logs.length > 0
+        ? LIGHTER_STARTED
+        : entry.proposal.say;
     closeCoach();
     if (workout) {
       markSessionAdjust(entry.proposal.action);
       syncSession(r.state);
-      sayConfirmation(entry.proposal.say);
+      sayConfirmation(say);
     }
-    showUndoToast(entry.proposal.say ?? `Done. ${entry.proposal.title}.`, change.id);
+    showUndoToast(say ?? `Done. ${entry.proposal.title}.`, change.id);
     refreshAfterChange();
   }
+
+  /** Lighter today applied after a set was logged: started lifts keep their weights. */
+  const LIGHTER_STARTED = 'Done. Lifts not started yet are lighter.';
 
   /** Undo the newest standing change (LIFO). With `id`, only if it's that one. */
   async function undoNewest(source: string, id?: number): Promise<void> {
@@ -1047,6 +1131,8 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function removeToast(): void {
+    // An Undo toast's 10 s timer is cleared too (a notice has no dispose).
+    toast?.dispose?.();
     toast?.remove();
     toast = null;
   }
@@ -2010,8 +2096,9 @@ export function mountApp(root: HTMLElement): void {
           dispatch({ type: 'SKIP_EXERCISE', now: now() });
         },
         onEnd: () => dispatch({ type: 'FINISH', now: now() }),
-        // M10: the coach, typing allowed (paused: no set is running).
-        onCoach: trainer ? () => void openCoach('workout') : undefined,
+        // M10: the coach, typing allowed (paused: no set is running). Not from the camera view
+        // (SPEC M10): the row is hidden while it's open.
+        onCoach: trainer && !camera ? () => void openCoach('workout') : undefined,
       },
     );
   }

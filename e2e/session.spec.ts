@@ -95,8 +95,12 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await page.clock.pauseAt(new Date('2026-11-13T18:00:05Z'));
 
   // Today
-  await expect(page.locator('.day-btn')).toHaveCount(6);
-  await page.getByRole('button', { name: /Push A/ }).click();
+  // The dated week (M10): 7 days, no rest weekdays by default, so Push A is today and next week.
+  await expect(page.locator('.day-btn')).toHaveCount(7);
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await expect(page.locator('.ex-row')).toHaveCount(6);
   await page.getByRole('button', { name: 'Start workout' }).click();
 
@@ -225,7 +229,10 @@ test('Pause sheet while resting: Skip moves to the next exercise and stays in re
   await page.goto('/');
   await page.clock.pauseAt(new Date('2026-11-13T18:00:05Z'));
 
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
   await page.clock.runFor(30_000);
