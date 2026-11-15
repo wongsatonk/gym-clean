@@ -12,13 +12,23 @@
  * - Mid-workout (`phase: 'workout'`) → only go easy / lighter / swap / remove, and only on
  *   exercises without logged sets (`logged`); swaps are today only. Lighter is allowed per SPEC
  *   goal 3 ("only affects sets that haven't started").
- * - Food → "Food tips come with Fuel." until M7.
+ * - Food → "Food tips come with Fuel." while `m7Available` is false. With M7: up to 3
+ *   `foods` suggestions (actions/food.ts) that fit what's left today; "You've hit today's
+ *   targets." when nothing is left; the Fuel setup pointer without targets. Never mid-workout.
  * - Anything else → "I can help with:" plus the quick chips; never a guess.
  * - Proposal text is passed through `proposalReply` (copy check, `say` ≤ 8 words).
  * Chip ids: the 6 quick actions (UI COACH_CHIPS), the 6 BodyArea values, and the follow-ups
  * below (`args` say what they act on). 'endWorkout' is handled by the UI, not here.
  */
-import type { BodyArea, Proposal, SetLog, TrainerState } from '../types';
+import type {
+  BodyArea,
+  FoodSuggestion,
+  MacroSet,
+  NutritionTargets,
+  Proposal,
+  SetLog,
+  TrainerState,
+} from '../types';
 import type { Unit } from '../units';
 import { matchIntent, type DayWord, type Intent, type IntentSlots, type Safety } from './intents';
 import { addDate, effectiveDay, weekdayOf } from './plan';
@@ -43,7 +53,19 @@ import {
   type StallOption,
   type StallSession,
 } from './actions/stall';
-import { FOOD_LATER, HELP_TEXT, proposalReply, RED_FLAG_LINE, REFERRAL_LINE } from './replies';
+import { suggestFood, type FoodCandidates } from './actions/food';
+import { leftMacros, remaining } from '../nutrition/day';
+import {
+  FOOD_DONE,
+  FOOD_LATER,
+  FOOD_NONE,
+  FOOD_SETUP,
+  foodIdeasReply,
+  HELP_TEXT,
+  proposalReply,
+  RED_FLAG_LINE,
+  REFERRAL_LINE,
+} from './replies';
 
 export type CoachPhase = 'today' | 'preview' | 'workout';
 export type QuickChipId = 'notToday' | 'easyOn' | 'lighter' | 'swap' | 'adjustPlan' | 'food';
@@ -95,6 +117,14 @@ export type CoachContext = {
   catalog: TrainerCatalog;
   /** M7 Fuel is built (food suggestions). */
   m7Available: boolean;
+  /** M7 data for food suggestions; absent → the Fuel setup pointer. */
+  fuel?: CoachFuel;
+};
+
+/** Today's food log totals, the targets (null = not set up) and what can be suggested. */
+export type CoachFuel = FoodCandidates & {
+  totals: MacroSet;
+  targets: NutritionTargets | null;
 };
 
 export type CoachResponse = {
@@ -106,6 +136,8 @@ export type CoachResponse = {
   intent: Intent;
   /** A line to speak now (only the red-flag line mid-workout), ≤ 12 words. */
   say?: string;
+  /** M7: food ideas, each with a Log payload (logged only on a tap). */
+  foods?: FoodSuggestion[];
 };
 
 export const QUICK_CHIPS: readonly CoachChip[] = [
@@ -164,7 +196,13 @@ const DAY_INDEX: Record<Exclude<DayWord, 'today' | 'tomorrow'>, number> = {
   sat: 6,
 };
 
-type Body = { reply: string; proposal?: Proposal; chips?: CoachChip[]; say?: string };
+type Body = {
+  reply: string;
+  proposal?: Proposal;
+  chips?: CoachChip[];
+  say?: string;
+  foods?: FoodSuggestion[];
+};
 
 const isArea = (id: string): id is BodyArea => (AREA_CHIP_IDS as readonly string[]).includes(id);
 const isWorkout = (ctx: CoachContext) => ctx.phase === 'workout';
@@ -197,6 +235,7 @@ function finish(ctx: CoachContext, safety: Safety, intent: Intent, body: Body): 
   const out: CoachResponse = { reply, chips: body.chips ?? quickChips(ctx), safety, intent };
   if (body.proposal) out.proposal = { ...body.proposal, ...proposalReply(body.proposal) };
   if (body.say) out.say = body.say;
+  if (body.foods && body.foods.length > 0) out.foods = body.foods;
   return out;
 }
 
@@ -370,8 +409,14 @@ function stallFlow(ctx: CoachContext, exerciseId?: string, option?: StallOption)
 }
 
 function food(ctx: CoachContext): Body {
-  // M7 isn't built yet: the suggestion action arrives with it.
-  return { reply: ctx.m7Available ? 'Food ideas are in Fuel.' : FOOD_LATER };
+  if (!ctx.m7Available) return { reply: FOOD_LATER };
+  const fuel = ctx.fuel;
+  if (!fuel?.targets) return { reply: FOOD_SETUP };
+  const left = leftMacros(remaining(fuel.totals, fuel.targets));
+  if (left.kcal <= 0 && left.proteinG <= 0) return { reply: FOOD_DONE };
+  const foods = suggestFood(left, fuel);
+  if (foods.length === 0) return { reply: FOOD_NONE };
+  return { reply: foodIdeasReply(left), foods };
 }
 
 // ---------- main ----------

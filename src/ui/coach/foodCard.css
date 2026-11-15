@@ -1,0 +1,85 @@
+/* M7 F2: the coach's food result card (src/ui/coach/foodCard.ts). Tokens only, Pro mood.
+   Body ≥ 20px, Log ≥ 56px. Log is a neutral surface-2 button (the coach sheet keeps orange for
+   Apply); a logged row shows a green check + "Logged" (achieved, not a button). */
+
+.fc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+}
+
+.fc-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.fc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: var(--line-w) solid var(--line);
+  min-width: 0;
+}
+
+.fc-txt {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fc-name {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.fc-meta,
+.fc-why {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.fc-log {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  min-width: 96px;
+  padding: 0 16px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.fc-logged {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  color: var(--success);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}

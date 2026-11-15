@@ -4,7 +4,11 @@ import { fromUnit } from '../units';
 import {
   adjustSummary,
   checkCopy,
+  FOOD_DONE,
   FOOD_LATER,
+  FOOD_NONE,
+  FOOD_SETUP,
+  foodIdeasReply,
   HELP_TEXT,
   proposalReply,
   RED_FLAG_LINE,
@@ -58,7 +62,15 @@ describe('fixed lines', () => {
   });
 
   it('every fixed line passes checkCopy and may be spoken (≤ 12 words)', () => {
-    for (const line of [REFERRAL_LINE, RED_FLAG_LINE, HELP_TEXT, FOOD_LATER]) {
+    for (const line of [
+      REFERRAL_LINE,
+      RED_FLAG_LINE,
+      HELP_TEXT,
+      FOOD_LATER,
+      FOOD_SETUP,
+      FOOD_DONE,
+      FOOD_NONE,
+    ]) {
       expect(checkCopy(line), line).toEqual({ ok: true, hits: [] });
       expect(wordCount(line)).toBeLessThanOrEqual(SPOKEN_MAX_WORDS);
     }
@@ -69,6 +81,24 @@ describe('fixed lines', () => {
   it('help starts with "I can help with:" and food says it comes with Fuel', () => {
     expect(HELP_TEXT).toBe('I can help with:');
     expect(FOOD_LATER).toBe('Food tips come with Fuel.');
+  });
+
+  it('food (M7): targets hit, setup help, and the ideas line with what is left', () => {
+    expect(FOOD_DONE).toBe("You've hit today's targets.");
+    expect(FOOD_SETUP).toMatch(/Fuel/);
+    expect(foodIdeasReply({ kcal: 900.4, proteinG: 40 })).toBe(
+      '40 g protein and 900 kcal left today. Some ideas:',
+    );
+    expect(foodIdeasReply({ kcal: 900, proteinG: 0 })).toBe('900 kcal left today. Some ideas:');
+    expect(foodIdeasReply({ kcal: 0, proteinG: 22.5 })).toBe(
+      '22.5 g protein left today. Some ideas:',
+    );
+    for (const m of [
+      { kcal: 900, proteinG: 40 },
+      { kcal: 0, proteinG: 10 },
+    ]) {
+      expect(checkCopy(foodIdeasReply(m)).ok).toBe(true);
+    }
   });
 });
 

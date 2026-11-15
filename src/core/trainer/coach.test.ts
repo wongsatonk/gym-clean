@@ -28,7 +28,18 @@ import {
   SPOKEN_MAX_WORDS,
 } from './replies';
 import source from './coach.ts?raw';
-import type { BodyArea, Exercise, Program, SetLog, TrainerState } from '../types';
+import type {
+  BodyArea,
+  Exercise,
+  Food,
+  NutritionTargets,
+  Program,
+  Recipe,
+  SetLog,
+  TrainerState,
+} from '../types';
+import type { CoachFuel } from './coach';
+import { FOOD_DONE, FOOD_NONE, FOOD_SETUP } from './replies';
 
 // Made-up history; the program is the repo's default program (public, no personal numbers).
 const exercises = exercisesJson as Exercise[];
@@ -118,6 +129,71 @@ function workoutCtx(dayId: string, logged: string[]): CoachContext {
   return { ...c, phase: 'workout', sessions: h.sessions, logged };
 }
 
+// M7 Fuel data for the food path (made-up numbers).
+const TARGETS: NutritionTargets = {
+  kcal: { value: 2600, estimate: true },
+  proteinG: { value: 140, estimate: true },
+  carbsG: { value: 320, estimate: true },
+  fatG: { value: 75, estimate: true },
+};
+const per100 = (id: string, name: string, kcal: number, proteinG: number): Food => ({
+  id,
+  name,
+  source: 'custom',
+  basis: { per100g: true },
+  kcal,
+  proteinG,
+});
+const plate = (id: string, name: string, kcal: number, proteinG: number): Food => ({
+  id,
+  name,
+  source: 'thai-estimate',
+  basis: { servingLabel: '1 plate' },
+  portions: [
+    { label: 'Small', factor: 0.75 },
+    { label: 'Regular', factor: 1 },
+    { label: 'Large', factor: 1.4 },
+  ],
+  kcal,
+  proteinG,
+  note: 'Made-up test values',
+});
+const SHAKE: Food = {
+  id: 'seed-shake',
+  name: 'Protein shake',
+  source: 'custom',
+  basis: { servingLabel: '1 scoop' },
+  kcal: 120,
+  proteinG: 24,
+};
+const DISHES = [
+  plate('thai-pad-thai', 'Pad thai', 600, 20),
+  plate('thai-kapao', 'Pad kra pao with rice and egg', 700, 32),
+];
+const CHICKEN_RICE: Recipe = {
+  id: 'r1',
+  name: 'Chicken and rice',
+  ingredients: [
+    { foodId: 'f-chicken', grams: 400 },
+    { foodId: 'f-rice', grams: 600 },
+  ],
+  servings: 4,
+  updatedAt: 1,
+};
+const FUEL: CoachFuel = {
+  totals: { kcal: 1400, proteinG: 80 },
+  targets: TARGETS,
+  favorites: [{ id: 'fav', ref: { foodId: 'seed-shake' }, amount: { servings: 1 }, createdAt: 1 }],
+  foods: [
+    SHAKE,
+    per100('f-chicken', 'Chicken breast', 165, 31),
+    per100('f-rice', 'Rice', 130, 2.7),
+    ...DISHES,
+  ],
+  recipes: [CHICKEN_RICE],
+  thaiDishes: DISHES,
+};
+
 const ids = (r: CoachResponse) => r.chips.map((c) => c.id);
 const text = (t: string): CoachInput => ({ text: t });
 
@@ -127,6 +203,7 @@ function allCopy(r: CoachResponse): string[] {
     r.reply,
     r.say ?? '',
     ...r.chips.map((c) => c.label),
+    ...(r.foods ?? []).flatMap((f) => [f.label, f.why]),
     ...(p ? [p.title, p.why, p.say ?? '', ...p.lines.flatMap((l) => [l.before, l.after])] : []),
   ].filter((s) => s !== '');
 }
@@ -169,6 +246,7 @@ describe('copy (SPEC M10 Safety)', () => {
       for (const c of [
         ctxFor(dayId),
         ctxFor(dayId, { m7Available: true }),
+        ctxFor(dayId, { m7Available: true, fuel: FUEL }),
         workoutCtx(dayId, []),
       ]) {
         for (const input of inputs) {
@@ -329,6 +407,58 @@ describe('food', () => {
     const r = handle(text('what should I eat after training?'), ctxFor('push-a'));
     expect(r.reply).toBe(FOOD_LATER);
     expect(r.proposal).toBeUndefined();
+    expect(r.foods).toBeUndefined();
+    // M7 data alone doesn't switch it on: m7Available decides.
+    expect(handle({ chip: 'food' }, ctxFor('push-a', { fuel: FUEL })).reply).toBe(FOOD_LATER);
+  });
+
+  it('M7 on: the chip and the text intent return up to 3 suggestions, protein first', () => {
+    for (const input of [{ chip: 'food' as const }, text('what should I eat after training?')]) {
+      const r = handle(input, ctxFor('push-a', { m7Available: true, fuel: FUEL }));
+      expect(r.intent).toBe('food');
+      expect(r.reply).toBe('60 g protein and 1200 kcal left today. Some ideas:');
+      expect(r.foods?.map((f) => f.label)).toEqual([
+        'Chicken and rice',
+        'Pad kra pao with rice and egg',
+        'Protein shake',
+      ]);
+      expect(r.proposal).toBeUndefined();
+      expect(ids(r)).toEqual(QUICK_CHIPS.map((c) => c.id));
+    }
+  });
+
+  it('nothing left → "You\'ve hit today\'s targets."', () => {
+    const fuel: CoachFuel = { ...FUEL, totals: { kcal: 2700, proteinG: 150 } };
+    const r = handle({ chip: 'food' }, ctxFor('push-a', { m7Available: true, fuel }));
+    expect(r.reply).toBe(FOOD_DONE);
+    expect(r.foods).toBeUndefined();
+  });
+
+  it('no targets or no Fuel data → the help reply pointing to Fuel setup', () => {
+    const noTargets: CoachFuel = { ...FUEL, targets: null };
+    for (const c of [
+      ctxFor('push-a', { m7Available: true }),
+      ctxFor('push-a', { m7Available: true, fuel: noTargets }),
+    ]) {
+      const r = handle({ chip: 'food' }, c);
+      expect(r.reply).toBe(FOOD_SETUP);
+      expect(r.foods).toBeUndefined();
+    }
+  });
+
+  it('nothing saved fits → a pointer to a quick estimate', () => {
+    const fuel: CoachFuel = { ...FUEL, favorites: [], recipes: [], thaiDishes: [] };
+    const r = handle({ chip: 'food' }, ctxFor('push-a', { m7Available: true, fuel }));
+    expect(r.reply).toBe(FOOD_NONE);
+    expect(r.foods).toBeUndefined();
+  });
+
+  it('mid-workout it is still not offered', () => {
+    const c = { ...workoutCtx('push-a', []), m7Available: true, fuel: FUEL };
+    const r = handle({ chip: 'food' }, c);
+    expect(r.reply).toBe(MID_SESSION_REPLY);
+    expect(r.foods).toBeUndefined();
+    expect(handle(text('what should I eat'), c).foods).toBeUndefined();
   });
 });
 

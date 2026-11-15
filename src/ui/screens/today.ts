@@ -18,6 +18,7 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
+import { nudgeBanner } from '../fuel/links';
 import { dayMuscles, estimateMinutes, muscleLabel, type DayMuscles } from '../../core/dayInfo';
 
 /** The last finished session, as the Last time tile shows it. */
@@ -59,6 +60,8 @@ export type TodayProps = {
   adjustedToday?: string | null | undefined;
   /** M10-q11: program.json changed after he edited his plan: offer Use it / Keep mine. */
   newProgram?: boolean | undefined;
+  /** M7-q6: the evening nudge line (core `nudgeFor`), e.g. "40 g protein to go today." Shown, never spoken. */
+  nudge?: string | null | undefined;
 };
 
 /** One calendar day, as `src/core/trainer/plan.ts` returns it. `date` is local YYYY-MM-DD. */
@@ -85,6 +88,10 @@ export type TodayActions = {
   onUseNewProgram?: (() => void) | undefined;
   /** … Keep mine (the prompt goes away). */
   onKeepPlan?: (() => void) | undefined;
+  /** M7: Dismiss on the nudge (hidden for the rest of the day). Required for the nudge to show. */
+  onDismissNudge?: (() => void) | undefined;
+  /** M7: "Log food" on the nudge (opens Fuel). */
+  onOpenFuel?: (() => void) | undefined;
 };
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -547,6 +554,9 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       ? newProgramPrompt(actions)
       : null,
     props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,
+    props.nudge && actions.onDismissNudge
+      ? nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel)
+      : null,
     hero(props, actions),
     h('div', { class: 'pair' }, streakTile(props), lastTile(props)),
     h(

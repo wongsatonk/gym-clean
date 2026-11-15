@@ -13,10 +13,11 @@
 // e2e hooks: dialog named "Coach", `data-coach-chip=<id>`, `data-coach-area=<area>`,
 // `data-coach-followup=<index>` (follow-up options, task 16), the text box
 // labelled "Ask the coach" with button "Send", button "Close".
-import type { BodyArea, Proposal } from '../../core/types';
+import type { BodyArea, FoodSuggestion, Proposal } from '../../core/types';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
 import { moodClass } from '../tokens';
+import { buildFoodCard } from './foodCard';
 import { buildProposalCard, buildRedFlagCard } from './proposalCard';
 import './coach.css';
 
@@ -68,6 +69,12 @@ export type CoachSheetProps = {
    * it), never while a red flag is up.
    */
   followUps?: readonly { label: string }[] | undefined;
+  /**
+   * M7 F2: food ideas from core `suggestFood` ("What should I eat?"), drawn as a card after the
+   * messages with a Log button per row. `logged` = row indexes already logged. Needs `onLogFood`;
+   * never shown while a red flag is up. Omitted → the sheet is unchanged.
+   */
+  food?: { suggestions: readonly FoodSuggestion[]; logged?: readonly number[] } | undefined;
 };
 
 export type CoachSheetActions = {
@@ -81,6 +88,8 @@ export type CoachSheetActions = {
   onEndWorkout?: (() => void) | undefined;
   /** A follow-up option at `index` in `followUps`. */
   onFollowUp?: ((index: number) => void) | undefined;
+  /** M7 F2: Log on the food card row at `index` in `food.suggestions`. */
+  onLogFood?: ((index: number) => void) | undefined;
 };
 
 /**
@@ -149,6 +158,12 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
     list.append(h('li', { class: 'cs-card-item' }, built.el));
     cycle.push(...built.controls);
   });
+  if (p.food && p.food.suggestions.length && a.onLogFood && !red) {
+    const onLogFood = a.onLogFood;
+    const built = buildFoodCard(p.food.suggestions, { onLog: onLogFood }, p.food.logged);
+    list.append(h('li', { class: 'cs-card-item' }, built.el));
+    cycle.push(...built.controls);
+  }
 
   const chips = visibleChips(p).map((c) => {
     const pressed = c.id === 'easyOn' && p.showAreas === true;

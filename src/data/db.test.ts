@@ -516,7 +516,7 @@ describe('GymDb v4 (M10 trainer)', () => {
     const up = new GymDb(name);
     await up.open();
     try {
-      expect(up.verno).toBe(4);
+      expect(up.verno).toBeGreaterThanOrEqual(4);
       expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
       expect(await setsForSession(up, 's1')).toHaveLength(1);
       expect(await getUnit(up)).toBe('lb');
@@ -538,5 +538,86 @@ describe('GymDb v4 (M10 trainer)', () => {
     });
     await finishSession(db, 's9', 2000, { setsDone: 3 });
     expect(await db.sessions.get('s9')).toMatchObject({ adjust: ['lighter'], endedAt: 2000 });
+  });
+});
+
+describe('GymDb v5 (M7 nutrition)', () => {
+  it('upgrades a v4 database keeping every existing row and adds the empty nutrition tables', async () => {
+    const name = `upgrade-${n++}`;
+    // The schema exactly as shipped before M7 (versions 1–4).
+    const old = new Dexie(name);
+    old.version(1).stores({
+      sessions: 'sessionId, dayId, startedAt',
+      sets: '++id, sessionId, exerciseId, startedAt, [exerciseId+startedAt]',
+    });
+    old.version(2).stores({
+      exerciseNotes: 'exerciseId',
+      sessionNotes: '[sessionId+exerciseId], sessionId',
+      settings: 'key',
+    });
+    old.version(3).stores({
+      devlogSessions: 'id, startedAt',
+      devlogSets: 'key, sessionId, [sessionId+seq]',
+      devlogChunks: '++id, sessionId, setKey',
+    });
+    old.version(4).stores({
+      trainer: 'key',
+      planChanges: '++id, createdAt',
+    });
+    await old.open();
+    await old.table('sessions').put({ sessionId: 's1', dayId: 'push-a', startedAt: 1000 });
+    await old.table('sets').add(log());
+    await old.table('exerciseNotes').put({ exerciseId: 'e1', machineSetting: 'seat 4', note: '' });
+    await old
+      .table('sessionNotes')
+      .put({ sessionId: 's1', exerciseId: 'e1', note: 'n', updatedAt: 1 });
+    await old.table('settings').put({ key: 'unit', value: 'lb' });
+    await old.table('devlogSessions').put({ id: 'd1', startedAt: 1000 });
+    await old.table('devlogSets').put({ key: 'k1', sessionId: 'd1', seq: 0 });
+    await old.table('devlogChunks').add({ sessionId: 'd1', setKey: 'k1', bytes: 3 });
+    await old.table('trainer').put({ key: 'current', state: { made: 'up' } });
+    await old.table('planChanges').add({ createdAt: 5, kind: 'made-up' });
+    old.close();
+
+    const up = new GymDb(name);
+    await up.open();
+    try {
+      expect(up.verno).toBe(5);
+      expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
+      expect(await setsForSession(up, 's1')).toHaveLength(1);
+      expect(await up.exerciseNotes.get('e1')).toMatchObject({ machineSetting: 'seat 4' });
+      expect(await up.sessionNotes.count()).toBe(1);
+      expect(await getUnit(up)).toBe('lb');
+      expect(await up.devlogSessions.count()).toBe(1);
+      expect(await up.devlogSets.count()).toBe(1);
+      expect(await up.devlogChunks.count()).toBe(1);
+      expect(await up.trainer.get('current')).toMatchObject({ state: { made: 'up' } });
+      expect(await up.planChanges.count()).toBe(1);
+      for (const t of [
+        up.foods,
+        up.recipes,
+        up.foodEntries,
+        up.weighIns,
+        up.favorites,
+        up.weeklyChecks,
+      ])
+        expect(await t.count()).toBe(0);
+    } finally {
+      up.close();
+      await up.delete();
+    }
+  });
+
+  it('indexes the nutrition tables as planned', () => {
+    const idx = (t: string): string[] => {
+      const s = db.table(t).schema;
+      return [s.primKey.name, ...s.indexes.map((i) => i.name)];
+    };
+    expect(idx('foods')).toEqual(['id', 'name', 'barcode']);
+    expect(idx('recipes')).toEqual(['id']);
+    expect(idx('foodEntries')).toEqual(['id', 'date', 'time']);
+    expect(idx('weighIns')).toEqual(['date']);
+    expect(idx('favorites')).toEqual(['id', 'createdAt']);
+    expect(idx('weeklyChecks')).toEqual(['weekStart']);
   });
 });

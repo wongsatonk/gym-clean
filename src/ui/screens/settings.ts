@@ -34,6 +34,8 @@ export type SettingsProps = {
   audioTest: HTMLElement;
   /** `createDevLogPanel(...).el`. */
   devLog: HTMLElement;
+  /** M7: `nutritionSettings(...)` (src/ui/fuel). Omitted → no Nutrition section. */
+  nutrition?: HTMLElement | null | undefined;
 };
 
 export type SettingsActions = {
@@ -158,6 +160,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
       ),
       h('p', { class: 'muted set-note' }, unitNote(props.unit)),
     ),
+    props.nutrition ? section('nutrition', 'flame', 'Nutrition', props.nutrition) : null,
     actions.onPlanChanges
       ? section(
           'plan',

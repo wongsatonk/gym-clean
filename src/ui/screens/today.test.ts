@@ -563,3 +563,35 @@ describe('previewScreen with M10 trainer props', () => {
     expect(r.textContent).toBe('Barbell CurlAdjustedRemoved today');
   });
 });
+
+describe('todayScreen M7 nudge', () => {
+  const nudges = (el: FakeEl) => el.find((e) => e.hasAttribute('data-fuel-nudge'));
+
+  it('hidden without the nudge prop, or without onDismissNudge', () => {
+    expect(nudges(render().el)).toHaveLength(0);
+    expect(nudges(render({ nudge: '40 g protein to go today.' }).el)).toHaveLength(0);
+  });
+
+  it('shown above the hero with Dismiss and Log food', () => {
+    let dismissed = 0;
+    let opened = 0;
+    const el = asFake(
+      todayScreen(props({ nudge: '40 g protein to go today.' }), {
+        onStart: () => undefined,
+        onOpenDay: () => undefined,
+        onTab: () => undefined,
+        onDismissNudge: () => dismissed++,
+        onOpenFuel: () => opened++,
+      }),
+    );
+    const n = nudges(el);
+    expect(n).toHaveLength(1);
+    expect(n[0]?.textContent).toContain('40 g protein to go today.');
+    const idx = el.children.findIndex((c) => c.hasAttribute('data-fuel-nudge'));
+    const hero = el.children.findIndex((c) => c.classes.some((k) => k.includes('hero')));
+    expect(idx).toBeLessThan(hero);
+    n[0]?.find((e) => e.hasAttribute('data-nudge-dismiss'))[0]?.click();
+    n[0]?.find((e) => e.hasAttribute('data-nudge-open'))[0]?.click();
+    expect([dismissed, opened]).toEqual([1, 1]);
+  });
+});

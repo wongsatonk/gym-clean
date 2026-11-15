@@ -28,6 +28,7 @@ import { formatDuration } from '../../core/format';
 import { sessionVolume, type NewBest } from '../../core/stats';
 import type { SetLog } from '../../core/types';
 import { formatWeight, toUnit, type Unit } from '../../core/units';
+import { proteinLine, type SummaryFuel } from '../fuel/links';
 import { createStallCards, type StallCardData, type StallCardOption } from '../coachSummary';
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -67,6 +68,8 @@ export type SummaryProps = {
   focusEl?: HTMLElement | null | undefined;
   /** M10: stalled exercises (core `detectStalls` + `stallLine`); omitted/empty → no card. */
   stalls?: readonly StallCardData[] | undefined;
+  /** M7: today's protein vs target + the post-workout hint. Omitted/null (no targets) → hidden. */
+  fuel?: SummaryFuel | null | undefined;
 };
 
 export type SummaryActions = {
@@ -324,6 +327,7 @@ export function summaryScreen(p: SummaryProps, a: SummaryActions): HTMLElement {
     volumeCard(p, volumeKg, reps),
     bestsBlock(p),
     h('div', { class: 'stats sum-tiles', 'data-count': tiles.length }, ...tiles),
+    p.fuel ? proteinLine(p.fuel) : null,
     p.fixEl ?? null,
     p.focusEl ?? null,
     h('h2', { class: 'section-title' }, 'Sets'),

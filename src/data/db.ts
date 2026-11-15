@@ -1,11 +1,17 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Accent,
+  Favorite,
+  Food,
+  FoodEntry,
   PlanChange,
   ProposalAction,
   RepEvent,
+  Recipe,
   SetLog,
   TrainerState,
+  WeeklyCheck,
+  WeighIn,
 } from '../core/types';
 import type { RuleStatus } from '../core/exercises/types';
 import type { Rudeness } from '../core/personas';
@@ -128,6 +134,14 @@ export class GymDb extends Dexie {
   devlogChunks!: Table<DevLogChunkRow, number>;
   trainer!: Table<TrainerRow, string>;
   planChanges!: Table<PlanChange, number>;
+  // M7 nutrition (on device only; see src/data/nutrition/store.ts)
+  foods!: Table<Food, string>;
+  recipes!: Table<Recipe, string>;
+  foodEntries!: Table<FoodEntry, string>;
+  /** One row per local date; saving the same date again replaces it (M7-q10). */
+  weighIns!: Table<WeighIn, string>;
+  favorites!: Table<Favorite, string>;
+  weeklyChecks!: Table<WeeklyCheck, string>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -150,6 +164,16 @@ export class GymDb extends Dexie {
     this.version(4).stores({
       trainer: 'key',
       planChanges: '++id, createdAt',
+    });
+    // M7 nutrition. New tables only; existing data is untouched. Nutrition settings live in the
+    // existing `settings` table under key 'nutrition'.
+    this.version(5).stores({
+      foods: 'id, name, barcode',
+      recipes: 'id',
+      foodEntries: 'id, date, time',
+      weighIns: 'date',
+      favorites: 'id, createdAt',
+      weeklyChecks: 'weekStart',
     });
   }
 }

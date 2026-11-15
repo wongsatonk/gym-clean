@@ -1,0 +1,342 @@
+/* M7 Fuel forms: number fields and choices (fields.ts), Setup (setup.ts), Settings → Nutrition
+   (nutritionSettings.ts) and the shared Fuel header / notes (also used by weighIn.ts).
+   Tokens only (src/styles.css). Pro mood. Gym rules: main numbers ≥ 64px, body ≥ 20px,
+   taps ≥ 56px. Colour roles (M4e mix): the chosen option is a white fill + check (never orange);
+   the only orange fill is the screen's main action (Save). */
+
+/* ---------- Screen frame ---------- */
+
+.fuel-form.mood-pro {
+  gap: 18px;
+}
+
+.fuel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.fuel-head .page-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fuel-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 0 16px 0 10px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.fuel-lead,
+.fuel-note {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  line-height: 1.35;
+}
+
+.fuel-note:empty {
+  display: none;
+}
+
+.fuel-sub {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.fuel-privacy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.fuel-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- Number field: label, [−] value [+] ---------- */
+
+.nf {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nf-label {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.nf-row {
+  display: grid;
+  grid-template-columns: var(--tap-cta) minmax(0, 1fr) var(--tap-cta);
+  align-items: stretch;
+  gap: 8px;
+}
+
+.nf-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-hero);
+  background: var(--surface-2);
+}
+
+.nf-step:disabled {
+  opacity: 0.4;
+}
+
+.nf-mid {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 10px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+}
+
+.nf-mid input.nf-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.nf-unit {
+  flex: none;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+/* ---------- Choices: one of many, chosen = white fill + check ---------- */
+
+.choice-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.choices {
+  display: grid;
+  gap: 8px;
+}
+
+.choices-row {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap-bar);
+  padding: 8px 16px;
+  text-align: left;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.choice-check {
+  flex: none;
+  display: inline-flex;
+  visibility: hidden;
+}
+
+.choice.on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.choice.on .choice-check {
+  visibility: visible;
+}
+
+.choice-txt {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.choice-label {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.choice-note {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.choice.on .choice-note {
+  color: var(--on-selected);
+}
+
+/* ---------- Settings → Nutrition ---------- */
+
+.nt {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.nt-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nt-sub {
+  margin: 4px 0 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.nt-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.nt-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.nt-label {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.nt-yours {
+  color: var(--text-2);
+  font-size: var(--fs-label);
+  font-weight: 600;
+}
+
+.nt-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nt-num {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nt-value {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.nt-unit {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.nt-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-min);
+  padding: 0 16px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+/* Save / Turn on in a settings block: a confirmed choice, so the white "selected" fill. */
+.nt-btn.nt-save {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.nt-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nt-edit-actions .nt-btn {
+  flex: 1 1 auto;
+}
+
+.nt-barcode {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nt-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.nt-confirm-txt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+}
+
+.nt-confirm-txt .ic {
+  flex: none;
+  margin-top: 2px;
+}

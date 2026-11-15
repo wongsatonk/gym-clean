@@ -1,0 +1,215 @@
+// M7 Fuel tab (task 11, SPEC M7 "Screens & UX", Pro mood). Pure render: values and callbacks in,
+// element out. No DB: app.ts loads today's entries, runs the core totals/targets selectors and
+// passes the results here. A delete is undone with the app's Undo toast (`showUndoToast`, which
+// already keeps clear of the tab bar).
+//
+// Layout: title + date + Weigh-in, the nudge banner slot, the rings with the big "to go" numbers
+// (or the "Set up your targets" card), Log food (the one orange action), today's entries grouped
+// by meal slot (each row opens the entry editor; Delete is a separate button, undone by the app's toast),
+// then the 4-tab bar (Today / Fuel / History / Settings).
+//
+// e2e hooks: `main.screen.fuel[data-screen=fuel]`, `[data-ring=kcal|proteinG|carbsG|fatG]`,
+// `[data-left=…]`, `[data-log-open]`, `[data-weigh-in]`, `[data-setup]`, `[data-fuel-nudge]` (links.ts, shared with Today),
+// `[data-slot=<slot>]` groups, `[data-entry=<id>]` rows, `[data-entry-delete=<id>]`.
+import type {
+  FoodEntry,
+  MacroSet,
+  MealSlot,
+  NutritionMode,
+  NutritionTargets,
+} from '../../core/types';
+import { formatWeight, type Unit } from '../../core/units';
+import { h } from '../dom';
+import { SLOT_LABEL, amountText, estimateTag, fmtNum } from '../fuel/common';
+import { nudgeBanner } from '../fuel/links';
+import { fuelRings } from '../fuel/rings';
+import { icon } from '../icons';
+import { tabBar, type AppTabId } from '../tabBar';
+import { moodClass } from '../tokens';
+import { dateLabel } from './today';
+
+export type FuelProps = {
+  now: number;
+  mode: NutritionMode;
+  /** null until setup is done: the screen shows "Set up your targets". */
+  targets: NutritionTargets | null;
+  /** Today's totals (core). */
+  totals: MacroSet;
+  /** Today's entries (any order; grouped and sorted here by slot and time). */
+  entries: readonly FoodEntry[];
+  unit: Unit;
+  /** The latest weigh-in, shown on the Weigh-in button. */
+  lastWeighInKg?: number | null | undefined;
+  /** M7-q6 evening nudge text ("40 g protein to go today"), or null. */
+  nudge?: string | null | undefined;
+};
+
+export type FuelActions = {
+  /** Opens the log sheet. */
+  onLog: () => void;
+  onEditEntry: (entry: FoodEntry) => void;
+  /** Delete at once; the app shows the Undo toast (no confirm dialog). */
+  onDeleteEntry: (entry: FoodEntry) => void;
+  onWeighIn: () => void;
+  onSetup: () => void;
+  onDismissNudge?: (() => void) | undefined;
+  onTab: (tab: AppTabId) => void;
+};
+
+/** Entries grouped by slot; groups ordered by their first entry's time, rows by time. */
+export function groupBySlot(
+  entries: readonly FoodEntry[],
+): { slot: MealSlot; entries: FoodEntry[] }[] {
+  const map = new Map<MealSlot, FoodEntry[]>();
+  for (const e of [...entries].sort((a, b) => a.time - b.time)) {
+    map.set(e.slot, [...(map.get(e.slot) ?? []), e]);
+  }
+  return [...map].map(([slot, list]) => ({ slot, entries: list }));
+}
+
+function header(props: FuelProps, actions: FuelActions): HTMLElement {
+  const w = props.lastWeighInKg;
+  return h(
+    'header',
+    { class: 'fuel-head' },
+    h(
+      'div',
+      { class: 'fuel-head-txt' },
+      h('h1', { class: 'page-title' }, 'Fuel'),
+      h('p', { class: 'date' }, dateLabel(props.now)),
+    ),
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'fuel-weigh-btn',
+        'data-weigh-in': true,
+        onclick: () => actions.onWeighIn(),
+      },
+      icon('trend', 'md'),
+      h(
+        'span',
+        { class: 'fuel-weigh-txt' },
+        h('span', {}, 'Weigh-in'),
+        w != null
+          ? h('span', { class: 'fuel-weigh-last' }, `${formatWeight(w, props.unit)} ${props.unit}`)
+          : null,
+      ),
+    ),
+  );
+}
+
+function setupCard(onSetup: () => void): HTMLElement {
+  return h(
+    'section',
+    { class: 'fuel-setup-card', 'data-setup-card': true, 'aria-labelledby': 'fuel-setup-title' },
+    h('h2', { class: 'fuel-setup-title', id: 'fuel-setup-title' }, 'Set up your targets'),
+    h(
+      'p',
+      { class: 'muted' },
+      'Daily calories and protein come from your height, age, activity and today’s weight.',
+    ),
+    h(
+      'button',
+      { type: 'button', class: 'fuel-secondary', 'data-setup': true, onclick: () => onSetup() },
+      icon('sliders', 'md'),
+      h('span', {}, 'Set up targets'),
+    ),
+  );
+}
+
+function entryRow(e: FoodEntry, mode: NutritionMode, actions: FuelActions): HTMLElement {
+  const macros = [`${fmtNum(e.kcal)} kcal`, `${fmtNum(e.proteinG)} g protein`];
+  if (mode === 'full') {
+    if (e.carbsG !== undefined) macros.push(`${fmtNum(e.carbsG)} g carbs`);
+    if (e.fatG !== undefined) macros.push(`${fmtNum(e.fatG)} g fat`);
+  }
+  return h(
+    'li',
+    { class: 'fuel-entry', 'data-entry': e.id },
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'fuel-entry-main',
+        'data-entry-edit': e.id,
+        onclick: () => actions.onEditEntry(e),
+      },
+      h('span', { class: 'fuel-entry-name' }, e.label),
+      h(
+        'span',
+        { class: 'fuel-entry-meta' },
+        h('span', {}, amountText(e.amount)),
+        e.estimate ? estimateTag() : null,
+      ),
+      h('span', { class: 'fuel-entry-macros' }, macros.join(' · ')),
+      h('span', { class: 'sr-only' }, ', edit'),
+    ),
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'fuel-entry-del',
+        'data-entry-delete': e.id,
+        'aria-label': `Delete ${e.label}`,
+        onclick: () => actions.onDeleteEntry(e),
+      },
+      icon('close', 'md'),
+      h('span', { 'aria-hidden': 'true' }, 'Delete'),
+    ),
+  );
+}
+
+function entriesSection(props: FuelProps, actions: FuelActions): HTMLElement {
+  const groups = groupBySlot(props.entries);
+  if (groups.length === 0) {
+    return h(
+      'section',
+      { class: 'fuel-entries', 'data-entries': 'none' },
+      h('h2', { class: 'fuel-h2' }, 'Today'),
+      h('p', { class: 'muted fuel-empty' }, 'Nothing logged yet today.'),
+    );
+  }
+  return h(
+    'section',
+    { class: 'fuel-entries', 'aria-label': 'Today’s food' },
+    ...groups.map((g) => {
+      const kcal = g.entries.reduce((s, e) => s + e.kcal, 0);
+      const protein = g.entries.reduce((s, e) => s + e.proteinG, 0);
+      return h(
+        'section',
+        { class: 'fuel-slot', 'data-slot': g.slot, 'aria-labelledby': `slot-${g.slot}` },
+        h(
+          'h2',
+          { class: 'fuel-h2', id: `slot-${g.slot}` },
+          h('span', {}, SLOT_LABEL[g.slot]),
+          h('span', { class: 'fuel-slot-sum' }, `${fmtNum(kcal)} kcal · ${fmtNum(protein)} g`),
+        ),
+        h('ul', { class: 'fuel-list' }, ...g.entries.map((e) => entryRow(e, props.mode, actions))),
+      );
+    }),
+  );
+}
+
+export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement {
+  return h(
+    'main',
+    { class: `screen fuel has-tabbar ${moodClass('pro')}`, 'data-screen': 'fuel' },
+    header(props, actions),
+    props.nudge ? nudgeBanner(props.nudge, actions.onDismissNudge ?? (() => undefined)) : null,
+    props.targets ? fuelRings(props.mode, props.totals, props.targets) : setupCard(actions.onSetup),
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'primary-btn cta-btn fuel-log-btn',
+        'data-log-open': true,
+        onclick: () => actions.onLog(),
+      },
+      icon('plus', 'lg'),
+      'Log food',
+    ),
+    entriesSection(props, actions),
+    tabBar('fuel', actions.onTab, { fuel: true }),
+  );
+}

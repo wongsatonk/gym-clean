@@ -1,0 +1,21 @@
+{
+  "format": "gym-clean-seed-foods",
+  "version": 1,
+  "note": "Foods the app starts with. Values are made-up placeholders (the repo is public); the app asks for the numbers from the product label the first time an editFromLabel food is logged.",
+  "editFromLabel": ["seed:protein-shake"],
+  "foods": [
+    {
+      "id": "seed:protein-shake",
+      "name": "Protein shake",
+      "nameTh": "โปรตีนเชค",
+      "source": "custom",
+      "basis": { "servingLabel": "1 scoop", "servingG": 30 },
+      "kcal": 120,
+      "proteinG": 24,
+      "carbsG": 3,
+      "fatG": 1.5,
+      "estimate": true,
+      "note": "Placeholder values, not from any product. Enter the numbers from your product's label."
+    }
+  ]
+}

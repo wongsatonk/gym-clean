@@ -220,3 +220,19 @@ describe('settings screen', () => {
     expect(unitNote('lb')).toMatch(/^Weights step by 5 lb\./);
   });
 });
+
+describe('settingsScreen M7 Nutrition slot', () => {
+  it('no nutrition prop → no Nutrition section (unchanged)', () => {
+    const { el } = render();
+    expect(el.find((e) => e.getAttribute('data-section') === 'nutrition')).toHaveLength(0);
+  });
+
+  it('places the nutrition block in a "Nutrition" section after Weight unit', () => {
+    const { el } = render({ nutrition: slot('data-nutrition') });
+    const sections = el.find((e) => e.tag === 'section').map((s) => s.getAttribute('data-section'));
+    expect(sections.indexOf('nutrition')).toBe(sections.indexOf('unit') + 1);
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'nutrition', 'nutrition');
+    expect(sec.textContent).toContain('Nutrition');
+    expect(sec.find((e) => e.hasAttribute('data-nutrition'))).toHaveLength(1);
+  });
+});

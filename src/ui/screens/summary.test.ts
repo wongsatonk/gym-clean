@@ -350,3 +350,25 @@ describe('summaryScreen stall card (M10)', () => {
     ]);
   });
 });
+
+describe('summaryScreen M7 protein line', () => {
+  const hasFuel = (el: FakeEl) => el.find((e) => e.hasAttribute('data-fuel-protein')).length;
+
+  it('hidden without the fuel prop or with null (no targets)', () => {
+    expect(hasFuel(render().el)).toBe(0);
+    expect(hasFuel(render({ fuel: null }).el)).toBe(0);
+  });
+
+  it('shown after the stat tiles with the hint', () => {
+    const { el } = render({
+      fuel: { proteinG: 85, targetG: 130, hint: '45 g protein to go today' },
+    });
+    expect(hasFuel(el)).toBe(1);
+    const kids = el.children.map(
+      (c) => c.classes.join(' ') + (c.hasAttribute('data-fuel-protein') ? ' FUEL' : ''),
+    );
+    const tiles = kids.findIndex((k) => k.includes('sum-tiles'));
+    expect(kids[tiles + 1]).toContain('FUEL');
+    expect(el.textContent).toContain('45 g protein to go today');
+  });
+});

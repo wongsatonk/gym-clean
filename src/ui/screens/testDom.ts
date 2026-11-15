@@ -51,6 +51,10 @@ export class FakeEl {
       } else this.children.push(n);
     }
   }
+  replaceChildren(...nodes: (FakeEl | string)[]) {
+    this.children = [];
+    this.append(...nodes);
+  }
   set textContent(v: string) {
     const t = new FakeEl('#text');
     t.text = v;

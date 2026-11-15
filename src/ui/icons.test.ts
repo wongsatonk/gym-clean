@@ -31,10 +31,11 @@ describe('icon set', () => {
       'ruler',
       'flag',
       'chat',
+      'bowl',
     ] as const) {
       expect(ICON_NAMES).toContain(n);
     }
-    expect(ICON_NAMES.length).toBe(31);
+    expect(ICON_NAMES.length).toBe(32);
     for (const n of ICON_NAMES) expect(ICON_PATHS[n]).toMatch(/^<(path|rect|circle) /);
   });
 

@@ -11,12 +11,35 @@ import { ADVICE_BANNED_WORDS, wordCount } from '../advice';
 import { formatWeight, type Unit } from '../units';
 import { normalizeText } from './intents';
 import phrases from './phrases.json';
-import type { DayOverride, PlannedExercise, ProgramDay, Proposal, ProposalAction } from '../types';
+import type {
+  DayOverride,
+  MacroSet,
+  PlannedExercise,
+  ProgramDay,
+  Proposal,
+  ProposalAction,
+} from '../types';
 
 export const REFERRAL_LINE = "If something doesn't feel right, check with a doctor or physio.";
 export const RED_FLAG_LINE = 'Stop the workout for today and get checked by a doctor.';
 export const HELP_TEXT = 'I can help with:';
 export const FOOD_LATER = 'Food tips come with Fuel.';
+/** M7 on, but no targets yet. */
+export const FOOD_SETUP = 'Set up your targets in Fuel first, then ask me again.';
+/** M7: protein and kcal targets both reached today. */
+export const FOOD_DONE = "You've hit today's targets.";
+/** M7: nothing saved fits what's left. */
+export const FOOD_NONE = "Nothing saved fits what's left. Try a quick estimate in Fuel.";
+
+const r1 = (x: number) => Math.round(x * 10) / 10;
+
+/** The reply above the food suggestions, e.g. "40 g protein and 900 kcal left today. Some ideas:". */
+export function foodIdeasReply(left: MacroSet): string {
+  const p = r1(Math.max(0, left.proteinG));
+  const k = Math.round(Math.max(0, left.kcal));
+  const parts = [p > 0 ? `${p} g protein` : '', k > 0 ? `${k} kcal` : ''].filter(Boolean);
+  return `${parts.join(' and ')} left today. Some ideas:`;
+}
 
 /** A Proposal's `say` (spoken confirmation after Apply). */
 export const SAY_MAX_WORDS = 8;
