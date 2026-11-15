@@ -1,0 +1,15 @@
+// Gym Clean: signing settings for the App target (its Debug and Release configurations use this
+// file as their base).
+//
+// This file is public and holds no personal data. The placeholder bundle id below is enough for a
+// simulator build. To run on your iPhone, copy Signing.local.xcconfig.example to
+// Signing.local.xcconfig (gitignored, never committed) and put your own bundle id and Apple team
+// id there. It is included last, so its values win. Steps: docs/ios-setup.md.
+//
+// Don't pick a Team in Xcode's Signing & Capabilities tab: Xcode would write your team id into
+// project.pbxproj, which is committed. Put it in Signing.local.xcconfig instead.
+
+PRODUCT_BUNDLE_IDENTIFIER = com.example.gymclean
+CODE_SIGN_STYLE = Automatic
+
+#include? "Signing.local.xcconfig"

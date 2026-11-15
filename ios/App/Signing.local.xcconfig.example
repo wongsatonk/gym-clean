@@ -1,0 +1,9 @@
+// Copy this file to Signing.local.xcconfig (same folder) and fill in your own values.
+// Signing.local.xcconfig is gitignored: your bundle id and team id never go into the public repo.
+// Steps: docs/ios-setup.md, "4. Your bundle id and team".
+
+// A bundle id that is yours, e.g. com.yourname.gymclean (letters, digits, dots and hyphens only).
+PRODUCT_BUNDLE_IDENTIFIER = com.yourname.gymclean
+
+// Your team id (10 characters). See docs/ios-setup.md for where Xcode shows it.
+DEVELOPMENT_TEAM = ABCDE12345
