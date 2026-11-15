@@ -26,6 +26,7 @@ import {
   foodFromDbRow,
   isEstimateFood,
   recipePerServing,
+  rescaleEntry,
   scaleFood,
   type EntryOpts,
 } from '../../core/nutrition/portions';
@@ -61,6 +62,7 @@ import {
   deleteRecipe,
   entriesBetween,
   getBarcodeLookup,
+  getNudgeShown,
   getNutritionMode,
   getNutritionSettings,
   listFavorites,
@@ -78,6 +80,7 @@ import {
   seedOnce,
   setBarcodeLookup,
   setMode,
+  setNudgeShown,
 } from '../../data/nutrition/store';
 import { fuelScreen } from '../screens/fuel';
 import type { TabId } from '../tabBar';
@@ -119,8 +122,6 @@ export type FuelHost = {
 
 type Sub = { kind: 'main' } | { kind: 'weighIn' } | { kind: 'setup'; back: 'fuel' | 'settings' };
 
-/** Settings key for the evening nudge (M7-q6: at most once a day): the date it was last shown. */
-const NUDGE_KEY = 'nutritionNudgeShown';
 const ENTRY_DAYS = 30;
 const HISTORY_DAYS = 14;
 const TREND_DAYS = 28;
@@ -245,7 +246,7 @@ export function createFuel(host: FuelHost) {
       listFavorites(db),
       listWeeklyChecks(db),
       sessionsSince(db, t - (HISTORY_DAYS + 1) * 24 * 3_600_000),
-      db.settings.get(NUDGE_KEY),
+      getNudgeShown(db),
     ]);
     return force || (startGen === gen && pending.size === 0) ? rows : null;
   }
@@ -273,7 +274,7 @@ export function createFuel(host: FuelHost) {
     sessions = sess.map((x) =>
       x.endedAt !== undefined ? { startedAt: x.startedAt, endedAt: x.endedAt } : { startedAt: x.startedAt },
     );
-    nudgeShownDate = typeof shown?.value === 'string' ? shown.value : null;
+    nudgeShownDate = shown;
     index = null;
     loaded = true;
     evaluateNudge();
@@ -364,13 +365,13 @@ export function createFuel(host: FuelHost) {
     if (!n) return;
     nudge = n;
     nudgeShownDate = d;
-    void track(db.settings.put({ key: NUDGE_KEY, value: d })).catch(host.logError);
+    void track(setNudgeShown(db, d)).catch(host.logError);
   }
 
   function dismissNudge(): void {
     nudge = null;
     nudgeShownDate = today();
-    void track(db.settings.put({ key: NUDGE_KEY, value: nudgeShownDate })).catch(host.logError);
+    void track(setNudgeShown(db, nudgeShownDate)).catch(host.logError);
     host.render();
   }
 
@@ -780,19 +781,14 @@ export function createFuel(host: FuelHost) {
   }
 
   function openEntry(e: FoodEntry): void {
-    const base = entryBase(e);
-    const preview = (a: FoodAmount): MacroSet => scaleFood(base, a) ?? macrosOf(e);
+    // Core rescaleEntry scales from the entry's as-logged macros/amount, so edits never drift.
+    const preview = (a: FoodAmount): MacroSet => macrosOf(rescaleEntry(e, a) ?? e);
     openSheet(
       entrySheet(
         { entry: e, mode, preview },
         {
           onSave: ({ amount, slot }) => {
-            const m = preview(amount);
-            const next: FoodEntry = { ...e, amount, slot, kcal: m.kcal, proteinG: m.proteinG };
-            if (m.carbsG !== undefined) next.carbsG = m.carbsG;
-            else delete next.carbsG;
-            if (m.fatG !== undefined) next.fatG = m.fatG;
-            else delete next.fatG;
+            const next: FoodEntry = { ...(rescaleEntry(e, amount) ?? e), slot };
             closeSheet(entryEditSel(e.id));
             void track(saveEntry(db, next))
               .then(() => {

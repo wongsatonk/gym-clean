@@ -11,7 +11,7 @@
  *   option within `KCAL_SLACK` over still counts.
  * - With protein left, items need ≥ `MIN_PROTEIN_G` and rank by the protein they cover (capped at
  *   what's left), then by closeness to the kcal left. With protein done, closeness to kcal left.
- * - Labels that fail `checkCopy` are never offered.
+ * - Labels that fail `checkCopy` are never offered. `why` lines use whole grams.
  * - Foods in `skipIds` (placeholders still waiting for label numbers) are never offered.
  */
 import type {
@@ -143,12 +143,12 @@ function pick(options: readonly Option[], kcalLeft: number): Option | undefined 
 
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
+/** Coach lines show and speak whole grams (kcal already whole). */
 function whyFor(o: Option, left: MacroSet): string {
-  const p = r1(left.proteinG);
+  const p = Math.round(left.proteinG);
   if (p > 0) {
-    return o.macros.proteinG >= p
-      ? `Covers your ${p} g protein left`
-      : `${r1(o.macros.proteinG)} g of your ${p} g protein left`;
+    const g = Math.round(o.macros.proteinG);
+    return g >= p ? `Covers your ${p} g protein left` : `${g} g of your ${p} g protein left`;
   }
   return `Fits your ${Math.round(left.kcal)} kcal left`;
 }

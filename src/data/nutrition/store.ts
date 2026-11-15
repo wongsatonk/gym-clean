@@ -241,6 +241,23 @@ export async function setBarcodeLookup(db: GymDb, on: boolean): Promise<void> {
   await patchSettings(db, { barcodeLookup: on });
 }
 
+// ---------- Evening nudge (settings key 'nutritionNudgeShown') ----------
+
+/** M7-q6: the local date the evening nudge was last shown or dismissed (at most once a day). */
+const NUDGE_KEY = 'nutritionNudgeShown';
+
+/** The date the nudge was last shown (YYYY-MM-DD), else null. */
+export async function getNudgeShown(db: GymDb): Promise<string | null> {
+  const v = (await db.settings.get(NUDGE_KEY))?.value;
+  return typeof v === 'string' && DATE_RE.test(v) ? v : null;
+}
+
+/** Records that the nudge was shown (or dismissed) on `date`. */
+export async function setNudgeShown(db: GymDb, date: string): Promise<void> {
+  checkDate(date);
+  await db.settings.put({ key: NUDGE_KEY, value: date });
+}
+
 // ---------- Seeding ----------
 
 /**
