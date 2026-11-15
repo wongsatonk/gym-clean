@@ -17,7 +17,8 @@
     "postinstall": "node scripts/copy-mediapipe-wasm.mjs",
     "synthetic": "node scripts/synthetic.mjs",
     "devlog": "node scripts/devlog.mjs",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "build-foods": "node scripts/build-foods.mjs"
   },
   "type": "module",
   "devDependencies": {

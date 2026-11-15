@@ -36,3 +36,6 @@ fixtures/synthetic/**/*.webm
 *.devlog.json.gz
 gym-clean-devlog-*.json*
 devlog-exports/
+
+# M7: raw USDA FoodData Central downloads (rebuilt by scripts/build-foods.mjs --download)
+data-src/

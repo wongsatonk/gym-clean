@@ -5,8 +5,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 ## Status
 
 - **Live:** 119acd5 on main, deployed 2026-11-15 (CI 118 passed): everything above plus **M10 phase A AI trainer** (coach chat, Not today, go easy on an area, lighter, deload, swap, stall fix, Undo, Plan changes).
-- **In progress:** nothing building. Waiting on gym checkpoints.
-- **Next step:** 🧍 Checkpoint E (a week with the coach: at least one Not today, one Go easy on…, one swap) and 🧍 Checkpoint F1 (camera wave-1 sets + dev-log export). Then M4f wave 2 or M7.
+- **In progress:** nothing building. M7 Fuel is planned (2026-11-15, plan under "Current milestone plan").
+- **Next step:** Wongsaton said "Polish, then Fuel". So first the polish round, then **M7 Fuel** on branch `m7-fuel`. Tasks 1, 2 and 3 can start immediately. The gym checkpoints run alongside: 🧍 Checkpoint E (a week with the coach: at least one Not today, one Go easy on…, one swap) and 🧍 Checkpoint F1 (camera wave-1 sets + dev-log export). M4f wave 2 comes after F1.
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **Waiting on Wongsaton:**
   - Deploy OK for m4e-redesign.
@@ -18,6 +18,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - The 🧍 gym checkpoints.
   - **M4f Camera for more exercises (planned 2026-11-14):** the M4f-q questions under "Blockers / questions" are not blocking; their defaults get built.
   - **M10 AI trainer (planned 2026-11-14):** the M10-q questions under "Blockers / questions". Phase A can start once q1–q3 and q8 have answers, or on the defaults if he says so.
+  - **M7 Fuel (planned 2026-11-15):** the M7-q questions under "Blockers / questions" are not blocking; their defaults get built. M7-q5 answered: barcode is built, off by default.
 
 ## Milestone checklist
 
@@ -36,12 +37,256 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [~] M5b Trainer recommendations after the set: round 1 is live. The tempo rule (T1) is built in M5 (task 8)
 - [~] M5c Hands-free sets: **built and live** (c3c1f85, verifier PASS) → waiting for 🧍 Checkpoint B3 (hands-free gym test). Follow-up "Breaks inside a set: tap to continue" planned below
 - [ ] M6 Polish & install
-- [ ] M7 Fuel: food & nutrition (independent of the camera; can be built while waiting on Checkpoint B with `/build M7`)
+- [ ] M7 Fuel: food & nutrition. **Planned 2026-11-15** (plan below, includes M10 F1–F3). Wongsaton: "Polish, then Fuel", so it's built after the polish round on `m7-fuel`. The M7-q questions are not blocking; their defaults get built. Barcode is an optional track (M7-q5) **ANSWERED 2026-11-15: "Yes, off by default" — build the barcode track (on-device scanner library, Open Food Facts lookup sends only the barcode number, setting off by default).**. No 🧍 checkpoint in the SPEC
 - [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
 - [ ] M9 Native iOS shell (Capacitor). Outline only in the SPEC; not planned (M10-q9)
 - [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
 
 ## Current milestone plan
+
+### M7 — Fuel: food & nutrition (planned 2026-11-15; after the polish round)
+**Contract:** SPEC M7 (all of it, including Accept), SPEC §4 "M7 — nutrition" data model, and the Decision "M7 plan" (2026-11-15).
+- All logic and data is **tests first** (targets, adjustment, portions, recipes, units, totals, search, store, script, data tables).
+- Nothing is pushed or deployed without Wongsaton's OK.
+- **Copy rules:** coaching language only ("45 g protein to go today", "On track this week"). No diet, weight-loss, health or medical claims. Every Fuel string passes the M10 `checkCopy` (M5b banned words + diagnosis terms). Computed numbers carry an "estimate" tag.
+- **Privacy:** nutrition data lives only in IndexedDB on the phone. It never goes into the dev log or its export. Tests, fixtures and docs use made-up numbers only. The only network call in M7 is the optional barcode lookup, which sends just the barcode number.
+- **Out of scope (M7b):** photo capture, the food classifier, `ml/**`, `src/food-vision/**`, the Claude backup and any `api.anthropic.com` CSP entry. The `photo-local` / `photo-ai` sources and `photoConfidence` exist only as types.
+- **No 🧍 checkpoint:** SPEC M7 has none. Wongsaton can simply use it. M7b's Checkpoint D comes later.
+
+**Branch:** `m7-fuel`, cut from main (4f812bf) once the polish round has merged.
+
+**Fit with the current code (why the plan looks like this):**
+- The tab bar (`src/ui/tabBar.ts`) has Today / History / Settings and `TabId` is a closed union. Fuel becomes a 4th tab (M7-q7). `app.ts`'s `View` union gets `fuel`, `weighIn`, `fuelSetup`, `recipe` and `myFood` screens.
+- Dexie is at **version 4** (M10). M7 adds **version 5** with new tables only, so existing rows are untouched. Nutrition settings go in the existing `settings` table under key `'nutrition'`, like the unit and accent settings.
+- `src/core/units.ts` already has `toUnit` / `fromUnit` / `snapToStep`. Weigh-ins reuse them and the unit setting.
+- **Coach hooks:** `coach.ts` has `CoachContext.m7Available` and `food(ctx)` returns `FOOD_LATER` ("Food tips come with Fuel."). `app.ts` passes `m7Available: false`. The coach sheet already has the "What should I eat?" chip. M10 F1–F3 (below) replace the placeholder. Mid-session, the coach still doesn't offer food (existing coach test).
+- **Food DB size and offline use:** the USDA subset is a large JSON file. Importing it as a module would make `tsc` and the main bundle slow. So it's imported with Vite's `?url` (a hashed asset, which `tsc` doesn't parse) and fetched on the first search. The PWA precache globs (`vite.config.ts`: `**/*.{js,css,html,woff2}`, …) don't cover `.json`, so main adds the asset pattern, or airplane mode breaks search.
+- **CSP:** `index.html` has `connect-src 'self' blob: data:`. The same-origin food DB fetch is fine. The barcode lookup needs `https://world.openfoodfacts.org` added (barcode track only).
+- **iPhone Safari has no `BarcodeDetector`.** Scanning on his phone needs an on-device library (see M7-q5), so barcode is a separate track that can be cut.
+- **Existing reusable UI:** the M10 Undo toast (`src/ui/coach/undoToast.ts`) handles entry deletes (no confirm dialogs). `switchRow` in settings.ts covers the mode and barcode switches. Ring geometry follows the Rest ring (`ringOffset` in rest.ts).
+
+**Ownership:**
+- core-engineer: `src/core/nutrition/**`, `src/core/trainer/**` (F1), `src/data/**` (db.ts, `src/data/nutrition/**`), `scripts/build-foods.mjs` (+ `scripts/build-foods.test.mjs`, `scripts/fixtures/usda-mini/`).
+- ui-engineer: `src/ui/screens/fuel.ts`, `src/ui/fuel/**` (new), `tabBar.ts`, `icons.ts`, `settings.ts`, `summary.ts`, `today.ts`, `src/ui/coach/**` (F2), `src/styles.css`, `index.html` (CSP), `e2e/fuel.spec.ts`, `e2e/barcode.spec.ts`.
+- main: `src/core/types.ts`, `src/ui/app.ts`, `vite.config.ts`, `.gitignore`, `package.json`, git.
+
+#### Core path
+- [x] 1. [main] Shared types.
+  - Files: src/core/types.ts.
+  - Add the SPEC §4 M7 types (`MacroSet`, `Food`, `Recipe`, `FoodEntry`, `WeighIn`, `NutritionSettings`) plus what the plan needs:
+    - `MealSlot`, `NutritionMode`;
+    - `Favorite = { id, ref: { foodId } | { recipeId }, amount, createdAt }`;
+    - `WeeklyCheck = { weekStart, avgKg, prevAvgKg, ratePct, kind: 'up' | 'down' | 'onTrack' | 'needData', deltaKcal, outcome: 'pending' | 'accepted' | 'dismissed', decidedAt? }`;
+    - `NutritionTargets` (each macro with an `estimate` flag);
+    - `FoodDbRow` (the compact USDA row, matching task 3);
+    - `FoodSuggestion` (for F1/F2).
+  - `Food` gains `barcode?` and `estimate?` (quick-estimate favorites). `Recipe` gains `nameTh?` and `updatedAt`.
+  - Done when: typecheck passes and the shapes match SPEC §4 plus the additions above.
+  - Deps: none.
+- [x] 2. [main] Config.
+  - Files: .gitignore (`data-src/` for the raw USDA downloads), vite.config.ts (precache the hashed food-DB asset).
+  - Done when: `npm run build` lists the food-DB asset in the precache manifest. Before task 3 lands, a placeholder JSON is enough to show this.
+  - Deps: none.
+- [x] 3. [core-engineer] `scripts/build-foods.mjs` and the USDA subset, **tests first**.
+  - Files: scripts/build-foods.mjs, scripts/build-foods.test.mjs, scripts/fixtures/usda-mini/ (made-up rows), src/data/nutrition/usda-foods.json (generated). Run it as `node scripts/build-foods.mjs`; main adds the `build-foods` npm script in task 17.
+  - Reads USDA FoodData Central **bulk downloads** (Foundation, SR Legacy, FNDDS) from gitignored `data-src/usda/`. `--download` fetches the public files. **No API key and no account** (the FDC REST API needs a free data.gov key; we don't use it).
+  - Keeps common foods. Output rows are compact: id, name, kcal / protein / carbs / fat per 100 g, and up to 3 household portions in grams.
+  - Prints the gzip size and **fails above 2 MB gzip**.
+  - Done when tests (on the mini fixture) cover: the field mapping, kJ → kcal when kcal is missing, rows without kcal or protein dropped, stable sorting/ids, and the budget failure. The real output is ≤ 2 MB gzip.
+  - Deps: none. It can start immediately. It needs internet once for the download.
+- [ ] 4. [core-engineer] Thai dishes and seed foods, **tests first**.
+  - Files: src/data/nutrition/thaiDishes.src.json (reference recipes: ingredients in grams with FDC ids, or an FNDDS code), src/data/nutrition/thaiDishes.json (generated by build-foods), src/data/nutrition/seedFoods.json, src/data/nutrition/foods.test.ts.
+  - About 40 dishes: the SPEC examples plus common others. Each has an English name, a Thai name, kcal / protein / carbs / fat per typical plate, and Small / Regular / Large = 0.75 / 1 / 1.4 (M7-q9). `source: 'thai-estimate'`, and a note that names the FNDDS code or the reference recipe.
+  - Seed food: "Protein shake" with **made-up placeholder values**, marked to edit from the label (M7-q4).
+  - Never copy values from commercial apps.
+  - Done when the data test checks that every dish and seed food has kcal + protein, a source and a note, every Thai dish has `nameTh` and 3 portions, and a dish rebuilt from its recipe matches the generated values. May land as 2 commits (20 dishes each).
+  - Deps: 3.
+- [ ] 5. [core-engineer ∥A] Targets, **tests first**.
+  - Files: src/core/nutrition/targets.ts(+test).
+  - Age from birth year and today's date. Mifflin–St Jeor × activity (1.2 / 1.375 / 1.55 / 1.725). Surplus clamped to 0–600 (default 300). Protein clamped to 1.6–2.2 g/kg (default 1.8). Full mode: fat = max(25% of kcal, 0.6 g/kg) and carbs = the rest, never negative.
+  - Weight = the 7-day average, else the latest weigh-in, else none (returns "weigh in first").
+  - Overrides win per macro and drop the `estimate` flag. `visibleMacros(mode)`.
+  - Done when tests cover: both sexes, every activity level, both clamps, a fat floor that binds, overrides, a Quick → Full → Quick round trip that changes no stored value, and no weigh-in. Made-up numbers only.
+  - Deps: 1.
+- [ ] 6. [core-engineer ∥A, after 5] Weekly adjustment, **tests first**.
+  - Files: src/core/nutrition/adjust.ts(+test).
+  - `weeklyAverages(weighIns, weekStart)` with Monday–Sunday weeks (M7-q2). `weeklyCheck(...)` → a `WeeklyCheck`:
+    - fewer than 4 weigh-ins in either week → `needData`, no change;
+    - gain below the range → +150;
+    - gain above 0.75%/week → −100;
+    - otherwise on track.
+  - The result is clamped so the target never drops below the maintenance estimate. `trend(weighIns, days)` gives the chart series (daily points + 7-day average).
+  - Done when tests cover every branch, exactly 3 vs 4 weigh-ins, the maintenance floor, a week boundary at Sunday 23:59 / Monday 00:00, a DST week, and that accept/dismiss only records the outcome (nothing applies by itself).
+  - Deps: 1, 5.
+- [ ] 7. [core-engineer ∥B] Portions, recipes and entry builders, **tests first**.
+  - Files: src/core/nutrition/portions.ts(+test).
+  - `scaleFood(food, amount)`: per 100 g × grams, or per serving × servings, times the portion factor.
+  - `recipePerServing(recipe, foods)`: a macro missing in any ingredient stays undefined, not 0.
+  - `entryFromFood` / `entryFromRecipe` / `entryFromQuick` copy the macros into the entry, so editing a recipe later doesn't rewrite past entries.
+  - Rounding: kcal to whole numbers, grams to 1 decimal. Weigh-in kg/lb through `src/core/units.ts`.
+  - Done when tests cover: 0.5 / 1 / 1.5 / 2 servings, S/R/L, per-100 g grams, a recipe with a missing fat value, a recipe edited after logging, and lb ↔ kg for weigh-ins.
+  - Deps: 1.
+- [ ] 8. [core-engineer ∥B, after 7] Day totals, slots, recents, nudges and hints, **tests first**.
+  - Files: src/core/nutrition/day.ts(+test).
+  - `dayTotals`, `remaining` (never shown negative; "over by" instead).
+  - `slotFor(time, lastSessionEnd)` per M7-q1. Day boundary at local midnight (M7-q8).
+  - `recentItems(entries, n)`, deduplicated by ref + amount.
+  - `nudgeFor(now, totals, targets, shownToday)` per M7-q6.
+  - `postWorkoutHint(totals, targets)` ("45 g protein to go today" / "Protein target hit today").
+  - `nutritionHistory(entries, sessions, days)` with training days marked.
+  - Done when tests cover: the slot boundaries, post-workout, an entry at 23:59 vs 00:01, recents, the nudge firing at most once a day, every hint passing `checkCopy`, and training-day marks from finished sessions only.
+  - Deps: 1, 7.
+- [ ] 9. [core-engineer ∥C] Food search + lazy loader, **tests first**.
+  - Files: src/core/nutrition/search.ts(+test), src/data/nutrition/foodDb.ts(+test).
+  - Pure ranking over `FoodDbRow[]` plus my foods, recipes and Thai dishes. My items come first, then exact, prefix and contains matches, shorter names first. English and Thai tokens.
+  - The loader fetches the `?url` asset once and caches it in memory. The fetch is injected in tests.
+  - Done when tests (on a fixture) cover: ranking, Thai queries, an empty query, the loader fetching once and showing an error state when offline before the first load, and search over 50k made-up rows staying under 50 ms in Vitest.
+  - Deps: 1. Check the format against task 3's real output when it lands.
+- [ ] 10. [core-engineer ∥C] Persistence, **tests first**.
+  - Files: src/data/db.ts(+test), src/data/nutrition/store.ts(+test).
+  - Dexie **version(5)**, new tables only:
+    - `foods` (`id, name, barcode`);
+    - `recipes` (`id`);
+    - `foodEntries` (`id, date, time`);
+    - `weighIns` (`date`, one per date, the latest wins, M7-q10);
+    - `favorites` (`id, createdAt`);
+    - `weeklyChecks` (`weekStart`).
+  - Nutrition settings live under settings key `'nutrition'`.
+  - Store functions: CRUD, `seedOnce` (Protein shake as a favorite), `setMode`.
+  - Done when tests cover: a v4 → v5 upgrade that keeps every existing row, seeding only once, a mode switch that loses no entry field, a delete followed by restore (for Undo), and every existing db test passing. Record the version bump as a Decision.
+  - Deps: 1.
+
+#### Screens (ui-engineer; props in, callbacks out, no DB; render tests + 390×844 harness screenshots in the 3 accents; tokens only)
+- [ ] 11. [ui-engineer] Fuel tab.
+  - Files: src/ui/screens/fuel.ts(+test), src/ui/fuel/rings.ts(+test), src/ui/tabBar.ts, src/ui/icons.ts, src/styles.css.
+  - A 4th tab, "Fuel" (M7-q7).
+  - Rings: kcal + protein, plus carbs + fat in Full mode.
+  - Remaining amounts in big numbers (≥ 64px), with "estimate" tags.
+  - Today's entries grouped by slot. Each entry can be edited or deleted (delete uses the Undo toast).
+  - A weigh-in button, a nudge banner slot, and an empty state ("Set up your targets").
+  - Done when: render tests (Quick/Full, empty, over target) and screenshots pass.
+  - Deps: 1.
+- [ ] 12. [ui-engineer] Log sheet.
+  - Files: src/ui/fuel/logSheet.ts(+test).
+  - Sections in SPEC order: favorites & recent, my recipes, Thai dishes, quick estimate, search, my foods (barcode is added in 21).
+  - Portion stepper (0.5 steps) and S/R/L chips.
+  - Quick-estimate form: name + kcal + protein, carbs/fat in Full mode, Light/Regular/Big presets (M7-q3), and "Save as favorite".
+  - Search results arrive through a callback. Loading and offline states.
+  - Focus trap and Escape, as in the Pause sheet.
+  - Done when: a render test proves a favorite logs in ≤ 3 taps (open, item, Log), and screenshots pass.
+  - Deps: 1.
+- [ ] 13. [ui-engineer] Recipe and My food editors.
+  - Files: src/ui/fuel/recipeEditor.ts(+test), src/ui/fuel/myFoodEditor.ts(+test).
+  - Recipe editor: ingredients in grams (picked through the search callback), servings, and a live per-serving preview.
+  - My food: per 100 g or per serving, with an optional serving weight.
+  - Done when: render tests and screenshots pass.
+  - Deps: 1.
+- [ ] 14. [ui-engineer] Setup and Settings → Nutrition.
+  - Files: src/ui/fuel/setup.ts(+test), src/ui/screens/settings.ts(+test).
+  - Setup asks for height, birth year, sex, activity level and today's weight. Today's weight becomes the first weigh-in (M7-q11).
+  - Settings: a Quick/Full switch; targets with "estimate" tags and hand overrides; surplus 0–600 and protein 1.6–2.2 steppers; "Re-run setup".
+  - Done when: render tests and screenshots pass.
+  - Deps: 1.
+- [ ] 15. [ui-engineer] Weigh-in screen.
+  - Files: src/ui/fuel/weighIn.ts(+test).
+  - A kg/lb stepper (the unit setting).
+  - Our own SVG trend chart with daily dots and the 7-day average line.
+  - The weekly suggestion card (Accept / Not now; `needData` shows "Need more weigh-ins").
+  - Nutrition history for the last 14 days, with training days marked.
+  - Done when: render tests (all 4 card kinds, kg and lb) and screenshots pass.
+  - Deps: 1.
+- [ ] 16. [ui-engineer] Workout link and nudges elsewhere.
+  - Files: src/ui/screens/summary.ts(+test), src/ui/screens/today.ts(+test).
+  - Summary: an optional `fuel` prop showing today's protein vs target plus the hint. It's hidden when there are no targets.
+  - Today: the nudge banner slot.
+  - Done when: render tests show both are hidden when props are absent, and the existing summary/today tests stay green.
+  - Deps: 1.
+
+#### Wiring, coach food (M10 F1–F3) and e2e
+- [ ] 17. [main] Wiring.
+  - Files: src/ui/app.ts, package.json (the `build-foods` script).
+  - New views and the Fuel tab. Load the store on the first Fuel open.
+  - Compute targets, totals, nudges and the weekly check through core. Accepting a check writes `overrides.kcal`, or the surplus, and records the outcome.
+  - Pass the Summary protein line. Use the Undo toast for deletes.
+  - Search lazy-loads `foodDb`.
+  - Nutrition never goes into dev-log events.
+  - Done when, by hand: setup → log a favorite → the rings update, airplane mode (in a prod preview) still searches, and the existing e2e stays green.
+  - Deps: 2, 4, 5, 6, 8, 9, 10, 11–16.
+- [ ] F1. [core-engineer, after 7+8] Food suggestions in the coach, **tests first** (replaces M10 F1).
+  - Files: src/core/trainer/actions/food.ts(+test), src/core/trainer/coach.ts(+test), src/core/trainer/replies.ts(+test).
+  - `suggestFood(remaining, favorites, recipes, thaiDishes)` → 3 items that fit the remaining protein, then kcal, each with a Log payload (a `FoodEntry` draft).
+  - When `m7Available` is true, `food(ctx)` returns the suggestions. `FOOD_LATER` stays only for `m7Available: false`. Mid-session it is still not offered.
+  - Done when tests cover: nothing left → "You've hit today's targets.", no targets/data → the help reply pointing to Fuel setup, protein-first ordering, every line passing `checkCopy`. Made-up numbers only.
+  - Deps: 1, 7, 8 (M10 task 11 is done).
+- [ ] F2. [ui-engineer] Food result card in the coach sheet (replaces M10 F2).
+  - Files: src/ui/coach/foodCard.ts(+test), src/ui/coach/coachSheet.ts.
+  - 3 rows (name, portion, kcal / protein), each with a Log button (≥ 56px).
+  - Done when: render tests and screenshots pass.
+  - Deps: 1 (`FoodSuggestion`).
+- [ ] F3. [main] Coach wiring to the M7 log (replaces M10 F3).
+  - Files: src/ui/app.ts.
+  - Pass `m7Available: true` once targets exist. Log → the store, then the Undo toast, then a rerender.
+  - Done when, by hand: "What should I eat?" → Log → the Fuel rings update.
+  - Deps: 17, F1, F2.
+- [ ] 18. [ui-engineer] E2E `e2e/fuel.spec.ts` (390×844).
+  - Cases: the SPEC M7 Accept flow:
+    - set up targets → log a favorite, a recipe serving, a Thai dish (Large) and a quick estimate → the rings and remaining amounts update;
+    - switch to Full mode → carbs/fat appear and no data is lost;
+    - weigh-ins over 2 fake weeks (clock mocked) → the suggestion card → Accept → the new target.
+  - Also: delete + Undo, the coach food chip → Log (F3), offline search after the first load (prod preview, `context.setOffline`), and 0 off-device requests.
+  - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
+  - Deps: 17, F3.
+
+#### Barcode track (optional, off by default; cut the whole track if M7-q5 says no)
+- [ ] 19. [core-engineer ∥] Barcode core, **tests first**.
+  - Files: src/core/nutrition/barcode.ts(+test), src/data/nutrition/offClient.ts(+test).
+  - EAN-13 / EAN-8 / UPC-A checksum validation.
+  - Open Food Facts JSON → `Food` (per 100 g, `source: 'openfoodfacts'`, kJ → kcal fallback, rejects missing kcal or protein).
+  - The client has an injected fetch and a 10 s timeout. The URL holds only the barcode, there are no other params or headers with user data, and it is never called while the setting is off.
+  - Done when tests cover: checksums, parsing (missing/odd units), the request shape, setting off → 0 calls, and the result saved to My foods so the next lookup is local.
+  - Deps: 1.
+- [ ] 20. [main] Scanner dependency.
+  - Files: package.json, vite.config.ts.
+  - Pick an on-device barcode library for Safari (no `BarcodeDetector` on iOS). Check the current docs and size, and prefer a small wasm build (e.g. zxing-wasm). Precache its wasm so it works offline.
+  - Done when: `npm run build` precaches it and the bundle-size delta is recorded in the Decision.
+  - Deps: none (after M7-q5).
+- [ ] 21. [ui-engineer] Scanner UI + setting.
+  - Files: src/ui/fuel/barcodeScan.ts(+test), src/ui/fuel/logSheet.ts, src/ui/screens/settings.ts, index.html (CSP `connect-src` + `https://world.openfoodfacts.org`).
+  - Uses `BarcodeDetector` where it exists, else the library, else typing the digits.
+  - The setting shows its explainer before it turns on: "Looks up the barcode number online. Nothing else is sent."
+  - Camera frames stay on the phone and nothing is recorded.
+  - Done when: render tests and screenshots pass, and the section is hidden while the setting is off.
+  - Deps: 14, 19, 20.
+- [ ] 22. [main] Barcode wiring. Files: src/ui/app.ts. Done when, by hand, typed digits → result → saved to My foods → the second lookup works offline. Deps: 17, 21.
+- [ ] 23. [ui-engineer] E2E `e2e/barcode.spec.ts` with `page.route` mocks: off → 0 requests to openfoodfacts; on → the URL holds only the code; not found → a "Add it to My foods" path. Done when: green with `--repeat-each=3`. Deps: 22.
+
+#### Close
+- [ ] 24. [reviewer] Review the branch diff against CLAUDE.md:
+  - pure core (no DOM or fetch in `src/core/nutrition`);
+  - no personal numbers anywhere in the repo;
+  - copy passes `checkCopy`, with no diet or medical claims;
+  - 64 / 20 / 56px, tokens only;
+  - the only network call is the barcode lookup, and only when it's on;
+  - nutrition data is kept out of the dev log;
+  - no M7b scope crept in.
+  - Deps: 18, 23 (or 18 alone if the barcode track is cut).
+- [ ] 25. [verifier] Verify against SPEC M7 Accept.
+  - Run `npm run check`, `npm run e2e` and `npm run build`. Report the food-DB gzip size against the 2 MB budget.
+  - Airplane-mode run in the prod preview.
+  - 390×844 screenshots `docs/screenshots/m7-*`, console clean.
+  - Evidence goes into PROGRESS.
+  - Deps: 24.
+- [ ] 26. [main] Merge `m7-fuel` + **ask Wongsaton before pushing** (push = deploy). Deps: 25.
+
+**Parallel waves:**
+- **Start now (no deps):** 1 [main], 2 [main], 3 [core, needs one download], and 20 [main, only once M7-q5 is answered].
+- **Wave 1 (after 1):**
+  - core: up to 3 instances: A 5 → 6; B 7 → 8 → F1; C 9, 10, 19. Instance C, or the task-3 instance, goes on to 4 after 3.
+  - ui: 11, 12, 13, 14, 15, 16 and F2 (2 instances, e.g. 11 + 12 + 16 and 13 + 14 + 15 + F2).
+- **Wave 2:** 17 [main], 21 [ui, after 14 + 19 + 20].
+- **Wave 3:** F3, 22 [main].
+- **Wave 4:** 18 and 23 [ui] → 24 → 25 → 26.
+- **Critical path:** 3 → 4 (USDA download + ~40 reference recipes, the longest single job) → 17 → F3 → 18 → 24 → 25 → 26. The logic path 1 → 7 → 8 → F1 → F3 is shorter.
 
 ### M4f — Camera for more exercises (planned 2026-11-14; wave 1 first, wave 2 after Checkpoint F1)
 **Contract:** SPEC M4f (both rule tables, the `learning` status, the UI copy, Accept) and the Decision "M4f scope and the learning state" (2026-11-14).
@@ -508,7 +753,7 @@ M10-q8.
 - [x] 20. [main] Merge `m10a-trainer` + **ask Wongsaton before pushing** (push = deploy). Deps: 19.
 - [ ] 21. 🧍 **Checkpoint E:** a week with the coach (Not today, Go easy on…, a swap); he reports. Deps: 20.
 
-**Later in phase A (needs M7):**
+**Later in phase A (needs M7):** now planned inside the M7 plan above as tasks F1–F3 (2026-11-15). Tick them there; the lines below are kept for reference.
 - [ ] F1. [core-engineer] `actions/food.ts`, **tests first**: `suggestFood(remaining, favorites, recipes,
   thaiDishes)` → 3 items that fit the remaining protein/kcal (protein first), plus a Log payload. Done when
   tests cover: nothing left → "You've hit today's targets", no data → help, made-up numbers only. Deps: M7, 11.
@@ -1434,6 +1679,28 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-15: **M7 plan (planner).** Wongsaton: "Polish, then Fuel". M7 is built next, after the polish round. Plan under "Current milestone plan"; contract: SPEC M7.
+  - **Order:** CLAUDE.md says to finish milestones in order. M6 is built, M4 is still provisional, and Checkpoints B3 / E / F1 are open. M7 doesn't touch the camera, so it proceeds on his explicit word, as M5 and M10 did.
+  - **Food DB:**
+    - `scripts/build-foods.mjs` reads USDA FoodData Central bulk downloads (public domain / CC0; no API key, no account) from gitignored `data-src/usda/`.
+    - It writes `src/data/nutrition/usda-foods.json`, which is committed and must stay ≤ 2 MB gzip; the script enforces this.
+    - The app imports it with `?url` and fetches it on the first search, which keeps `tsc` and the main bundle fast. The PWA precaches it, so search works offline.
+  - **Thai dishes are computed, not typed in:**
+    - a committed reference-recipe source (`thaiDishes.src.json`: FDC ids + grams, or an FNDDS code) builds `thaiDishes.json`, so every value is traceable to USDA;
+    - no commercial-app values.
+  - **Dexie version 4 → 5**, new tables only (foods, recipes, foodEntries, weighIns, favorites, weeklyChecks). Nutrition settings use the existing `settings` table (key `'nutrition'`).
+  - **Privacy:**
+    - nutrition data stays in IndexedDB and is never written to dev-log events or exports;
+    - made-up numbers only in tests, fixtures and docs;
+    - the seed "Protein shake" ships with placeholder values to edit from the label.
+  - **Network:** the only off-device call in M7 is the optional Open Food Facts barcode lookup. It's off by default and sends the barcode number only. The CSP gains `https://world.openfoodfacts.org` only with the barcode track. iOS Safari lacks `BarcodeDetector`, so scanning needs an on-device library (M7-q5); typed digits always work. The barcode track is separate and can be cut.
+  - **Copy:** coaching language only, with no diet, weight-loss, health or medical claims. All Fuel copy passes M10 `checkCopy`. Computed values carry an "estimate" tag.
+  - **Nothing applies by itself:** weekly suggestions apply only on Accept, and coach food suggestions only on Log, with Undo.
+  - **M10 F1–F3** (coach food suggestions) are folded into the M7 plan as its F tasks.
+  - **M7b scope stays out:** no photo capture, classifier, `ml/`, `src/food-vision/` or Claude backup. Their types exist only as SPEC §4 placeholders.
+  - **No 🧍 checkpoint** (SPEC M7 has none).
+  - The M7-q defaults are provisional until he answers.
+
 - 2026-11-15: **M10 phase A verified (task 19).** Every SPEC M10 phase A Accept item met: check 2186 + 29; intent eval 87/87 (100%), safety 31/31; build OK (main 142.53 kB gzip); full e2e 123 passed, 1 skipped; trainer.spec ×5 parallel 60/60 after fixing a flaky tap-target helper (it measured between Plan changes' two renders). Screenshots `docs/screenshots/m10-*.png`. Non-blocking: the Undo toast covers the tab bar for 10 s; older "3D demo"/"Camera" chips under 56px (pre-M10).
 
 - 2026-11-15: **M10 fix round (main).** (1) "Go easy on <area>" swaps only for a candidate sharing a primary muscle outside the area; with today's catalog it removes primary-area moves and lightens secondary-area moves (SPEC updated). (2) REPLACE_UPCOMING and the new INSERT_UPCOMING work while paused; mid-workout Undo restores removed rows in place. (3) If a mid-workout change on Rest leaves no unstarted rows the session goes to Summary and Undo can't reopen it (actions refuse when nothing would be left, so this shouldn't occur). Evidence: check 2186 + 29; full e2e 123 passed, 1 skipped; re-review PASS.
@@ -2035,6 +2302,31 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - Non-blocking observations: (1) after Apply, set 3 at 40 lb (sets 8×35, 8×35, 8×40) gets A3 again, "+5 lb → 45 lb". That matches the rule table (A3 looks at reps only, all of today's sets), but it suggests a second jump after one set at the new weight; product call for Wongsaton (e.g. only count sets at the current weight). (2) The one-arm row demo has the hand on the bench but both feet on the floor, while how-to line 1 says "One knee and hand on the bench" (anatomy-3d-engineer or the how-to text). (3) In headless Chrome the gauge screenshot shows count "0 · Get into start position" while the gauge moves (counter still settling at 14 fps); expected.
 
 ## Blockers / questions for Wongsaton
+- **New (M7 Fuel, planned 2026-11-15; not blocking. The defaults below are what gets built unless you say otherwise):**
+  - **(M7-q1) Meal slots.** Entries get a slot from the time, and you can change it. **Default:**
+    - breakfast before 10:30, lunch 10:30–14:30, snack 14:30–17:30, dinner 17:30–21:30, snack after that;
+    - "post-workout" for anything logged within 2 h after you finish a workout.
+  - **(M7-q2) Weekly check day.** **Default:** weeks run Monday–Sunday. On Monday the card compares last week's average weight with the week before. It stays until you Accept or tap Not now.
+  - **(M7-q3) Quick-estimate presets** (Light / Regular / Big plate). **Default:** each preset fills in starter kcal + protein that you edit before logging. The values are typical-plate guesses, not yours. Your saved favorites ("Thai place near work — pad see ew") keep your own numbers. Alternative: the presets multiply the numbers you typed by 0.75 / 1 / 1.4.
+  - **(M7-q4) Protein shake.** The repo is public, so it ships with placeholder values. **Default:** the first time you log it, the app asks you to enter the numbers from your product's label (kept only on your phone).
+  - **(M7-q5) Barcode: build it now?** **Answered 2026-11-15: "Yes, off by default".** **Default: yes, as the last part of M7, off by default.**
+    - The lookup goes to Open Food Facts (free, no account) and sends only the barcode number. Results are saved to My foods so the next scan works offline.
+    - iPhone Safari can't read barcodes by itself, so scanning adds a small on-device scanning library to the app (roughly 1 MB; the exact size gets checked).
+    - Typing the digits always works.
+    - Alternatives: typed digits only, or skip barcode until later.
+  - **(M7-q6) Evening nudge.** **Default:** shown only when you open the app, after 19:00, if protein is under 75% of the target. At most once a day, and it can be dismissed. Example: "40 g protein to go today." Never pushed or spoken.
+  - **(M7-q7) Where Fuel goes.** **Default:** a 4th tab, in the order Today / Fuel / History / Settings.
+  - **(M7-q8) When a food day ends.** **Default: at midnight.** A snack at 00:30 counts toward the new day. Alternative: the day ends at 03:00.
+  - **(M7-q9) Thai dish list and portions.** **Default:**
+    - the ~40 dishes are the SPEC examples plus other common dishes;
+    - Small / Regular / Large = 0.75 / 1 / 1.4 × a typical plate.
+    - Tell us any dishes you eat often that should be on the list. You can also save your own as recipes or quick-estimate favorites.
+  - **(M7-q10) Weigh-ins.** **Default:** one weigh-in per day (entering again replaces it), done in the morning. The app doesn't check the time.
+  - **(M7-q11) First targets.** Targets need your weight. **Default:** setup asks for today's weight and saves it as your first weigh-in.
+  - **Paid accounts / external services:** none needed for M7.
+    - USDA FoodData Central bulk files are free public downloads; the API key route isn't used.
+    - Open Food Facts is free, with no key.
+    - The only things that need a paid account are in M7b (Claude backup) and M10 phase C, and both are out of M7.
 - **New (M4f Camera for more exercises, planned 2026-11-14; not blocking. Per "I confirm everything you need right now", the defaults below are what gets built unless you say otherwise):**
   - **(M4f-q1) Curl and row style.** Hammer curls, incline curls and the bent-over row: do you move both arms together, or alternate? **Default: both together.** The phone sees you side-on and counts the near arm, so alternating would count only half your reps.
   - **(M4f-q2) One arm or leg at a time** (concentration curls; step-ups in wave 2). **Default:**

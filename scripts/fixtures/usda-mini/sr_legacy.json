@@ -1,0 +1,86 @@
+{
+  "SRLegacyFoods": [
+    {
+      "description": "Testfruit, raw (older SR row, replaced by Foundation)",
+      "fdcId": 170001,
+      "ndbNumber": 90001,
+      "dataType": "SR Legacy",
+      "foodCategory": { "description": "Fruits and Fruit Juices" },
+      "foodNutrients": [
+        { "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" }, "amount": 48 },
+        { "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" }, "amount": 0.3 }
+      ],
+      "foodPortions": []
+    },
+    {
+      "description": "Testchicken, breast, cooked",
+      "fdcId": 170002,
+      "ndbNumber": 95002,
+      "dataType": "SR Legacy",
+      "foodCategory": { "description": "Poultry Products" },
+      "foodNutrients": [
+        { "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" }, "amount": 165.4 },
+        { "nutrient": { "id": 1062, "name": "Energy", "unitName": "kJ" }, "amount": 690 },
+        { "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" }, "amount": 31.02 },
+        { "nutrient": { "id": 1004, "name": "Total lipid (fat)", "unitName": "g" }, "amount": 3.57 },
+        { "nutrient": { "id": 1005, "name": "Carbohydrate, by difference", "unitName": "g" }, "amount": 0 }
+      ],
+      "foodPortions": [
+        { "id": 11, "amount": 1, "value": 1, "measureUnit": { "name": "undetermined" }, "modifier": "oz", "gramWeight": 28.35, "sequenceNumber": 1 },
+        { "id": 12, "amount": 1, "value": 1, "measureUnit": { "name": "undetermined" }, "modifier": "cup, chopped or diced", "gramWeight": 140, "sequenceNumber": 2 },
+        { "id": 13, "amount": 0.5, "value": 0.5, "measureUnit": { "name": "undetermined" }, "modifier": "breast, bone removed", "gramWeight": 172.04, "sequenceNumber": 3 },
+        { "id": 14, "amount": 1, "value": 1, "measureUnit": { "name": "undetermined" }, "modifier": "piece", "gramWeight": 40, "sequenceNumber": 4 },
+        { "id": 15, "amount": 1, "value": 1, "measureUnit": { "name": "undetermined" }, "modifier": "unit", "gramWeight": 300, "sequenceNumber": 5 }
+      ]
+    },
+    {
+      "description": "Testjar baby food, apple",
+      "fdcId": 170003,
+      "ndbNumber": 95003,
+      "dataType": "SR Legacy",
+      "foodCategory": { "description": "Baby Foods" },
+      "foodNutrients": [
+        { "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" }, "amount": 60 },
+        { "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" }, "amount": 0.2 }
+      ],
+      "foodPortions": []
+    },
+    {
+      "description": "Testseal, raw (Alaska Native)",
+      "fdcId": 170004,
+      "ndbNumber": 95004,
+      "dataType": "SR Legacy",
+      "foodCategory": { "description": "American Indian/Alaska Native Foods" },
+      "foodNutrients": [
+        { "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" }, "amount": 120 },
+        { "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" }, "amount": 20 }
+      ],
+      "foodPortions": []
+    },
+    {
+      "description": "Testsyrup, no protein listed",
+      "fdcId": 170005,
+      "ndbNumber": 95005,
+      "dataType": "SR Legacy",
+      "foodCategory": { "description": "Sweets" },
+      "foodNutrients": [
+        { "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" }, "amount": 260 },
+        { "nutrient": { "id": 1005, "name": "Carbohydrate, by difference", "unitName": "g" }, "amount": 67 }
+      ],
+      "foodPortions": []
+    },
+    {
+      "description": "  apple  test,   dried ",
+      "fdcId": 170006,
+      "ndbNumber": 95006,
+      "dataType": "SR Legacy",
+      "foodCategory": { "description": "Fruits and Fruit Juices" },
+      "foodNutrients": [
+        { "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" }, "amount": 243 },
+        { "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" }, "amount": 0.93 },
+        { "nutrient": { "id": 1004, "name": "Total lipid (fat)", "unitName": "g" }, "amount": null }
+      ],
+      "foodPortions": []
+    }
+  ]
+}

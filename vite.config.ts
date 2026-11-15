@@ -56,7 +56,9 @@ const pwa = VitePWA({
   workbox: {
     // woff2 only: every target browser takes it, the .woff fallbacks would never be fetched.
     // The manifest, its icons and the apple-touch-icon are added by the plugin itself.
-    globPatterns: ['**/*.{js,css,html,woff2}', 'models/*.task', 'mediapipe/wasm/*'],
+    // M7: the USDA food list is imported as a `?url` asset (assets/usda-foods-*.json) so offline
+    // search works; it's fetched on the first food search, not at startup.
+    globPatterns: ['**/*.{js,css,html,woff2}', 'assets/usda-foods-*.json', 'models/*.task', 'mediapipe/wasm/*'],
     maximumFileSizeToCacheInBytes: 20 * 1024 * 1024, // the wasm is 14.7 MB
     cleanupOutdatedCaches: true,
     navigateFallback: 'index.html',

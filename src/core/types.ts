@@ -149,3 +149,123 @@ export type PlanChange = {
   after: TrainerState;
   undoneAt?: number;
 };
+
+// ---- M7 Fuel: nutrition (SPEC §4 M7; all stored on device only) ----
+
+export type MacroSet = { kcal: number; proteinG: number; carbsG?: number; fatG?: number };
+
+export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'post-workout';
+
+export type NutritionMode = 'quick' | 'full';
+
+export type FoodSource = 'usda' | 'thai-estimate' | 'custom' | 'openfoodfacts' | 'photo-local' | 'photo-ai';
+
+export type Food = MacroSet & {
+  id: string;
+  name: string;
+  nameTh?: string;
+  source: FoodSource;
+  basis: { per100g: true } | { servingLabel: string; servingG?: number };
+  /** e.g. Small 0.75 / Regular 1 / Large 1.4 */
+  portions?: { label: string; factor: number }[];
+  note?: string;
+  /** EAN/UPC digits for a scanned or typed packaged food. */
+  barcode?: string;
+  /** True for quick-estimate foods (numbers are rough). */
+  estimate?: boolean;
+};
+
+export type Recipe = {
+  id: string;
+  name: string;
+  nameTh?: string;
+  ingredients: { foodId: string; grams: number }[];
+  servings: number;
+  updatedAt: number;
+};
+
+export type FoodAmount = { servings: number } | { grams: number };
+
+export type FoodEntry = MacroSet & {
+  id: string;
+  /** Local YYYY-MM-DD. */
+  date: string;
+  time: number;
+  slot: MealSlot;
+  label: string;
+  ref?: { foodId?: string; recipeId?: string };
+  amount: FoodAmount;
+  /** Quick estimates / photo guesses. */
+  estimate: boolean;
+  /** M7b: top-1 confidence of the accepted photo guess. */
+  photoConfidence?: number;
+};
+
+export type WeighIn = { date: string; kg: number };
+
+export type NutritionSettings = {
+  mode: NutritionMode;
+  heightCm: number;
+  birthYear: number;
+  sex: 'male' | 'female';
+  activity: 'sedentary' | 'light' | 'moderate' | 'very';
+  surplusKcal: number;
+  proteinGPerKg: number;
+  fatPct: number;
+  gainPctPerWeek: [min: number, max: number];
+  overrides?: Partial<MacroSet>;
+  barcodeLookup: boolean;
+};
+
+export type Favorite = {
+  id: string;
+  ref: { foodId: string } | { recipeId: string };
+  amount: FoodAmount;
+  createdAt: number;
+};
+
+export type WeeklyCheck = {
+  /** Local YYYY-MM-DD of the week's Monday. */
+  weekStart: string;
+  avgKg: number | null;
+  prevAvgKg: number | null;
+  ratePct: number | null;
+  kind: 'up' | 'down' | 'onTrack' | 'needData';
+  deltaKcal: number;
+  outcome: 'pending' | 'accepted' | 'dismissed';
+  decidedAt?: number;
+};
+
+/** A daily target value, flagged when it is an estimate (e.g. no weigh-in yet). */
+export type TargetValue = { value: number; estimate: boolean };
+
+export type NutritionTargets = {
+  kcal: TargetValue;
+  proteinG: TargetValue;
+  carbsG: TargetValue;
+  fatG: TargetValue;
+};
+
+/** Compact USDA FoodData Central row (src/data/nutrition/usda-foods.json); values per 100 g. */
+export type FoodDbRow = {
+  /** 'usda:<fdcId>' */
+  id: string;
+  name: string;
+  ds: 'foundation' | 'sr' | 'fndds';
+  kcal: number;
+  proteinG: number;
+  carbsG?: number;
+  fatG?: number;
+  /** At most 3 household measures. */
+  portions?: { label: string; g: number }[];
+};
+
+/** A coach food suggestion (M10 F1/F2): what to eat to fit what's left today. */
+export type FoodSuggestion = {
+  label: string;
+  ref: { foodId?: string; recipeId?: string };
+  amount: FoodAmount;
+  macros: MacroSet;
+  /** Short plain reason, e.g. "Fits your 40 g protein left". */
+  why: string;
+};
