@@ -4,13 +4,25 @@ import { restCueText, restCuesBetween } from '../core/restCues';
 import {
   currentPlanned,
   next,
+  next as nextState,
   restElapsedMs,
   startSession,
   summarize,
   type SessionEvent,
   type SessionState,
 } from '../core/session';
-import type { Accent, FocusCueId, PlannedExercise, ProgramDay, SetLog } from '../core/types';
+import type {
+  Accent,
+  DayAdjust,
+  FocusCueId,
+  PlanChange,
+  PlannedExercise,
+  ProgramDay,
+  Proposal,
+  ProposalAction,
+  SetLog,
+  TrainerState,
+} from '../core/types';
 import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
 import { shouldSpeakFocusCue } from '../core/focusCue';
 import {
@@ -20,7 +32,44 @@ import {
   coachSummary,
   type Advice,
 } from '../core/advice';
-import { cueFor, exerciseById, exerciseName, program } from '../data/catalog';
+import {
+  bodyAreaOf,
+  catalogExercises,
+  cueFor,
+  exerciseById,
+  exerciseName,
+  gymHas,
+  program,
+} from '../data/catalog';
+import {
+  calendar,
+  effectiveDay,
+  localDate,
+  programHash,
+  seedPlan,
+  upNext as trainerUpNext,
+  type EffectiveDay,
+} from '../core/trainer/plan';
+import { applyProposal, resetToProgram, undoLast } from '../core/trainer/changes';
+import {
+  handle as coachHandle,
+  MID_SESSION_REPLY,
+  stallSince,
+  type CoachChip,
+  type CoachContext,
+  type CoachInput,
+  type CoachPhase,
+} from '../core/trainer/coach';
+import { adjustSummary, rowAdjustNote } from '../core/trainer/replies';
+import { detectStalls, stallLine } from '../core/trainer/actions/stall';
+import type { TrainerCatalog } from '../core/trainer/swapCandidates';
+import {
+  commitChange,
+  defaultProgramChanged,
+  listChanges,
+  loadTrainerState,
+  saveTrainerState,
+} from '../data/plan';
 import {
   GymDb,
   finishSession,
@@ -55,6 +104,12 @@ import {
   type SetRow,
 } from '../data/db';
 import { startDevLogSession, type DevLogRecorder } from '../data/devlog';
+import { coachSheet, type CoachChipId as SheetChipId, type CoachItem } from './coach/coachSheet';
+import { undoToast, type UndoToast } from './coach/undoToast';
+import { planChangesScreen } from './screens/planChanges';
+import { alignRows, rowChanged } from './trainerRows';
+import type { StallCardData } from './coachSummary';
+import type { PreviewRow } from './screens/preview';
 import { bodyMapSvg, pickView } from './bodyMap';
 import type { Body3D } from './body3d/viewer';
 import { badgesFor } from './badges';
@@ -127,12 +182,56 @@ type TodayStats = {
 /** M6 History: finished sessions and their sets in the window (loaded when the tab opens). */
 type HistoryData = { sessions: SessionRow[]; sets: SetRow[]; today: number } | 'error';
 
+/**
+ * M10 day preview: `day` is what Start runs. For today's day it's `effectiveDay` (with any adjust
+ * override applied, `today: true`); for another day it's the plan day.
+ */
+type PreviewDay = {
+  day: ProgramDay;
+  planDay: ProgramDay;
+  today: boolean;
+  adjust: DayAdjust['kind'] | null;
+};
+
 type View =
   | { screen: 'today'; upNextDayId: string | null; stats: TodayStats | null }
   | { screen: 'settings' }
+  | { screen: 'planChanges' }
   | { screen: 'history'; exerciseId: string | null; data: HistoryData | null }
-  | { screen: 'preview'; day: ProgramDay; loading: boolean }
+  | ({ screen: 'preview'; loading: boolean } & PreviewDay)
   | { screen: 'session'; s: SessionState; sheet: Sheet };
+
+/** M10 coach sheet state: the open chat (never stored), its proposals and options. */
+type CoachUi = {
+  phase: CoachPhase;
+  items: CoachItem[];
+  /** Proposal items by their index in `items`, with how they were asked for. */
+  proposals: Map<number, { proposal: Proposal; source: PlanChange['source']; intent: string }>;
+  showAreas: boolean;
+  /** The quick chips to offer (core's list for this turn). */
+  quick: SheetChipId[];
+  /** Core chips that aren't quick or area chips ("Try …", "Push the week instead", …). */
+  followUps: CoachChip[];
+  /** History the coach reads (stalls, last weights), loaded when it opens. */
+  sets: SetLog[];
+  lastWeightKg: Record<string, number>;
+  el: HTMLElement | null;
+  opener: HTMLElement | null;
+};
+
+const QUICK_IDS: readonly string[] = [
+  'notToday',
+  'easyOn',
+  'lighter',
+  'swap',
+  'adjustPlan',
+  'food',
+];
+const AREA_IDS: readonly string[] = ['arms', 'shoulders', 'chest', 'back', 'legs', 'core'];
+const WORKOUT_QUICK: SheetChipId[] = ['easyOn', 'lighter', 'swap'];
+const COACH_GREETING = 'What should we change?';
+const UNDO_FAILED = "Can't undo that now: the plan changed since.";
+const STALE_PROPOSAL = 'The plan changed since. Ask me again.';
 
 export function mountApp(root: HTMLElement): void {
   const db = new GymDb();
@@ -145,6 +244,27 @@ export function mountApp(root: HTMLElement): void {
   let coachVoice: CoachVoice = { ...COACH_VOICE_DEFAULT };
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
+
+  // ---------- M10 trainer state ----------
+  // The stored plan/schedule/overrides (seeded from program.json on first run), the sessions the
+  // calendar reads, and the change log for Undo. Loaded once at startup; every Apply / Undo /
+  // Reset goes through core changes.ts and is saved with commitChange.
+  let trainer: TrainerState | null = null;
+  let trainerSessions: SessionRow[] = [];
+  let changes: PlanChange[] = [];
+  let newProgram = false;
+  let coach: CoachUi | null = null;
+  let toast: HTMLElement | null = null;
+  // The running session's adjustments (SessionRow.adjust): lighter/deload sessions skip stalls.
+  let sessionAdjust: ProposalAction[] = [];
+  let summaryStalls: { sessionId: string; stalls: StallCardData[] } | null = null;
+  const trainerCatalog: TrainerCatalog = {
+    exercises: catalogExercises(),
+    areaOf: bodyAreaOf,
+    hasEquipment: gymHas,
+  };
+  const todayDate = () => localDate(now());
+  const planDays = () => trainer?.plan.days ?? program.days;
 
   // Developer log (M4c): numbers only, stays on the phone. Calls queue until the recorder exists,
   // then run at once: a hands-free set is opened and the camera's first writes to it (meta, the
@@ -508,10 +628,12 @@ export function mountApp(root: HTMLElement): void {
         return todayScreen(v.upNextDayId, v.stats);
       case 'settings':
         return settingsScreen();
+      case 'planChanges':
+        return planChangesView();
       case 'history':
         return historyView(v.exerciseId, v.data);
       case 'preview':
-        return previewScreen(v.day, v.loading);
+        return previewScreen(v, v.loading);
       case 'session':
         return sessionScreen(v.s, v.sheet);
     }
@@ -570,7 +692,7 @@ export function mountApp(root: HTMLElement): void {
         days: ok ? lastDays(ok.sessions, sets, today) : [],
         exercises: exercisesWithHistory(sets, today).map((id) => exerciseHistory(sets, id, today)),
         detail: exerciseId ? exerciseHistory(sets, exerciseId, today) : null,
-        dayName: (id) => program.days.find((d) => d.id === id)?.name ?? id,
+        dayName: (id) => planDays().find((d) => d.id === id)?.name ?? id,
         name: exerciseName,
       },
       {
@@ -607,13 +729,16 @@ export function mountApp(root: HTMLElement): void {
   async function loadUpNext(): Promise<void> {
     let upNext: string | null;
     try {
-      const last = await db.sessions.orderBy('startedAt').last();
-      const idx = last ? program.days.findIndex((d) => d.id === last.dayId) : -1;
-      upNext = program.days[(idx + 1) % program.days.length]?.id ?? null;
+      await trainerReady;
+      // All sessions: the calendar's rotation starts after the last finished one, however old.
+      trainerSessions = await db.sessions.toArray();
+      upNext =
+        trainerUpNext(trainer ?? seedPlan(program), trainerSessions, todayDate())?.dayId ?? null;
     } catch (err) {
       console.warn('Could not read history', err);
-      upNext = program.days[0]?.id ?? null; // never leave Start disabled
+      upNext = null;
     }
+    upNext ??= planDays()[0]?.id ?? null; // never leave Start disabled
     if (view.screen !== 'today') return;
     view = { screen: 'today', upNextDayId: upNext, stats: null };
     render();
@@ -642,7 +767,7 @@ export function mountApp(root: HTMLElement): void {
     if (info) {
       const prev = previousSameDaySession(sessions, info.sessionId);
       last = {
-        dayName: program.days.find((d) => d.id === info.dayId)?.name ?? info.dayId,
+        dayName: planDays().find((d) => d.id === info.dayId)?.name ?? info.dayId,
         date: info.date,
         durationMs: info.durationMs,
         volumeKg: info.volumeKg,
@@ -664,21 +789,498 @@ export function mountApp(root: HTMLElement): void {
     return renderToday(
       {
         now: now(),
-        days: program.days,
+        days: todayDays(),
         upNextDayId,
         streakWeeks: stats?.streakWeeks ?? 0,
         weekDots: stats?.weekDots ?? weekDots([], now()),
         last: stats?.last ?? null,
         doneThisWeek: stats?.doneThisWeek,
         unit,
+        // M10: the dated week (moved days follow the calendar) once the trainer state is loaded.
+        calendar:
+          trainer && upNextDayId !== null
+            ? calendar(trainer, trainerSessions, todayDate(), 7)
+            : undefined,
+        adjustedToday: adjustedTodayText(),
+        newProgram,
       },
       {
         // The hero goes through the preview, which loads last time's weights for the defaults.
         onStart: (day) => void openPreview(day),
         onOpenDay: (day) => void openPreview(day),
         onTab: (tab) => goTab(tab),
+        onCoach: trainer ? () => void openCoach('today') : undefined,
+        onUndoAdjust: () => void undoNewest('banner'),
+        onTrainAnyway: (day) => trainAnyway(day),
+        onUseNewProgram: () => void resetPlan(),
+        onKeepPlan: () => keepPlan(),
       },
     );
+  }
+
+  // ---------- M10 trainer: plan state, coach sheet, Apply / Undo ----------
+
+  async function loadTrainer(): Promise<void> {
+    try {
+      trainer = await loadTrainerState(db, program);
+      newProgram = defaultProgramChanged(trainer, program);
+      changes = await listChanges(db);
+    } catch (err) {
+      // No stored plan (IndexedDB off): the default program, in memory, still runs.
+      logDbError(err);
+      trainer ??= seedPlan(program);
+    }
+  }
+
+  /** Dev log (M10): ids only, never message text. Lands only while a workout's log is open. */
+  function trainerLog(
+    intent: string,
+    action: string,
+    outcome: 'shown' | 'applied' | 'dismissed' | 'undone',
+    source: string,
+  ): void {
+    rec((r) => r.logEvent('trainer', { intent, action, outcome, source }));
+  }
+
+  /** "Adjusted today: …" for today's override; null when there's none to show or undo. */
+  function adjustedTodayText(): string | null {
+    if (!trainer) return null;
+    const eff: EffectiveDay = effectiveDay(trainer, trainerSessions, todayDate());
+    const o = eff.override;
+    if (!o || eff.done) return null;
+    // Train anyway writes a plain override that isn't a coach change (nothing to undo).
+    if (!o.rest && !o.adjust && o.dayId === undefined) return null;
+    const planDay = trainer.plan.days.find((d) => d.id === (o.dayId ?? eff.day?.id));
+    return adjustSummary(o, exerciseName, planDay);
+  }
+
+  /** The plan days, with today's day as it runs (so the hero counts what Start runs). */
+  function todayDays(): readonly ProgramDay[] {
+    if (!trainer) return program.days;
+    const eff = effectiveDay(trainer, trainerSessions, todayDate());
+    const run = !eff.done && !eff.rest && eff.adjusted ? eff.day : null;
+    return trainer.plan.days.map((d) => (run && d.id === run.id ? run : d));
+  }
+
+  /** Stores a new trainer state that isn't a plan change (Train anyway, Keep mine). */
+  function saveTrainer(next: TrainerState): void {
+    trainer = next;
+    void saveTrainerState(db, next).catch(logDbError);
+  }
+
+  /**
+   * Train anyway on a rest day (Decision, main): today becomes a training day in the trainer
+   * state (a `{ date }` override, version bump, no PlanChange), so the calendar and the coach
+   * agree, then the preview of the day it runs.
+   */
+  function trainAnyway(day: ProgramDay): void {
+    if (trainer) {
+      const date = todayDate();
+      saveTrainer({
+        ...trainer,
+        version: trainer.version + 1,
+        overrides: [...trainer.overrides.filter((o) => o.date !== date), { date }],
+      });
+      const eff = effectiveDay(trainer, trainerSessions, date);
+      void openPreview(eff.day ?? day);
+      return;
+    }
+    void openPreview(day);
+  }
+
+  /** M10-q11 "Keep mine": his plan stays; the prompt goes until program.json changes again. */
+  function keepPlan(): void {
+    if (!trainer) return;
+    saveTrainer({
+      ...trainer,
+      version: trainer.version + 1,
+      plan: { ...trainer.plan, seededFrom: programHash(program) },
+    });
+    newProgram = false;
+    render();
+  }
+
+  async function resetPlan(): Promise<void> {
+    if (!trainer) return;
+    const r = resetToProgram(trainer, program, now(), 'chip');
+    if (!r.ok) return;
+    trainer = r.state;
+    newProgram = false;
+    const change = await saveChangeRecord(r.state, r.change);
+    changes = [change, ...changes];
+    trainerLog('reset', 'reset', 'applied', 'chip');
+    showUndoToast('Done. Default program is back.');
+    refreshAfterChange();
+  }
+
+  /** Saves state + change in one transaction; returns the change with its id. */
+  async function saveChangeRecord(state: TrainerState, change: PlanChange): Promise<PlanChange> {
+    try {
+      const id = await commitChange(db, state, change);
+      return { ...change, id };
+    } catch (err) {
+      logDbError(err);
+      return change;
+    }
+  }
+
+  /** Re-render whatever is under the change (Today / preview / Plan changes / Summary). */
+  function refreshAfterChange(): void {
+    if (view.screen === 'today') {
+      void loadUpNext();
+    } else if (view.screen === 'preview') {
+      const eff = trainer ? effectiveDay(trainer, trainerSessions, todayDate()) : null;
+      // Not today from the preview: today no longer runs this day, so back to Today.
+      if (view.today && (!eff || eff.rest || eff.day?.id !== view.day.id)) goToday();
+      else void openPreview(view.planDay);
+    } else if (view.screen === 'session' && view.s.phase === 'summary') {
+      void loadSummaryHistory(view.s);
+      render();
+    } else {
+      render();
+    }
+  }
+
+  // ----- the running session follows a mid-workout change -----
+
+  /**
+   * Replays the plan change on the running session: every row that differs between the session's
+   * day and today's day in `next`, and that has no logged set yet, is replaced or removed with
+   * REPLACE_UPCOMING. Logged sets are never touched; a removed row can't come back on Undo.
+   * The reducer refuses REPLACE_UPCOMING while paused (the Pause sheet is open), so the
+   * replacements run between a RESUME and a PAUSE at the same instant: no time passes.
+   */
+  function syncSession(next: TrainerState): void {
+    if (view.screen !== 'session' || view.s.phase === 'summary') return;
+    const start = view.s;
+    const t = now();
+    const today = effectiveDay(next, trainerSessions, todayDate());
+    if (!today.day || today.day.id !== start.day.id) return;
+    let s = start;
+    const wasPaused = s.paused;
+    if (wasPaused) s = nextState(s, { type: 'RESUME', now: t });
+    for (const { from, to } of alignRows(start.day.exercises, today.day.exercises)) {
+      if (!rowChanged(from, to)) continue;
+      if (s.logs.some((l) => l.exerciseId === from.exerciseId)) continue;
+      const exIndex = s.day.exercises.findIndex((p) => p.exerciseId === from.exerciseId);
+      if (exIndex < 0) continue;
+      const e: SessionEvent = { type: 'REPLACE_UPCOMING', exIndex, planned: to, now: t };
+      const after = nextState(s, e);
+      if (after === s) continue;
+      // Ids only in the dev log.
+      rec((r) =>
+        r.logEvent(e.type, { exIndex, exerciseId: from.exerciseId, toId: to?.exerciseId ?? null }),
+      );
+      s = after;
+    }
+    if (wasPaused && s.phase !== 'summary') s = nextState(s, { type: 'PAUSE', now: t });
+    if (s === start) return;
+    view = { screen: 'session', s, sheet: null };
+    if (s.phase === 'summary') onFinished(s);
+    syncCamera();
+    render();
+  }
+
+  /** The session row records what this workout ran with (stalls skip adjusted sessions). */
+  function markSessionAdjust(action: ProposalAction): void {
+    if (view.screen !== 'session' || sessionAdjust.includes(action)) return;
+    sessionAdjust = [...sessionAdjust, action];
+    void db.sessions.update(view.s.sessionId, { adjust: [...sessionAdjust] }).catch(logDbError);
+  }
+
+  /** Speaks a confirmation mid-workout: a cue, queued (never cancels), never during a set. */
+  function sayConfirmation(text: string | undefined): void {
+    if (!text || view.screen !== 'session') return;
+    const s = view.s;
+    if (s.phase === 'summary' || (s.phase === 'exercise' && !s.paused)) return;
+    voice.speak(text, { kind: 'cue' });
+  }
+
+  // ----- Apply / Undo -----
+
+  async function applyFromCoach(index: number): Promise<void> {
+    const c = coach;
+    const entry = c?.proposals.get(index);
+    if (!c || !entry || !trainer) return;
+    c.proposals.delete(index);
+    const r = applyProposal(trainer, entry.proposal, now(), entry.source);
+    if (!r.ok) {
+      c.items[index] = { kind: 'coach', text: STALE_PROPOSAL };
+      renderCoach();
+      return;
+    }
+    trainer = r.state;
+    const change = await saveChangeRecord(r.state, r.change);
+    changes = [change, ...changes];
+    trainerLog(entry.intent, entry.proposal.action, 'applied', entry.source);
+    const workout = c.phase === 'workout';
+    closeCoach();
+    if (workout) {
+      markSessionAdjust(entry.proposal.action);
+      syncSession(r.state);
+      sayConfirmation(entry.proposal.say);
+    }
+    showUndoToast(entry.proposal.say ?? `Done. ${entry.proposal.title}.`, change.id);
+    refreshAfterChange();
+  }
+
+  /** Undo the newest standing change (LIFO). With `id`, only if it's that one. */
+  async function undoNewest(source: string, id?: number): Promise<void> {
+    if (!trainer) return;
+    const r = undoLast(trainer, changes, now(), id);
+    if (!r.ok) {
+      showNotice(UNDO_FAILED);
+      return;
+    }
+    trainer = r.state;
+    const undone = r.change;
+    changes = changes.map((c) =>
+      (undone.id !== undefined ? c.id === undone.id : c.createdAt === undone.createdAt)
+        ? undone
+        : c,
+    );
+    await saveChangeRecord(r.state, undone);
+    trainerLog('undo', undone.action, 'undone', source);
+    removeToast();
+    syncSession(r.state); // mid-workout: only rows still unstarted go back
+    refreshAfterChange();
+  }
+
+  function removeToast(): void {
+    toast?.remove();
+    toast = null;
+  }
+
+  function showUndoToast(text: string, id?: number): void {
+    removeToast();
+    const el: UndoToast = undoToast(
+      { text },
+      {
+        onUndo: () => void undoNewest('toast', id),
+        onExpire: () => {
+          if (toast === el) removeToast();
+        },
+      },
+    );
+    toast = el;
+    document.body.append(el);
+  }
+
+  /** A short status line in the toast slot (no Undo), gone after 4 s. */
+  function showNotice(text: string): void {
+    removeToast();
+    const el = h(
+      'div',
+      { class: 'undo-toast', role: 'status', 'data-notice': true },
+      h('p', { class: 'undo-text' }, text),
+    );
+    toast = el;
+    document.body.append(el);
+    window.setTimeout(() => {
+      if (toast === el) removeToast();
+    }, 4000);
+  }
+
+  // ----- Plan changes (Settings) -----
+
+  function openPlanChanges(): void {
+    view = { screen: 'planChanges' };
+    render();
+    void listChanges(db)
+      .then((list) => {
+        changes = list;
+        if (view.screen === 'planChanges') render();
+      })
+      .catch(logDbError);
+  }
+
+  function planChangesView(): HTMLElement {
+    return planChangesScreen(
+      { changes },
+      {
+        onBack: () => {
+          view = { screen: 'settings' };
+          render();
+        },
+        onUndo: (c) => void undoNewest('planChanges', c.id),
+        onReset: () => void resetPlan(),
+      },
+    );
+  }
+
+  // ----- the coach sheet -----
+
+  /**
+   * Opens the coach from Today / the preview / the Pause sheet ('workout') or Summary's stall
+   * card ('today' with a first chip). Reads the history it needs first.
+   */
+  async function openCoach(phase: CoachPhase, first?: CoachInput): Promise<void> {
+    if (coach || !trainer) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    let sets: SetLog[] = [];
+    let lastW: Record<string, number> = {};
+    try {
+      trainerSessions = await db.sessions.toArray();
+      const finished = trainerSessions.filter((x) => x.endedAt !== undefined);
+      sets = await setsForSessions(
+        db,
+        finished.map((x) => x.sessionId),
+      );
+      const ids = [...new Set(planDays().flatMap((d) => d.exercises.map((p) => p.exerciseId)))];
+      lastW = lastWeights(await lastSessionSets(db, ids));
+    } catch (err) {
+      logDbError(err);
+    }
+    if (view.screen === 'session' && phase === 'workout') lastW = { ...view.s.lastWeightKg };
+    if (coach) return;
+    coach = {
+      phase,
+      items: [{ kind: 'coach', text: phase === 'workout' ? MID_SESSION_REPLY : COACH_GREETING }],
+      proposals: new Map(),
+      showAreas: false,
+      quick: phase === 'workout' ? [...WORKOUT_QUICK] : [],
+      followUps: [],
+      sets,
+      lastWeightKg: lastW,
+      el: null,
+      opener,
+    };
+    if (first) coachTurn(first);
+    else renderCoach();
+  }
+
+  /** What core's coach reads. Mid-workout, today is the running day as it runs now. */
+  function coachContext(c: CoachUi): CoachContext {
+    const t = todayDate();
+    let state = trainer ?? seedPlan(program);
+    let logged: string[] = [];
+    if (c.phase === 'workout' && view.screen === 'session') {
+      const s = view.s;
+      logged = [...new Set(s.logs.map((l) => l.exerciseId))];
+      // The running set's exercise counts as started (the reducer won't replace it).
+      if (s.phase === 'exercise') logged.push(currentPlanned(s).exerciseId);
+      const eff = effectiveDay(state, trainerSessions, t);
+      if (eff.rest || eff.day?.id !== s.day.id)
+        state = {
+          ...state,
+          overrides: [...state.overrides.filter((o) => o.date !== t), { date: t, dayId: s.day.id }],
+        };
+    }
+    return {
+      phase: c.phase,
+      state,
+      sessions: trainerSessions,
+      sets: c.sets,
+      changes,
+      today: t,
+      unit,
+      lastWeightKg: c.lastWeightKg,
+      logged,
+      catalog: trainerCatalog,
+      m7Available: false,
+    };
+  }
+
+  function coachTurn(input: CoachInput, said?: string): void {
+    const c = coach;
+    if (!c) return;
+    const r = coachHandle(input, coachContext(c));
+    if (said) c.items.push({ kind: 'user', text: said });
+    c.items.push(
+      r.safety === 'redFlag'
+        ? { kind: 'redFlag', text: r.reply }
+        : { kind: 'coach', text: r.reply },
+    );
+    if (r.proposal) {
+      const source: PlanChange['source'] = 'text' in input ? 'rules' : 'chip';
+      c.proposals.set(c.items.length, { proposal: r.proposal, source, intent: r.intent });
+      c.items.push({ kind: 'proposal', proposal: r.proposal });
+      trainerLog(r.intent, r.proposal.action, 'shown', source);
+    }
+    const plain = (x: CoachChip) => QUICK_IDS.includes(x.id) && x.args === undefined;
+    c.quick = r.chips.filter(plain).map((x) => x.id as SheetChipId);
+    c.showAreas = r.chips.some((x) => AREA_IDS.includes(x.id));
+    c.followUps = r.chips.filter(
+      (x) => !plain(x) && !AREA_IDS.includes(x.id) && x.id !== 'endWorkout',
+    );
+    // Only the red-flag line is spoken, and only mid-workout (core sets `say` then).
+    if (r.say && c.phase === 'workout') voice.speak(r.say, { kind: 'cue' });
+    renderCoach();
+  }
+
+  function dismissProposal(index: number): void {
+    const c = coach;
+    const entry = c?.proposals.get(index);
+    if (!c || !entry) return;
+    c.proposals.delete(index);
+    trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
+    c.items[index] = { kind: 'coach', text: `${entry.proposal.title}: not now. Nothing changed.` };
+    c.quick = c.phase === 'workout' ? [...WORKOUT_QUICK] : [];
+    c.followUps = [];
+    renderCoach();
+  }
+
+  function closeCoach(): void {
+    const c = coach;
+    if (!c) return;
+    for (const entry of c.proposals.values())
+      trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
+    c.el?.remove();
+    coach = null;
+    if (!howTo) root.inert = false;
+    const back =
+      (c.opener?.isConnected ? c.opener : null) ??
+      root.querySelector<HTMLElement>('[data-pause="coach"], [data-coach-open]');
+    back?.focus();
+  }
+
+  function renderCoach(): void {
+    const c = coach;
+    if (!c) return;
+    const el = coachSheet(
+      {
+        items: c.items,
+        showAreas: c.showAreas,
+        allowTyping: true, // Today, the preview and the Pause sheet only: never during a set
+        chips: c.quick.length ? c.quick : c.phase === 'workout' ? WORKOUT_QUICK : undefined,
+        inWorkout: c.phase === 'workout',
+        followUps: c.followUps,
+      },
+      {
+        onClose: closeCoach,
+        onChip: (id) => coachTurn({ chip: id }, chipLabel(id)),
+        onArea: (area) => coachTurn({ chip: area }, area[0]?.toUpperCase() + area.slice(1)),
+        onText: (text) => coachTurn({ text }, text),
+        onApply: (index) => void applyFromCoach(index),
+        onDismiss: (index) => dismissProposal(index),
+        onEndWorkout: () => {
+          closeCoach();
+          dispatch({ type: 'FINISH', now: now() });
+        },
+        onFollowUp: (index) => {
+          const f = c.followUps[index];
+          if (f) coachTurn({ chip: f.id, ...(f.args ? { args: f.args } : {}) }, f.label);
+        },
+      },
+    );
+    if (c.el?.isConnected) c.el.replaceWith(el);
+    else document.body.append(el);
+    c.el = el;
+    root.inert = true; // the sheet is modal
+    const apply = [...el.querySelectorAll<HTMLElement>('.proposal-apply')].at(-1);
+    (apply ?? el).focus();
+  }
+
+  function chipLabel(id: SheetChipId): string {
+    const labels: Record<SheetChipId, string> = {
+      notToday: 'Not today',
+      easyOn: 'Go easy on…',
+      lighter: 'Lighter today',
+      swap: 'Swap an exercise',
+      adjustPlan: 'Adjust my plan',
+      food: 'What should I eat?',
+    };
+    return labels[id];
   }
 
   // ---------- Settings ----------
@@ -797,16 +1399,32 @@ export function mountApp(root: HTMLElement): void {
         },
         onCameraTest: () => openCameraView('Camera test'),
         onTab: (t) => goTab(t),
+        onPlanChanges: () => openPlanChanges(),
       },
     );
   }
 
   // ---------- Day preview ----------
 
-  async function openPreview(day: ProgramDay): Promise<void> {
-    view = { screen: 'preview', day, loading: true };
+  /** What the preview of `day` runs: today's effective day (adjusted) or the plan day. */
+  function previewDayFor(day: ProgramDay): PreviewDay {
+    const planDay = planDays().find((d) => d.id === day.id) ?? day;
+    if (trainer) {
+      const eff = effectiveDay(trainer, trainerSessions, todayDate());
+      if (!eff.done && !eff.rest && eff.day?.id === day.id)
+        return { day: eff.day, planDay, today: true, adjust: eff.adjusted };
+    }
+    return { day: planDay, planDay, today: false, adjust: null };
+  }
+
+  async function openPreview(picked: ProgramDay): Promise<void> {
+    const pd = previewDayFor(picked);
+    view = { screen: 'preview', loading: true, ...pd };
     render();
-    const ids = day.exercises.map((e) => e.exerciseId);
+    // The rows as they run plus the plan rows they replaced (for the "was …" notes).
+    const ids = [
+      ...new Set([...pd.day.exercises, ...pd.planDay.exercises].map((e) => e.exerciseId)),
+    ];
     try {
       const [last, notes] = await Promise.all([
         lastSessionSets(db, ids),
@@ -819,42 +1437,86 @@ export function mountApp(root: HTMLElement): void {
       lastTime = {};
       exerciseNotes = {};
     }
-    if (view.screen === 'preview' && view.day === day) {
-      view = { screen: 'preview', day, loading: false };
+    if (view.screen === 'preview' && view.day === pd.day) {
+      view = { ...view, loading: false };
       render();
     }
   }
 
-  function defaultWeightKg(p: PlannedExercise): number {
-    return lastTime[p.exerciseId]?.at(-1)?.weightKg ?? snapToStep(p.startWeightKg ?? 0, unit);
+  /**
+   * The weight a set would default to (session defaultsFor): today's lighter/deload weight, else
+   * last time, else the plan. null = no weight yet (a swapped-in exercise with no history).
+   */
+  function defaultWeightKg(p: PlannedExercise): number | null {
+    if (p.weightKgToday !== undefined) return p.weightKgToday;
+    const last = lastTime[p.exerciseId]?.at(-1)?.weightKg;
+    if (last !== undefined) return last;
+    return p.startWeightKg === undefined ? null : snapToStep(p.startWeightKg, unit);
   }
 
-  function previewScreen(day: ProgramDay, loading: boolean): HTMLElement {
+  function weightLabel(p: PlannedExercise): string {
+    const wKg = defaultWeightKg(p);
+    if (wKg === null) return 'pick your weight';
+    return wKg > 0 ? `${w(wKg)} ${unit}` : 'bodyweight';
+  }
+
+  function previewRow(p: PlannedExercise): PreviewRow {
+    const last = setsText(lastTime[p.exerciseId] ?? []);
+    return {
+      exerciseId: p.exerciseId,
+      tracking: p.tracking,
+      name: exerciseName(p.exerciseId),
+      plan: `${p.sets} × ${repsRange(p)} reps · ${weightLabel(p)}`,
+      machine: noteFor(p.exerciseId).machineSetting || undefined,
+      last: last || undefined,
+    };
+  }
+
+  function previewScreen(pd: PreviewDay, loading: boolean): HTMLElement {
+    const { day, planDay } = pd;
+    // Today's adjusted rows: pair each plan row with what runs instead (or nothing).
+    const pairs = pd.adjust ? alignRows(planDay.exercises, day.exercises) : [];
+    const lastKg = (id: string) => lastTime[id]?.at(-1)?.weightKg;
+    const rows = day.exercises.map((p) => {
+      const row = previewRow(p);
+      const pair = pairs.find((x) => x.to === p);
+      const note = pair
+        ? rowAdjustNote(pair.from, p, unit, exerciseName, lastKg(pair.from.exerciseId))
+        : null;
+      return note && pd.adjust
+        ? { ...row, adjusted: p.adjusted ?? pd.adjust, adjustNote: note }
+        : row;
+    });
+    const removedRows = pairs
+      .filter((x) => x.to === null)
+      .map((x): PreviewRow => ({
+        ...previewRow(x.from),
+        adjusted: 'removed',
+        adjustNote: 'Removed today',
+      }));
+    const days = planDays();
+    const position = days.findIndex((d) => d.id === day.id);
     return renderPreview(
       {
         day,
-        position: program.days.indexOf(day) + 1,
-        total: program.days.length,
+        position: (position < 0 ? 0 : position) + 1,
+        total: days.length,
         loading,
         hint: silentHint(), // iOS mutes spoken cues in Silent mode; a page can't detect it
-        rows: day.exercises.map((p) => {
-          const wKg = defaultWeightKg(p);
-          const last = setsText(lastTime[p.exerciseId] ?? []);
-          return {
-            exerciseId: p.exerciseId,
-            tracking: p.tracking,
-            name: exerciseName(p.exerciseId),
-            plan: `${p.sets} × ${repsRange(p)} reps · ${wKg > 0 ? `${w(wKg)} ${unit}` : 'bodyweight'}`,
-            machine: noteFor(p.exerciseId).machineSetting || undefined,
-            last: last || undefined,
-          };
-        }),
+        rows,
+        removedRows,
+        adjustedToday: pd.today ? adjustedTodayText() : null,
       },
-      { onBack: goToday, onStart: startDay },
+      {
+        onBack: goToday,
+        onStart: (d) => startDay(d, pd.today ? pd.adjust : null),
+        onCoach: trainer ? () => void openCoach('preview') : undefined,
+        onUndoAdjust: () => void undoNewest('banner'),
+      },
     );
   }
 
-  function startDay(day: ProgramDay): void {
+  function startDay(day: ProgramDay, adjust: ProposalAction | null = null): void {
     voice.unlock(); // must happen inside the tap
     const t = now();
     const s = startSession(day, crypto.randomUUID(), t, {
@@ -866,11 +1528,15 @@ export function mountApp(root: HTMLElement): void {
     lastCueElapsedMs = 0;
     placementSpoken = new Set();
     correction = null;
+    sessionAdjust = adjust ? [adjust] : [];
     startDevLog(s, day.id);
     void wakeLock.hold();
-    void startSessionRow(db, { sessionId: s.sessionId, dayId: day.id, startedAt: t }).catch(
-      logDbError,
-    );
+    void startSessionRow(db, {
+      sessionId: s.sessionId,
+      dayId: day.id,
+      startedAt: t,
+      ...(sessionAdjust.length ? { adjust: [...sessionAdjust] } : {}),
+    }).catch(logDbError);
     startTicker();
     render();
     speakFocusCue(null, s);
@@ -1344,6 +2010,8 @@ export function mountApp(root: HTMLElement): void {
           dispatch({ type: 'SKIP_EXERCISE', now: now() });
         },
         onEnd: () => dispatch({ type: 'FINISH', now: now() }),
+        // M10: the coach, typing allowed (paused: no set is running).
+        onCoach: trainer ? () => void openCoach('workout') : undefined,
       },
     );
   }
@@ -1369,8 +2037,13 @@ export function mountApp(root: HTMLElement): void {
         fixEl: lastSetFix(s),
         coachEl: createCoachSummary(coachSummary(s, lastTime, exerciseName), exerciseName),
         focusEl: createFocusSummary(s.logs, exerciseName),
+        stalls: summaryStalls?.sessionId === s.sessionId ? summaryStalls.stalls : [],
       },
-      { onDone: goToday },
+      {
+        onDone: goToday,
+        onStallOption: (exerciseId, option) =>
+          void openCoach('today', { chip: 'stallFix', args: { exerciseId, option } }),
+      },
     );
   }
 
@@ -1383,6 +2056,30 @@ export function mountApp(root: HTMLElement): void {
       const prevLogs = prev ? await setsForSessions(db, [prev.sessionId]) : [];
       const ids = [...new Set(s.logs.map((l) => l.exerciseId))];
       const history = await setsForExercises(db, ids);
+      // M10: lifts stalled for 3 sessions (shown under the coach line with their two fixes).
+      if (trainer) {
+        // This session's own row may not be saved as finished yet: count it as it ended.
+        trainerSessions = (await db.sessions.toArray()).map((row) =>
+          row.sessionId === s.sessionId
+            ? {
+                ...row,
+                endedAt: s.endedAt ?? t,
+                ...(sessionAdjust.length ? { adjust: [...sessionAdjust] } : {}),
+              }
+            : row,
+        );
+        const stalls = detectStalls(history, trainerSessions, trainer.plan, {
+          since: stallSince(changes),
+        }).filter((st) => ids.includes(st.exerciseId));
+        summaryStalls = {
+          sessionId: s.sessionId,
+          stalls: stalls.map((st) => ({
+            exerciseId: st.exerciseId,
+            line: stallLine(st, exerciseName),
+            options: st.options,
+          })),
+        };
+      }
       summaryHistory = {
         sessionId: s.sessionId,
         prevLogs,
@@ -1462,5 +2159,7 @@ export function mountApp(root: HTMLElement): void {
       if (view.screen === 'settings') render();
     })
     .catch(logDbError);
+  // M10: the trainer state first (Today's calendar and up next read it).
+  const trainerReady = loadTrainer();
   void loadUpNext();
 }

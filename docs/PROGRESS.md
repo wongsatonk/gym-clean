@@ -473,7 +473,7 @@ M10-q8.
   - Summary: a stall card under the M5b line with two options, each opening its Proposal.
   - Done when: render tests and screenshots.
   - Deps: 13.
-- [ ] 16. [main] Wiring.
+- [x] 16. [main] Wiring.
   - Files: src/ui/app.ts, src/data/catalog.ts call sites.
   - Load the trainer state at startup.
   - Replace `loadUpNext` with `upNext(calendar…)`, and keep "never leave Start disabled".
@@ -486,7 +486,7 @@ M10-q8.
     source }`: ids only.
   - Done when, by hand: Not today → Today moves, the avoid-arms day runs, Undo works, existing e2e green.
   - Deps: 5, 11, 12, 13, 14, 15.
-- [ ] 17. [ui-engineer] E2E `e2e/trainer.spec.ts`.
+- [x] 17. [ui-engineer] E2E `e2e/trainer.spec.ts`.
   - Cases: the SPEC M10 phase A Accept list. Also: Lighter today in lb shows 30 lb for a 35 lb default,
     reload keeps the plan, Reset + Undo, and no `input`/`textarea` on the Exercise screen during a set.
   - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.

@@ -382,3 +382,8 @@
     transform: scaleX(0);
   }
 }
+
+/* Follow-up options (task 16): the coach's alternatives, set apart from the quick chips. */
+.cs-followup {
+  border-color: var(--text);
+}

@@ -10,7 +10,8 @@
 // Focus trap and Escape follow the Pause sheet: Escape closes; Tab / Shift+Tab cycle the sheet's
 // controls in order; the page behind is made inert by the app.
 //
-// e2e hooks: dialog named "Coach", `data-coach-chip=<id>`, `data-coach-area=<area>`, the text box
+// e2e hooks: dialog named "Coach", `data-coach-chip=<id>`, `data-coach-area=<area>`,
+// `data-coach-followup=<index>` (follow-up options, task 16), the text box
 // labelled "Ask the coach" with button "Send", button "Close".
 import type { BodyArea, Proposal } from '../../core/types';
 import { h } from '../dom';
@@ -61,6 +62,12 @@ export type CoachSheetProps = {
   chips?: readonly CoachChipId[] | undefined;
   /** A workout is running: the red-flag card offers End workout. */
   inWorkout?: boolean | undefined;
+  /**
+   * Follow-up options from the coach ("Try Hammer Curls", "Push the week instead", an exercise
+   * to swap). Shown under the list, also next to a waiting proposal (they're alternatives to
+   * it), never while a red flag is up.
+   */
+  followUps?: readonly { label: string }[] | undefined;
 };
 
 export type CoachSheetActions = {
@@ -72,6 +79,8 @@ export type CoachSheetActions = {
   onApply: (index: number) => void;
   onDismiss: (index: number) => void;
   onEndWorkout?: (() => void) | undefined;
+  /** A follow-up option at `index` in `followUps`. */
+  onFollowUp?: ((index: number) => void) | undefined;
 };
 
 /**
@@ -156,7 +165,23 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
       h('span', {}, c.label),
     );
   });
-  cycle.push(...chips);
+  const followUps =
+    !red && a.onFollowUp
+      ? (p.followUps ?? []).map((f, index) =>
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'cs-chip cs-followup',
+              'data-coach-followup': index,
+              onclick: () => a.onFollowUp?.(index),
+            },
+            h('span', {}, f.label),
+          ),
+        )
+      : [];
+  // Tab order follows the layout: follow-ups sit above the quick chips.
+  cycle.push(...followUps, ...chips);
 
   const areas =
     p.showAreas && !quiet
@@ -233,6 +258,13 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
       { class: 'cs-panel' },
       h('div', { class: 'cs-head' }, h('h2', { class: 'cs-title' }, 'Coach'), close),
       scroll,
+      followUps.length
+        ? h(
+            'div',
+            { class: 'cs-chips cs-followups', role: 'group', 'aria-label': 'Options' },
+            ...followUps,
+          )
+        : null,
       chips.length
         ? h('div', { class: 'cs-chips', role: 'group', 'aria-label': 'Quick actions' }, ...chips)
         : null,

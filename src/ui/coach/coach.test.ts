@@ -60,6 +60,7 @@ function mount(p: Partial<CoachSheetProps> = {}) {
         onApply: (i: number) => log.push(`apply:${i}`),
         onDismiss: (i: number) => log.push(`dismiss:${i}`),
         onEndWorkout: () => log.push('end'),
+        onFollowUp: (i: number) => log.push(`follow:${i}`),
       },
     ),
   );
@@ -217,6 +218,20 @@ describe('coachSheet', () => {
     byText(gym.el, 'Not today').click();
     expect(gym.log).toEqual(['end', 'chip:notToday']);
     expect(gym.el.byClass('primary-btn')).toHaveLength(0);
+  });
+
+  it('follow-up options: shown with a waiting proposal, report their index, hidden by a red flag', () => {
+    const followUps = [{ label: 'Try Hammer Curls' }, { label: 'Push the week instead' }];
+    const items: CoachItem[] = [{ kind: 'proposal', proposal: PROPOSAL }];
+    const { el, log } = mount({ items, followUps });
+    expect(el.byClass('cs-followup').map((b) => b.textContent.trim())).toEqual([
+      'Try Hammer Curls',
+      'Push the week instead',
+    ]);
+    byText(el, 'Push the week instead').click();
+    expect(log).toEqual(['follow:1']);
+    const red = mount({ items: [{ kind: 'redFlag', text: RED }], followUps });
+    expect(red.el.byClass('cs-followup')).toHaveLength(0);
   });
 
   it('Escape closes; Tab and Shift+Tab cycle the controls inside the sheet', () => {

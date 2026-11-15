@@ -57,6 +57,8 @@ export type TodayProps = {
   calendar?: readonly CalendarEntry[] | undefined;
   /** "Easy on arms · 2 swaps": today's override summary. Shows the Adjusted banner with Undo. */
   adjustedToday?: string | null | undefined;
+  /** M10-q11: program.json changed after he edited his plan: offer Use it / Keep mine. */
+  newProgram?: boolean | undefined;
 };
 
 /** One calendar day, as `src/core/trainer/plan.ts` returns it. `date` is local YYYY-MM-DD. */
@@ -79,6 +81,10 @@ export type TodayActions = {
   onUndoAdjust?: (() => void) | undefined;
   /** Train anyway on a rest day; falls back to onStart. */
   onTrainAnyway?: ((day: ProgramDay) => void) | undefined;
+  /** "A new default program is available": Use it (an undoable Reset). */
+  onUseNewProgram?: (() => void) | undefined;
+  /** … Keep mine (the prompt goes away). */
+  onKeepPlan?: (() => void) | undefined;
 };
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -175,6 +181,34 @@ export function adjustedBanner(summary: string, onUndo: (() => void) | undefined
           'Undo',
         )
       : null,
+  );
+}
+
+/** M10-q11: the new-default-program prompt (Today only). */
+function newProgramPrompt(actions: TodayActions): HTMLElement {
+  return h(
+    'section',
+    { class: 'adjusted-banner program-prompt', 'data-program-prompt': true, role: 'status' },
+    h(
+      'p',
+      { class: 'adjusted-text' },
+      icon('calendar', 'sm'),
+      h('span', {}, 'A new default program is available.'),
+    ),
+    h(
+      'div',
+      { class: 'program-prompt-actions' },
+      h(
+        'button',
+        { type: 'button', class: 'adjusted-undo', onclick: () => actions.onUseNewProgram?.() },
+        'Use it',
+      ),
+      h(
+        'button',
+        { type: 'button', class: 'adjusted-undo', onclick: () => actions.onKeepPlan?.() },
+        'Keep mine',
+      ),
+    ),
   );
 }
 
@@ -373,10 +407,14 @@ function dayCard(day: ProgramDay, props: TodayProps, actions: TodayActions): HTM
   );
 }
 
-/** True when an override moved this date: it was made a rest day or given another day. */
+/**
+ * True when an override moved this date: it was made a rest day, or a training day by Not today /
+ * Train anyway (an override with no `adjust`). An adjust override (lighter, swap, …) pins its
+ * day id too, but only changes what the day runs, so it's "Adjusted", not "Moved".
+ */
 export function isMoved(entry: CalendarEntry): boolean {
   const o = entry.override;
-  return !!o && (o.rest === true || o.dayId !== undefined);
+  return !!o && (o.rest === true || o.adjust === undefined);
 }
 
 /**
@@ -505,6 +543,9 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
           )
         : h('span', { class: 'date' }, dateLabel(props.now)),
     ),
+    props.newProgram && actions.onUseNewProgram && actions.onKeepPlan
+      ? newProgramPrompt(actions)
+      : null,
     props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,
     hero(props, actions),
     h('div', { class: 'pair' }, streakTile(props), lastTile(props)),

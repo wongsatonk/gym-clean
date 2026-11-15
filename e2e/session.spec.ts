@@ -244,6 +244,9 @@ test('Pause sheet while resting: Skip moves to the next exercise and stays in re
   const sheet = page.getByRole('dialog', { name: 'Paused' });
   await expect(sheet.locator('.pause-context')).toHaveText('Resting · next Dumbbell Bench Press');
   await expect(sheet.getByRole('button', { name: 'Resume' })).toBeFocused();
+  // M10: the Coach row sits under Resume.
+  await page.keyboard.press('Tab');
+  await expect(sheet.locator('[data-pause="coach"]')).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(sheet.getByRole('button', { name: 'Skip exercise' })).toBeFocused();
   await page.keyboard.press('Tab');

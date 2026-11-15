@@ -46,6 +46,8 @@ export type SettingsActions = {
   onUnit: (unit: Unit) => void;
   onCameraTest: () => void;
   onTab: (tab: TabId) => void;
+  /** M10: opens Settings → Plan changes. Omitted → no Plan section. */
+  onPlanChanges?: (() => void) | undefined;
 };
 
 /** The unit help line under the kg / lb choice. */
@@ -156,6 +158,23 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
       ),
       h('p', { class: 'muted set-note' }, unitNote(props.unit)),
     ),
+    actions.onPlanChanges
+      ? section(
+          'plan',
+          'calendar',
+          'Plan',
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'set-action',
+              'data-plan-changes-open': true,
+              onclick: () => actions.onPlanChanges?.(),
+            },
+            'Plan changes',
+          ),
+        )
+      : null,
     section('devlog', 'bars', 'Developer log', props.devLog),
     tabBar('settings', actions.onTab),
   );

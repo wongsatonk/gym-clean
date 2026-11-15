@@ -719,6 +719,20 @@ h1 {
   color: var(--warn);
 }
 
+/* M10-q11 prompt: the text on its own line, Use it / Keep mine side by side under it. */
+.program-prompt {
+  flex-wrap: wrap;
+}
+
+.program-prompt .adjusted-text {
+  flex-basis: 100%;
+}
+
+.program-prompt-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .adjusted-undo {
   flex: none;
   min-height: var(--tap-min);
