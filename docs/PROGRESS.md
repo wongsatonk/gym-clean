@@ -5,8 +5,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 ## Status
 
 - **Live:** c5e3a0d on main, deployed 2026-11-14: everything through M6, M4d 3D demos for all 30 program exercises, and M4f wave 1 (camera for hammer / concentration / incline curls, DB shoulder press, bent-over row, triceps extension, all `learning`).
-- **In progress:** M10 phase A AI trainer on branch `m10a-trainer` (tasks 1–17 done and committed; task 18 review = CHANGES REQUIRED → fix round in progress; then 19 verify, 20 ask to deploy).
-- **Next step:** finish the review fixes (core: REPLACE_UPCOMING while paused, INSERT_UPCOMING for mid-workout Undo, avoid-area swaps need a shared primary muscle, explicit row map in DayAdjust; app: Train anyway undoes a standing postpone, no Coach row over the camera, toast dispose), re-review, verify, then ask Wongsaton to deploy. Then 🧍 Checkpoint E (a week with the coach) and 🧍 Checkpoint F1 (camera wave-1 sets).
+- **In progress:** M10 phase A AI trainer on branch `m10a-trainer`: tasks 1–18 done (review CHANGES REQUIRED → fix round a83406f, ee7a68c, 5896f2a → re-review PASS). Task 19 verification running; Wongsaton pre-approved the deploy ("deploy when it's ready").
+- **Next step:** on verifier PASS, fast-forward main to m10a-trainer and push (deploy), then tell Wongsaton. Then 🧍 Checkpoint E (a week with the coach) and 🧍 Checkpoint F1 (camera wave-1 sets).
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **Waiting on Wongsaton:**
   - Deploy OK for m4e-redesign.
@@ -1433,6 +1433,8 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-15: **M10 fix round (main).** (1) "Go easy on <area>" swaps only for a candidate sharing a primary muscle outside the area; with today's catalog it removes primary-area moves and lightens secondary-area moves (SPEC updated). (2) REPLACE_UPCOMING and the new INSERT_UPCOMING work while paused; mid-workout Undo restores removed rows in place. (3) If a mid-workout change on Rest leaves no unstarted rows the session goes to Summary and Undo can't reopen it (actions refuse when nothing would be left, so this shouldn't occur). Evidence: check 2186 + 29; full e2e 123 passed, 1 skipped; re-review PASS.
 
 - 2026-11-15: **M10 wiring decisions (main).** (1) "Train anyway" on a rest day writes a `{date}` train override for today (version bump, saved, no PlanChange) so the calendar and the coach treat today as training; review fix: on a day that is rest only because of a standing "Not today", Train anyway undoes that change instead. (2) Mid-workout "Lighter today" changes only exercises with 0 logged sets. (3) Trainer dev-log events are recorded only inside a workout (the dev log is per-workout, M4c); events from Today/preview/Summary are not logged. (4) Rest weekdays default to none (M10-q1 answered "No fixed rest days").
 - 2026-11-15: **M10 tasks 16–17 evidence.** `npm run check` green (2152 + 29); `e2e/trainer.spec.ts` ×3 24/24; full e2e 119 passed, 1 skipped (opt-in HISTORY_SHOTS), 0 flaky. Screenshots `docs/screenshots/m10-*.png` (coach sheet, proposal, confirmation + Undo, Today adjusted, rest day, preview adjusted, Plan changes). Review (task 18): CHANGES REQUIRED, blocking = Sunday default rest day (fixed 0a2be23); non-blocking items in fix round.
