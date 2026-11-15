@@ -175,11 +175,27 @@ describe('suggestFood', () => {
     const s = suggestFood({ kcal: 1200, proteinG: 30 }, C);
     expect(s[0]?.why).toBe('Covers your 30 g protein left');
     const t = suggestFood({ kcal: 1200, proteinG: 60 }, C);
-    expect(t[0]?.why).toBe('35.1 g of your 60 g protein left');
+    expect(t[0]?.why).toBe('35 g of your 60 g protein left');
     for (const x of [...s, ...t]) {
       expect(checkCopy(x.label).ok).toBe(true);
       expect(checkCopy(x.why).ok).toBe(true);
     }
+  });
+});
+
+describe('suggestFood: why lines use whole grams', () => {
+  it('rounds the protein left and the item protein to whole grams', () => {
+    const t = suggestFood({ kcal: 1200, proteinG: 59.6 }, C);
+    expect(t[0]?.why).toBe('35 g of your 60 g protein left');
+    const s = suggestFood({ kcal: 1200, proteinG: 22.4 }, C);
+    expect(s[0]?.why).toBe('Covers your 22 g protein left');
+    for (const x of [...s, ...t]) expect(x.why).not.toMatch(/\d\.\d/);
+  });
+
+  it('under half a gram of protein left reads as the kcal line', () => {
+    const s = suggestFood({ kcal: 500, proteinG: 0.4 }, C);
+    expect(s.length).toBeGreaterThan(0);
+    for (const x of s) expect(x.why).toBe('Fits your 500 kcal left');
   });
 });
 

@@ -263,6 +263,39 @@ export function entryFromQuick(q: QuickInput, opts: EntryOpts): FoodEntry | null
   return entry(opts, name, { servings: 1 }, m, true);
 }
 
+const amountIn = (a: FoodAmount, grams: boolean): number | null =>
+  'grams' in a ? (grams ? a.grams : null) : grams ? a.servings * 100 : a.servings;
+
+/**
+ * A logged entry at a new amount (same kind: grams or servings; servings of a gram entry count
+ * 100 g each, like `scaleFood`). The macros scale straight from the entry's as-logged
+ * macros / amount ratio (`entry.logged`, else the entry itself), so there is no per-100 g base
+ * rounded to 0.1 g and editing back and forth never drifts. Everything else on the entry is kept
+ * and the result carries `logged`. Null = a bad amount, a 0 base or grams for a servings entry.
+ */
+export function rescaleEntry(entry: FoodEntry, amount: FoodAmount): FoodEntry | null {
+  const base = entry.logged ?? { amount: entry.amount, macros: entry };
+  const grams = 'grams' in base.amount;
+  const from = amountIn(base.amount, grams);
+  const to = amountIn(amount, grams);
+  if (from === null || to === null || !(from > 0) || !okNum(from) || !okNum(to)) return null;
+  const m = base.macros;
+  const own: MacroSet = { kcal: m.kcal, proteinG: m.proteinG };
+  for (const k of OPTIONAL) {
+    const v = m[k];
+    if (v !== undefined) own[k] = v;
+  }
+  const out: FoodEntry = {
+    ...entry,
+    amount,
+    logged: { amount: base.amount, macros: own },
+    ...roundMacros(times(own, to / from)),
+  };
+  if (own.carbsG === undefined) delete out.carbsG;
+  if (own.fatG === undefined) delete out.fatG;
+  return out;
+}
+
 /** A typed weigh-in in the display unit → kg (stored); null = not a positive number. */
 export function weighInKg(value: number, unit: Unit): number | null {
   if (!Number.isFinite(value) || value <= 0) return null;

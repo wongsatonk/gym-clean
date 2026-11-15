@@ -49,14 +49,15 @@ export function gymSwapWhy(missingLabels: readonly string[], scope: 'today' | 'p
   return `${head} This works the same main muscles. ${tail}`;
 }
 
-const r1 = (x: number) => Math.round(x * 10) / 10;
-
-/** The reply above the food suggestions, e.g. "40 g protein and 900 kcal left today. Some ideas:". */
+/**
+ * The reply above the food suggestions, e.g. "40 g protein and 900 kcal left today. Some ideas:".
+ * Whole grams and whole kcal (shown and spoken); amounts that round to 0 are left out.
+ */
 export function foodIdeasReply(left: MacroSet): string {
-  const p = r1(Math.max(0, left.proteinG));
+  const p = Math.round(Math.max(0, left.proteinG));
   const k = Math.round(Math.max(0, left.kcal));
   const parts = [p > 0 ? `${p} g protein` : '', k > 0 ? `${k} kcal` : ''].filter(Boolean);
-  return `${parts.join(' and ')} left today. Some ideas:`;
+  return parts.length ? `${parts.join(' and ')} left today. Some ideas:` : 'Some ideas:';
 }
 
 /** A Proposal's `say` (spoken confirmation after Apply). */

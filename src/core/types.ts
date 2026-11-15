@@ -210,6 +210,11 @@ export type FoodEntry = MacroSet & {
   estimate: boolean;
   /** M7b: top-1 confidence of the accepted photo guess. */
   photoConfidence?: number;
+  /**
+   * The amount and macros as first logged, set by `rescaleEntry` on the first amount edit.
+   * Later edits scale from it, so repeated edits never compound rounding. Absent = never edited.
+   */
+  logged?: { amount: FoodAmount; macros: MacroSet };
 };
 
 export type WeighIn = { date: string; kg: number };

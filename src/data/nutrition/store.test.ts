@@ -15,6 +15,7 @@ import {
   getBarcodeLookup,
   getFood,
   getNutritionMode,
+  getNudgeShown,
   getNutritionSettings,
   getRecipe,
   getWeeklyCheck,
@@ -34,6 +35,7 @@ import {
   seedOnce,
   setBarcodeLookup,
   setMode,
+  setNudgeShown,
 } from './store';
 
 // Made-up values throughout (the repo is public).
@@ -271,6 +273,37 @@ describe('nutrition settings', () => {
     await db.settings.put({ key: 'nutrition', value: 'garbage' });
     expect(await getBarcodeLookup(db)).toBe(false);
     expect(await getNutritionSettings(db)).toBeNull();
+  });
+});
+
+describe('evening nudge shown date', () => {
+  it('is null until set, then the last date set (settings key nutritionNudgeShown)', async () => {
+    expect(await getNudgeShown(db)).toBeNull();
+    await setNudgeShown(db, '2026-01-05');
+    expect(await getNudgeShown(db)).toBe('2026-01-05');
+    await setNudgeShown(db, '2026-01-06');
+    expect(await getNudgeShown(db)).toBe('2026-01-06');
+    // Same stored shape as before the helpers: a plain date string under its own key.
+    expect(await db.settings.get('nutritionNudgeShown')).toEqual({
+      key: 'nutritionNudgeShown',
+      value: '2026-01-06',
+    });
+    // Doesn't touch the nutrition settings row.
+    expect(await db.settings.get('nutrition')).toBeUndefined();
+  });
+
+  it('reads a value stored before the helpers existed; junk reads as null', async () => {
+    await db.settings.put({ key: 'nutritionNudgeShown', value: '2026-02-01' });
+    expect(await getNudgeShown(db)).toBe('2026-02-01');
+    await db.settings.put({ key: 'nutritionNudgeShown', value: 42 });
+    expect(await getNudgeShown(db)).toBeNull();
+    await db.settings.put({ key: 'nutritionNudgeShown', value: 'yesterday' });
+    expect(await getNudgeShown(db)).toBeNull();
+  });
+
+  it('rejects a date that is not YYYY-MM-DD', async () => {
+    await expect(setNudgeShown(db, '5/1/2026')).rejects.toThrow(RangeError);
+    expect(await getNudgeShown(db)).toBeNull();
   });
 });
 

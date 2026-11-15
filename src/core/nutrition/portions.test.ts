@@ -9,13 +9,14 @@ import {
   foodFromDbRow,
   missingIngredients,
   recipePerServing,
+  rescaleEntry,
   roundMacros,
   scaleFood,
   weighInDisplay,
   weighInKg,
 } from './portions';
 import { checkCopy } from '../trainer/replies';
-import type { Food, FoodDbRow, Recipe } from '../types';
+import type { Food, FoodAmount, FoodDbRow, FoodEntry, Recipe } from '../types';
 
 // Made-up foods and numbers only (the repo is public).
 const RICE: Food = {
@@ -378,6 +379,99 @@ describe('entry builders', () => {
     expect(entryFromFood(SHAKE, { servings: 1 }, { ...OPTS, time: early })?.date).toBe(
       '2026-11-12',
     );
+  });
+});
+
+describe('rescaleEntry', () => {
+  // Made-up entry: 250 g of something, macros as logged.
+  const E: FoodEntry = {
+    id: 'e1',
+    date: '2026-01-05',
+    time: 0,
+    slot: 'lunch',
+    label: 'Something',
+    ref: { foodId: 'f-x' },
+    amount: { grams: 250 },
+    estimate: false,
+    kcal: 413,
+    proteinG: 35.1,
+    carbsG: 12.3,
+  };
+  const macros = (e: FoodEntry) => ({
+    kcal: e.kcal,
+    proteinG: e.proteinG,
+    carbsG: e.carbsG,
+    fatG: e.fatG,
+  });
+
+  it('scales by the entry\'s own macros / amount ratio; missing macros stay missing', () => {
+    const r = rescaleEntry(E, { grams: 100 });
+    expect(r).not.toBeNull();
+    expect(r?.amount).toEqual({ grams: 100 });
+    expect(macros(r as FoodEntry)).toEqual({
+      kcal: 165,
+      proteinG: 14,
+      carbsG: 4.9,
+      fatG: undefined,
+    });
+    expect('fatG' in (r as FoodEntry)).toBe(false);
+    // Everything else is kept.
+    expect(r).toMatchObject({ id: 'e1', slot: 'lunch', label: 'Something', ref: { foodId: 'f-x' } });
+  });
+
+  it('saving the same amount changes nothing (no per-100 g round-trip)', () => {
+    const r = rescaleEntry(E, { grams: 250 });
+    expect(macros(r as FoodEntry)).toEqual(macros(E));
+  });
+
+  it('10 alternating edits return the original macros (no drift)', () => {
+    for (const [a, b] of [
+      [{ grams: 100 }, { grams: 250 }],
+      [{ grams: 75 }, { grams: 250 }],
+      [{ grams: 333 }, { grams: 250 }],
+    ] as [FoodAmount, FoodAmount][]) {
+      let e: FoodEntry = E;
+      for (let i = 0; i < 10; i++) e = rescaleEntry(e, i % 2 === 0 ? a : b) as FoodEntry;
+      expect(e.amount).toEqual({ grams: 250 });
+      expect(macros(e)).toEqual(macros(E));
+    }
+  });
+
+  it('is path independent: any edit history gives the same macros for an amount', () => {
+    let e: FoodEntry = E;
+    for (const g of [30, 410, 7, 125, 90]) e = rescaleEntry(e, { grams: g }) as FoodEntry;
+    expect(macros(e)).toEqual(macros(rescaleEntry(E, { grams: 90 }) as FoodEntry));
+  });
+
+  it('servings entries scale by servings; rounding as elsewhere', () => {
+    const s: FoodEntry = { ...E, amount: { servings: 1 }, kcal: 360, proteinG: 35, carbsG: 30.5 };
+    const r = rescaleEntry(s, { servings: 1.5 }) as FoodEntry;
+    expect(macros(r)).toEqual({ kcal: 540, proteinG: 52.5, carbsG: 45.8, fatG: undefined });
+    expect(macros(rescaleEntry(r, { servings: 1 }) as FoodEntry)).toEqual(macros(s));
+  });
+
+  it('0 is allowed; bad amounts, a 0 base or grams for a servings entry give null', () => {
+    expect(macros(rescaleEntry(E, { grams: 0 }) as FoodEntry)).toEqual({
+      kcal: 0,
+      proteinG: 0,
+      carbsG: 0,
+      fatG: undefined,
+    });
+    expect(rescaleEntry(E, { grams: -1 })).toBeNull();
+    expect(rescaleEntry(E, { grams: Number.NaN })).toBeNull();
+    expect(rescaleEntry({ ...E, amount: { grams: 0 } }, { grams: 100 })).toBeNull();
+    expect(rescaleEntry({ ...E, amount: { servings: 1 } }, { grams: 100 })).toBeNull();
+  });
+
+  it('a gram entry read in servings counts one serving as 100 g (like scaleFood)', () => {
+    const r = rescaleEntry(E, { servings: 1 }) as FoodEntry;
+    expect(macros(r)).toEqual(macros(rescaleEntry(E, { grams: 100 }) as FoodEntry));
+  });
+
+  it('does not mutate the entry', () => {
+    const copy = structuredClone(E);
+    rescaleEntry(E, { grams: 40 });
+    expect(E).toEqual(copy);
   });
 });
 

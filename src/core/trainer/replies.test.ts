@@ -93,8 +93,14 @@ describe('fixed lines', () => {
     );
     expect(foodIdeasReply({ kcal: 900, proteinG: 0 })).toBe('900 kcal left today. Some ideas:');
     expect(foodIdeasReply({ kcal: 0, proteinG: 22.5 })).toBe(
-      '22.5 g protein left today. Some ideas:',
+      '23 g protein left today. Some ideas:',
     );
+    // Whole grams only, shown or spoken.
+    expect(foodIdeasReply({ kcal: 640.6, proteinG: 35.14 })).toBe(
+      '35 g protein and 641 kcal left today. Some ideas:',
+    );
+    expect(foodIdeasReply({ kcal: 300, proteinG: 0.4 })).toBe('300 kcal left today. Some ideas:');
+    expect(foodIdeasReply({ kcal: 0.3, proteinG: 0.2 })).toBe('Some ideas:');
     for (const m of [
       { kcal: 900, proteinG: 40 },
       { kcal: 0, proteinG: 10 },
