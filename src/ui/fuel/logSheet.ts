@@ -192,10 +192,8 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
     closeLabel: 'Close',
     onClose: a.onClose,
     onEscape: () => {
-      if (detail) {
-        detail = null;
-        render();
-      } else a.onClose();
+      if (detail) back();
+      else a.onClose();
     },
   });
 
@@ -218,6 +216,13 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
   const nav = h('div', { class: 'log-secs', role: 'group', 'aria-label': 'Food sources' }, ...tabs);
   const panel = h('div', { class: 'log-panel' });
   shell.body.append(nav, panel);
+
+  /** Detail → list. The detail (and the focused control) is gone: focus stays in the sheet. */
+  function back(): void {
+    detail = null;
+    render();
+    shell.el.focus?.();
+  }
 
   const pick = (item: LogItem) => {
     detail = item;
@@ -496,10 +501,7 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
           type: 'button',
           class: 'fuel-back',
           'data-log-back': true,
-          onclick: () => {
-            detail = null;
-            render();
-          },
+          onclick: () => back(),
         },
         icon('back', 'md'),
         h('span', {}, 'Back'),

@@ -58,7 +58,15 @@ const pwa = VitePWA({
     // The manifest, its icons and the apple-touch-icon are added by the plugin itself.
     // M7: the USDA food list is imported as a `?url` asset (assets/usda-foods-*.json) so offline
     // search works; it's fetched on the first food search, not at startup.
-    globPatterns: ['**/*.{js,css,html,woff2}', 'assets/usda-foods-*.json', 'models/*.task', 'mediapipe/wasm/*'],
+    // M7 task 20: the zxing-wasm barcode reader wasm (~0.9 MB) is a `?url` asset loaded on the
+    // first scan from our own origin (src/ui/fuel/barcodeDecoder.ts), never from a CDN.
+    globPatterns: [
+      '**/*.{js,css,html,woff2}',
+      'assets/usda-foods-*.json',
+      'assets/zxing_reader-*.wasm',
+      'models/*.task',
+      'mediapipe/wasm/*',
+    ],
     maximumFileSizeToCacheInBytes: 20 * 1024 * 1024, // the wasm is 14.7 MB
     cleanupOutdatedCaches: true,
     navigateFallback: 'index.html',

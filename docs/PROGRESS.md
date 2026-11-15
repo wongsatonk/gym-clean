@@ -203,7 +203,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Deps: 1.
 
 #### Wiring, coach food (M10 F1–F3) and e2e
-- [ ] 17. [main] Wiring.
+- [x] 17. [main] Wiring.
   - Files: src/ui/app.ts, package.json (the `build-foods` script).
   - New views and the Fuel tab. Load the store on the first Fuel open.
   - Compute targets, totals, nudges and the weekly check through core. Accepting a check writes `overrides.kcal`, or the surplus, and records the outcome.
@@ -223,7 +223,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - 3 rows (name, portion, kcal / protein), each with a Log button (≥ 56px).
   - Done when: render tests and screenshots pass.
   - Deps: 1 (`FoodSuggestion`).
-- [ ] F3. [main] Coach wiring to the M7 log (replaces M10 F3).
+- [x] F3. [main] Coach wiring to the M7 log (replaces M10 F3).
   - Files: src/ui/app.ts.
   - Pass `m7Available: true` once targets exist. Log → the store, then the Undo toast, then a rerender.
   - Done when, by hand: "What should I eat?" → Log → the Fuel rings update.
@@ -1679,6 +1679,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-15: **Barcode scanner library (M7 task 20).** `zxing-wasm` ^3.1.6 (MIT; zxing-cpp underneath is Apache-2.0), reader-only build `zxing-wasm/reader`: EAN-13/EAN-8/UPC-A (asked for explicitly, `maxNumberOfSymbols: 1`, `tryHarder`), works in iOS Safari (no `BarcodeDetector` needed). Rejected `@zxing/library` 0.23 (Apache-2.0, pure JS, maintenance mode, ~11.9 MB unpacked, weaker 1D decoding). Loader `src/ui/fuel/barcodeDecoder.ts` → `loadBarcodeDecoder()` dynamically imports the lib and `zxing-wasm/reader/zxing_reader.wasm?url`, so nothing is in the main bundle; one shared instance, a failed load isn't cached. **Self-hosted wasm, no network:** the library's default `locateFile` points at fastly.jsdelivr.net; we pass our own `locateFile` that returns the Vite asset URL (`assets/zxing_reader-<hash>.wasm`, same origin), and overrides replace the default (checked in `share.js`); frames are decoded in memory, nothing is sent. Workbox `globPatterns` gains `assets/zxing_reader-*.wasm` (the `.js` chunks were already matched). **Size delta** (probe build with the loader reachable): +3 precache entries, +~962 KiB (21 637.54 → 22 599.91 KiB): wasm 946.86 kB (414.30 kB gzip) + `reader` JS chunk 37.72 kB (13.44 kB gzip) + a tiny URL stub; main `index` chunk unchanged. Until task 21/22 imports the loader, the real build doesn't emit it and Workbox warns that the zxing glob matches nothing (same as the USDA JSON glob).
 - 2026-11-15: **M7 wave 1 review (tasks 4–16, 19, F1, F2).** Reviewer CHANGES REQUIRED → fixed → PASS. A weekly check of kind up/down with `deltaKcal: 0` means "no change possible" (target at maintenance, or surplus at 600 with no hand-set kcal); `checkHasChange()` gates Accept, the card shows "Your target stays the same" + Got it. `applyAcceptedCheck` applies exactly `deltaKcal`. One USDA converter (core `foodFromDbRow`); USDA household measures stay on the row, not `Food.portions`. Weigh-in UI takes core `TrendPoint[]`/`HistoryDay[]`. Ships with the polish batch (Wongsaton: "Ship with M7"). Open for task 17/F3: 4-tab bar on every screen, Food lookup for `usda:*` favorites/recents, pass candidates (incl. Thai dishes) to `entryFromSuggestion`, no double S/R/L factor on recents, `skipIds: EDIT_FROM_LABEL`, label save clears `estimate`, merge mode/barcode into setup save, CSP `connect-src` for Open Food Facts (task 21). Non-blocking: coach `skipFood` also hides quick-estimate favorites (custom + estimate) — narrow to `skipIds`; Fuel tab Dismiss needs a real handler.
 - 2026-11-15: **Dexie version 5 (M7 task 10).** New tables only (`foods: 'id, name, barcode'`, `recipes: 'id'`, `foodEntries: 'id, date, time'`, `weighIns: 'date'` (one per date, latest wins), `favorites: 'id, createdAt'`, `weeklyChecks: 'weekStart'`); no upgrade function, every v1–v4 row is untouched (fake-indexeddb v4 → v5 test). Nutrition settings live under settings key `'nutrition'`, the one-time seed flag under `'nutritionSeeded'`.
 - 2026-11-15: **M7 plan (planner).** Wongsaton: "Polish, then Fuel". M7 is built next, after the polish round. Plan under "Current milestone plan"; contract: SPEC M7.

@@ -224,8 +224,8 @@ describe('history screen: list', () => {
     expect(calls).toEqual(['open:pu', 'tab:settings']);
   });
 
-  it('has three tabs: Today, History, Settings', () => {
-    expect(TABS.map((t) => t.label)).toEqual(['Today', 'History', 'Settings']);
+  it('has four tabs: Today, Fuel, History, Settings', () => {
+    expect(TABS.map((t) => t.label)).toEqual(['Today', 'Fuel', 'History', 'Settings']);
   });
 
   it('empty: no history at all shows one message and a way to Today', () => {

@@ -12,7 +12,7 @@
  * - With protein left, items need ≥ `MIN_PROTEIN_G` and rank by the protein they cover (capped at
  *   what's left), then by closeness to the kcal left. With protein done, closeness to kcal left.
  * - Labels that fail `checkCopy` are never offered.
- * - Placeholder foods still waiting for label numbers are never offered (see `skipFood`).
+ * - Foods in `skipIds` (placeholders still waiting for label numbers) are never offered.
  */
 import type {
   Favorite,
@@ -55,12 +55,12 @@ export type FoodCandidates = {
 };
 
 /**
- * A placeholder food still waiting for its label numbers is never suggested: its id is in
- * `skipIds`, or it is the unedited seed (source 'custom' with `estimate: true`). Saving the label
- * values clears `estimate`, so `estimate !== true` is the "label entered" marker.
+ * A placeholder food still waiting for its label numbers is never suggested. Only `skipIds`
+ * decides this (the app passes EDIT_FROM_LABEL until the label is entered): `estimate: true` on
+ * a custom food also marks quick-estimate favorites, which must still be offered.
  */
 function skipFood(food: Food, skipIds: ReadonlySet<string>): boolean {
-  return skipIds.has(food.id) || (food.source === 'custom' && food.estimate === true);
+  return skipIds.has(food.id);
 }
 
 const NO_SKIP: ReadonlySet<string> = new Set();

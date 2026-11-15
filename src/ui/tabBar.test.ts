@@ -4,19 +4,20 @@ import { TABS, TABS_WITH_FUEL, tabBar, type AppTabId, type TabId } from './tabBa
 
 useFakeDom();
 
-describe('tabBar: M7 Fuel option', () => {
-  it('stays the 3-tab M6 bar without the option', () => {
+describe('tabBar: M7 Fuel tab', () => {
+  it('always has the 4 tabs', () => {
     const picked: TabId[] = [];
     const bar = asFake(tabBar('today', (t) => picked.push(t)));
     expect(bar.byClass('tab').map((t) => t.getAttribute('data-tab'))).toEqual(
       TABS.map((t) => t.id),
     );
-    expect(bar.classes).toEqual(['tabbar']);
+    expect(TABS.map((t) => t.id)).toEqual(['today', 'fuel', 'history', 'settings']);
+    expect(bar.classes).toEqual(['tabbar', 'tabbar-4']);
   });
 
-  it('with { fuel: true }: Today / Fuel / History / Settings, each icon + label', () => {
+  it('Today / Fuel / History / Settings, each icon + label', () => {
     const picked: AppTabId[] = [];
-    const bar = asFake(tabBar('today', (t) => picked.push(t), { fuel: true }));
+    const bar = asFake(tabBar('today', (t) => picked.push(t)));
     const tabs = bar.byClass('tab');
     expect(TABS_WITH_FUEL.map((t) => t.label)).toEqual(['Today', 'Fuel', 'History', 'Settings']);
     expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual([

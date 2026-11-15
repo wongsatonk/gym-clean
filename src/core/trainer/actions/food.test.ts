@@ -201,9 +201,48 @@ describe('suggestFood: placeholder foods waiting for label numbers', () => {
     expect(t.some((x) => x.ref.foodId === 'thai-kapao')).toBe(false);
   });
 
-  it('skips an unedited custom estimate (the seed placeholder) even without skipIds', () => {
+  it('skips the unedited seed shake when its id is in skipIds', () => {
     const seed: Food = { ...SHAKE, estimate: true };
-    expect(suggestFood({ kcal: 0, proteinG: 30 }, shakeOnly(seed))).toEqual([]);
+    expect(
+      suggestFood(
+        { kcal: 0, proteinG: 30 },
+        { ...shakeOnly(seed), skipIds: new Set(['seed-shake']) },
+      ),
+    ).toEqual([]);
+  });
+
+  it('offers a custom estimate when its id is not in skipIds (no source/estimate heuristic)', () => {
+    const seed: Food = { ...SHAKE, estimate: true };
+    expect(suggestFood({ kcal: 0, proteinG: 30 }, shakeOnly(seed))).toHaveLength(1);
+  });
+
+  it('offers a quick-estimate favorite (custom + estimate)', () => {
+    const quick: Food = {
+      id: 'f-quick-noodles',
+      name: 'Noodle soup',
+      source: 'custom',
+      basis: { servingLabel: '1 bowl' },
+      kcal: 400,
+      proteinG: 22,
+      estimate: true,
+    };
+    const fav: Favorite = {
+      id: 'fav-quick',
+      ref: { foodId: quick.id },
+      amount: { servings: 1 },
+      createdAt: 1,
+    };
+    const s = suggestFood(
+      { kcal: 500, proteinG: 30 },
+      {
+        favorites: [fav, FAV_SHAKE],
+        foods: [quick, SHAKE],
+        recipes: [],
+        thaiDishes: [],
+        skipIds: new Set(['seed-shake']),
+      },
+    );
+    expect(s.map((x) => x.ref.foodId)).toEqual(['f-quick-noodles']);
   });
 
   it('offers it once label numbers are saved (estimate cleared)', () => {

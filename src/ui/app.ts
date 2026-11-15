@@ -161,6 +161,8 @@ import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSet
 import { ruleStatus } from '../core/exercises';
 import { h } from './dom';
 import { createCoachVoiceSettings } from './coachVoiceSettings';
+import { createFuel } from './fuel/fuelController';
+import type { FoodSuggestion } from '../core/types';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
 
@@ -199,6 +201,7 @@ type PreviewDay = {
 type View =
   | { screen: 'today'; upNextDayId: string | null; stats: TodayStats | null }
   | { screen: 'settings' }
+  | { screen: 'fuel' }
   | { screen: 'planChanges' }
   | { screen: 'history'; exerciseId: string | null; data: HistoryData | null }
   | ({ screen: 'preview'; loading: boolean } & PreviewDay)
@@ -218,6 +221,8 @@ type CoachUi = {
   /** History the coach reads (stalls, last weights), loaded when it opens. */
   sets: SetLog[];
   lastWeightKg: Record<string, number>;
+  /** M7 F3: the food card from the last "What should I eat?" (logged = row indexes). */
+  food: { suggestions: FoodSuggestion[]; logged: number[] } | null;
   el: HTMLElement | null;
   opener: HTMLElement | null;
 };
@@ -268,6 +273,27 @@ export function mountApp(root: HTMLElement): void {
   };
   const todayDate = () => localDate(now());
   const planDays = () => trainer?.plan.days ?? program.days;
+
+  // ---------- M7 Fuel (state, sub-views and sheets live in fuel/fuelController.ts) ----------
+  // Nutrition data never goes to the developer log (no `rec` calls on this path).
+  const fuel = createFuel({
+    db,
+    root,
+    now: () => now(),
+    unit: () => unit,
+    render: () => render(),
+    showFuel: () => {
+      view = { screen: 'fuel' };
+      render();
+    },
+    showSettings: () => {
+      view = { screen: 'settings' };
+      render();
+    },
+    goTab: (t) => goTab(t),
+    toast: (text, onUndo) => showActionToast(text, onUndo),
+    logError: (err) => logDbError(err),
+  });
 
   // Developer log (M4c): numbers only, stays on the phone. Calls queue until the recorder exists,
   // then run at once: a hands-free set is opened and the camera's first writes to it (meta, the
@@ -632,6 +658,8 @@ export function mountApp(root: HTMLElement): void {
         return todayScreen(v.upNextDayId, v.stats);
       case 'settings':
         return settingsScreen();
+      case 'fuel':
+        return fuel.screen();
       case 'planChanges':
         return planChangesView();
       case 'history':
@@ -658,11 +686,20 @@ export function mountApp(root: HTMLElement): void {
       case 'history':
         if (view.screen !== 'history') openHistory();
         return;
+      case 'fuel':
+        if (view.screen !== 'fuel') void openFuel();
+        return;
       default: {
         const unhandled: never = tab;
         throw new Error(`Unhandled tab: ${String(unhandled)}`);
       }
     }
+  }
+
+  async function openFuel(): Promise<void> {
+    await fuel.open();
+    view = { screen: 'fuel' };
+    render();
   }
 
   function openHistory(): void {
@@ -720,9 +757,13 @@ export function mountApp(root: HTMLElement): void {
     devLogPanel?.destroy();
     devLogPanel = null;
     disposeAudioTest(); // stops its camera, restores audioSession 'auto'
+    fuel.closeSheet();
     view = { screen: 'today', upNextDayId: null, stats: null };
     render();
     void loadUpNext();
+    void fuel.refresh().then(() => {
+      if (view.screen === 'today') render();
+    });
   }
 
   // ---------- Today ----------
@@ -807,6 +848,7 @@ export function mountApp(root: HTMLElement): void {
             : undefined,
         adjustedToday: adjustedTodayText(),
         newProgram,
+        nudge: fuel.nudgeText(),
       },
       {
         // The hero goes through the preview, which loads last time's weights for the defaults.
@@ -818,6 +860,8 @@ export function mountApp(root: HTMLElement): void {
         onTrainAnyway: (day) => trainAnyway(day),
         onUseNewProgram: () => void resetPlan(),
         onKeepPlan: () => keepPlan(),
+        onDismissNudge: () => fuel.dismissNudge(),
+        onOpenFuel: () => void openFuel(),
       },
     );
   }
@@ -1197,6 +1241,26 @@ export function mountApp(root: HTMLElement): void {
     placeToast();
   }
 
+  /** M7: an Undo toast for a Fuel action (log, delete); `onUndo` puts it back. */
+  function showActionToast(text: string, onUndo: () => void): void {
+    removeToast();
+    const el: UndoToast = undoToast(
+      { text },
+      {
+        onUndo: () => {
+          removeToast();
+          onUndo();
+        },
+        onExpire: () => {
+          if (toast === el) removeToast();
+        },
+      },
+    );
+    toast = el;
+    document.body.append(el);
+    placeToast();
+  }
+
   /** A short status line in the toast slot (no Undo), gone after 4 s. */
   function showNotice(text: string): void {
     removeToast();
@@ -1260,6 +1324,7 @@ export function mountApp(root: HTMLElement): void {
       );
       const ids = [...new Set(planDays().flatMap((d) => d.exercises.map((p) => p.exerciseId)))];
       lastW = lastWeights(await lastSessionSets(db, ids));
+      await fuel.ensureLoaded();
     } catch (err) {
       logDbError(err);
     }
@@ -1274,6 +1339,7 @@ export function mountApp(root: HTMLElement): void {
       followUps: [],
       sets,
       lastWeightKg: lastW,
+      food: null,
       el: null,
       opener,
     };
@@ -1309,7 +1375,8 @@ export function mountApp(root: HTMLElement): void {
       lastWeightKg: c.lastWeightKg,
       logged,
       catalog: trainerCatalog,
-      m7Available: false,
+      m7Available: fuel.m7Available(),
+      fuel: fuel.coachFuel(),
     };
   }
 
@@ -1329,6 +1396,7 @@ export function mountApp(root: HTMLElement): void {
       c.items.push({ kind: 'proposal', proposal: r.proposal });
       trainerLog(r.intent, r.proposal.action, 'shown', source);
     }
+    c.food = r.foods?.length ? { suggestions: r.foods, logged: [] } : null;
     const plain = (x: CoachChip) => QUICK_IDS.includes(x.id) && x.args === undefined;
     c.quick = r.chips.filter(plain).map((x) => x.id as SheetChipId);
     c.showAreas = r.chips.some((x) => AREA_IDS.includes(x.id));
@@ -1377,6 +1445,7 @@ export function mountApp(root: HTMLElement): void {
         chips: c.quick.length ? c.quick : c.phase === 'workout' ? WORKOUT_QUICK : undefined,
         inWorkout: c.phase === 'workout',
         followUps: c.followUps,
+        food: c.food ?? undefined,
       },
       {
         onClose: closeCoach,
@@ -1393,6 +1462,7 @@ export function mountApp(root: HTMLElement): void {
           const f = c.followUps[index];
           if (f) coachTurn({ chip: f.id, ...(f.args ? { args: f.args } : {}) }, f.label);
         },
+        onLogFood: (index) => logCoachFood(c, index),
       },
     );
     if (c.el?.isConnected) c.el.replaceWith(el);
@@ -1401,6 +1471,25 @@ export function mountApp(root: HTMLElement): void {
     root.inert = true; // the sheet is modal
     const apply = [...el.querySelectorAll<HTMLElement>('.proposal-apply')].at(-1);
     (apply ?? el).focus();
+  }
+
+  /** M7 F3: a food idea's Log → the store, the row marked logged, the Undo toast. */
+  function logCoachFood(c: CoachUi, index: number): void {
+    const food = c.food;
+    const s = food?.suggestions[index];
+    if (!food || !s || food.logged.includes(index)) return;
+    food.logged.push(index);
+    renderCoach();
+    void fuel
+      .logSuggestion(s, () => {
+        food.logged = food.logged.filter((i) => i !== index);
+        if (coach === c) renderCoach();
+      })
+      .catch((err: unknown) => {
+        food.logged = food.logged.filter((i) => i !== index);
+        logDbError(err);
+        if (coach === c) renderCoach();
+      });
   }
 
   function chipLabel(id: SheetChipId): string {
@@ -1496,6 +1585,7 @@ export function mountApp(root: HTMLElement): void {
           },
         }).el,
         speakerCheck: voiceTest(),
+        nutrition: fuel.settingsBlock(),
         audioTest: audioTestPanel(),
         devLog: devLogPanel.el,
       },
@@ -1794,6 +1884,10 @@ export function mountApp(root: HTMLElement): void {
     void wakeLock.release();
     saveTotals(s);
     void loadSummaryHistory(s);
+    // M7: today's protein vs target on Summary (read fresh: this workout counts for "post-workout").
+    void fuel.refresh().then(() => {
+      if (view.screen === 'session' && view.s.phase === 'summary') render();
+    });
     // Keep the dev log open on Summary so a last-set fix there still reaches it;
     // it is finished when leaving Summary (goToday). Flush now in case the app is closed here.
     rec((r) => void r.flush());
@@ -2177,6 +2271,7 @@ export function mountApp(root: HTMLElement): void {
         coachEl: createCoachSummary(coachSummary(s, lastTime, exerciseName), exerciseName),
         focusEl: createFocusSummary(s.logs, exerciseName),
         stalls: summaryStalls?.sessionId === s.sessionId ? summaryStalls.stalls : [],
+        fuel: fuel.summaryFuel(),
       },
       {
         onDone: goToday,
@@ -2301,4 +2396,8 @@ export function mountApp(root: HTMLElement): void {
   // M10: the trainer state first (Today's calendar and up next read it).
   const trainerReady = loadTrainer();
   void loadUpNext();
+  // M7: targets / today's totals for the Today nudge (no seeding until Fuel is opened).
+  void fuel.refresh().then(() => {
+    if (view.screen === 'today' || view.screen === 'settings') render();
+  });
 }

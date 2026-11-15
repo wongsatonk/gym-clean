@@ -215,18 +215,19 @@ describe('todayScreen', () => {
     expect(calls.open).toEqual([DAYS[2]?.id]);
   });
 
-  it('ends with the tab bar, Today current; History and Settings call onTab', () => {
+  it('ends with the tab bar, Today current; Fuel, History and Settings call onTab', () => {
     const { el, calls } = render();
     const bar = el.children.at(-1) as FakeEl;
     expect(bar.classes).toContain('tabbar');
     const tabs = bar.byClass('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Today', 'History', 'Settings']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['Today', 'Fuel', 'History', 'Settings']);
     expect(tabs[0]?.getAttribute('aria-current')).toBe('page');
     expect(tabs[1]?.getAttribute('aria-current')).toBeNull();
     tabs[0]?.click();
     tabs[1]?.click();
     tabs[2]?.click();
-    expect(calls.tab).toEqual(['history', 'settings']);
+    tabs[3]?.click();
+    expect(calls.tab).toEqual(['fuel', 'history', 'settings']);
   });
 });
 
@@ -237,9 +238,9 @@ describe('tabBar', () => {
     expect(bar.tag).toBe('nav');
     expect(bar.getAttribute('aria-label')).toBe('Main');
     const tabs = bar.byClass('tab');
-    expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual(['today', 'history', 'settings']);
+    expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual(['today', 'fuel', 'history', 'settings']);
     expect(tabs.every((t) => t.byClass('tab-label').length === 1)).toBe(true);
-    expect(tabs[2]?.classes).toContain('on');
+    expect(tabs[3]?.classes).toContain('on');
     tabs[0]?.click();
     expect(picked).toEqual(['today']);
   });

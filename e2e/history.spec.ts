@@ -268,7 +268,7 @@ test('History list: 7-day scoreboard, sessions, exercises; gym rules; speaks not
   await expect(page.locator('[data-history-day]')).toHaveCount(3);
   await expect(page.locator('[data-history-exercise]')).toHaveCount(4);
   await expect(page.locator('[data-tab="history"]')).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('[data-tab]')).toHaveCount(3);
+  await expect(page.locator('[data-tab]')).toHaveCount(4);
   // The tab bar doesn't cover the last exercise once scrolled to the bottom.
   await page.locator('[data-history-exercise]').last().scrollIntoViewIfNeeded();
   const [row, bar] = await Promise.all([

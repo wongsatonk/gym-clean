@@ -210,6 +210,6 @@ export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement 
       'Log food',
     ),
     entriesSection(props, actions),
-    tabBar('fuel', actions.onTab, { fuel: true }),
+    tabBar('fuel', actions.onTab),
   );
 }
