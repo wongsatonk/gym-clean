@@ -6,8 +6,9 @@
     <meta name="theme-color" content="#0d0f12" />
     <meta name="color-scheme" content="dark" />
     <!-- Privacy: the page may only talk to its own origin. This also blocks MediaPipe's built-in
-         usage logging (odml.pa.googleapis.com), which has no off switch. -->
-    <meta http-equiv="Content-Security-Policy" content="connect-src 'self' blob: data:" />
+         usage logging (odml.pa.googleapis.com), which has no off switch. The one exception is the
+         optional M7 barcode lookup (off by default), which sends only the barcode number. -->
+    <meta http-equiv="Content-Security-Policy" content="connect-src 'self' blob: data: https://world.openfoodfacts.org" />
     <title>Gym Clean</title>
     <!-- M6 install: the web manifest link is added at build time by vite-plugin-pwa. iOS reads
          these tags instead; the dark page runs under the status bar (safe-area insets apply). -->

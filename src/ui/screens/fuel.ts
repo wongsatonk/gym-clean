@@ -24,7 +24,7 @@ import { SLOT_LABEL, amountText, estimateTag, fmtNum } from '../fuel/common';
 import { nudgeBanner } from '../fuel/links';
 import { fuelRings } from '../fuel/rings';
 import { icon } from '../icons';
-import { tabBar, type AppTabId } from '../tabBar';
+import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
 import { dateLabel } from './today';
 
@@ -53,7 +53,7 @@ export type FuelActions = {
   onWeighIn: () => void;
   onSetup: () => void;
   onDismissNudge?: (() => void) | undefined;
-  onTab: (tab: AppTabId) => void;
+  onTab: (tab: TabId) => void;
 };
 
 /** Entries grouped by slot; groups ordered by their first entry's time, rows by time. */

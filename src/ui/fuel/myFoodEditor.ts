@@ -6,7 +6,7 @@
 //
 // e2e hooks: dialog `[data-my-food-editor]`, `#food-name`, `[data-basis=per100g|serving]`
 // (aria-pressed), `#food-serving-label`, `#food-serving-g`, `#food-kcal`, `#food-protein`,
-// `#food-carbs`, `#food-fat`, `[data-food-save]`.
+// `#food-carbs`, `#food-fat`, `[data-food-save]`, `[data-food-barcode]` (a scanned code, shown).
 import type { MacroSet, NutritionMode } from '../../core/types';
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -17,6 +17,8 @@ export type MyFoodDraft = MacroSet & {
   name: string;
   nameTh?: string | undefined;
   basis: { per100g: true } | { servingLabel: string; servingG?: number | undefined };
+  /** A scanned barcode (M7-q5): kept with the food so the next scan finds it on the phone. */
+  barcode?: string | undefined;
 };
 
 export type MyFoodEditorProps = {
@@ -172,6 +174,7 @@ export function myFoodEditor(p: MyFoodEditorProps, a: MyFoodEditorActions): HTML
       basis: perServing ? { servingLabel: sl, servingG: sg ?? undefined } : { per100g: true },
       kcal: k,
       proteinG: pr,
+      barcode: p.draft.barcode,
     };
     // Full mode edits carbs/fat; Quick keeps whatever was stored.
     const c = carbs ? parseNum(inputValue(carbs.input)) : blank ? null : (p.draft.carbsG ?? null);
@@ -188,6 +191,13 @@ export function myFoodEditor(p: MyFoodEditorProps, a: MyFoodEditorActions): HTML
           'p',
           { class: 'fuel-note', 'data-label-prompt': true },
           'Enter the numbers from your product’s label. They stay on this phone.',
+        )
+      : null,
+    p.draft.barcode
+      ? h(
+          'p',
+          { class: 'fuel-note', 'data-food-barcode': p.draft.barcode },
+          `Barcode ${p.draft.barcode}. Enter the numbers from the package label.`,
         )
       : null,
     name.wrap,

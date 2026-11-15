@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { asFake, useFakeDom } from './screens/testDom';
-import { TABS, TABS_WITH_FUEL, tabBar, type AppTabId, type TabId } from './tabBar';
+import { TABS, tabBar, type TabId } from './tabBar';
 
 useFakeDom();
 
@@ -16,10 +16,10 @@ describe('tabBar: M7 Fuel tab', () => {
   });
 
   it('Today / Fuel / History / Settings, each icon + label', () => {
-    const picked: AppTabId[] = [];
+    const picked: TabId[] = [];
     const bar = asFake(tabBar('today', (t) => picked.push(t)));
     const tabs = bar.byClass('tab');
-    expect(TABS_WITH_FUEL.map((t) => t.label)).toEqual(['Today', 'Fuel', 'History', 'Settings']);
+    expect(TABS.map((t) => t.label)).toEqual(['Today', 'Fuel', 'History', 'Settings']);
     expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual([
       'today',
       'fuel',

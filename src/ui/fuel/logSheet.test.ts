@@ -354,3 +354,53 @@ describe('scaleItem (core scaleFood)', () => {
     });
   });
 });
+
+describe('logSheet: barcode entry (M7-q5)', () => {
+  it('no Scan button while barcode lookup is off', () => {
+    const { el } = open();
+    section(el, 'search');
+    expect(all(el, 'data-scan-open')).toHaveLength(0);
+    section(el, 'myFoods');
+    expect(all(el, 'data-scan-open')).toHaveLength(0);
+  });
+
+  it('on: Scan in Search and My foods, reporting the section', () => {
+    const from: string[] = [];
+    const sheet = logSheet(props({ scan: true }), {
+      onLog: () => undefined,
+      onQuickLog: () => undefined,
+      onSearch: () => undefined,
+      onNewRecipe: () => undefined,
+      onNewFood: () => undefined,
+      onEditItem: () => undefined,
+      onScan: (s) => from.push(s),
+      onClose: () => undefined,
+    });
+    const el = asFake(sheet);
+    expect(all(el, 'data-scan-open')).toHaveLength(0); // favorites
+    section(el, 'search');
+    byAttr(el, 'data-scan-open').click();
+    section(el, 'myFoods');
+    byAttr(el, 'data-scan-open').click();
+    expect(from).toEqual(['search', 'myFoods']);
+    expect(byAttr(el, 'data-scan-open').textContent).toBe('Scan a barcode');
+  });
+
+  it('opens on a scanned item’s detail with its source line; Back goes to the section', () => {
+    const OAT: LogItem = {
+      key: 'food:off:4006381333931',
+      label: 'Made-up oat drink',
+      macros: { kcal: 46, proteinG: 1.1 },
+      per: '100g',
+      editable: true,
+      note: 'Open Food Facts (ODbL), per 100 g. Check it against the label.',
+      ref: { foodId: 'off:4006381333931' },
+    };
+    const { el } = open({ initialSection: 'myFoods', initialDetail: OAT, myFoods: [OAT] });
+    expect(byAttr(el, 'data-log-detail').getAttribute('data-log-detail')).toBe(OAT.key);
+    expect(byAttr(el, 'data-item-note').textContent).toMatch(/Open Food Facts/);
+    byAttr(el, 'data-log-back').click();
+    expect(byAttr(el, 'data-section-panel').getAttribute('data-section-panel')).toBe('myFoods');
+    expectCleanCopy(el);
+  });
+});

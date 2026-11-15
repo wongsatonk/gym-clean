@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FoodEntry, NutritionTargets } from '../../core/types';
 import { all, byAttr, expectCleanCopy } from '../fuel/fuelTestKit';
-import type { AppTabId } from '../tabBar';
+import type { TabId } from '../tabBar';
 import { fuelScreen, groupBySlot, type FuelProps } from './fuel';
 import { FakeEl, asFake, useFakeDom } from './testDom';
 
@@ -75,7 +75,7 @@ function render(over: Partial<FuelProps> = {}) {
     weigh: 0,
     setup: 0,
     dismiss: 0,
-    tab: [] as AppTabId[],
+    tab: [] as TabId[],
   };
   const el = asFake(
     fuelScreen(props(over), {

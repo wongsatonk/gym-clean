@@ -636,6 +636,9 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function render(): void {
+    // Left Settings by any route (a tab, Nutrition setup, Plan changes): stop the audio test's
+    // camera and beep context. A no-op when there is no live panel.
+    if (view.screen !== 'settings') disposeAudioTest();
     const screen = screenFor(view);
     if (camera && camera.el.parentNode === root) {
       // Camera sheet open: swap only the screen under it, so the sheet keeps focus and scroll.
@@ -673,6 +676,7 @@ export function mountApp(root: HTMLElement): void {
 
   /** Tab bar: every tab is handled here, so a new tab id fails to compile until it's wired. */
   function goTab(tab: TabId): void {
+    navSeq++;
     switch (tab) {
       case 'today':
         if (view.screen !== 'today') goToday();
@@ -696,8 +700,15 @@ export function mountApp(root: HTMLElement): void {
     }
   }
 
+  /** Bumped on every tab tap, so a slow Fuel load can tell another tab was chosen meanwhile. */
+  let navSeq = 0;
+
   async function openFuel(): Promise<void> {
+    const seq = ++navSeq;
+    const from = view.screen;
     await fuel.open();
+    // Another tab (or a workout) was chosen during the first load: stay there.
+    if (seq !== navSeq || view.screen !== from) return;
     view = { screen: 'fuel' };
     render();
   }

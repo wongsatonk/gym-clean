@@ -4,8 +4,9 @@
 // screen, the Settings → Nutrition block, the Summary protein line, Today's nudge and the coach's
 // food data. All numbers come from core (targets, totals, weekly check, portions, search).
 //
-// Privacy: nutrition data stays in IndexedDB. Nothing here writes to the developer log, and the
-// only fetch is the same-origin food list (foodDb, lazy, on the first search).
+// Privacy: nutrition data stays in IndexedDB. Nothing here writes to the developer log. Fetches:
+// the same-origin food list (foodDb, lazy, on the first search) and, only while barcode lookup
+// is on, the Open Food Facts lookup with nothing but the barcode digits (offClient.ts).
 import { weekStartOf, weeklyCheck, checkHasChange, decideCheck, applyAcceptedCheck, trend } from '../../core/nutrition/adjust';
 import {
   dayTotals,
@@ -51,6 +52,7 @@ import type {
 import type { Unit } from '../../core/units';
 import { sessionsSince, type GymDb } from '../../data/db';
 import { foodDb } from '../../data/nutrition/foodDb';
+import { lookupBarcode } from '../../data/nutrition/offClient';
 import { EDIT_FROM_LABEL, SEED_FOODS, THAI_DISHES } from '../../data/nutrition/foods';
 import {
   addFavorite,
@@ -79,9 +81,18 @@ import {
 } from '../../data/nutrition/store';
 import { fuelScreen } from '../screens/fuel';
 import type { TabId } from '../tabBar';
+import { barcodeScanSheet, type ScanSheet } from './barcodeScan';
 import { entrySheet } from './entrySheet';
 import type { SummaryFuel } from './links';
-import { logSheet, type LogChoice, type LogItem, type LogSection, type QuickLog, type SearchState } from './logSheet';
+import {
+  logSheet,
+  type LogChoice,
+  type LogItem,
+  type LogSection,
+  type LogSheet,
+  type QuickLog,
+  type SearchState,
+} from './logSheet';
 import { myFoodEditor, type MyFoodDraft } from './myFoodEditor';
 import { nutritionSettings, type MacroKey } from './nutritionSettings';
 import { recipeEditor, type RecipeDraft } from './recipeEditor';
@@ -180,6 +191,10 @@ export function createFuel(host: FuelHost) {
   let nudge: Nudge | null = null;
   let sub: Sub = { kind: 'main' };
   let sheet: HTMLElement | null = null;
+  /** Cleanup for the open sheet (the scanner stops its camera). */
+  let sheetDispose: (() => void) | null = null;
+  /** The open sheet when it is the log sheet (Undo re-renders it). */
+  let logEl: LogSheet | null = null;
   let index: SearchIndex | null = null;
   let indexHasUsda = false;
   /** USDA rows seen in search results, as foods (saved to db.foods once logged or used). */
@@ -193,10 +208,33 @@ export function createFuel(host: FuelHost) {
 
   // ---------- loading ----------
 
-  async function load(): Promise<void> {
+  /**
+   * Local writes: `gen` moves when one starts and when it settles, `pending` holds those still
+   * running. A refresh whose read overlapped a write reads again, so it never puts back rows from
+   * before the write (or drops a row the write added).
+   */
+  let gen = 0;
+  const pending = new Set<Promise<unknown>>();
+  function track<T>(p: Promise<T>): Promise<T> {
+    gen++;
+    pending.add(p);
+    const done = () => {
+      pending.delete(p);
+      gen++;
+    };
+    p.then(done, done);
+    return p;
+  }
+
+  /**
+   * Reads everything; null when a local write overlapped the read (the caller reads again),
+   * unless `force` (first load: something beats nothing).
+   */
+  async function read(force = false) {
     const t = host.now();
     const d = foodDate(t);
-    const [s, m, bc, w, e, f, r, fav, c, sess, shown] = await Promise.all([
+    const startGen = gen;
+    const rows = await Promise.all([
       getNutritionSettings(db),
       getNutritionMode(db),
       getBarcodeLookup(db),
@@ -209,6 +247,20 @@ export function createFuel(host: FuelHost) {
       sessionsSince(db, t - (HISTORY_DAYS + 1) * 24 * 3_600_000),
       db.settings.get(NUDGE_KEY),
     ]);
+    return force || (startGen === gen && pending.size === 0) ? rows : null;
+  }
+
+  const MAX_READS = 5;
+
+  async function load(): Promise<void> {
+    let rows: Awaited<ReturnType<typeof read>> = null;
+    for (let i = 0; i < MAX_READS && rows === null; i++) {
+      if (pending.size) await Promise.allSettled([...pending]);
+      rows = await read(i === MAX_READS - 1 && !loaded);
+    }
+    // Writes kept landing (very unlikely): keep the in-memory copy, which already has them.
+    if (rows === null) return;
+    const [s, m, bc, w, e, f, r, fav, c, sess, shown] = rows;
     settings = s;
     mode = s?.mode ?? m;
     barcode = s?.barcodeLookup ?? bc;
@@ -247,7 +299,7 @@ export function createFuel(host: FuelHost) {
     if (seeded) return;
     seeded = true;
     try {
-      if (await seedOnce(db, SEED_FOODS, host.now())) {
+      if (await track(seedOnce(db, SEED_FOODS, host.now()))) {
         [foods, favorites] = await Promise.all([listFoods(db), listFavorites(db)]);
         index = null;
       }
@@ -312,13 +364,13 @@ export function createFuel(host: FuelHost) {
     if (!n) return;
     nudge = n;
     nudgeShownDate = d;
-    void db.settings.put({ key: NUDGE_KEY, value: d }).catch(host.logError);
+    void track(db.settings.put({ key: NUDGE_KEY, value: d })).catch(host.logError);
   }
 
   function dismissNudge(): void {
     nudge = null;
     nudgeShownDate = today();
-    void db.settings.put({ key: NUDGE_KEY, value: nudgeShownDate }).catch(host.logError);
+    void track(db.settings.put({ key: NUDGE_KEY, value: nudgeShownDate })).catch(host.logError);
     host.render();
   }
 
@@ -508,50 +560,75 @@ export function createFuel(host: FuelHost) {
   async function keepUsda(id: string): Promise<void> {
     const f = usdaFoods.get(id);
     if (!f || foods.some((x) => x.id === id)) return;
-    await saveFood(db, f);
+    await track(saveFood(db, f));
     foods = [...foods, f];
   }
 
   // ---------- sheets ----------
 
-  function openSheet(el: HTMLElement): void {
+  function openSheet(el: HTMLElement, dispose?: () => void): void {
     closeSheet(false);
     sheet = el;
+    sheetDispose = dispose ?? null;
     host.root.inert = true;
     document.body.append(el);
     el.focus();
   }
 
-  function closeSheet(refocus = true): void {
+  const LOG_OPEN = '[data-log-open]';
+  const entryEditSel = (id: string) => `[data-entry-edit="${id}"]`;
+
+  /** Focus `sel` on the current screen, else its Log button (never left on <body>). */
+  function focusOn(sel: string): void {
+    const root = host.root;
+    if (sheet || typeof root.querySelector !== 'function') return;
+    (root.querySelector<HTMLElement>(sel) ?? root.querySelector<HTMLElement>(LOG_OPEN))?.focus();
+  }
+
+  /** `refocus`: where focus goes once the sheet is gone (false: the caller decides). */
+  function closeSheet(refocus: string | false = LOG_OPEN): void {
     window.clearTimeout(searchTimer);
     searchSeq++;
     if (!sheet) return;
+    sheetDispose?.();
+    sheetDispose = null;
+    logEl = null;
     sheet.remove();
     sheet = null;
     host.root.inert = false;
-    if (refocus) host.root.querySelector<HTMLElement>('[data-log-open]')?.focus();
+    if (refocus) focusOn(refocus);
   }
 
-  function afterChange(): void {
+  /**
+   * Data changed: re-render. `focus` (after a sheet action) puts focus back on that control of
+   * the re-rendered screen; the old element is gone with the render.
+   */
+  function afterChange(focus?: string): void {
     index = null;
     evaluateNudge();
     host.render();
+    if (focus) focusOn(focus);
+  }
+
+  /** Undo changed what an open log sheet lists: draw it again on the same section. */
+  function reopenLog(): void {
+    if (logEl && sheet === logEl) openLog(logEl.section());
   }
 
   async function addEntry(e: FoodEntry): Promise<void> {
-    await saveEntry(db, e);
+    await track(saveEntry(db, e));
     entries = [...entries, e];
-    afterChange();
+    afterChange(LOG_OPEN);
     host.toast(`Logged ${e.label}.`, () => void removeEntry(e, false));
   }
 
-  async function removeEntry(e: FoodEntry, undoable: boolean): Promise<void> {
-    await deleteEntry(db, e.id);
+  async function removeEntry(e: FoodEntry, undoable: boolean, focus?: string): Promise<void> {
+    await track(deleteEntry(db, e.id));
     entries = entries.filter((x) => x.id !== e.id);
-    afterChange();
+    afterChange(focus);
     if (undoable)
       host.toast(`Deleted ${e.label}.`, () => {
-        void restoreEntry(db, e)
+        void track(restoreEntry(db, e))
           .then(() => {
             entries = [...entries.filter((x) => x.id !== e.id), e];
             afterChange();
@@ -560,7 +637,7 @@ export function createFuel(host: FuelHost) {
       });
   }
 
-  function openLog(section?: LogSection): void {
+  function openLog(section?: LogSection, detail?: LogItem): void {
     void ensureSeeded().then(() => {
       const el = logSheet(
         {
@@ -572,6 +649,8 @@ export function createFuel(host: FuelHost) {
           myFoods: myFoodItems(),
           presets: QUICK_PRESETS.map((p) => ({ label: p.label, kcal: p.kcal, proteinG: p.proteinG })),
           initialSection: section,
+          initialDetail: detail,
+          scan: barcode,
         },
         {
           onLog: (c) => void logChoice(c).catch(host.logError),
@@ -580,11 +659,63 @@ export function createFuel(host: FuelHost) {
           onNewRecipe: () => openRecipeEditor(null),
           onNewFood: () => openFoodEditor(null, false),
           onEditItem: (item) => editItem(item),
+          onScan: (from) => openScan(from),
           onClose: () => closeSheet(),
         },
       );
       openSheet(el);
+      logEl = el;
     });
+  }
+
+  // ---------- barcode (M7-q5, only while the lookup is on) ----------
+
+  function openScan(back: LogSection): void {
+    const el: ScanSheet = barcodeScanSheet({
+      onCode: (code) => void scanLookup(el, code).catch(host.logError),
+      onAddFood: (code) => openFoodEditor(null, false, { barcode: code }),
+      onClose: () => openLog(back),
+    });
+    openSheet(el, () => el.dispose());
+  }
+
+  /** Lookup → found: its detail to log (saved to My foods, Undo) / missing: add it / a message. */
+  async function scanLookup(el: ScanSheet, code: string): Promise<void> {
+    el.setStatus({ kind: 'looking', code });
+    const r = await track(lookupBarcode(db, code));
+    if (sheet !== el) return; // closed while looking
+    switch (r.status) {
+      case 'found': {
+        const f = r.food;
+        foods = [...foods.filter((x) => x.id !== f.id), f];
+        index = null;
+        openLog('myFoods', foodItem(f, `food:${f.id}`, f.note ? { note: f.note } : {}));
+        if (r.from === 'online') host.toast(`Saved ${f.name} to My foods.`, () => void unsaveFood(f));
+        return;
+      }
+      case 'notFound':
+      case 'incomplete':
+        el.setStatus({ kind: 'missing', code, reason: r.status });
+        return;
+      case 'off':
+        el.setStatus({ kind: 'off' });
+        return;
+      case 'error':
+        el.setStatus({ kind: 'error', reason: r.reason });
+        return;
+      case 'invalid':
+        el.setStatus({ kind: 'invalid' });
+        return;
+    }
+  }
+
+  /** Undo of a barcode save: the food leaves My foods (entries already logged keep their numbers). */
+  async function unsaveFood(f: Food): Promise<void> {
+    await track(deleteFood(db, f.id));
+    foods = foods.filter((x) => x.id !== f.id);
+    index = null;
+    reopenLog();
+    host.render();
   }
 
   async function logChoice(c: LogChoice): Promise<void> {
@@ -624,9 +755,9 @@ export function createFuel(host: FuelHost) {
         estimate: true,
       };
       if (f.name === '') return;
-      await saveFood(db, f);
+      await track(saveFood(db, f));
       const fav: Favorite = { id: `fav:${f.id}`, ref: { foodId: f.id }, amount: { servings: 1 }, createdAt: host.now() };
-      await addFavorite(db, fav);
+      await track(addFavorite(db, fav));
       foods = [...foods, f];
       favorites = [...favorites, fav];
       e = entryFromFood(f, { servings: 1 }, opts);
@@ -662,29 +793,30 @@ export function createFuel(host: FuelHost) {
             else delete next.carbsG;
             if (m.fatG !== undefined) next.fatG = m.fatG;
             else delete next.fatG;
-            closeSheet();
-            void saveEntry(db, next)
+            closeSheet(entryEditSel(e.id));
+            void track(saveEntry(db, next))
               .then(() => {
                 entries = entries.map((x) => (x.id === e.id ? next : x));
-                afterChange();
+                afterChange(entryEditSel(e.id));
               })
               .catch(host.logError);
           },
           onDelete: () => {
             closeSheet();
-            void removeEntry(e, true).catch(host.logError);
+            void removeEntry(e, true, LOG_OPEN).catch(host.logError);
           },
-          onClose: () => closeSheet(),
+          onClose: () => closeSheet(entryEditSel(e.id)),
         },
       ),
     );
   }
 
-  function openFoodEditor(existing: Food | null, labelPrompt: boolean): void {
+  function openFoodEditor(existing: Food | null, labelPrompt: boolean, opts: { barcode?: string } = {}): void {
     const draft: MyFoodDraft = existing
       ? { ...macrosOf(existing), id: existing.id, name: existing.name, nameTh: existing.nameTh, basis: existing.basis }
-      : { kcal: 0, proteinG: 0, name: '', basis: { servingLabel: '' } };
-    const back = () => openLog(existing && !labelPrompt ? 'myFoods' : 'favorites');
+      : { kcal: 0, proteinG: 0, name: '', basis: { servingLabel: '' }, barcode: opts.barcode };
+    const back = () =>
+      openLog((existing && !labelPrompt) || opts.barcode ? 'myFoods' : 'favorites');
     openSheet(
       myFoodEditor(
         { draft, mode, labelPrompt },
@@ -699,19 +831,27 @@ export function createFuel(host: FuelHost) {
             };
             if (d.nameTh) f.nameTh = d.nameTh;
             else delete f.nameTh;
+            // A cleared carbs / fat field drops the stored value.
             if (d.carbsG !== undefined) f.carbsG = d.carbsG;
+            else delete f.carbsG;
             if (d.fatG !== undefined) f.fatG = d.fatG;
+            else delete f.fatG;
+            if (!existing && d.barcode) f.barcode = d.barcode;
             // The seed placeholder now has the label's numbers: no longer an estimate.
             if (EDIT_FROM_LABEL.has(f.id)) {
               delete f.estimate;
               delete f.note;
             }
-            void saveFood(db, f)
+            void track(saveFood(db, f))
               .then(() => {
                 foods = [...foods.filter((x) => x.id !== f.id), f];
                 index = null;
-                back();
+                // A scanned product: straight to its detail, ready to log.
+                if (!existing && f.barcode) openLog('myFoods', foodItem(f, `food:${f.id}`));
+                else back();
                 host.render();
+                // A scanned product added by hand: Undo takes it out of My foods again.
+                if (!existing && f.barcode) host.toast(`Saved ${f.name} to My foods.`, () => void unsaveFood(f));
               })
               .catch(host.logError);
           },
@@ -719,17 +859,18 @@ export function createFuel(host: FuelHost) {
           onDelete:
             existing && foods.some((x) => x.id === existing.id)
               ? () => {
-                  void deleteFood(db, existing.id)
+                  void track(deleteFood(db, existing.id))
                     .then((row) => {
                       foods = foods.filter((x) => x.id !== existing.id);
                       index = null;
                       openLog('myFoods');
                       if (row)
                         host.toast(`Deleted ${row.name}.`, () => {
-                          void saveFood(db, row)
+                          void track(saveFood(db, row))
                             .then(() => {
                               foods = [...foods, row];
                               index = null;
+                              reopenLog();
                             })
                             .catch(host.logError);
                         });
@@ -782,7 +923,7 @@ export function createFuel(host: FuelHost) {
           const r = asRecipe(d, existing?.id ?? uid('recipe'));
           void (async () => {
             for (const i of r.ingredients) if (i.foodId.startsWith('usda:')) await keepUsda(i.foodId);
-            await saveRecipe(db, r);
+            await track(saveRecipe(db, r));
             recipes = [...recipes.filter((x) => x.id !== r.id), r];
             index = null;
             back();
@@ -791,17 +932,18 @@ export function createFuel(host: FuelHost) {
         onCancel: back,
         onDelete: existing
           ? () => {
-              void deleteRecipe(db, existing.id)
+              void track(deleteRecipe(db, existing.id))
                 .then((row) => {
                   recipes = recipes.filter((x) => x.id !== existing.id);
                   index = null;
                   back();
                   if (row)
                     host.toast(`Deleted ${row.name}.`, () => {
-                      void saveRecipe(db, row)
+                      void track(saveRecipe(db, row))
                         .then(() => {
                           recipes = [...recipes, row];
                           index = null;
+                          reopenLog();
                         })
                         .catch(host.logError);
                     });
@@ -840,7 +982,7 @@ export function createFuel(host: FuelHost) {
       {
         onLog: () => openLog(),
         onEditEntry: (e) => openEntry(e),
-        onDeleteEntry: (e) => void removeEntry(e, true).catch(host.logError),
+        onDeleteEntry: (e) => void removeEntry(e, true, LOG_OPEN).catch(host.logError),
         onWeighIn: () => {
           sub = { kind: 'weighIn' };
           host.render();
@@ -872,7 +1014,7 @@ export function createFuel(host: FuelHost) {
         },
         onSave: (kg) => {
           const w: WeighIn = { date: today(), kg };
-          void saveWeighIn(db, w)
+          void track(saveWeighIn(db, w))
             .then(() => {
               weighIns = [...weighIns.filter((x) => x.date !== w.date), w].sort((a, b) =>
                 a.date < b.date ? -1 : 1,
@@ -897,10 +1039,13 @@ export function createFuel(host: FuelHost) {
     const next = applyAcceptedCheck(prev, decided);
     settings = next;
     checks = [...checks.filter((x) => x.weekStart !== decided.weekStart), decided];
-    void (async () => {
-      if (next !== prev) await saveNutritionSettings(db, next);
-      await saveWeeklyCheck(db, decided);
-    })().catch(host.logError);
+    // One tracked write for both, so a refresh can't land between them with the old check.
+    void track(
+      (async () => {
+        if (next !== prev) await saveNutritionSettings(db, next);
+        await saveWeeklyCheck(db, decided);
+      })(),
+    ).catch(host.logError);
     afterChange();
   }
 
@@ -940,11 +1085,16 @@ export function createFuel(host: FuelHost) {
   }
 
   async function saveSetup(v: SetupValues, back: 'fuel' | 'settings'): Promise<void> {
-    // Mode and the barcode switch may already be stored (set before setup): keep them.
-    const [storedMode, storedBarcode] = await Promise.all([getNutritionMode(db), getBarcodeLookup(db)]);
+    // Build on what is stored, not the in-memory copy: mode and the barcode switch may have been
+    // set (before setup, or while it was open), and the in-memory copy may be older.
+    const [stored, storedMode, storedBarcode] = await Promise.all([
+      getNutritionSettings(db),
+      getNutritionMode(db),
+      getBarcodeLookup(db),
+    ]);
     const body = { heightCm: v.heightCm, birthYear: v.birthYear, sex: v.sex, activity: v.activity };
-    const next: NutritionSettings = settings
-      ? { ...settings, ...body, mode: storedMode, barcodeLookup: storedBarcode }
+    const next: NutritionSettings = stored
+      ? { ...stored, ...body, mode: storedMode, barcodeLookup: storedBarcode }
       : {
           mode: storedMode,
           surplusKcal: NUTRITION_DEFAULTS.surplusKcal,
@@ -955,8 +1105,8 @@ export function createFuel(host: FuelHost) {
           ...body,
         };
     const w: WeighIn = { date: today(), kg: v.weightKg };
-    await saveNutritionSettings(db, next);
-    await saveWeighIn(db, w);
+    await track(saveNutritionSettings(db, next));
+    await track(saveWeighIn(db, w));
     settings = next;
     mode = next.mode;
     barcode = next.barcodeLookup;
@@ -969,7 +1119,7 @@ export function createFuel(host: FuelHost) {
 
   function saveSettings(next: NutritionSettings): void {
     settings = next;
-    void saveNutritionSettings(db, next).catch(host.logError);
+    void track(saveNutritionSettings(db, next)).catch(host.logError);
     afterChange();
   }
 
@@ -980,7 +1130,7 @@ export function createFuel(host: FuelHost) {
         onMode: (m) => {
           mode = m;
           if (settings) settings = { ...settings, mode: m };
-          void setMode(db, m).catch(host.logError);
+          void track(setMode(db, m)).catch(host.logError);
           host.render();
         },
         onOverride: (k: MacroKey, value) => {
@@ -1000,7 +1150,7 @@ export function createFuel(host: FuelHost) {
         onBarcodeLookup: (on) => {
           barcode = on;
           if (settings) settings = { ...settings, barcodeLookup: on };
-          void setBarcodeLookup(db, on).catch(host.logError);
+          void track(setBarcodeLookup(db, on)).catch(host.logError);
           host.render();
         },
       },
@@ -1057,11 +1207,11 @@ export function createFuel(host: FuelHost) {
     /** F3: the coach card's Log. Resolves with an undo that removes the entry again. */
     async logSuggestion(s: FoodSuggestion, onUndone: () => void): Promise<void> {
       const e = entryFromSuggestion(s, entryOpts(), { foods: foodMap() });
-      await saveEntry(db, e);
+      await track(saveEntry(db, e));
       entries = [...entries, e];
       afterChange();
       host.toast(`Logged ${e.label}.`, () => {
-        void deleteEntry(db, e.id)
+        void track(deleteEntry(db, e.id))
           .then(() => {
             entries = entries.filter((x) => x.id !== e.id);
             afterChange();

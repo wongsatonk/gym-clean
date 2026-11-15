@@ -9,7 +9,8 @@
 //
 // e2e hooks: dialog `[data-log-sheet]`, `[data-log-section=<id>]` buttons (aria-pressed),
 // `[data-section-panel=<id>]`, `[data-log-item=<key>]`, `[data-portion=<label>]`,
-// `[data-stepper=portion]`, `[data-slot-chip=<slot>]`, `[data-log-confirm]`, `[data-quick-*]`.
+// `[data-stepper=portion]`, `[data-slot-chip=<slot>]`, `[data-log-confirm]`, `[data-quick-*]`,
+// `[data-scan-open]` (Search and My foods, only while barcode lookup is on), `[data-item-note]`.
 import { scaleFood } from '../../core/nutrition/portions';
 import type { Food, FoodAmount, MacroSet, MealSlot, NutritionMode } from '../../core/types';
 import { h } from '../dom';
@@ -62,6 +63,8 @@ export type LogItem = {
   badge?: 'favorite' | 'recent' | undefined;
   /** Recipes and my foods can be edited from their detail. */
   editable?: boolean | undefined;
+  /** A short source line on the detail (e.g. Open Food Facts attribution). */
+  note?: string | undefined;
   ref: { foodId?: string; recipeId?: string };
 };
 
@@ -90,6 +93,10 @@ export type LogSheetProps = {
   /** M7-q3 Light / Regular / Big plate starters. */
   presets: readonly QuickPreset[];
   initialSection?: LogSection | undefined;
+  /** Open straight on this item's detail (a scanned barcode); Back goes to `initialSection`. */
+  initialDetail?: LogItem | undefined;
+  /** M7-q5: barcode lookup is on, so Search and My foods offer "Scan a barcode". */
+  scan?: boolean | undefined;
   /** Macros for an amount (core portion scaling). Default: `scaleItem`. */
   preview?: ((item: LogItem, amount: FoodAmount, factor: number) => MacroSet) | undefined;
 };
@@ -114,6 +121,8 @@ export type LogSheetActions = {
   onNewFood: () => void;
   /** Edit a recipe / my food, or enter the Protein shake's label numbers. */
   onEditItem: (item: LogItem) => void;
+  /** "Scan a barcode" (shown only with `scan`); the section it was tapped in. */
+  onScan?: ((from: LogSection) => void) | undefined;
   onClose: () => void;
 };
 
@@ -181,7 +190,7 @@ function itemList(
 
 export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
   let section: LogSection = p.initialSection ?? 'favorites';
-  let detail: LogItem | null = null;
+  let detail: LogItem | null = p.initialDetail ?? null;
   let search: SearchState = { status: 'idle' };
   let query = '';
   const preview = p.preview ?? scaleItem;
@@ -266,6 +275,21 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
     }
   };
 
+  const scanButton = (): HTMLElement | null =>
+    p.scan && a.onScan
+      ? h(
+          'button',
+          {
+            type: 'button',
+            class: 'fuel-secondary',
+            'data-scan-open': true,
+            onclick: () => a.onScan?.(section),
+          },
+          icon('camera', 'md'),
+          h('span', {}, 'Scan a barcode'),
+        )
+      : null;
+
   function sectionPanel(): HTMLElement {
     const meta = LOG_SECTIONS.find((s) => s.id === section) ?? LOG_SECTIONS[0];
     const head = h('h2', { class: 'fuel-h2' }, meta?.title ?? '');
@@ -307,12 +331,13 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
             a.onSearch(v);
           },
         });
-        wrap.append(f.wrap, results);
+        appendAll(wrap, scanButton(), f.wrap, results);
         paintResults();
         break;
       }
       case 'myFoods':
-        wrap.append(
+        appendAll(
+          wrap,
           h(
             'button',
             {
@@ -324,6 +349,7 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
             icon('plus', 'md'),
             h('span', {}, 'New food'),
           ),
+          scanButton(),
           itemList(p.myFoods, p.mode, pick, 'No foods of your own yet.'),
         );
         break;
@@ -509,6 +535,7 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
       h('h2', { class: 'log-detail-name', id: 'log-detail-name', tabindex: '-1' }, item.label),
       item.nameTh ? h('p', { class: 'log-item-th', lang: 'th' }, item.nameTh) : null,
       item.estimate ? h('p', { class: 'log-detail-tag' }, estimateTag()) : null,
+      item.note ? h('p', { class: 'fuel-hint', 'data-item-note': true }, item.note) : null,
     );
     if (item.needsLabel) {
       wrap.append(

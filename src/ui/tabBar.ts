@@ -6,8 +6,6 @@ import { h } from './dom';
 import { icon, type IconName } from './icons';
 
 export type TabId = 'today' | 'fuel' | 'history' | 'settings';
-/** Kept as an alias (wave-1 screens import it). */
-export type AppTabId = TabId;
 
 type TabDef = { id: TabId; label: string; icon: IconName };
 
@@ -18,9 +16,6 @@ export const TABS: readonly TabDef[] = [
   { id: 'history', label: 'History', icon: 'bars' },
   { id: 'settings', label: 'Settings', icon: 'sliders' },
 ];
-
-/** Same as TABS (the bar always has Fuel now). */
-export const TABS_WITH_FUEL: readonly TabDef[] = TABS;
 
 /**
  * The bottom tab bar. Tapping the active tab does nothing; any other calls `onSelect`.
