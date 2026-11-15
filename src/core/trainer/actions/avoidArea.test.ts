@@ -127,17 +127,51 @@ describe('proposeAvoidArea', () => {
     expectCleanCopy(p);
   });
 
-  it('arms on Push B: dips swapped for a chest fly that is not already in the day', () => {
+  it('arms on Push B: dips removed (its only primary muscle is the triceps)', () => {
     const ctx = ctxFor('push-b');
     const p = proposal(proposeAvoidArea(ctx, 'arms', CATALOG));
     const rows = todayRows(ctx, p);
     expect(row(rows, 'Bench_Dips')).toBeUndefined();
     expect(row(rows, 'Triceps_Pushdown')).toBeUndefined();
+    // Nothing swapped in: every row is from the plan day.
+    const planIds = program.days.find((d) => d.id === 'push-b')?.exercises.map((x) => x.exerciseId);
+    for (const r of rows) expect(planIds).toContain(r.exerciseId);
+    expect(p.lines.find((l) => l.before.startsWith('Bench Dips'))?.after).toMatch(/removed/i);
+  });
+
+  it('shoulders on Push A: the seated press is removed, never swapped for triceps work', () => {
+    const ctx = ctxFor('push-a');
+    const p = proposal(proposeAvoidArea(ctx, 'shoulders', CATALOG));
+    const rows = todayRows(ctx, p);
+    expect(row(rows, 'Seated_Dumbbell_Press')).toBeUndefined();
+    expect(row(rows, 'Tricep_Dumbbell_Kickback')).toBeUndefined();
+    expect(row(rows, 'Side_Lateral_Raise')).toBeUndefined();
+    expect(p.lines.find((l) => l.before.startsWith('Seated Dumbbell Press'))?.after).toMatch(
+      /removed/i,
+    );
+    // Presses where shoulders only help: lighter.
+    expect(row(rows, 'Dumbbell_Bench_Press')?.adjusted).toBe('avoidArea');
+  });
+
+  // The real catalog has one primary muscle per exercise, so a swap needs a made-up one with a
+  // second primary outside the area: dips as triceps + chest.
+  const dipsTwoPrimaries: TrainerCatalog = {
+    ...CATALOG,
+    exercises: exercises.map((e) =>
+      e.id === 'Bench_Dips'
+        ? { ...e, primaryMuscles: ['triceps', 'chest'], secondaryMuscles: ['shoulders'] }
+        : e,
+    ),
+  };
+
+  it('a primary muscle outside the area: swapped in place for a move that shares it', () => {
+    const ctx = ctxFor('push-b');
+    const p = proposal(proposeAvoidArea(ctx, 'arms', dipsTwoPrimaries));
+    const rows = todayRows(ctx, p);
+    expect(row(rows, 'Bench_Dips')).toBeUndefined();
     const swapped = rows.filter((r) => r.adjusted === 'avoidArea' && r.weightKgToday === undefined);
     expect(swapped.map((r) => r.exerciseId)).toEqual(['Incline_Dumbbell_Flyes']);
-    // Swapped in the dips' place (last, after the removed pushdown), keeping its sets, reps and
-    // rest; no history → blank weight.
-    expect(rows.map((r) => r.exerciseId).at(-1)).toBe('Incline_Dumbbell_Flyes');
+    // In the dips' place (last), keeping its sets, reps and rest; no history → blank weight.
     expect(rows.at(-1)).toEqual({
       exerciseId: 'Incline_Dumbbell_Flyes',
       sets: 2,
@@ -153,7 +187,7 @@ describe('proposeAvoidArea', () => {
 
   it("swapped weights come from that exercise's history", () => {
     const ctx = ctxFor('push-b', { lastWeightKg: { Incline_Dumbbell_Flyes: 8 } });
-    const rows = todayRows(ctx, proposal(proposeAvoidArea(ctx, 'arms', CATALOG)));
+    const rows = todayRows(ctx, proposal(proposeAvoidArea(ctx, 'arms', dipsTwoPrimaries)));
     expect(row(rows, 'Incline_Dumbbell_Flyes')?.startWeightKg).toBe(8);
   });
 

@@ -98,14 +98,25 @@ export type SessionEvent =
   | { type: 'GO_TO_EXERCISE'; exIndex: number; now: number }
   /**
    * M10 coach, mid-workout: replace (`planned`) or remove (`null`) the exercise at `exIndex` in
-   * today's day. Accepted only when that exercise has no logged sets, it isn't the running set
-   * (the current exercise in the exercise phase), and not paused. A replacement must have
+   * today's day. Accepted only when that exercise has no logged sets and it isn't the running set
+   * (the current exercise in the exercise phase, paused or not). Accepted while paused (the Pause
+   * sheet's coach): the pause, the rest clock and `setStartedAt` stay. A replacement must have
    * ≥ 1 set and must not already be elsewhere in the day. Indices stay right: removing before
    * the current exercise shifts `exIndex` down. On Rest, replacing the upcoming exercise loads
    * its defaults; removing it moves to the next unfinished one (summary at `now` if none).
    * The removed/replaced id leaves `skipped`. Logged sets are never touched.
    */
   | { type: 'REPLACE_UPCOMING'; exIndex: number; planned: PlannedExercise | null; now: number }
+  /**
+   * M10 mid-workout Undo of a removal: put an unstarted exercise back at `exIndex`
+   * (0…length). Rejected when its id is already in the day or has logged sets today, or it has
+   * no sets. Accepted mid-set, on Rest and while paused (the pause and rest clock stay).
+   * Indices stay right: inserting at or before the current exercise shifts `exIndex` up, except
+   * on Rest between exercises (the upcoming one has no logged sets) at exactly `exIndex`, where
+   * the inserted exercise becomes the upcoming one and its defaults load (the Undo of removing
+   * the upcoming exercise). The id leaves `skipped`. `now` is informational.
+   */
+  | { type: 'INSERT_UPCOMING'; exIndex: number; planned: PlannedExercise; now: number }
   | { type: 'FINISH'; now: number };
 
 export type SessionSummary = {
@@ -252,7 +263,7 @@ function correctLast(
   };
 }
 
-/** REPLACE_UPCOMING (never paused or on Summary here). Returns `s` itself when rejected. */
+/** REPLACE_UPCOMING (never on Summary here; may be paused). Returns `s` itself when rejected. */
 function replaceUpcoming(
   s: SessionState,
   e: Extract<SessionEvent, { type: 'REPLACE_UPCOMING' }>,
@@ -264,7 +275,7 @@ function replaceUpcoming(
   if (loggedFor(s, old.exerciseId).length > 0) return s;
   const p = e.planned;
   if (p) {
-    if (!Number.isInteger(p.sets) || p.sets < 1) return s;
+    if (!validSets(p)) return s;
     if (exercises.some((x, i) => i !== e.exIndex && x.exerciseId === p.exerciseId)) return s;
   }
 
@@ -289,9 +300,41 @@ function replaceUpcoming(
   return goToExercise({ ...base, exIndex: at }, nextUnfinished(base, at, 0), e.now);
 }
 
+const validSets = (p: PlannedExercise) => Number.isInteger(p.sets) && p.sets >= 1;
+
+/** INSERT_UPCOMING (never on Summary here; may be paused). Returns `s` itself when rejected. */
+function insertUpcoming(
+  s: SessionState,
+  e: Extract<SessionEvent, { type: 'INSERT_UPCOMING' }>,
+): SessionState {
+  const exercises = s.day.exercises;
+  const at = e.exIndex;
+  const p = e.planned;
+  if (!Number.isInteger(at) || at < 0 || at > exercises.length) return s;
+  if (!p || !validSets(p)) return s;
+  if (exercises.some((x) => x.exerciseId === p.exerciseId)) return s;
+  if (loggedFor(s, p.exerciseId).length > 0) return s;
+
+  const day: ProgramDay = {
+    ...s.day,
+    exercises: [...exercises.slice(0, at), { ...p }, ...exercises.slice(at)],
+  };
+  const skipped = s.skipped.filter((id) => id !== p.exerciseId);
+  const base = { ...s, day, skipped };
+  if (at > s.exIndex) return base;
+  const betweenExercises =
+    s.phase === 'rest' && loggedFor(s, currentPlanned(s).exerciseId).length === 0;
+  if (at === s.exIndex && betweenExercises) return goToExercise(base, at, e.now);
+  return { ...base, exIndex: s.exIndex + 1 };
+}
+
 export function next(s: SessionState, e: SessionEvent): SessionState {
   if (s.phase === 'summary') return e.type === 'CORRECT_LAST_SET' ? correctLast(s, e) : s;
   if (e.type === 'FINISH') return toSummary(s, e.now);
+
+  // The coach may change upcoming rows from the Pause sheet; the pause itself stays.
+  if (e.type === 'REPLACE_UPCOMING') return replaceUpcoming(s, e);
+  if (e.type === 'INSERT_UPCOMING') return insertUpcoming(s, e);
 
   if (s.paused) {
     if (e.type !== 'RESUME') return s;
@@ -406,9 +449,6 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       const moved = goToExercise({ ...s, skipped }, e.exIndex, e.now);
       return s.phase === 'rest' ? moved : { ...moved, setStartedAt: e.now };
     }
-
-    case 'REPLACE_UPCOMING':
-      return replaceUpcoming(s, e);
 
     case 'SKIP_EXERCISE': {
       const skipped = [...s.skipped, currentPlanned(s).exerciseId];

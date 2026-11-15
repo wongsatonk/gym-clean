@@ -129,17 +129,44 @@ describe('swapCandidates', () => {
     }
   });
 
-  it("with an area: the candidate hits the exercise's other muscles (dips → chest/shoulder work)", () => {
-    const dips = byId('Bench_Dips'); // triceps | chest, shoulders
-    const pushB =
-      program.days.find((d) => d.id === 'push-b')?.exercises.map((p) => p.exerciseId) ?? [];
-    const out = swapCandidates(dips, CATALOG, { avoid: 'arms', exclude: pushB, limit: 50 });
-    expect(out.length).toBeGreaterThan(0);
-    for (const c of out) {
-      expect(c.exercise.primaryMuscles.some((m) => m === 'chest' || m === 'shoulders')).toBe(true);
-    }
-    // Chest primary + shoulders secondary beats a chest-only fly (Push B already has the crossover).
-    expect(out[0]?.exercise.id).toBe('Incline_Dumbbell_Flyes');
+  it("with an area: the candidate shares a primary muscle with the exercise's primaries outside it", () => {
+    // Synthetic: the real catalog has one primary muscle per exercise.
+    const base = byId('Front_Dumbbell_Raise');
+    const ex = (id: string, primaryMuscles: string[], secondaryMuscles: string[] = []) => ({
+      ...base,
+      id,
+      primaryMuscles,
+      secondaryMuscles,
+    });
+    const press = ex('press', ['chest', 'triceps'], ['shoulders']);
+    const cat: TrainerCatalog = {
+      ...CATALOG,
+      exercises: [
+        press,
+        ex('fly', ['chest'], ['shoulders']),
+        ex('chest-only', ['chest']),
+        // Hits only the press's secondary muscle (shoulders) as a primary: not a swap.
+        ex('raise', ['shoulders']),
+        ex('kickback', ['triceps']),
+      ],
+    };
+    const ids = swapCandidates(press, cat, { avoid: 'arms', exclude: [], limit: 10 }).map(
+      (c) => c.exercise.id,
+    );
+    expect(ids).toEqual(['fly', 'chest-only']);
+  });
+
+  it('with an area: primaries all in the area → no candidates, even via secondary muscles', () => {
+    // Seated press (shoulders | triceps) on a shoulders day off: never a triceps kickback.
+    const press = byId('Seated_Dumbbell_Press');
+    expect(press.primaryMuscles).toEqual(['shoulders']);
+    expect(swapCandidates(press, CATALOG, { avoid: 'shoulders', exclude: [], limit: 50 })).toEqual(
+      [],
+    );
+    // Dips (triceps | chest, shoulders) on an arms day off: no chest fly either.
+    expect(
+      swapCandidates(byId('Bench_Dips'), CATALOG, { avoid: 'arms', exclude: [], limit: 50 }),
+    ).toEqual([]);
   });
 
   it('with an area: nothing left to hit → no candidates (curls on an arms day off)', () => {

@@ -22,7 +22,9 @@ import {
   type TrainerCatalog,
 } from '../swapCandidates';
 import {
+  baseReplaced,
   baseRows,
+  composeReplaced,
   refuse,
   rowText,
   todayDay,
@@ -99,7 +101,13 @@ function prepare(
           ],
           why: 'It works the same main muscles with kit your gym has. Just for today.',
           say: say(from.name, c.exercise.name),
-          next: withDayAdjust(ctx.state, ctx.today, today.day.id, { kind: 'swap', exercises: out }),
+          next: withDayAdjust(ctx.state, ctx.today, today.day.id, {
+            kind: 'swap',
+            exercises: out,
+            replaced: composeReplaced(baseReplaced(today.override, []), [
+              { fromId, toId: q.exerciseId },
+            ]),
+          }),
           baseVersion: ctx.state.version,
         };
       },
@@ -130,7 +138,16 @@ function prepare(
       next.plan.days = next.plan.days.map((d) => ({ ...d, exercises: swapIn(d.exercises) }));
       next.overrides = next.overrides.map((o) =>
         live(o) && o.adjust
-          ? { ...o, adjust: { ...o.adjust, exercises: swapIn(o.adjust.exercises, 'swap') } }
+          ? {
+              ...o,
+              adjust: {
+                ...o.adjust,
+                exercises: swapIn(o.adjust.exercises, 'swap'),
+                replaced: composeReplaced(o.adjust.replaced ?? [], [
+                  { fromId, toId: c.exercise.id },
+                ]),
+              },
+            }
           : o,
       );
       return {

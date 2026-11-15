@@ -6,9 +6,10 @@
  *
  * Eligible: not the exercise itself, not in `exclude`, equipment the gym has, and
  * - without `avoid`: shares a primary muscle with the exercise;
- * - with `avoid`: no primary or secondary muscle in that area, and its primary muscles hit at
- *   least one of the exercise's muscles outside the area ("the same other muscles"). An exercise
- *   whose muscles are all in the area has no candidates (it gets removed).
+ * - with `avoid`: no primary or secondary muscle in that area, and its primary muscles share at
+ *   least one of the exercise's **primary** muscles outside the area (a muscle that only helps,
+ *   e.g. the triceps of a shoulder press, never picks the swap). An exercise whose primary
+ *   muscles are all in the area has no candidates (it gets removed).
  * Ranked by: primary overlap, then secondary overlap, then the same `tracking`, then the same
  * equipment, then catalog order.
  */
@@ -81,7 +82,7 @@ export function swapCandidates(
   const outside = (m: string) => avoid === undefined || catalog.areaOf(m) !== avoid;
   const P = exercise.primaryMuscles.filter(outside);
   const S = exercise.secondaryMuscles.filter(outside);
-  const target = avoid === undefined ? exercise.primaryMuscles : [...P, ...S];
+  const target = avoid === undefined ? exercise.primaryMuscles : P;
   const excluded = new Set([exercise.id, ...opts.exclude]);
 
   const scored = catalog.exercises.flatMap((c, order) => {

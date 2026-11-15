@@ -3,11 +3,13 @@
  *
  * For each of today's exercises (as the day will run; a previous avoid-area override is rebuilt
  * from the plan day):
- * - a primary muscle in the area → swapped for the best catalog candidate that hits its other
- *   muscles and doesn't load the area at all (see swapCandidates), or removed when none fits;
+ * - a primary muscle in the area → swapped for the best catalog candidate that shares one of its
+ *   primary muscles outside the area and doesn't load the area at all (see swapCandidates), or
+ *   removed when none fits (always, for an exercise whose only primary muscle is in the area);
  * - the area only in secondary muscles → lightened: weight −10% snapped down, bodyweight reps
  *   −20%, sets unchanged (M10-q2 default);
  * - otherwise unchanged. Rows in `started` (logged sets mid-workout) are never touched.
+ * The adjust records its row map (`replaced`), stacked on the base override's map.
  * When every exercise of the day works the area (e.g. legs on a Legs day), or nothing would be
  * left, there's no training proposal: the reply suggests "Not today" or a different day.
  */
@@ -20,7 +22,9 @@ import {
   type TrainerCatalog,
 } from '../swapCandidates';
 import {
+  baseReplaced,
   baseRows,
+  composeReplaced,
   lightenRow,
   nameOf,
   refuse,
@@ -59,6 +63,7 @@ export function proposeAvoidArea(
   const taken = new Set(rows.map((p) => p.exerciseId));
   const lines: Proposal['lines'] = [];
   const out: PlannedExercise[] = [];
+  const replaced: { fromId: string; toId: string | null }[] = [];
   for (const p of rows) {
     const e = byId.get(p.exerciseId);
     const before = `${nameOf(named, p.exerciseId)} · ${rowText(p, ctx)}`;
@@ -75,8 +80,10 @@ export function proposeAvoidArea(
         const q = swappedRow(p, best, ctx.lastWeightKg, 'avoidArea');
         taken.add(q.exerciseId);
         out.push(q);
+        replaced.push({ fromId: p.exerciseId, toId: q.exerciseId });
         lines.push({ before, after: `${best.exercise.name} · ${rowText(q, ctx)}` });
       } else {
+        replaced.push({ fromId: p.exerciseId, toId: null });
         lines.push({ before, after: 'Removed today' });
       }
     } else if (loadsArea(e, area, catalog.areaOf)) {
@@ -107,6 +114,7 @@ export function proposeAvoidArea(
         kind: 'avoidArea',
         area,
         exercises: out,
+        replaced: composeReplaced(baseReplaced(today.override, ['avoidArea']), replaced),
       }),
       baseVersion: ctx.state.version,
     },

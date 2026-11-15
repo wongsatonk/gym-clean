@@ -38,7 +38,15 @@ describe('proposeRemove', () => {
     const r = proposeRemove(ctx({ started: ['bench'] }), 'fly');
     if (!r.ok) throw new Error(r.reason);
     expect(r.proposal.next.overrides).toEqual([
-      { date: '2026-11-11', dayId: 'a', adjust: { kind: 'swap', exercises: [pe('bench')] } },
+      {
+        date: '2026-11-11',
+        dayId: 'a',
+        adjust: {
+          kind: 'swap',
+          exercises: [pe('bench')],
+          replaced: [{ fromId: 'fly', toId: null }],
+        },
+      },
     ]);
     expect(r.proposal.next.plan).toEqual(ctx().state.plan);
     expect(r.proposal.lines).toEqual([

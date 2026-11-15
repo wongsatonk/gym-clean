@@ -19,6 +19,7 @@
  */
 import { formatWeight, fromUnit, snapToStep, stepFor, toUnit, type Unit } from '../../units';
 import { calendar, effectiveDay, type PlanSession } from '../plan';
+import type { RowReplacement } from '../rows';
 import type {
   DayAdjust,
   DayOverride,
@@ -221,6 +222,44 @@ export function baseRows(
   return structuredClone(state.plan.days.find((d) => d.id === dayId)?.exercises ?? []);
 }
 
+/**
+ * The row map (DayAdjust.replaced) that goes with `baseRows`: the override's own when its rows
+ * are the base, else empty (rebuilt from the plan day).
+ */
+export function baseReplaced(
+  override: DayOverride | undefined,
+  rebuild: readonly DayAdjust['kind'][],
+): RowReplacement[] {
+  const adjust = override?.adjust;
+  if (adjust && !rebuild.includes(adjust.kind)) return structuredClone(adjust.replaced ?? []);
+  return [];
+}
+
+/**
+ * `prev` (the base rows' map) followed by this change's own replacements `local` (base row id →
+ * new id or null). A chain is followed: plan a → x earlier and x → y now gives a → y and x → y.
+ * One entry per `fromId`, the latest wins; a row swapped back to itself is dropped.
+ */
+export function composeReplaced(
+  prev: readonly RowReplacement[],
+  local: readonly RowReplacement[],
+): RowReplacement[] {
+  const now = new Map(local.map((r) => [r.fromId, r.toId]));
+  const out = new Map<string, string | null>();
+  for (const r of prev) {
+    const toId = r.toId !== null && now.has(r.toId) ? (now.get(r.toId) ?? null) : r.toId;
+    out.set(r.fromId, toId);
+  }
+  for (const r of local) {
+    out.delete(r.fromId);
+    out.set(r.fromId, r.toId);
+  }
+  // A row swapped back to its original is in the day again: not a replacement.
+  return [...out]
+    .filter(([fromId, toId]) => fromId !== toId)
+    .map(([fromId, toId]) => ({ fromId, toId }));
+}
+
 /** The state with `date`'s overrides replaced by one running `dayId` with `adjust`. */
 export function withDayAdjust(
   state: TrainerState,
@@ -260,7 +299,11 @@ export function proposeLighter(ctx: ActionContext): ActionResult {
       lines,
       why: 'One set fewer and about 10% lighter, so you still train but keep some energy in the tank.',
       say: 'Done. Today is lighter.',
-      next: withDayAdjust(ctx.state, ctx.today, today.day.id, { kind: 'lighter', exercises: out }),
+      next: withDayAdjust(ctx.state, ctx.today, today.day.id, {
+        kind: 'lighter',
+        exercises: out,
+        replaced: baseReplaced(today.override, ['lighter']),
+      }),
       baseVersion: ctx.state.version,
     },
   };
@@ -282,7 +325,11 @@ export function proposeDeload(ctx: ActionContext): ActionResult {
         ? p
         : lightenRow(p, ctx, 'deload', deloadSets, DELOAD.weightFactor),
     );
-    next = withDayAdjust(next, e.date, e.dayId, { kind: 'deload', exercises: out });
+    next = withDayAdjust(next, e.date, e.dayId, {
+      kind: 'deload',
+      exercises: out,
+      replaced: baseReplaced(e.override, ['lighter', 'deload']),
+    });
     lines.push({
       before: `${dateText(e.date)} · ${day.name} · ${totalSets(rows)} sets`,
       after: `${totalSets(out)} sets · about 10% lighter`,

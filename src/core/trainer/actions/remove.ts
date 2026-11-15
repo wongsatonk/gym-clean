@@ -5,7 +5,9 @@
  * row left (End workout is the way out then).
  */
 import {
+  baseReplaced,
   baseRows,
+  composeReplaced,
   nameOf,
   refuse,
   rowText,
@@ -36,7 +38,13 @@ export function proposeRemove(ctx: ActionContext, exerciseId: string): ActionRes
       lines: [{ before: `${name} · ${rowText(p, ctx)}`, after: 'Removed today' }],
       why: 'The rest of today stays as it is. Your plan is unchanged.',
       say: 'Done. Exercise removed.',
-      next: withDayAdjust(ctx.state, ctx.today, today.day.id, { kind: 'swap', exercises: out }),
+      next: withDayAdjust(ctx.state, ctx.today, today.day.id, {
+        kind: 'swap',
+        exercises: out,
+        replaced: composeReplaced(baseReplaced(today.override, []), [
+          { fromId: exerciseId, toId: null },
+        ]),
+      }),
       baseVersion: ctx.state.version,
     },
   };

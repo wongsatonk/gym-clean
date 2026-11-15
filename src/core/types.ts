@@ -104,6 +104,12 @@ export type DayAdjust = {
   area?: BodyArea;
   /** The day as it will run. */
   exercises: PlannedExercise[];
+  /**
+   * Row map: every exercise id that left the day (plan rows and earlier swap-ins) with the id
+   * that runs in its place now (null = removed). Older overrides have none; consumers fall back
+   * to pairing rows by likeness (src/core/trainer/rows.ts).
+   */
+  replaced?: { fromId: string; toId: string | null }[];
 };
 
 /** `date` is local YYYY-MM-DD. */
