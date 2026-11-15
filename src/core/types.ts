@@ -91,6 +91,17 @@ export type Accent = 'orange' | 'volt' | 'yellow';
 
 // ---- M10 AI trainer (SPEC M10 data model) ----
 
+/**
+ * M10e: the equipment his gym has, as item ids from src/data/equipment.json, plus the exercises he
+ * chose to keep in his plan despite missing kit ("Keep it"). Stored in the settings table, key 'gym'.
+ */
+export interface GymProfile {
+  equipment: string[];
+  /** Exercise ids he chose to keep despite missing kit. */
+  kept: string[];
+  updatedAt: number;
+}
+
 export type BodyArea = 'arms' | 'shoulders' | 'chest' | 'back' | 'legs' | 'core';
 
 /** The user's own copy of the program; `seededFrom` is the program.json hash. */

@@ -10,8 +10,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **Waiting on Wongsaton:**
   - Deploy OK for m4e-redesign.
-  - **A-q6:** the `--warn` amber is too close to Volt gold and to the Yellow CTA.
-  - **A-q5:** should a rep best at a lighter weight count?
+  - ~~A-q6~~ (answered "keep it") and ~~A-q5~~ (answered "no") on 2026-11-15.
+  - **M10e equipment-aware swaps (planned 2026-11-15, branch `m10-equipment`):** the M10e-q questions under "Blockers / questions" are not blocking; their defaults get built.
   - **A-q7:** should Legs days show the front of the figure?
   - **Exercise first screen:** the notes row sits about 30px under the sticky Set done until you scroll. Shrinking the content would fix it.
   - The B-q and A-q questions under "Blockers / questions".
@@ -41,8 +41,122 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
 - [ ] M9 Native iOS shell (Capacitor). Outline only in the SPEC; not planned (M10-q9)
 - [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
+- [ ] M10e Equipment-aware swaps (follow-up to M10 phase A): **planned 2026-11-15** on `m10-equipment` (gym profile, kit needs as data, the coach proposes a swap for kit his gym lacks, e.g. Leg Press) → extends 🧍 Checkpoint E
 
 ## Current milestone plan
+
+### M10 follow-up — equipment-aware swaps (planned 2026-11-15)
+**Contract:** SPEC M10 "Follow-up: equipment-aware swaps (M10e)" and the Decision "M10e equipment-aware swaps" (2026-11-15). All logic and data is **tests first**. Wongsaton: "That's why I want the coach to help me" / "Yes, build it". He's travelling, so the M10e-q defaults (Blockers) get built.
+
+**Branch:** `m10-equipment` (already checked out). Nothing is pushed without his OK.
+
+**Fit with the current code (why the plan looks like this):**
+- `TrainerCatalog.hasEquipment(equipment)` filters on free-exercise-db's coarse `equipment` field (`body only | cable | dumbbell | kettlebells | machine`), and `src/data/equipment.json` still holds the provisional M10-q6 default (it lists "leg press" and "calf raise" machines he doesn't have). "machine" can't tell a leg press from a smith machine, and "cable" can't tell a rope from a D-handle. So kit needs become **per-exercise data** (`src/data/exerciseKit.json`), and the core filter becomes `canDo(exerciseId)`. No `if (exercise === …)` anywhere.
+- Today's swap pool already has quad candidates for Leg Press (Dumbbell Squat, Split Squat with Dumbbells, Lunges, Rear Lunge, Goblet Squat). It has no smith or barbell moves, so those are vendored. A small data list `replaceWith` ranks the closest replacements first (smith squat before a lunge) without code branches.
+- `proposeSwapOptions(ctx, id, catalog, 'plan')` already builds a plan-scope swap with Apply / Undo / Plan changes. The equipment prompt **reuses it**, so `Proposal.action` stays `'swap'` and there's no new action, no `TrainerState` change and no Dexie version bump.
+- The gym profile goes in the existing `settings` table (key `'gym'`), like `unit` and `'nutrition'`. Dexie stays at version 5.
+- Today already has a two-button prompt pattern (`program-prompt`: Use it / Keep mine). The "missing kit" prompt copies it.
+- The "Info" badge is automatic for ids without a 3D demo (`src/ui/badges.ts` → `hasDemo`), so vendored exercises need no UI work for it.
+- **Other branches in flight:** cloud session 1 (M7b: `ml/**`, `src/food-vision/**`) and session 2 (camera e2e + Undo toast: `src/ui/app.ts`, `src/ui/fuel/**`, camera/hands-free/focus-cues specs). This plan doesn't touch `ml/**`, `src/food-vision/**`, `src/ui/fuel/**`, `src/ui/coach/undoToast.ts` or any camera spec. **Shared files it does touch:** `src/core/types.ts` (task 1), `src/ui/app.ts` (task 9, a small diff in the trainer block plus the Today/preview props, so expect a merge with session 2), `src/ui/screens/today.ts` / `preview.ts` / `src/styles.css` (task 8), `docs/PROGRESS.md` and `docs/SPEC.md`.
+
+**Ownership:** core-engineer `src/data/**`, `src/core/trainer/**`; ui-engineer `src/ui/screens/**`, `src/styles.css`, `e2e/equipment.spec.ts` (new); main `src/core/types.ts`, `src/ui/app.ts`, git.
+
+- [x] 1. [main] Shared type `GymProfile`.
+  - Files: src/core/types.ts.
+  - `GymProfile = { equipment: string[]; kept: string[] /* exercise ids he chose to keep despite missing kit */; updatedAt: number }` (SPEC M10e data model).
+  - Done when: typecheck passes and the shape matches the SPEC.
+  - Deps: none.
+- [ ] 2. [core-engineer] Equipment vocabulary, default profile and per-exercise kit needs, **tests first**.
+  - Files: src/data/equipment.json (rewritten: `items: { id, label, group }[]`, `defaultProfile: string[]`, a note pointing at the M10-q6 Decision), src/data/exerciseKit.json (new: `exerciseId → { needs: string[][]; replaceWith?: string[] }`; `needs` is "any one of these lists, each list all-of"; bodyweight = `[[]]`), src/data/catalog.ts(+test).
+  - Items (ids are data): `dumbbells` (5–75 lb), `kettlebell`, `adjustable-bench`, `cable-lat-pulldown`, `cable-low-row`, `cable-pulley` (adjustable pulleys), `cable-d-handle`, `cable-lat-bar`, `cable-rope`, `leg-extension`, `leg-curl`, `smith-machine`, `half-rack`, `barbell` (bar + plates), `plyo-box`, `pull-up-bar`, `leg-press`, `chest-press`, `pec-deck`, `calf-machine`.
+  - `defaultProfile` = his list (Decision "Gym equipment (M10-q6)"): everything above **except** `cable-rope`, `pull-up-bar` (unconfirmed, M10e-q8), `leg-press`, `chest-press`, `pec-deck`, `calf-machine`.
+  - Catalog API: `equipmentItems()`, `defaultGymProfile(): GymProfile`, `kitNeeds(id)`, `gymCanDo(id, profile)`, `preferredSwaps(id)`. `gymHas` / `gymEquipment` stay until task 9 moves app.ts off them, then this task's owner deletes them (task 9b).
+  - Done when tests show:
+    - every catalog exercise has a kit entry, and every id in `needs`, `replaceWith` and `defaultProfile` is a known item or catalog id;
+    - with the default profile: **not doable** = Leg_Press, Calf_Press_On_The_Leg_Press_Machine, Standing_Calf_Raises (M10e-q2), Triceps_Pushdown_-_Rope_Attachment, Cable_Rope_Overhead_Triceps_Extension; **doable** = Face_Pull and Triceps_Pushdown (D-handle), Goblet_Squat (dumbbell or kettlebell), Lying_Leg_Curls and Seated_Leg_Curl (M10e-q3), Cable_Crossover and Cable_Chest_Press (M10e-q5), and every other program exercise;
+    - every `replaceWith` id shares a primary muscle with its exercise;
+    - the existing catalog tests (muscles, cues, how-to, SVG paths, banned words) still pass.
+  - Deps: 1.
+- [ ] 3. [core-engineer, after 2] Vendor the leg-press and calf replacements, **tests first**.
+  - Files: src/data/exercises.json, src/data/cues.json, src/data/howto.json, src/data/exerciseKit.json, src/data/catalog.test.ts.
+  - Candidates (check each id exists upstream in `yuhonas/free-exercise-db` and the licence is still Unlicense; vendor fields unchanged; record the upstream commit SHA in a Decision): `Smith_Machine_Squat`, `Barbell_Squat` (or `Barbell_Full_Squat`, whichever upstream entry is the plain back squat), `Smith_Machine_Calf_Raise`. For a rear-foot-elevated (Bulgarian) split squat: check whether the vendored `Split_Squat_with_Dumbbells` already is one; if not, vendor the closest upstream dumbbell entry. Don't invent ids.
+  - Each gets a cue (≤ 8 words), 2–3 how-to lines (≤ 70 chars) in coaching language, focus and tempo, and kit needs (smith: `smith-machine`; barbell squat: `half-rack` + `barbell`; split squat: `dumbbells` + `adjustable-bench`). Weight-logging line per M10e-q7.
+  - `replaceWith`: Leg_Press → [Smith_Machine_Squat, Barbell squat, the split squat] (M10e-q1); Standing_Calf_Raises → [Smith_Machine_Calf_Raise, Standing_Dumbbell_Calf_Raise] (M10e-q2).
+  - Done when: catalog tests pass for the new ids (muscles map to an area and an SVG path id, cue, how-to, no banned words), and none has a 3D demo (they show "Info"; `tracking: 'manual'`, no pose rule).
+  - Deps: 2.
+- [ ] 4. [core-engineer, after 2+3] Kit-aware swap candidates and missing-kit detection, **tests first**.
+  - Files: src/core/trainer/swapCandidates.ts(+test), src/core/trainer/equipment.ts(+test) (new), and the core tests that build a `TrainerCatalog` (actions/swap.test.ts, actions/avoidArea.test.ts, actions/rowMap.test.ts, coach.test.ts).
+  - `TrainerCatalog.hasEquipment(equipment)` → `canDo(exerciseId)`, plus optional `preferred(exerciseId): readonly string[]`. Ranking: position in `preferred` first (only eligible ids), then the existing keys.
+  - `missingKit(state, catalog, date, kept)` → `{ dayId, exerciseId }[]` for that date's effective day (`effectiveDay`, overrides included); `missingInPlan(state, catalog, kept)` for every plan day.
+  - **Same commit as a one-line [main] change** in `src/ui/app.ts` (`canDo: (id) => gymCanDo(id, defaultGymProfile())`, `preferred: preferredSwaps`) so typecheck stays green. Task 9 replaces the default with the stored profile.
+  - Done when tests cover:
+    - Leg Press on Legs B → Smith Machine Squat, Barbell squat, the split squat, in that order (the day's own ids excluded);
+    - a profile without `smith-machine` → the barbell squat first; dumbbells-only → dumbbell moves only;
+    - rope exercises are never suggested; "Go easy on…" never picks an exercise the gym can't do;
+    - `missingKit` returns Leg_Press for Legs B with the default profile, and nothing once the plan was swapped, for a kept id, or on a rest day;
+    - every program exercise still has ≥ 1 candidate with the default profile;
+    - every existing trainer test passes.
+  - Deps: 2, 3.
+- [ ] 5. [core-engineer, after 4] Coach: the missing-kit proposal, **tests first**.
+  - Files: src/core/trainer/coach.ts(+test), src/core/trainer/replies.ts(+test) if a new line is needed, src/core/trainer/phrases.json, src/core/trainer/evals/requests.json, src/core/trainer/intents.test.ts.
+  - New chip `gymSwap` (args `exerciseId`) → reply "Your gym doesn't have the kit for Leg Press. Here's a swap." + the **plan-scope** proposal for the top candidate (via `proposeSwapOptions`, why line names the missing kit as data, e.g. "No leg press here. This works the same main muscles."), and chips: the other candidates (plan scope), **Just today** (`swapTo`, scope today), **Keep Leg Press** (new UI-only chip id `keepExercise`, like `endWorkout`). No candidate → the "No good swap…" reply + Keep.
+  - The "Adjust my plan" chip lists missing-kit exercises first (one chip each).
+  - Free text: "my gym has no leg press", "there's no leg press", "no leg press machine", "ไม่มีเครื่อง leg press" → `swap` with `exerciseId`, which goes to the same `gymSwap` flow when that exercise lacks kit. ≥ 6 new eval items.
+  - Mid-workout: never offered unprompted (the Pause sheet's existing swap still works).
+  - Done when tests cover: every reply passes `checkCopy`, `say` ≤ 8 words, the Keep chip is present, Apply then `undoLast` restores Leg Press exactly, the intent eval still ≥ 90% with 100% safety flags.
+  - Deps: 4.
+- [ ] 6. [core-engineer ∥ 3–5] Gym profile persistence, **tests first**.
+  - Files: src/data/gym.ts(+test) (new).
+  - `loadGymProfile(db)` → the stored profile, else `defaultGymProfile()` (nothing written until he edits). `saveGymProfile(db, equipment)`: unknown ids rejected, `kept` cleared (a new profile asks again). `keepExercise(db, exerciseId)`.
+  - Settings key `'gym'` in the existing `settings` table. **No Dexie version bump.**
+  - Done when fake-indexeddb tests cover: default on first read, round trip, unknown id rejected, keep persisted, save clears `kept`, and every existing db test passing.
+  - Deps: 1, 2.
+- [ ] 7. [core-engineer, after 3; same instance, same files] Single-handle copy for face pull and pushdown.
+  - Files: src/data/cues.json, src/data/howto.json, src/data/catalog.test.ts.
+  - Face_Pull and Triceps_Pushdown read right with one D-handle, per M10e-q4 (default: one arm at a time, reps per side; the plan numbers stay). E.g. face pull "Handle at face height, step back, arm straight." / "Pull toward your face, elbow high and wide." / "Return slowly. Then the other arm."
+  - Done when: a test asserts neither entry says "rope" or "bar", cues ≤ 8 words, lines ≤ 70 chars, `checkCopy` clean.
+  - Note: their 3D demos still show the old grip (task 12, can-follow).
+  - Deps: 3.
+- [ ] 8. [ui-engineer ∥] Today and preview "missing kit" prompt.
+  - Files: src/ui/screens/today.ts(+test), src/ui/screens/preview.ts(+test), src/styles.css (only if the program-prompt styles don't fit).
+  - Props `missingKit?: { exerciseId: string; name: string } | null`; callbacks `onSeeGymSwap(exerciseId)`, `onKeepExercise(exerciseId)`.
+  - A card in the `program-prompt` style (`data-gym-prompt`, role status, shown not spoken: nothing to react to mid-set): "Your gym has no kit for Leg Press." with **See a swap** (CTA) and **Keep it**, both ≥ 56px, body ≥ 20px, tokens only. The day's rows are unchanged until Apply (never silently).
+  - Done when: render tests, 390×844 harness screenshots in the 3 accents, tokens test green, typecheck + lint clean.
+  - Deps: 1.
+- [ ] 9. [main, after 4–6, 8] Wiring.
+  - Files: src/ui/app.ts (trainer block ~L256–275 and the Today/preview props only).
+  - Load the profile at startup (`loadGymProfile`); `trainerCatalog.canDo` reads it.
+  - Today/preview get `missingKit` = the first `missingKit(...)` on the shown day, skipping `kept`.
+  - See a swap → open the coach sheet with `handle({ chip: 'gymSwap', args })`; Apply / Undo / Plan changes as today. Keep it (prompt or chip `keepExercise`) → `keepExercise` + rerender.
+  - No new dev-log events (existing trainer ids cover a swap).
+  - 9b. [core-engineer] delete `gymHas` / `gymEquipment` and their tests once app.ts no longer uses them.
+  - Done when, by hand: Legs B shows the prompt → See a swap → Apply → the preview shows Smith Machine Squat with "Info" → Undo restores Leg Press and the prompt; full existing e2e green.
+  - Deps: 4, 5, 6, 8.
+- [ ] 10. [ui-engineer] E2E `e2e/equipment.spec.ts` (new; copy helpers from `e2e/trainer.spec.ts`, don't edit it).
+  - Seed finished sessions so Legs B is up next.
+  - The prompt shows; before any tap, the preview still lists Leg Press (no silent change).
+  - See a swap → proposal "Leg Press → Smith Machine Squat" → **Apply** → Today/preview show Smith Machine Squat with the "Info" badge → reload keeps it → **Undo** → Leg Press and the prompt are back.
+  - Keep it → reload → no prompt. Free text "my gym has no leg press" → the same proposal.
+  - Every button ≥ 56px; 0 off-device requests.
+  - Done when: passes with `--repeat-each=3`, full `npm run e2e` green.
+  - Deps: 9.
+- [ ] 11. *(can-follow, only if scope allows)* [ui-engineer] Settings → **My gym** checklist.
+  - Files: src/ui/screens/myGym.ts(+test) (new), src/ui/screens/settings.ts (a row), e2e/equipment.spec.ts (a case). 11b. [main] the route in src/ui/app.ts.
+  - Grouped checkboxes from `equipmentItems()` labels, rows ≥ 56px, Save → `saveGymProfile` via a callback, a privacy line "Stays on this phone."
+  - Done when: render tests + 390×844 screenshot; e2e: untick Smith machine → the Legs B swap offers the barbell squat first.
+  - Deps: 6, 9.
+- [ ] 12. *(can-follow, after M10e-q4 is answered)* [anatomy-3d-engineer] Face pull / pushdown 3D demos with a single handle (src/ui/demo3d/**). Not this round.
+- [ ] 13. [reviewer] Review the branch diff: core pure (no DOM/DB in `src/core/trainer`), kit needs as data with no exercise-id branches, nothing applied without a tap, Undo works, copy passes `checkCopy`, 56 / 20px and tokens, no network, ownership respected, vendored entries match upstream. Deps: 10 (and 11 if built).
+- [ ] 14. [verifier] Verify the milestone against SPEC M10e Accept: `npm run check`, `npm run e2e`, `npm run build`, intent-eval score, 390×844 screenshots `docs/screenshots/m10e-*.png` (prompt, proposal, applied preview with Info, My gym if built), console clean, 0 off-device requests; evidence into PROGRESS. Deps: 13.
+- [ ] 15. [main] Merge `m10-equipment` + **ask Wongsaton before pushing** (push = deploy). Deps: 14.
+- [ ] 16. 🧍 **Checkpoint E (extended):** at the gym, Legs B runs with the leg-press swap; he reports the replacement's weight and whether the prompt felt right. Deps: 15.
+
+**Parallel waves:**
+- **Wave 1:** 1 [main], then 2 [core A] and 8 [ui] in parallel.
+- **Wave 2:** 3 → 7 [core A], 6 [core B].
+- **Wave 3:** 4 → 5 [core A].
+- **Then:** 9 (+9b) → 10 → (11) → 13 → 14 → 15 → 16.
+- **Critical path:** 1 → 2 → 3 → 4 → 5 → 9 → 10.
 
 ### M7 — Fuel: food & nutrition (planned 2026-11-15; after the polish round)
 **Contract:** SPEC M7 (all of it, including Accept), SPEC §4 "M7 — nutrition" data model, and the Decision "M7 plan" (2026-11-15).
@@ -1679,6 +1793,17 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-15: **M10e equipment-aware swaps (planner).** His gym has no leg press, but Legs B has Leg Press. Wongsaton: "That's why I want the coach to help me" and "Yes, build it". Plan under "Current milestone plan"; contract: SPEC M10 "Follow-up: equipment-aware swaps (M10e)".
+  - **Scope:** a follow-up to M10 phase A on branch `m10-equipment`, not a new milestone number. It proceeds on his explicit word while Checkpoint E is open, as M7 and M10 did.
+  - **Gym profile:** a list of equipment ids stored on the phone (settings key `'gym'`, existing table, **no Dexie version bump**). Default = his list from the photos (Decision "Gym equipment (M10-q6)"). Editable later (Settings → My gym, can-follow).
+  - **Kit needs are data:** `src/data/exerciseKit.json` gives each catalog exercise "any of these kit lists". The coarse free-exercise-db `equipment` field stays as vendored but no longer decides swaps. `TrainerCatalog.hasEquipment` becomes `canDo(exerciseId)`.
+  - **Never silent, asked once:** when the day has an exercise his gym can't do, Today/preview show a prompt; the coach offers a plan-scope swap (the existing swap Proposal: Apply, Undo, Plan changes), plus Just today and Keep it. Keep it is remembered until he edits his gym; Just today asks again next time (M10e-q6).
+  - **Closest replacement first** via a data list (`replaceWith`), then the existing muscle ranking. The avoid-area rule (swaps share a primary muscle) is unchanged.
+  - **Vendored:** smith squat, barbell squat and a smith calf raise from free-exercise-db (Unlicense), only ids checked upstream. They show "Info" (no 3D demo) and are manual.
+  - **Single D-handle:** face pull and pushdown copy is written for one handle (M10e-q4). Rope-only exercises are never suggested.
+  - **Files kept clear of the cloud sessions:** no `ml/**`, `src/food-vision/**`, `src/ui/fuel/**`, `src/ui/coach/undoToast.ts` or camera specs. Shared: `src/core/types.ts`, `src/ui/app.ts` (expect a merge with session 2), `today.ts` / `preview.ts`.
+  - The M10e-q defaults are provisional until he answers.
+- 2026-11-15: **Answers recorded:** M10-q2 "yes" (helper exercises stay, 10% lighter; as built), A-q5 "no" (a rep best at a lighter weight doesn't count; as built), A-q6 "keep it" (Volt gold and `--warn` amber stay). No code change.
 - 2026-11-15: **Gym equipment (M10-q6), read from Wongsaton's 41 photos of his apartment gym** (photos stay on his Mac in `private/`, gitignored; people ignored). Swaps and future camera exercises should only use this list.
   - **Matrix cable tower** (stacks 10–295 lb, 15 lb steps): lat pulldown (long bar, thigh pad), seated low row, adjustable pulleys (19 positions) on a column + overhead beam, side pulleys (crossover-type moves likely possible). **Attachments seen: lat bar and single D-handle only** (no rope, straight bar or V-handle seen → face pull / rope pushdown need his check).
   - **Matrix leg extension / leg curl combo** (10–160 lb, 10 lb steps, +5 lb add-on). **Matrix smith machine.** **Torque half rack** with barbell, J-hooks, safeties (pull-up bar likely, unconfirmed). A **Torque plate-loaded leg/glute machine** (type unsure).
@@ -2338,6 +2463,16 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   4. The setup screenshot shows the sticky Save targets bar just below "Stays on this phone." with no gap. It isn't clipped.
 
 ## Blockers / questions for Wongsaton
+- **New (M10e equipment-aware swaps, planned 2026-11-15; not blocking. You're travelling, so the defaults get built):**
+  - **(M10e-q1) Leg Press replacement order.** **Default:** Smith machine squat first, then barbell back squat in the half rack (safeties set), then a dumbbell split squat. Same 4 × 10–12; the weight is blank the first time ("pick your weight").
+  - **(M10e-q2) Standing calf raises (Legs A).** The plan's version uses a calf machine, and none was seen. **Default:** the coach offers a swap once (Smith machine calf raise, then standing dumbbell calf raise). If you already do them on the smith, tap Keep it.
+  - **(M10e-q3) Leg curl machine.** Is the Matrix combo a **seated** or a **lying** curl? **Default:** it counts for both Lying Leg Curls and Seated Leg Curl, so no prompt.
+  - **(M10e-q4) Face pull and pushdown with the single D-handle.** **Default:** one arm at a time, reps per side (same numbers as the plan); the how-to says "handle", not rope/bar. Alternative: pushdown with both hands on the lat bar.
+  - **(M10e-q5) Cable crossover / cable chest press with one handle.** **Default:** counted as doable (one arm at a time, or a second handle if there is one), so no prompt.
+  - **(M10e-q6) "Just today".** **Default:** the prompt comes back next Legs B; "Keep it" stops it until you change My gym. OK?
+  - **(M10e-q7) Logging barbell and smith weights.** **Default:** barbell = plates + bar (a standard 20 kg / 45 lb bar); smith = only the plates you add, because smith bars differ. The how-to says so.
+  - **(M10e-q8) Pull-up bar on the half rack** (likely, unconfirmed). **Default:** not in your profile; tick it in My gym if it's there.
+  - **(M10e-q9) The Torque plate-loaded leg/glute machine.** What is it (hack squat, pendulum squat, hip thrust, leg press)? If it's a leg press or hack squat, Leg Press might not need a swap at all. **Default:** not counted as a leg press until you say.
 - **New (M7 Fuel, planned 2026-11-15; not blocking. The defaults below are what gets built unless you say otherwise):**
   - **(M7-q1) Meal slots.** Entries get a slot from the time, and you can change it. **Default:**
     - breakfast before 10:30, lunch 10:30–14:30, snack 14:30–17:30, dinner 17:30–21:30, snack after that;

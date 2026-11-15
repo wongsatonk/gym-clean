@@ -895,7 +895,7 @@ Settings → Plan changes. A model's text never changes data by itself.
 | **Go easy on a body area** (arms, shoulders, chest, back, legs, core; joint words map to areas as data) | For each of today's exercises: an exercise whose **primary** muscles are in the area is **swapped** only for a catalog candidate that shares one of its **primary** muscles outside the area and doesn't load the area at all, otherwise **removed** (with today's catalog — one primary muscle per exercise — this means removed; Decision 2026-11-15). An exercise with the area only in **secondary** muscles is **lightened** (default; see M10-q2). | today |
 | **Lighter today** | Every exercise: −1 set (minimum 2), weight −10% snapped **down** to the unit step; bodyweight: the rep target −20%. | today |
 | **Deload week** | 7 days from today: sets halved (rounded up), weight −10%. | dated overrides |
-| **Swap an exercise** | The top 3 catalog candidates: same primary muscle group, equipment he has, not already in the day. Today only or from now on. | today or plan |
+| **Swap an exercise** | The top 3 catalog candidates: same primary muscle group, equipment he has (per-exercise kit needs vs his gym profile, see M10e), not already in the day. Today only or from now on. | today or plan |
 | **Stalled → adjust** | Builds on M5b. An exercise whose top set (weight, reps at that weight) hasn't improved for 3 finished sessions in a row (lighter/deload sessions excluded) gets two options: **−10% and build back up** (weight down, the rep range top +2), or **+1 set** (maximum 5). Shown on Summary under the M5b coach line and in the chat. | plan |
 | **Food suggestion** | **Later, needs M7:** from today's remaining kcal/protein, pick 3 items from favorites, recipes and Thai dishes that fit, each with Log. Until M7 the chip says "Food tips come with Fuel." | — |
 
@@ -1047,6 +1047,47 @@ type PlanChange = {
   never-in-CI eval run with his key reports the same metrics as phase B.
 - 🧍 **Checkpoint E (after phase A):** Wongsaton uses the coach for a week: at least one "Not today", one
   "Go easy on…" and one swap. He reports what felt off. Phase B gets its own checkpoint with M9.
+  Extended by M10e: Legs B runs at the gym with the leg-press swap.
+
+#### Follow-up: equipment-aware swaps (M10e, added 2026-11-15)
+Wongsaton: his gym has no leg press, but Legs B has Leg Press. "That's why I want the coach to help me."
+"Yes, build it." His equipment is the PROGRESS Decision "Gym equipment (M10-q6)". Open details: M10e-q1…q9.
+- **Gym profile:** a list of equipment ids stored on the phone (settings key `'gym'`), defaulting to his
+  gym: dumbbells 5–75 lb, kettlebell, adjustable bench, cable tower (lat pulldown, low row, adjustable
+  pulleys), single D-handle, lat bar, leg extension / leg curl, smith machine, half rack + barbell + plates,
+  plyo box. Not in it: leg press, chest press, pec deck, calf machine, rope (and the unconfirmed pull-up
+  bar). Editable later in Settings → **My gym** (a checklist; can follow).
+- **Kit needs are data:** each catalog exercise lists the kit it needs (any one of several lists), finer
+  than free-exercise-db's `equipment` field ("machine" can't tell a leg press from a smith machine). Swap
+  candidates ("Swap an exercise" and "Go easy on…") only use exercises the profile can do. A short data
+  list of closest replacements per exercise ranks first (Leg Press → smith squat, barbell squat, split squat).
+- **The coach asks, it never changes the plan by itself:** when a day has an exercise the gym can't do,
+  Today and the preview show "Your gym has no kit for <exercise>." with **See a swap** / **Keep it**.
+  See a swap opens the coach with the swap Proposal (scope plan by default, plus Just today), applied only
+  on Apply, with Undo and a Plan changes line like any swap. Keep it isn't asked again until the profile
+  changes. Typing "my gym has no leg press" reaches the same proposal. Nothing is offered unprompted
+  mid-workout.
+- **Swap pool:** extra free-exercise-db exercises (Unlicense; ids checked upstream) as replacements:
+  smith machine squat, barbell squat, smith machine calf raise (and a split squat if the vendored one
+  isn't rear-foot-elevated). They're manual and show the "Info" badge (no 3D demo).
+- **Single handle:** face pull and pushdown cues and how-to are written for the single D-handle. Rope-only
+  exercises are never suggested.
+- **Data model:** `GymProfile = { equipment: string[]; kept: string[]; updatedAt: number }`;
+  `src/data/equipment.json` = `{ items: { id, label, group }[]; defaultProfile: string[] }`;
+  `src/data/exerciseKit.json` = `Record<exerciseId, { needs: string[][]; replaceWith?: string[] }>`. No
+  new Proposal action and no Dexie version bump.
+- **Accept:**
+  - Unit tests, written first: every catalog exercise has kit needs with known ids; with the default
+    profile Leg Press (and the other listed machine/rope moves) is not doable and every other program
+    exercise is; Leg Press's top candidates follow the replacement list; a profile change reorders them;
+    no candidate needs kit the profile lacks (avoid-area included); missing-kit detection on Legs B, after
+    a swap, for a kept exercise and on a rest day; Apply → Undo restores Leg Press; profile storage round
+    trip; all coach copy passes `checkCopy`; the intent eval stays ≥ 90%.
+  - Every program exercise still has ≥ 1 swap candidate with the default profile.
+  - E2E (390×844): Legs B shows the prompt and still lists Leg Press before any tap → See a swap → Apply →
+    the preview shows the replacement with "Info" → reload keeps it → Undo restores Leg Press; Keep it hides
+    the prompt after reload; buttons ≥ 56px; no off-device request.
+  - 390×844 screenshots of the prompt, the proposal and the applied preview.
 
 ## 3. Rep counter design
 
