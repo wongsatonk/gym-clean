@@ -4,8 +4,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Live:** 119acd5 on main, deployed 2026-11-15 (CI 118 passed): everything above plus **M10 phase A AI trainer** (coach chat, Not today, go easy on an area, lighter, deload, swap, stall fix, Undo, Plan changes).
-- **In progress:** M7 Fuel built, reviewed (PASS) and verified (PASS, e2e 140/140) on `m7-fuel`; being deployed with the polish batch (Wongsaton: "You can deploy when it ready"). Follow-up (non-blocking, verifier note 1): the 10 s Undo toast covers a sheet's main button (scan Look up, barcode/Thai detail Log, editor fields) until you scroll — move the toast or lift the sheet.
+- **Live:** b2c532e on main, deployed 2026-11-15 (CI: 2582 unit, 135 e2e passed): everything above plus the polish batch and **M7 Fuel** (Fuel tab, targets + weekly check, weigh-ins, 47 Thai dishes, offline USDA search, recipes, coach food ideas, opt-in barcode scan). First CI run (e01600c) failed on the short-phone set-up card under Linux text rendering; fixed in b2c532e (reproduced in the Playwright Linux container).
+- **In progress:** cloud sessions during Wongsaton's flight (2026-11-15), per `docs/cloud-briefs.md`. Open follow-up: the 10 s Undo toast covers a Fuel sheet's main button until you scroll (verifier note; in cloud session 2).
 - **Next step:** check the M7 deploy is live. During Wongsaton's flight: cloud sessions per `docs/cloud-briefs.md` (M7b local food vision; camera e2e stability). Gym checkpoints E and F1 still open.
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **Waiting on Wongsaton:**
@@ -276,7 +276,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - 390×844 screenshots `docs/screenshots/m7-*`, console clean.
   - Evidence goes into PROGRESS.
   - Deps: 24.
-- [ ] 26. [main] Merge `m7-fuel` + **ask Wongsaton before pushing** (push = deploy). Deps: 25.
+- [x] 26. [main] Merge `m7-fuel` + **ask Wongsaton before pushing** (push = deploy). Deps: 25.
 
 **Parallel waves:**
 - **Start now (no deps):** 1 [main], 2 [main], 3 [core, needs one download], and 20 [main, only once M7-q5 is answered].
