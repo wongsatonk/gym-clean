@@ -492,14 +492,14 @@ M10-q8.
     reload keeps the plan, Reset + Undo, and no `input`/`textarea` on the Exercise screen during a set.
   - Done when: it passes with `--repeat-each=3` and the full `npm run e2e` is green.
   - Deps: 16.
-- [ ] 18. [reviewer] Review the branch diff against CLAUDE.md.
+- [x] 18. [reviewer] Review the branch diff against CLAUDE.md.
   - Pure core (no DOM, no fetch in `src/core/trainer`).
   - Every action goes through `propose*`; nothing applies without a tap; Undo everywhere.
   - Copy passes `checkCopy`; referral and red-flag lines are verbatim.
   - 56 / 64 / 20px, tokens only.
   - No typing mid-set; dev log ids only; no network.
   - Deps: 17.
-- [ ] 19. [verifier] Verify phase A against SPEC M10 Accept (phase A).
+- [x] 19. [verifier] Verify phase A against SPEC M10 Accept (phase A).
   - Run `npm run check`, `npm run e2e`, `npm run build`.
   - The intent-eval score.
   - 390×844 screenshots `docs/screenshots/m10-*`, console clean, 0 off-device requests.
@@ -1433,6 +1433,8 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-15: **M10 phase A verified (task 19).** Every SPEC M10 phase A Accept item met: check 2186 + 29; intent eval 87/87 (100%), safety 31/31; build OK (main 142.53 kB gzip); full e2e 123 passed, 1 skipped; trainer.spec ×5 parallel 60/60 after fixing a flaky tap-target helper (it measured between Plan changes' two renders). Screenshots `docs/screenshots/m10-*.png`. Non-blocking: the Undo toast covers the tab bar for 10 s; older "3D demo"/"Camera" chips under 56px (pre-M10).
 
 - 2026-11-15: **M10 fix round (main).** (1) "Go easy on <area>" swaps only for a candidate sharing a primary muscle outside the area; with today's catalog it removes primary-area moves and lightens secondary-area moves (SPEC updated). (2) REPLACE_UPCOMING and the new INSERT_UPCOMING work while paused; mid-workout Undo restores removed rows in place. (3) If a mid-workout change on Rest leaves no unstarted rows the session goes to Summary and Undo can't reopen it (actions refuse when nothing would be left, so this shouldn't occur). Evidence: check 2186 + 29; full e2e 123 passed, 1 skipped; re-review PASS.
 

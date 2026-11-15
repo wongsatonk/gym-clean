@@ -203,14 +203,21 @@ async function openCoach(page: Page) {
 async function expectTapTargets(page: Page, selector: string) {
   // evaluateAll doesn't wait: let the screen's buttons render first.
   await expect(page.locator(`${selector} button`).first()).toBeVisible();
-  const heights = await page
-    .locator(`${selector} button`)
-    .evaluateAll((els) =>
-      els
-        .filter((e) => e.getClientRects().length > 0)
-        .map((e) => [e.textContent?.trim() ?? '', e.getBoundingClientRect().height] as const),
-    );
-  expect(heights.length).toBeGreaterThan(0);
+  // Some screens render twice (e.g. Plan changes after its async list load), so the buttons can be
+  // swapped out between the wait above and the measure. Retry until a laid-out set is measured.
+  let heights: (readonly [string, number])[] = [];
+  await expect
+    .poll(async () => {
+      heights = await page
+        .locator(`${selector} button`)
+        .evaluateAll((els) =>
+          els
+            .filter((e) => e.getClientRects().length > 0)
+            .map((e) => [e.textContent?.trim() ?? '', e.getBoundingClientRect().height] as const),
+        );
+      return heights.length;
+    })
+    .toBeGreaterThan(0);
   for (const [name, hgt] of heights) expect(hgt, `button "${name}"`).toBeGreaterThanOrEqual(56);
 }
 
