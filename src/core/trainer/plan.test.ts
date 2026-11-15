@@ -103,7 +103,7 @@ describe('local dates', () => {
 });
 
 describe('seedPlan', () => {
-  it('copies the program, rotation = program order, rest = Sunday (M10-q1 default)', () => {
+  it('copies the program, rotation = program order, no fixed rest days (M10-q1)', () => {
     const s = seedPlan(PROGRAM);
     expect(s.version).toBe(0);
     expect(s.plan.days).toEqual(PROGRAM.days);
@@ -111,9 +111,21 @@ describe('seedPlan', () => {
     expect(s.plan.days[0]?.exercises).not.toBe(PROGRAM.days[0]?.exercises);
     expect(s.plan.edited).toBe(false);
     expect(s.plan.seededFrom).toBe(programHash(PROGRAM));
-    expect(s.schedule).toEqual({ rotation: ['a', 'b', 'c', 'd', 'e', 'f'], restWeekdays: [0] });
-    expect(DEFAULT_REST_WEEKDAYS).toEqual([0]);
+    expect(s.schedule).toEqual({ rotation: ['a', 'b', 'c', 'd', 'e', 'f'], restWeekdays: [] });
+    expect(DEFAULT_REST_WEEKDAYS).toEqual([]);
     expect(s.overrides).toEqual([]);
+  });
+
+  it('with no history, upNext is the first program day on every weekday, Sunday included', () => {
+    const s = seedPlan(PROGRAM);
+    expect(s.schedule.restWeekdays).toEqual([]);
+    // 2026-11-09 (Mon) … 2026-11-15 (Sun).
+    for (let i = 0; i < 7; i++) {
+      const date = addDate('2026-11-09', i);
+      expect(upNext(s, [], date)?.dayId).toBe('a');
+      expect(calendar(s, [], date, 1)[0]?.rest).toBe(false);
+    }
+    expect(weekdayOf('2026-11-15')).toBe(0);
   });
 
   it('a deep copy: editing the plan never touches the program', () => {

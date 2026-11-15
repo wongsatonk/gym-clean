@@ -317,7 +317,7 @@ M10-q8.
   - Files: src/core/trainer/plan.ts(+test).
   - `seedPlan(program)`, `effectiveDay(state, date)`, `calendar(state, finishedSessions, fromDate, days)`
     → `{ date, dayId | null, rest, override? }[]`, and `upNext(...)`.
-  - Default schedule: rotation = the program order; rest weekdays per M10-q1 (provisional `[0]`, Sunday).
+  - Default schedule: rotation = the program order; rest weekdays per M10-q1 (answered: none, `[]`; still supported when set).
   - Done when tests cover:
     - the rotation after the last finished session (unfinished sessions ignored);
     - rest weekdays and missed days;
@@ -1432,6 +1432,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+- 2026-11-15: **M10-q1 answered: no fixed rest days (core-engineer).** `DEFAULT_REST_WEEKDAYS` / `seedPlan` → `restWeekdays: []`, so Up next with no history is the first program day on any weekday, Sunday included, and "Not today" (use rest day) slides the week and says "no rest day". Rest weekdays stay fully supported; tests and `e2e/trainer.spec.ts` that cover rest days set Sunday explicitly. No migration: Dexie v4 isn't shipped, so a dev-seeded `[0]` is simply kept (loadTrainerState never rewrites rest weekdays).
 - 2026-11-15: **M10 Dexie version 3 → 4 (core-engineer, task 12).** New tables only: `trainer` (key `'current'`, row `{ key, state: TrainerState }`) and `planChanges` (`++id, createdAt`); `SessionRow.adjust` is unindexed, so existing rows are untouched (upgrade test v3 → v4). `loadTrainerState` re-seeds an unedited plan when program.json's hash changes (plan + rotation from the program; rest weekdays, overrides kept; version + 1, no change record) and keeps an edited one (M10-q11), with `defaultProgramChanged` for the "new default program" prompt.
 - 2026-11-14: **M4f wave-1 retune from synthetic (core-engineer).** Two wave 1 rules miscounted their rendered clips (pose-engineer, staged in `fixtures-staging/m4f/`). Both stay `learning`; real sets at 🧍 Checkpoint F1 decide the final values. SPEC M4f wave 1 table updated.
   - **Watch at 🧍 Checkpoint F1 (reviewer):** the triceps `minVisibility: 0.4` lets MediaPipe guesses of a hidden wrist through; replay his real triceps sets at 0.4 and 0.5 before promoting, and re-check the narrow extended window (136–140 worked, 142 miscounts).
@@ -2041,7 +2042,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   - **(M4f-q8) Committing your real sets.** **Default:** after each gym checkpoint we commit, as landmark numbers only (never video), just the sets you OK, like B-q5. Those sets are what moves an exercise from Learning to tuned.
   - **(M4f-q9) Triceps extension.** **Default: one dumbbell overhead with both hands** (the how-to). Alternative: one arm at a time, which would follow M4f-q2.
 - **New (M10 AI trainer, planned 2026-11-14; the defaults are what gets built if you say "go"):**
-  - **(M10-q1) Rest days and "Not today".** Which weekday(s) are your rest days? Default: Sunday. When you postpone, should the coach use this week's rest day so you still get 6 sessions ("use rest day", the default), or slide the whole week by a day ("push week")? Both are offered; which one should be preselected?
+  - ~~**(M10-q1) Rest days and "Not today".**~~ **Answered 2026-11-15: "No fixed rest days".** Default schedule now has `restWeekdays: []`; rest weekdays still work when set. Original question: Which weekday(s) are your rest days? Default: Sunday. When you postpone, should the coach use this week's rest day so you still get 6 sessions ("use rest day", the default), or slide the whole week by a day ("push week")? Both are offered; which one should be preselected?
   - **(M10-q2) "Go easy on my arms".** Exercises where arms are the **main** target (curls, triceps work) get swapped or removed. What about exercises where arms only **help** (rows, presses, pulldowns)? Default: keep them, 10% lighter. Alternatives: swap those too, or leave them as planned.
   - **(M10-q3) Lighter today / deload.** Default for "Lighter today": 1 set fewer (at least 2) and 10% lighter, with bodyweight exercises at 20% fewer reps. Default for "Deload week": half the sets and 10% lighter for 7 days. OK?
   - **(M10-q4) "Stalled".** Default: no progress on an exercise's best set for 3 sessions in a row. The options offered are "10% lighter and build back up" or "+1 set". Right trigger, right options?

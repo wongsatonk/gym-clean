@@ -18,8 +18,11 @@
  */
 import type { DayAdjust, DayOverride, Program, ProgramDay, TrainerState } from '../types';
 
-/** M10-q1 (provisional): Sunday. 0 = Sunday … 6 = Saturday. */
-export const DEFAULT_REST_WEEKDAYS: readonly number[] = [0];
+/**
+ * M10-q1 (answered 2026-11-15): no fixed rest days, so the default is empty. Rest weekdays
+ * stay fully supported when set (0 = Sunday … 6 = Saturday).
+ */
+export const DEFAULT_REST_WEEKDAYS: readonly number[] = [];
 
 /** The session fields the calendar needs; `SessionRow` from src/data/db.ts fits. */
 export type PlanSession = {

@@ -16,7 +16,10 @@ declare global {
 const REFERRAL = "If something doesn't feel right, check with a doctor or physio.";
 const RED_FLAG = 'Stop the workout for today and get checked by a doctor.';
 const MIN = 60_000;
-/** Local times. Fri 13 Nov 2026 is a training day; Sun 15 Nov is the default rest weekday. */
+/**
+ * Local times. Fri 13 Nov 2026 and Sun 15 Nov are both training days by default (M10-q1: no fixed
+ * rest days); the rest-day tests store Sunday as a rest weekday with `setRestWeekdays`.
+ */
 const at = (day: number, hour: number) => new Date(2026, 10, day, hour, 0).getTime();
 
 async function installMocks(page: Page) {
@@ -136,6 +139,52 @@ async function seed(page: Page, sessions: SessionSeed[], sets: SetSeed[]) {
   await page.reload();
 }
 
+/**
+ * Sets the stored trainer state's rest weekdays (0 = Sunday) once the app has seeded it, then
+ * reloads. The plan itself stays the app's own seed.
+ */
+async function setRestWeekdays(page: Page, restWeekdays: number[]) {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (restWeekdays) =>
+          new Promise<boolean>((resolve) => {
+            const open = indexedDB.open('gym-clean');
+            open.onerror = () => resolve(false);
+            open.onsuccess = () => {
+              const d = open.result;
+              if (!d.objectStoreNames.contains('trainer')) {
+                d.close();
+                return resolve(false);
+              }
+              const tx = d.transaction('trainer', 'readwrite');
+              const store = tx.objectStore('trainer');
+              const rq = store.get('current');
+              let wrote = false;
+              rq.onsuccess = () => {
+                const row = rq.result as
+                  | { key: string; state: { schedule: { restWeekdays: number[] } } }
+                  | undefined;
+                if (!row) return;
+                row.state.schedule.restWeekdays = restWeekdays;
+                store.put(row);
+                wrote = true;
+              };
+              tx.oncomplete = () => {
+                d.close();
+                resolve(wrote);
+              };
+              tx.onerror = () => resolve(false);
+            };
+          }),
+        restWeekdays,
+      ),
+    )
+    .toBe(true);
+  await page.reload();
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+}
+
 /** Opens the app at `time` and waits for Today's week strip. */
 async function openApp(page: Page, time: number) {
   await installMocks(page);
@@ -174,13 +223,17 @@ test('Not today: the 7-day preview → Apply → Today rests, next day up → Un
 }) => {
   const { requests, errors } = record(page);
   await openApp(page, at(13, 18));
+  // Sunday is a rest weekday here, so "use rest day" (the default mode) has one to use.
+  await setRestWeekdays(page, [0]);
   await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
+  await expect(page.locator('[data-cal="2026-11-15"]')).toHaveAttribute('data-rest');
 
   await openCoach(page);
   await expectTapTargets(page, '[data-coach-sheet]');
   await coach(page).locator('[data-coach-chip="notToday"]').click();
   const card = coach(page).locator('[data-proposal]');
   await expect(card).toBeVisible();
+  await expect(card).toContainText('Sunday becomes a training day');
   // The moved week, before → after, one row per changed date.
   await expect(card.locator('.proposal-row').first()).toBeVisible();
   await expect(card).toContainText('Push A');
@@ -195,6 +248,8 @@ test('Not today: the 7-day preview → Apply → Today rests, next day up → Un
   await expect(page.locator('[data-adjusted]')).toContainText('Rest day (moved)');
   await expect(page.locator('[data-cal="2026-11-13"]')).toHaveAttribute('data-rest');
   await expect(page.locator('[data-cal="2026-11-14"]')).toHaveAttribute('data-day', 'push-a');
+  // useRestDay: the week keeps every session, so Sunday trains instead of resting.
+  await expect(page.locator('[data-cal="2026-11-15"]')).not.toHaveAttribute('data-rest');
   const toast = page.locator('[data-undo-toast]');
   await expect(toast).toBeVisible();
   await expectTapTargets(page, '[data-undo-toast]');
@@ -458,6 +513,10 @@ test('rest day: "Rest day" hero → Train anyway runs the next day; the calendar
 }) => {
   const { requests, errors } = record(page);
   await openApp(page, at(15, 10)); // Sunday
+  // The default has no rest weekdays (M10-q1): Sunday trains the first program day.
+  await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
+  await expect(page.locator('[data-cal="2026-11-15"]')).toHaveAttribute('data-day', 'push-a');
+  await setRestWeekdays(page, [0]);
   const hero = page.locator('[data-hero="rest"]');
   await expect(hero).toContainText('Rest day');
   await expect(hero).toContainText('Next up: Push A');

@@ -45,10 +45,14 @@ const CATALOG: TrainerCatalog = {
 const program = programJson as Program;
 const ROTATION = program.days.map((d) => d.id);
 
-// 2026-11-11 is a Wednesday. Rest weekday: Sunday (2026-11-15).
+// 2026-11-11 is a Wednesday. The default has no rest weekdays (M10-q1); these tests set Sunday
+// (2026-11-15) explicitly so the rest-day paths stay covered.
 const TODAY = '2026-11-11';
 const at = (m: number, d: number, h = 18) => new Date(2026, m - 1, d, h, 0).getTime();
-const baseState = (): TrainerState => ({ ...seedPlan(program), version: 5 });
+const baseState = (): TrainerState => {
+  const s = seedPlan(program);
+  return { ...s, version: 5, schedule: { ...s.schedule, restWeekdays: [0] } };
+};
 
 type Hist = { sessions: StallSession[]; sets: SetLog[] };
 let sid = 0;
@@ -339,6 +343,18 @@ describe('postpone', () => {
     expect(r2.proposal?.action).toBe('postpone');
     expect(r2.proposal?.why).not.toEqual(r.proposal?.why);
     expect(r2.chips.find((x) => x.id === 'postponeMode')?.args?.mode).toBe('useRestDay');
+  });
+
+  it('the seeded default (no rest weekdays): Not today slides the week and says so', () => {
+    const s = seedPlan(program);
+    const c = { ...ctxFor('pull-a'), state: { ...s, version: 5 } };
+    expect(c.state.schedule.restWeekdays).toEqual([]);
+    const r = handle({ chip: 'notToday' }, c);
+    expect(r.proposal?.action).toBe('postpone');
+    expect(r.proposal?.why).toMatch(/no rest day/i);
+    // Sunday is a training day too, so it is never "already a rest day".
+    const sun = handle({ chip: 'notToday' }, { ...c, today: '2026-11-15' });
+    expect(sun.proposal?.action).toBe('postpone');
   });
 
   it('"skip leg day" postpones', () => {
