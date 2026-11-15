@@ -2559,7 +2559,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   4. The setup screenshot shows the sticky Save targets bar just below "Stays on this phone." with no gap. It isn't clipped.
 
 ## Blockers / questions for Wongsaton
-- **New (M9 native iOS shell, planned 2026-11-15; BLOCKING: no code until you answer, or say "go with the defaults"). The platform facts are in Decisions "M9 native shell plan" and get re-checked against live docs before any code:**
+- **M9 native iOS shell: ANSWERED 2026-11-15 — Wongsaton: "Go with your defaults for all 9, I'm using iPhone 17 Pro". q1 free Apple ID first; q2 ios-engineer added to CLAUDE.md (agent file fixed: no §M8, no HealthKit, plan order); q3 iOS 26.0; q4–q8 defaults; q9 Xcode: installed at /Applications/Xcode.app but `xcodebuild` fails to load CoreDevice ("Error loading required libraries… reinstall") — he must open Xcode and finish/repair its component install before task 3. (Was: planned 2026-11-15; BLOCKING: no code until you answer, or say "go with the defaults"). The platform facts are in Decisions "M9 native shell plan" and get re-checked against live docs before any code:**
   - **(M9-q1) How the app gets signed.**
     - **Free Apple ID:** costs nothing. The app stops opening 7 days after each install until you plug in (or same Wi-Fi) and re-run it from Xcode on your Mac. At most ~3 such apps on the phone. No TestFlight.
     - **Paid Apple Developer Program:** US$99 a year (billed in baht). Signing lasts a year, updates install from the TestFlight app over the air (each build lasts 90 days), no Mac needed after each change.
