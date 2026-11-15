@@ -219,7 +219,7 @@ function readSetting(page: Page, key: string): Promise<unknown> {
 
 /** Day → Start workout → Exercise list → `exercise` → Camera (set 1 running). */
 async function openCamera(page: Page, day: RegExp, exercise: string): Promise<Locator> {
-  await page.getByRole('button', { name: day }).click();
+  await page.getByRole('button', { name: day }).first().click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.getByRole('button', { name: 'Exercise list' }).click();
   const list = page.getByRole('dialog', { name: 'Exercise list' });

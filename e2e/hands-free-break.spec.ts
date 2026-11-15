@@ -214,7 +214,10 @@ function setRows(page: Page): Promise<SetRow[]> {
 
 /** Push A → Start workout → Exercise list → Pushups → Camera (set 1 running). */
 async function openCamera(page: Page): Promise<Locator> {
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.getByRole('button', { name: 'Exercise list' }).click();
   const list = page.getByRole('dialog', { name: 'Exercise list' });

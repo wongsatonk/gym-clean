@@ -110,7 +110,10 @@ async function setUnit(page: Page, unit: 'kg' | 'lb') {
 }
 
 async function startPushA(page: Page) {
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: BENCH })).toBeVisible();
 }

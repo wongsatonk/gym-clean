@@ -86,7 +86,10 @@ test('Hammer Curls offers the camera; Dumbbell Bench Press does not', async ({ p
   await expect(page.getByRole('button', { name: 'Camera', exact: true })).toBeVisible();
 
   await page.goto('/');
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Camera', exact: true })).toHaveCount(0);

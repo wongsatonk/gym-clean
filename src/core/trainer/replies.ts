@@ -64,7 +64,7 @@ const FALLBACK: Record<ProposalAction, { title: string; why: string; say: string
   },
   avoidArea: {
     title: 'Go easy today',
-    why: 'Some moves are swapped, dropped or lighter today.',
+    why: 'Some moves are dropped or lighter today.',
     say: 'Done. Today is easier.',
   },
   lighter: {

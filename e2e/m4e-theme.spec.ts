@@ -75,7 +75,7 @@ async function boot(page: Page) {
   await page.clock.install({ time: new Date('2026-11-13T18:00:00Z') });
   await page.goto('/');
   await page.clock.pauseAt(new Date('2026-11-13T18:00:05Z'));
-  await expect(page.locator('.day-btn')).toHaveCount(6);
+  await expect(page.locator('.day-btn')).toHaveCount(7);
   return rec;
 }
 
@@ -126,7 +126,10 @@ async function openSettings(page: Page) {
 }
 
 async function startPushA(page: Page) {
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
 }
@@ -145,7 +148,7 @@ test('Volt survives a reload, is applied before the app script runs, and turns s
   await expectSaved(page, 'volt');
 
   await page.reload();
-  await expect(page.locator('.day-btn')).toHaveCount(6);
+  await expect(page.locator('.day-btn')).toHaveCount(7);
   await expect(page.locator('html')).toHaveAttribute('data-accent', 'volt');
   expect(await varOf(page, '--cta')).toBe('#c8f31d');
   expect(await varOf(page, '--success')).toBe(GOLD);
@@ -179,7 +182,7 @@ for (const accent of ['orange', 'yellow'] as const) {
     await expectSaved(page, accent);
 
     await page.reload();
-    await expect(page.locator('.day-btn')).toHaveCount(6);
+    await expect(page.locator('.day-btn')).toHaveCount(7);
     // The pre-paint script only sets Volt/Yellow; the app sets the attribute once IndexedDB loads.
     await expect(page.locator('html')).toHaveAttribute('data-accent', accent);
     expect(await varOf(page, '--success')).toBe(GREEN);
@@ -354,7 +357,7 @@ test("Today's streak and Last time tiles fill in after seeded and finished sessi
     },
   ]);
   await page.reload();
-  await expect(page.locator('.day-btn')).toHaveCount(6);
+  await expect(page.locator('.day-btn')).toHaveCount(7);
   await expect(last).toHaveAttribute('data-last-session', 'Pull A');
   await expect(streak).toHaveAttribute('data-streak', '0');
   await expect(page.locator('[data-dot="done"]')).toHaveCount(2);
@@ -373,7 +376,7 @@ test("Today's streak and Last time tiles fill in after seeded and finished sessi
   await expect(last).toHaveAttribute('data-last-session', 'Push A');
   await expect(last.locator('.last-meta')).toContainText('Fri');
   await expect(last.locator('[data-volume]')).toHaveText('120 kg lifted');
-  await expect(page.locator('.day-btn[data-day="push-a"]')).toHaveClass(/done/);
+  await expect(page.locator('.day-btn[data-day="push-a"]').first()).toHaveClass(/done/);
   await page.screenshot({ path: test.info().outputPath('today-tiles.png') });
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);

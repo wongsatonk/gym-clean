@@ -269,7 +269,10 @@ const curlRows = async (page: Page) =>
 
 /** Pull A → Start workout (the row is first). */
 async function startPullA(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
 }

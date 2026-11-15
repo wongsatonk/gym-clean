@@ -1,6 +1,6 @@
 // M10 phase A, end to end in the real app (SPEC M10 "Accept", phase A E2E list): the coach sheet
 // on Today / the preview / the Pause sheet, Apply → Undo, the calendar (Not today, rest day,
-// Train anyway), Lighter today in lb, a mid-workout swap, a stall on Summary from seeded history,
+// Train anyway), Lighter today in lb, a mid-workout swap, a mid-workout removal + Undo, a stall on Summary from seeded history,
 // a red flag, Plan changes with Reset + Undo, and the plan surviving a reload.
 // Replies on Today and the preview are shown, not spoken; a change applied mid-workout is spoken
 // once as a short cue. No text box on the Exercise screen during a set; no off-device request.
@@ -201,6 +201,8 @@ async function openCoach(page: Page) {
 
 /** Every visible button in `scope` is at least 56px tall (gym rule). */
 async function expectTapTargets(page: Page, selector: string) {
+  // evaluateAll doesn't wait: let the screen's buttons render first.
+  await expect(page.locator(`${selector} button`).first()).toBeVisible();
   const heights = await page
     .locator(`${selector} button`)
     .evaluateAll((els) =>
@@ -264,7 +266,7 @@ test('Not today: the 7-day preview → Apply → Today rests, next day up → Un
   expect(errors).toEqual([]);
 });
 
-test('"my arms hurt": referral line + go-easy proposal → preview shows the swaps → the workout runs them', async ({
+test('"my arms hurt": referral line + go-easy proposal → preview shows the changes → the workout runs them', async ({
   page,
   baseURL,
 }) => {
@@ -439,6 +441,74 @@ test('mid-workout swap from the Pause sheet: no text box during the set; spoken 
   expect(errors).toEqual([]);
 });
 
+test("mid-workout go-easy removes the curls; the toast's Undo brings them back in place", async ({
+  page,
+  baseURL,
+}) => {
+  const { requests, errors } = record(page);
+  await openApp(page, at(13, 18));
+  // Push A done yesterday: today is Pull A (rows first, curls last).
+  await seed(
+    page,
+    [
+      {
+        sessionId: 's-push',
+        dayId: 'push-a',
+        startedAt: at(12, 18),
+        endedAt: at(12, 18) + 50 * MIN,
+      },
+    ],
+    [],
+  );
+  await page.locator('[data-hero="pull-a"] [data-start]').click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.locator('[data-screen="exercise"]')).toBeVisible();
+  const listIds = async () => {
+    await page.getByRole('button', { name: 'Exercise list' }).click();
+    const list = page.getByRole('dialog', { name: 'Exercise list' });
+    await expect(list).toBeVisible();
+    const names = await list.locator('.ex-row-btn').allTextContents();
+    await list.getByRole('button', { name: 'Close' }).click();
+    return names;
+  };
+  const before = await listIds();
+  const curlAt = before.findIndex((t) => t.includes('Dumbbell Bicep Curl'));
+  expect(curlAt).toBeGreaterThan(0);
+
+  await openPause(page);
+  await page.locator('[data-pause="coach"]').click();
+  await coach(page).getByLabel('Ask the coach').fill('my arms hurt');
+  await coach(page).getByRole('button', { name: 'Send' }).click();
+  const card = coach(page).locator('[data-proposal]');
+  await expect(card).toBeVisible();
+  const spokenBefore = await page.evaluate(() => window.__spoken.length);
+  await card.getByRole('button', { name: 'Apply' }).click();
+  await expect(coach(page)).toHaveCount(0);
+  // Spoken once, short (paused: no set running).
+  const said = await page.evaluate((n) => window.__spoken.slice(n), spokenBefore);
+  expect(said).toHaveLength(1);
+  expect(said[0]).toMatch(/^Done\./);
+  expect(said[0]).not.toMatch(/swap/i);
+  await expect(page.locator('[data-undo-toast]')).not.toContainText(/swap/i);
+
+  await page
+    .getByRole('dialog', { name: 'Paused' })
+    .getByRole('button', { name: 'Resume' })
+    .click();
+  const during = await listIds();
+  expect(during.some((t) => t.includes('Dumbbell Bicep Curl'))).toBe(false);
+  expect(during.length).toBeLessThan(before.length);
+
+  // Undo: the removed rows come back, in their places.
+  await page.locator('[data-undo-toast]').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('[data-undo-toast]')).toHaveCount(0);
+  const after = await listIds();
+  expect(after).toEqual(before);
+
+  expect(offDevice(requests, baseURL)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test('a stalled lift on Summary (seeded history) opens its proposal; Apply', async ({
   page,
   baseURL,
@@ -467,7 +537,7 @@ test('a stalled lift on Summary (seeded history) opens its proposal; Apply', asy
     ),
   );
   // Today the rotation is on Pull A; run Push A from its card in the week strip.
-  await page.locator('.day-btn[data-day="push-a"]').click();
+  await page.locator('.day-btn[data-day="push-a"]').first().click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.getByRole('button', { name: 'Set done' }).click(); // 8 × 15 again: no gain
   await endWorkout(page);
@@ -607,7 +677,10 @@ test('mid-workout Lighter today after a logged set: the confirmation says only u
 
 test('the Pause sheet has no Coach row while the camera view is open', async ({ page }) => {
   await openApp(page, at(13, 18));
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
   await openPause(page);

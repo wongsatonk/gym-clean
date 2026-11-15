@@ -19,7 +19,10 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
   await leaveSettings(page);
 
   // Preview: Push A list with lb weights (15 kg plan -> 35 lb)
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   const rows = page.locator('.ex-row');
   await expect(rows).toHaveCount(6);
   await expect(rows.first()).toContainText('Dumbbell Bench Press');
@@ -64,7 +67,10 @@ test('lb units, notes, exercise list jump and last time carry across sessions', 
   await page.getByRole('button', { name: 'Done' }).click();
 
   // Next session: last time, machine setting and weight default carry over; today's note is fresh
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await expect(rows.first()).toContainText('Machine: Bench notch 3');
   await expect(rows.first()).toContainText('Last time: 8×40 lb');
   await expect(rows.first()).toContainText('· 40 lb');

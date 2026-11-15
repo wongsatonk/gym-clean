@@ -60,7 +60,10 @@ const spoken = (page: Page) =>
 
 /** Pull A → Start → exercise list → `name` → Camera. Returns the camera dialog. */
 async function openCameraFor(page: Page, name: string) {
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
   await page.getByRole('button', { name: 'Exercise list' }).click();
@@ -162,7 +165,10 @@ test('tuned rule (Dumbbell Bicep Curl): no chip, no setup line, no Rest note', a
 
 /** Pull A → Start → exercise list → `name` (no camera). */
 async function goToExercise(page: Page, name: string): Promise<void> {
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
   await page.getByRole('button', { name: 'Exercise list' }).click();
@@ -251,7 +257,7 @@ test.describe('hands-free on (camera stays open in rest mode)', () => {
 
 /** Push A / Pull A → Start → exercise list → `name` → Camera, set-up card up. */
 async function openCameraOn(page: Page, day: RegExp, first: string, name: string) {
-  await page.getByRole('button', { name: day }).click();
+  await page.getByRole('button', { name: day }).first().click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: first })).toBeVisible();
   await page.getByRole('button', { name: 'Exercise list' }).click();

@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 async function startDay(page: Page, day: RegExp) {
   await page.goto('/');
-  await page.getByRole('button', { name: day }).click();
+  await page.getByRole('button', { name: day }).first().click();
   await page.getByRole('button', { name: 'Start workout' }).click();
 }
 

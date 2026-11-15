@@ -121,7 +121,10 @@ test('dev log: correct the last set on Rest and Summary, export it, clear it', a
   await leaveSettings(page);
 
   // Push A, one manual bench press set with a note (free text must never reach the log).
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
   await page.getByRole('button', { name: 'Notes and machine setting' }).click();

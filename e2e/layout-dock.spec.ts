@@ -94,7 +94,10 @@ test('Settings, Preview, Exercise and Rest: nothing ends under the sticky dock',
   await nothingUnderDock(page, 'settings');
 
   await page.locator('[data-tab="today"]').click();
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await expect(page.getByRole('button', { name: 'Start workout' })).toBeVisible();
   await nothingUnderDock(page, 'preview');
 
@@ -112,7 +115,10 @@ test('Rest with a coach Apply: Apply ends ≥ 16px above Start set, and the tip 
   page,
 }) => {
   await boot(page);
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: BENCH })).toBeVisible();
   for (let i = 0; i < 2; i++) {

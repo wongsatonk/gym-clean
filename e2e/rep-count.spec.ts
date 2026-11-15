@@ -113,7 +113,10 @@ async function readSets(page: Page) {
 
 /** Pull A → jump to Dumbbell Bicep Curl via the exercise list → open its camera. */
 async function openCurlCamera(page: Page) {
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
   await page.getByRole('button', { name: 'Exercise list' }).click();

@@ -105,7 +105,10 @@ test('live: Rest → Camera opens rest mode; two reps after the arming time auto
 
   await installMocks(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.getByRole('button', { name: 'Exercise list' }).click();
   const list = page.getByRole('dialog', { name: 'Exercise list' });

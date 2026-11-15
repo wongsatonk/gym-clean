@@ -108,7 +108,7 @@ import { startDevLogSession, type DevLogRecorder } from '../data/devlog';
 import { coachSheet, type CoachChipId as SheetChipId, type CoachItem } from './coach/coachSheet';
 import { undoToast, type UndoToast } from './coach/undoToast';
 import { planChangesScreen } from './screens/planChanges';
-import { alignRows, rowChanged } from './trainerRows';
+import { alignRows, rowChanged } from '../core/trainer/rows';
 import type { StallCardData } from './coachSummary';
 import type { PreviewRow } from './screens/preview';
 import { bodyMapSvg, pickView } from './bodyMap';
@@ -192,6 +192,8 @@ type PreviewDay = {
   planDay: ProgramDay;
   today: boolean;
   adjust: DayAdjust['kind'] | null;
+  /** The adjust's row map (plan row id -> the id that runs instead), when it has one. */
+  replaced: NonNullable<DayAdjust['replaced']>;
 };
 
 type View =
@@ -1017,11 +1019,14 @@ export function mountApp(root: HTMLElement): void {
   // ----- the running session follows a mid-workout change -----
 
   /**
-   * Replays the plan change on the running session: every row that differs between the session's
-   * day and today's day in `next`, and that has no logged set yet, is replaced or removed with
-   * REPLACE_UPCOMING. Logged sets are never touched; a removed row can't come back on Undo.
-   * The reducer refuses REPLACE_UPCOMING while paused (the Pause sheet is open), so the
-   * replacements run between a RESUME and a PAUSE at the same instant: no time passes.
+   * Replays the plan change on the running session (the reducer accepts both events while
+   * paused, so the Pause sheet's coach works too):
+   * - every row that differs between the session's day and today's day in `next`, and that has no
+   *   logged set yet, is replaced or removed with REPLACE_UPCOMING;
+   * - every row of today's day that pairs with no session row and isn't in the session (an Undo
+   *   of a removal) goes back with INSERT_UPCOMING, right after the row it followed in today's
+   *   day (or first). Logged sets are never touched.
+   * Rows are paired with the adjust's row map (DayAdjust.replaced) when it has one.
    */
   function syncSession(next: TrainerState): void {
     if (view.screen !== 'session' || view.s.phase === 'summary') return;
@@ -1029,24 +1034,44 @@ export function mountApp(root: HTMLElement): void {
     const t = now();
     const today = effectiveDay(next, trainerSessions, todayDate());
     if (!today.day || today.day.id !== start.day.id) return;
+    const target = today.day.exercises;
+    const replaced = today.override?.adjust?.replaced ?? [];
     let s = start;
-    const wasPaused = s.paused;
-    if (wasPaused) s = nextState(s, { type: 'RESUME', now: t });
-    for (const { from, to } of alignRows(start.day.exercises, today.day.exercises)) {
+    type RowEvent = Extract<SessionEvent, { type: 'REPLACE_UPCOMING' | 'INSERT_UPCOMING' }>;
+    const step = (e: RowEvent, fromId: string | null, toId: string | null): void => {
+      const after = nextState(s, e);
+      if (after === s) return;
+      // Ids only in the dev log.
+      rec((r) => r.logEvent(e.type, { exIndex: e.exIndex, exerciseId: fromId, toId }));
+      s = after;
+    };
+    const pairs = alignRows(start.day.exercises, target, replaced);
+    for (const { from, to } of pairs) {
       if (!rowChanged(from, to)) continue;
       if (s.logs.some((l) => l.exerciseId === from.exerciseId)) continue;
       const exIndex = s.day.exercises.findIndex((p) => p.exerciseId === from.exerciseId);
       if (exIndex < 0) continue;
-      const e: SessionEvent = { type: 'REPLACE_UPCOMING', exIndex, planned: to, now: t };
-      const after = nextState(s, e);
-      if (after === s) continue;
-      // Ids only in the dev log.
-      rec((r) =>
-        r.logEvent(e.type, { exIndex, exerciseId: from.exerciseId, toId: to?.exerciseId ?? null }),
+      step(
+        { type: 'REPLACE_UPCOMING', exIndex, planned: to, now: t },
+        from.exerciseId,
+        to?.exerciseId ?? null,
       );
-      s = after;
     }
-    if (wasPaused && s.phase !== 'summary') s = nextState(s, { type: 'PAUSE', now: t });
+    // Rows that came back (Undo of a removal): in today's order, after the row they followed.
+    const paired = new Set(pairs.map((x) => x.to));
+    target.forEach((p, i) => {
+      if (paired.has(p) || s.phase === 'summary') return;
+      if (s.day.exercises.some((x) => x.exerciseId === p.exerciseId)) return;
+      let exIndex = 0;
+      for (let k = i - 1; k >= 0; k--) {
+        const at = s.day.exercises.findIndex((x) => x.exerciseId === target[k]?.exerciseId);
+        if (at >= 0) {
+          exIndex = at + 1;
+          break;
+        }
+      }
+      step({ type: 'INSERT_UPCOMING', exIndex, planned: p, now: t }, null, p.exerciseId);
+    });
     if (s === start) return;
     view = { screen: 'session', s, sheet: null };
     if (s.phase === 'summary') onFinished(s);
@@ -1498,9 +1523,15 @@ export function mountApp(root: HTMLElement): void {
     if (trainer) {
       const eff = effectiveDay(trainer, trainerSessions, todayDate());
       if (!eff.done && !eff.rest && eff.day?.id === day.id)
-        return { day: eff.day, planDay, today: true, adjust: eff.adjusted };
+        return {
+          day: eff.day,
+          planDay,
+          today: true,
+          adjust: eff.adjusted,
+          replaced: eff.override?.adjust?.replaced ?? [],
+        };
     }
-    return { day: planDay, planDay, today: false, adjust: null };
+    return { day: planDay, planDay, today: false, adjust: null, replaced: [] };
   }
 
   async function openPreview(picked: ProgramDay): Promise<void> {
@@ -1561,7 +1592,7 @@ export function mountApp(root: HTMLElement): void {
   function previewScreen(pd: PreviewDay, loading: boolean): HTMLElement {
     const { day, planDay } = pd;
     // Today's adjusted rows: pair each plan row with what runs instead (or nothing).
-    const pairs = pd.adjust ? alignRows(planDay.exercises, day.exercises) : [];
+    const pairs = pd.adjust ? alignRows(planDay.exercises, day.exercises, pd.replaced) : [];
     const lastKg = (id: string) => lastTime[id]?.at(-1)?.weightKg;
     const rows = day.exercises.map((p) => {
       const row = previewRow(p);

@@ -62,7 +62,10 @@ test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Tric
   await installMocks(page);
   await page.goto('/');
 
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   const rows = page.locator('.ex-row');
   await expect(rows).toHaveCount(6);
   for (const [i, [name, camera]] of PUSH_A.entries()) {
@@ -88,7 +91,10 @@ test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Tric
 
   // Legs B preview (M4d batch 2): every row, Leg Press included, has a 3D demo and no Camera.
   await page.getByRole('button', { name: '‹ Back' }).click();
-  await page.getByRole('button', { name: /Legs B/ }).click();
+  await page
+    .getByRole('button', { name: /Legs B/ })
+    .first()
+    .click();
   const legPress = page.locator('.ex-row', { hasText: 'Leg Press' });
   await expect(legPress.locator('[data-badge="3d"]')).toHaveText('3D demo');
   await expect(legPress.locator('[data-badge="camera"]')).toHaveCount(0);
@@ -96,7 +102,10 @@ test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Tric
 
   // Pull A in-session list: every exercise has a 3D demo (M4d); the manual ones no Camera.
   await page.getByRole('button', { name: '‹ Back' }).click();
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.getByRole('button', { name: 'Exercise list' }).click();
   const list = page.getByRole('dialog', { name: 'Exercise list' });
@@ -120,7 +129,10 @@ test('How to: the 3D demo loops with phase text, Close returns focus', async ({ 
   const errors = watchErrors(page);
   await installMocks(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
   await expect(page.locator('.exercise-head-text [data-badge="3d"]')).toBeVisible();
@@ -196,7 +208,10 @@ test('How to: reduced motion starts the demo paused on the start pose', async ({
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await installMocks(page);
   await page.goto('/');
-  await page.getByRole('button', { name: /Push A/ }).click();
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.locator('[data-howto-open]').click();
   const sheet = page.locator('[data-howto=sheet]');

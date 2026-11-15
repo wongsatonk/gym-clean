@@ -139,7 +139,7 @@ test('History tab: last 7 days from the DB, unfinished session hidden, exercise 
   await installMocks(page);
   await page.clock.install({ time: at(13, 18) });
   await page.goto('/');
-  await expect(page.locator('.day-btn')).toHaveCount(6);
+  await expect(page.locator('.day-btn')).toHaveCount(7);
 
   const set = (
     sessionId: string,
@@ -243,7 +243,7 @@ test('History tab: last 7 days from the DB, unfinished session hidden, exercise 
   await expect(page.locator('[data-history-day]')).toHaveCount(2);
   await page.locator('[data-tab="today"]').click();
   await expect(page.locator('main[data-screen="history"]')).toHaveCount(0);
-  await expect(page.locator('.day-btn')).toHaveCount(6);
+  await expect(page.locator('.day-btn')).toHaveCount(7);
   await expect(page.locator('[data-tab="today"]')).toHaveAttribute('aria-current', 'page');
 
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);

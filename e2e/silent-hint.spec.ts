@@ -102,7 +102,10 @@ for (const vp of [
     });
     const page = await ctx.newPage();
     await page.goto('/');
-    await page.getByRole('button', { name: /Push A/ }).click();
+    await page
+      .getByRole('button', { name: /Push A/ })
+      .first()
+      .click();
     const start = page.getByRole('button', { name: 'Start workout' });
     await expect(start).toBeVisible();
     // Mounted by the real preview screen (app.ts), right above the Start button.

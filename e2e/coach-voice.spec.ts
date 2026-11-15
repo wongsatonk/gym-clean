@@ -235,7 +235,10 @@ test('drill on: live rep counts stay plain numbers; hints are rewritten', async 
   await page.locator('[data-coach-voice] [data-rudeness="3"]').click();
   await leaveSettings(page);
 
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await page.getByRole('button', { name: 'Exercise list' }).click();
   await page
