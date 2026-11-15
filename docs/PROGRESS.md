@@ -11,6 +11,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **Waiting on Wongsaton:**
   - Deploy OK for m4e-redesign.
   - ~~A-q6~~ (answered "keep it") and ~~A-q5~~ (answered "no") on 2026-11-15.
+  - **M9 native iOS shell (planned 2026-11-15, paper only):** the M9-q questions under "Blockers / questions" (signing route, owner line in CLAUDE.md, min iOS, which native features first, updates, keeping the PWA). No code until he answers.
   - **M10e equipment-aware swaps (planned 2026-11-15, branch `m10-equipment`):** the M10e-q questions under "Blockers / questions" are not blocking; their defaults get built.
   - **A-q7:** should Legs days show the front of the figure?
   - **Exercise first screen:** the notes row sits about 30px under the sticky Set done until you scroll. Shrinking the content would fix it.
@@ -39,11 +40,95 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M6 Polish & install
 - [x] M7 Fuel: food & nutrition. Built 2026-11-15 on `m7-fuel` (Fuel tab, targets + weekly check, Thai dishes, USDA search offline, recipes, coach food ideas, opt-in barcode). Reviewer PASS, verifier PASS (Verification evidence → M7).
 - [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
-- [ ] M9 Native iOS shell (Capacitor). Outline only in the SPEC; not planned (M10-q9)
+- [ ] M9 Native iOS shell (Capacitor). **Planned 2026-11-15 on paper (SPEC M9 + plan below); waiting on the M9-q answers, no build** → 🧍 Checkpoint G
 - [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
 - [ ] M10e Equipment-aware swaps (follow-up to M10 phase A): **planned 2026-11-15** on `m10-equipment` (gym profile, kit needs as data, the coach proposes a swap for kit his gym lacks, e.g. Leg Press) → extends 🧍 Checkpoint E
 
 ## Current milestone plan
+
+### M9 — Native iOS shell (planned 2026-11-15 — waiting on M9-q answers, no build)
+**Contract:** SPEC M9 and the Decision "M9 native shell plan" (2026-11-15). Wongsaton: "Plan M9… No code until you answer." Nothing below starts until he answers M9-q1–q6 (or says "go with the defaults"). Logic is **tests first**. 🧍 = needs his Mac / Xcode / iPhone / Apple ID.
+
+**Branch (when it starts):** `m9-native`, cut from main after M10e merges. Nothing is pushed without his OK.
+
+**Fit with the current code (why the plan looks like this):**
+- No Capacitor, `ios/` or `src/native/` exists yet. `vite.config.ts` sets `base` from `BASE_PATH` (GitHub Pages) and always adds `VitePWA` (service worker via `registerSW.js`). WKWebView doesn't run service workers for the `capacitor://` scheme, and the app is bundled anyway, so the native build needs its own mode: base `/`, no PWA plugin.
+- `src/ui/voice.ts` drives `speechSynthesis` with persona voices picked by name (`voiceNames.ts`). A native `AVSpeechSynthesizer` has a different voice list, so the spike (task 6) tries the cheaper route first: keep web speech and only wrap it in the app's audio session. `src/ui/audioTest.ts` (Settings → Audio test) is where he compares the routes.
+- `src/ui/wakeLock.ts` uses the web Wake Lock; the native idle timer is injected beside it, not instead of it.
+- There's no full backup/restore (only the dev-log export). The app's IndexedDB is separate from Safari's, so his history can't reach the app without one.
+- `src/main.ts` only mounts the app, so native start-up (detect, lazy-import `src/native/**`, inject) fits there without touching screens.
+- **Owner:** `.claude/agents/ios-engineer.md` exists (`ios/**`, `capacitor.config.ts`, `src/native/**`, `fixtures/headmotion/**`, `docs/ios-setup.md`) but CLAUDE.md's table doesn't list it (M9-q2). Tasks are tagged `[ios-engineer]` on the default "yes"; if he says no, they become `[main]`. The agent file also cites a "SPEC §M8" and a head-motion-first "9.0 spike" that the SPEC doesn't have (M9-q2).
+
+**Order:** 1 → 2 → 3 → (4 ∥ 5 ∥ 6) → 7 → 8 → 9 → 10 🧍 → 11 → 12 → 13 → 14 🧍. Backup/restore (B1–B3) runs in parallel from the start; it helps the PWA too.
+
+- [ ] 1. [main] Re-check the platform facts against current docs (Context7 / developer.apple.com / capacitorjs.com), because this plan's numbers come from the planner's knowledge (no web access in the planning session).
+  - Check: Capacitor current major, its iOS floor and Xcode version, SPM vs CocoaPods default, `@capacitor/haptics` version; free provisioning limits (7-day expiry, 3 apps per device, 10 App IDs per 7 days, capabilities a Personal Team can't use); Apple Developer Program price in Thailand and TestFlight build life; Foundation Models OS/device/language list (Thai?) and context size; `CMHeadphoneMotionManager` (for later).
+  - Files: docs/PROGRESS.md (update the Decision "M9 native shell plan" with sources and dates).
+  - Done when: every fact in that Decision has a source + date, and any change to a default is flagged to Wongsaton.
+  - Deps: M9-q answers.
+- [ ] 2. [main] Packages and a native build mode.
+  - Files: package.json (`@capacitor/core`, `@capacitor/cli`, `@capacitor/ios`, `@capacitor/haptics`, pinned to the major from task 1; scripts `build:native`, `ios:sync`, `ios:open`, `ios:run`), vite.config.ts (`--mode native` → base `/`, no `VitePWA`), .gitignore (`ios/App/Pods/`, `ios/**/xcuserdata/`, `ios/DerivedData/`, `ios/App/App/public/`, `ios/App/Signing.local.xcconfig`, `*.gymclean-backup.json`).
+  - Done when: `npm run build` produces the same file list as before (incl. `sw.js`, `registerSW.js`); `npm run build:native` has neither and uses base `/`; `npm run check` passes; CLI telemetry off is in the setup doc (task 3).
+  - Deps: 1.
+- [ ] 3. [ios-engineer] The Capacitor iOS project. 🧍 needs Xcode on his Mac (M9-q9).
+  - Files: capacitor.config.ts (appId placeholder, `webDir: 'dist'`, no `server.url`), ios/** (`npx cap add ios`), Info.plist (`NSCameraUsageDescription` in plain words, `ITSAppUsesNonExemptEncryption = NO`, portrait only, no background modes), deployment target per M9-q3, `ios/App/Signing.local.xcconfig.example` (team, bundle id; the real file gitignored), docs/ios-setup.md (install Xcode, sign in, Developer Mode on the iPhone, first run, trust the developer, re-sign every 7 days if free, `npx cap telemetry off`).
+  - Done when: `npm run build:native && npx cap sync ios` and `xcodebuild -workspace/-project … -scheme App -destination 'generic/platform=iOS Simulator' build` succeed; the simulator launches to Today with no console errors (screenshot in docs/screenshots/m9/).
+  - Deps: 2.
+- [ ] 4. [ios-engineer] Camera inside the shell.
+  - Files: ios/App/App/** (WKWebView media-capture permission handling if Capacitor's default doesn't grant `getUserMedia`; inline playback), docs/ios-setup.md (device checklist lines).
+  - Done when: the simulator build loads the pose model and wasm from the bundle with no errors (the simulator has no camera), and the on-device checklist has "camera page opens, one curl set counts" for task 10.
+  - Deps: 3.
+- [ ] 5. [ios-engineer] Platform bridge + KeepAwake + haptics, **tests first** for the TS side.
+  - Files: src/native/platform.ts(+test) (`isNative()` from the injected `window.Capacitor`, no static `@capacitor/*` import on the web path), src/native/keepAwake.ts(+test), src/native/haptics.ts(+test), ios/App/App/Plugins/KeepAwake/** (`isIdleTimerDisabled`, + XCTest).
+  - Done when: TS tests with a fake bridge pass (on/off, errors fall back to "not available"); XCTest passes on the simulator.
+  - Deps: 3.
+- [ ] 6. [ios-engineer] **Ducking spike** (the reason M9 exists), then the chosen route, **tests first** for the TS side.
+  - Route A: an `AudioSession` plugin sets `.playback` + `.duckOthers` around each web `speechSynthesis` utterance (activate on start, deactivate with `.notifyOthersOnDeactivation` on end). Keeps the persona voices.
+  - Route B: a `GymVoice` plugin speaks with `AVSpeechSynthesizer` in that session, with `speak({ text, rate, pitch, voiceId })`, `stop()`, `voices()` and start/end events.
+  - Also check whether the WebKit speech fix (2026-11-13 Decision, 326042@main) shipped in his iOS version; if speech already mixes, record it.
+  - Files: ios/App/App/Plugins/AudioSession/** or GymVoice/** (+ XCTest for the session options), src/native/voice.ts(+test).
+  - Done when: both routes build; a dev-only row in the native Audio test lets him try A and B with Spotify (task 10); TS tests cover start/end events, an error → web speech fallback, and no overlap with a running cue. The route he picks is recorded in Decisions.
+  - Deps: 3.
+- [ ] 7. [ui-engineer] Injectable native paths in voice, wake lock, haptics and Audio test, **tests first**.
+  - Files: src/ui/voice.ts(+test) (`setNativeSpeaker(impl | null)`: same queue semantics, cue kinds, never cancels a cue mid-set, falls back to web speech on error), src/ui/wakeLock.ts(+test) (`setNativeKeepAwake`), src/ui/audioTest.ts(+test) ("Native voice (ducks music)" rows when injected), haptic calls on Set done and Apply (only when injected; nothing on the web).
+  - Done when: unit tests with fakes pass and every existing voice/wake-lock test is unchanged and green. No `src/native` import from `src/ui`.
+  - Deps: 5, 6 (TS interfaces only).
+- [ ] 8. [main] Start-up wiring.
+  - Files: src/main.ts (if `isNative()`, lazy-import `src/native/**` and inject into voice / wake lock / haptics), src/ui/app.ts (Settings → About shows "App: native" / "On-device AI: <status>" from the task 9 probe).
+  - Done when: `npm run check` + full `npm run e2e` pass unchanged; a test (script or Vitest over `dist/`) shows the web main chunk has no Capacitor plugin code; the simulator build speaks through the native route.
+  - Deps: 7.
+- [ ] 9. [ios-engineer] Foundation Models **availability probe only** (de-risks M10 phase B; the brain itself is phase B).
+  - Files: ios/App/App/Plugins/GymBrain/GymBrainPlugin.swift (`availability()` → `available | deviceNotEligible | appleIntelligenceNotEnabled | modelNotReady | unsupported`, plus `supportedLanguages`), src/native/gymBrain.ts(+test).
+  - Done when: XCTest passes; on his phone (task 10) Settings shows the status and whether Thai is supported (feeds M10-q5).
+  - Deps: 5.
+- [ ] 10. 🧍 [Wongsaton + main] First install and the device checklist (docs/ios-setup.md).
+  - On his Mac: Xcode signed in with his Apple ID (free or paid per M9-q1), iPhone in Developer Mode, `npm run ios:run`.
+  - Checklist: launches in airplane mode; camera counts one curl set; ducking routes A and B with Spotify and Silent on (he picks one); the screen stays on through a 3-min rest; a PWA backup (B3) restores in the app; Safari Web Inspector → Network shows no request during a session; Settings shows the on-device AI status.
+  - Done when: results are in Verification evidence → M9 and the voice route is a Decision.
+  - Deps: 4, 6, 8, 9, B3.
+- [ ] 11. [ui-engineer] E2E for the native path in the browser: e2e/native-bridge.spec.ts with a fake `window.Capacitor` and fake plugins.
+  - Done when: a mini-session routes cues to the fake speaker, holds keep-awake from Start to Summary, and makes no network request; the full web e2e still passes. Deps: 8.
+- [ ] 12. [ios-engineer] Update route per M9-q5.
+  - Free: `npm run ios:run` (build:native → sync → run on the plugged-in / same-Wi-Fi phone); the doc says it also renews the 7-day signature.
+  - Paid: also `npm run ios:testflight` (archive → export → upload; check the current upload tool first), ios/App/ExportOptions.plist; no credentials in the repo (App Store Connect API key stays in his keychain / a gitignored path).
+  - Files: docs/ios-setup.md, ios/App/ExportOptions.plist (paid only); the script lines go to [main] in package.json.
+  - Done when: he installs one update by the chosen route (🧍). Deps: 10.
+- [ ] 13. [reviewer] Review the M9 diff (privacy: no network, no telemetry, no signing data in the repo; web path untouched) → [verifier] verify against SPEC M9 Accept (check, e2e, build, `build:native`, simulator build + screenshot, the task 10 evidence) → [main] merge + ask to push.
+  - Deps: 11, 12.
+- [ ] 14. 🧍 **Checkpoint G:** a week of gym sessions in the native app with music. He reports ducking, screen-on, camera, anything that differs from the PWA. Then M10 phase B (B1–B12) starts, with `[main, until an owner exists]` tasks moving to ios-engineer if M9-q2 is yes.
+
+#### Backup / restore (parallel track; useful for the PWA too)
+- [ ] B1. [core-engineer] Backup format, **tests first**.
+  - Files: src/data/backup.ts(+test).
+  - `exportAll(db)` → `{ format: 'gym-clean-backup', version, dexieVersion, appVersion, createdAt, tables: {…} }` with every table except the developer log (M9-q7) and never an API key (phase C); `importAll(db, json)` validates, rejects a newer `dexieVersion` or unknown format, and replaces all data in one transaction.
+  - Done when fake-indexeddb tests cover: round trip of every table, newer schema rejected, a broken file leaves the db untouched, no key field in the output.
+  - Deps: none.
+- [ ] B2. [ui-engineer] Settings → Back up / Restore.
+  - Files: src/ui/screens/settings.ts(+test), e2e/backup.spec.ts.
+  - Back up shares a `.gymclean-backup.json` file (share sheet on iOS, download elsewhere). Restore takes a file and asks "Replace all data on this phone?" with a two-tap confirm (≥ 56px). No network.
+  - Done when: render tests + e2e round trip (seed → back up → clear → restore → History shows the sessions) + 390×844 screenshot.
+  - Deps: B1 (API only).
+- [ ] B3. [main] Wire B1 ↔ B2 in app.ts. Done when the e2e passes. Deps: B1, B2.
 
 ### M10 follow-up — equipment-aware swaps (planned 2026-11-15)
 **Contract:** SPEC M10 "Follow-up: equipment-aware swaps (M10e)" and the Decision "M10e equipment-aware swaps" (2026-11-15). All logic and data is **tests first**. Wongsaton: "That's why I want the coach to help me" / "Yes, build it". He's travelling, so the M10e-q defaults (Blockers) get built.
@@ -882,7 +967,7 @@ M10-q8.
 - **Then:** 16 → 17 → 18 → 19 → 20.
 - **Critical path:** 1 → 3 → 4 → 7 → 11 → 16 → 17.
 
-#### Phase B — on-device brain (with M9; blocked on M10-q9)
+#### Phase B — on-device brain (with M9; blocked on M9, planned 2026-11-15 and waiting on M9-q; owner per M9-q2)
 - [ ] B0. Prerequisite: **M9 native shell** is specified, planned and running the web build on his iPhone
   (a separate plan). Not part of this list.
 - [ ] B1. [core-engineer] Tool definitions, the single source, **tests first**.
@@ -1793,6 +1878,17 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-15: **M9 native shell plan (planner, paper only).** Wongsaton said yes to "Plan M9 … No code until you answer." SPEC M9 is now a full section (it replaces the outline); the plan is under "Current milestone plan", marked waiting on the M9-q answers. Supersedes M10-q9.
+  - **What was checked, and how:** the planning session had **no web or Context7 access**, so the facts below come from the planner's knowledge (to mid-2026) and are **not yet re-checked against live docs**. Plan task 1 re-checks each one (capacitorjs.com docs + "Updating to 8.0" guide; developer.apple.com "Supported capabilities (iOS)", "Developer Program" / Membership pricing, TestFlight overview; Foundation Models docs + TN3193 "Managing the on-device foundation model's context window"; `CMHeadphoneMotionManager` reference) and writes the source and date here before any code. CLAUDE.md rule 8 applies.
+  - **Capacitor:** current major is **8** (released Dec 2025; 7 before it). Believed: iOS floor 15.0, needs Xcode 26, new iOS projects use Swift Package Manager by default (CocoaPods still possible), Node 22+ (the repo already requires ≥ 22). Official plugins used: `@capacitor/haptics`. Keep-awake and ducking are two tiny own plugins instead of community packages (fewer dependencies). The CLI has opt-in usage telemetry: turned off in the setup doc.
+  - **Free Apple ID (Personal Team):** the app stops opening **7 days** after install until it's re-run from Xcode on his Mac; about **3 apps** per device at once and **10 App IDs per 7 days**; no TestFlight; no capabilities like push, iCloud, Sign in with Apple, Associated Domains (HealthKit's status to re-check). M9's features (camera, audio session, idle timer, haptics, Foundation Models, headphone motion) need **no special entitlement**, so they all work on a free Apple ID. iPhone needs Developer Mode on.
+  - **Apple Developer Program:** **US$99/year** (charged in local currency in Thailand). One-year signing; **TestFlight** builds install over the air and last **90 days**; uploads can be scripted from his Mac. Paying needs his explicit yes (CLAUDE.md rule 7).
+  - **Foundation Models:** iOS/iPadOS/macOS **26+**, an Apple-Intelligence device (iPhone 15 Pro and later, so his iPhone 17 Pro qualifies), Apple Intelligence turned on and the model downloaded (`SystemLanguageModel.default.availability`). Runs fully on the device. Context window about **4,096 tokens per session** (instructions + tools + context + replies together), so M10 B2's provisional 1,500-token context budget is about the most that fits. **Languages:** English and the other Apple Intelligence languages (French, German, Italian, Portuguese, Spanish, Japanese, Korean, Chinese, and more added in 26.x); **Thai is not on the list known to the planner** → Thai free text goes to the rule matcher (M10-q5); the task 9 probe reads `supportedLanguages` on his phone.
+  - **`CMHeadphoneMotionManager` (later, not M9):** iOS 14+, AirPods Pro / AirPods (3rd gen+) / AirPods Max / some Beats, `NSMotionUsageDescription`, updates about 25 Hz while the app is active; no entitlement. It needs a SPEC section (what head motion would do) before it's planned.
+  - **Planner's recommended defaults (the M9-q questions):** start on the **free Apple ID** (costs nothing, proves ducking/camera/screen-on first), decide on the paid account at Checkpoint G; **ios-engineer** in the CLAUDE.md table; **min iOS 26.0** (his phone only, Foundation Models needs it); **first features:** shell + offline bundle + camera + ducked voice + screen-on (+ light haptics, + backup/restore to move his data), then M10 phase B's Foundation Models; head motion, notifications and HealthKit later or never; updates from a **bundled** build (no remote URL); **keep the PWA** as the main app.
+  - **Native build mode:** `--mode native` → base `/`, no service worker (WKWebView doesn't run one for `capacitor://`; the bundle is offline anyway). The web build and deploy are unchanged.
+  - **HealthKit / Apple Watch:** the ios-engineer agent text lists them, but SPEC §6 keeps them out of scope. SPEC wins until he says otherwise (M9-q4).
+  - The M9-q defaults are provisional until he answers.
 - 2026-11-15: **M10e equipment-aware swaps (planner).** His gym has no leg press, but Legs B has Leg Press. Wongsaton: "That's why I want the coach to help me" and "Yes, build it". Plan under "Current milestone plan"; contract: SPEC M10 "Follow-up: equipment-aware swaps (M10e)".
   - **Scope:** a follow-up to M10 phase A on branch `m10-equipment`, not a new milestone number. It proceeds on his explicit word while Checkpoint E is open, as M7 and M10 did.
   - **Gym profile:** a list of equipment ids stored on the phone (settings key `'gym'`, existing table, **no Dexie version bump**). Default = his list from the photos (Decision "Gym equipment (M10-q6)"). Editable later (Settings → My gym, can-follow).
@@ -2463,6 +2559,19 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   4. The setup screenshot shows the sticky Save targets bar just below "Stays on this phone." with no gap. It isn't clipped.
 
 ## Blockers / questions for Wongsaton
+- **New (M9 native iOS shell, planned 2026-11-15; BLOCKING: no code until you answer, or say "go with the defaults"). The platform facts are in Decisions "M9 native shell plan" and get re-checked against live docs before any code:**
+  - **(M9-q1) How the app gets signed.**
+    - **Free Apple ID:** costs nothing. The app stops opening 7 days after each install until you plug in (or same Wi-Fi) and re-run it from Xcode on your Mac. At most ~3 such apps on the phone. No TestFlight.
+    - **Paid Apple Developer Program:** US$99 a year (billed in baht). Signing lasts a year, updates install from the TestFlight app over the air (each build lasts 90 days), no Mac needed after each change.
+    - **Default:** start free to prove ducking, camera and screen-on; decide at Checkpoint G whether the weekly re-sign is worth US$99/year to avoid. Nothing in M9 needs the paid account.
+  - **(M9-q2) Owner for the native code.** OK to add this line to the CLAUDE.md "Agent team" table? `| ios-engineer | ios/**, capacitor.config.ts, src/native/** (Capacitor shell, Swift plugins, TS bridge), docs/ios-setup.md, scripts/gen-trainer-tools.mjs (M10 B3) |`. The agent file `.claude/agents/ios-engineer.md` already exists, but it mentions a "SPEC §M8" that doesn't exist, starts with an AirPods head-motion spike and lists HealthKit (out of scope in SPEC §6). **Default:** yes to the line, and the agent file is updated to match SPEC M9 (head motion / HealthKit removed until a milestone covers them). The M10 phase B tasks tagged `[main, until an owner exists]` move to ios-engineer.
+  - **(M9-q3) Minimum iOS.** **Default: iOS 26.0**, since it's only for your iPhone 17 Pro and Apple's on-device model needs 26 anyway. Alternative: Capacitor's floor (iOS 15) if another phone should run it.
+  - **(M9-q4) Which native features first.** **Default, in M9:** the shell itself (offline, camera), **voice that ducks music** (the original reason), **screen stays on**, light **haptics** on Set done / Apply, and **Back up / Restore** to move your history in. **Next (M10 phase B):** Apple's on-device coach brain. **Later, only if you want them (each gets its own spec):** AirPods head motion, notifications (e.g. "rest over" while the phone is locked), HealthKit / Apple Watch (currently out of scope). Want anything moved up or dropped?
+  - **(M9-q5) How updates reach your phone.** **Default:** the web app is bundled inside the native app (works offline, nothing loaded from the internet). An update = `npm run ios:run` from your Mac (free route; this also renews the 7 days) or a TestFlight build (paid route). Alternative: the app loads the GitHub Pages site, so updates arrive like the PWA, but it then needs the network on launch and loses offline use.
+  - **(M9-q6) Keep the PWA?** **Default: yes.** GitHub Pages stays the main app and keeps working unchanged; the native app is an add-on. You'd pick one for daily logging, because their data is separate (see q7).
+  - **(M9-q7) Moving your data.** The app can't see Safari's storage. **Default:** Settings → Back up in the PWA, Restore in the app (one file through Files / AirDrop, never uploaded). The developer log isn't included (it's large); a coach API key never is. OK?
+  - **(M9-q8) App name and bundle id.** **Default:** "Gym Clean"; the bundle id (e.g. `com.<you>.gymclean`) and your team id live only in a local, gitignored Xcode file, never in the public repo.
+  - **(M9-q9) Xcode on your Mac.** Is Xcode 26 installed (with the iOS simulator)? The helpers run on this Mac, so they can do simulator builds themselves; signing in with your Apple ID, Developer Mode on the iPhone and the first install are yours (🧍). **Default:** you install Xcode before M9 starts.
 - **New (M10e equipment-aware swaps, planned 2026-11-15; not blocking. You're travelling, so the defaults get built):**
   - **(M10e-q1) Leg Press replacement order.** **Default:** Smith machine squat first, then barbell back squat in the half rack (safeties set), then a dumbbell split squat. Same 4 × 10–12; the weight is blank the first time ("pick your weight").
   - **(M10e-q2) Standing calf raises (Legs A).** The plan's version uses a calf machine, and none was seen. **Default:** the coach offers a swap once (Smith machine calf raise, then standing dumbbell calf raise). If you already do them on the smith, tap Keep it.
@@ -2521,7 +2630,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   - **(M10-q6) Your gym's equipment** (for swaps): dumbbells and a bench for sure. Which machines and cables are there (lat pulldown, cable stack, leg press, leg curl/extension, calf machine, pull-up bar, …)? Swaps only suggest what's on the list. **ANSWERED 2026-11-15: from his 41 gym photos (kept private, `private/gym-equipment-photos/`, never committed); list in Decisions "Gym equipment (M10-q6)".**
   - **(M10-q7) Phase C (Claude).** It needs a **paid Anthropic account** and your own API key, pasted into the app and kept only on your phone. When it's on, your messages, plan and workout numbers go to Anthropic (never notes, camera or the dev log). Do you want it at all? If yes: default model `claude-opus-5-5`, or a cheaper one?
   - **(M10-q8) Order.** Build M10 phase A right after M6 merges (before M7 Fuel)? Also, CLAUDE.md says to finish milestones in order, and Checkpoints C/B3 are still open. OK to build M10 phase A while those wait? Food tips need M7, so they come after it either way.
-  - **(M10-q9) Native shell (M9) and its owner.** The SPEC only has an M9 outline. Phase B needs it planned first: Capacitor iOS app, how it gets on your phone (Xcode on your Mac with a free Apple ID, which re-signs every 7 days, or a paid Apple Developer account for TestFlight). There's also no agent that owns `ios/**` and `src/native/**`. Add one (e.g. `native-engineer`) to the CLAUDE.md table? That needs your OK.
+  - **(M10-q9) Native shell (M9) and its owner.** **Superseded 2026-11-15 by M9-q1–q9** (M9 is now specified and planned on paper). Original question: The SPEC only has an M9 outline. Phase B needs it planned first: Capacitor iOS app, how it gets on your phone (Xcode on your Mac with a free Apple ID, which re-signs every 7 days, or a paid Apple Developer account for TestFlight). There's also no agent that owns `ios/**` and `src/native/**`. Add one (e.g. `native-engineer`) to the CLAUDE.md table? That needs your OK.
   - **(M10-q10) How good must the on-device brain be?** Default bar: the right action and arguments on ≥ 85% of the example requests, and 100% safe replies. Higher or lower?
   - **(M10-q11) Updating the default program.** If I change `program.json` later and you've already edited your plan with the coach, default: keep your plan and show "a new default program is available" (Use it / Keep mine). OK?
   - **(M10-q12) Chat history.** Default: the chat isn't saved; only the list of applied plan changes is kept (for Undo). Want the conversation kept on the phone?

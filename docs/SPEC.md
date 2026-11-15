@@ -856,11 +856,70 @@ PWA from M6).
 - 🧍 **Checkpoint D:** I collect/label my meal photos (via the save-photos setting), run the
   training, import the model, and test a week of real meals.
 
-### M9 — Native iOS shell (outline only, added 2026-11-14; not planned yet)
-Referenced by the 2026-11-13 music-ducking Decision and by M10 phase B. A Capacitor iOS app that wraps the
-same web build, adds AVAudioSession `.playback` + `.duckOthers` for spoken cues, and hosts native plugins
-(M10's on-device brain). Scope, distribution (personal device / TestFlight) and owner are open questions
-(PROGRESS Blockers, M10-q9). M10 phase A doesn't need it.
+### M9 — Native iOS shell (specified 2026-11-15; planned, waiting on the M9-q answers)
+Referenced by the 2026-11-13 music-ducking Decision and by M10 phase B. Wongsaton said yes to "Plan M9"
+(2026-11-15); no code until he answers the M9-q questions (PROGRESS Blockers). Decision "M9 native shell
+plan" (2026-11-15) holds the version/provisioning facts and the defaults.
+
+**What it is:** a Capacitor iOS app for **his own iPhone only** (iPhone 17 Pro). It wraps the **same web
+build** (bundled into the app, so it works offline from the first launch) and adds a few native pieces the
+web can't do on iOS. It is not an App Store app.
+
+#### Goals
+1. **Same app, inside a shell.** Every screen, the camera + pose pipeline, Fuel, the coach and the data
+   layer run unchanged in the WKWebView. No screen is rewritten in Swift.
+2. **Voice ducks music** (the reason M9 exists): spoken cues lower his music (Spotify etc.) instead of
+   pausing it, and play with the Silent switch on. AVAudioSession `.playback` + `.duckOthers`, active only
+   while a cue is speaking, then released with `.notifyOthersOnDeactivation` so the music comes back up.
+   The spike (plan task 6) decides the route: the app's audio session around the web `speechSynthesis`
+   (keeps the persona voices), or a native `AVSpeechSynthesizer` plugin (voice list mapped).
+3. **Screen stays on** for the whole session through the native idle timer (the web Wake Lock stays the
+   PWA path).
+4. **Haptics** (small): a light tap on Set done and Apply. Never the only signal (voice over screen).
+5. **Moving data in:** Settings → **Back up** / **Restore** (one versioned JSON file through the share sheet
+   / Files), in both the PWA and the app, because the app's IndexedDB is separate from Safari's.
+6. **Ready for M10 phase B:** the `GymBrain` plugin (Apple Foundation Models) is built in M10 phase B, not
+   here; M9 only proves a plugin round trip and shows a read-only "On-device AI: <status>" line in Settings.
+
+**Later, not in M9 (each needs its own SPEC section first):** AirPods head motion
+(`CMHeadphoneMotionManager`), local notifications, HealthKit / Apple Watch (still out of scope per §6),
+live-update services.
+
+#### What stays web
+- The **PWA on GitHub Pages stays** the main, always-working app (unless M9-q6 says otherwise). Every
+  native feature sits behind `isNative()` plus a plugin availability check, with the current web path as
+  the fallback. The web build, `npm run check`, `npm run e2e` and the deploy must pass with no native code
+  taken, and Capacitor code stays out of the web bundle's main chunk.
+- All logic stays in `src/core/` (pure TS). Swift stays thin: it speaks, keeps the screen on, taps, and
+  (later) answers a model call. No rules, thresholds or copy in Swift.
+
+#### Privacy (same rules, nothing leaves the phone)
+- Same hard rules as CLAUDE.md: video and inference stay on the device, no recording, no analytics.
+- The app makes **no network request** of its own: bundled web build (no `server.url`), no remote config,
+  no crash reporting, no push, no extra network entitlements. Capacitor CLI telemetry is turned off
+  (`npx cap telemetry off`). The opt-in Open Food Facts lookup (M7) and phase C (M10) behave exactly as in
+  the PWA, off by default.
+- Apple's Foundation Models (M10 phase B) runs on the device; the plugin never calls a server model.
+- Info.plist usage strings say plainly what each permission is for (camera: "Counts your reps on this
+  phone. Video never leaves it."). Only the permissions a shipped feature needs.
+- **Signing stays his:** Apple ID, team ID, bundle id and certificates live in a gitignored local Xcode
+  config; the repo has a `.example` file only. The repo is public.
+- Backup files hold his data: created only when he taps Back up, never committed, no API key inside.
+
+#### Accept
+- Web unchanged: `npm run check`, `npm run e2e`, `npm run build` pass; the web `dist/` keeps its service
+  worker and file list; a test asserts the main chunk has no Capacitor plugin code.
+- Native build: `npm run build:native` (base `/`, no service worker), `npx cap sync ios` and an
+  `xcodebuild` simulator build succeed; the simulator launches to Today with no console errors (screenshot).
+- Unit tests (tests first) for the native adapters with fake plugins: voice queue semantics unchanged
+  (kinds, never cancels a cue mid-set), fallback to the web path on any plugin error, keep-awake on/off with
+  the session, backup round trip (every table, newer schema rejected, no API key).
+- An e2e with a fake `window.Capacitor` shows cues routed to the native speaker and the screen kept awake.
+- On his iPhone (🧍, checklist in `docs/ios-setup.md`): launches in airplane mode; the camera counts a curl
+  set; Spotify ducks under "Ten seconds" and comes back, with Silent on; the screen stays on through a 3-min
+  rest; a PWA backup restores in the app; Safari Web Inspector shows no network request during a session.
+- 🧍 **Checkpoint G:** a week of gym sessions in the native app with music playing. He reports ducking,
+  screen-on, camera and anything that differs from the PWA.
 
 ### M10 — AI trainer: plan actions, coach chat, on-device brain (added 2026-11-14)
 Wongsaton: "same feature as real personal training such as suggest me the food, I can ask to postpone the
