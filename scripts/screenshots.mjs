@@ -2532,6 +2532,172 @@ async function m7(browser) {
   await q.ctx.close();
 }
 
+// ---- M10e + M9 backup verify (2026-11-15) ----
+async function m10eSeed(page, sessions) {
+  for (let i = 0; i < 50; i++) {
+    const ok = await page.evaluate((sessions) => new Promise((resolve) => {
+      void indexedDB.databases().then((dbs) => {
+        if (!dbs.some((d) => d.name === 'gym-clean')) return resolve(false);
+        const open = indexedDB.open('gym-clean');
+        open.onerror = () => resolve(false);
+        open.onsuccess = () => {
+          const d = open.result;
+          if (!d.objectStoreNames.contains('sessions')) { d.close(); return resolve(false); }
+          const tx = d.transaction(['sessions'], 'readwrite');
+          for (const s of sessions)
+            tx.objectStore('sessions').put({ ...s, setsDone: 0, totalVolumeKg: 0, restOverruns: 0 });
+          tx.oncomplete = () => { d.close(); resolve(true); };
+          tx.onerror = () => resolve(false);
+        };
+      });
+    }), sessions);
+    if (ok) break;
+    await page.waitForTimeout(200);
+  }
+  await page.reload();
+}
+
+async function m10eShot(p, name, extra = {}) {
+  await p.page.waitForTimeout(300);
+  await shot(p.page, p.log, `m10e-verify-${name}`, { sizes: await m7Sizes(p.page), ...extra });
+}
+
+async function m10e(browser) {
+  const p = await m7Phone(browser, m7At(13, 18));
+  const { page } = p;
+  const steps = {};
+  const days = ['push-a', 'pull-a', 'legs-a', 'push-b', 'pull-b'];
+  await m10eSeed(page, days.map((dayId, i) => ({ sessionId: `s-${dayId}`, dayId,
+    startedAt: m7At(8 + i, 18), endedAt: m7At(8 + i, 18) + 50 * 60_000 })));
+  await page.locator('[data-hero="legs-b"]').waitFor();
+  const prompt = page.locator('[data-gym-prompt="Leg_Press"]');
+  await prompt.waitFor();
+  steps.promptText = (await prompt.textContent())?.trim();
+  await m10eShot(p, 'prompt-today');
+  const preview = page.locator('[data-screen="preview"]');
+  await page.locator('[data-hero="legs-b"] [data-start]').click();
+  await preview.locator('li.ex-row').first().waitFor();
+  steps.previewHasLegPressBeforeTap = await preview.locator('[data-ex="Leg_Press"]').count();
+  await m10eShot(p, 'prompt-preview');
+  await preview.getByRole('button', { name: '‹ Back' }).click();
+  await prompt.locator('[data-gym-swap]').click();
+  const coach = page.getByRole('dialog', { name: 'Coach' });
+  const card = coach.locator('[data-proposal]');
+  await card.waitFor();
+  steps.proposal = (await card.textContent())?.replace(/\s+/g, ' ').trim();
+  steps.coachChips = await coach.locator('button').allTextContents();
+  await m10eShot(p, 'proposal');
+  await card.getByRole('button', { name: 'Apply' }).click();
+  await page.locator('[data-undo-toast]').waitFor();
+  steps.promptAfterApply = await prompt.count();
+  await m10eShot(p, 'applied-today');
+  await page.locator('[data-hero="legs-b"] [data-start]').click();
+  const smith = preview.locator('[data-ex="Smith_Machine_Squat"]');
+  await smith.waitFor();
+  steps.smithInfoBadge = await smith.locator('[data-badge="info"]').count();
+  steps.legPressAfterApply = await preview.locator('[data-ex="Leg_Press"]').count();
+  await m10eShot(p, 'applied-preview');
+  await preview.getByRole('button', { name: '‹ Back' }).click();
+  await page.locator('[data-tab="settings"]').click();
+  await page.locator('[data-plan-changes-open]').click();
+  const changes = page.locator('[data-screen="plan-changes"]');
+  await changes.locator('li.plan-change').first().waitFor();
+  await m10eShot(p, 'plan-changes');
+  await changes.locator('[data-undo-change]').first().click();
+  await changes.locator('li.plan-change[data-undone]').first().waitFor();
+  await m10eShot(p, 'plan-changes-undone');
+  await changes.getByRole('button', { name: '‹ Back' }).click();
+  await page.locator('[data-tab="today"]').click();
+  await prompt.waitFor();
+  steps.promptBackAfterUndo = await prompt.count();
+  await page.locator('[data-hero="legs-b"] [data-start]').click();
+  await preview.locator('li.ex-row').first().waitFor();
+  steps.legPressAfterUndo = await preview.locator('[data-ex="Leg_Press"]').count();
+  await preview.getByRole('button', { name: '‹ Back' }).click();
+
+  // My gym ticks.
+  await page.locator('[data-tab="settings"]').click();
+  await m10eShot(p, 'settings');
+  await page.locator('[data-my-gym-open]').click();
+  const gym = page.locator('[data-screen="my-gym"]');
+  await gym.waitFor();
+  await m10eShot(p, 'my-gym');
+  const legPress = gym.locator('[data-gym-item="leg-press"]');
+  const smithItem = gym.locator('[data-gym-item="smith-machine"]');
+  steps.myGymLegPressBefore = await legPress.getAttribute('aria-checked');
+  steps.myGymSmithBefore = await smithItem.getAttribute('aria-checked');
+  await legPress.click();
+  await page.waitForTimeout(300);
+  steps.myGymLegPressAfter = await legPress.getAttribute('aria-checked');
+  await legPress.scrollIntoViewIfNeeded();
+  await m10eShot(p, 'my-gym-ticked');
+  await page.reload();
+  await page.locator('[data-screen="today"]').waitFor();
+  await page.locator('[data-hero="legs-b"]').waitFor();
+  await page.waitForTimeout(500);
+  steps.promptAfterLegPressTicked = await prompt.count();
+  await page.locator('[data-tab="settings"]').click();
+  await page.locator('[data-my-gym-open]').click();
+  await gym.waitFor();
+  steps.myGymLegPressAfterReload = await legPress.getAttribute('aria-checked');
+  await legPress.click();
+  await page.waitForTimeout(300);
+  await page.reload();
+  await page.locator('[data-hero="legs-b"]').waitFor();
+  await prompt.waitFor({ timeout: 5000 }).catch(() => {});
+  steps.promptAfterUntick = await prompt.count();
+
+  // Backup → Restore (two taps) → Undo.
+  await page.locator('[data-tab="settings"]').click();
+  const backup = page.locator('[data-backup]');
+  await backup.scrollIntoViewIfNeeded();
+  await m10eShot(p, 'backup');
+  const [dl] = await Promise.all([page.waitForEvent('download'),
+    page.locator('[data-backup-export]').click()]);
+  mkdirSync('test-results/verify-m10e', { recursive: true });
+  const file = `test-results/verify-m10e/${dl.suggestedFilename()}`;
+  await dl.saveAs(file);
+  steps.backupFile = dl.suggestedFilename();
+  await page.locator('[data-unit="lb"]').click();
+  await page.locator('[data-backup-file]').setInputFiles(file);
+  await page.locator('[data-backup-confirm]').waitFor();
+  steps.confirmText = (await backup.textContent())?.replace(/\s+/g, ' ').trim();
+  await backup.scrollIntoViewIfNeeded();
+  await m10eShot(p, 'restore-confirm');
+  const replace = page.locator('[data-backup-replace]');
+  await replace.click();
+  steps.replaceAfterOneTap = (await replace.textContent())?.trim();
+  await m10eShot(p, 'restore-tap-again');
+  await replace.click();
+  await page.locator('[data-backup-status="ok"]').waitFor();
+  steps.unitAfterRestore = await page.locator('[data-unit="kg"]').getAttribute('aria-pressed');
+  await m10eShot(p, 'restored');
+  await page.locator('[data-undo-toast]').getByRole('button', { name: 'Undo' }).click();
+  await page.waitForTimeout(500);
+  steps.statusAfterUndo = (await page.locator('[data-backup-status]').textContent())?.trim();
+  steps.unitLbAfterUndo = await page.locator('[data-unit="lb"]').getAttribute('aria-pressed');
+  await backup.scrollIntoViewIfNeeded();
+  await m10eShot(p, 'restore-undone');
+
+  // M7 Fuel: coach "what should I eat" with whole grams.
+  await page.locator('[data-tab="fuel"]').click();
+  await page.locator('main[data-screen="fuel"]').waitFor();
+  const setup = await m7SetUp(page);
+  await setup.locator('[data-setup-save]').click();
+  await page.locator('main[data-screen="fuel"] [data-ring="kcal"]').waitFor();
+  await page.locator('[data-tab="today"]').click();
+  await page.locator('[data-coach-open]').click();
+  await coach.getByLabel('Ask the coach').fill('what should I eat');
+  await coach.getByRole('button', { name: 'Send' }).click();
+  await coach.locator('[data-food-card]').waitFor();
+  steps.foodRows = await coach.locator('[data-food-row]').allTextContents();
+  steps.foodCard = (await coach.locator('[data-food-card]').first().textContent())?.replace(/\s+/g, ' ').trim();
+  steps.decimalGrams = (steps.foodCard.match(/\d+\.\d+\s*g\b/g) ?? []);
+  await m10eShot(p, 'coach-food');
+  results.push({ flow: 'm10e', steps, offsite: p.offsite, off: p.off, console: p.log });
+  await p.ctx.close();
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -2565,6 +2731,7 @@ try {
   else if (milestone === 'm4f') await m4f(browser);
   else if (milestone === 'm4f-setup') await m4fSetup(browser);
   else if (milestone === 'm7') await m7(browser);
+  else if (milestone === 'm10e') await m10e(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
