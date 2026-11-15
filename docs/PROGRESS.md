@@ -118,7 +118,9 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] 14. 🧍 **Checkpoint G:** a week of gym sessions in the native app with music. He reports ducking, screen-on, camera, anything that differs from the PWA. Then M10 phase B (B1–B12) starts, with `[main, until an owner exists]` tasks moving to ios-engineer if M9-q2 is yes.
 
 #### Backup / restore (parallel track; useful for the PWA too)
-- [ ] B1. [core-engineer] Backup format, **tests first**.
+- [x] B1. [core-engineer] Backup format, **tests first**. Done 2026-11-15 (23 tests; `npm run check` green, 2605 unit tests).
+  - API for B2/B3: `exportAll(db, { appVersion?, now? }) → BackupFile` (save with `JSON.stringify`); `importAll(db, textOrObject, { now? }) → { counts, undo }` (`undo` = the pre-import data as a BackupFile, kept in memory; `importAll(db, undo)` reverts); `validateBackup(db, input)` checks without writing; errors are `BackupError` with `code` `'corrupt' | 'format' | 'newer' | 'write'` (no partial writes in any case). `BACKUP_TABLES` lists the 13 backed-up tables; a test fails if a new Dexie table isn't put there or in `DEVLOG_TABLES`.
+  - Rules: older `dexieVersion` files restore (missing tables come back empty); restore keeps the dev log and any secret settings row on this phone; secret-looking names (`apiKey`, `secret`, `token`, `password`…) are stripped from exports and ignored in files. The UI must confirm before calling `importAll` (B2's two-tap).
   - Files: src/data/backup.ts(+test).
   - `exportAll(db)` → `{ format: 'gym-clean-backup', version, dexieVersion, appVersion, createdAt, tables: {…} }` with every table except the developer log (M9-q7) and never an API key (phase C); `importAll(db, json)` validates, rejects a newer `dexieVersion` or unknown format, and replaces all data in one transaction.
   - Done when fake-indexeddb tests cover: round trip of every table, newer schema rejected, a broken file leaves the db untouched, no key field in the output.
