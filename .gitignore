@@ -39,3 +39,6 @@ devlog-exports/
 
 # M7: raw USDA FoodData Central downloads (rebuilt by scripts/build-foods.mjs --download)
 data-src/
+
+# Private photos and files (e.g. gym equipment photos): never commit
+private/
