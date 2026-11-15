@@ -4,9 +4,9 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Live:** c5e3a0d on main, deployed 2026-11-14: everything through M6, M4d 3D demos for all 30 program exercises, and M4f wave 1 (camera for hammer / concentration / incline curls, DB shoulder press, bent-over row, triceps extension, all `learning`).
-- **In progress:** M10 phase A AI trainer on branch `m10a-trainer`: tasks 1–18 done (review CHANGES REQUIRED → fix round a83406f, ee7a68c, 5896f2a → re-review PASS). Task 19 verification running; Wongsaton pre-approved the deploy ("deploy when it's ready").
-- **Next step:** on verifier PASS, fast-forward main to m10a-trainer and push (deploy), then tell Wongsaton. Then 🧍 Checkpoint E (a week with the coach) and 🧍 Checkpoint F1 (camera wave-1 sets).
+- **Live:** 119acd5 on main, deployed 2026-11-15 (CI 118 passed): everything above plus **M10 phase A AI trainer** (coach chat, Not today, go easy on an area, lighter, deload, swap, stall fix, Undo, Plan changes).
+- **In progress:** nothing building. Waiting on gym checkpoints.
+- **Next step:** 🧍 Checkpoint E (a week with the coach: at least one Not today, one Go easy on…, one swap) and 🧍 Checkpoint F1 (camera wave-1 sets + dev-log export). Then M4f wave 2 or M7.
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **Waiting on Wongsaton:**
   - Deploy OK for m4e-redesign.
@@ -505,7 +505,7 @@ M10-q8.
   - 390×844 screenshots `docs/screenshots/m10-*`, console clean, 0 off-device requests.
   - Evidence into PROGRESS.
   - Deps: 18.
-- [ ] 20. [main] Merge `m10a-trainer` + **ask Wongsaton before pushing** (push = deploy). Deps: 19.
+- [x] 20. [main] Merge `m10a-trainer` + **ask Wongsaton before pushing** (push = deploy). Deps: 19.
 - [ ] 21. 🧍 **Checkpoint E:** a week with the coach (Not today, Go easy on…, a swap); he reports. Deps: 20.
 
 **Later in phase A (needs M7):**
