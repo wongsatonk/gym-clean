@@ -36,6 +36,8 @@ export type SettingsProps = {
   devLog: HTMLElement;
   /** M7: `nutritionSettings(...)` (src/ui/fuel). Omitted → no Nutrition section. */
   nutrition?: HTMLElement | null | undefined;
+  /** M9 B2: `backupPanel(...)`. Omitted → no Backup section. */
+  backup?: HTMLElement | null | undefined;
 };
 
 export type SettingsActions = {
@@ -50,6 +52,8 @@ export type SettingsActions = {
   onTab: (tab: TabId) => void;
   /** M10: opens Settings → Plan changes. Omitted → no Plan section. */
   onPlanChanges?: (() => void) | undefined;
+  /** M10e: opens Settings → My gym. Omitted → no Gym section. */
+  onMyGym?: (() => void) | undefined;
 };
 
 /** The unit help line under the kg / lb choice. */
@@ -161,6 +165,24 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
       h('p', { class: 'muted set-note' }, unitNote(props.unit)),
     ),
     props.nutrition ? section('nutrition', 'flame', 'Nutrition', props.nutrition) : null,
+    actions.onMyGym
+      ? section(
+          'gym',
+          'dumbbell',
+          'Gym',
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'set-action',
+              'data-my-gym-open': true,
+              onclick: () => actions.onMyGym?.(),
+            },
+            'My gym',
+          ),
+          h('p', { class: 'muted set-note' }, 'The kit your gym has. Swaps use only that.'),
+        )
+      : null,
     actions.onPlanChanges
       ? section(
           'plan',
@@ -178,6 +200,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           ),
         )
       : null,
+    props.backup ? section('backup', 'lock', 'Backup', props.backup) : null,
     section('devlog', 'bars', 'Developer log', props.devLog),
     tabBar('settings', actions.onTab),
   );

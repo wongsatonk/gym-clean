@@ -3048,6 +3048,31 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+/* M9 B2 Settings → Backup (src/ui/screens/backupPanel.ts): neutral actions, the two-tap
+   Replace reuses .plan-reset (danger outline, filled once armed). Errors: warn colour (attention)
+   with plain words ("Nothing changed"), never colour alone. */
+.settings .backup-panel,
+.settings .backup-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings .backup-file {
+  display: none;
+}
+
+.settings .backup-q {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.settings .backup-status.error {
+  color: var(--warn);
+  font-weight: 700;
+}
+
 /* Segmented choices (unit, coach voice): one outlined track, the chosen one a white fill + check. */
 .settings .segmented {
   gap: 0;

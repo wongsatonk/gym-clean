@@ -17,7 +17,6 @@ import {
   equipmentItems,
   exerciseById,
   gymCanDo,
-  gymHas,
   howToFor,
   kitNeeds,
   missingKitLabels,
@@ -259,13 +258,6 @@ describe('catalog (M10 swap pool)', () => {
     expect(areaForWord('banana')).toBeUndefined();
     // Every area can be named in words.
     for (const area of ALL_AREAS) expect(Object.values(bodyAreasJson.words), area).toContain(area);
-  });
-
-  it('legacy gymHas (until task 9b) still answers coarse equipment values', () => {
-    expect(gymHas('dumbbell')).toBe(true);
-    expect(gymHas('kettlebells')).toBe(true);
-    expect(gymHas('barbell')).toBe(false);
-    expect(gymHas(null)).toBe(false);
   });
 
   it('every program exercise has at least one swap candidate (same primary muscle, kit he has, not in the day)', () => {

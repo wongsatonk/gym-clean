@@ -117,10 +117,5 @@
     "smith-machine",
     "leg-extension",
     "leg-curl"
-  ],
-  "legacyNote": "available/substitutes back the old coarse gymHas() check; removed in M10e task 9b once app.ts no longer uses it.",
-  "available": ["body only", "dumbbell", "cable", "machine"],
-  "substitutes": {
-    "kettlebells": "dumbbell"
-  }
+  ]
 }

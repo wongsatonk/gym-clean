@@ -125,12 +125,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `exportAll(db)` → `{ format: 'gym-clean-backup', version, dexieVersion, appVersion, createdAt, tables: {…} }` with every table except the developer log (M9-q7) and never an API key (phase C); `importAll(db, json)` validates, rejects a newer `dexieVersion` or unknown format, and replaces all data in one transaction.
   - Done when fake-indexeddb tests cover: round trip of every table, newer schema rejected, a broken file leaves the db untouched, no key field in the output.
   - Deps: none.
-- [ ] B2. [ui-engineer] Settings → Back up / Restore.
+- [x] B2. [ui-engineer] Settings → Back up / Restore. Done 2026-11-15: `src/ui/screens/backupPanel.ts`(+test) in a Settings "Backup" section (before the developer log). Back up = a Blob download `gym-clean-YYYY-MM-DD.gymclean-backup.json` (no share sheet yet: `navigator.share` needs a fresh tap after the async export on iOS; the download goes to Files). Restore: file picker → `validateBackup` → "Replace all data on this phone?" with "N workouts" from the file, two-tap Replace (as Reset) or Cancel → `importAll` → settings and plan read again without a reload → Undo toast (`importAll(db, undo)`). Errors: newer → "Update the app first", corrupt/format → "This file isn't a Gym Clean backup. Nothing changed.", write → "Couldn't restore. Nothing changed.". e2e `e2e/backup.spec.ts` (2 tests).
   - Files: src/ui/screens/settings.ts(+test), e2e/backup.spec.ts.
   - Back up shares a `.gymclean-backup.json` file (share sheet on iOS, download elsewhere). Restore takes a file and asks "Replace all data on this phone?" with a two-tap confirm (≥ 56px). No network.
   - Done when: render tests + e2e round trip (seed → back up → clear → restore → History shows the sessions) + 390×844 screenshot.
   - Deps: B1 (API only).
-- [ ] B3. [main] Wire B1 ↔ B2 in app.ts. Done when the e2e passes. Deps: B1, B2.
+- [x] B3. [main] Wire B1 ↔ B2 in app.ts. Done when the e2e passes. Deps: B1, B2. Done 2026-11-15 (ui-engineer, delegated): `exportBackup` / `pickRestoreFile` / `confirmRestore` / `undoRestore` / `reloadStored` in app.ts's Settings area. Screenshots `docs/screenshots/m9-backup-{confirm,restored,refused}.png`.
 
 ### M10 follow-up — equipment-aware swaps (planned 2026-11-15)
 **Contract:** SPEC M10 "Follow-up: equipment-aware swaps (M10e)" and the Decision "M10e equipment-aware swaps" (2026-11-15). All logic and data is **tests first**. Wongsaton: "That's why I want the coach to help me" / "Yes, build it". He's travelling, so the M10e-q defaults (Blockers) get built.
@@ -153,7 +153,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `GymProfile = { equipment: string[]; kept: string[] /* exercise ids he chose to keep despite missing kit */; updatedAt: number }` (SPEC M10e data model).
   - Done when: typecheck passes and the shape matches the SPEC.
   - Deps: none.
-- [ ] 2. [core-engineer] Equipment vocabulary, default profile and per-exercise kit needs, **tests first**.
+- [x] 2. [core-engineer] Equipment vocabulary, default profile and per-exercise kit needs, **tests first**.
   - Files: src/data/equipment.json (rewritten: `items: { id, label, group }[]`, `defaultProfile: string[]`, a note pointing at the M10-q6 Decision), src/data/exerciseKit.json (new: `exerciseId → { needs: string[][]; replaceWith?: string[] }`; `needs` is "any one of these lists, each list all-of"; bodyweight = `[[]]`), src/data/catalog.ts(+test).
   - Items (ids are data): `dumbbells` (5–75 lb), `kettlebell`, `adjustable-bench`, `cable-lat-pulldown`, `cable-low-row`, `cable-pulley` (adjustable pulleys), `cable-d-handle`, `cable-lat-bar`, `cable-rope`, `leg-extension`, `leg-curl`, `smith-machine`, `half-rack`, `barbell` (bar + plates), `plyo-box`, `pull-up-bar`, `leg-press`, `chest-press`, `pec-deck`, `calf-machine`.
   - `defaultProfile` = his list (Decision "Gym equipment (M10-q6)"): everything above **except** `cable-rope`, `pull-up-bar` (unconfirmed, M10e-q8), `leg-press`, `chest-press`, `pec-deck`, `calf-machine`.
@@ -164,14 +164,14 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - every `replaceWith` id shares a primary muscle with its exercise;
     - the existing catalog tests (muscles, cues, how-to, SVG paths, banned words) still pass.
   - Deps: 1.
-- [ ] 3. [core-engineer, after 2] Vendor the leg-press and calf replacements, **tests first**.
+- [x] 3. [core-engineer, after 2] Vendor the leg-press and calf replacements, **tests first**.
   - Files: src/data/exercises.json, src/data/cues.json, src/data/howto.json, src/data/exerciseKit.json, src/data/catalog.test.ts.
   - Candidates (check each id exists upstream in `yuhonas/free-exercise-db` and the licence is still Unlicense; vendor fields unchanged; record the upstream commit SHA in a Decision): `Smith_Machine_Squat`, `Barbell_Squat` (or `Barbell_Full_Squat`, whichever upstream entry is the plain back squat), `Smith_Machine_Calf_Raise`. For a rear-foot-elevated (Bulgarian) split squat: check whether the vendored `Split_Squat_with_Dumbbells` already is one; if not, vendor the closest upstream dumbbell entry. Don't invent ids.
   - Each gets a cue (≤ 8 words), 2–3 how-to lines (≤ 70 chars) in coaching language, focus and tempo, and kit needs (smith: `smith-machine`; barbell squat: `half-rack` + `barbell`; split squat: `dumbbells` + `adjustable-bench`). Weight-logging line per M10e-q7.
   - `replaceWith`: Leg_Press → [Smith_Machine_Squat, Barbell squat, the split squat] (M10e-q1); Standing_Calf_Raises → [Smith_Machine_Calf_Raise, Standing_Dumbbell_Calf_Raise] (M10e-q2).
   - Done when: catalog tests pass for the new ids (muscles map to an area and an SVG path id, cue, how-to, no banned words), and none has a 3D demo (they show "Info"; `tracking: 'manual'`, no pose rule).
   - Deps: 2.
-- [ ] 4. [core-engineer, after 2+3] Kit-aware swap candidates and missing-kit detection, **tests first**.
+- [x] 4. [core-engineer, after 2+3] Kit-aware swap candidates and missing-kit detection, **tests first**.
   - Files: src/core/trainer/swapCandidates.ts(+test), src/core/trainer/equipment.ts(+test) (new), and the core tests that build a `TrainerCatalog` (actions/swap.test.ts, actions/avoidArea.test.ts, actions/rowMap.test.ts, coach.test.ts).
   - `TrainerCatalog.hasEquipment(equipment)` → `canDo(exerciseId)`, plus optional `preferred(exerciseId): readonly string[]`. Ranking: position in `preferred` first (only eligible ids), then the existing keys.
   - `missingKit(state, catalog, date, kept)` → `{ dayId, exerciseId }[]` for that date's effective day (`effectiveDay`, overrides included); `missingInPlan(state, catalog, kept)` for every plan day.
@@ -184,7 +184,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
     - every program exercise still has ≥ 1 candidate with the default profile;
     - every existing trainer test passes.
   - Deps: 2, 3.
-- [ ] 5. [core-engineer, after 4] Coach: the missing-kit proposal, **tests first**.
+- [x] 5. [core-engineer, after 4] Coach: the missing-kit proposal, **tests first**.
   - Files: src/core/trainer/coach.ts(+test), src/core/trainer/replies.ts(+test) if a new line is needed, src/core/trainer/phrases.json, src/core/trainer/evals/requests.json, src/core/trainer/intents.test.ts.
   - New chip `gymSwap` (args `exerciseId`) → reply "Your gym doesn't have the kit for Leg Press. Here's a swap." + the **plan-scope** proposal for the top candidate (via `proposeSwapOptions`, why line names the missing kit as data, e.g. "No leg press here. This works the same main muscles."), and chips: the other candidates (plan scope), **Just today** (`swapTo`, scope today), **Keep Leg Press** (new UI-only chip id `keepExercise`, like `endWorkout`). No candidate → the "No good swap…" reply + Keep.
   - The "Adjust my plan" chip lists missing-kit exercises first (one chip each).
@@ -192,25 +192,25 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Mid-workout: never offered unprompted (the Pause sheet's existing swap still works).
   - Done when tests cover: every reply passes `checkCopy`, `say` ≤ 8 words, the Keep chip is present, Apply then `undoLast` restores Leg Press exactly, the intent eval still ≥ 90% with 100% safety flags.
   - Deps: 4.
-- [ ] 6. [core-engineer ∥ 3–5] Gym profile persistence, **tests first**.
+- [x] 6. [core-engineer ∥ 3–5] Gym profile persistence, **tests first**.
   - Files: src/data/gym.ts(+test) (new).
   - `loadGymProfile(db)` → the stored profile, else `defaultGymProfile()` (nothing written until he edits). `saveGymProfile(db, equipment)`: unknown ids rejected, `kept` cleared (a new profile asks again). `keepExercise(db, exerciseId)`.
   - Settings key `'gym'` in the existing `settings` table. **No Dexie version bump.**
   - Done when fake-indexeddb tests cover: default on first read, round trip, unknown id rejected, keep persisted, save clears `kept`, and every existing db test passing.
   - Deps: 1, 2.
-- [ ] 7. [core-engineer, after 3; same instance, same files] Single-handle copy for face pull and pushdown.
+- [x] 7. [core-engineer, after 3; same instance, same files] Single-handle copy for face pull and pushdown.
   - Files: src/data/cues.json, src/data/howto.json, src/data/catalog.test.ts.
   - Face_Pull and Triceps_Pushdown read right with one D-handle, per M10e-q4 (default: one arm at a time, reps per side; the plan numbers stay). E.g. face pull "Handle at face height, step back, arm straight." / "Pull toward your face, elbow high and wide." / "Return slowly. Then the other arm."
   - Done when: a test asserts neither entry says "rope" or "bar", cues ≤ 8 words, lines ≤ 70 chars, `checkCopy` clean.
   - Note: their 3D demos still show the old grip (task 12, can-follow).
   - Deps: 3.
-- [ ] 8. [ui-engineer ∥] Today and preview "missing kit" prompt.
+- [x] 8. [ui-engineer ∥] Today and preview "missing kit" prompt.
   - Files: src/ui/screens/today.ts(+test), src/ui/screens/preview.ts(+test), src/styles.css (only if the program-prompt styles don't fit).
   - Props `missingKit?: { exerciseId: string; name: string } | null`; callbacks `onSeeGymSwap(exerciseId)`, `onKeepExercise(exerciseId)`.
   - A card in the `program-prompt` style (`data-gym-prompt`, role status, shown not spoken: nothing to react to mid-set): "Your gym has no kit for Leg Press." with **See a swap** (CTA) and **Keep it**, both ≥ 56px, body ≥ 20px, tokens only. The day's rows are unchanged until Apply (never silently).
   - Done when: render tests, 390×844 harness screenshots in the 3 accents, tokens test green, typecheck + lint clean.
   - Deps: 1.
-- [ ] 9. [main, after 4–6, 8] Wiring.
+- [x] 9. [main, after 4–6, 8] Wiring. Done 2026-11-15 (ui-engineer, delegated): app.ts loads the profile in `loadTrainer` (`loadGymProfile`), `trainerCatalog` = `canDo: gymCanDo(id, gym)`, `preferred: preferredSwaps`, `missingKitLabels`; `CoachContext.gymKept`; Today `missingKit` = first of core `missingKit(trainer, sessions, catalog, today, kept)`, the preview = the first row of the shown day the gym can't do (kept skipped); See a swap → `openCoach(phase, { chip: 'gymSwap', args })`; Keep it (prompt or the coach's `keepExercise` chip, which sets aside the open proposal and says "OK, keeping Leg Press…") → `keepExercise` + rerender. 9b done: `gymHas` / `gymEquipment`, `available` / `substitutes` / `legacyNote` and the legacy test are gone (nothing referenced them).
   - Files: src/ui/app.ts (trainer block ~L256–275 and the Today/preview props only).
   - Load the profile at startup (`loadGymProfile`); `trainerCatalog.canDo` reads it.
   - Today/preview get `missingKit` = the first `missingKit(...)` on the shown day, skipping `kept`.
@@ -219,7 +219,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - 9b. [core-engineer] delete `gymHas` / `gymEquipment` and their tests once app.ts no longer uses them.
   - Done when, by hand: Legs B shows the prompt → See a swap → Apply → the preview shows Smith Machine Squat with "Info" → Undo restores Leg Press and the prompt; full existing e2e green.
   - Deps: 4, 5, 6, 8.
-- [ ] 10. [ui-engineer] E2E `e2e/equipment.spec.ts` (new; copy helpers from `e2e/trainer.spec.ts`, don't edit it).
+- [x] 10. [ui-engineer] E2E `e2e/equipment.spec.ts` (new; copy helpers from `e2e/trainer.spec.ts`, don't edit it).
   - Seed finished sessions so Legs B is up next.
   - The prompt shows; before any tap, the preview still lists Leg Press (no silent change).
   - See a swap → proposal "Leg Press → Smith Machine Squat" → **Apply** → Today/preview show Smith Machine Squat with the "Info" badge → reload keeps it → **Undo** → Leg Press and the prompt are back.
@@ -227,7 +227,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Every button ≥ 56px; 0 off-device requests.
   - Done when: passes with `--repeat-each=3`, full `npm run e2e` green.
   - Deps: 9.
-- [ ] 11. *(can-follow, only if scope allows)* [ui-engineer] Settings → **My gym** checklist.
+  - Done 2026-11-15: 5 tests (prompt → See a swap → Apply → Smith Machine Squat with Info → reload → Undo via Plan changes; Keep it + reload; the coach's Keep Leg Press chip; typed "my gym has no leg press"; My gym). Shared helpers copied to `e2e/app.helpers.ts` (trainer.spec.ts untouched). `--repeat-each=5` 35/35 with backup.spec.
+- [x] 11. *(can-follow, only if scope allows)* [ui-engineer] Settings → **My gym** checklist. Done 2026-11-15 with 11b: `src/ui/screens/myGym.ts`(+css, +test), Settings "Gym" section with a My gym row, `myGym` view in app.ts. Saves on each tap (`saveGymProfile`, the row flips in place so focus stays), plain note that Keep it choices reset when the list changes, "Stays on this phone." e2e: Keep it → untick Smith machine → the prompt is back and the swap offers Barbell Squat first → tick Leg press → no prompt (survives a reload). Screenshot `docs/screenshots/m10e-my-gym.png`.
   - Files: src/ui/screens/myGym.ts(+test) (new), src/ui/screens/settings.ts (a row), e2e/equipment.spec.ts (a case). 11b. [main] the route in src/ui/app.ts.
   - Grouped checkboxes from `equipmentItems()` labels, rows ≥ 56px, Save → `saveGymProfile` via a callback, a privacy line "Stays on this phone."
   - Done when: render tests + 390×844 screenshot; e2e: untick Smith machine → the Legs B swap offers the barbell squat first.

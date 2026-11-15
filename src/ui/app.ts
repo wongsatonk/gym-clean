@@ -21,6 +21,7 @@ import type {
   ProgramDay,
   Proposal,
   ProposalAction,
+  GymProfile,
   SetLog,
   TrainerState,
 } from '../core/types';
@@ -40,10 +41,14 @@ import {
   exerciseById,
   exerciseName,
   defaultGymProfile,
+  equipmentItems,
   gymCanDo,
+  missingKitLabels,
   preferredSwaps,
   program,
 } from '../data/catalog';
+import { missingKit as coreMissingKit } from '../core/trainer/equipment';
+import { keepExercise, loadGymProfile, saveGymProfile } from '../data/gym';
 import {
   calendar,
   effectiveDay,
@@ -110,6 +115,14 @@ import { startDevLogSession, type DevLogRecorder } from '../data/devlog';
 import { coachSheet, type CoachChipId as SheetChipId, type CoachItem } from './coach/coachSheet';
 import { undoToast, type UndoToast } from './coach/undoToast';
 import { planChangesScreen } from './screens/planChanges';
+import { myGymScreen } from './screens/myGym';
+import {
+  backupErrorText,
+  backupFileName,
+  backupPanel,
+  type RestoreStep,
+} from './screens/backupPanel';
+import { BackupError, exportAll, importAll, validateBackup, type BackupFile } from '../data/backup';
 import { alignRows, rowChanged } from '../core/trainer/rows';
 import type { StallCardData } from './coachSummary';
 import type { PreviewRow } from './screens/preview';
@@ -205,6 +218,7 @@ type View =
   | { screen: 'settings' }
   | { screen: 'fuel' }
   | { screen: 'planChanges' }
+  | { screen: 'myGym' }
   | { screen: 'history'; exerciseId: string | null; data: HistoryData | null }
   | ({ screen: 'preview'; loading: boolean } & PreviewDay)
   | { screen: 'session'; s: SessionState; sheet: Sheet };
@@ -268,11 +282,14 @@ export function mountApp(root: HTMLElement): void {
   // The running session's adjustments (SessionRow.adjust): lighter/deload sessions skip stalls.
   let sessionAdjust: ProposalAction[] = [];
   let summaryStalls: { sessionId: string; stalls: StallCardData[] } | null = null;
+  // M10e: his gym's equipment and the exercises he kept anyway (default until he edits My gym).
+  let gym: GymProfile = defaultGymProfile();
   const trainerCatalog: TrainerCatalog = {
     exercises: catalogExercises(),
     areaOf: bodyAreaOf,
-    canDo: (id) => gymCanDo(id, defaultGymProfile()),
+    canDo: (id) => gymCanDo(id, gym),
     preferred: preferredSwaps,
+    missingKitLabels: (id) => missingKitLabels(id, gym),
   };
   const todayDate = () => localDate(now());
   const planDays = () => trainer?.plan.days ?? program.days;
@@ -668,6 +685,17 @@ export function mountApp(root: HTMLElement): void {
         return fuel.screen();
       case 'planChanges':
         return planChangesView();
+      case 'myGym':
+        return myGymScreen(
+          { items: equipmentItems(), equipment: gym.equipment },
+          {
+            onBack: () => {
+              view = { screen: 'settings' };
+              render();
+            },
+            onChange: (equipment) => saveGym(equipment),
+          },
+        );
       case 'history':
         return historyView(v.exerciseId, v.data);
       case 'preview':
@@ -863,6 +891,7 @@ export function mountApp(root: HTMLElement): void {
         adjustedToday: adjustedTodayText(),
         newProgram,
         nudge: fuel.nudgeText(),
+        missingKit: trainer && upNextDayId !== null ? todayMissingKit() : null,
       },
       {
         // The hero goes through the preview, which loads last time's weights for the defaults.
@@ -876,6 +905,8 @@ export function mountApp(root: HTMLElement): void {
         onKeepPlan: () => keepPlan(),
         onDismissNudge: () => fuel.dismissNudge(),
         onOpenFuel: () => void openFuel(),
+        onSeeGymSwap: (id) => seeGymSwap('today', id),
+        onKeepExercise: (id) => keepGymExercise(id),
       },
     );
   }
@@ -887,11 +918,60 @@ export function mountApp(root: HTMLElement): void {
       trainer = await loadTrainerState(db, program);
       newProgram = defaultProgramChanged(trainer, program);
       changes = await listChanges(db);
+      gym = await loadGymProfile(db);
     } catch (err) {
       // No stored plan (IndexedDB off): the default program, in memory, still runs.
       logDbError(err);
       trainer ??= seedPlan(program);
     }
+  }
+
+  // ----- M10e: kit his gym doesn't have (asked once, never silent) -----
+
+  const missingFor = (exerciseId: string) => ({ exerciseId, name: exerciseName(exerciseId) });
+
+  /** Today's first exercise the gym can't do (kept ones skipped), as it runs today. */
+  function todayMissingKit(): { exerciseId: string; name: string } | null {
+    if (!trainer) return null;
+    const m = coreMissingKit(trainer, trainerSessions, trainerCatalog, todayDate(), gym.kept)[0];
+    return m ? missingFor(m.exerciseId) : null;
+  }
+
+  /** The preview's first row the gym can't do (any day the preview shows). */
+  function dayMissingKit(day: ProgramDay): { exerciseId: string; name: string } | null {
+    if (!trainer) return null;
+    const p = day.exercises.find(
+      (x) => !gym.kept.includes(x.exerciseId) && !trainerCatalog.canDo(x.exerciseId),
+    );
+    return p ? missingFor(p.exerciseId) : null;
+  }
+
+  /** See a swap: the coach's plan-scope swap for the missing kit (Apply / Undo as usual). */
+  function seeGymSwap(phase: CoachPhase, exerciseId: string): void {
+    void openCoach(phase, { chip: 'gymSwap', args: { exerciseId } });
+  }
+
+  /** Keep it: stop asking about this exercise until My gym changes. */
+  function keepGymExercise(exerciseId: string): void {
+    if (!gym.kept.includes(exerciseId)) gym = { ...gym, kept: [...gym.kept, exerciseId] };
+    render();
+    void keepExercise(db, exerciseId)
+      .then((p) => {
+        gym = p;
+        if (view.screen === 'today' || view.screen === 'preview') render();
+      })
+      .catch(logDbError);
+  }
+
+  /** My gym: save the ticked items (clears Keep it choices), then rerender. */
+  function saveGym(equipment: readonly string[]): void {
+    // The checklist flips its row in place: no render here, so focus stays on the row.
+    gym = { equipment: [...equipment], kept: [], updatedAt: now() };
+    void saveGymProfile(db, equipment, now())
+      .then((p) => {
+        gym = p;
+      })
+      .catch(logDbError);
   }
 
   /** Dev log (M10): ids only, never message text. Lands only while a workout's log is open. */
@@ -1389,6 +1469,7 @@ export function mountApp(root: HTMLElement): void {
       lastWeightKg: c.lastWeightKg,
       logged,
       catalog: trainerCatalog,
+      gymKept: gym.kept,
       m7Available: fuel.m7Available(),
       fuel: fuel.coachFuel(),
     };
@@ -1419,6 +1500,24 @@ export function mountApp(root: HTMLElement): void {
     );
     // Only the red-flag line is spoken, and only mid-workout (core sets `say` then).
     if (r.say && c.phase === 'workout') voice.speak(r.say, { kind: 'cue' });
+    renderCoach();
+  }
+
+  /** The coach's Keep X chip (UI-only): the open proposals are set aside, nothing changes. */
+  function keepFromCoach(c: CoachUi, exerciseId: string, said: string): void {
+    for (const [i, entry] of c.proposals) {
+      trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
+      c.items[i] = { kind: 'coach', text: `${entry.proposal.title}: not now.` };
+    }
+    c.proposals.clear();
+    c.items.push({ kind: 'user', text: said });
+    c.items.push({
+      kind: 'coach',
+      text: `OK, keeping ${exerciseName(exerciseId)}. I won't ask again until you change My gym.`,
+    });
+    c.quick = [];
+    c.followUps = [];
+    keepGymExercise(exerciseId);
     renderCoach();
   }
 
@@ -1474,6 +1573,11 @@ export function mountApp(root: HTMLElement): void {
         },
         onFollowUp: (index) => {
           const f = c.followUps[index];
+          const keepId = f?.id === 'keepExercise' ? f.args?.exerciseId : undefined;
+          if (f && keepId) {
+            keepFromCoach(c, keepId, f.label);
+            return;
+          }
           if (f) coachTurn({ chip: f.id, ...(f.args ? { args: f.args } : {}) }, f.label);
         },
         onLogFood: (index) => logCoachFood(c, index),
@@ -1600,6 +1704,19 @@ export function mountApp(root: HTMLElement): void {
         }).el,
         speakerCheck: voiceTest(),
         nutrition: fuel.settingsBlock(),
+        backup: backupPanel(
+          { restore: restoreStep },
+          {
+            onExport: () => void exportBackup(),
+            onPickFile: (f) => void pickRestoreFile(f),
+            onConfirmRestore: () => void confirmRestore(),
+            onCancelRestore: () => {
+              pendingRestore = null;
+              restoreStep = { kind: 'idle' };
+              render();
+            },
+          },
+        ),
         audioTest: audioTestPanel(),
         devLog: devLogPanel.el,
       },
@@ -1636,8 +1753,116 @@ export function mountApp(root: HTMLElement): void {
         onCameraTest: () => openCameraView('Camera test'),
         onTab: (t) => goTab(t),
         onPlanChanges: () => openPlanChanges(),
+        onMyGym: () => {
+          view = { screen: 'myGym' };
+          render();
+        },
       },
     );
+  }
+
+  // ----- M9 B2/B3: Back up / Restore (a local file; nothing is uploaded) -----
+
+  let restoreStep: RestoreStep = { kind: 'idle' };
+  let pendingRestore: BackupFile | null = null;
+
+  const restoreError = (err: unknown): RestoreStep => {
+    if (!(err instanceof BackupError)) logDbError(err);
+    const code = err instanceof BackupError ? err.code : 'write';
+    return { kind: 'message', text: backupErrorText(code), error: true };
+  };
+
+  /** Every table but the dev log, as a JSON file download (a Blob URL, never the network). */
+  async function exportBackup(): Promise<void> {
+    try {
+      const t = now();
+      const file = await exportAll(db, { now: t });
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(file)], { type: 'application/json' }),
+      );
+      const a = h('a', { href: url, download: backupFileName(t), hidden: true });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      restoreStep = { kind: 'message', text: 'Backup saved to this phone.', error: false };
+    } catch (err) {
+      logDbError(err);
+      restoreStep = { kind: 'message', text: "Couldn't make the backup. Try again.", error: true };
+    }
+    if (view.screen === 'settings') render();
+  }
+
+  /** A picked file: checked without writing, then the two-tap question. */
+  async function pickRestoreFile(f: File): Promise<void> {
+    try {
+      const file = validateBackup(db, await f.text());
+      const n = file.tables.sessions?.length ?? 0;
+      pendingRestore = file;
+      restoreStep = {
+        kind: 'confirm',
+        fileName: f.name,
+        summary: `${n} ${n === 1 ? 'workout' : 'workouts'}`,
+      };
+    } catch (err) {
+      pendingRestore = null;
+      restoreStep = restoreError(err);
+    }
+    if (view.screen === 'settings') render();
+  }
+
+  /** Second tap on Replace: all data replaced in one transaction, with an Undo toast. */
+  async function confirmRestore(): Promise<void> {
+    const file = pendingRestore;
+    if (!file) return;
+    pendingRestore = null;
+    restoreStep = { kind: 'busy' };
+    render();
+    try {
+      const { undo } = await importAll(db, file, { now: now() });
+      await reloadStored();
+      restoreStep = { kind: 'message', text: 'Restored from the backup.', error: false };
+      if (view.screen === 'settings') render();
+      showActionToast('Data restored.', () => void undoRestore(undo));
+    } catch (err) {
+      restoreStep = restoreError(err);
+      if (view.screen === 'settings') render();
+    }
+  }
+
+  /** The toast's Undo: puts back what was there before the restore. */
+  async function undoRestore(undo: BackupFile): Promise<void> {
+    try {
+      await importAll(db, undo, { now: now() });
+      await reloadStored();
+      restoreStep = { kind: 'message', text: 'Restore undone.', error: false };
+      showNotice('Restore undone.');
+    } catch (err) {
+      restoreStep = restoreError(err);
+    }
+    if (view.screen === 'settings') render();
+  }
+
+  /** After a restore (or its Undo): every stored setting and the plan, read again. */
+  async function reloadStored(): Promise<void> {
+    try {
+      unit = await getUnit(db);
+      spokenCount = await getSpokenCount(db);
+      coachTips = await getCoachTips(db);
+      handsFree = await getHandsFree(db);
+      accent = await getAccent(db);
+      applyAccent(accent);
+      mirrorAccent(accent);
+      coachVoice = await getCoachVoice(db);
+      voice.configure(coachVoice);
+    } catch (err) {
+      logDbError(err);
+    }
+    trainer = null;
+    gym = defaultGymProfile();
+    await loadTrainer();
+    trainerSessions = await db.sessions.toArray().catch(() => trainerSessions);
+    await fuel.refresh();
   }
 
   // ---------- Day preview ----------
@@ -1748,12 +1973,15 @@ export function mountApp(root: HTMLElement): void {
         rows,
         removedRows,
         adjustedToday: pd.today ? adjustedTodayText() : null,
+        missingKit: dayMissingKit(day),
       },
       {
         onBack: goToday,
         onStart: (d) => startDay(d, pd.today ? pd.adjust : null),
         onCoach: trainer ? () => void openCoach('preview') : undefined,
         onUndoAdjust: () => void undoNewest('banner'),
+        onSeeGymSwap: (id) => seeGymSwap('preview', id),
+        onKeepExercise: (id) => keepGymExercise(id),
       },
     );
   }

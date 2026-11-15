@@ -236,3 +236,43 @@ describe('settingsScreen M7 Nutrition slot', () => {
     expect(sec.find((e) => e.hasAttribute('data-nutrition'))).toHaveLength(1);
   });
 });
+
+describe('settingsScreen M10e Gym and M9 Backup sections', () => {
+  const noop = () => undefined;
+  const base = {
+    onAccent: noop,
+    onSpokenCount: noop,
+    onCoachTips: noop,
+    onHandsFree: noop,
+    onUnit: noop,
+    onCameraTest: noop,
+    onTab: noop,
+  };
+
+  it('no onMyGym / backup → neither section (unchanged)', () => {
+    const { el } = render();
+    const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+    expect(keys).not.toContain('gym');
+    expect(keys).not.toContain('backup');
+  });
+
+  it('Gym: a "My gym" row that opens the checklist; Backup sits right before the dev log', () => {
+    let opened = 0;
+    const el = asFake(
+      settingsScreen(props({ backup: slot('data-backup') }), {
+        ...base,
+        onMyGym: () => opened++,
+        onPlanChanges: noop,
+      }),
+    );
+    const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+    expect(keys).toEqual(['accent', 'voice', 'camera', 'unit', 'gym', 'plan', 'backup', 'devlog']);
+    const btn = one(el, (e) => e.hasAttribute('data-my-gym-open'), 'my gym');
+    expect(btn.textContent).toBe('My gym');
+    expect(btn.classes).toContain('set-action');
+    btn.click();
+    expect(opened).toBe(1);
+    const sec = byAttr(el, 'data-section', 'backup');
+    expect(sec.find((e) => e.hasAttribute('data-backup'))).toHaveLength(1);
+  });
+});

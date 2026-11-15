@@ -97,26 +97,9 @@ export type EquipmentItem = { id: string; label: string; group: string };
 type EquipmentData = {
   items: EquipmentItem[];
   defaultProfile: string[];
-  /** Legacy coarse check (gymHas), removed in M10e task 9b. */
-  available: string[];
-  substitutes: Record<string, string>;
 };
 type ExerciseKit = { needs: string[][]; replaceWith?: string[] };
 const equipment = equipmentJson as EquipmentData;
-const gymKit = new Set(equipment.available);
-
-/** The free-exercise-db equipment values the gym has (M10-q6). */
-export function gymEquipment(): readonly string[] {
-  return equipment.available;
-}
-
-/** Whether the gym can run an exercise with this equipment value (substitutes included). */
-export function gymHas(value: string | null): boolean {
-  if (value === null) return false;
-  const v = Object.hasOwn(equipment.substitutes, value) ? equipment.substitutes[value] : value;
-  return v !== undefined && gymKit.has(v);
-}
-
 const exerciseKit = exerciseKitJson as Record<string, ExerciseKit>;
 const itemById = new Map(equipment.items.map((i) => [i.id, i]));
 
