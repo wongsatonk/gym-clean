@@ -2697,6 +2697,43 @@ textarea:focus-visible {
   stroke-linejoin: round;
 }
 
+/* Short phones (375x667, or Safari with its toolbars): the whole set-up card fits without an
+   inner scroll, for every rule and the tallest top band (long name + Learning chip). While it is
+   up (no person found yet) the camera gives it room nothing needs right then:
+   - the switch-camera button moves to the top right, where the ROM gauge goes (hidden while the
+     card is up), so the card can sit on the stage's bottom edge;
+   - under the count, the set line and the REPS label hide (the Exercise screen shows the set;
+     "0 / 12" still reads as the count), and the fps/status line under the video hides, unless
+     it carries an error (camera blocked, camera or pose-model failure: data-error on the sheet);
+   - the card's lines use the 20px body size and tighter spacing.
+   The count number and the frame hint stay, and the card never covers them. Everything is back
+   as soon as the card closes. */
+@media (max-height: 740px) {
+  .cam-stage.setup-open .cam-stage-bottom {
+    top: 8px;
+    bottom: auto;
+    left: auto;
+  }
+
+  .cam-stage.setup-open .rep-set,
+  .cam-stage.setup-open .rep-label,
+  .camera-sheet:not([data-error]):has(.cam-stage.setup-open) .cam-status {
+    display: none;
+  }
+
+  .cam-stage.setup-open .cam-setup {
+    bottom: 8px;
+    max-height: max(80px, calc(100% - 8px - 16px - var(--hud-h, 200px)));
+    padding: 8px 12px;
+    row-gap: 2px;
+  }
+
+  .cam-stage.setup-open .setup-line {
+    font-size: var(--fs-body);
+    line-height: 1.15;
+  }
+}
+
 /* 3D live skeleton: collapsed until "3D" is tapped; then it takes room from the video. */
 .cam-3d {
   flex: 0 0 auto;

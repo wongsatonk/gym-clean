@@ -221,6 +221,34 @@ async function expectTapTargets(page: Page, selector: string) {
   for (const [name, hgt] of heights) expect(hgt, `button "${name}"`).toBeGreaterThanOrEqual(56);
 }
 
+/**
+ * The Undo toast sits above the screen's bottom chrome: it overlaps none of `targets` (the tab bar,
+ * the sticky Start), which stay fully in the viewport, and the whole toast is on screen.
+ */
+async function expectToastClear(page: Page, targets: readonly string[]) {
+  const toast = page.locator('[data-undo-toast]');
+  await expect(toast).toBeInViewport({ ratio: 1 });
+  for (const sel of targets) {
+    const target = page.locator(sel).first();
+    await expect(target, sel).toBeInViewport({ ratio: 1 });
+    // Placement follows render: poll until the toast has moved clear.
+    await expect
+      .poll(async () => {
+        const [t, b] = await Promise.all([toast.boundingBox(), target.boundingBox()]);
+        if (!t || !b) return 'missing';
+        const overlap =
+          t.x < b.x + b.width &&
+          b.x < t.x + t.width &&
+          t.y < b.y + b.height &&
+          b.y < t.y + t.height;
+        return overlap ? `overlaps ${sel}` : 'clear';
+      }, sel)
+      .toBe('clear');
+    const [t, b] = await Promise.all([toast.boundingBox(), target.boundingBox()]);
+    expect(t && b && t.y + t.height <= b.y, `toast above ${sel}`).toBe(true);
+  }
+}
+
 async function noHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 }
@@ -228,7 +256,7 @@ async function noHorizontalOverflow(page: Page) {
 test('Not today: the 7-day preview → Apply → Today rests, next day up → Undo restores it', async ({
   page,
   baseURL,
-}) => {
+}, testInfo) => {
   const { requests, errors } = record(page);
   await openApp(page, at(13, 18));
   // Sunday is a rest weekday here, so "use rest day" (the default mode) has one to use.
@@ -261,6 +289,9 @@ test('Not today: the 7-day preview → Apply → Today rests, next day up → Un
   const toast = page.locator('[data-undo-toast]');
   await expect(toast).toBeVisible();
   await expectTapTargets(page, '[data-undo-toast]');
+  // Above the tab bar, never over it, for its whole 10 s.
+  await expectToastClear(page, ['[data-tabbar]']);
+  await page.screenshot({ path: testInfo.outputPath('undo-toast-today-390.png') });
 
   await toast.getByRole('button', { name: 'Undo' }).click();
   await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
@@ -614,7 +645,7 @@ test('rest day: "Rest day" hero → Train anyway runs the next day; the calendar
 test('Not today → Train anyway takes the postpone back: the week is as before, Undo rests again', async ({
   page,
   baseURL,
-}) => {
+}, testInfo) => {
   const { requests, errors } = record(page);
   await openApp(page, at(13, 18));
   await setRestWeekdays(page, [0]);
@@ -638,7 +669,13 @@ test('Not today → Train anyway takes the postpone back: the week is as before,
   await expect(page.locator('[data-screen="preview"] h1')).toHaveText('Push A');
   const toast = page.locator('[data-undo-toast]');
   await expect(toast).toContainText('Today is a training day');
+  // On the preview it sits above the sticky Start, which stays fully visible and tappable.
+  await expectToastClear(page, ['.sticky-bottom', '.sticky-bottom .primary-btn']);
+  await expect(page.getByRole('button', { name: 'Start workout' })).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: testInfo.outputPath('undo-toast-preview-390.png') });
   await page.getByRole('button', { name: '‹ Back' }).click();
+  // Still up after Back: it moves above Today's tab bar.
+  await expectToastClear(page, ['[data-tabbar]']);
   // The postpone is taken back: Sunday rests again, no extra session, no "Adjusted" banner.
   await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
   await expect(page.locator('[data-cal="2026-11-15"]')).toHaveAttribute('data-rest');

@@ -308,11 +308,14 @@
 
 /* ---------- Undo toast ---------- */
 
+/* Above the screen's bottom chrome (tab bar, sticky Start / Set done): app.ts measures it into
+   --toast-bottom, so the toast never hides a control for its 10 s. Without chrome, it keeps
+   clear of the home indicator. */
 .undo-toast {
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: max(16px, env(safe-area-inset-bottom));
+  bottom: var(--toast-bottom, max(16px, env(safe-area-inset-bottom)));
   z-index: 30;
   max-width: 528px;
   margin: 0 auto;

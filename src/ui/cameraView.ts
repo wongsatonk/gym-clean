@@ -1500,8 +1500,11 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     stopStream(stream);
     try {
       stream = await openCamera(video, facing);
+      // A camera that opens clears an earlier switch error (the fps line takes over again).
+      if (el.dataset.error === 'switch') delete el.dataset.error;
     } catch (err) {
-      setStatus(`Camera error: ${(err as Error).message}`);
+      // data-error keeps the message visible on short phones while the set-up card is up.
+      setStatus(`Camera error: ${(err as Error).message}`, { error: 'switch' });
     }
   }
 

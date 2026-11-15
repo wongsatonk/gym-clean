@@ -331,31 +331,174 @@ for (const [day, first, name] of [
 test.describe('set-up card on a short phone (375×667)', () => {
   test.use({ viewport: { width: 375, height: 667 } });
 
-  test('Standing Dumbbell Triceps Extension: "Got it" fully visible, count uncovered', async ({
+  // Learning (chip + extra line) and tuned rules, side and front views: the whole card fits,
+  // with no inner scroll, under the count and above the stage buttons.
+  for (const [day, first, name, learning] of [
+    [/Push A/, 'Dumbbell Bench Press', 'Standing Dumbbell Triceps Extension', true],
+    [/Pull A/, 'One-Arm Dumbbell Row', 'Hammer Curls', true],
+    [/Pull A/, 'One-Arm Dumbbell Row', 'Dumbbell Bicep Curl', false],
+    [/Push A/, 'Dumbbell Bench Press', 'Side Lateral Raise', false],
+  ] as const) {
+    test(`${name}: whole card in view, no inner scroll, "Got it" ≥ 56px, count uncovered`, async ({
+      page,
+    }, testInfo) => {
+      const cam = await openCameraOn(page, day, first, name);
+      const got = cam.locator('.cam-setup').getByRole('button', { name: 'Got it' });
+      await expect(got).toBeInViewport({ ratio: 1 });
+      const line = cam.locator('[data-setup-learning]');
+      if (learning) {
+        await expect(line).toHaveText(SETUP_LINE);
+        await expect(line).toBeInViewport({ ratio: 1 });
+      } else {
+        await expect(line).toHaveCount(0);
+      }
+      // The HUD height feeds the card's max-height through a ResizeObserver: let it settle.
+      const fit = () =>
+        page.evaluate(() => {
+          const card = document.querySelector<HTMLElement>('.cam-setup');
+          if (!card) return 'missing';
+          const over = card.scrollHeight - card.clientHeight;
+          if (over <= 0) return 'fits';
+          // Enough to tell why on a failure (a poll timeout doesn't print the last value).
+          const stage = card.parentElement;
+          return JSON.stringify({
+            over,
+            sh: card.scrollHeight,
+            ch: card.clientHeight,
+            maxH: getComputedStyle(card).maxHeight,
+            hud: stage ? getComputedStyle(stage).getPropertyValue('--hud-h') : '',
+            stageCls: stage?.className,
+            stageH: stage?.clientHeight,
+          });
+        });
+      await expect
+        .poll(fit)
+        .toBe('fits')
+        .catch(async () => expect(await fit()).toBe('fits'));
+      const m = await page.evaluate(() => {
+        const card = document.querySelector('.cam-setup')?.getBoundingClientRect();
+        const count = document.querySelector('.rep-count')?.getBoundingClientRect();
+        const btn = [...document.querySelectorAll('.cam-setup button')]
+          .find((b) => b.textContent === 'Got it')
+          ?.getBoundingClientRect();
+        if (!card || !count || !btn) throw new Error('missing card parts');
+        const parts = [...document.querySelectorAll('.cam-setup > *')].map((el) => {
+          const r = el.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom };
+        });
+        const sw = document.querySelector('.cam-switch')?.getBoundingClientRect();
+        const panel = document.querySelector('.rep-panel')?.getBoundingClientRect();
+        if (!sw || !panel) throw new Error('missing switch or rep panel');
+        const lineFont = [...document.querySelectorAll('.cam-setup .setup-line')].map((el) =>
+          parseFloat(getComputedStyle(el).fontSize),
+        );
+        return {
+          card,
+          count,
+          btn,
+          sw,
+          panel,
+          parts,
+          lineFont,
+          stageBottom: document.querySelector('.cam-stage')?.getBoundingClientRect().bottom ?? 0,
+          vh: innerHeight,
+          scroll: document.documentElement.scrollWidth,
+        };
+      });
+      expect(m.btn.height).toBeGreaterThanOrEqual(56);
+      expect(m.btn.width).toBeGreaterThanOrEqual(56);
+      expect(m.btn.bottom).toBeLessThanOrEqual(m.card.bottom);
+      expect(m.card.top).toBeGreaterThanOrEqual(m.count.bottom); // never over the count
+      expect(m.card.bottom).toBeLessThanOrEqual(Math.min(m.vh, m.stageBottom));
+      for (const part of m.parts) {
+        // Every line inside the card: nothing cut at either edge.
+        expect(part.top).toBeGreaterThanOrEqual(m.card.top);
+        expect(part.bottom).toBeLessThanOrEqual(m.card.bottom);
+      }
+      for (const px of m.lineFont) expect(px).toBeGreaterThanOrEqual(20);
+      // The switch-camera button moved up beside the count: clear of the rep panel and the card.
+      const apart = (a: DOMRect, b: DOMRect) =>
+        a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+      expect(apart(m.sw, m.panel), 'switch vs rep panel').toBe(true);
+      expect(apart(m.sw, m.card), 'switch vs card').toBe(true);
+      expect(m.sw.height).toBeGreaterThanOrEqual(56);
+      expect(m.sw.right).toBeLessThanOrEqual(375);
+      expect(m.scroll).toBe(375);
+      await page.screenshot({
+        path: testInfo.outputPath(`setup-card-375-${name.replace(/ /g, '-')}.png`),
+      });
+      await got.click();
+      await expect(cam.locator('.cam-setup')).toBeHidden();
+    });
+  }
+});
+
+// On a short phone the status line under the video hides while the set-up card is up, but never
+// when it carries an error: a blocked camera or a failed model means no person is ever found, so
+// the card stays up and the error must still show.
+test.describe('camera errors stay visible on a short phone (375×667)', () => {
+  test.use({ viewport: { width: 375, height: 667 } });
+  const PULL_A = [/Pull A/, 'One-Arm Dumbbell Row', 'Hammer Curls'] as const;
+
+  test('camera blocked: the "Camera blocked" line shows under the card', async ({ page }) => {
+    await page.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = () =>
+        Promise.reject(new DOMException('Permission denied', 'NotAllowedError'));
+    });
+    await page.reload();
+    const cam = await openCameraOn(page, ...PULL_A);
+    const status = cam.locator('.cam-status');
+    await expect(status).toContainText('Camera blocked');
+    await expect(status).toBeInViewport({ ratio: 1 });
+    await expect(cam.locator('.cam-setup')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(375);
+  });
+
+  test('pose model fails to load: the error line shows under the card', async ({ page }) => {
+    await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: 'export async function createPoseTracker() { throw new Error("no model"); }',
+      }),
+    );
+    const cam = await openCameraOn(page, ...PULL_A);
+    const status = cam.locator('.cam-status');
+    await expect(status).toContainText('Pose model failed to load');
+    await expect(status).toBeInViewport({ ratio: 1 });
+    await expect(cam.locator('.cam-setup')).toBeVisible();
+  });
+
+  test('switch camera fails: the error line shows; a later good switch clears it', async ({
     page,
   }) => {
-    const cam = await openCameraOn(
-      page,
-      /Push A/,
-      'Dumbbell Bench Press',
-      'Standing Dumbbell Triceps Extension',
+    // A pose model that loads at once and never finds a person: the card stays up.
+    await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: `export async function createPoseTracker() {
+          return { delegate: 'CPU', detect() { return null; }, close() {} };
+        }`,
+      }),
     );
-    const got = cam.locator('.cam-setup').getByRole('button', { name: 'Got it' });
-    await expect(got).toBeInViewport({ ratio: 1 });
-    const m = await page.evaluate(() => {
-      const card = document.querySelector('.cam-setup')?.getBoundingClientRect();
-      const count = document.querySelector('.rep-count')?.getBoundingClientRect();
-      const btn = [...document.querySelectorAll('.cam-setup button')]
-        .find((b) => b.textContent === 'Got it')
-        ?.getBoundingClientRect();
-      if (!card || !count || !btn) throw new Error('missing card parts');
-      return { card, count, btn };
+    const cam = await openCameraOn(page, ...PULL_A);
+    const status = cam.locator('.cam-status');
+    await expect(cam).toHaveAttribute('data-delegate', /.+/); // model loaded, loop running
+    await expect(status).toBeHidden(); // the fps line hides while the card is up
+    await page.evaluate(() => {
+      const w = window as unknown as { __realGum?: MediaDevices['getUserMedia'] };
+      w.__realGum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = () =>
+        Promise.reject(new DOMException('Could not start video source', 'NotReadableError'));
     });
-    expect(m.btn.height).toBeGreaterThanOrEqual(56);
-    expect(m.btn.bottom).toBeLessThanOrEqual(m.card.bottom);
-    expect(m.card.top).toBeGreaterThanOrEqual(m.count.bottom);
-    await got.click();
-    await expect(cam.locator('.cam-setup')).toBeHidden();
+    await cam.getByRole('button', { name: 'Switch camera' }).click();
+    await expect(status).toContainText('Camera error');
+    await expect(status).toBeInViewport({ ratio: 1 });
+    await page.evaluate(() => {
+      const w = window as unknown as { __realGum: MediaDevices['getUserMedia'] };
+      navigator.mediaDevices.getUserMedia = w.__realGum;
+    });
+    await cam.getByRole('button', { name: 'Switch camera' }).click();
+    await expect(status).toBeHidden();
   });
 });
 

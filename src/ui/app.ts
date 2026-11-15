@@ -623,6 +623,7 @@ export function mountApp(root: HTMLElement): void {
       ensureBody3d();
       placeBody3d();
     }
+    placeToast();
   }
 
   function screenFor(v: View): HTMLElement {
@@ -1162,6 +1163,24 @@ export function mountApp(root: HTMLElement): void {
     toast = null;
   }
 
+  /**
+   * Keeps the toast above the screen's bottom chrome (tab bar, sticky Start / Set done dock), so
+   * nothing it would hide is underneath for its 10 s. That chrome already carries the bottom
+   * safe area; with none, the CSS default keeps the toast clear of it.
+   */
+  function placeToast(): void {
+    if (!toast) return;
+    let top = window.innerHeight;
+    for (const el of root.querySelectorAll<HTMLElement>('[data-tabbar], .sticky-bottom')) {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0 && r.bottom > 0 && r.top < top) top = r.top;
+    }
+    const above = window.innerHeight - top;
+    if (above > 0) toast.style.setProperty('--toast-bottom', `${Math.round(above + 8)}px`);
+    else toast.style.removeProperty('--toast-bottom');
+  }
+  window.addEventListener('resize', placeToast);
+
   function showUndoToast(text: string, id?: number): void {
     removeToast();
     const el: UndoToast = undoToast(
@@ -1175,6 +1194,7 @@ export function mountApp(root: HTMLElement): void {
     );
     toast = el;
     document.body.append(el);
+    placeToast();
   }
 
   /** A short status line in the toast slot (no Undo), gone after 4 s. */
@@ -1187,6 +1207,7 @@ export function mountApp(root: HTMLElement): void {
     );
     toast = el;
     document.body.append(el);
+    placeToast();
     window.setTimeout(() => {
       if (toast === el) removeToast();
     }, 4000);

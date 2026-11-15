@@ -55,6 +55,34 @@ const hasWebGL = (page: Page) =>
     return Boolean(c.getContext('webgl2') ?? c.getContext('webgl'));
   });
 
+/**
+ * The badges are static labels, not controls (so the 56px tap-target rule doesn't apply): plain
+ * spans, not inside a button or link of their own, no pointer cursor, not focusable. The How-to
+ * sheet opens from its own ≥ 56px button. (In the exercise-list sheet they sit inside the whole
+ * row's button, which is the tap target; that is checked by the list's own tests.)
+ */
+async function expectStaticBadges(page: Page, scope: string) {
+  const badges = page.locator(`${scope} [data-badge]`);
+  await expect(badges.first()).toBeVisible();
+  const found = await badges.evaluateAll((els) =>
+    els.map((el) => ({
+      text: el.textContent,
+      tag: el.tagName,
+      control: el.closest('button, a, [role="button"], [role="link"], [tabindex]') !== null,
+      pointer: getComputedStyle(el).cursor === 'pointer',
+    })),
+  );
+  expect(found.length).toBeGreaterThan(0);
+  for (const b of found) {
+    expect(b, `badge "${b.text}"`).toEqual({
+      text: b.text,
+      tag: 'SPAN',
+      control: false,
+      pointer: false,
+    });
+  }
+}
+
 test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Triceps Extension, still Learning); Pull A and Legs B all 3D demo', async ({
   page,
 }) => {
@@ -88,6 +116,7 @@ test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Tric
     .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(fontPx).toBeGreaterThanOrEqual(20);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await expectStaticBadges(page, '.ex-row');
 
   // Legs B preview (M4d batch 2): every row, Leg Press included, has a 3D demo and no Camera.
   await page.getByRole('button', { name: '‹ Back' }).click();
@@ -136,8 +165,13 @@ test('How to: the 3D demo loops with phase text, Close returns focus', async ({ 
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
   await expect(page.locator('.exercise-head-text [data-badge="3d"]')).toBeVisible();
+  await expectStaticBadges(page, '.exercise-head-text');
 
   const open = page.locator('[data-howto-open]');
+  // The How-to control is the button, and it meets the tap-target rule.
+  const openBox = await open.boundingBox();
+  expect(openBox?.height ?? 0).toBeGreaterThanOrEqual(56);
+  expect(openBox?.width ?? 0).toBeGreaterThanOrEqual(56);
   await open.click();
   const sheet = page.getByRole('dialog', { name: 'Dumbbell Bench Press' });
   await expect(sheet).toBeVisible();
