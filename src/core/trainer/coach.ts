@@ -16,9 +16,14 @@
  *   `foods` suggestions (actions/food.ts) that fit what's left today; "You've hit today's
  *   targets." when nothing is left; the Fuel setup pointer without targets. Never mid-workout.
  * - Anything else → "I can help with:" plus the quick chips; never a guess.
+ * - Missing kit (M10e): `gymSwap` (Today/preview prompt, "Adjust my plan", or typed "my gym has
+ *   no leg press") → "Your gym doesn't have the kit for X." + the plan-scope swap to the closest
+ *   replacement, the other candidates, Just today and Keep X (`keepExercise`, UI-only). Never
+ *   offered mid-workout; there a typed request gets the usual today swap.
  * - Proposal text is passed through `proposalReply` (copy check, `say` ≤ 8 words).
  * Chip ids: the 6 quick actions (UI COACH_CHIPS), the 6 BodyArea values, and the follow-ups
- * below (`args` say what they act on). 'endWorkout' is handled by the UI, not here.
+ * below (`args` say what they act on). 'endWorkout' and 'keepExercise' are handled by the UI, not
+ * here.
  */
 import type {
   BodyArea,
@@ -55,12 +60,15 @@ import {
 } from './actions/stall';
 import { suggestFood, type FoodCandidates } from './actions/food';
 import { leftMacros, remaining } from '../nutrition/day';
+import { missingInPlan } from './equipment';
 import {
   FOOD_DONE,
   FOOD_LATER,
   FOOD_NONE,
   FOOD_SETUP,
   foodIdeasReply,
+  gymSwapReply,
+  gymSwapWhy,
   HELP_TEXT,
   proposalReply,
   RED_FLAG_LINE,
@@ -80,6 +88,10 @@ export type CoachChipId =
   | 'swapTo'
   /** args.exerciseId: remove it today (mid-workout). */
   | 'remove'
+  /** args.exerciseId: the swap for an exercise the gym lacks the kit for (M10e). */
+  | 'gymSwap'
+  /** UI-only: args.exerciseId, keep it despite the missing kit (M10e, stored in the profile). */
+  | 'keepExercise'
   /** args.mode: Not today with that mode. */
   | 'postponeMode'
   /** args.exerciseId, option: that stall fix. */
@@ -119,6 +131,8 @@ export type CoachContext = {
   m7Available: boolean;
   /** M7 data for food suggestions; absent → the Fuel setup pointer. */
   fuel?: CoachFuel;
+  /** M10e: exercises he chose to keep despite missing kit (GymProfile.kept). */
+  gymKept?: readonly string[];
 };
 
 /** Today's food log totals, the targets (null = not set up) and what can be suggested. */
@@ -338,6 +352,65 @@ function swapFlow(ctx: CoachContext, exerciseId: string, explicit?: SwapScope): 
   return fromResult(ctx, { ok: true, proposal: first.proposal }, chips);
 }
 
+// ---------- M10e: missing kit ----------
+
+const lacksKit = (ctx: CoachContext, id: string) => !ctx.catalog.canDo(id);
+
+/**
+ * The swap for an exercise the gym lacks the kit for: `toId` (default the closest replacement)
+ * in `scope` (default the plan), the other candidates, Just today / From now on, and Keep.
+ */
+function gymSwapFlow(
+  ctx: CoachContext,
+  exerciseId: string,
+  scope: SwapScope = 'plan',
+  toId?: string,
+): Body {
+  const name = nameOf(ctx, exerciseId);
+  const keep: CoachChip = { id: 'keepExercise', label: `Keep ${name}`, args: { exerciseId } };
+  const actx = actionCtx(ctx);
+  const opts = proposeSwapOptions(actx, exerciseId, ctx.catalog, 'plan');
+  if (!opts.ok)
+    return opts.reason === 'noCandidate'
+      ? { reply: opts.reply, chips: [keep] }
+      : { reply: opts.reply };
+  const target = toId ?? opts.options[0]?.exerciseId;
+  if (target === undefined)
+    return { reply: 'No good swap with the kit your gym has.', chips: [keep] };
+  const r = proposeSwap(actx, exerciseId, target, ctx.catalog, scope);
+  if (!r.ok) return { reply: r.reply, chips: [keep] };
+  const why = gymSwapWhy(ctx.catalog.missingKitLabels?.(exerciseId) ?? [], scope);
+  const chips: CoachChip[] = opts.options
+    .filter((o) => o.exerciseId !== target)
+    .map((o) => ({
+      id: 'swapTo',
+      label: `Try ${o.name}`,
+      args: { exerciseId, toId: o.exerciseId, scope: 'plan' },
+    }));
+  const other: SwapScope = scope === 'plan' ? 'today' : 'plan';
+  if (proposeSwap(actx, exerciseId, target, ctx.catalog, other).ok)
+    chips.push({
+      id: 'swapTo',
+      label: other === 'today' ? 'Just today' : 'From now on',
+      args: { exerciseId, toId: target, scope: other },
+    });
+  chips.push(keep);
+  return { reply: gymSwapReply(name), proposal: { ...r.proposal, why }, chips };
+}
+
+/** One chip per plan exercise the gym lacks the kit for (not kept), for "Adjust my plan". */
+function gymChips(ctx: CoachContext): CoachChip[] {
+  if (isWorkout(ctx)) return [];
+  const ids = [
+    ...new Set(missingInPlan(ctx.state, ctx.catalog, ctx.gymKept ?? []).map((m) => m.exerciseId)),
+  ];
+  return ids.map((id) => ({
+    id: 'gymSwap',
+    label: `Swap ${nameOf(ctx, id)} (no kit)`,
+    args: { exerciseId: id },
+  }));
+}
+
 /** For each exercise, the time of the newest applied (not undone) stall change that touched it. */
 export function stallSince(changes: readonly TrainerChange[] = []): Record<string, number> {
   const out: Record<string, number> = {};
@@ -365,9 +438,10 @@ function stalls(ctx: CoachContext): Stall[] {
   return detectStalls(ctx.sets, ctx.sessions, ctx.state.plan, { since: stallSince(ctx.changes) });
 }
 
-const noStalls = (): Body => ({
+const noStalls = (gym: CoachChip[]): Body => ({
   reply: NO_STALLS,
   chips: [
+    ...gym,
     { id: 'deload', label: 'Deload week' },
     { id: 'swap', label: 'Swap from now on', args: { scope: 'plan' } },
   ],
@@ -376,10 +450,12 @@ const noStalls = (): Body => ({
 function stallFlow(ctx: CoachContext, exerciseId?: string, option?: StallOption): Body {
   const all = stalls(ctx);
   const stall = exerciseId ? all.find((s) => s.exerciseId === exerciseId) : all[0];
+  // "Adjust my plan": exercises the gym lacks the kit for come first (M10e).
+  const gym = exerciseId ? [] : gymChips(ctx);
   if (!stall) {
     if (exerciseId)
       return { reply: `${nameOf(ctx, exerciseId)} is still moving. No change needed.` };
-    return noStalls();
+    return noStalls(gym);
   }
   const pick = option && stall.options.includes(option) ? option : stall.options[0];
   if (!pick) return { reply: stallLine(stall, (id) => nameOf(ctx, id)) };
@@ -390,6 +466,7 @@ function stallFlow(ctx: CoachContext, exerciseId?: string, option?: StallOption)
   const line = stallLine(stall, (id) => nameOf(ctx, id));
   if (!r.ok) return { reply: `${line} ${r.reply}` };
   const chips: CoachChip[] = [
+    ...gym,
     ...stall.options
       .filter((o) => o !== pick)
       .map((o) => ({
@@ -430,6 +507,7 @@ const BLOCKED_MID_SESSION = new Set<string>([
   'adjustPlan',
   'postponeMode',
   'stallFix',
+  'gymSwap',
 ]);
 
 function redFlag(ctx: CoachContext): CoachResponse {
@@ -470,6 +548,8 @@ function handleText(text: string, ctx: CoachContext): CoachResponse {
     case 'deload':
       return done(fromResult(ctx, proposeDeload(actionCtx(ctx))));
     case 'swap':
+      if (s.exerciseId && !isWorkout(ctx) && lacksKit(ctx, s.exerciseId))
+        return done(gymSwapFlow(ctx, s.exerciseId, s.scope));
       return done(s.exerciseId ? swapFlow(ctx, s.exerciseId, s.scope) : askExercise(ctx, s.scope));
     case 'stall':
       return done(stallFlow(ctx, s.exerciseId));
@@ -489,6 +569,7 @@ const CHIP_INTENT: Partial<Record<CoachChipId, Intent>> = {
   swap: 'swap',
   pickExercise: 'swap',
   swapTo: 'swap',
+  gymSwap: 'swap',
   remove: 'swap',
   adjustPlan: 'stall',
   stallFix: 'stall',
@@ -516,9 +597,13 @@ function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachR
       return done(ex ? swapFlow(ctx, ex, args.scope) : askExercise(ctx, args.scope));
     case 'pickExercise':
       return done(ex ? swapFlow(ctx, ex, args.scope) : askExercise(ctx, args.scope));
+    case 'gymSwap':
+      if (!ex) return done(askExercise(ctx, 'plan'));
+      return done(lacksKit(ctx, ex) ? gymSwapFlow(ctx, ex) : swapFlow(ctx, ex, 'plan'));
     case 'swapTo': {
       if (!ex || !args.toId) return done({ reply: HELP_TEXT });
       const scope: SwapScope = isWorkout(ctx) ? 'today' : (args.scope ?? 'today');
+      if (!isWorkout(ctx) && lacksKit(ctx, ex)) return done(gymSwapFlow(ctx, ex, scope, args.toId));
       return done(fromResult(ctx, proposeSwap(actionCtx(ctx), ex, args.toId, ctx.catalog, scope)));
     }
     case 'remove':

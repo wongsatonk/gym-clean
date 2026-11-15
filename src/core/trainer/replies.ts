@@ -31,6 +31,24 @@ export const FOOD_DONE = "You've hit today's targets.";
 /** M7: nothing saved fits what's left. */
 export const FOOD_NONE = "Nothing saved fits what's left. Try a quick estimate in Fuel.";
 
+// ---------- M10e: the gym lacks the kit ----------
+
+/** The reply above a missing-kit swap proposal. */
+export function gymSwapReply(exerciseName: string): string {
+  return `Your gym doesn't have the kit for ${exerciseName}. Here's a swap.`;
+}
+
+/**
+ * The why line of a missing-kit swap: names the missing kit (equipment labels, as data), e.g.
+ * "No leg press here. This works the same main muscles. Just for today."
+ */
+export function gymSwapWhy(missingLabels: readonly string[], scope: 'today' | 'plan'): string {
+  const kit = missingLabels.map((l) => l.toLowerCase()).join(' or ');
+  const head = kit === '' ? "Your gym doesn't have the kit for it." : `No ${kit} here.`;
+  const tail = scope === 'plan' ? 'Every day with it changes from now on.' : 'Just for today.';
+  return `${head} This works the same main muscles. ${tail}`;
+}
+
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
 /** The reply above the food suggestions, e.g. "40 g protein and 900 kcal left today. Some ideas:". */

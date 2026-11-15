@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import exercisesJson from '../../../data/exercises.json';
-import bodyAreasJson from '../../../data/bodyAreas.json';
-import equipmentJson from '../../../data/equipment.json';
+import { EXERCISES, trainerCatalog } from '../../testkit/trainerCatalog';
 import programJson from '../../../data/program.json';
 import phrases from '../phrases.json';
 import { ADVICE_BANNED_WORDS, wordCount } from '../../advice';
@@ -10,27 +8,12 @@ import { effectiveDay, seedPlan, type PlanSession } from '../plan';
 import type { TrainerCatalog } from '../swapCandidates';
 import type { ActionContext, ActionResult } from './lighter';
 import { proposeSwap, proposeSwapOptions } from './swap';
-import type {
-  BodyArea,
-  Exercise,
-  PlannedExercise,
-  Program,
-  Proposal,
-  TrainerState,
-} from '../../types';
+import type { Exercise, PlannedExercise, Program, Proposal, TrainerState } from '../../types';
 
 // Made-up history; the program is the repo's default program (public, no personal numbers).
-const exercises = exercisesJson as Exercise[];
-const areaByMuscle = new Map<string, BodyArea>();
-for (const [area, a] of Object.entries(bodyAreasJson.areas)) {
-  for (const m of a.muscles) areaByMuscle.set(m, area as BodyArea);
-}
-const subs = equipmentJson.substitutes as Record<string, string>;
-const CATALOG: TrainerCatalog = {
-  exercises,
-  areaOf: (m) => areaByMuscle.get(m),
-  hasEquipment: (v) => v !== null && equipmentJson.available.includes(subs[v] ?? v),
-};
+// The catalog with his gym's default kit (M10e), wired like src/ui/app.ts.
+const exercises = EXERCISES;
+const CATALOG: TrainerCatalog = trainerCatalog();
 const program = programJson as Program;
 const ROTATION = program.days.map((d) => d.id);
 const byId = (id: string): Exercise => {
@@ -86,7 +69,7 @@ describe('proposeSwapOptions', () => {
     for (const o of r.options) {
       expect(dayIds('pull-a')).not.toContain(o.exerciseId);
       expect(byId(o.exerciseId).primaryMuscles).toContain('biceps');
-      expect(CATALOG.hasEquipment(byId(o.exerciseId).equipment)).toBe(true);
+      expect(CATALOG.canDo(o.exerciseId)).toBe(true);
       expect(o.name).toBe(byId(o.exerciseId).name);
       expect(o.proposal).toMatchObject({ action: 'swap', scope: 'today', baseVersion: 2 });
       // Same slot, same sets/reps/rest; marked as a swap; today only.
@@ -210,7 +193,7 @@ describe('proposeSwapOptions', () => {
     });
     // A plan swap doesn't need a training day.
     expect(proposeSwapOptions(rest, 'Dumbbell_Bicep_Curl', CATALOG, 'plan').ok).toBe(true);
-    const noKit: TrainerCatalog = { ...CATALOG, hasEquipment: () => false };
+    const noKit: TrainerCatalog = { ...CATALOG, canDo: () => false };
     expect(
       proposeSwapOptions(ctxFor('pull-a'), 'Dumbbell_Bicep_Curl', noKit, 'today'),
     ).toMatchObject({ ok: false, reason: 'noCandidate' });

@@ -614,6 +614,62 @@
       "slots": {},
       "safety": "redFlag",
       "ruleSupported": true
+    },
+    {
+      "text": "My gym has no leg press",
+      "intent": "swap",
+      "slots": { "exerciseId": "Leg_Press" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "There's no leg press at my gym",
+      "intent": "swap",
+      "slots": { "exerciseId": "Leg_Press" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "No leg press machine here",
+      "intent": "swap",
+      "slots": { "exerciseId": "Leg_Press" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "ไม่มีเครื่อง leg press",
+      "intent": "swap",
+      "slots": { "exerciseId": "Leg_Press" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "We don't have a leg extension machine",
+      "intent": "swap",
+      "slots": { "exerciseId": "Leg_Extensions" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "There is no rope for face pulls",
+      "intent": "swap",
+      "slots": { "exerciseId": "Face_Pull" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "The gym doesn't have a leg press, what can I do instead?",
+      "intent": "swap",
+      "slots": { "exerciseId": "Leg_Press" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "No legs today please",
+      "intent": "avoidArea",
+      "slots": { "area": "legs", "date": "today" },
+      "safety": "none",
+      "ruleSupported": true
     }
   ]
 }

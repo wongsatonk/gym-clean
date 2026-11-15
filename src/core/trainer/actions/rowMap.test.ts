@@ -1,9 +1,7 @@
 // M10: every day-level action records its row map (DayAdjust.replaced) so the preview and the
 // running session pair rows exactly (src/core/trainer/rows.ts).
 import { describe, expect, it } from 'vitest';
-import exercisesJson from '../../../data/exercises.json';
-import bodyAreasJson from '../../../data/bodyAreas.json';
-import equipmentJson from '../../../data/equipment.json';
+import { EXERCISES, trainerCatalog } from '../../testkit/trainerCatalog';
 import programJson from '../../../data/program.json';
 import { effectiveDay, seedPlan, type PlanSession } from '../plan';
 import { alignRows } from '../rows';
@@ -18,20 +16,12 @@ import {
 } from './lighter';
 import { proposeRemove } from './remove';
 import { proposeSwap, proposeSwapOptions } from './swap';
-import type { BodyArea, DayAdjust, Exercise, Program, Proposal, TrainerState } from '../../types';
+import type { DayAdjust, Program, Proposal, TrainerState } from '../../types';
 
 // Made-up history; the program is the repo's default program (public, no personal numbers).
-const exercises = exercisesJson as Exercise[];
-const areaByMuscle = new Map<string, BodyArea>();
-for (const [area, a] of Object.entries(bodyAreasJson.areas)) {
-  for (const m of a.muscles) areaByMuscle.set(m, area as BodyArea);
-}
-const subs = equipmentJson.substitutes as Record<string, string>;
-const CATALOG: TrainerCatalog = {
-  exercises,
-  areaOf: (m) => areaByMuscle.get(m),
-  hasEquipment: (v) => v !== null && equipmentJson.available.includes(subs[v] ?? v),
-};
+// The catalog with his gym's default kit (M10e), wired like src/ui/app.ts.
+const exercises = EXERCISES;
+const CATALOG: TrainerCatalog = trainerCatalog();
 const program = programJson as Program;
 const ROTATION = program.days.map((d) => d.id);
 

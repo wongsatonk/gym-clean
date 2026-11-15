@@ -9,6 +9,7 @@
 // Coach button (`[data-coach-open]`), the "Adjusted today" banner (`[data-adjusted]`, Undo
 // `[data-undo-adjust]`), a "Rest day" hero (`[data-hero="rest"]`, Train anyway keeps
 // `data-start`), and a dated week strip (`.cal-card[data-cal]`, moved days `.moved`).
+// M10e (optional): the "missing kit" prompt (`[data-gym-prompt]`, ./gymPrompt.ts).
 import type { WeekDot } from '../../core/stats';
 import type { DayOverride, ProgramDay } from '../../core/types';
 import { formatWeight, type Unit } from '../../core/units';
@@ -20,6 +21,7 @@ import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
 import { nudgeBanner } from '../fuel/links';
 import { dayMuscles, estimateMinutes, muscleLabel, type DayMuscles } from '../../core/dayInfo';
+import { gymPrompt, type MissingKit } from './gymPrompt';
 
 /** The last finished session, as the Last time tile shows it. */
 export type TodayLast = {
@@ -62,6 +64,11 @@ export type TodayProps = {
   newProgram?: boolean | undefined;
   /** M7-q6: the evening nudge line (core `nudgeFor`), e.g. "40 g protein to go today." Shown, never spoken. */
   nudge?: string | null | undefined;
+  /**
+   * M10e: the first exercise of the up-next day his gym has no kit for (kept ids skipped).
+   * Shows the "missing kit" prompt (See a swap / Keep it) when both callbacks are set.
+   */
+  missingKit?: MissingKit | null | undefined;
 };
 
 /** One calendar day, as `src/core/trainer/plan.ts` returns it. `date` is local YYYY-MM-DD. */
@@ -92,6 +99,10 @@ export type TodayActions = {
   onDismissNudge?: (() => void) | undefined;
   /** M7: "Log food" on the nudge (opens Fuel). */
   onOpenFuel?: (() => void) | undefined;
+  /** M10e: See a swap on the missing-kit prompt (opens the coach's swap proposal). */
+  onSeeGymSwap?: ((exerciseId: string) => void) | undefined;
+  /** M10e: Keep it on the missing-kit prompt. */
+  onKeepExercise?: ((exerciseId: string) => void) | undefined;
 };
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -553,6 +564,7 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
     props.newProgram && actions.onUseNewProgram && actions.onKeepPlan
       ? newProgramPrompt(actions)
       : null,
+    gymPrompt(props.missingKit, actions),
     props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,
     props.nudge && actions.onDismissNudge
       ? nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel)

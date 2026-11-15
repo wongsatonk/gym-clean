@@ -462,6 +462,25 @@
     "bare": ["push", "pull"],
     "bareFollowers": ["please", "session", "workout", "pls"]
   },
+  "missingKit": {
+    "note": "M10e: 'my gym has no leg press'. A named exercise plus one of 'phrases' -> swap that exercise (the coach turns it into the equipment swap when the gym lacks its kit). 'bare' words count only when no stall, lighter or food phrase matched. Never with a discomfort or red-flag word (those keep their own path).",
+    "phrases": [
+      "has no",
+      "have no",
+      "theres no",
+      "there is no",
+      "there isnt",
+      "there arent",
+      "dont have",
+      "doesnt have",
+      "do not have",
+      "does not have",
+      "no machine",
+      "ไม่มีเครื่อง",
+      "ยิมไม่มี"
+    ],
+    "bare": ["no", "ไม่มี"]
+  },
   "scope": {
     "plan": [
       "from now on",

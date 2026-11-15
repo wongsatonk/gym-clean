@@ -9,6 +9,8 @@ import {
   FOOD_NONE,
   FOOD_SETUP,
   foodIdeasReply,
+  gymSwapReply,
+  gymSwapWhy,
   HELP_TEXT,
   proposalReply,
   RED_FLAG_LINE,
@@ -288,5 +290,38 @@ describe('rowAdjustNote', () => {
       rowAdjustNote(pe('row'), pe('row', { sets: 2, weightKgToday: 7.5 }), 'kg', nameOf),
     ];
     for (const n of notes) expect(n && checkCopy(n).ok, n ?? '').toBe(true);
+  });
+});
+
+describe('missing-kit swap copy (M10e)', () => {
+  it('names the exercise and the missing kit', () => {
+    expect(gymSwapReply('Leg Press')).toBe(
+      "Your gym doesn't have the kit for Leg Press. Here's a swap.",
+    );
+    expect(gymSwapWhy(['Leg press'], 'plan')).toBe(
+      'No leg press here. This works the same main muscles. Every day with it changes from now on.',
+    );
+    expect(gymSwapWhy(['Leg press'], 'today')).toBe(
+      'No leg press here. This works the same main muscles. Just for today.',
+    );
+    expect(gymSwapWhy(['Half rack', 'Barbell and plates'], 'plan')).toMatch(
+      /^No half rack or barbell and plates here\./,
+    );
+  });
+
+  it('falls back to a generic line without labels', () => {
+    expect(gymSwapWhy([], 'plan')).toBe(
+      "Your gym doesn't have the kit for it. This works the same main muscles. Every day with it changes from now on.",
+    );
+  });
+
+  it('passes checkCopy', () => {
+    for (const t of [
+      gymSwapReply('Leg Press'),
+      gymSwapWhy(['Leg press'], 'plan'),
+      gymSwapWhy(['Calf raise machine'], 'today'),
+      gymSwapWhy([], 'today'),
+    ])
+      expect(checkCopy(t), t).toEqual({ ok: true, hits: [] });
   });
 });

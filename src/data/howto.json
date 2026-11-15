@@ -172,9 +172,9 @@
   },
   "Triceps_Pushdown": {
     "lines": [
-      "Stand tall at a high pulley, upper arms at your sides.",
-      "Push the bar down until your arms are straight.",
-      "Let it rise slowly, elbows staying where they are."
+      "Handle on a high pulley, upper arm at your side.",
+      "Push the handle down until your arm is straight.",
+      "Let it rise slowly. Then the other arm."
     ],
     "focus": "Focus: triceps, the back of the upper arm.",
     "tempo": "Push 1 s · Hold 1 s · Return 2 s"
@@ -208,9 +208,9 @@
   },
   "Face_Pull": {
     "lines": [
-      "Rope on a high pulley, step back, arms straight.",
-      "Pull the rope to your face, hands apart, elbows high.",
-      "Hold a moment, then let the arms return slowly."
+      "Handle at face height, step back, arm straight.",
+      "Pull toward your face, elbow high and wide.",
+      "Return slowly. Then the other arm."
     ],
     "focus": "Focus: rear shoulders. Upper back helps.",
     "tempo": "Pull 1 s · Hold 1 s · Return 2 s"
@@ -511,5 +511,32 @@
     ],
     "focus": "Focus: lats. Biceps and mid back help.",
     "tempo": "Lift 1 s · Return 2 s"
+  },
+  "Barbell_Squat": {
+    "lines": [
+      "In the half rack, set the catch bars just under your low point.",
+      "Bar on your upper back, sit down until thighs are about level.",
+      "Stand up through your heels. Log the bar (20 kg) plus the plates."
+    ],
+    "focus": "Focus: thighs (quads). Glutes and hamstrings help.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "Smith_Machine_Calf_Raise": {
+    "lines": [
+      "Bar on your upper back, balls of your feet on a plate.",
+      "Rise onto your toes as high as you can and hold.",
+      "Lower your heels slowly. Log only the plates you add."
+    ],
+    "focus": "Focus: calves.",
+    "tempo": "Lift 1 s · Hold 1 s · Lower 2 s"
+  },
+  "Smith_Machine_Squat": {
+    "lines": [
+      "Bar on your upper back, feet a little in front of you.",
+      "Unhook it and sit down until your thighs are about level.",
+      "Drive up through your heels. Log only the plates you add."
+    ],
+    "focus": "Focus: thighs (quads). Glutes and hamstrings help.",
+    "tempo": "Down 2 s · Up 1 s"
   }
 }

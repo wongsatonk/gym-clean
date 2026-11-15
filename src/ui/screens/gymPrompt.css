@@ -1,0 +1,54 @@
+/* M10e "missing kit" prompt (src/ui/screens/gymPrompt.ts), Today and the day preview.
+   Same card as the M10-q11 program prompt (.adjusted-banner.program-prompt): amber edge marks
+   attention, icon + words (never colour alone). Text on its own line, two buttons under it.
+   See a swap is the filled CTA, Keep it the outline one. Tokens from src/styles.css only. */
+
+.gym-prompt {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  border-left: 4px solid var(--warn);
+}
+
+.gym-prompt-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.gym-prompt-text .ic {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.gym-prompt-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.gym-prompt-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.gym-prompt-cta {
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}

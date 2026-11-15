@@ -181,6 +181,34 @@ describe('phrases.json', () => {
   });
 });
 
+describe('missing kit (M10e)', () => {
+  it('"my gym has no leg press" and friends → swap Leg Press', () => {
+    for (const text of [
+      'my gym has no leg press',
+      "there's no leg press",
+      'There is no leg press here',
+      'no leg press machine',
+      "we don't have a leg press",
+      'ไม่มีเครื่อง leg press',
+    ]) {
+      expect(matchIntent(text, ctx), text).toEqual({
+        intent: 'swap',
+        slots: { exerciseId: 'Leg_Press' },
+        safety: 'none',
+      });
+    }
+  });
+
+  it('leaves other "no" requests alone', () => {
+    expect(matchIntent('no legs today', ctx).intent).toBe('avoidArea');
+    expect(matchIntent('no time today', ctx).intent).toBe('postpone');
+    expect(matchIntent('no progress on hammer curls', ctx).intent).toBe('stall');
+    expect(matchIntent('no energy today', ctx).intent).toBe('lighter');
+    // Discomfort keeps the avoid-area path (the referral line comes first).
+    expect(matchIntent('my knee is sore, no leg press', ctx).intent).toBe('avoidArea');
+  });
+});
+
 describe('eval set (SPEC M10 Accept)', () => {
   it('has at least 60 items and no personal data', () => {
     expect(ITEMS.length).toBeGreaterThanOrEqual(60);

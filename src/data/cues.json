@@ -20,7 +20,7 @@
   "Dumbbell_Shoulder_Press": "Press straight up, brace your core.",
   "Dumbbell_Squat": "Chest up, sit back, drive up.",
   "Dumbbell_Step_Ups": "Push through the top leg only.",
-  "Face_Pull": "Pull to your face, elbows high.",
+  "Face_Pull": "Pull to your face, elbow high.",
   "Flat_Bench_Cable_Flyes": "Wide arc, hug the cables together.",
   "Front_Dumbbell_Raise": "No swing, lift to eye level.",
   "Goblet_Squat": "Chest up, sit down between your knees.",
@@ -52,8 +52,11 @@
   "Stiff-Legged_Dumbbell_Deadlift": "Hips back, feel the hamstring stretch.",
   "Straight-Arm_Pulldown": "Arms long, sweep the bar to thighs.",
   "Tricep_Dumbbell_Kickback": "Upper arm still, kick back and squeeze.",
-  "Triceps_Pushdown": "Elbows pinned, lock out and squeeze.",
+  "Triceps_Pushdown": "Elbow pinned, lock out and squeeze.",
   "Triceps_Pushdown_-_Rope_Attachment": "Elbows pinned, spread the rope at bottom.",
   "Underhand_Cable_Pulldowns": "Palms up, pull elbows to your sides.",
-  "Wide-Grip_Lat_Pulldown": "Pull elbows down, chest up to bar."
+  "Wide-Grip_Lat_Pulldown": "Pull elbows down, chest up to bar.",
+  "Barbell_Squat": "Chest up, sit down, push the floor away.",
+  "Smith_Machine_Calf_Raise": "Full stretch down, pause at the top.",
+  "Smith_Machine_Squat": "Bar on upper back, sit down, drive up."
 }

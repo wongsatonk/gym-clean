@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import exercisesJson from '../../../data/exercises.json';
-import bodyAreasJson from '../../../data/bodyAreas.json';
-import equipmentJson from '../../../data/equipment.json';
+import { EXERCISES, trainerCatalog } from '../../testkit/trainerCatalog';
 import programJson from '../../../data/program.json';
 import phrases from '../phrases.json';
 import { ADVICE_BANNED_WORDS, wordCount } from '../../advice';
@@ -21,17 +19,9 @@ import type {
 } from '../../types';
 
 // Made-up history; the program is the repo's default program (public, no personal numbers).
-const exercises = exercisesJson as Exercise[];
-const areaByMuscle = new Map<string, BodyArea>();
-for (const [area, a] of Object.entries(bodyAreasJson.areas)) {
-  for (const m of a.muscles) areaByMuscle.set(m, area as BodyArea);
-}
-const subs = equipmentJson.substitutes as Record<string, string>;
-const CATALOG: TrainerCatalog = {
-  exercises,
-  areaOf: (m) => areaByMuscle.get(m),
-  hasEquipment: (v) => v !== null && equipmentJson.available.includes(subs[v] ?? v),
-};
+// The catalog with his gym's default kit (M10e), wired like src/ui/app.ts.
+const exercises = EXERCISES;
+const CATALOG: TrainerCatalog = trainerCatalog();
 const program = programJson as Program;
 const ROTATION = program.days.map((d) => d.id);
 const byId = (id: string): Exercise => {
@@ -201,7 +191,7 @@ describe('proposeAvoidArea', () => {
   });
 
   it('no candidate → removed (gym without the kit)', () => {
-    const noKit: TrainerCatalog = { ...CATALOG, hasEquipment: () => false };
+    const noKit: TrainerCatalog = { ...CATALOG, canDo: () => false };
     const ctx = ctxFor('push-b');
     const rows = todayRows(ctx, proposal(proposeAvoidArea(ctx, 'arms', noKit)));
     expect(row(rows, 'Bench_Dips')).toBeUndefined();
@@ -236,6 +226,26 @@ describe('proposeAvoidArea', () => {
           }
         }
         expectCleanCopy(r.proposal);
+      }
+    }
+  });
+
+  it('never swaps in an exercise the gym lacks the kit for (M10e), for every day and area', () => {
+    const areas: BodyArea[] = ['arms', 'shoulders', 'chest', 'back', 'legs', 'core'];
+    for (const equipment of [undefined, ['dumbbells', 'adjustable-bench']]) {
+      const cat = trainerCatalog(equipment);
+      for (const dayId of ROTATION) {
+        const planIds = new Set(
+          program.days.find((d) => d.id === dayId)?.exercises.map((x) => x.exerciseId),
+        );
+        for (const area of areas) {
+          const ctx = ctxFor(dayId);
+          const r = proposeAvoidArea(ctx, area, cat);
+          if (!r.ok) continue;
+          for (const x of todayRows(ctx, r.proposal).filter((x) => !planIds.has(x.exerciseId))) {
+            expect(cat.canDo(x.exerciseId), `${dayId}/${area}: ${x.exerciseId}`).toBe(true);
+          }
+        }
       }
     }
   });

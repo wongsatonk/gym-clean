@@ -1,16 +1,126 @@
 {
-  "note": "What the gym has (M10-q6 default, provisional until Wongsaton lists his gym): dumbbells, a bench, a cable stack with a lat pulldown, and the machines the program already uses (leg press, leg curl, leg extension, calf raise). Values are free-exercise-db 'equipment' strings; swaps only suggest exercises whose equipment is available. No pull-up bar is assumed.",
-  "available": ["body only", "dumbbell", "cable", "machine"],
-  "machines": [
-    "lat pulldown",
-    "cable stack",
-    "leg press",
-    "leg curl",
-    "leg extension",
-    "calf raise"
+  "note": "His gym's equipment (M10e). Items are the kit an exercise can need (exerciseKit.json); defaultProfile is his gym as read from his photos, PROGRESS Decision 'Gym equipment (M10-q6)' (2026-11-15). Not in it: rope, the unconfirmed pull-up bar (M10e-q8), leg press, chest press, pec deck, calf machine. Editable later in Settings > My gym (stored under settings key 'gym').",
+  "items": [
+    {
+      "id": "dumbbells",
+      "label": "Dumbbells (5–75 lb)",
+      "group": "free weights"
+    },
+    {
+      "id": "kettlebell",
+      "label": "Kettlebell",
+      "group": "free weights"
+    },
+    {
+      "id": "barbell",
+      "label": "Barbell and plates",
+      "group": "free weights"
+    },
+    {
+      "id": "adjustable-bench",
+      "label": "Adjustable bench",
+      "group": "benches and racks"
+    },
+    {
+      "id": "half-rack",
+      "label": "Half rack",
+      "group": "benches and racks"
+    },
+    {
+      "id": "plyo-box",
+      "label": "Plyo box",
+      "group": "benches and racks"
+    },
+    {
+      "id": "pull-up-bar",
+      "label": "Pull-up bar",
+      "group": "benches and racks"
+    },
+    {
+      "id": "cable-lat-pulldown",
+      "label": "Lat pulldown",
+      "group": "cables"
+    },
+    {
+      "id": "cable-low-row",
+      "label": "Seated low row",
+      "group": "cables"
+    },
+    {
+      "id": "cable-pulley",
+      "label": "Adjustable cable pulleys",
+      "group": "cables"
+    },
+    {
+      "id": "cable-d-handle",
+      "label": "Single D-handle",
+      "group": "cables"
+    },
+    {
+      "id": "cable-lat-bar",
+      "label": "Lat bar",
+      "group": "cables"
+    },
+    {
+      "id": "cable-rope",
+      "label": "Rope attachment",
+      "group": "cables"
+    },
+    {
+      "id": "smith-machine",
+      "label": "Smith machine",
+      "group": "machines"
+    },
+    {
+      "id": "leg-extension",
+      "label": "Leg extension",
+      "group": "machines"
+    },
+    {
+      "id": "leg-curl",
+      "label": "Leg curl",
+      "group": "machines"
+    },
+    {
+      "id": "leg-press",
+      "label": "Leg press",
+      "group": "machines"
+    },
+    {
+      "id": "chest-press",
+      "label": "Chest press machine",
+      "group": "machines"
+    },
+    {
+      "id": "pec-deck",
+      "label": "Pec deck",
+      "group": "machines"
+    },
+    {
+      "id": "calf-machine",
+      "label": "Calf raise machine",
+      "group": "machines"
+    }
   ],
+  "defaultProfile": [
+    "dumbbells",
+    "kettlebell",
+    "barbell",
+    "adjustable-bench",
+    "half-rack",
+    "plyo-box",
+    "cable-lat-pulldown",
+    "cable-low-row",
+    "cable-pulley",
+    "cable-d-handle",
+    "cable-lat-bar",
+    "smith-machine",
+    "leg-extension",
+    "leg-curl"
+  ],
+  "legacyNote": "available/substitutes back the old coarse gymHas() check; removed in M10e task 9b once app.ts no longer uses it.",
+  "available": ["body only", "dumbbell", "cable", "machine"],
   "substitutes": {
     "kettlebells": "dumbbell"
-  },
-  "substitutesNote": "The goblet squat is listed as a kettlebell exercise upstream; it is done here with one dumbbell."
+  }
 }

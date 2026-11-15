@@ -39,7 +39,9 @@ import {
   cueFor,
   exerciseById,
   exerciseName,
-  gymHas,
+  defaultGymProfile,
+  gymCanDo,
+  preferredSwaps,
   program,
 } from '../data/catalog';
 import {
@@ -269,7 +271,8 @@ export function mountApp(root: HTMLElement): void {
   const trainerCatalog: TrainerCatalog = {
     exercises: catalogExercises(),
     areaOf: bodyAreaOf,
-    hasEquipment: gymHas,
+    canDo: (id) => gymCanDo(id, defaultGymProfile()),
+    preferred: preferredSwaps,
   };
   const todayDate = () => localDate(now());
   const planDays = () => trainer?.plan.days ?? program.days;

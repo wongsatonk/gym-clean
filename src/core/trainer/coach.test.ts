@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import exercisesJson from '../../data/exercises.json';
-import bodyAreasJson from '../../data/bodyAreas.json';
+import { trainerCatalog } from '../testkit/trainerCatalog';
 import equipmentJson from '../../data/equipment.json';
 import programJson from '../../data/program.json';
 import evals from './evals/requests.json';
 import { wordCount } from '../advice';
-import { applyProposal, type TrainerChange } from './changes';
+import { applyProposal, undoLast, type TrainerChange } from './changes';
 import { effectiveDay, seedPlan } from './plan';
 import type { StallSession } from './actions/stall';
 import type { TrainerCatalog } from './swapCandidates';
 import {
   AREA_CHIP_IDS,
   MID_SESSION_REPLY,
+  PROPOSAL_REPLY,
   QUICK_CHIPS,
   handle,
   type CoachContext,
@@ -28,31 +28,13 @@ import {
   SPOKEN_MAX_WORDS,
 } from './replies';
 import source from './coach.ts?raw';
-import type {
-  BodyArea,
-  Exercise,
-  Food,
-  NutritionTargets,
-  Program,
-  Recipe,
-  SetLog,
-  TrainerState,
-} from '../types';
+import type { Food, NutritionTargets, Program, Recipe, SetLog, TrainerState } from '../types';
 import type { CoachFuel } from './coach';
 import { FOOD_DONE, FOOD_NONE, FOOD_SETUP } from './replies';
 
 // Made-up history; the program is the repo's default program (public, no personal numbers).
-const exercises = exercisesJson as Exercise[];
-const areaByMuscle = new Map<string, BodyArea>();
-for (const [area, a] of Object.entries(bodyAreasJson.areas)) {
-  for (const m of a.muscles) areaByMuscle.set(m, area as BodyArea);
-}
-const subs = equipmentJson.substitutes as Record<string, string>;
-const CATALOG: TrainerCatalog = {
-  exercises,
-  areaOf: (m) => areaByMuscle.get(m),
-  hasEquipment: (v) => v !== null && equipmentJson.available.includes(subs[v] ?? v),
-};
+// The catalog with his gym's default kit (M10e), wired like src/ui/app.ts.
+const CATALOG: TrainerCatalog = trainerCatalog();
 const program = programJson as Program;
 const ROTATION = program.days.map((d) => d.id);
 
@@ -195,6 +177,8 @@ const FUEL: CoachFuel = {
 };
 
 const ids = (r: CoachResponse) => r.chips.map((c) => c.id);
+/** A gym with every equipment item (no missing-kit chips). */
+const FULL_KIT = trainerCatalog(equipmentJson.items.map((i) => i.id));
 const text = (t: string): CoachInput => ({ text: t });
 
 function allCopy(r: CoachResponse): string[] {
@@ -584,7 +568,10 @@ describe('adjust my plan / stalls', () => {
     const applied = applyProposal(c.state, p, at(11, 10, 20), 'chip');
     if (!applied.ok) throw new Error(applied.reason);
     const changes: TrainerChange[] = [applied.change];
-    const r = handle({ chip: 'adjustPlan' }, { ...c, state: applied.state, changes });
+    const r = handle(
+      { chip: 'adjustPlan' },
+      { ...c, state: applied.state, changes, catalog: FULL_KIT },
+    );
     expect(r.proposal).toBeUndefined();
     expect(ids(r)).toEqual(['deload', 'swap']);
     // An undone change doesn't count.
@@ -595,10 +582,209 @@ describe('adjust my plan / stalls', () => {
   });
 
   it('no stalls → deload or a swap from now on', () => {
-    const r = handle({ chip: 'adjustPlan' }, ctxFor('push-a'));
+    const r = handle({ chip: 'adjustPlan' }, ctxFor('push-a', { catalog: FULL_KIT }));
     expect(r.proposal).toBeUndefined();
     expect(ids(r)).toEqual(['deload', 'swap']);
     expect(r.chips[1]?.args?.scope).toBe('plan');
+  });
+});
+
+// M10e: the coach offers a plan swap for kit his gym lacks; nothing changes until Apply.
+describe('missing kit (M10e)', () => {
+  const LEGS_B = program.days.find((d) => d.id === 'legs-b');
+  const GYM_REPLY = "Your gym doesn't have the kit for Leg Press. Here's a swap.";
+  const keepChip = {
+    id: 'keepExercise',
+    label: 'Keep Leg Press',
+    args: { exerciseId: 'Leg_Press' },
+  };
+
+  it('gymSwap → the plan-scope swap to Smith Machine Squat, the others, Just today and Keep', () => {
+    const c = ctxFor('legs-b');
+    const r = handle({ chip: 'gymSwap', args: { exerciseId: 'Leg_Press' } }, c);
+    expect(r.reply).toBe(GYM_REPLY);
+    expect(r.intent).toBe('swap');
+    expect(r.proposal).toMatchObject({ action: 'swap', scope: 'plan' });
+    expect(r.proposal?.lines).toEqual([
+      { before: 'Legs B · Leg Press', after: 'Legs B · Smith Machine Squat' },
+    ]);
+    expect(r.proposal?.why).toBe(
+      'No leg press here. This works the same main muscles. Every day with it changes from now on.',
+    );
+    expect(r.chips).toEqual([
+      {
+        id: 'swapTo',
+        label: 'Try Barbell Squat',
+        args: { exerciseId: 'Leg_Press', toId: 'Barbell_Squat', scope: 'plan' },
+      },
+      {
+        id: 'swapTo',
+        label: 'Try Split Squat with Dumbbells',
+        args: { exerciseId: 'Leg_Press', toId: 'Split_Squat_with_Dumbbells', scope: 'plan' },
+      },
+      {
+        id: 'swapTo',
+        label: 'Just today',
+        args: { exerciseId: 'Leg_Press', toId: 'Smith_Machine_Squat', scope: 'today' },
+      },
+      keepChip,
+    ]);
+    expectClean(r, 'gymSwap');
+  });
+
+  it('a candidate chip keeps the missing-kit reply, Just today and Keep', () => {
+    const c = ctxFor('legs-b');
+    const r = handle(
+      {
+        chip: 'swapTo',
+        args: { exerciseId: 'Leg_Press', toId: 'Barbell_Squat', scope: 'plan' },
+      },
+      c,
+    );
+    expect(r.reply).toBe(GYM_REPLY);
+    expect(r.proposal?.lines[0]?.after).toBe('Legs B · Barbell Squat');
+    expect(r.chips.map((x) => x.args?.toId ?? x.id)).toEqual([
+      'Smith_Machine_Squat',
+      'Split_Squat_with_Dumbbells',
+      'Barbell_Squat',
+      'keepExercise',
+    ]);
+    expect(r.chips[2]).toMatchObject({ label: 'Just today', args: { scope: 'today' } });
+    expectClean(r, 'swapTo plan');
+  });
+
+  it('Just today → a today swap with a From now on chip', () => {
+    const c = ctxFor('legs-b');
+    const r = handle(
+      {
+        chip: 'swapTo',
+        args: { exerciseId: 'Leg_Press', toId: 'Smith_Machine_Squat', scope: 'today' },
+      },
+      c,
+    );
+    expect(r.reply).toBe(GYM_REPLY);
+    expect(r.proposal).toMatchObject({ action: 'swap', scope: 'today' });
+    expect(r.proposal?.why).toBe(
+      'No leg press here. This works the same main muscles. Just for today.',
+    );
+    expect(r.chips).toContainEqual({
+      id: 'swapTo',
+      label: 'From now on',
+      args: { exerciseId: 'Leg_Press', toId: 'Smith_Machine_Squat', scope: 'plan' },
+    });
+    expect(r.chips.at(-1)).toEqual(keepChip);
+    expectClean(r, 'just today');
+  });
+
+  it('on another day (preview of Legs B): the plan swap, no Just today', () => {
+    const r = handle({ chip: 'gymSwap', args: { exerciseId: 'Leg_Press' } }, ctxFor('push-a'));
+    expect(r.proposal).toMatchObject({ action: 'swap', scope: 'plan' });
+    expect(r.chips.some((x) => x.label === 'Just today')).toBe(false);
+    expect(r.chips.at(-1)).toEqual(keepChip);
+  });
+
+  it('Apply then Undo restores Leg Press exactly', () => {
+    const c = ctxFor('legs-b');
+    const p = handle({ chip: 'gymSwap', args: { exerciseId: 'Leg_Press' } }, c).proposal;
+    if (!p) throw new Error('no proposal');
+    const applied = applyProposal(c.state, p, at(11, 11, 9), 'chip');
+    if (!applied.ok) throw new Error(applied.reason);
+    const day = (st: TrainerState) => effectiveDay(st, c.sessions, TODAY).day?.exercises;
+    expect(day(applied.state)?.[0]?.exerciseId).toBe('Smith_Machine_Squat');
+    const undone = undoLast(applied.state, [applied.change], at(11, 11, 10));
+    if (!undone.ok) throw new Error(undone.reason);
+    expect(undone.state.plan.days).toEqual(c.state.plan.days);
+    expect(undone.state.overrides).toEqual(c.state.overrides);
+    expect(day(undone.state)).toEqual(LEGS_B?.exercises);
+  });
+
+  it('no candidate → the No good swap reply and Keep', () => {
+    const c = ctxFor('legs-b', { catalog: trainerCatalog(['leg-curl']) });
+    const r = handle({ chip: 'gymSwap', args: { exerciseId: 'Leg_Press' } }, c);
+    expect(r.proposal).toBeUndefined();
+    expect(r.reply).toMatch(/^No good swap for Leg Press/);
+    expect(r.chips).toEqual([keepChip]);
+    expectClean(r, 'no candidate');
+  });
+
+  it('works without missing-kit labels (generic why line)', () => {
+    const bare: TrainerCatalog = { ...CATALOG };
+    delete bare.missingKitLabels;
+    const r = handle(
+      { chip: 'gymSwap', args: { exerciseId: 'Leg_Press' } },
+      ctxFor('legs-b', { catalog: bare }),
+    );
+    expect(r.proposal?.why).toMatch(/^Your gym doesn't have the kit for it\./);
+    expectClean(r, 'no labels');
+  });
+
+  it('free text "my gym has no leg press" reaches the same proposal', () => {
+    const c = ctxFor('legs-b');
+    const chip = handle({ chip: 'gymSwap', args: { exerciseId: 'Leg_Press' } }, c);
+    for (const t of ['my gym has no leg press', 'ไม่มีเครื่อง leg press', 'no leg press machine']) {
+      const r = handle(text(t), c);
+      expect(r.reply, t).toBe(GYM_REPLY);
+      expect(r.proposal, t).toEqual(chip.proposal);
+      expect(r.chips, t).toEqual(chip.chips);
+    }
+    // Also from another day.
+    expect(handle(text('my gym has no leg press'), ctxFor('pull-a')).reply).toBe(GYM_REPLY);
+  });
+
+  it('kit the gym has → the usual swap, not the missing-kit flow', () => {
+    const r = handle(text("there's no hammer curls today"), ctxFor('pull-a'));
+    expect(r.reply).toBe(PROPOSAL_REPLY);
+    expect(r.chips.some((x) => x.id === 'keepExercise')).toBe(false);
+  });
+
+  it('a gymSwap chip for kit the gym has → the usual plan swap', () => {
+    const r = handle({ chip: 'gymSwap', args: { exerciseId: 'Hammer_Curls' } }, ctxFor('pull-a'));
+    expect(r.reply).toBe(PROPOSAL_REPLY);
+    expect(r.proposal).toMatchObject({ action: 'swap', scope: 'plan' });
+  });
+
+  it('mid-workout: never offered; typed text gets the usual today swap', () => {
+    const w = workoutCtx('legs-b', []);
+    expect(handle({ chip: 'gymSwap', args: { exerciseId: 'Leg_Press' } }, w).reply).toBe(
+      MID_SESSION_REPLY,
+    );
+    const r = handle(text('my gym has no leg press'), w);
+    expect(r.reply).not.toBe(GYM_REPLY);
+    expect(r.proposal).toMatchObject({ action: 'swap', scope: 'today' });
+    expect(r.chips.some((x) => x.id === 'keepExercise')).toBe(false);
+    for (const input of [text('hello'), { chip: 'swap' as const }, { chip: 'lighter' as const }])
+      expect(handle(input, w).chips.some((x) => x.id === 'gymSwap')).toBe(false);
+  });
+
+  it('Adjust my plan lists missing-kit exercises first, skipping kept ones', () => {
+    const r = handle({ chip: 'adjustPlan' }, ctxFor('push-a'));
+    expect(r.chips.slice(0, 2)).toEqual([
+      {
+        id: 'gymSwap',
+        label: 'Swap Standing Calf Raises (no kit)',
+        args: { exerciseId: 'Standing_Calf_Raises' },
+      },
+      { id: 'gymSwap', label: 'Swap Leg Press (no kit)', args: { exerciseId: 'Leg_Press' } },
+    ]);
+    expect(ids(r).slice(2)).toEqual(['deload', 'swap']);
+    const kept = handle({ chip: 'adjustPlan' }, ctxFor('push-a', { gymKept: ['Leg_Press'] }));
+    expect(kept.chips.filter((x) => x.id === 'gymSwap').map((x) => x.args?.exerciseId)).toEqual([
+      'Standing_Calf_Raises',
+    ]);
+    expectClean(r, 'adjustPlan');
+  });
+
+  it('every missing-kit reply passes checkCopy on every day (default gym and a dumbbell gym)', () => {
+    for (const catalog of [CATALOG, trainerCatalog(['dumbbells', 'adjustable-bench'])]) {
+      for (const dayId of ROTATION) {
+        const c = ctxFor(dayId, { catalog });
+        for (const d of program.days)
+          for (const p of d.exercises) {
+            const r = handle({ chip: 'gymSwap', args: { exerciseId: p.exerciseId } }, c);
+            expectClean(r, `${dayId}: ${p.exerciseId}`);
+          }
+      }
+    }
   });
 });
 

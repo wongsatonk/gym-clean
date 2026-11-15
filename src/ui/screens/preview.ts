@@ -7,6 +7,7 @@
 // M10 (optional props): a Coach button, the "Adjusted today" banner, an "Adjusted" badge on
 // changed rows (`li.ex-row[data-adjusted]`) and removed rows in their own list
 // (`li.ex-row-removed`, not `.ex-row`, so `.ex-row` still counts the exercises that run).
+// M10e (optional): the "missing kit" prompt (`[data-gym-prompt]`, ./gymPrompt.ts).
 import type { PlannedExercise, ProgramDay } from '../../core/types';
 import { exerciseById } from '../../data/catalog';
 import { badgesFor } from '../badges';
@@ -15,6 +16,7 @@ import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { dayMuscles, estimateMinutes, muscleLabel } from '../../core/dayInfo';
 import { adjustedBanner, coachButton } from './today';
+import { gymPrompt, type MissingKit } from './gymPrompt';
 
 /** How a row differs from the default day (M10). `removed` rows aren't part of the day that runs. */
 export type RowAdjust = 'swap' | 'lighter' | 'deload' | 'avoidArea' | 'removed';
@@ -50,6 +52,11 @@ export type PreviewProps = {
   removedRows?: readonly PreviewRow[] | undefined;
   /** M10: today's override summary; shows the "Adjusted today" banner with Undo. */
   adjustedToday?: string | null | undefined;
+  /**
+   * M10e: the first exercise of this day his gym has no kit for (kept ids skipped). Shows the
+   * "missing kit" prompt when both callbacks are set. The rows stay as they are until Apply.
+   */
+  missingKit?: MissingKit | null | undefined;
 };
 
 export type PreviewActions = {
@@ -59,6 +66,10 @@ export type PreviewActions = {
   onCoach?: (() => void) | undefined;
   /** M10: Undo on the Adjusted banner. */
   onUndoAdjust?: (() => void) | undefined;
+  /** M10e: See a swap on the missing-kit prompt. */
+  onSeeGymSwap?: ((exerciseId: string) => void) | undefined;
+  /** M10e: Keep it on the missing-kit prompt. */
+  onKeepExercise?: ((exerciseId: string) => void) | undefined;
 };
 
 /** The "Adjusted" badge: icon + word (never colour alone). */
@@ -107,6 +118,7 @@ export function previewScreen(props: PreviewProps, actions: PreviewActions): HTM
       h('button', { class: 'ghost-btn', type: 'button', onclick: actions.onBack }, '‹ Back'),
       actions.onCoach ? coachButton(actions.onCoach) : null,
     ),
+    gymPrompt(props.missingKit, actions),
     props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,
     h(
       'section',
