@@ -19,6 +19,8 @@
 //                                            #   setup line, Rest/Summary/hands-free Fix note, export
 //   node scripts/screenshots.mjs m4f-setup  # M4f set-up card at 390x844 + 375x667 (triceps,
 //                                            #   hammer, tuned curl): card/Got it/count geometry
+//   node scripts/screenshots.mjs m7         # M7 Fuel click-through (clock mocked, OFF routed):
+//                                            #   docs/screenshots/m7-verify-*.png
 //   node scripts/screenshots.mjs m5c-hold    # M5c breaks inside a set: body-line hold, Continue →
 //                                            #   one set; last-set hold (Save set); dev-log export
 //                                            #   to test-results/verify-m5c-hold/
@@ -2252,6 +2254,284 @@ async function m4fSetup(browser) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// M7 Fuel (task 25): click-through at 390x844 with a mocked clock. Open Food Facts is routed to a
+// made-up product / a 404; no real request leaves the machine.
+const M7_OFF = 'https://world.openfoodfacts.org';
+const m7At = (day, hour, min = 0) => new Date(2026, 10, day, hour, min).getTime();
+
+async function m7Phone(browser, time, { noDetector = false } = {}) {
+  const p = await newPhone(browser);
+  await p.page.addInitScript((nd) => {
+    window.__spoken = [];
+    const fake = { speak: (u) => window.__spoken.push(u.text), cancel() {}, pause() {}, resume() {},
+      getVoices: () => [], addEventListener() {}, speaking: false, pending: false, paused: false };
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: fake });
+    if (nd) Object.defineProperty(window, 'BarcodeDetector', { value: undefined, configurable: true });
+  }, noDetector);
+  p.offsite = watchOffsite(p.page);
+  p.off = [];
+  await p.ctx.route(`${M7_OFF}/**`, async (route) => {
+    const url = route.request().url();
+    p.off.push(url);
+    const cors = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
+    if (!url.includes('4006381333931')) return route.fulfill({ status: 404, headers: cors, body: '{"status":0}' });
+    return route.fulfill({ status: 200, headers: cors, body: JSON.stringify({ code: '4006381333931', status: 1,
+      product: { product_name: 'Made-up oat drink', brands: 'Test brand',
+        nutriments: { 'energy-kcal_100g': 46, proteins_100g: 1.1, carbohydrates_100g: 6.6, fat_100g: 1.5 } } }) });
+  });
+  await p.page.clock.install({ time });
+  await p.page.goto(BASE);
+  await p.page.locator('[data-screen="today"]').waitFor();
+  return p;
+}
+
+/** Gym-rule measures on the visible screen: big numbers, smallest body text, smallest button. */
+async function m7Sizes(page) {
+  return page.evaluate(() => {
+    const vis = (e) => e.getClientRects().length > 0;
+    const lefts = [...document.querySelectorAll('[data-left]')].filter(vis)
+      .map((e) => parseFloat(getComputedStyle(e).fontSize));
+    const btns = [...document.querySelectorAll('button, [role=switch], a[href]')].filter(vis)
+      .filter((e) => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; })
+      .map((e) => [e.textContent.trim().slice(0, 30) || e.getAttribute('aria-label'), Math.round(e.getBoundingClientRect().height)]);
+    const small = btns.filter(([, h]) => h < 56);
+    const texts = [...document.querySelectorAll('p, li, label, span, h1, h2, h3, button, input')].filter(vis)
+      .filter((e) => e.textContent.trim() || e.tagName === 'INPUT')
+      .filter((e) => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; })
+      .map((e) => [e.textContent.trim().slice(0, 30), parseFloat(getComputedStyle(e).fontSize)]);
+    const minText = texts.reduce((m, t) => (t[1] < m[1] ? t : m), ['', 999]);
+    const under20 = texts.filter(([, s]) => s < 20).slice(0, 8);
+    return { bigNumberPx: lefts, buttonsUnder56: small, minText, under20 };
+  });
+}
+
+async function m7Shot(p, name, extra = {}) {
+  await p.page.waitForTimeout(250);
+  await shot(p.page, p.log, `m7-verify-${name}`, { sizes: await m7Sizes(p.page), ...extra });
+}
+
+async function m7SetUp(page, weight = '70.0') {
+  await page.locator('main[data-screen="fuel"] [data-setup]').click();
+  const setup = page.locator('main[data-screen="fuel-setup"]');
+  await setup.waitFor();
+  await setup.locator('[data-field="sex"] [data-choice="male"]').click();
+  await setup.locator('[data-field="activity"] [data-choice="moderate"]').click();
+  const w = setup.locator('[data-field="weight"] .nf-value');
+  await w.fill(weight);
+  await w.dispatchEvent('change');
+  return setup;
+}
+
+async function m7GoFuel(page) {
+  const fuel = page.locator('main[data-screen="fuel"]');
+  if (await fuel.isVisible()) await page.locator('[data-tab="today"]').click();
+  await page.locator('[data-tab="fuel"]').click();
+  await fuel.waitFor();
+}
+
+async function m7(browser) {
+  // A: setup → favorite, recipe, Thai Large, quick estimate → rings → Full → coach → barcode.
+  const p = await m7Phone(browser, m7At(11, 12), { noDetector: true });
+  const { page } = p;
+  const sheet = page.locator('[data-log-sheet]');
+  const steps = {};
+  await m7GoFuel(page);
+  await m7Shot(p, 'fuel-empty');
+  const setup = await m7SetUp(page);
+  await m7Shot(p, 'setup');
+  await setup.locator('[data-setup-save]').click();
+  await page.locator('main[data-screen="fuel"] [data-ring="kcal"]').waitFor();
+  await m7Shot(p, 'fuel-start');
+
+  await page.locator('[data-log-open]').click();
+  await sheet.waitFor();
+  await m7Shot(p, 'log-favorites');
+  const shake = sheet.locator('[data-log-item]', { hasText: 'Protein shake' });
+  await shake.click();
+  await sheet.locator('[data-edit-item]').click();
+  const ed = page.locator('[data-my-food-editor]');
+  await ed.waitFor();
+  await ed.locator('#food-kcal').fill('130');
+  await ed.locator('#food-protein').fill('25');
+  await m7Shot(p, 'shake-label');
+  await ed.locator('[data-food-save]').click();
+  await shake.click();
+  steps.shakePreview = await sheet.locator('[data-preview]').textContent();
+  await sheet.locator('[data-log-confirm]').click();
+  await sheet.waitFor({ state: 'detached' });
+
+  await page.locator('[data-log-open]').click();
+  await sheet.locator('[data-log-section="recipes"]').click();
+  await sheet.locator('[data-new-recipe]').click();
+  const rx = page.locator('[data-recipe-editor]');
+  await rx.locator('#recipe-name').fill('Chicken rice bowl');
+  for (const q of ['chicken breast', 'rice']) {
+    await rx.locator('#recipe-search').fill(q);
+    const first = rx.locator('[data-search-results] [data-log-item]').first();
+    await first.waitFor({ timeout: 15_000 });
+    await first.click();
+  }
+  await rx.locator('[data-stepper="servings"] [data-step="up"]').click();
+  await m7Shot(p, 'recipe-editor');
+  await rx.locator('[data-recipe-save]').click();
+  await sheet.locator('[data-log-item^="recipe:"]', { hasText: 'Chicken rice bowl' }).click();
+  steps.recipePreview = await sheet.locator('[data-preview]').textContent();
+  await sheet.locator('[data-log-confirm]').click();
+  await sheet.waitFor({ state: 'detached' });
+
+  await page.locator('[data-log-open]').click();
+  await sheet.locator('[data-log-section="thai"]').click();
+  await m7Shot(p, 'log-thai');
+  await sheet.locator('[data-log-item="thai:thai:pad-kra-pao-moo-rice-egg"]').click();
+  await sheet.locator('[data-portion="Large"]').click();
+  steps.thaiLarge = await sheet.locator('[data-preview]').textContent();
+  await m7Shot(p, 'thai-large');
+  await sheet.locator('[data-log-confirm]').click();
+  await sheet.waitFor({ state: 'detached' });
+
+  await page.locator('[data-log-open]').click();
+  await sheet.locator('[data-log-section="quick"]').click();
+  await sheet.locator('#quick-name').fill('Noodle shop near work');
+  await sheet.locator('#quick-kcal').fill('650');
+  await sheet.locator('#quick-protein').fill('30');
+  await m7Shot(p, 'quick-estimate');
+  await sheet.locator('[data-quick-log]').click();
+  await sheet.waitFor({ state: 'detached' });
+  await page.waitForTimeout(5500); // let the Logged toast go
+  await m7Shot(p, 'fuel-quick-rings');
+  await page.locator('main[data-screen="fuel"] [data-entry]').first().scrollIntoViewIfNeeded();
+  await m7Shot(p, 'fuel-entries');
+  steps.quickRings = await page.locator('main[data-screen="fuel"] [data-ring]').allTextContents();
+  steps.entryCountQuick = await page.locator('main[data-screen="fuel"] [data-entry]').count();
+
+  await page.locator('[data-tab="settings"]').click();
+  const nut = page.locator('[data-nutrition]');
+  await nut.scrollIntoViewIfNeeded();
+  await nut.locator('[data-mode="full"]').click();
+  await page.waitForTimeout(200);
+  await nut.scrollIntoViewIfNeeded();
+  await m7Shot(p, 'settings-nutrition-full');
+  await m7GoFuel(page);
+  await m7Shot(p, 'fuel-full-rings');
+  steps.fullRings = await page.locator('main[data-screen="fuel"] [data-ring]').allTextContents();
+  steps.entryCountFull = await page.locator('main[data-screen="fuel"] [data-entry]').count();
+
+  await page.locator('[data-tab="today"]').click();
+  await page.locator('[data-coach-open]').click();
+  const coach = page.getByRole('dialog', { name: 'Coach' });
+  await coach.locator('[data-coach-chip="food"]').click();
+  await coach.locator('[data-food-card]').waitFor();
+  await m7Shot(p, 'coach-food');
+  steps.coachRow0 = (await coach.locator('[data-food-row="0"]').textContent())?.trim();
+  await coach.locator('[data-food-log="0"]').click();
+  await coach.locator('[data-food-logged="0"]').waitFor();
+  await m7Shot(p, 'coach-food-logged');
+  await coach.getByRole('button', { name: 'Close' }).click();
+  await m7GoFuel(page);
+  steps.entryCountAfterCoach = await page.locator('main[data-screen="fuel"] [data-entry]').count();
+
+  // Barcode: off by default → explainer → on → typed digits (found, then not found → Add).
+  await page.locator('[data-tab="settings"]').click();
+  const sw = page.locator('[data-setting="barcode-lookup"]');
+  await sw.scrollIntoViewIfNeeded();
+  steps.barcodeDefault = await sw.getAttribute('aria-checked');
+  steps.offRequestsWhileOff = p.off.length;
+  await sw.click();
+  await page.locator('[data-barcode-confirm]').waitFor();
+  await m7Shot(p, 'barcode-explainer');
+  await page.locator('[data-barcode-on]').click();
+  await page.locator('[data-tab="fuel"]').click();
+  await page.locator('[data-log-open]').click();
+  await sheet.locator('[data-log-section="search"]').click();
+  await sheet.locator('[data-scan-open]').click();
+  const scan = page.locator('[data-scan-sheet]');
+  await scan.waitFor();
+  await page.waitForTimeout(2500);
+  steps.scanCamera = await scan.locator('[data-scan-camera]').getAttribute('data-scan-camera');
+  await m7Shot(p, 'scan-sheet');
+  await scan.locator('#scan-digits').fill('4006381333931');
+  await scan.locator('[data-scan-lookup]').click();
+  await sheet.locator('[data-log-detail="food:off:4006381333931"]').waitFor();
+  await m7Shot(p, 'scan-found');
+  await sheet.locator('[data-close]').click().catch(() => {});
+  await page.keyboard.press('Escape').catch(() => {});
+  await sheet.waitFor({ state: 'detached' }).catch(() => {});
+  await page.locator('[data-log-open]').click();
+  await sheet.locator('[data-log-section="myFoods"]').click();
+  await sheet.locator('[data-scan-open]').click();
+  await scan.waitFor();
+  await scan.locator('#scan-digits').fill('5901234123457');
+  await scan.locator('[data-scan-lookup]').click();
+  await scan.locator('[data-scan-result="missing"]').waitFor();
+  await m7Shot(p, 'scan-missing');
+  await scan.locator('[data-scan-add="5901234123457"]').click();
+  const ed2 = page.locator('[data-my-food-editor]');
+  await ed2.waitFor();
+  await ed2.locator('#food-name').fill('Made-up crackers');
+  await ed2.locator('[data-basis="per100g"]').click();
+  await ed2.locator('#food-kcal').fill('420');
+  await ed2.locator('#food-protein').fill('9');
+  await m7Shot(p, 'scan-add-myfood');
+  await ed2.locator('[data-food-save]').click();
+  await sheet.locator('[data-log-detail]').waitFor();
+  await sheet.locator('[data-log-back]').click();
+  await sheet.locator('[data-section-panel="myFoods"]').waitFor();
+  await m7Shot(p, 'myfoods-after-add');
+  steps.myFoods = await sheet.locator('[data-section-panel="myFoods"] [data-log-item]').allTextContents();
+  steps.offRequests = p.off;
+  steps.spoken = await page.evaluate(() => window.__spoken);
+  results.push({ flow: 'A', steps, offsite: p.offsite, console: p.log });
+  await p.ctx.close();
+
+  // B: two fake weeks of weigh-ins → weekly card → Accept → new target.
+  const q = await m7Phone(browser, m7At(2, 7));
+  const pg = q.page;
+  const stepsB = {};
+  await m7GoFuel(pg);
+  const s2 = await m7SetUp(pg, '70.0');
+  await s2.locator('[data-setup-save]').click();
+  await pg.locator('main[data-screen="fuel"] [data-ring="kcal"]').waitFor();
+  const wi = pg.locator('main[data-screen="weigh-in"]');
+  const weigh = async (day, kg) => {
+    await pg.clock.setSystemTime(m7At(day, 7));
+    if (await wi.isVisible()) await wi.getByRole('button', { name: 'Back' }).click();
+    await m7GoFuel(pg);
+    await pg.locator('main[data-screen="fuel"] [data-weigh-in]').click();
+    await wi.waitFor();
+    const f = wi.locator('[data-field="weigh-in"] .nf-value');
+    await f.fill(kg);
+    await f.dispatchEvent('change');
+    await wi.locator('[data-weigh-save]').click();
+    await wi.locator('[data-weigh-today="saved"]').waitFor();
+  };
+  for (const d of [3, 4, 5]) await weigh(d, '70.0');
+  for (const d of [9, 10, 11, 12]) await weigh(d, '70.1');
+  await wi.getByRole('button', { name: 'Back' }).click();
+  await pg.clock.setSystemTime(m7At(16, 7));
+  await m7GoFuel(pg);
+  stepsB.before = await pg.locator('[data-ring="kcal"]').textContent();
+  await pg.locator('main[data-screen="fuel"] [data-weigh-in]').click();
+  await wi.waitFor();
+  const card = wi.locator('[data-weekly-card]');
+  await card.waitFor();
+  stepsB.cardKind = await card.getAttribute('data-kind');
+  stepsB.cardTitle = await card.locator('#wi-card-title').textContent();
+  await m7Shot(q, 'weigh-in-top');
+  await card.scrollIntoViewIfNeeded();
+  await m7Shot(q, 'weekly-card');
+  await card.locator('[data-weekly-accept]').click();
+  await card.waitFor({ state: 'detached' });
+  await pg.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await m7Shot(q, 'weigh-in-history');
+  await wi.getByRole('button', { name: 'Back' }).click();
+  await pg.waitForTimeout(300);
+  stepsB.after = await pg.locator('[data-ring="kcal"]').textContent();
+  await m7Shot(q, 'fuel-after-accept');
+  results.push({ flow: 'B', steps: stepsB, offsite: q.offsite, console: q.log });
+  await q.ctx.close();
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -2284,6 +2564,7 @@ try {
   else if (milestone === 'm4e') await m4e(browser, process.argv[3]);
   else if (milestone === 'm4f') await m4f(browser);
   else if (milestone === 'm4f-setup') await m4fSetup(browser);
+  else if (milestone === 'm7') await m7(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));

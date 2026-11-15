@@ -5,8 +5,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 ## Status
 
 - **Live:** 119acd5 on main, deployed 2026-11-15 (CI 118 passed): everything above plus **M10 phase A AI trainer** (coach chat, Not today, go easy on an area, lighter, deload, swap, stall fix, Undo, Plan changes).
-- **In progress:** nothing building. M7 Fuel is planned (2026-11-15, plan under "Current milestone plan").
-- **Next step:** Wongsaton said "Polish, then Fuel". So first the polish round, then **M7 Fuel** on branch `m7-fuel`. Tasks 1, 2 and 3 can start immediately. The gym checkpoints run alongside: 🧍 Checkpoint E (a week with the coach: at least one Not today, one Go easy on…, one swap) and 🧍 Checkpoint F1 (camera wave-1 sets + dev-log export). M4f wave 2 comes after F1.
+- **In progress:** M7 Fuel built, reviewed (PASS) and verified (PASS, e2e 140/140) on `m7-fuel`; being deployed with the polish batch (Wongsaton: "You can deploy when it ready"). Follow-up (non-blocking, verifier note 1): the 10 s Undo toast covers a sheet's main button (scan Look up, barcode/Thai detail Log, editor fields) until you scroll — move the toast or lift the sheet.
+- **Next step:** check the M7 deploy is live. During Wongsaton's flight: cloud sessions per `docs/cloud-briefs.md` (M7b local food vision; camera e2e stability). Gym checkpoints E and F1 still open.
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **Waiting on Wongsaton:**
   - Deploy OK for m4e-redesign.
@@ -37,7 +37,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [~] M5b Trainer recommendations after the set: round 1 is live. The tempo rule (T1) is built in M5 (task 8)
 - [~] M5c Hands-free sets: **built and live** (c3c1f85, verifier PASS) → waiting for 🧍 Checkpoint B3 (hands-free gym test). Follow-up "Breaks inside a set: tap to continue" planned below
 - [ ] M6 Polish & install
-- [ ] M7 Fuel: food & nutrition. **Planned 2026-11-15** (plan below, includes M10 F1–F3). Wongsaton: "Polish, then Fuel", so it's built after the polish round on `m7-fuel`. The M7-q questions are not blocking; their defaults get built. Barcode is an optional track (M7-q5) **ANSWERED 2026-11-15: "Yes, off by default" — build the barcode track (on-device scanner library, Open Food Facts lookup sends only the barcode number, setting off by default).**. No 🧍 checkpoint in the SPEC
+- [x] M7 Fuel: food & nutrition. Built 2026-11-15 on `m7-fuel` (Fuel tab, targets + weekly check, Thai dishes, USDA search offline, recipes, coach food ideas, opt-in barcode). Reviewer PASS, verifier PASS (Verification evidence → M7).
 - [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
 - [ ] M9 Native iOS shell (Capacitor). Outline only in the SPEC; not planned (M10-q9)
 - [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
@@ -228,7 +228,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Pass `m7Available: true` once targets exist. Log → the store, then the Undo toast, then a rerender.
   - Done when, by hand: "What should I eat?" → Log → the Fuel rings update.
   - Deps: 17, F1, F2.
-- [ ] 18. [ui-engineer] E2E `e2e/fuel.spec.ts` (390×844).
+- [x] 18. [ui-engineer] E2E `e2e/fuel.spec.ts` (390×844).
   - Cases: the SPEC M7 Accept flow:
     - set up targets → log a favorite, a recipe serving, a Thai dish (Large) and a quick estimate → the rings and remaining amounts update;
     - switch to Full mode → carbs/fat appear and no data is lost;
@@ -245,23 +245,23 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - The client has an injected fetch and a 10 s timeout. The URL holds only the barcode, there are no other params or headers with user data, and it is never called while the setting is off.
   - Done when tests cover: checksums, parsing (missing/odd units), the request shape, setting off → 0 calls, and the result saved to My foods so the next lookup is local.
   - Deps: 1.
-- [ ] 20. [main] Scanner dependency.
+- [x] 20. [main] Scanner dependency.
   - Files: package.json, vite.config.ts.
   - Pick an on-device barcode library for Safari (no `BarcodeDetector` on iOS). Check the current docs and size, and prefer a small wasm build (e.g. zxing-wasm). Precache its wasm so it works offline.
   - Done when: `npm run build` precaches it and the bundle-size delta is recorded in the Decision.
   - Deps: none (after M7-q5).
-- [ ] 21. [ui-engineer] Scanner UI + setting.
+- [x] 21. [ui-engineer] Scanner UI + setting.
   - Files: src/ui/fuel/barcodeScan.ts(+test), src/ui/fuel/logSheet.ts, src/ui/screens/settings.ts, index.html (CSP `connect-src` + `https://world.openfoodfacts.org`).
   - Uses `BarcodeDetector` where it exists, else the library, else typing the digits.
   - The setting shows its explainer before it turns on: "Looks up the barcode number online. Nothing else is sent."
   - Camera frames stay on the phone and nothing is recorded.
   - Done when: render tests and screenshots pass, and the section is hidden while the setting is off.
   - Deps: 14, 19, 20.
-- [ ] 22. [main] Barcode wiring. Files: src/ui/app.ts. Done when, by hand, typed digits → result → saved to My foods → the second lookup works offline. Deps: 17, 21.
-- [ ] 23. [ui-engineer] E2E `e2e/barcode.spec.ts` with `page.route` mocks: off → 0 requests to openfoodfacts; on → the URL holds only the code; not found → a "Add it to My foods" path. Done when: green with `--repeat-each=3`. Deps: 22.
+- [x] 22. [main] Barcode wiring. Files: src/ui/app.ts. Done when, by hand, typed digits → result → saved to My foods → the second lookup works offline. Deps: 17, 21.
+- [x] 23. [ui-engineer] E2E `e2e/barcode.spec.ts` with `page.route` mocks: off → 0 requests to openfoodfacts; on → the URL holds only the code; not found → a "Add it to My foods" path. Done when: green with `--repeat-each=3`. Deps: 22.
 
 #### Close
-- [ ] 24. [reviewer] Review the branch diff against CLAUDE.md:
+- [x] 24. [reviewer] Review the branch diff against CLAUDE.md:
   - pure core (no DOM or fetch in `src/core/nutrition`);
   - no personal numbers anywhere in the repo;
   - copy passes `checkCopy`, with no diet or medical claims;
@@ -270,7 +270,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - nutrition data is kept out of the dev log;
   - no M7b scope crept in.
   - Deps: 18, 23 (or 18 alone if the barcode track is cut).
-- [ ] 25. [verifier] Verify against SPEC M7 Accept.
+- [x] 25. [verifier] Verify against SPEC M7 Accept.
   - Run `npm run check`, `npm run e2e` and `npm run build`. Report the food-DB gzip size against the 2 MB budget.
   - Airplane-mode run in the prod preview.
   - 390×844 screenshots `docs/screenshots/m7-*`, console clean.
@@ -2303,6 +2303,32 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   - `docs/screenshots/m4d-pull-a-badges.png`: all five Pull A rows "3D demo"; "Camera" on row and curl only.
   - `docs/screenshots/silent-hint-preview.png` (iPhone UA): "Spoken cues: turn Silent mode off." (20px, icon + words), Got it 56px, sits above Start workout, Start fully on screen. Default (non-iOS) UA: no hint.
 - Non-blocking observations: (1) after Apply, set 3 at 40 lb (sets 8×35, 8×35, 8×40) gets A3 again, "+5 lb → 45 lb". That matches the rule table (A3 looks at reps only, all of today's sets), but it suggests a second jump after one set at the new weight; product call for Wongsaton (e.g. only count sets at the current weight). (2) The one-arm row demo has the hand on the bench but both feet on the floor, while how-to line 1 says "One knee and hand on the bench" (anatomy-3d-engineer or the how-to text). (3) In headless Chrome the gauge screenshot shows count "0 · Get into start position" while the gauge moves (counter still settling at 14 fps); expected.
+
+### M7 (2026-11-15)
+- Verified on `m7-fuel` at 6e3bc2d **plus the uncommitted working tree** (scanner tasks 21–23 + fix round: barcodeScan.ts/css, logSheet, fuelController, fuel screen, tabBar, app.ts, index.html CSP, e2e/fuel.spec.ts, e2e/barcode.spec.ts). Load average 4.9–6.4 at the start (other sessions idle-ish), 3.3 at the end. Verdict: **PASS** (non-blocking notes below).
+- `npm run check`: typecheck (both projects) + lint clean, Vitest **93 files / 2,582 tests passed**, node script tests **56/56**. Nutrition + units alone: 11 files / 215 tests (targets incl. overrides, clamps, fat floor, Quick→Full→Quick round trip; adjust incl. 3 vs 4 weigh-ins, Sunday 23:59 / Monday 00:00, DST week, never below maintenance; portions 0.5/1/1.5/2, S/R/L, missing macro stays missing, recipe edited after logging, lb↔kg). `foods.test.ts` checks every one of the **47 Thai dishes** (source `thai-estimate`, `nameTh`, kcal + protein, 3 portions, `usda:` note, Atwater within 15%, rebuilt-from-recipe match) and the seed Protein shake.
+- `npm run build`: main `index` **587.39 kB / 177.50 kB gzip** vs origin/main (119acd5, same build) **459.88 / 142.53 kB** → **+127.5 kB raw / +35.0 kB gzip**. Lazy: `usda-foods-*.json` 2,650 kB / **356.6 kB gzip** (gzip -6: 360,514 B, budget 2 MB), `zxing_reader-*.wasm` 946.9 / 414.3 kB gzip, `reader` 13.4 kB gzip, `zxing_reader` js 0.08 kB gzip; landmarker, three, scene, viewer, skeleton3d unchanged. Precache **26 entries (25,311 KiB)**, was 22; `dist/sw.js` lists `assets/usda-foods-CEIZg-2w.json`, `assets/zxing_reader-BCjuyud6.wasm` and `assets/zxing_reader-DGddFt39.js`. CSP `connect-src 'self' blob: data: https://world.openfoodfacts.org`.
+- `E2E_PORT=5311 npx playwright test` (full suite, 7 workers): **140 passed, 1 skipped** (`history.spec.ts:336` HISTORY_SHOTS, opt-in), 0 failed, 0 flaky, 11.9 min. All six `fuel.spec.ts` and five `barcode.spec.ts` cases passed, including the prod-preview offline food search and `pwa.spec.ts` offline install. The camera/live specs that failed or flaked in earlier loaded runs all passed first time: `hands-free-live.spec.ts:90` (17.2 s), `camera-person.spec.ts:3` and `:37`, `hands-free.spec.ts:604`, `focus-cues.spec.ts:444`. So no rerun and no origin/main comparison was needed (a clean origin/main snapshot was prepared and used only for the bundle-size baseline). CI still skips the live rep count on GPU-less runners.
+- Flakiness: `npx playwright test e2e/fuel.spec.ts e2e/barcode.spec.ts --project=mobile --repeat-each=5`: **55/55 passed**, 0 flaky (19.3 s).
+- Click-through (`SHOT_PORT=5312 node scripts/screenshots.mjs m7`; clock mocked to Wed 11 Nov 12:00, Open Food Facts routed to a made-up product / a 404, speech spy, BarcodeDetector removed so the zxing reader runs on the fake camera). Made-up values only:
+  - setup (male, Active, 70.0 kg) → rings 2,807 kcal / 126 g to go, both "estimate";
+  - Favorites: seed Protein shake asks for its label first → 130 / 25 → "130 kcal · 25 g protein" → Log;
+  - recipe "Chicken rice bowl" (chicken breast + rice from the USDA list, pot makes 2) → "133 kcal · 21 g protein" per serving → Log;
+  - Thai: pad kra pao (ข้าวผัดกะเพราหมูสับไข่ดาว) Large → "1,170 kcal · 57 g protein" → Log;
+  - Quick estimate "Noodle shop near work" 650 / 30 → Log;
+  - rings: 2,083 of 2,807 (724 to go), protein 134 of 126 ("+8 g protein over target"), 4 entries under Lunch;
+  - Settings → Full: 4 rings (carbs 95 of 400, fat 67 of 78), still 4 entries, kcal/protein unchanged, quick entry still "650 kcal · 30 g protein";
+  - Today → Coach → "What should I eat?" → 3 rows, each "Fits your 724 kcal left" (row 0 "Khao pad with chicken … 722 kcal · 43 g protein") → Log → "Logged" toast → Fuel shows 5 entries;
+  - Settings barcode: **off by default**, 0 Open Food Facts requests while off → explainer ("Looks up the barcode number online … Nothing else is sent …") → Turn on → Search → Scan a barcode (camera `on`, zxing) → typed 4006381333931 → detail "Made-up oat drink (Test brand)", "Saved … to My foods"; typed 5901234123457 → 404 → "Open Food Facts doesn't have 5901234123457 yet" → Add it to My foods → editor with the barcode → Made-up crackers 420 / 9 per 100 g → saved → My foods lists shake, oat drink, crackers. Exactly 2 requests left the device, both `GET https://world.openfoodfacts.org/api/v2/product/<code>.json` (routed);
+  - second context, clock Mon 2 → Mon 16 Nov: setup 70.0, weigh-ins 70.0 ×3 then 70.1 ×4 → weekly card `up`, "Add 150 kcal a day?" ("up 0.14% … slower than your plan", "New target: 2,959 kcal a day (was 2,809)", estimate) → Accept → card gone → Fuel ring 2,959 kcal.
+  - Nothing spoken in either flow.
+- Screenshots 390×844 (DPR 2), every one **scrollWidth 390**, **0 page errors**. Console: one `Failed to load resource … 404` from the intentional not-found barcode lookup (the e2e filters the same line); nothing else. Every remaining/target number on the rings 64px; **no visible button under 56px** in any shot; smallest text 18px, only short labels (tab labels, "estimate" tags, "Delete" under its icon, "70 kg" in the Weigh-in button, "Weekly check" eyebrow), as allowed by the M4e `--fs-label` decision; body text ≥ 20px.
+  - `docs/screenshots/m7-verify-fuel-empty.png`, `m7-verify-setup.png`, `m7-verify-fuel-start.png`, `m7-verify-log-favorites.png`, `m7-verify-shake-label.png`, `m7-verify-recipe-editor.png`, `m7-verify-log-thai.png`, `m7-verify-thai-large.png`, `m7-verify-quick-estimate.png`, `m7-verify-fuel-quick-rings.png`, `m7-verify-fuel-entries.png`, `m7-verify-settings-nutrition-full.png`, `m7-verify-fuel-full-rings.png`, `m7-verify-coach-food.png`, `m7-verify-coach-food-logged.png`, `m7-verify-barcode-explainer.png`, `m7-verify-scan-sheet.png`, `m7-verify-scan-found.png`, `m7-verify-scan-missing.png`, `m7-verify-scan-add-myfood.png`, `m7-verify-myfoods-after-add.png`, `m7-verify-weigh-in-top.png`, `m7-verify-weekly-card.png`, `m7-verify-weigh-in-history.png`, `m7-verify-fuel-after-accept.png`.
+- Non-blocking observations:
+  1. **The 10 s Undo toast covers a sheet's main button until you scroll.** Measured (`test-results/m7-toast.mjs`): with a "Logged …" toast up (618–762 px), the scan sheet's Look up (618–690) is fully under it, and a tap there hits the toast. After scrolling the sheet (the extra 248 px padding from fuel.css), Look up sits at 524–596, clear, and works. The barcode detail's Log (622–694) is the same: under the toast until scrolled (barcode.spec checks only the scrolled case). The toasts also cover the Meal chips in the Thai detail and the editor's Protein field (`m7-verify-thai-large.png`, `m7-verify-scan-add-myfood.png`). This matches the design comment in fuel.css, but a sweaty user may not think to scroll. Owner: ui-engineer (e.g. lift the sheet's sticky action above the toast, or shorten the toast while a sheet is open).
+  2. The Undo toast from a log follows across tabs and into the coach and scan sheets for its full 10 s (seen on Settings, Coach and Scan). This is the M10 behaviour.
+  3. Main chunk +35 kB gzip (Fuel screens + nutrition core). The food list and the scanner are lazy, as planned.
+  4. The setup screenshot shows the sticky Save targets bar just below "Stays on this phone." with no gap. It isn't clipped.
 
 ## Blockers / questions for Wongsaton
 - **New (M7 Fuel, planned 2026-11-15; not blocking. The defaults below are what gets built unless you say otherwise):**
