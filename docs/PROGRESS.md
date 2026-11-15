@@ -4,9 +4,10 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 ## Status
 
-- **Live:** eb16eed on main, deployed 2026-11-14. It has everything through M5, the drill voice, **M5c "tap to continue"** and the **M4e redesign**. Wongsaton OK'd it; it took 3 CI rounds: a Rest-with-Apply margin on Linux fonts, and the low-fps cue on GPU-less runners in a camera-layout test.
-- **In progress:** M4d 3D demos for the remaining 18 exercises, on branch `m4d-demos`. Batch 1 is Legs A + Push B.
-- **Next step:** Wongsaton reviews the screenshots and OKs a deploy (fast-forward main to m4e-redesign). After that, 🧍 Checkpoint C / B3 at the gym.
+- **Live:** c5e3a0d on main, deployed 2026-11-14: everything through M6, M4d 3D demos for all 30 program exercises, and M4f wave 1 (camera for hammer / concentration / incline curls, DB shoulder press, bent-over row, triceps extension, all `learning`).
+- **In progress:** M10 phase A AI trainer on branch `m10a-trainer` (tasks 1–17 done and committed; task 18 review = CHANGES REQUIRED → fix round in progress; then 19 verify, 20 ask to deploy).
+- **Next step:** finish the review fixes (core: REPLACE_UPCOMING while paused, INSERT_UPCOMING for mid-workout Undo, avoid-area swaps need a shared primary muscle, explicit row map in DayAdjust; app: Train anyway undoes a standing postpone, no Coach row over the camera, toast dispose), re-review, verify, then ask Wongsaton to deploy. Then 🧍 Checkpoint E (a week with the coach) and 🧍 Checkpoint F1 (camera wave-1 sets).
+- **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **Waiting on Wongsaton:**
   - Deploy OK for m4e-redesign.
   - **A-q6:** the `--warn` amber is too close to Volt gold and to the Yellow CTA.
@@ -1432,6 +1433,9 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-15: **M10 wiring decisions (main).** (1) "Train anyway" on a rest day writes a `{date}` train override for today (version bump, saved, no PlanChange) so the calendar and the coach treat today as training; review fix: on a day that is rest only because of a standing "Not today", Train anyway undoes that change instead. (2) Mid-workout "Lighter today" changes only exercises with 0 logged sets. (3) Trainer dev-log events are recorded only inside a workout (the dev log is per-workout, M4c); events from Today/preview/Summary are not logged. (4) Rest weekdays default to none (M10-q1 answered "No fixed rest days").
+- 2026-11-15: **M10 tasks 16–17 evidence.** `npm run check` green (2152 + 29); `e2e/trainer.spec.ts` ×3 24/24; full e2e 119 passed, 1 skipped (opt-in HISTORY_SHOTS), 0 flaky. Screenshots `docs/screenshots/m10-*.png` (coach sheet, proposal, confirmation + Undo, Today adjusted, rest day, preview adjusted, Plan changes). Review (task 18): CHANGES REQUIRED, blocking = Sunday default rest day (fixed 0a2be23); non-blocking items in fix round.
 - 2026-11-15: **M10-q1 answered: no fixed rest days (core-engineer).** `DEFAULT_REST_WEEKDAYS` / `seedPlan` → `restWeekdays: []`, so Up next with no history is the first program day on any weekday, Sunday included, and "Not today" (use rest day) slides the week and says "no rest day". Rest weekdays stay fully supported; tests and `e2e/trainer.spec.ts` that cover rest days set Sunday explicitly. No migration: Dexie v4 isn't shipped, so a dev-seeded `[0]` is simply kept (loadTrainerState never rewrites rest weekdays).
 - 2026-11-15: **M10 Dexie version 3 → 4 (core-engineer, task 12).** New tables only: `trainer` (key `'current'`, row `{ key, state: TrainerState }`) and `planChanges` (`++id, createdAt`); `SessionRow.adjust` is unindexed, so existing rows are untouched (upgrade test v3 → v4). `loadTrainerState` re-seeds an unedited plan when program.json's hash changes (plan + rotation from the program; rest weekdays, overrides kept; version + 1, no change record) and keeps an edited one (M10-q11), with `defaultProgramChanged` for the "new default program" prompt.
 - 2026-11-14: **M4f wave-1 retune from synthetic (core-engineer).** Two wave 1 rules miscounted their rendered clips (pose-engineer, staged in `fixtures-staging/m4f/`). Both stay `learning`; real sets at 🧍 Checkpoint F1 decide the final values. SPEC M4f wave 1 table updated.
