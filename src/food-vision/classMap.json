@@ -240,6 +240,76 @@
           "KhaoNiewMaMuang"
         ]
       }
+    },
+    "pad_pak_ruam_mit": {
+      "dishes": [
+        "thai:pad-pak-ruam-mit"
+      ],
+      "datasets": {
+        "thfood50": [
+          "PadPakRuamMit"
+        ]
+      }
+    },
+    "kor_moo_yang": {
+      "dishes": [
+        "thai:kor-moo-yang"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KorMooYang"
+        ]
+      }
+    },
+    "khao_mok_gai": {
+      "dishes": [
+        "thai:khao-mok-gai"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KhaoMokGai"
+        ]
+      }
+    },
+    "suki": {
+      "dishes": [
+        "thai:suki-nam-moo"
+      ],
+      "datasets": {
+        "thfood50": [
+          "Suki"
+        ]
+      }
+    },
+    "yentafo": {
+      "dishes": [
+        "thai:yentafo"
+      ],
+      "datasets": {
+        "thfood50": [
+          "Yentafo"
+        ]
+      }
+    },
+    "kuay_jab": {
+      "dishes": [
+        "thai:kuay-jab"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KuayJab"
+        ]
+      }
+    },
+    "goong_pao": {
+      "dishes": [
+        "thai:goong-pao"
+      ],
+      "datasets": {
+        "thfood50": [
+          "GoongPao"
+        ]
+      }
     }
   }
 }

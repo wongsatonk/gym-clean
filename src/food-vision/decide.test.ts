@@ -153,3 +153,18 @@ describe('decide', () => {
     expect(input).toEqual(copy);
   });
 });
+
+describe('decide with a model that covers a subset of the class map', () => {
+  it('options only ever hold labels the model returned', () => {
+    // The model knows 2 of the 4 classes; it can only score those (plus junk it may emit).
+    const modelLabels = new Set(['pad_thai', 'tom_yum']);
+    const d = decide(
+      [cat('tom_yum', 0.5), cat('pad_thai', 0.3), cat('not_in_map', 0.2)],
+      map,
+      opts,
+    );
+    expect(d.options.map((o) => o.label)).toEqual(['tom_yum', 'pad_thai']);
+    for (const o of d.options) expect(modelLabels.has(o.label)).toBe(true);
+    expect(d.options.some((o) => o.label === 'pad_kra_pao' || o.label === 'som_tum')).toBe(false);
+  });
+});

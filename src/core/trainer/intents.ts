@@ -9,7 +9,8 @@
  *  1. red flag → `help`, no slots, `safety: 'redFlag'` (never a training proposal);
  *  2. deload, 3. swap, 4. postpone (incl. "skip leg day" / "skip <plan day name>");
  *  4b. missing kit (M10e): a named exercise with "has no" / "there's no" / "ไม่มีเครื่อง" (or a
- *     bare "no" when no stall/lighter/food phrase matched), no discomfort → swap that exercise;
+ *     bare "no" when no stall/lighter/food phrase and no "no more" / "today" word matched), no
+ *     discomfort → swap that exercise;
  *  5. an area word with a discomfort or "avoid" word → avoidArea;
  *  6. stall, 7. lighter, 8. food;
  *  9. discomfort with no area → avoidArea without an area (the coach asks which area);
@@ -144,6 +145,7 @@ const SKIP_BARE = P.skipDay.bare.map((w) => normalizeText(w));
 const SKIP_BARE_FOLLOWERS = compileList(P.skipDay.bareFollowers);
 const MISSING_KIT = compileList(P.missingKit.phrases);
 const MISSING_KIT_BARE = compileList(P.missingKit.bare);
+const MISSING_KIT_BARE_NOT = compileList(P.missingKit.bareNot);
 const SCOPE_PLAN = compileList(P.scope.plan);
 const SCOPE_TODAY = compileList(P.scope.today);
 const DISCOMFORT = compileList(P.safety.discomfort);
@@ -317,11 +319,15 @@ function exerciseOf(text: string, ctx: MatchContext): string | undefined {
   return pick(heads.map((n) => n.id));
 }
 
-/** "my gym has no …", "there's no …", or a bare "no" that isn't about progress, energy or food. */
+/**
+ * "my gym has no …", "there's no …", or a bare "no" that isn't about progress, energy or food, nor
+ * a wish about today / from now on ("no more squats", "no squats today": not a fact about the gym).
+ */
 function missingKit(text: string): boolean {
   if (has(MISSING_KIT, text)) return true;
   return (
     has(MISSING_KIT_BARE, text) &&
+    !has(MISSING_KIT_BARE_NOT, text) &&
     !has(INTENTS.stall, text) &&
     !has(INTENTS.lighter, text) &&
     !has(INTENTS.food, text)

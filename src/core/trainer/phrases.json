@@ -463,7 +463,7 @@
     "bareFollowers": ["please", "session", "workout", "pls"]
   },
   "missingKit": {
-    "note": "M10e: 'my gym has no leg press'. A named exercise plus one of 'phrases' -> swap that exercise (the coach turns it into the equipment swap when the gym lacks its kit). 'bare' words count only when no stall, lighter or food phrase matched. Never with a discomfort or red-flag word (those keep their own path).",
+    "note": "M10e: 'my gym has no leg press'. A named exercise plus one of 'phrases' -> swap that exercise (the coach turns it into the equipment swap when the gym lacks its kit). 'bare' words count only when no stall, lighter or food phrase matched and none of 'bareNot' (a wish about this session or from now on, e.g. 'no more squats', 'no squats today', is not a fact about the gym). Never with a discomfort or red-flag word (those keep their own path).",
     "phrases": [
       "has no",
       "have no",
@@ -479,7 +479,22 @@
       "ไม่มีเครื่อง",
       "ยิมไม่มี"
     ],
-    "bare": ["no", "ไม่มี"]
+    "bare": ["no", "ไม่มี"],
+    "bareNot": [
+      "no more",
+      "anymore",
+      "any more",
+      "today",
+      "tonight",
+      "tomorrow",
+      "this time",
+      "this week",
+      "for now",
+      "for a while",
+      "วันนี้",
+      "พรุ่งนี้",
+      "อีกแล้ว"
+    ]
   },
   "scope": {
     "plan": [

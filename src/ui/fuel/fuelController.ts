@@ -7,6 +7,12 @@
 // Privacy: nutrition data stays in IndexedDB. Nothing here writes to the developer log. Fetches:
 // the same-origin food list (foodDb, lazy, on the first search) and, only while barcode lookup
 // is on, the Open Food Facts lookup with nothing but the barcode digits (offClient.ts).
+//
+// M7b photos: the photo is shrunk in memory (photoCapture), classified on the phone by the
+// injected classifier (host.photo, food-vision), turned into options by `decide`, confirmed in
+// the photo sheet and logged with `entryFromPhoto`. The photo is kept only when "Save photos to
+// improve recognition" is on (`maybeSavePhoto`), labelled with the dish he confirmed; otherwise
+// the canvas is dropped once the sheet closes. Photos and results never reach the developer log.
 import { weekStartOf, weeklyCheck, checkHasChange, decideCheck, applyAcceptedCheck, trend } from '../../core/nutrition/adjust';
 import {
   dayTotals,
@@ -41,6 +47,8 @@ import type {
   FoodAmount,
   FoodDbRow,
   FoodEntry,
+  FoodModelRecord,
+  FoodVisionSettings,
   FoodSuggestion,
   MacroSet,
   MealSlot,
@@ -52,6 +60,10 @@ import type {
 } from '../../core/types';
 import type { Unit } from '../../core/units';
 import { sessionsSince, type GymDb } from '../../data/db';
+import { CLASS_MAP } from '../../food-vision/classMap';
+import { decide as decidePhoto, type ScoredLabel } from '../../food-vision/decide';
+import { entryFromPhoto } from '../../core/nutrition/photo';
+import { deletePhotos, getFoodVisionSettings, getModel, maybeSavePhoto } from '../../data/nutrition/photoStore';
 import { foodDb } from '../../data/nutrition/foodDb';
 import { lookupBarcode } from '../../data/nutrition/offClient';
 import { EDIT_FROM_LABEL, SEED_FOODS, THAI_DISHES } from '../../data/nutrition/foods';
@@ -98,6 +110,8 @@ import {
 } from './logSheet';
 import { myFoodEditor, type MyFoodDraft } from './myFoodEditor';
 import { nutritionSettings, type MacroKey } from './nutritionSettings';
+import { preparePhoto, type CapturedPhoto } from './photoCapture';
+import { photoSheet, type PhotoChoice, type PhotoSheet } from './photoSheet';
 import { recipeEditor, type RecipeDraft } from './recipeEditor';
 import { fuelSetupScreen, type SetupValues } from './setup';
 import { weighInScreen } from './weighIn';
@@ -118,7 +132,24 @@ export type FuelHost = {
   /** The app's Undo toast (10 s). */
   toast: (text: string, onUndo: () => void) => void;
   logError: (err: unknown) => void;
+  /** M7b: on-device photo logging. Omitted → the log sheet has no photo row. */
+  photo?: FuelPhotoHost | undefined;
 };
+
+/** What the photo flow needs from food-vision (app.ts passes the real classifier). */
+export type FuelPhotoHost = {
+  /** The shared classifier for this stored model (food-vision `loadFoodClassifier`). */
+  load: (model: FoodModelRecord) => Promise<{
+    classify: (image: HTMLCanvasElement) => { categories: readonly ScoredLabel[] };
+  }>;
+  /** Frees the loaded classifier (model removed or replaced; food-vision `disposeFoodClassifier`). */
+  dispose: () => void;
+  /** Test seam. Default: photoCapture `preparePhoto`. */
+  prepare?: ((file: Blob, opts: { keepBlob: boolean }) => Promise<CapturedPhoto>) | undefined;
+};
+
+/** A photo still in memory while its dish is being picked (search after a photo). */
+type PendingPhoto = { photo: CapturedPhoto; takenAt: number };
 
 type Sub = { kind: 'main' } | { kind: 'weighIn' } | { kind: 'setup'; back: 'fuel' | 'settings' };
 
@@ -190,6 +221,11 @@ export function createFuel(host: FuelHost) {
   let sessions: { startedAt: number; endedAt?: number }[] = [];
   let nudgeShownDate: string | null = null;
   let nudge: Nudge | null = null;
+  /** M7b: the imported food model (null: none) and the save-photos setting. */
+  let photoModel: FoodModelRecord | null = null;
+  let photoSettings: FoodVisionSettings = { savePhotos: false };
+  /** Bumps on every new photo and on close, so a slow classify can't fill a newer sheet. */
+  let photoSeq = 0;
   let sub: Sub = { kind: 'main' };
   let sheet: HTMLElement | null = null;
   /** Cleanup for the open sheet (the scanner stops its camera). */
@@ -247,6 +283,8 @@ export function createFuel(host: FuelHost) {
       listWeeklyChecks(db),
       sessionsSince(db, t - (HISTORY_DAYS + 1) * 24 * 3_600_000),
       getNudgeShown(db),
+      host.photo ? getModel(db) : Promise.resolve(undefined),
+      getFoodVisionSettings(db),
     ]);
     return force || (startGen === gen && pending.size === 0) ? rows : null;
   }
@@ -261,7 +299,9 @@ export function createFuel(host: FuelHost) {
     }
     // Writes kept landing (very unlikely): keep the in-memory copy, which already has them.
     if (rows === null) return;
-    const [s, m, bc, w, e, f, r, fav, c, sess, shown] = rows;
+    const [s, m, bc, w, e, f, r, fav, c, sess, shown, model, fv] = rows;
+    setPhotoModel(model ?? null);
+    photoSettings = fv;
     settings = s;
     mode = s?.mode ?? m;
     barcode = s?.barcodeLookup ?? bc;
@@ -590,6 +630,7 @@ export function createFuel(host: FuelHost) {
   function closeSheet(refocus: string | false = LOG_OPEN): void {
     window.clearTimeout(searchTimer);
     searchSeq++;
+    photoSeq++;
     if (!sheet) return;
     sheetDispose?.();
     sheetDispose = null;
@@ -638,7 +679,11 @@ export function createFuel(host: FuelHost) {
       });
   }
 
-  function openLog(section?: LogSection, detail?: LogItem): void {
+  /**
+   * `pending`: a photo whose dish is being found through search (M7b). It lives only in this
+   * sheet's callbacks, so it is dropped with the sheet.
+   */
+  function openLog(section?: LogSection, detail?: LogItem, pending?: PendingPhoto): void {
     void ensureSeeded().then(() => {
       const el = logSheet(
         {
@@ -652,20 +697,115 @@ export function createFuel(host: FuelHost) {
           initialSection: section,
           initialDetail: detail,
           scan: barcode,
+          photoAvailable: photoModel !== null,
         },
         {
-          onLog: (c) => void logChoice(c).catch(host.logError),
+          onLog: (c) => void logChoice(c, pending).catch(host.logError),
           onQuickLog: (q) => void quickLog(q).catch(host.logError),
           onSearch: (q) => runSearch(q, el),
           onNewRecipe: () => openRecipeEditor(null),
           onNewFood: () => openFoodEditor(null, false),
           onEditItem: (item) => editItem(item),
           onScan: (from) => openScan(from),
+          onPhoto: host.photo ? (file) => void photoFlow(file).catch(host.logError) : undefined,
           onClose: () => closeSheet(),
         },
       );
       openSheet(el);
       logEl = el;
+    });
+  }
+
+  // ---------- M7b food photos ----------
+
+  /** A new or removed model frees the old classifier (it is reloaded on the next photo). */
+  function setPhotoModel(next: FoodModelRecord | null): void {
+    const changed =
+      (photoModel === null) !== (next === null) ||
+      (photoModel !== null && next !== null && photoModel.importedAt !== next.importedAt);
+    if (changed && photoModel !== null) host.photo?.dispose();
+    photoModel = next;
+  }
+
+  /** Photo → in-memory canvas → photo sheet ("Looking…") → classify → decide → result. */
+  async function photoFlow(file: File): Promise<void> {
+    const ph = host.photo;
+    const model = photoModel;
+    if (!ph || !model) return;
+    const seq = ++photoSeq;
+    const takenAt = host.now();
+    const slot = slotFor(takenAt, lastSessionEnd());
+    let captured: CapturedPhoto | null;
+    try {
+      captured = await (ph.prepare ?? preparePhoto)(file, { keepBlob: photoSettings.savePhotos });
+    } catch {
+      captured = null;
+    }
+    if (seq !== photoSeq) return; // another photo or a closed sheet meanwhile
+    const pending: PendingPhoto | undefined = captured ? { photo: captured, takenAt } : undefined;
+    const el: PhotoSheet = photoSheet(
+      {
+        mode,
+        slot,
+        dishes: thaiItems(),
+        state: captured ? { status: 'looking' } : { status: 'error' },
+        photo: captured?.canvas,
+      },
+      {
+        onLog: (c) => void logPhoto(c, pending).catch(host.logError),
+        // The photo goes along to search: a Thai dish picked there is still labelled with it.
+        onSearch: () => openLog('search', undefined, pending),
+        onCancel: () => closeSheet(),
+      },
+    );
+    openSheet(el);
+    photoSeq = seq; // openSheet's closeSheet bumped it; this sheet is the current photo
+    if (!captured) return;
+    let state: Parameters<PhotoSheet['setState']>[0];
+    try {
+      const classifier = await ph.load(model);
+      if (seq !== photoSeq || sheet !== el) return;
+      const { categories } = classifier.classify(captured.canvas);
+      state = { status: 'result', decision: decidePhoto(categories, CLASS_MAP, { claudeAvailable: false }) };
+    } catch (err) {
+      // Not host.logError: nothing about photos goes to the developer log. The sheet says it.
+      console.warn('Food photo: classify failed', err);
+      state = { status: 'error' };
+    }
+    if (seq !== photoSeq || sheet !== el) return;
+    el.setState(state);
+  }
+
+  async function logPhoto(c: PhotoChoice, pending: PendingPhoto | undefined): Promise<void> {
+    const dish = foodMap().get(c.dishId);
+    const e = dish ? entryFromPhoto(dish, c.portion.label, c.confidence, entryOpts(c.slot)) : null;
+    if (!e) return;
+    closeSheet();
+    await addPhotoEntry(e, c.dishId, pending);
+  }
+
+  /**
+   * Saves the entry, then (save-photos on only) the photo labelled with the dish. Undo removes
+   * both. The in-memory photo is dropped either way once this returns.
+   */
+  async function addPhotoEntry(e: FoodEntry, dishId: string, pending: PendingPhoto | undefined): Promise<void> {
+    await track(saveEntry(db, e));
+    entries = [...entries, e];
+    let savedId: string | null = null;
+    const blob = pending?.photo.blob;
+    if (pending && blob) {
+      const id = uid('photo');
+      const photo = { id, dishId, createdAt: pending.takenAt, w: pending.photo.w, h: pending.photo.h, blob };
+      const saved = await track(maybeSavePhoto(db, photoSettings, photo)).catch((err: unknown) => {
+        host.logError(err);
+        return false;
+      });
+      if (saved) savedId = id;
+    }
+    afterChange(LOG_OPEN);
+    host.toast(`Logged ${e.label}.`, () => {
+      void removeEntry(e, false).catch(host.logError);
+      if (savedId) void track(deletePhotos(db, [savedId])).catch(host.logError);
     });
   }
 
@@ -719,10 +859,21 @@ export function createFuel(host: FuelHost) {
     host.render();
   }
 
-  async function logChoice(c: LogChoice): Promise<void> {
+  async function logChoice(c: LogChoice, pending?: PendingPhoto): Promise<void> {
     const opts = entryOpts(c.slot);
     let e: FoodEntry | null = null;
     const { foodId, recipeId } = c.item.ref;
+    // After a photo (None of these → search): a Thai dish keeps the photo source, no confidence.
+    const dish = pending && foodId !== undefined ? foodMap().get(foodId) : undefined;
+    const photoE =
+      dish && c.portion && 'servings' in c.amount && c.amount.servings === 1
+        ? entryFromPhoto(dish, c.portion.label, undefined, opts)
+        : null;
+    if (photoE && foodId !== undefined) {
+      closeSheet();
+      await addPhotoEntry(photoE, foodId, pending);
+      return;
+    }
     if (recipeId !== undefined) {
       const r = recipes.find((x) => x.id === recipeId);
       e = r ? entryFromRecipe(r, foodMap(), amountValue(c.amount), opts) : null;
@@ -1218,5 +1369,13 @@ export function createFuel(host: FuelHost) {
     },
     /** Closes an open Fuel sheet (leaving the screen). */
     closeSheet: () => closeSheet(false),
+    /**
+     * M7b: Settings → Food photos saved a change (model imported / replaced / removed, Undo, or
+     * the save-photos switch). A new or removed model frees the loaded classifier.
+     */
+    setPhoto(next: { model?: FoodModelRecord | null; settings?: FoodVisionSettings }): void {
+      if (next.model !== undefined) setPhotoModel(next.model);
+      if (next.settings !== undefined) photoSettings = { savePhotos: next.settings.savePhotos };
+    },
   };
 }

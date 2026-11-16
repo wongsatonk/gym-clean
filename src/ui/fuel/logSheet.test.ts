@@ -404,3 +404,62 @@ describe('logSheet: barcode entry (M7-q5)', () => {
     expectCleanCopy(el);
   });
 });
+
+describe('logSheet: photo entry (M7b task 15, M7b-q4)', () => {
+  function openWithPhoto(over: Partial<LogSheetProps>) {
+    const files: unknown[] = [];
+    const sheet = logSheet(props(over), {
+      onLog: () => undefined,
+      onQuickLog: () => undefined,
+      onSearch: () => undefined,
+      onNewRecipe: () => undefined,
+      onNewFood: () => undefined,
+      onEditItem: () => undefined,
+      onPhoto: (f) => files.push(f),
+      onClose: () => undefined,
+    });
+    return { el: asFake(sheet), files };
+  }
+
+  it('no photo row at all without onPhoto (sheet unchanged)', () => {
+    const { el } = open({ photoAvailable: true });
+    expect(all(el, 'data-log-photo')).toHaveLength(0);
+    expect(all(el, 'data-photo-hint')).toHaveLength(0);
+    expect(all(el, 'data-photo-open')).toHaveLength(0);
+  });
+
+  it('with a model: the Photo button sits above the sections and hands over the file', () => {
+    const { el, files } = openWithPhoto({ photoAvailable: true });
+    const row = byAttr(el, 'data-log-photo');
+    const nav = el.find((e) => e.getAttribute('aria-label') === 'Food sources')[0];
+    const body = el.find((e) => e.children.includes(row))[0];
+    expect(body).toBeDefined();
+    expect(body?.children.indexOf(row)).toBeLessThan(body?.children.indexOf(nav as FakeEl) ?? -1);
+    expect(byAttr(row, 'data-photo-open').textContent).toBe('Log from a photo');
+    expect(all(el, 'data-photo-hint')).toHaveLength(0);
+    const input = byAttr(row, 'data-photo-input') as FakeEl & { files?: unknown };
+    const file = { name: 'meal.jpg' };
+    input.files = [file];
+    input.dispatch('change', {});
+    expect(files).toEqual([file]);
+    expectCleanCopy(el);
+  });
+
+  it('without a model: one line pointing to Settings, no button', () => {
+    const { el } = openWithPhoto({ photoAvailable: false });
+    expect(all(el, 'data-photo-open')).toHaveLength(0);
+    expect(byAttr(el, 'data-photo-hint').textContent).toBe(
+      'Log from a photo: add a food model in Settings.',
+    );
+    expectCleanCopy(el);
+  });
+
+  it('a detail hides the photo row; Back shows it again', () => {
+    const { el } = openWithPhoto({ photoAvailable: true });
+    section(el, 'thai');
+    byAttr(el, 'data-log-item', KRA_PAO.key).click();
+    expect(byAttr(el, 'data-log-photo').hasAttribute('hidden')).toBe(true);
+    byAttr(el, 'data-log-back').click();
+    expect(byAttr(el, 'data-log-photo').hasAttribute('hidden')).toBe(false);
+  });
+});

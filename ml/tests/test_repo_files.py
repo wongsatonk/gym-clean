@@ -37,3 +37,6 @@ def test_colab_notebook_is_public_data_only_licence_gated_and_has_no_outputs():
     assert "--no-personal" in code
     assert "--zip" not in code and "personal_zips" not in code
     assert "files.download" in code
+    assert "last output" in code  # run() shows the failing command's output tail
+    assert '"--epochs", str(EPOCHS)' in code
+    assert "config.yaml" not in code  # never rewrite the config (e.g. to lower a threshold)

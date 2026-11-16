@@ -26,11 +26,24 @@ Classifier. The output is one `.tflite` file (with label metadata) that you impo
 - **One workaround.** The mediapipe 1.2.x wheel lacks a small compiled helper that the metadata
   writer imports for one value (the minimum metadata parser version).
   `gymfood/export.py::_metadata_shim` supplies `"1.0.0"`. Every field we write needs only that
-  version. The export step then loads the result in MediaPipe to prove it works.
+  version. We also skip the writer's JSON-rendering step (it loads MediaPipe's native library,
+  which on Linux needs `libEGL.so.1` / `libGLESv2.so.2`), so writing metadata is pure Python.
+- **Export check.** The model is written first (with a `.json` report), then checked: on
+  `export.verify_images` images it must give the trained head's top-1 at least
+  `export.min_top1_agreement` (0.98) of the time — in MediaPipe Python, or, where MediaPipe's
+  native library can't load, in the TFLite interpreter (with a warning). A failed check exits 1
+  and says why; the file and the trained head are kept.
+- **Preprocessing contract.** Training resizes each photo to 224×224 (stretched, Pillow
+  antialiased bilinear). MediaPipe's own resize of a big photo is not antialiased and changed the
+  top-1 answer on 5.5% of THFOOD-50 check photos (and more on big phone photos) (`mediapipe_full_size_top1_agreement` in the
+  `.json`). So the app resizes the photo to 224×224 itself (canvas, smoothing "high") before
+  `classify()`, and the export check feeds MediaPipe exactly that.
 - **Model.** EfficientNet-Lite0 feature vector (Apache 2.0, 224 px, 4.7M params) is the same
   default backbone Model Maker uses. It stays **frozen**: each image is embedded once (cached),
   and a softmax head is trained on the embeddings with numpy. That makes CPU training practical.
-  The export is float16, about 7 MB, well under the 25 MB limit.
+  The export is float16, about 7 MB, well under the 25 MB limit. On the 30-class Mac run it gave
+  the trained head's top-1 on 200/200 check photos (as did float32, 13.6 MB). If a future run
+  fails the check because of float16, set `export.quantization: none`.
 - **Measured on an M4 Pro (CPU):**
   - backbone about 2 ms/image, plus JPEG decoding;
   - THFOOD-50's ~7k mapped images with 1 augmented copy: a few minutes to embed;

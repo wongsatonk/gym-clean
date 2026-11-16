@@ -135,3 +135,14 @@
   bottom: max(12px, env(safe-area-inset-bottom));
   z-index: 1;
 }
+
+/* M7b task 15: the Photo row at the top of the log sheet (or the Settings hint, M7b-q4). */
+.log-photo[hidden],
+.log-photo-hint[hidden] {
+  display: none;
+}
+
+.log-photo-hint {
+  font-size: var(--fs-body);
+  line-height: 1.35;
+}

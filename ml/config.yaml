@@ -41,10 +41,10 @@ head:
   seed: 7
 
 export:
-  quantization: float16    # float16 (default, ~4-5 MB) | int8 (smaller, check accuracy) | none
+  quantization: float16    # float16 (default, ~7 MB) | int8 (smaller, check accuracy) | none (float32, ~14 MB)
   max_mb: 25
-  verify_images: 20
-  min_top1_agreement: 0.9  # MediaPipe top-1 vs the trained head on verify_images
+  verify_images: 200
+  min_top1_agreement: 0.98 # MediaPipe top-1 (photos pre-resized to 224 like the app) vs the trained head
 
 report:
   confused_pairs: 10

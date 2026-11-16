@@ -34,7 +34,7 @@ def test_smoke_pipeline_exports_a_mediapipe_model(tmp_path: Path):
     assert info["mb"] <= 25
     assert info["labels"] == list(SMOKE_LABELS)
     assert set(SMOKE_LABELS) <= set(load_class_map(cfg.paths.class_map).labels)
-    assert info["mediapipe_top1_agreement"] >= 0.9
+    assert info["mediapipe_top1_agreement"] >= 0.98
     assert json.loads(model.with_suffix(".json").read_text())["labels"] == list(SMOKE_LABELS)
 
     labels, results, _ms = mediapipe_classify(model.read_bytes(), [np.full((300, 200, 3), 200, np.uint8)])

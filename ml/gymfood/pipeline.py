@@ -157,43 +157,79 @@ def run_evaluate(cfg: Config, run_id: str, *, log=print) -> dict:
 
 
 def run_export(cfg: Config, run_id: str, out: Path, *, log=print) -> dict:
+    """Builds the .tflite, writes it (and its .json) first, then checks it: the exported model must
+    give the trained head's top-1 on `verify_images` images fed exactly as the app feeds MediaPipe
+    (already 224x224, see images.load_image). Raises after writing if a check fails, so a trained
+    head is never lost to a failed check."""
     from .backbone import make_embedder
-    from .export import add_metadata, build_tflite, mediapipe_classify
+    from .export import add_metadata, build_tflite, mediapipe_classify, mediapipe_unavailable, tflite_predict
     from .images import load_image
 
     rd = run_dir(cfg, run_id)
     head, labels = load_head(rd / "head.npz")
     rows = read_manifest(manifest_path(cfg))
     pool = [r for s in ("personal_test", "test", "val", "train") for r in rows if r.split == s and r.label in labels]
-    picks = pool[: cfg.export.verify_images]
+    n = cfg.export.verify_images
+    picks = pool[:: max(1, len(pool) // n)][:n] if n > 0 else []  # spread over splits and classes
     size = cfg.backbone.image_size
     reps = np.stack([load_image(r.path, size) for r in picks]) if picks else None
     tfl = add_metadata(build_tflite(cfg, head.W, head.b, representative=reps), labels, cfg)
     mb = len(tfl) / 1e6
-    if mb > cfg.export.max_mb:
-        raise ValueError(f"model is {mb:.1f} MB, above the {cfg.export.max_mb} MB limit")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(tfl)
-    # Load check: MediaPipe Python (same task as the app) on the original images vs the trained head.
-    from PIL import Image, ImageOps
-
-    originals = []
-    for r in picks:
-        with Image.open(r.path) as im:
-            originals.append(np.asarray(ImageOps.exif_transpose(im).convert("RGB")))
-    mp_labels, mp_results, ms = mediapipe_classify(tfl, originals)
-    if set(mp_labels) - set(labels) or (picks and len(set(mp_labels)) < min(2, len(labels))):
-        raise ValueError(f"MediaPipe labels {mp_labels} don't match the model labels {labels}")
-    expected = predict_proba(make_embedder(cfg)(reps), head.W, head.b).argmax(1) if picks else np.array([])
-    agree = sum(1 for res, e in zip(mp_results, expected) if res and res[0][0] == labels[int(e)])
-    agreement = agree / len(picks) if picks else 1.0
     info = {"model": str(out), "run_id": run_id, "bytes": len(tfl), "mb": round(mb, 2), "labels": labels,
             "quantization": cfg.export.quantization, "verify_images": len(picks),
-            "mediapipe_top1_agreement": agreement, "mediapipe_python_cpu_ms_per_image": round(ms, 1),
-            "machine": f"{platform.system()} {platform.machine()}"}
+            "machine": f"{platform.system()} {platform.machine()} python {platform.python_version()}"}
+    problems: list[str] = []
+    if mb > cfg.export.max_mb:
+        problems.append(f"model is {mb:.1f} MB, above the {cfg.export.max_mb} MB limit")
+
+    def agreement(top: list[int]) -> float:
+        return float(np.mean(np.array(top) == expected)) if picks else 1.0
+
+    expected = predict_proba(make_embedder(cfg)(reps), head.W, head.b).argmax(1) if picks else np.array([], int)
+    mean, std = cfg.backbone.norm_mean[0], cfg.backbone.norm_std[0]
+    tfl_top = list(tflite_predict(tfl, (reps.astype(np.float32) - mean) / std).argmax(1)) if picks else []
+    info["tflite_top1_agreement"] = agreement(tfl_top)
+    gate, gate_name = info["tflite_top1_agreement"], "TFLite interpreter"
+
+    why_not = mediapipe_unavailable()
+    if why_not:
+        log(f"WARNING: MediaPipe Python can't load its native library here ({why_not}); skipped the "
+            "MediaPipe load check. The model was checked with the TFLite interpreter only: load it "
+            "in the app (or MediaPipe on another machine) before relying on it.")
+        info["mediapipe_check"] = f"skipped: {why_not}"
+    elif picks:
+        index = {lbl: i for i, lbl in enumerate(labels)}
+        mp_labels, mp_res, ms = mediapipe_classify(tfl, list(reps))
+        if set(mp_labels) - set(labels) or len(set(mp_labels)) < min(2, len(labels)):
+            problems.append(f"MediaPipe labels {mp_labels} don't match the model labels {labels}")
+        info["mediapipe_top1_agreement"] = agreement([index.get(r[0][0], -1) if r else -1 for r in mp_res])
+        info["mediapipe_python_cpu_ms_per_image"] = round(ms, 1)
+        gate, gate_name = info["mediapipe_top1_agreement"], "MediaPipe"
+        # Info only: the same photos at full size, resized by MediaPipe itself (not antialiased).
+        # Low = the app must pre-resize to 224x224 before classify(), as the gate above does.
+        _, mp_full, _ = mediapipe_classify(tfl, [_original(r.path) for r in picks])
+        info["mediapipe_full_size_top1_agreement"] = agreement(
+            [index.get(r[0][0], -1) if r else -1 for r in mp_full])
+        info["mediapipe_check"] = "ok"
     out.with_suffix(".json").write_text(json.dumps(info, indent=2))
-    log(f"exported {out} ({mb:.2f} MB, {len(labels)} labels); MediaPipe Python top-1 agreement "
-        f"{agree}/{len(picks)}, {ms:.0f} ms/image on this CPU")
-    if agreement < cfg.export.min_top1_agreement:
-        raise ValueError(f"MediaPipe top-1 agreement {agreement:.2f} < {cfg.export.min_top1_agreement}")
+    log(f"exported {out} ({mb:.2f} MB, {cfg.export.quantization}, {len(labels)} labels); top-1 agreement "
+        f"with the trained head on {len(picks)} images: TFLite {info['tflite_top1_agreement']:.3f}"
+        + (f", MediaPipe {info['mediapipe_top1_agreement']:.3f} (full-size photos resized by MediaPipe: "
+           f"{info['mediapipe_full_size_top1_agreement']:.3f}), {info['mediapipe_python_cpu_ms_per_image']:.0f}"
+           " ms/image on this CPU" if "mediapipe_top1_agreement" in info else ""))
+    if gate < cfg.export.min_top1_agreement:
+        problems.append(f"{gate_name} top-1 agreement {gate:.3f} < export.min_top1_agreement "
+                        f"{cfg.export.min_top1_agreement} (quantization {cfg.export.quantization}; "
+                        "float16/int8 can flip near-ties, try quantization: none)")
+    if problems:
+        raise ValueError(f"export check failed for {out} (file kept): " + "; ".join(problems))
     return info
+
+
+def _original(path: str) -> np.ndarray:
+    from PIL import Image, ImageOps
+
+    with Image.open(path) as im:
+        return np.ascontiguousarray(np.asarray(ImageOps.exif_transpose(im).convert("RGB")))

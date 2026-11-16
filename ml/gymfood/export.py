@@ -6,7 +6,12 @@ tensorflow<2.16 and needs tensorflow-addons (end of life), which have no current
 Python 3.12 wheels. So we use TensorFlow's TFLite converter plus the metadata writer that ships
 in the `mediapipe` package. mediapipe 1.2.x moved to C bindings and its wheel lacks the small
 `_pywrap_metadata_version` module the writer imports for one call (the minimum metadata parser
-version); `_metadata_shim()` provides it with "1.0.0", the version every field we write needs."""
+version); `_metadata_shim()` provides it with "1.0.0", the version every field we write needs.
+
+Preprocessing contract (see `images.load_image`): the head is trained on photos stretched to
+224x224 with Pillow's antialiased bilinear resize. MediaPipe's own resize of a large photo is not
+antialiased, so the app must hand MediaPipe a photo already resized to 224x224 (canvas, smoothing
+"high"); the export check feeds MediaPipe exactly that."""
 from __future__ import annotations
 
 import sys
@@ -77,17 +82,66 @@ def build_tflite(cfg: Config, W: np.ndarray, b: np.ndarray, *, representative: n
 
 
 def add_metadata(tflite: bytes, labels: list[str], cfg: Config) -> bytes:
+    """Adds MediaPipe image-classifier metadata (normalization, labels) in pure Python.
+
+    `MetadataWriter.populate()` also renders the metadata as JSON, and that step loads MediaPipe's
+    native library (libmediapipe, which on Linux needs libEGL / libGLESv2). We only need the model
+    bytes, so we run the same populator without the JSON step: no native code, works anywhere the
+    `mediapipe` wheel installs."""
     _metadata_shim()
+    from mediapipe.tasks.python.metadata import metadata
     from mediapipe.tasks.python.metadata.metadata_writers import image_classifier, metadata_writer
 
-    writer = image_classifier.MetadataWriter.create(
+    outer = image_classifier.MetadataWriter.create(
         bytearray(tflite),
         list(cfg.backbone.norm_mean),
         list(cfg.backbone.norm_std),
         metadata_writer.Labels().add(list(labels)),
     )
-    out, _json = writer.populate()
-    return bytes(out)
+    w = outer.writer
+    populator = metadata.MetadataPopulator.with_model_buffer(w._model_buffer)
+    populator.load_metadata_buffer(metadata_writer._create_metadata_buffer(
+        model_buffer=w._model_buffer, general_md=w._general_md, input_md=w._input_mds,
+        output_md=w._output_mds, input_process_units=w._input_process_units,
+        custom_metadata_md=w._custom_metadata_mds, output_group_md=w._output_group_mds))
+    if w._associated_files:
+        populator.load_associated_files(w._associated_files)
+    populator.populate()
+    out = bytes(populator.get_model_buffer())
+    # Free the temp files now: their __del__ at interpreter exit prints "Exception ignored" noise.
+    del populator, w, outer
+    return out
+
+
+def mediapipe_unavailable() -> str | None:
+    """None when MediaPipe Python's native library loads here, else the reason (e.g. a missing
+    system library) so the caller can skip the MediaPipe load check with a clear warning."""
+    try:
+        from mediapipe.tasks.python.core import mediapipe_c_bindings
+
+        mediapipe_c_bindings.load_raw_library()
+        return None
+    except Exception as e:  # noqa: BLE001 - any import / dlopen failure means "can't check here"
+        return f"{type(e).__name__}: {e}"
+
+
+def tflite_predict(model: bytes, x: np.ndarray) -> np.ndarray:
+    """Runs the .tflite with TensorFlow's interpreter on normalized float NHWC input -> (N, K)."""
+    import warnings
+
+    import tensorflow as tf
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # tf.lite.Interpreter deprecation notice
+        it = tf.lite.Interpreter(model_content=model)
+    it.allocate_tensors()
+    inp, out = it.get_input_details()[0]["index"], it.get_output_details()[0]["index"]
+    res = []
+    for img in x:
+        it.set_tensor(inp, img[None].astype(np.float32))
+        it.invoke()
+        res.append(it.get_tensor(out)[0].copy())
+    return np.array(res)
 
 
 def mediapipe_classify(model: bytes, images: list[np.ndarray], max_results: int = -1):

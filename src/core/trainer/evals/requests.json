@@ -670,6 +670,20 @@
       "slots": { "area": "legs", "date": "today" },
       "safety": "none",
       "ruleSupported": true
+    },
+    {
+      "text": "No more squats",
+      "intent": "help",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "No squats today",
+      "intent": "help",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
     }
   ]
 }
