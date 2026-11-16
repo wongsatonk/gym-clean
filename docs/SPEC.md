@@ -882,8 +882,8 @@ web can't do on iOS. It is not an App Store app.
    here; M9 only proves a plugin round trip and shows a read-only "On-device AI: <status>" line in Settings.
 
 **Later, not in M9 (each needs its own SPEC section first):** AirPods head motion
-(`CMHeadphoneMotionManager`), local notifications, HealthKit / Apple Watch (still out of scope per §6),
-live-update services.
+(`CMHeadphoneMotionManager`), local notifications, HealthKit / Apple Watch (still out of scope per §6;
+reading Apple Health is proposed as M11, 2026-11-16), live-update services.
 
 #### What stays web
 - The **PWA on GitHub Pages stays** the main, always-working app (unless M9-q6 says otherwise). Every
@@ -1148,6 +1148,136 @@ Wongsaton: his gym has no leg press, but Legs B has Leg Press. "That's why I wan
     the prompt after reload; buttons ≥ 56px; no off-device request.
   - 390×844 screenshots of the prompt, the proposal and the applied preview.
 
+### M11 — Health data: Apple Health + WHOOP (PROPOSED 2026-11-16; waiting on M11-q, no build)
+Wongsaton (2026-11-16): "Can you get my information from Apple Health? … take that information to help me
+improve my body by coach" and "I wear Whoop everyday. It might be good if you can sync the app, apple health,
+and whoop together to share my health data to improve my health."
+
+**Status: a proposal.** It changes §6 (which keeps "Apple Watch / heart rate" out of scope) and M9's "Later:
+HealthKit" line. Nothing here is built until he approves it (M11-q1) and answers the other M11-q questions
+(PROGRESS Blockers), or says "go with the defaults". The facts behind it are in the PROGRESS Decision "M11
+health data plan" (2026-11-16); several are marked NOT VERIFIED and get checked first (plan task 1).
+
+**Native app only.** HealthKit has no web API, so M11 lives in the M9 Capacitor app (branch `m9-native` until
+it merges). The PWA is unchanged: Settings → Health says "Health data works in the iPhone app." Every health
+path sits behind `isNative()` + a plugin check, like M9.
+
+#### Goals
+1. **Read, don't write (default).** The app reads a small, listed set of Apple Health types after he says yes
+   to each one in iOS's Health permission sheet. It never writes to Health unless M11-q5 says so.
+2. **One route for WHOOP (default, route A):** WHOOP → Apple Health → Gym Clean. The WHOOP app already shares
+   its data into Apple Health on his phone; Gym Clean reads it from there. **No network, no account, no
+   server.** Route B (the WHOOP Developer API, network) is only planned if he picks it (M11-q2).
+3. **The coach uses the data in coaching words only** (below). Every suggestion is a card he can dismiss; it
+   goes through the existing M10 `propose*` functions, so nothing changes until he taps **Apply**, and Undo
+   works as for any proposal.
+4. **He controls each type:** Settings → **Health** lists every type with its own switch and a one-line
+   explainer of what the coach does with it. Turning one off stops reading it and deletes what the app kept
+   of it.
+
+#### Data read (read-only; default list, M11-q4)
+| Apple Health type | Typical source on his phone | Used for |
+|---|---|---|
+| Body mass (`bodyMass`) | a scale app, manual Health entry, WHOOP if he types it there | weigh-in auto-fill |
+| Workouts (`HKWorkout`: type, start, duration, active energy, average HR if present) from **other apps** | WHOOP activities, other apps | outside workouts in the weekly load |
+| Active energy (`activeEnergyBurned`), daily total | WHOOP, iPhone | weekly load; M7 activity-level check |
+| Sleep (`sleepAnalysis`: asleep stages summed per night) | WHOOP | "Lighter today?" |
+| Resting heart rate (`restingHeartRate`) | WHOOP | "Lighter today?" |
+| Heart rate variability (`heartRateVariabilitySDNN`) | WHOOP | "Lighter today?" (compared only with his own baseline from the same source) |
+
+- Not read: live heart rate during sets, steps, SpO₂, temperature, respiratory rate, blood pressure, glucose,
+  cycle tracking, clinical records, anything else. Adding a type needs a SPEC edit.
+- **WHOOP recovery and strain are not Apple Health types**, so route A never sees them. With route A the coach
+  uses sleep, HRV and resting HR (the inputs WHOOP itself leans on) plus active energy and workouts. Recovery %
+  and day strain are only available with route B.
+- Reads happen when the app opens or comes to the foreground (and on "Read now" in Settings): the last 35
+  days on first connect, then since the last read. No background delivery. Health data is only readable while
+  the phone is unlocked; a locked read is skipped quietly.
+
+#### How the coach uses each signal (pure logic in `src/core/health/`, tests first)
+- **Personal baselines, never population norms.** Each signal is compared with his own rolling median over the
+  last 28 days (from the same source), and needs ≥ 7 days of data before it's used. No absolute "good/bad"
+  thresholds, no scores of his health. Thresholds are data (`src/core/health/rules.ts`), not code branches.
+- **Weigh-in auto-fill (M7):** the earliest body-mass sample of each local day before 12:00 becomes that day's
+  weigh-in (source `health`), unless he already typed one (his entry wins and is never overwritten). Deleting
+  an imported weigh-in in Fuel keeps it deleted. The M7 weekly check uses them like typed ones; nothing else in
+  M7 changes.
+- **Outside workouts → weekly load:** Today's week strip and the coach context show "This week: 3 gym
+  sessions, 2 other workouts (run 40 min, football 90 min)". Gym Clean's own sessions are never counted twice
+  (workouts written by Gym Clean, if M11-q5 ever turns writing on, are skipped by source).
+- **Active energy → activity level (M7, M11-q8):** at the weekly check, if his 14-day average active energy
+  fits a different M7 activity level than the one set, the card adds "Health shows more activity than
+  'light'. Switch to 'moderate'?" with Switch / Keep. Never applied by itself.
+- **"Lighter today?" (the main use):** on a training day, before Start, the app counts today's signals:
+  - sleep last night ≥ 60 min under his baseline;
+  - HRV this morning ≥ 15% under his baseline;
+  - resting HR this morning ≥ 5 bpm over his baseline;
+  - a long or hard outside workout in the last 24 h (≥ 60 min, or active energy ≥ 1.5 × his median workout);
+  - (route B only) WHOOP recovery in WHOOP's lowest band.
+  With **2 or more**, Today shows one card: "Lighter today?" + the reasons as facts in plain words ("Sleep was
+  about 1 h 20 m shorter than usual. Resting heart rate is higher than usual.") and three buttons (≥ 56px):
+  **Lighter today** (opens the M10 Lighter Proposal → Apply / Undo), **Not today** (the M10 postpone
+  Proposal), **Train as planned** (hides it for today). It is shown once per day, never during a workout,
+  never spoken (he's holding the phone on Today, M10 rule 5), and never auto-applied. With 1 signal it says
+  nothing.
+- **Deload nudge:** if the card's 2-signal rule fired on ≥ 3 of the last 7 days, the next card offers
+  **Deload week** (M10 action) instead of Lighter today, at most once per 14 days.
+- **Copy:** coaching words only. Reasons state what changed versus his usual ("shorter than usual"), never what
+  it means for his health. Banned on top of M10 `checkCopy`: sick, ill, illness, infection, overtraining,
+  fatigue syndrome, stress (as a health state), recovery debt, risk, warning, unhealthy, abnormal. No promises
+  ("you'll recover faster"). The M10 discomfort/red-flag rules are unchanged.
+- **M10 brains:** phase B (on-device) may receive the computed card reasons only (no raw samples). Phase C
+  (Claude) receives nothing from Health (M11-q7).
+
+#### What stays out
+Writing to Health (unless M11-q5), Apple Watch app, live HR during sets, background refresh, notifications,
+any health score, diagnosis or medical wording, raw samples in the dev log, sending Health data anywhere
+(route A), and the PWA.
+
+#### Privacy
+- Route A: **no network request** — the M9 rule holds. Health data goes HealthKit → plugin → the app's
+  IndexedDB only. The app stores per-day summaries (`healthDays`), not raw samples; they are excluded from Back
+  up files by default (M11-q7) and from the dev log; turning a type off deletes its stored values.
+- Info.plist gets `NSHealthShareUsageDescription`: "Reads sleep, heart rate, workouts and weight so the coach
+  can suggest a lighter day. Stays on this phone." `NSHealthUpdateUsageDescription` only if M11-q5 turns
+  writing on. The HealthKit entitlement has no team id in it (the repo is public).
+- The repo is public: fixtures and tests use made-up numbers only.
+- Route B (only if chosen) changes this: WHOOP's cloud sends his data to the phone over the network; the
+  explainer says so before he connects; CSP `connect-src` gains the WHOOP API host; tokens stay only on the
+  phone; any server in the middle must be his and is planned separately.
+
+#### Data model (adds to §4; final shape in `src/core/types.ts`)
+```ts
+type HealthType = 'bodyMass' | 'workouts' | 'activeEnergy' | 'sleep' | 'restingHr' | 'hrv';
+type HealthSettings = { enabled: Record<HealthType, boolean>; lastReadAt?: number; route: 'apple' | 'whoop-api' };
+type HealthWorkout = { start: number; minutes: number; kind: string; kcal?: number; avgHr?: number; source: string };
+type HealthDay = {                        // one row per local date, derived, never raw samples
+  date: string; sleepMin?: number; restingHr?: number; hrvMs?: number; hrvSource?: string;
+  activeKcal?: number; workouts?: HealthWorkout[]; whoopRecoveryPct?: number /* route B */;
+};
+type ReadinessSignal = 'sleepShort' | 'hrvLow' | 'restingHrHigh' | 'hardOutsideWorkout' | 'whoopLow';
+type ReadinessCard = { date: string; signals: ReadinessSignal[]; reasons: string[]; offer: 'lighter' | 'deload' };
+// WeighIn gains: source?: 'manual' | 'health'
+```
+
+#### Accept
+- Unit tests (tests first, fixtures with made-up numbers in `src/core/health/fixtures/`): baseline (median,
+  < 7 days → no signal, source mix kept apart), each signal on/off at its edges, the 2-signal rule, the deload
+  nudge and its 14-day spacing, once-per-day, sleep across midnight and DST, weigh-in pick (earliest before
+  12:00, typed wins, deleted stays deleted), workout de-duplication, the activity-level check, and every reason
+  string passing `checkCopy` + the M11 banned list.
+- The plugin's TS side with a fake bridge: permission denied / partial / not available / locked phone all end
+  in "no data", never an error screen. XCTest for the Swift mapping (units: kg, bpm, ms, kcal, minutes).
+- E2E (390×844) with a fake `window.Capacitor` health plugin: connect → per-type switches → seeded data →
+  Today shows "Lighter today?" with two reasons → Lighter today → the M10 proposal → Apply → Undo; a weigh-in
+  appears in Fuel; Settings off → card gone, data deleted; no network request. The PWA shows the "iPhone app"
+  line and makes no HealthKit call.
+- 390×844 screenshots: Settings → Health, the card, Fuel with an imported weigh-in.
+- 🧍 On his iPhone: the Health permission sheet shows only the listed types; WHOOP's data appears; Safari Web
+  Inspector shows no network request.
+- 🧍 **Checkpoint H:** a week with Health connected. He reports whether the card showed on the right days,
+  whether the reasons matched how he felt, and any weigh-in that came in wrong.
+
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).
@@ -1273,3 +1403,8 @@ Accounts, cloud sync (Google Calendar sync parked for later, 2026-11-13), sharin
 AI-generated programs, photoreal/medical 3D anatomy, multi-person
 tracking, recording/saving video (the M4c developer log stores pose numbers only, never images),
 Apple Watch / heart rate.
+
+**PROPOSED change (M11, 2026-11-16; applies only if Wongsaton approves M11-q1):** reading a listed set of
+Apple Health types in the native app (body mass, workouts, active energy, sleep, resting HR, HRV — including
+what WHOOP shares into Apple Health) moves into scope as M11. Still out: an Apple Watch app, live heart rate
+during sets, writing to Health (unless M11-q5), and any health score or medical wording.
