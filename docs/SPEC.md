@@ -1160,7 +1160,7 @@ Wongsaton: his gym has no leg press, but Legs B has Leg Press. "That's why I wan
     the prompt after reload; buttons ≥ 56px; no off-device request.
   - 390×844 screenshots of the prompt, the proposal and the applied preview.
 
-### M11 — Health data: Apple Health + WHOOP (PROPOSED 2026-11-16; waiting on M11-q, no build)
+### M11 — Health data: Apple Health + WHOOP (APPROVED 2026-11-16: route A, read-only, defaults; built on `m11-build`)
 Wongsaton (2026-11-16): "Can you get my information from Apple Health? … take that information to help me
 improve my body by coach" and "I wear Whoop everyday. It might be good if you can sync the app, apple health,
 and whoop together to share my health data to improve my health."

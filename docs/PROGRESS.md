@@ -9,7 +9,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **Next step:** check the M7 deploy is live. During Wongsaton's flight: cloud sessions per `docs/cloud-briefs.md` (M7b local food vision; camera e2e stability). Gym checkpoints E and F1 still open.
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **Waiting on Wongsaton:**
-  - **M11 Health data (Apple Health + WHOOP), planned 2026-11-16 on paper:** the M11-q questions under "Blockers / questions" (approve the scope change, route A vs B, paid Apple account only if needed, data types, write-back). No code until he answers. 🧍 M11 task 2 (check what WHOOP shares into Health) can be done now.
+  - **M11 Health data (Apple Health + WHOOP): built 2026-11-16 on `m11-build`** (read-only, route A, defaults). Reviewer PASS (424cafd), verifier PASS on the Mac (check 3157, full e2e 159/1 skipped, simulator build + 19 XCTests). Next: 🧍 task 13 on his iPhone (`ios/` checklist in docs/ios-setup.md), then merge; 🧍 task 2 (which types WHOOP writes) still open.
   - Deploy OK for m4e-redesign.
   - ~~A-q6~~ (answered "keep it") and ~~A-q5~~ (answered "no") on 2026-11-15.
   - **M9 native iOS shell (answered 2026-11-15: defaults for all 9, iPhone 17 Pro):** tasks 1–2 done (facts re-checked, Capacitor 8.6.2 packages + `--mode native` build). Task 3 needs Xcode repaired on his Mac (M9-q9). Facts that changed are flagged in Decisions "M9 native shell plan" (Thai still not supported by Apple's on-device model; CLI telemetry is opt-out; iOS 27 adds an off-device Private Cloud Compute model we don't use).
@@ -45,7 +45,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M9 Native iOS shell (Capacitor). **Answered 2026-11-15 (defaults); tasks 1–2 done, task 3 waits on Xcode (M9-q9)** → 🧍 Checkpoint G
 - [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
 - [ ] M10e Equipment-aware swaps (follow-up to M10 phase A): **planned 2026-11-15** on `m10-equipment` (gym profile, kit needs as data, the coach proposes a swap for kit his gym lacks, e.g. Leg Press) → extends 🧍 Checkpoint E
-- [ ] M11 Health data (Apple Health + WHOOP, native app only): **proposed and planned 2026-11-16 on paper; waiting on the M11-q answers, no build** → 🧍 Checkpoint H
+- [ ] M11 Health data (Apple Health + WHOOP, native app only): **built 2026-11-16 on `m11-build` (read-only, route A); reviewer PASS, verifier PASS on the Mac; waiting on the iPhone test (task 13)** → 🧍 Checkpoint H
 
 ## Current milestone plan
 
@@ -64,7 +64,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 **Order:** 1 → 2 🧍 → (3 ∥ 4 ∥ 5 ∥ 6) → 7 → 8 → (9 ∥ 10) → 11 → 12 🧍 → 13 → 14 → 15 🧍. Route B (W1–W4) only if M11-q2 = B.
 
-- [ ] 1. [main] Re-check every NOT VERIFIED fact in the Decision "M11 health data plan" against official pages (the planning session had no web access), and record source + date for each.
+- [x] 1. [main] Re-check every NOT VERIFIED fact in the Decision "M11 health data plan" against official pages (the planning session had no web access), and record source + date for each.
   - Check: HealthKit capability with a free Personal Team (developer.apple.com "Supported capabilities (iOS)" and Xcode → Signing & Capabilities); current HealthKit read APIs for sleep stages, HRV SDNN, resting HR, workouts on iOS 26/27; Capacitor HealthKit plugins on npm (version, Capacitor 8 peer, licence, last publish, open issues); WHOOP's Apple Health help article (what it writes / reads); WHOOP Developer docs (OAuth flow, PKCE vs client secret, redirect URI rules, scopes, rate limits, API terms).
   - Files: docs/PROGRESS.md (Decision "M11 health data plan").
   - Done when: each fact has a source + date, and any change to a default (above all: "HealthKit works on a free team") is flagged to Wongsaton before task 3.
@@ -72,43 +72,43 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] 2. 🧍 [Wongsaton] On the iPhone: Health app → Profile → Apps (or Sharing → Apps) → WHOOP → write down which types are turned on for "Allow WHOOP to write" and "Allow WHOOP to read". In the WHOOP app → Settings → Integrations → Apple Health, confirm it's connected.
   - Done when: the list is in this file (types only, no values). It decides the final M11-q4 list.
   - Deps: none (can happen now).
-- [ ] 3. [main] Types and settings.
+- [x] 3. [main] Types and settings.
   - Files: src/core/types.ts (`HealthType`, `HealthSettings`, `HealthWorkout`, `HealthDay`, `ReadinessSignal`, `ReadinessCard`, `WeighIn.source?`).
   - Done when: `npm run check` passes; no behaviour change.
   - Deps: 1.
-- [ ] 4. [ios-engineer] `GymHealth` plugin, **read-only**, tests first for the TS side. Default: a thin custom Swift plugin (no third-party HealthKit plugin) unless task 1 finds a maintained, Capacitor-8, MIT/Apache plugin that covers sleep stages + HRV + workouts (then record the switch as a Decision).
+- [x] 4. [ios-engineer] `GymHealth` plugin, **read-only**, tests first for the TS side. Default: a thin custom Swift plugin (no third-party HealthKit plugin) unless task 1 finds a maintained, Capacitor-8, MIT/Apache plugin that covers sleep stages + HRV + workouts (then record the switch as a Decision).
   - API: `isAvailable()`, `requestRead(types)`, `read({ types, since })` → per-type arrays already in app units (kg, bpm, ms, kcal, minutes, ISO times, source bundle id/name); workouts exclude Gym Clean's own bundle id. No write methods.
   - Files: ios/App/App/Plugins/GymHealth/** (+XCTest for unit mapping and sleep-stage summing), ios/App/App/App.entitlements (`com.apple.developer.healthkit`; no team id), ios/App/App/Info.plist (`NSHealthShareUsageDescription` text from SPEC M11), src/native/health.ts(+test, fake bridge: unavailable, denied, partial, locked → empty result, never throws), docs/ios-setup.md (Health permission step).
   - Done when: TS tests pass; the simulator build with HealthKit succeeds; XCTest passes on the simulator with sample data.
   - Deps: 1, 3 (types only).
-- [ ] 5. [core-engineer] Health summaries, baselines and signals, **tests first**.
+- [x] 5. [core-engineer] Health summaries, baselines and signals, **tests first**.
   - Files: src/core/health/days.ts(+test) (raw plugin result → `HealthDay` per local date: sleep night assigned to the wake-up date, across midnight and DST), src/core/health/baseline.ts(+test) (28-day median, ≥ 7 days, per source), src/core/health/rules.ts (thresholds as data), src/core/health/readiness.ts(+test) (signals, 2-signal rule, deload nudge ≥ 3 of 7 days and 14-day spacing, once per day, rest day → no card), src/core/health/copy.ts(+test) (reason strings; all pass `checkCopy` + the M11 banned list), src/core/health/fixtures/*.json (made-up weeks: normal, short sleep + high RHR, one signal only, sparse data, mixed HRV sources).
   - Done when: every SPEC M11 unit-test bullet for these is covered and green.
   - Deps: 3.
-- [ ] 6. [core-engineer] Weigh-in import, weekly load and activity-level check, **tests first**.
+- [x] 6. [core-engineer] Weigh-in import, weekly load and activity-level check, **tests first**.
   - Files: src/core/health/weighIns.ts(+test) (earliest sample before 12:00 local, typed wins, deleted-import list respected, kg rounding), src/core/health/weeklyLoad.ts(+test) (gym sessions + outside workouts this week, no double count), src/core/nutrition/activityCheck.ts(+test) (14-day active-energy average → suggested M7 level or null; M11-q8).
   - Done when: tests green; existing M7 weekly-check tests unchanged.
   - Deps: 3.
-- [ ] 7. [core-engineer] Storage: Dexie version 6 with `healthDays` (key `date`), `settings` key `'health'`, `WeighIn.source` (old rows read as `manual`), `deletedHealthWeighIns` in the health settings; `clearHealthType(type)` deletes stored values; backup.ts puts `healthDays` on a new `NOT_BACKED_UP_TABLES` list (M11-q7 default) and imported weigh-ins stay in backups like any weigh-in.
+- [x] 7. [core-engineer] Storage: Dexie version 6 with `healthDays` (key `date`), `settings` key `'health'`, `WeighIn.source` (old rows read as `manual`), `deletedHealthWeighIns` in the health settings; `clearHealthType(type)` deletes stored values; backup.ts puts `healthDays` on a new `NOT_BACKED_UP_TABLES` list (M11-q7 default) and imported weigh-ins stay in backups like any weigh-in.
   - Files: src/data/db.ts(+test), src/data/health/store.ts(+test), src/data/backup.ts(+test).
   - Done when: fake-indexeddb tests cover the v5 → v6 upgrade with data kept, the round trip, clear-per-type, and the backup table-list test.
   - Deps: 3.
-- [ ] 8. [core-engineer] Sync orchestration (pure, injected plugin + store): first read 35 days, then since `lastReadAt`; only enabled types; merges into `healthDays`; runs weigh-in import; returns today's `ReadinessCard | null`. **Tests first** with a fake plugin.
+- [x] 8. [core-engineer] Sync orchestration (pure, injected plugin + store): first read 35 days, then since `lastReadAt`; only enabled types; merges into `healthDays`; runs weigh-in import; returns today's `ReadinessCard | null`. **Tests first** with a fake plugin.
   - Files: src/core/health/sync.ts(+test).
   - Done when: tests cover first connect, incremental, a type turned off mid-way, plugin unavailable → no-op.
   - Deps: 5, 6, 7 (API).
-- [ ] 9. [ui-engineer] Settings → **Health** screen (props in, callbacks out): Connect, per-type switches (≥ 56px rows) each with a one-line explainer of what the coach does with it, "Read now", last read time, "Turn off and delete" per type, and the PWA line "Health data works in the iPhone app."
+- [x] 9. [ui-engineer] Settings → **Health** screen (props in, callbacks out): Connect, per-type switches (≥ 56px rows) each with a one-line explainer of what the coach does with it, "Read now", last read time, "Turn off and delete" per type, and the PWA line "Health data works in the iPhone app."
   - Files: src/ui/screens/healthSettings.ts(+test), src/styles.css (tokens only).
   - Done when: render tests + 390×844 harness screenshot; text ≥ 20px, all copy passes `checkCopy`.
   - Deps: 3.
-- [ ] 10. [ui-engineer] Today "Lighter today?" card (reasons + Lighter today / Not today / Train as planned, or Deload week), the weekly-load line in the week strip, the "from Health" tag on imported weigh-ins in Fuel, and the activity-level line in the weekly check card.
+- [x] 10. [ui-engineer] Today "Lighter today?" card (reasons + Lighter today / Not today / Train as planned, or Deload week), the weekly-load line in the week strip, the "from Health" tag on imported weigh-ins in Fuel, and the activity-level line in the weekly check card.
   - Files: src/ui/screens/today.ts(+test), src/ui/fuel/weighIn.ts(+test) (the weekly suggestion card lives here), src/ui/fuel/fuelController.ts(+test) (pass the source tag and activity line through), src/styles.css.
   - Done when: render tests + 390×844 screenshots; the card never renders on the Exercise or camera screens.
   - Deps: 3.
-- [ ] 11. [main] Wiring: `src/main.ts` injects `src/native/health.ts` when native; `src/ui/app.ts` runs sync on open/foreground, routes the card buttons to `proposeLighter` / `proposeDeload` / `proposePostpone` (existing Apply/Undo/Plan changes), Settings → Health route, M10 phase B context gets card reasons only.
+- [x] 11. [main] Wiring: `src/main.ts` injects `src/native/health.ts` when native; `src/ui/app.ts` runs sync on open/foreground, routes the card buttons to `proposeLighter` / `proposeDeload` / `proposePostpone` (existing Apply/Undo/Plan changes), Settings → Health route, M10 phase B context gets card reasons only.
   - Done when: `npm run check` + full `npm run e2e` pass; the web main chunk still has no Capacitor plugin code.
   - Deps: 4, 8, 9, 10.
-- [ ] 12. [ui-engineer] e2e/health.spec.ts with a fake `window.Capacitor` `GymHealth` plugin and seeded made-up data: connect → switches → card with two reasons → Lighter today → proposal → Apply → Undo; imported weigh-in in Fuel; type off → card gone and data deleted; no network request; PWA (no bridge) shows the "iPhone app" line.
+- [x] 12. [ui-engineer] e2e/health.spec.ts with a fake `window.Capacitor` `GymHealth` plugin and seeded made-up data: connect → switches → card with two reasons → Lighter today → proposal → Apply → Undo; imported weigh-in in Fuel; type off → card gone and data deleted; no network request; PWA (no bridge) shows the "iPhone app" line.
   - Done when: the spec passes 3× in a row and the full e2e is green.
   - Deps: 11.
 - [ ] 13. 🧍 [Wongsaton + main] On his iPhone (`npm run ios:run`): the Health sheet lists only the chosen types; after allowing, Settings → Health shows WHOOP-sourced sleep/HRV/RHR; a weigh-in from Health shows in Fuel; Safari Web Inspector shows no network request. Add the lines to docs/ios-setup.md's checklist.
@@ -3035,6 +3035,16 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - `E2E_PORT=5341 npx playwright test e2e/pwa.spec.ts`: **1 passed** (installs, then offline with the model and wasm from the cache).
 - `.gitignore`: `ios/App/Signing.local.xcconfig`, `ios/App/App/public/`, `ios/**/xcuserdata/`, `ios/App/Pods/`, `*.gymclean-backup.json` checked with `git check-ignore`; `Signing.local.xcconfig.example` and `Info.plist` stay tracked.
 - Not run: `ios:*` scripts (no `ios/` until task 3; Xcode broken on this Mac, M9-q9).
+
+### M11 Apple Health (2026-11-16)
+Verifier on `m11-build` at 424cafd (reviewer PASS on the same commit). **Verdict: PASS for everything that can run on the Mac; the 🧍 iPhone items (task 13) and Checkpoint H are pending.**
+- `npm run check`: typecheck + lint clean, Vitest **125 files / 3157 tests passed**, script tests **56/56**. Health tests: `src/core/health/{days,baseline,readiness,readiness.fixtures,copy,weighIns,weeklyLoad,sync}.test.ts`, `src/core/nutrition/activityCheck.test.ts`, `src/native/health.test.ts` (fake bridge: no plugin, unavailable, denied → empty ok, partial, locked → `status: locked`, other failure → `failed`, never throws); fixtures in `src/core/health/fixtures/` (normal week, short sleep + high RHR, one signal only, sparse, mixed HRV sources ×2).
+- `E2E_PORT=5731 E2E_PWA_PORT=6731 npm run e2e` (all phases): **159 passed, 1 skipped** (the opt-in `HISTORY_SHOTS` test), 18.1 min. `e2e/health.spec.ts` 5/5; `--repeat-each=5` on it: **25/25**.
+- `npm run build`: OK, precache 30 entries (25424.84 KiB). Main `index-Dz3YDO-h.js` 680.74 kB (205.80 kB gzip): **0 matches for `GymHealth` / `registerPlugin`**; the plugin is only in the lazy `health-DRjgxf-M.js` (3.26 kB / 1.44 kB gzip). Other lazy chunks: three.module 535.59 kB, vision_bundle 154.07 kB.
+- Native: `npx vite build --mode native && npx cap sync ios` OK (no tracked file changed). `xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -destination id=<GymClean iPhone 17 Pro sim> CODE_SIGNING_ALLOWED=NO build`: **BUILD SUCCEEDED**, 0 warnings. Built `Info.plist` has `NSHealthShareUsageDescription` (SPEC text) and no `NSHealthUpdateUsageDescription`; `App.entitlements` has only `com.apple.developer.healthkit` (no team id); the plugin calls `requestAuthorization(toShare: [], read:)`. `xcodebuild -scheme GymHealthCore … test`: **19 tests, 0 failures, TEST SUCCEEDED**. (The simulator is named "GymClean iPhone 17 Pro", so `name=iPhone 17 Pro` in docs/ios-setup.md doesn't match it on this Mac; use the id or that name.)
+- Screenshots 390×844 (DPR 2) from the wired app with a fake `window.Capacitor` GymHealth bridge (made-up data, same as e2e/health.spec), `node scripts/screenshots.mjs m11`: `docs/screenshots/m11-verify-health-settings-connect.png`, `m11-verify-health-settings.png`, `m11-verify-health-settings-bottom.png`, `m11-verify-health-settings-confirm.png`, `m11-verify-today-card.png`, `m11-verify-fuel-weigh-in.png`, `m11-verify-health-pwa.png`. Every one **scrollWidth 390, 0 console errors/warnings, 0 page errors, 0 off-site requests**; nothing spoken. Connect asked iOS for exactly the six types; all six switch rows 60px. Card: "Lighter today?" with "Sleep was about 1 h 50 m shorter than usual." and "Resting heart rate is about 7 bpm higher than usual.", buttons Lighter today / Not today / Train as planned all 56px; week line "This week: 0 gym sessions, 1 other workout (run 40 min)". Fuel: Weigh-in 70.4 kg + "from Health" tag. No visible button under 56px; body text ≥ 20px; 18px only on short labels (tab labels, muscle chips, the Weigh-in chip value and its tag), as allowed by the M4e `--fs-label` decision (same as M7).
+- 🧍 Pending (Wongsaton, task 13): the Health sheet lists only the six types on his iPhone, WHOOP data appears, a Health weigh-in shows in Fuel, Safari Web Inspector shows no network request. Then Checkpoint H.
+- Doc gaps for main (not blocking): the M11 task checkboxes in "Current milestone plan" are all still `[ ]`, the Milestone checklist line still says "waiting on the M11-q answers, no build", and SPEC M11's heading still says "PROPOSED … no build".
 
 ## Blockers / questions for Wongsaton
 - **M11 Health data: ANSWERED 2026-11-16.** Wongsaton: route A ("Go with route A, get the information from Health"), read-only ("Let's just read it for now, plan to write to it later"), paid account only if needed ("If need it, just pause for now"; not needed: HealthKit capability added and the build succeeded on the free Personal Team, 2026-11-16), and "Use the defaults" for q1, q4, q6, q7, q8. Still open (not blocking): 🧍 task 2, which types WHOOP writes into Health on his phone. (Was:)

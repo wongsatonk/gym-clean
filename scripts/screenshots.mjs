@@ -2865,6 +2865,116 @@ async function camVerify(browser) {
   await p.ctx.close();
 }
 
+// ---- M11 Apple Health (2026-11-16): fake GymHealth bridge with MADE-UP data, same shape as
+// e2e/health.spec.ts. Fri 13 Nov 2026 08:00 local: short night + higher resting HR today.
+async function m11Phone(browser, native) {
+  const p = await newPhone(browser);
+  await p.page.addInitScript((isNative) => {
+    window.__spoken = [];
+    const fake = { speak: (u) => window.__spoken.push(u.text), cancel() {}, pause() {}, resume() {},
+      getVoices: () => [], addEventListener() {}, speaking: false, pending: false, paused: false };
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: fake });
+    if (isNative === null) return;
+    window.__health = { isAvailable: 0, requestRead: [], read: [] };
+    const at = (day, h, m = 0) => new Date(2026, 10, day, h, m).getTime();
+    const ymd = (t) => { const d = new Date(t); const q = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${q(d.getMonth() + 1)}-${q(d.getDate())}`; };
+    const sleep = [], restingHr = [], hrv = [], activeEnergy = [];
+    for (let k = 0; k <= 28; k++) {
+      const day = 13 - k; const today = k === 0; const wake = at(day, 6, 30);
+      sleep.push({ start: wake - 8 * 3_600_000, end: wake, asleepMin: today ? 340 : 450, source: 'Band' });
+      restingHr.push({ start: at(day, 7), bpm: today ? 62 : 55, source: 'Band' });
+      hrv.push({ start: at(day, 6, 45), ms: 60, source: 'Band' });
+      if (!today) activeEnergy.push({ date: ymd(at(day, 0)), start: at(day, 0), kcal: 400 });
+    }
+    const data = { sleep, restingHr, hrv, activeEnergy,
+      bodyMass: [{ start: at(13, 7), kg: 70.4, source: 'Scale' }],
+      workouts: [{ start: at(11, 18), minutes: 40, kind: 'running', source: 'Band' }] };
+    const plugin = {
+      isAvailable: async () => { window.__health.isAvailable++; return { available: true }; },
+      requestRead: async ({ types }) => { window.__health.requestRead.push([...types]); return { requested: true }; },
+      read: async ({ types, since, until }) => {
+        window.__health.read.push([...types]);
+        const out = {};
+        for (const t of types) out[t] = (data[t] ?? []).filter((r) => r.start >= since && (!until || r.start < until));
+        return out;
+      },
+    };
+    window.Capacitor = { isNativePlatform: () => isNative, getPlatform: () => (isNative ? 'ios' : 'web'),
+      Plugins: { GymHealth: plugin } };
+  }, native);
+  p.offsite = watchOffsite(p.page);
+  await p.page.clock.install({ time: new Date(2026, 10, 13, 8, 0).getTime() });
+  await p.page.goto(BASE);
+  await p.page.locator('[data-cal]').first().waitFor();
+  return p;
+}
+
+async function m11Shot(p, name, extra = {}) {
+  await p.page.waitForTimeout(300);
+  await shot(p.page, p.log, `m11-verify-${name}`, { sizes: await m7Sizes(p.page), ...extra });
+}
+
+async function m11(browser) {
+  // Native (fake bridge): Settings → Health before and after Connect, Today card, Fuel weigh-in.
+  const p = await m11Phone(browser, true);
+  const { page } = p;
+  const hs = page.locator('main[data-screen="health-settings"]');
+  await page.locator('[data-tab="settings"]').click();
+  await page.locator('[data-health-open]').click();
+  await hs.waitFor();
+  await m11Shot(p, 'health-settings-connect');
+  await hs.locator('[data-health-connect]').click();
+  await hs.locator('[data-health-last-read]').filter({ hasText: 'Last read: today 08:00' }).waitFor();
+  await m11Shot(p, 'health-settings', {
+    switches: await hs.locator('[data-health-type]').evaluateAll((els) =>
+      els.map((e) => [e.getAttribute('data-health-type'), e.getAttribute('aria-checked'),
+        Math.round(e.getBoundingClientRect().height)])),
+    requestRead: await page.evaluate(() => window.__health.requestRead),
+  });
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await m11Shot(p, 'health-settings-bottom');
+  // Turn-off confirm for one type (cancel nothing; just show the confirm row).
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await hs.locator('[data-health-type="sleep"]').click();
+  await hs.locator('[data-health-delete="sleep"]').waitFor();
+  await hs.locator('[data-health-delete="sleep"]').scrollIntoViewIfNeeded();
+  await m11Shot(p, 'health-settings-confirm');
+  await hs.getByRole('button', { name: '‹ Back' }).click();
+  await page.locator('[data-tab="today"]').click();
+  await page.locator('[data-cal]').first().waitFor();
+  // The confirm was left open (not confirmed): sleep must still be on and the card still there.
+  const card = page.locator('[data-readiness]');
+  await card.waitFor();
+  await card.scrollIntoViewIfNeeded();
+  await m11Shot(p, 'today-card', {
+    offer: await card.getAttribute('data-readiness'),
+    reasons: await card.locator('[data-readiness-reason]').allTextContents(),
+    weekLoad: await page.locator('[data-week-load]').textContent(),
+    cardButtons: await card.locator('button').evaluateAll((els) =>
+      els.map((e) => [e.textContent.trim(), Math.round(e.getBoundingClientRect().height)])),
+  });
+  await page.locator('[data-tab="fuel"]').click();
+  await page.locator('main[data-screen="fuel"]').waitFor();
+  const weigh = page.locator('[data-weigh-in]');
+  await weigh.filter({ hasText: '70.4' }).waitFor();
+  await weigh.scrollIntoViewIfNeeded();
+  await m11Shot(p, 'fuel-weigh-in', { weighIn: (await weigh.textContent())?.replace(/\s+/g, ' ').trim(),
+    tag: await weigh.locator('[data-from-health]').textContent() });
+  const spoken = await page.evaluate(() => window.__spoken);
+  results.push({ flow: 'm11-native', spoken, offsite: p.offsite });
+  await p.ctx.close();
+
+  // PWA (no Capacitor): Settings → Health line.
+  const w = await m11Phone(browser, null);
+  await w.page.locator('[data-tab="settings"]').click();
+  await w.page.locator('[data-health-open]').click();
+  await w.page.locator('main[data-screen="health-settings"] [data-health-pwa]').waitFor();
+  await m11Shot(w, 'health-pwa', { line: await w.page.locator('[data-health-pwa]').textContent() });
+  results.push({ flow: 'm11-pwa', offsite: w.offsite });
+  await w.ctx.close();
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -2900,6 +3010,7 @@ try {
   else if (milestone === 'm7') await m7(browser);
   else if (milestone === 'm10e') await m10e(browser);
   else if (milestone === 'cam-verify') await camVerify(browser);
+  else if (milestone === 'm11') await m11(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
