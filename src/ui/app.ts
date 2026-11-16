@@ -178,6 +178,7 @@ import { h } from './dom';
 import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { createFuel } from './fuel/fuelController';
 import { createFoodVisionHost } from './fuel/foodVisionHost';
+import { createHealthHost } from './healthHost';
 import type { FoodSuggestion } from '../core/types';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
@@ -220,6 +221,7 @@ type View =
   | { screen: 'fuel' }
   | { screen: 'planChanges' }
   | { screen: 'myGym' }
+  | { screen: 'healthSettings' }
   | { screen: 'history'; exerciseId: string | null; data: HistoryData | null }
   | ({ screen: 'preview'; loading: boolean } & PreviewDay)
   | { screen: 'session'; s: SessionState; sheet: Sheet };
@@ -323,6 +325,30 @@ export function mountApp(root: HTMLElement): void {
     toast: (text, onUndo) => showActionToast(text, onUndo),
     logError: (err) => logDbError(err),
     photo: foodVision.photoHost,
+    health: {
+      activitySuggestion: (c) => health.fuelHost.activitySuggestion(c),
+      onActivityAnswered: (a, l) => health.fuelHost.onActivityAnswered(a, l),
+    },
+  });
+
+  // ---------- M11 Health (iPhone app only; healthHost.ts) ----------
+  // Synced on open (after the plan loads), on foreground and on Read now. The card shows only on
+  // Today, never spoken; nothing from Health reaches the coach context.
+  const health = createHealthHost({
+    db,
+    now: () => now(),
+    render: () => {
+      if (['today', 'healthSettings', 'fuel'].includes(view.screen)) render();
+    },
+    trainingDay: () => {
+      if (!trainer) return undefined;
+      const eff = effectiveDay(trainer, trainerSessions, todayDate());
+      return eff.day !== null && !eff.rest && !eff.done;
+    },
+    inWorkout: () => view.screen === 'session' && view.s.phase !== 'summary',
+    sessions: () => trainerSessions,
+    onWeighIns: () => void fuel.refresh().then(() => render()),
+    logError: (err) => logDbError(err),
   });
 
   // Developer log (M4c): numbers only, stays on the phone. Calls queue until the recorder exists,
@@ -697,6 +723,11 @@ export function mountApp(root: HTMLElement): void {
         return fuel.screen();
       case 'planChanges':
         return planChangesView();
+      case 'healthSettings':
+        return health.settingsScreen(() => {
+          view = { screen: 'settings' };
+          render();
+        });
       case 'myGym':
         return myGymScreen(
           { items: equipmentItems(), equipment: gym.equipment },
@@ -904,8 +935,10 @@ export function mountApp(root: HTMLElement): void {
         newProgram,
         nudge: fuel.nudgeText(),
         missingKit: trainer && upNextDayId !== null ? todayMissingKit() : null,
+        ...health.todayProps(),
       },
       {
+        ...health.readinessActions((chip) => void openCoach('today', { chip })),
         // The hero goes through the preview, which loads last time's weights for the defaults.
         onStart: (day) => void openPreview(day),
         onOpenDay: (day) => void openPreview(day),
@@ -1783,6 +1816,10 @@ export function mountApp(root: HTMLElement): void {
         onPlanChanges: () => openPlanChanges(),
         onMyGym: () => {
           view = { screen: 'myGym' };
+          render();
+        },
+        onHealth: () => {
+          view = { screen: 'healthSettings' };
           render();
         },
       },
@@ -2666,7 +2703,8 @@ export function mountApp(root: HTMLElement): void {
     .catch(logDbError);
   // M10: the trainer state first (Today's calendar and up next read it).
   const trainerReady = loadTrainer();
-  void loadUpNext();
+  // M11: the first Health sync once Today's plan and sessions are known.
+  void loadUpNext().then(() => health.start());
   // M7: targets / today's totals for the Today nudge (no seeding until Fuel is opened).
   void fuel.refresh().then(() => {
     if (view.screen === 'today' || view.screen === 'settings') render();
