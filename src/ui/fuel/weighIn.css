@@ -86,6 +86,31 @@
   background: var(--surface-2);
 }
 
+/* M11-q8: the activity-level line (asks, never applies by itself). Inside the weekly card it
+   sits under a divider; on its own it is the whole card body. */
+.wi-activity {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wi-card > .wi-card-actions + .wi-activity {
+  padding-top: 12px;
+  border-top: var(--line-w) solid var(--line);
+}
+
+.wi-activity-text {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.wi-activity-btn {
+  min-height: var(--tap-min);
+  font-size: var(--fs-body);
+}
+
 /* ---------- Trend chart ---------- */
 
 .wi-figure {

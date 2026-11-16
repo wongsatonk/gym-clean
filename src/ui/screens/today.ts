@@ -10,8 +10,10 @@
 // `[data-undo-adjust]`), a "Rest day" hero (`[data-hero="rest"]`, Train anyway keeps
 // `data-start`), and a dated week strip (`.cal-card[data-cal]`, moved days `.moved`).
 // M10e (optional): the "missing kit" prompt (`[data-gym-prompt]`, ./gymPrompt.ts).
+// M11 (optional): the "Lighter today?" card (`[data-readiness]`, ./readinessCard.ts; never on a
+// rest day) and the weekly-load line under "Your week" (`[data-week-load]`, ./weekLoad.ts).
 import type { WeekDot } from '../../core/stats';
-import type { DayOverride, ProgramDay } from '../../core/types';
+import type { DayOverride, ProgramDay, ReadinessCard } from '../../core/types';
 import { formatWeight, type Unit } from '../../core/units';
 import { exerciseById } from '../../data/catalog';
 import { bodyMapSvg, pickView } from '../bodyMap';
@@ -22,6 +24,8 @@ import { moodClass } from '../tokens';
 import { nudgeBanner } from '../fuel/links';
 import { dayMuscles, estimateMinutes, muscleLabel, type DayMuscles } from '../../core/dayInfo';
 import { gymPrompt, type MissingKit } from './gymPrompt';
+import { readinessCard, type ReadinessActions } from './readinessCard';
+import { weekLoadLine, type WeekLoad } from './weekLoad';
 
 /** The last finished session, as the Last time tile shows it. */
 export type TodayLast = {
@@ -69,6 +73,14 @@ export type TodayProps = {
    * Shows the "missing kit" prompt (See a swap / Keep it) when both callbacks are set.
    */
   missingKit?: MissingKit | null | undefined;
+  // ---- M11 health (optional) ----
+  /**
+   * Core's readiness card for today (`ReadinessCard`), or null. Shows "Lighter today?" (or
+   * "Lighter week?" when `offer === 'deload'`) when its callbacks are set; never on a rest day.
+   */
+  readiness?: ReadinessCard | null | undefined;
+  /** Core's weekly load (gym sessions + outside workouts). Shows the line under "Your week". */
+  weekLoad?: WeekLoad | null | undefined;
 };
 
 /** One calendar day, as `src/core/trainer/plan.ts` returns it. `date` is local YYYY-MM-DD. */
@@ -79,7 +91,7 @@ export type CalendarEntry = {
   override?: DayOverride | undefined;
 };
 
-export type TodayActions = {
+export type TodayActions = ReadinessActions & {
   /** The hero's Start workout. */
   onStart: (day: ProgramDay) => void;
   /** A day card in the strip (opens the preview, as the old day list did). */
@@ -565,6 +577,7 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       ? newProgramPrompt(actions)
       : null,
     gymPrompt(props.missingKit, actions),
+    todayEntry(props)?.rest ? null : readinessCard(props.readiness, actions),
     props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,
     props.nudge && actions.onDismissNudge
       ? nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel)
@@ -577,6 +590,7 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       h('h2', {}, 'Your week'),
       h('span', {}, `${props.days.length}-day split`),
     ),
+    weekLoadLine(props.weekLoad),
     strip,
     tabBar('today', actions.onTab),
   );

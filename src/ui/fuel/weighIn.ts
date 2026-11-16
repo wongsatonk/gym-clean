@@ -18,6 +18,11 @@
 // `[data-weigh-save]`, `[data-weekly-card]` (data-kind up|down|onTrack|needData),
 // `[data-weekly-accept]`, `[data-weekly-dismiss]`, `[data-trend-chart]` with `.wc-dot` and
 // `.wc-avg`, `[data-fuel-history]` li `[data-day=YYYY-MM-DD]` (data-trained).
+//
+// M11 (optional): `[data-from-health]` tag when today's weigh-in was imported from Apple Health,
+// and the activity-level line (`[data-activity-suggest]`, Switch `[data-activity-switch]` /
+// Keep `[data-activity-keep]`) inside the weekly card, or as its own card when no check is
+// pending. It only asks; nothing changes until Switch.
 import { checkHasChange, type TrendPoint } from '../../core/nutrition/adjust';
 import type { HistoryDay } from '../../core/nutrition/day';
 import type { WeeklyCheck } from '../../core/types';
@@ -26,10 +31,10 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { dateLabel } from '../screens/today';
 import { moodClass } from '../tokens';
-import { estimateTag } from './common';
+import { estimateTag, fromHealthTag } from './common';
 import { numberField } from './fields';
 import { targetText } from './nutritionSettings';
-import { weightStep } from './setup';
+import { ACTIVITY_CHOICES, weightStep, type Activity } from './setup';
 import './weighIn.css';
 
 export type WeighInProps = {
@@ -46,7 +51,14 @@ export type WeighInProps = {
   kcalTarget: number | null;
   /** Core `nutritionHistory(...)` for the last 14 days, oldest first (shown newest first). */
   history: readonly HistoryDay[];
+  /** M11: where today's weigh-in came from; 'health' shows the "from Health" tag. */
+  todaySource?: 'manual' | 'health' | undefined;
+  /** M11-q8: core's activity-level check (current level + the one Health suggests), or null. */
+  activity?: ActivitySuggestion | null | undefined;
 };
+
+/** M11-q8: the M7 activity level now and the one his 14-day active energy fits. */
+export type ActivitySuggestion = { current: Activity; suggested: Activity };
 
 export type WeighInActions = {
   onBack: () => void;
@@ -54,6 +66,10 @@ export type WeighInActions = {
   onSave: (kg: number) => void;
   onAccept: () => void;
   onDismiss: () => void;
+  /** M11-q8: Switch to the suggested activity level. Needed (with onKeepActivity) to show it. */
+  onSwitchActivity?: ((level: Activity) => void) | undefined;
+  /** M11-q8: Keep the current level (don't ask again for this check). */
+  onKeepActivity?: (() => void) | undefined;
 };
 
 // ---------- pure helpers ----------
@@ -214,7 +230,79 @@ function longDate(date: string): string {
   return dateLabel(new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1).getTime());
 }
 
+const ACTIVITY_ORDER: readonly Activity[] = ACTIVITY_CHOICES.map((c) => c.value);
+const activityLabel = (a: Activity) => ACTIVITY_CHOICES.find((c) => c.value === a)?.label ?? a;
+
+/** "Health shows more activity than “Lightly active”. Switch to “Active”?" (null when equal). */
+export function activityLine(s: ActivitySuggestion): string | null {
+  const from = ACTIVITY_ORDER.indexOf(s.current);
+  const to = ACTIVITY_ORDER.indexOf(s.suggested);
+  if (from === to || from < 0 || to < 0) return null;
+  const more = to > from ? 'more' : 'less';
+  return `Health shows ${more} activity than “${activityLabel(s.current)}”. Switch to “${activityLabel(s.suggested)}”?`;
+}
+
 // ---------- parts ----------
+
+function activityBlock(p: WeighInProps, a: WeighInActions): HTMLElement | null {
+  const s = p.activity;
+  const { onSwitchActivity, onKeepActivity } = a;
+  if (!s || !onSwitchActivity || !onKeepActivity) return null;
+  const line = activityLine(s);
+  if (!line) return null;
+  return h(
+    'div',
+    { class: 'wi-activity', 'data-activity-suggest': s.suggested },
+    h('p', { class: 'wi-activity-text' }, line),
+    h(
+      'div',
+      { class: 'wi-card-actions' },
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'wi-dismiss wi-activity-btn',
+          'data-activity-switch': true,
+          onclick: () => onSwitchActivity(s.suggested),
+        },
+        h('span', {}, 'Switch'),
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'wi-dismiss wi-activity-btn',
+          'data-activity-keep': true,
+          onclick: () => onKeepActivity(),
+        },
+        h('span', {}, 'Keep'),
+      ),
+    ),
+  );
+}
+
+/** The activity line on its own card, for when no weekly check is pending. */
+function activityCard(p: WeighInProps, a: WeighInActions): HTMLElement | null {
+  const block = activityBlock(p, a);
+  if (!block) return null;
+  return h(
+    'section',
+    {
+      class: 'wi-card wi-card-info',
+      'data-activity-card': true,
+      role: 'status',
+      'aria-labelledby': 'wi-activity-title',
+    },
+    h(
+      'p',
+      { class: 'wi-card-eyebrow caps' },
+      icon('calendar', 'sm'),
+      h('span', {}, 'Weekly check'),
+    ),
+    h('h2', { class: 'wi-card-title', id: 'wi-activity-title' }, 'Activity level'),
+    block,
+  );
+}
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 function svg(tag: string, attrs: Record<string, string | number>, text?: string): Element {
@@ -226,7 +314,7 @@ function svg(tag: string, attrs: Record<string, string | number>, text?: string)
 
 function weeklyCard(p: WeighInProps, a: WeighInActions): HTMLElement | null {
   const c = p.check;
-  if (!c || c.outcome !== 'pending') return null;
+  if (!c || c.outcome !== 'pending') return activityCard(p, a);
   const copy = weeklyCardCopy(c, p.unit, p.kcalTarget);
   const info = copy.accept === null;
   return h(
@@ -277,6 +365,7 @@ function weeklyCard(p: WeighInProps, a: WeighInActions): HTMLElement | null {
         h('span', {}, copy.dismiss),
       ),
     ),
+    activityBlock(p, a),
   );
 }
 
@@ -400,6 +489,8 @@ export function weighInScreen(p: WeighInProps, a: WeighInActions): HTMLElement {
         p.todayKg !== null
           ? `Saved today: ${formatWeight(p.todayKg, p.unit)} ${p.unit}. Saving again replaces it.`
           : 'Best in the morning, before breakfast.',
+        p.todayKg !== null && p.todaySource === 'health' ? ' ' : null,
+        p.todayKg !== null && p.todaySource === 'health' ? fromHealthTag() : null,
       ),
       h(
         'button',

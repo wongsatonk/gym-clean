@@ -1,0 +1,18 @@
+/* M11 weekly-load line in Today's week strip (src/ui/screens/weekLoad.ts). Body size, secondary
+   text, icon + words. Tokens from src/styles.css only. */
+
+.week-load {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.week-load .ic {
+  flex: none;
+  margin-top: 2px;
+}

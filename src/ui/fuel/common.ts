@@ -54,6 +54,11 @@ export function estimateTag(): HTMLElement {
   return h('span', { class: 'fuel-tag', 'data-estimate': true }, 'estimate');
 }
 
+/** M11: the "from Health" tag on a weigh-in imported from Apple Health (a word, a static label). */
+export function fromHealthTag(): HTMLElement {
+  return h('span', { class: 'fuel-tag', 'data-from-health': true }, 'from Health');
+}
+
 /** append() that skips null / undefined / false (optional parts). */
 export function appendAll(
   el: HTMLElement,
