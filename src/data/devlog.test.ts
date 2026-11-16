@@ -146,6 +146,26 @@ describe('developer log recorder', () => {
     await r.finish();
   });
 
+  it('never stores Health data in the session settings snapshot (M11)', async () => {
+    const r = await startDevLogSession(
+      db,
+      {
+        dayId: 'push-a',
+        startedAt: clock,
+        settings: {
+          unit: 'kg',
+          health: { enabled: { sleep: true } },
+          healthDays: [{ date: '2030-01-07', sleepMin: 400 }],
+          readiness: { signals: ['sleepShort'] },
+        },
+      },
+      { now },
+    );
+    const row = await db.devlogSessions.get(r.sessionId);
+    expect(row?.settings).toEqual({ unit: 'kg' });
+    await r.finish();
+  });
+
   it('exports a camera set in the SPEC §4 shape with frames decoded', async () => {
     const r = await start({ id: 'w1' });
     r.logEvent('START_SET', { exIndex: 0 }, clock);

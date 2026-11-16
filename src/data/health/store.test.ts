@@ -1,0 +1,259 @@
+import 'fake-indexeddb/auto';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { HealthDay, HealthSettings } from '../../core/types';
+import { GymDb } from '../db';
+import { deleteWeighIn, listWeighIns, saveWeighIn } from '../nutrition/store';
+import {
+  HEALTH_SETTINGS_DEFAULT,
+  HEALTH_SETTINGS_KEY,
+  clearDisabledHealthTypes,
+  clearHealthType,
+  getHealthSettings,
+  importHealthWeighIns,
+  listHealthDays,
+  mergeHealthDays,
+  saveHealthSettings,
+  setHealthTypeEnabled,
+} from './store';
+
+// Made-up numbers only (the repo is public).
+let db: GymDb;
+let n = 0;
+beforeEach(async () => {
+  db = new GymDb(`health-${n++}`);
+  await db.open();
+});
+afterEach(async () => {
+  db.close();
+  await db.delete();
+});
+
+const at = (y: number, mo: number, d: number, h: number): number =>
+  new Date(y, mo - 1, d, h).getTime();
+
+const allOn: HealthSettings = {
+  ...HEALTH_SETTINGS_DEFAULT,
+  enabled: {
+    bodyMass: true,
+    workouts: true,
+    activeEnergy: true,
+    sleep: true,
+    restingHr: true,
+    hrv: true,
+  },
+};
+
+const full = (date: string): HealthDay => ({
+  date,
+  sleepMin: 410,
+  restingHr: 55,
+  hrvMs: 48,
+  hrvSource: 'WHOOP',
+  activeKcal: 520,
+  workouts: [{ start: at(2030, 1, 7, 7), minutes: 40, kind: 'running', source: 'WHOOP' }],
+});
+
+describe('health settings (settings key "health")', () => {
+  it('defaults to every type off, route apple, nothing deleted', async () => {
+    expect(HEALTH_SETTINGS_KEY).toBe('health');
+    expect(await getHealthSettings(db)).toEqual({
+      enabled: {
+        bodyMass: false,
+        workouts: false,
+        activeEnergy: false,
+        sleep: false,
+        restingHr: false,
+        hrv: false,
+      },
+      route: 'apple',
+      deletedHealthWeighIns: [],
+    });
+  });
+
+  it('round-trips and repairs a damaged row field by field', async () => {
+    await saveHealthSettings(db, { ...allOn, lastReadAt: 123, deletedHealthWeighIns: ['2030-01-07'] });
+    expect(await getHealthSettings(db)).toEqual({
+      ...allOn,
+      lastReadAt: 123,
+      deletedHealthWeighIns: ['2030-01-07'],
+    });
+    await db.settings.put({
+      key: 'health',
+      value: { enabled: { sleep: true, hrv: 'yes' }, route: 'nope', lastReadAt: 'x', deletedHealthWeighIns: [1, '2030-01-08'] },
+    });
+    const s = await getHealthSettings(db);
+    expect(s.enabled.sleep).toBe(true);
+    expect(s.enabled.hrv).toBe(false);
+    expect(s.route).toBe('apple');
+    expect(s.lastReadAt).toBeUndefined();
+    expect(s.deletedHealthWeighIns).toEqual(['2030-01-08']);
+  });
+
+  it('keeps the readiness history and repairs a damaged one field by field', async () => {
+    const card = {
+      date: '2030-01-07',
+      signals: ['sleepShort', 'restingHrHigh'] as const,
+      reasons: ['Sleep was about 1 h shorter than usual.', 'Resting heart rate is higher than usual.'],
+      offer: 'lighter' as const,
+    };
+    const readiness = {
+      lastCard: { ...card, signals: [...card.signals] },
+      answeredDate: '2030-01-07',
+      lastDeloadOfferDate: '2030-01-01',
+    };
+    await saveHealthSettings(db, { ...allOn, readiness });
+    expect((await getHealthSettings(db)).readiness).toEqual(readiness);
+
+    await db.settings.put({
+      key: 'health',
+      value: {
+        ...allOn,
+        readiness: {
+          lastCard: { ...card, signals: ['sleepShort', 'bogus'], offer: 'nap' },
+          answeredDate: 'yesterday',
+          lastDeloadOfferDate: '2030-01-01',
+        },
+      },
+    });
+    expect((await getHealthSettings(db)).readiness).toEqual({ lastDeloadOfferDate: '2030-01-01' });
+
+    await db.settings.put({ key: 'health', value: { ...allOn, readiness: { lastCard: { date: 3 } } } });
+    expect((await getHealthSettings(db)).readiness).toBeUndefined();
+    await db.settings.put({ key: 'health', value: { ...allOn, readiness: 'x' } });
+    expect((await getHealthSettings(db)).readiness).toBeUndefined();
+  });
+});
+
+describe('healthDays', () => {
+  it('merges per date: new fields win, missing fields are kept, workouts are unioned', async () => {
+    await mergeHealthDays(db, [full('2030-01-07')]);
+    await mergeHealthDays(db, [
+      {
+        date: '2030-01-07',
+        activeKcal: 610,
+        workouts: [
+          { start: at(2030, 1, 7, 7), minutes: 40, kind: 'running', source: 'WHOOP' },
+          { start: at(2030, 1, 7, 18), minutes: 90, kind: 'soccer', source: 'WHOOP' },
+        ],
+      },
+      { date: '2030-01-08', sleepMin: 380 },
+    ]);
+    const days = await listHealthDays(db);
+    expect(days.map((d) => d.date)).toEqual(['2030-01-07', '2030-01-08']);
+    expect(days[0]).toMatchObject({ sleepMin: 410, restingHr: 55, activeKcal: 610 });
+    expect(days[0]?.workouts?.map((w) => w.kind)).toEqual(['running', 'soccer']);
+    expect(await listHealthDays(db, '2030-01-08')).toEqual([{ date: '2030-01-08', sleepMin: 380 }]);
+    expect(await listHealthDays(db, '2030-01-01', '2030-01-07')).toHaveLength(1);
+  });
+
+  it('refuses a bad date', async () => {
+    await expect(mergeHealthDays(db, [{ date: 'today', sleepMin: 1 }])).rejects.toThrow(/date/);
+  });
+});
+
+describe('clearHealthType', () => {
+  it('removes only that type’s values; a row left with nothing is deleted', async () => {
+    await mergeHealthDays(db, [full('2030-01-07'), { date: '2030-01-08', hrvMs: 50, hrvSource: 'WHOOP' }]);
+    await clearHealthType(db, 'hrv');
+    expect(await listHealthDays(db)).toEqual([
+      {
+        date: '2030-01-07',
+        sleepMin: 410,
+        restingHr: 55,
+        activeKcal: 520,
+        workouts: full('2030-01-07').workouts,
+      },
+    ]);
+    await clearHealthType(db, 'sleep');
+    await clearHealthType(db, 'restingHr');
+    await clearHealthType(db, 'activeEnergy');
+    expect(await listHealthDays(db)).toEqual([
+      { date: '2030-01-07', workouts: full('2030-01-07').workouts },
+    ]);
+    await clearHealthType(db, 'workouts');
+    expect(await db.healthDays.count()).toBe(0);
+  });
+
+  it('bodyMass deletes imported weigh-ins and keeps typed ones', async () => {
+    await saveWeighIn(db, { date: '2030-01-07', kg: 70.1 });
+    await saveWeighIn(db, { date: '2030-01-08', kg: 70.2, source: 'health' });
+    await saveWeighIn(db, { date: '2030-01-09', kg: 70.3, source: 'manual' });
+    await clearHealthType(db, 'bodyMass');
+    expect(await listWeighIns(db)).toEqual([
+      { date: '2030-01-07', kg: 70.1 },
+      { date: '2030-01-09', kg: 70.3, source: 'manual' },
+    ]);
+  });
+
+  it('turning a type off clears it; turning it on keeps data', async () => {
+    await saveHealthSettings(db, allOn);
+    await mergeHealthDays(db, [full('2030-01-07')]);
+    await setHealthTypeEnabled(db, 'sleep', false);
+    expect((await getHealthSettings(db)).enabled.sleep).toBe(false);
+    expect((await listHealthDays(db))[0]?.sleepMin).toBeUndefined();
+    await setHealthTypeEnabled(db, 'sleep', true);
+    expect((await getHealthSettings(db)).enabled.sleep).toBe(true);
+    expect((await listHealthDays(db))[0]?.restingHr).toBe(55);
+  });
+
+  it('turning a type on forgets lastReadAt so the next read goes 35 days back; off keeps it', async () => {
+    await saveHealthSettings(db, { ...allOn, enabled: { ...allOn.enabled, hrv: false }, lastReadAt: 123 });
+    await setHealthTypeEnabled(db, 'sleep', false);
+    expect((await getHealthSettings(db)).lastReadAt).toBe(123);
+    await setHealthTypeEnabled(db, 'hrv', true);
+    expect((await getHealthSettings(db)).lastReadAt).toBeUndefined();
+  });
+
+  it('clearDisabledHealthTypes clears every type that is off (row values only)', async () => {
+    await saveHealthSettings(db, { ...allOn, enabled: { ...allOn.enabled, hrv: false, bodyMass: false } });
+    await saveWeighIn(db, { date: '2030-01-08', kg: 70.2, source: 'health' });
+    await mergeHealthDays(db, [full('2030-01-07')]);
+    await clearDisabledHealthTypes(db);
+    const d = (await listHealthDays(db))[0];
+    expect(d?.hrvMs).toBeUndefined();
+    expect(d?.hrvSource).toBeUndefined();
+    expect(d?.sleepMin).toBe(410);
+    // Weigh-ins are his backed-up data; only clearHealthType('bodyMass') removes them.
+    expect(await listWeighIns(db)).toHaveLength(1);
+  });
+});
+
+describe('importHealthWeighIns', () => {
+  const samples = [
+    { time: at(2030, 1, 7, 7), kg: 70.2 },
+    { time: at(2030, 1, 8, 7), kg: 70.4 },
+    { time: at(2030, 1, 9, 7), kg: 70.6 },
+  ];
+
+  it('writes morning picks as health weigh-ins; a typed one wins; deleted dates stay deleted', async () => {
+    await saveWeighIn(db, { date: '2030-01-07', kg: 69.9 });
+    await saveHealthSettings(db, { ...allOn, deletedHealthWeighIns: ['2030-01-09'] });
+    expect(await importHealthWeighIns(db, samples)).toEqual([
+      { date: '2030-01-08', kg: 70.4, source: 'health' },
+    ]);
+    expect(await listWeighIns(db)).toEqual([
+      { date: '2030-01-07', kg: 69.9 },
+      { date: '2030-01-08', kg: 70.4, source: 'health' },
+    ]);
+  });
+
+  it('a deleted import is remembered and never comes back; Undo forgets it', async () => {
+    await importHealthWeighIns(db, samples);
+    const removed = await deleteWeighIn(db, '2030-01-08');
+    expect(removed).toEqual({ date: '2030-01-08', kg: 70.4, source: 'health' });
+    expect((await getHealthSettings(db)).deletedHealthWeighIns).toEqual(['2030-01-08']);
+    expect(await importHealthWeighIns(db, samples)).toEqual([]);
+    expect(await db.weighIns.get('2030-01-08')).toBeUndefined();
+
+    // Undo puts the import back and forgets the deletion.
+    await saveWeighIn(db, removed as NonNullable<typeof removed>);
+    expect((await getHealthSettings(db)).deletedHealthWeighIns).toEqual([]);
+  });
+
+  it('deleting a typed weigh-in is not remembered (Health may fill that date later)', async () => {
+    await saveWeighIn(db, { date: '2030-01-08', kg: 69 });
+    await deleteWeighIn(db, '2030-01-08');
+    expect((await getHealthSettings(db)).deletedHealthWeighIns).toEqual([]);
+    expect(await importHealthWeighIns(db, samples)).toHaveLength(3);
+  });
+});

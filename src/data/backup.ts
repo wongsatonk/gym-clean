@@ -4,14 +4,22 @@
  * A backup is one JSON file the user creates by tapping Back up and moves himself (Files /
  * AirDrop); nothing here touches the network. It holds every Dexie table except the developer log
  * (large, and only for tuning), the saved food photos and the food model (large binaries; photos
- * leave the phone as their own zip export, the model is re-imported) and never an API key or other
+ * leave the phone as their own zip export, the model is re-imported), the Health day summaries
+ * (M11-q7: they stay on the phone and are read from Health again) and never an API key or other
  * secret (settings only, see SECRET_NAMES). Every row is checked against its table's shape before
  * the user is asked to confirm. Restore replaces all backed-up data in one transaction: it either
- * all lands or nothing changes. The developer log, the food photos / model and any secret already
- * on this phone are left alone.
+ * all lands or nothing changes. The developer log, the food photos / model, the Health day
+ * summaries and any secret already on this phone are left alone (Health values of a type the
+ * restored switches turn off are deleted, as turning it off in Settings would).
+ *
+ * Health (M11): imported weigh-ins are weigh-ins and travel like any other. The settings row
+ * 'health' (per-type switches, route, deleted-import dates) is backed up without `lastReadAt` and
+ * `readiness`, so the restored phone does a fresh first read and keeps its own card history.
+ * A file without that row keeps this phone's.
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';
+import { HEALTH_SETTINGS_KEY, clearDisabledHealthTypes } from './health/store';
 
 export const BACKUP_FORMAT = 'gym-clean-backup';
 /** The file layout's own version (bump when the header or table encoding changes). */
@@ -43,11 +51,17 @@ export type BackupTable = (typeof BACKUP_TABLES)[number];
 export const DEVLOG_TABLES = ['devlogSessions', 'devlogSets', 'devlogChunks'] as const;
 
 /**
- * Left out on purpose (M7b): saved meal photos and the imported food model are large Blobs that
- * don't fit a JSON backup. Photos leave the phone through their own zip export
- * (src/core/nutrition/photoExport.ts); the model is imported again in Settings.
+ * Left out on purpose, data that stays on this phone:
+ * - M7b: saved meal photos and the imported food model are large Blobs that don't fit a JSON
+ *   backup. Photos leave the phone through their own zip export
+ *   (src/core/nutrition/photoExport.ts); the model is imported again in Settings.
+ * - M11 (M11-q7): `healthDays`, the per-day Health summaries. They are read from Health again on
+ *   the restored phone. Imported weigh-ins are in `weighIns` and are backed up.
  */
-export const LOCAL_ONLY_TABLES = ['foodPhotos', 'foodModels'] as const;
+export const LOCAL_ONLY_TABLES = ['foodPhotos', 'foodModels', 'healthDays'] as const;
+
+/** Every table a backup never carries (a restore leaves them alone). */
+export const NOT_BACKED_UP_TABLES = [...DEVLOG_TABLES, ...LOCAL_ONLY_TABLES] as const;
 
 export type BackupFile = {
   format: typeof BACKUP_FORMAT;
@@ -132,10 +146,37 @@ const isSecretSetting = (row: unknown): boolean =>
   typeof (row as { key?: unknown }).key === 'string' &&
   isSecretName((row as { key: string }).key);
 
-/** Backed-up rows of one table: only settings rows are touched (secret rows and fields removed). */
+/**
+ * Health settings fields that only make sense on the phone that read them (M11): the last read
+ * time, and the readiness-card history (today's card, answered date, deload spacing) that comes
+ * from this phone's Health data.
+ */
+const HEALTH_LOCAL_FIELDS: readonly string[] = ['lastReadAt', 'readiness'];
+
+const isHealthSetting = (row: unknown): row is { key: string; value: unknown } =>
+  isObj(row) && row.key === HEALTH_SETTINGS_KEY;
+
+function stripHealthLocal(row: unknown): unknown {
+  if (!isHealthSetting(row) || !isObj(row.value)) return row;
+  const value = Object.fromEntries(
+    Object.entries(row.value).filter(([k]) => !HEALTH_LOCAL_FIELDS.includes(k)),
+  );
+  return { ...row, value };
+}
+
+/** This phone's readiness history (kept across a restore that brings its own health row). */
+function localHealthReadiness(rows: readonly unknown[]): unknown {
+  const row = rows.find(isHealthSetting);
+  return row && isObj(row.value) ? row.value.readiness : undefined;
+}
+
+/**
+ * Backed-up rows of one table: only settings rows are touched (secret rows and fields removed,
+ * the health row loses its phone-only fields).
+ */
 function cleanRows(name: BackupTable, rows: unknown[]): unknown[] {
   if (name !== 'settings') return rows;
-  return rows.filter((r) => !isSecretSetting(r)).map(stripSecrets);
+  return rows.filter((r) => !isSecretSetting(r)).map(stripSecrets).map(stripHealthLocal);
 }
 
 async function readTables(db: GymDb): Promise<Record<BackupTable, unknown[]>> {
@@ -292,7 +333,7 @@ const ROW_SHAPES: Record<BackupTable, Record<string, Check>> = {
     'photoConfidence?': num,
     'logged?': obj,
   },
-  weighIns: { date: str, kg: num },
+  weighIns: { date: str, kg: num, 'source?': str },
   favorites: { id: str, ref: obj, amount: obj, createdAt: num },
   weeklyChecks: {
     weekStart: str,
@@ -390,9 +431,14 @@ export async function importAll(
 ): Promise<ImportResult> {
   const file = validateBackup(db, input);
   try {
-    return await db.transaction('rw', [...BACKUP_TABLES], async () => {
+    return await db.transaction('rw', [...BACKUP_TABLES, 'healthDays'], async () => {
       const undo: BackupFile = { ...header(db, opts), tables: await readTables(db) };
-      const localSecrets = (await db.settings.toArray()).filter(isSecretSetting);
+      const localRows = await db.settings.toArray();
+      const localSecrets = localRows.filter(isSecretSetting);
+      const fileRows = file.tables.settings ?? [];
+      const fileHasHealth = fileRows.some(isHealthSetting);
+      const localHealth = fileHasHealth ? [] : localRows.filter(isHealthSetting);
+      const localReadiness = fileHasHealth ? localHealthReadiness(localRows) : undefined;
       const counts = {} as Record<BackupTable, number>;
       for (const name of BACKUP_TABLES) {
         const table = db.table(name);
@@ -402,6 +448,14 @@ export async function importAll(
         counts[name] = rows.length;
       }
       if (localSecrets.length > 0) await db.settings.bulkPut(localSecrets);
+      if (localHealth.length > 0) await db.settings.bulkPut(localHealth);
+      if (localReadiness !== undefined) {
+        const row = await db.settings.get(HEALTH_SETTINGS_KEY);
+        if (row && isObj(row.value)) {
+          await db.settings.put({ ...row, value: { ...row.value, readiness: localReadiness } });
+        }
+      }
+      await clearDisabledHealthTypes(db);
       return { counts, undo };
     });
   } catch (e) {

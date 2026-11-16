@@ -16,6 +16,7 @@ import type {
   WeighIn,
 } from '../../core/types';
 import type { GymDb } from '../db';
+import { markHealthWeighInDeleted } from '../health/store';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -110,10 +111,24 @@ export async function restoreEntry(db: GymDb, entry: FoodEntry): Promise<void> {
 
 // ---------- Weigh-ins (one per local date, the latest wins: M7-q10) ----------
 
+/**
+ * Saves (replaces) the date's weigh-in. `source` is kept when given ('health' = imported from
+ * Apple Health, M11); a row without one was typed by hand. Saving an imported row again (Undo of
+ * its delete) takes its date off the deleted-imports list.
+ */
 export async function saveWeighIn(db: GymDb, w: WeighIn): Promise<void> {
   checkDate(w.date);
   if (!Number.isFinite(w.kg) || w.kg <= 0) throw new RangeError(`Bad weigh-in kg ${w.kg}`);
-  await db.weighIns.put({ date: w.date, kg: w.kg });
+  const row: WeighIn = { date: w.date, kg: w.kg };
+  if (w.source === 'health' || w.source === 'manual') row.source = w.source;
+  if (row.source !== 'health') {
+    await db.weighIns.put(row);
+    return;
+  }
+  await db.transaction('rw', [db.weighIns, db.settings], async () => {
+    await db.weighIns.put(row);
+    await markHealthWeighInDeleted(db, row.date, false);
+  });
 }
 
 /** Weigh-ins in date order, optionally only those on or after `sinceDate`. */
@@ -122,11 +137,15 @@ export async function listWeighIns(db: GymDb, sinceDate?: string): Promise<Weigh
   return db.weighIns.where('date').aboveOrEqual(sinceDate).toArray();
 }
 
-/** Removes the weigh-in and returns it (for Undo: `saveWeighIn`). */
+/**
+ * Removes the weigh-in and returns it (for Undo: `saveWeighIn`). Deleting an imported one
+ * (source 'health') puts its date on the deleted-imports list, so Health never brings it back.
+ */
 export async function deleteWeighIn(db: GymDb, date: string): Promise<WeighIn | undefined> {
-  return db.transaction('rw', db.weighIns, async () => {
+  return db.transaction('rw', [db.weighIns, db.settings], async () => {
     const row = await db.weighIns.get(date);
     if (row) await db.weighIns.delete(date);
+    if (row?.source === 'health') await markHealthWeighInDeleted(db, date, true);
     return row;
   });
 }

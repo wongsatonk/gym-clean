@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Counts your reps on this phone. Video never leaves it.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Reads sleep, heart rate, workouts and weight so the coach can suggest a lighter day. Stays on this phone.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

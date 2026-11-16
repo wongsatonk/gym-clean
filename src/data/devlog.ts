@@ -87,6 +87,16 @@ export async function setDevLogEnabled(db: GymDb, on: boolean): Promise<void> {
 
 // ---------- recorder ----------
 
+/**
+ * M11: Health data never enters the developer log. Settings keys that carry it (`health*`,
+ * `readiness*`) are dropped from the session's settings snapshot.
+ */
+const HEALTH_KEY_RE = /^(health|readiness)/i;
+
+function withoutHealth(settings: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(settings).filter(([k]) => !HEALTH_KEY_RE.test(k)));
+}
+
 export type DevLogSessionMeta = {
   dayId: string;
   settings: Record<string, unknown>;
@@ -545,7 +555,7 @@ async function openSession(
       startedAt,
       appVersion: opts.appVersion ?? __APP_VERSION__,
       userAgent: opts.userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : ''),
-      settings: { ...meta.settings },
+      settings: withoutHealth(meta.settings),
       dayId: meta.dayId,
       bytes: 0,
     });

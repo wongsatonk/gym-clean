@@ -7,6 +7,7 @@ import {
   BACKUP_TABLES,
   DEVLOG_TABLES,
   LOCAL_ONLY_TABLES,
+  NOT_BACKED_UP_TABLES,
   BACKUP_VERSION,
   BackupError,
   exportAll,
@@ -230,7 +231,7 @@ describe('exportAll', () => {
     expect(file.format).toBe('gym-clean-backup');
     expect(file.version).toBe(BACKUP_VERSION);
     expect(file.dexieVersion).toBe(a.verno);
-    expect(file.dexieVersion).toBe(6);
+    expect(file.dexieVersion).toBe(7);
     expect(file.appVersion).toBe('abc123');
     expect(file.createdAt).toBe(T0 + 5);
     expect(Object.keys(file.tables).sort()).toEqual(
@@ -257,9 +258,18 @@ describe('exportAll', () => {
 
   it('covers every Dexie table: each one is either backed up or deliberately left out', async () => {
     const all = a.tables.map((t) => t.name).sort();
-    const left = ['devlogChunks', 'devlogSessions', 'devlogSets', 'foodModels', 'foodPhotos'];
+    const left = [
+      'devlogChunks',
+      'devlogSessions',
+      'devlogSets',
+      'foodModels',
+      'foodPhotos',
+      'healthDays',
+    ];
     expect([...BACKUP_TABLES, ...left].sort()).toEqual(all);
     expect([...DEVLOG_TABLES, ...LOCAL_ONLY_TABLES].sort()).toEqual(left);
+    expect([...NOT_BACKED_UP_TABLES].sort()).toEqual(left);
+    for (const t of NOT_BACKED_UP_TABLES) expect(BACKUP_TABLES).not.toContain(t);
   });
 
   it('leaves saved food photos and the food model out of the file (M7b)', async () => {
@@ -597,5 +607,120 @@ describe('secret stripping is narrow (settings only, explicit names)', () => {
     const rows = JSON.parse(text).tables.settings as { key: string; value: unknown }[];
     expect(rows.map((r) => r.key).sort()).toEqual(['coach', 'coachTokens']);
     expect(rows.find((r) => r.key === 'coach')?.value).toEqual({ tokenCount: 1500, model: 'x' });
+  });
+});
+
+describe('M11 health data in backups', () => {
+  const healthRow = {
+    key: 'health',
+    value: {
+      enabled: {
+        bodyMass: true,
+        workouts: true,
+        activeEnergy: false,
+        sleep: true,
+        restingHr: true,
+        hrv: true,
+      },
+      route: 'apple',
+      lastReadAt: T0,
+      deletedHealthWeighIns: ['2026-01-03'],
+    },
+  };
+
+  it('leaves healthDays out (M11-q7) and keeps imported weigh-ins like any weigh-in', async () => {
+    await seed(a);
+    await a.healthDays.put({ date: '2026-01-05', sleepMin: 401, restingHr: 57, hrvMs: 49 });
+    await a.weighIns.put({ date: '2026-01-06', kg: 70.3, source: 'health' });
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(Object.keys(file.tables)).not.toContain('healthDays');
+    expect(JSON.stringify(file)).not.toMatch(/sleepMin|restingHr|hrvMs/);
+    expect(file.tables.weighIns).toContainEqual({ date: '2026-01-06', kg: 70.3, source: 'health' });
+
+    await importAll(b, viaFile(file));
+    expect(await b.weighIns.get('2026-01-06')).toEqual({
+      date: '2026-01-06',
+      kg: 70.3,
+      source: 'health',
+    });
+    expect(await b.healthDays.count()).toBe(0);
+  });
+
+  it('backs up the health switches and deleted-import dates but not lastReadAt', async () => {
+    await seed(a);
+    await a.settings.put(healthRow);
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    const row = (file.tables.settings as { key: string; value: unknown }[]).find(
+      (r) => r.key === 'health',
+    );
+    expect(row?.value).toEqual({
+      enabled: healthRow.value.enabled,
+      route: 'apple',
+      deletedHealthWeighIns: ['2026-01-03'],
+    });
+  });
+
+  it('leaves the readiness history out of the file; a restore keeps this phone’s', async () => {
+    const readiness = {
+      lastCard: {
+        date: '2026-01-07',
+        signals: ['sleepShort', 'hrvLow'],
+        reasons: ['Sleep was about 1 h shorter than usual.', 'HRV is lower than usual.'],
+        offer: 'lighter',
+      },
+      answeredDate: '2026-01-07',
+      lastDeloadOfferDate: '2026-01-01',
+    };
+    await seed(a);
+    await a.settings.put({ key: 'health', value: { ...healthRow.value, readiness } });
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(JSON.stringify(file)).not.toMatch(/readiness|answeredDate|lastDeloadOfferDate|lastCard/);
+
+    const mine = { lastDeloadOfferDate: '2026-01-05' };
+    await b.settings.put({ key: 'health', value: { ...healthRow.value, readiness: mine } });
+    await importAll(b, viaFile(file));
+    const row = (await b.settings.get('health'))?.value as Record<string, unknown>;
+    expect(row.readiness).toEqual(mine);
+    expect(row.lastReadAt).toBeUndefined();
+    expect(row.deletedHealthWeighIns).toEqual(['2026-01-03']);
+
+    // A file that somehow carries one (hand-edited) can't bring it in either.
+    const edited = await exportAll(a, { appVersion: 't', now: T0 });
+    const hrow = (edited.tables.settings as { key: string; value: Record<string, unknown> }[]).find(
+      (r) => r.key === 'health',
+    );
+    if (hrow) hrow.value.readiness = readiness;
+    await b.settings.delete('health');
+    await importAll(b, viaFile(edited));
+    expect(((await b.settings.get('health'))?.value as Record<string, unknown>).readiness).toBeUndefined();
+  });
+
+  it('a restore leaves this phone’s healthDays alone, except types the restored switches turn off', async () => {
+    await seed(a);
+    await a.settings.put(healthRow); // activeEnergy off
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.healthDays.bulkPut([
+      { date: '2026-01-05', sleepMin: 401, activeKcal: 480 },
+      { date: '2026-01-06', activeKcal: 300 },
+    ]);
+    await importAll(b, file);
+    expect(await b.healthDays.toArray()).toEqual([{ date: '2026-01-05', sleepMin: 401 }]);
+  });
+
+  it('a file without a health row keeps this phone’s health settings and data', async () => {
+    await seed(a);
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.settings.put(healthRow);
+    await b.healthDays.put({ date: '2026-01-05', sleepMin: 401, activeKcal: 480 });
+    await importAll(b, file);
+    expect(await b.settings.get('health')).toEqual(healthRow);
+    expect(await b.healthDays.get('2026-01-05')).toEqual({ date: '2026-01-05', sleepMin: 401 });
+  });
+
+  it('refuses a weigh-in with a non-string source', async () => {
+    await seed(a);
+    const f = await exportAll(a, { appVersion: 't', now: T0 });
+    f.tables.weighIns = [{ date: '2026-01-07', kg: 70, source: 3 }];
+    expect(() => validateBackup(b, f)).toThrow(BackupError);
   });
 });

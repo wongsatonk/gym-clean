@@ -16,6 +16,9 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		B1A11E000000000000000001 /* AppViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A11E000000000000000011 /* AppViewController.swift */; };
+		B1A11E000000000000000002 /* GymHealthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1A11E000000000000000012 /* GymHealthPlugin.swift */; };
+		B1A11E000000000000000003 /* GymHealthCore in Frameworks */ = {isa = PBXBuildFile; productRef = B1A11E000000000000000023 /* GymHealthCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -32,6 +35,8 @@
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		A9C1E5000000000000000001 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = SOURCE_ROOT; };
 		C7A9C51D30AB238D0031921A /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		B1A11E000000000000000011 /* AppViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewController.swift; sourceTree = "<group>"; };
+		B1A11E000000000000000012 /* GymHealthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymHealthPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -40,6 +45,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				B1A11E000000000000000003 /* GymHealthCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -69,6 +75,8 @@
 			children = (
 				C7A9C51D30AB238D0031921A /* App.entitlements */,
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
+				B1A11E000000000000000011 /* AppViewController.swift */,
+				B1A11E000000000000000013 /* Plugins */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -79,6 +87,22 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		B1A11E000000000000000013 /* Plugins */ = {
+			isa = PBXGroup;
+			children = (
+				B1A11E000000000000000014 /* GymHealth */,
+			);
+			path = Plugins;
+			sourceTree = "<group>";
+		};
+		B1A11E000000000000000014 /* GymHealth */ = {
+			isa = PBXGroup;
+			children = (
+				B1A11E000000000000000012 /* GymHealthPlugin.swift */,
+			);
+			path = GymHealth;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -99,6 +123,7 @@
 			name = App;
 			packageProductDependencies = (
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
+				B1A11E000000000000000023 /* GymHealthCore */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -131,6 +156,7 @@
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
 				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				B1A11E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymHealth/GymHealthCore" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -164,6 +190,8 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				B1A11E000000000000000001 /* AppViewController.swift in Sources */,
+				B1A11E000000000000000002 /* GymHealthPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -371,6 +399,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "CapApp-SPM";
 		};
+		B1A11E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymHealth/GymHealthCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = App/Plugins/GymHealth/GymHealthCore;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -378,6 +410,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";
+		};
+		B1A11E000000000000000023 /* GymHealthCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B1A11E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymHealth/GymHealthCore" */;
+			productName = GymHealthCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

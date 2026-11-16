@@ -334,6 +334,12 @@ export type HealthSettings = {
   route: 'apple' | 'whoop-api';
   /** Dates (YYYY-MM-DD) of imported weigh-ins he deleted; never re-imported. */
   deletedHealthWeighIns?: string[];
+  /** Readiness card history (once per day, deload spacing); see core/health/readiness ReadinessHistory. */
+  readiness?: {
+    lastCard?: ReadinessCard;
+    answeredDate?: string;
+    lastDeloadOfferDate?: string;
+  };
 };
 
 /** One workout logged by another app (e.g. WHOOP). Gym Clean's own bundle id is excluded. */
