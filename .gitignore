@@ -42,3 +42,17 @@ data-src/
 
 # Private photos and files (e.g. gym equipment photos): never commit
 private/
+
+# M9 native iOS shell (Capacitor): build output, per-user Xcode state, the web bundle Capacitor
+# copies in, and the local signing file (Apple team id + bundle id never go in the public repo).
+ios/App/Pods/
+ios/**/xcuserdata/
+ios/DerivedData/
+ios/App/build/
+ios/App/output/
+ios/App/App/public/
+ios/App/App/capacitor.config.json
+ios/App/App/config.xml
+ios/App/Signing.local.xcconfig
+# Backups (M9 B1-B3) hold workout history: never commit
+*.gymclean-backup.json

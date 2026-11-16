@@ -5,6 +5,11 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
+    "build:native": "npm run typecheck && vite build --mode native",
+    "cap:telemetry-off": "cap telemetry off",
+    "ios:sync": "npm run build:native && npm run cap:telemetry-off && cap sync ios",
+    "ios:open": "npm run cap:telemetry-off && cap open ios",
+    "ios:run": "npm run ios:sync && cap run ios",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
@@ -22,6 +27,7 @@
   },
   "type": "module",
   "devDependencies": {
+    "@capacitor/cli": "8.6.2",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
@@ -44,6 +50,9 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@capacitor/core": "8.6.2",
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.6.2",
     "@fontsource/barlow": "^5.3.0",
     "@fontsource/barlow-condensed": "^5.3.0",
     "@mediapipe/tasks-vision": "^1.2.3",
