@@ -1,0 +1,245 @@
+{
+  "format": "gym-clean-food-class-map",
+  "version": 1,
+  "note": "Classifier label (lower snake ASCII) -> thai:* dish ids in src/data/nutrition/thaiDishes.json. First dish = default; look-alike variants share a class (M7b-q2). datasets = source class names per dataset that train this label. Read by the app and by ml/. See ml/DATASETS.md.",
+  "classes": {
+    "pad_kra_pao": {
+      "dishes": [
+        "thai:pad-kra-pao-moo-rice-egg",
+        "thai:pad-kra-pao-gai-rice-egg",
+        "thai:pad-kra-pao-moo-rice",
+        "thai:pad-kra-pao-goong-rice-egg"
+      ],
+      "datasets": {
+        "thfood50": [
+          "PhatKaphrao"
+        ]
+      }
+    },
+    "khao_man_gai": {
+      "dishes": [
+        "thai:khao-man-gai",
+        "thai:khao-man-gai-tod"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KaoManGai"
+        ]
+      }
+    },
+    "pad_thai": {
+      "dishes": [
+        "thai:pad-thai-goong",
+        "thai:pad-thai-gai"
+      ],
+      "datasets": {
+        "thfood50": [
+          "PadThai"
+        ]
+      }
+    },
+    "tom_yum_goong": {
+      "dishes": [
+        "thai:tom-yum-goong"
+      ],
+      "datasets": {
+        "thfood50": [
+          "TomYumGoong"
+        ]
+      }
+    },
+    "tom_kha_gai": {
+      "dishes": [
+        "thai:tom-kha-gai"
+      ],
+      "datasets": {
+        "thfood50": [
+          "TomKhaGai"
+        ]
+      }
+    },
+    "kaeng_khiao_wan": {
+      "dishes": [
+        "thai:kaeng-khiao-wan-gai-rice"
+      ],
+      "datasets": {
+        "thfood50": [
+          "GaengKeawWan"
+        ]
+      }
+    },
+    "massaman": {
+      "dishes": [
+        "thai:massaman-gai-rice"
+      ],
+      "datasets": {
+        "thfood50": [
+          "MassamanGai"
+        ]
+      }
+    },
+    "som_tum": {
+      "dishes": [
+        "thai:som-tum-thai",
+        "thai:som-tum-gai-yang-khao-niao"
+      ],
+      "datasets": {
+        "thfood50": [
+          "Somtam"
+        ]
+      }
+    },
+    "gai_yang": {
+      "dishes": [
+        "thai:gai-yang"
+      ],
+      "datasets": {
+        "thfood50": [
+          "GaiYang"
+        ]
+      }
+    },
+    "larb_moo": {
+      "dishes": [
+        "thai:larb-moo"
+      ],
+      "datasets": {
+        "thfood50": [
+          "LarbMoo"
+        ]
+      }
+    },
+    "nam_tok_moo": {
+      "dishes": [
+        "thai:nam-tok-moo"
+      ],
+      "datasets": {
+        "thfood50": [
+          "NamTokMoo"
+        ]
+      }
+    },
+    "kuay_teow_ruea": {
+      "dishes": [
+        "thai:kuay-teow-ruea"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KuayTeowReua"
+        ]
+      }
+    },
+    "jok_moo": {
+      "dishes": [
+        "thai:jok-moo",
+        "thai:khao-tom-moo"
+      ],
+      "datasets": {
+        "thfood50": [
+          "Joke"
+        ]
+      }
+    },
+    "khao_kai_jeow": {
+      "dishes": [
+        "thai:khao-kai-jeow"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KaiJeowMooSaap"
+        ]
+      }
+    },
+    "khao_moo_daeng": {
+      "dishes": [
+        "thai:khao-moo-daeng",
+        "thai:khao-moo-krob"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KaoMooDang"
+        ]
+      }
+    },
+    "khao_kha_moo": {
+      "dishes": [
+        "thai:khao-kha-moo"
+      ],
+      "datasets": {
+        "thfood50": [
+          "StewedPorkLeg"
+        ]
+      }
+    },
+    "moo_tod_kratiem": {
+      "dishes": [
+        "thai:moo-tod-kratiem-rice"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KhaoMooTodGratiem"
+        ]
+      }
+    },
+    "pad_pak_bung": {
+      "dishes": [
+        "thai:pad-pak-bung-fai-daeng"
+      ],
+      "datasets": {
+        "thfood50": [
+          "PadPakBung"
+        ]
+      }
+    },
+    "yum_woon_sen": {
+      "dishes": [
+        "thai:yum-woon-sen"
+      ],
+      "datasets": {
+        "thfood50": [
+          "YamWoonSen"
+        ]
+      }
+    },
+    "tom_jued": {
+      "dishes": [
+        "thai:tom-jued-tao-hoo-moo-sap"
+      ],
+      "datasets": {
+        "thfood50": [
+          "GaengJued"
+        ]
+      }
+    },
+    "moo_satay": {
+      "dishes": [
+        "thai:moo-satay"
+      ],
+      "datasets": {
+        "thfood50": [
+          "MooSatay"
+        ]
+      }
+    },
+    "gai_tod": {
+      "dishes": [
+        "thai:gai-tod"
+      ],
+      "datasets": {
+        "thfood50": [
+          "FriedChicken"
+        ]
+      }
+    },
+    "khao_niao_mamuang": {
+      "dishes": [
+        "thai:khao-niao-mamuang"
+      ],
+      "datasets": {
+        "thfood50": [
+          "KhaoNiewMaMuang"
+        ]
+      }
+    }
+  }
+}

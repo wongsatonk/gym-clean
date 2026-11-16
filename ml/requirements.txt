@@ -1,0 +1,9 @@
+# Gym Clean M7b food classifier pipeline: Mac (Apple Silicon, CPU) / Linux, Python 3.12.
+# Checked 2026-11-16. See README "Tooling choice" for why not MediaPipe Model Maker.
+tensorflow==2.21.0      # backbone SavedModel + TFLite converter (CPU on Mac is enough: frozen backbone)
+mediapipe==1.2.3        # metadata writer + ImageClassifier load check (same task as the app)
+numpy==2.5.5
+pillow==13.0.0
+PyYAML==6.0.3
+pyarrow==26.0.1         # reads the THFOOD-50 parquet files
+pytest==9.2.0

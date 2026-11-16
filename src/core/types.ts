@@ -208,7 +208,9 @@ export type FoodEntry = MacroSet & {
   amount: FoodAmount;
   /** Quick estimates / photo guesses. */
   estimate: boolean;
-  /** M7b: top-1 confidence of the accepted photo guess. */
+  /** M7b: set on entries logged from a photo. */
+  source?: 'photo-local' | 'photo-ai';
+  /** M7b: confidence of the accepted photo guess (only when the logged dish was offered). */
   photoConfidence?: number;
   /**
    * The amount and macros as first logged, set by `rescaleEntry` on the first amount edit.
@@ -239,6 +241,31 @@ export type Favorite = {
   amount: FoodAmount;
   createdAt: number;
 };
+
+/** M7b: a saved, labelled meal photo (only when "Save photos" is on; stays on the phone). */
+export type FoodPhoto = {
+  id: string;
+  /** The `thai:*` dish id he confirmed. */
+  dishId: string;
+  createdAt: number;
+  w: number;
+  h: number;
+  /** JPEG. */
+  blob: Blob;
+};
+
+/** M7b: the imported food classifier (.tflite), stored in IndexedDB. One record. */
+export type FoodModelRecord = {
+  id: 'food';
+  name: string;
+  sizeBytes: number;
+  labels: string[];
+  importedAt: number;
+  blob: Blob;
+};
+
+/** M7b: settings key 'foodVision'. Default `{ savePhotos: false }`. */
+export type FoodVisionSettings = { savePhotos: boolean };
 
 export type WeeklyCheck = {
   /** Local YYYY-MM-DD of the week's Monday. */

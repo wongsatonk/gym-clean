@@ -82,7 +82,7 @@ describe('gym profile store (M10e)', () => {
     });
   });
 
-  it('needs no Dexie version bump (still version 5)', () => {
-    expect(db.verno).toBe(5);
+  it('needs no table of its own (the profile lives in settings)', () => {
+    expect(db.tables.map((t) => t.name)).not.toContain('gym');
   });
 });

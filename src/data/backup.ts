@@ -3,9 +3,11 @@
  *
  * A backup is one JSON file the user creates by tapping Back up and moves himself (Files /
  * AirDrop); nothing here touches the network. It holds every Dexie table except the developer log
- * (large, and only for tuning) and never an API key or other secret. Restore replaces all backed-up
- * data in one transaction: it either all lands or nothing changes. The developer log and any secret
- * already on this phone are left alone.
+ * (large, and only for tuning), the saved food photos and the food model (large binaries; photos
+ * leave the phone as their own zip export, the model is re-imported) and never an API key or other
+ * secret. Restore replaces all backed-up data in one transaction: it either all lands or nothing
+ * changes. The developer log, the food photos / model and any secret already on this phone are
+ * left alone.
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';
@@ -15,8 +17,8 @@ export const BACKUP_FORMAT = 'gym-clean-backup';
 export const BACKUP_VERSION = 1;
 
 /**
- * The tables a backup carries. Every new Dexie table must land here or in DEVLOG_TABLES (a test
- * checks), so a schema bump can't silently drop data from backups.
+ * The tables a backup carries. Every new Dexie table must land here, in DEVLOG_TABLES or in
+ * LOCAL_ONLY_TABLES (a test checks), so a schema bump can't silently drop data from backups.
  */
 export const BACKUP_TABLES = [
   'sessions',
@@ -38,6 +40,13 @@ export type BackupTable = (typeof BACKUP_TABLES)[number];
 
 /** Left out on purpose (M9-q7): the developer log stays on the phone that recorded it. */
 export const DEVLOG_TABLES = ['devlogSessions', 'devlogSets', 'devlogChunks'] as const;
+
+/**
+ * Left out on purpose (M7b): saved meal photos and the imported food model are large Blobs that
+ * don't fit a JSON backup. Photos leave the phone through their own zip export
+ * (src/core/nutrition/photoExport.ts); the model is imported again in Settings.
+ */
+export const LOCAL_ONLY_TABLES = ['foodPhotos', 'foodModels'] as const;
 
 export type BackupFile = {
   format: typeof BACKUP_FORMAT;

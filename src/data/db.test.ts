@@ -582,7 +582,7 @@ describe('GymDb v5 (M7 nutrition)', () => {
     const up = new GymDb(name);
     await up.open();
     try {
-      expect(up.verno).toBe(5);
+      expect(up.verno).toBeGreaterThanOrEqual(5);
       expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
       expect(await setsForSession(up, 's1')).toHaveLength(1);
       expect(await up.exerciseNotes.get('e1')).toMatchObject({ machineSetting: 'seat 4' });
@@ -619,5 +619,102 @@ describe('GymDb v5 (M7 nutrition)', () => {
     expect(idx('weighIns')).toEqual(['date']);
     expect(idx('favorites')).toEqual(['id', 'createdAt']);
     expect(idx('weeklyChecks')).toEqual(['weekStart']);
+  });
+});
+
+describe('GymDb v6 (M7b food photos)', () => {
+  it('upgrades a v5 database keeping every existing row and adds the empty photo tables', async () => {
+    const name = `upgrade-${n++}`;
+    // The schema exactly as shipped before M7b (versions 1–5).
+    const old = new Dexie(name);
+    old.version(1).stores({
+      sessions: 'sessionId, dayId, startedAt',
+      sets: '++id, sessionId, exerciseId, startedAt, [exerciseId+startedAt]',
+    });
+    old.version(2).stores({
+      exerciseNotes: 'exerciseId',
+      sessionNotes: '[sessionId+exerciseId], sessionId',
+      settings: 'key',
+    });
+    old.version(3).stores({
+      devlogSessions: 'id, startedAt',
+      devlogSets: 'key, sessionId, [sessionId+seq]',
+      devlogChunks: '++id, sessionId, setKey',
+    });
+    old.version(4).stores({
+      trainer: 'key',
+      planChanges: '++id, createdAt',
+    });
+    old.version(5).stores({
+      foods: 'id, name, barcode',
+      recipes: 'id',
+      foodEntries: 'id, date, time',
+      weighIns: 'date',
+      favorites: 'id, createdAt',
+      weeklyChecks: 'weekStart',
+    });
+    await old.open();
+    await old.table('sessions').put({ sessionId: 's1', dayId: 'push-a', startedAt: 1000 });
+    await old.table('sets').add(log());
+    await old.table('exerciseNotes').put({ exerciseId: 'e1', machineSetting: 'seat 4', note: '' });
+    await old
+      .table('sessionNotes')
+      .put({ sessionId: 's1', exerciseId: 'e1', note: 'n', updatedAt: 1 });
+    await old.table('settings').bulkPut([
+      { key: 'unit', value: 'lb' },
+      { key: 'nutrition', value: { mode: 'quick' } },
+    ]);
+    await old.table('devlogSessions').put({ id: 'd1', startedAt: 1000 });
+    await old.table('devlogSets').put({ key: 'k1', sessionId: 'd1', seq: 0 });
+    await old.table('devlogChunks').add({ sessionId: 'd1', setKey: 'k1', bytes: 3 });
+    await old.table('trainer').put({ key: 'current', state: { made: 'up' } });
+    await old.table('planChanges').add({ createdAt: 5, kind: 'made-up' });
+    await old.table('foods').put({ id: 'f1', name: 'Made-up food', barcode: '123' });
+    await old.table('recipes').put({ id: 'r1' });
+    await old.table('foodEntries').put({ id: 'fe1', date: '2026-11-15', time: 7 });
+    await old.table('weighIns').put({ date: '2026-11-15', kg: 70 });
+    await old.table('favorites').put({ id: 'fav1', createdAt: 8 });
+    await old.table('weeklyChecks').put({ weekStart: '2026-11-09' });
+    old.close();
+
+    const up = new GymDb(name);
+    await up.open();
+    try {
+      expect(up.verno).toBe(6);
+      expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
+      expect(await setsForSession(up, 's1')).toHaveLength(1);
+      expect(await up.exerciseNotes.get('e1')).toMatchObject({ machineSetting: 'seat 4' });
+      expect(await up.sessionNotes.count()).toBe(1);
+      expect(await getUnit(up)).toBe('lb');
+      expect(await up.settings.get('nutrition')).toEqual({
+        key: 'nutrition',
+        value: { mode: 'quick' },
+      });
+      expect(await up.devlogSessions.count()).toBe(1);
+      expect(await up.devlogSets.count()).toBe(1);
+      expect(await up.devlogChunks.count()).toBe(1);
+      expect(await up.trainer.get('current')).toMatchObject({ state: { made: 'up' } });
+      expect(await up.planChanges.count()).toBe(1);
+      expect(await up.foods.get('f1')).toMatchObject({ name: 'Made-up food' });
+      expect(await up.recipes.count()).toBe(1);
+      expect(await up.foodEntries.get('fe1')).toMatchObject({ date: '2026-11-15' });
+      expect(await up.weighIns.get('2026-11-15')).toMatchObject({ kg: 70 });
+      expect(await up.favorites.count()).toBe(1);
+      expect(await up.weeklyChecks.count()).toBe(1);
+      expect(await up.foodModels.count()).toBe(0);
+      expect(await up.foodPhotos.count()).toBe(0);
+    } finally {
+      up.close();
+      await up.delete();
+    }
+  });
+
+  it('indexes the photo tables as planned', () => {
+    const idx = (t: string): string[] => {
+      const s = db.table(t).schema;
+      return [s.primKey.name, ...s.indexes.map((i) => i.name)];
+    };
+    expect(idx('foodModels')).toEqual(['id']);
+    expect(idx('foodPhotos')).toEqual(['id', 'createdAt', 'dishId']);
   });
 });

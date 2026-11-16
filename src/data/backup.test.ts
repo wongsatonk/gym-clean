@@ -5,6 +5,8 @@ import { GymDb } from './db';
 import {
   BACKUP_FORMAT,
   BACKUP_TABLES,
+  DEVLOG_TABLES,
+  LOCAL_ONLY_TABLES,
   BACKUP_VERSION,
   BackupError,
   exportAll,
@@ -188,7 +190,7 @@ describe('exportAll', () => {
     expect(file.format).toBe('gym-clean-backup');
     expect(file.version).toBe(BACKUP_VERSION);
     expect(file.dexieVersion).toBe(a.verno);
-    expect(file.dexieVersion).toBe(5);
+    expect(file.dexieVersion).toBe(6);
     expect(file.appVersion).toBe('abc123');
     expect(file.createdAt).toBe(T0 + 5);
     expect(Object.keys(file.tables).sort()).toEqual(
@@ -215,8 +217,57 @@ describe('exportAll', () => {
 
   it('covers every Dexie table: each one is either backed up or deliberately left out', async () => {
     const all = a.tables.map((t) => t.name).sort();
-    const left = ['devlogChunks', 'devlogSessions', 'devlogSets'];
+    const left = ['devlogChunks', 'devlogSessions', 'devlogSets', 'foodModels', 'foodPhotos'];
     expect([...BACKUP_TABLES, ...left].sort()).toEqual(all);
+    expect([...DEVLOG_TABLES, ...LOCAL_ONLY_TABLES].sort()).toEqual(left);
+  });
+
+  it('leaves saved food photos and the food model out of the file (M7b)', async () => {
+    await seed(a);
+    await a.foodPhotos.put({
+      id: 'ph1',
+      dishId: 'thai:made-up',
+      createdAt: T0,
+      w: 2,
+      h: 2,
+      blob: new Blob([new Uint8Array([1, 2])], { type: 'image/jpeg' }),
+    });
+    await a.foodModels.put({
+      id: 'food',
+      name: 'made-up.tflite',
+      sizeBytes: 2,
+      labels: ['a', 'b'],
+      importedAt: T0,
+      blob: new Blob([new Uint8Array([3, 4])]),
+    });
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(Object.keys(file.tables)).not.toContain('foodPhotos');
+    expect(Object.keys(file.tables)).not.toContain('foodModels');
+    expect(JSON.stringify(file)).not.toMatch(/ph1|made-up\.tflite/);
+  });
+
+  it('a restore leaves the photos and model already on this phone alone (M7b)', async () => {
+    await seed(a);
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.foodPhotos.put({
+      id: 'ph1',
+      dishId: 'thai:made-up',
+      createdAt: T0,
+      w: 2,
+      h: 2,
+      blob: new Blob([new Uint8Array([1, 2])], { type: 'image/jpeg' }),
+    });
+    await b.foodModels.put({
+      id: 'food',
+      name: 'm',
+      sizeBytes: 2,
+      labels: ['a', 'b'],
+      importedAt: T0,
+      blob: new Blob([new Uint8Array([3, 4])]),
+    });
+    await importAll(b, file);
+    expect(await b.foodPhotos.count()).toBe(1);
+    expect(await b.foodModels.count()).toBe(1);
   });
 
   it('never writes an API key or other secret, even if one is stored', async () => {
@@ -331,7 +382,7 @@ describe('importAll', () => {
       ['not an object', () => '[1,2,3]', 'corrupt'],
       ['another format', (f) => ({ ...f, format: 'something-else' }), 'format'],
       ['a newer backup version', (f) => ({ ...f, version: BACKUP_VERSION + 1 }), 'newer'],
-      ['a newer Dexie schema', (f) => ({ ...f, dexieVersion: 6 }), 'newer'],
+      ['a newer Dexie schema', (f) => ({ ...f, dexieVersion: f.dexieVersion + 1 }), 'newer'],
       ['a bad dexieVersion', (f) => ({ ...f, dexieVersion: 'five' }), 'corrupt'],
       ['no tables', (f) => ({ ...f, tables: undefined }), 'corrupt'],
       ['an unknown table', (f) => ({ ...f, tables: { ...f.tables, devlogChunks: [] } }), 'corrupt'],

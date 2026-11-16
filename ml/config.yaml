@@ -1,0 +1,51 @@
+# Gym Clean M7b food classifier: training config. Paths are relative to ml/ unless absolute.
+# Every script takes --config to point at a copy (e.g. the Colab notebook).
+
+paths:
+  class_map: ../src/food-vision/classMap.json   # single source of truth for labels (app + ml)
+  dishes: ../src/data/nutrition/thaiDishes.json  # dish names for reports only
+  data: data          # gitignored: downloads, extracted images, personal photos, manifest
+  runs: runs          # gitignored: embeddings, head weights, reports
+  models: models      # gitignored: exported .tflite
+
+backbone:
+  name: efficientnet_lite0      # Apache 2.0, see ml/DATASETS.md
+  source: efficientnet_lite0    # key in download.py SOURCES
+  image_size: 224
+  # The feature-vector model takes RGB floats in [0, 1]: (pixel - mean) / std.
+  norm_mean: [0.0]
+  norm_std: [255.0]
+  embed_dim: 1280
+  batch_size: 32
+  # Extra embedded copies per train image (flip / crop / brightness). 0 = none.
+  # Cached once, so each copy costs one extra backbone pass, not one per epoch.
+  augment_copies: 1
+
+split:
+  # Public datasets: by file hash, so the same file always lands in the same split.
+  val_pct: 10
+  test_pct: 10
+  # His own photos: at least this many are held out for testing and never trained on (SPEC).
+  personal_holdout_min: 100
+  personal_holdout_frac: 0.3
+  personal_val_pct: 10
+  seed: shared-split-v1   # salt for the hash buckets; changing it reshuffles every split
+
+head:
+  epochs: 60
+  batch_size: 256
+  learning_rate: 0.003
+  l2: 0.0001
+  label_smoothing: 0.1
+  patience: 8          # early stop on val top-1
+  seed: 7
+
+export:
+  quantization: float16    # float16 (default, ~4-5 MB) | int8 (smaller, check accuracy) | none
+  max_mb: 25
+  verify_images: 20
+  min_top1_agreement: 0.9  # MediaPipe top-1 vs the trained head on verify_images
+
+report:
+  confused_pairs: 10
+  min_class_images: 50     # classes with fewer train images are flagged in the report
