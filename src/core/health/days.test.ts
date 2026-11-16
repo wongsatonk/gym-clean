@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { healthDays, type HealthRead, type HealthSleepRead } from './days';
+import { healthDays, preferredHrvSource, type HealthRead, type HealthSleepRead } from './days';
 import { emptyHealthResult, type HealthReadResult } from '../../native/health';
 
 /** All numbers are made up (the repo is public). */
@@ -161,6 +161,62 @@ describe('healthDays: heart, energy, workouts', () => {
       hrvMs: 40,
       hrvSource: 'Watch',
     });
+  });
+
+  it('HRV: the source already stored for recent days wins over a bigger count in this read', () => {
+    const p = (iso: string, ms: number, source: string) => ({ start: t(iso), ms, source });
+    const read: HealthRead = {
+      hrv: [
+        p('2026-06-09T06:00:00+07:00', 41, 'Watch'),
+        p('2026-06-10T06:00:00+07:00', 42, 'Watch'),
+        p('2026-06-10T06:30:00+07:00', 60, 'WHOOP'),
+      ],
+    };
+    const days = healthDays(read, undefined, { hrvSource: 'WHOOP' });
+    expect(days.find((d) => d.date === '2026-06-10')).toMatchObject({
+      hrvMs: 60,
+      hrvSource: 'WHOOP',
+    });
+    // Where only the other source wrote, it's kept with its own label.
+    expect(days.find((d) => d.date === '2026-06-09')).toMatchObject({ hrvSource: 'Watch' });
+  });
+
+  it('HRV: a tie with nothing stored is decided by the latest data, not by the name', () => {
+    const p = (iso: string, ms: number, source: string) => ({ start: t(iso), ms, source });
+    const read = (a: string, b: string): HealthRead => ({
+      hrv: [
+        p('2026-06-10T06:00:00+07:00', 40, a),
+        p('2026-06-10T07:00:00+07:00', 60, b),
+        p('2026-06-11T06:00:00+07:00', 41, a),
+        p('2026-06-11T07:00:00+07:00', 61, b),
+      ],
+    });
+    // b's last sample is later → b, whatever the names sort to.
+    expect(day(read('Watch', 'WHOOP'), '2026-06-10')?.hrvSource).toBe('WHOOP');
+    expect(day(read('WHOOP', 'Watch'), '2026-06-10')?.hrvSource).toBe('Watch');
+  });
+
+  it('preferredHrvSource: the source on the most stored days, ties to the latest date', () => {
+    expect(preferredHrvSource([])).toBeUndefined();
+    expect(
+      preferredHrvSource([
+        { date: '2026-06-08', hrvMs: 60, hrvSource: 'WHOOP' },
+        { date: '2026-06-09', hrvMs: 60, hrvSource: 'WHOOP' },
+        { date: '2026-06-10', hrvMs: 40, hrvSource: 'Watch' },
+      ]),
+    ).toBe('WHOOP');
+    expect(
+      preferredHrvSource([
+        { date: '2026-06-09', hrvMs: 60, hrvSource: 'WHOOP' },
+        { date: '2026-06-10', hrvMs: 40, hrvSource: 'Watch' },
+      ]),
+    ).toBe('Watch');
+    expect(
+      preferredHrvSource([
+        { date: '2026-06-10', hrvMs: 40, hrvSource: 'Watch' },
+        { date: '2026-06-09', hrvMs: 60, hrvSource: 'WHOOP' },
+      ]),
+    ).toBe('Watch');
   });
 
   it('active energy: the daily total as sent, a repeated date keeps the larger, never summed', () => {

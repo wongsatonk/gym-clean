@@ -112,6 +112,37 @@ describe('readinessSignals: each signal at its edges', () => {
     expect(sig(days(workout(5, 40, 599)))).toEqual([]);
   });
 
+  it('a WHOOP log of his own Gym Clean session (overlapping in time) is no signal', () => {
+    const y = addDate(TODAY, -1);
+    const gymStart = Date.parse(`${y}T18:00:00+07:00`);
+    const strength: HealthWorkout = {
+      start: gymStart - 3 * 60_000,
+      minutes: 70,
+      kind: 'traditionalStrengthTraining',
+      source: 'WHOOP',
+    };
+    const days = [
+      ...usual().filter((d) => d.date !== y),
+      { date: y, sleepMin: 420, workouts: [strength] },
+      today({}),
+    ];
+    const gym = [
+      { sessionId: 's', dayId: 'push-a', startedAt: gymStart, endedAt: gymStart + 65 * 60_000 },
+    ];
+    expect(sig(days)).toEqual(['hardOutsideWorkout']);
+    expect(readinessSignals(days, TODAY, NOW, undefined, gym)).toEqual([]);
+    // An unfinished session is not an interval: still a signal.
+    expect(
+      readinessSignals(days, TODAY, NOW, undefined, [
+        { sessionId: 'o', dayId: 'x', startedAt: gymStart },
+      ]).map((s) => s.signal),
+    ).toEqual(['hardOutsideWorkout']);
+    // readinessCard passes them on.
+    const two = [...days.slice(0, -1), today({ sleepMin: 300 })];
+    expect(readinessCard(input(two))?.signals).toEqual(['sleepShort', 'hardOutsideWorkout']);
+    expect(readinessCard(input(two, { gymSessions: gym }))).toBeNull();
+  });
+
   it('a workout later today than `now` does not count', () => {
     expect(sig([...usual(), today({ workouts: [workout(-3, 90)] })])).toEqual([]);
   });

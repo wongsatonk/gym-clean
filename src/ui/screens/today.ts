@@ -76,7 +76,7 @@ export type TodayProps = {
   // ---- M11 health (optional) ----
   /**
    * Core's readiness card for today (`ReadinessCard`), or null. Shows "Lighter today?" (or
-   * "Lighter week?" when `offer === 'deload'`) when its callbacks are set; never on a rest day.
+   * "Deload week?" when `offer === 'deload'`) when its callbacks are set; never on a rest day.
    */
   readiness?: ReadinessCard | null | undefined;
   /** Core's weekly load (gym sessions + outside workouts). Shows the line under "Your week". */

@@ -108,22 +108,54 @@ function firstPerDate<T extends Point>(
   return out;
 }
 
+/** Plain code-unit order (not locale order): the last, deterministic tie-break. */
+const byCode = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+
 /**
- * HRV per date from one source only. The source with data on the most dates wins on a date
- * where several wrote (ties: alphabetical), so the baseline stays within one source.
+ * HRV per date from one source only, so the baseline stays within one source. Order of
+ * preference on a date where several wrote: `prefer` (the source already stored for his recent
+ * days, so a short incremental read can't flip it), then the source with data on the most dates
+ * in this read, then the one with the latest sample, then code-unit order of the name.
  */
-function hrvByDate(points: readonly HealthHrvPoint[]): Map<string, { ms: number; source: string }> {
+function hrvByDate(
+  points: readonly HealthHrvPoint[],
+  prefer: string | undefined,
+): Map<string, { ms: number; source: string }> {
   const grouped = new Map<string, HealthHrvPoint[]>();
   for (const p of points) grouped.set(p.source, [...(grouped.get(p.source) ?? []), p]);
-  const bySource = [...grouped].map(
-    ([source, list]) => [source, firstPerDate(list, (p) => p.ms)] as const,
+  const bySource = [...grouped].map(([source, list]) => {
+    const dates = firstPerDate(list, (p) => p.ms);
+    const latest = Math.max(-Infinity, ...list.map((p) => p.start).filter(ok));
+    return { source, dates, latest };
+  });
+  bySource.sort(
+    (a, b) =>
+      Number(b.source === prefer) - Number(a.source === prefer) ||
+      b.dates.size - a.dates.size ||
+      b.latest - a.latest ||
+      byCode(a.source, b.source),
   );
-  bySource.sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0]));
   const out = new Map<string, { ms: number; source: string }>();
-  for (const [source, dates] of bySource) {
+  for (const { source, dates } of bySource) {
     for (const [date, p] of dates) if (!out.has(date)) out.set(date, { ms: round1(p.v), source });
   }
   return out;
+}
+
+/**
+ * The HRV source of his stored days: the one on the most dates, ties to the one on the latest
+ * date (then code-unit order). Undefined when no stored day has HRV.
+ */
+export function preferredHrvSource(days: readonly HealthDay[]): string | undefined {
+  const stats = new Map<string, { n: number; last: string }>();
+  for (const d of days) {
+    if (d.hrvSource === undefined || d.hrvMs === undefined) continue;
+    const cur = stats.get(d.hrvSource) ?? { n: 0, last: '' };
+    stats.set(d.hrvSource, { n: cur.n + 1, last: d.date > cur.last ? d.date : cur.last });
+  }
+  return [...stats]
+    .sort(([sa, a], [sb, b]) => b.n - a.n || byCode(b.last, a.last) || byCode(sa, sb))
+    .at(0)?.[0];
 }
 
 /** Date → kcal. The plugin already sends one de-duplicated total per day; a repeat keeps the larger. */
@@ -161,8 +193,15 @@ function workoutsByDate(list: readonly HealthWorkout[]): Map<string, HealthWorko
   return out;
 }
 
+/** What the stored rows tell this read (see `preferredHrvSource`). */
+export type HealthDaysContext = { hrvSource?: string };
+
 /** The read as one row per local date (only dates with data), sorted by date. Never throws. */
-export function healthDays(read: HealthRead, rules: HealthRules = HEALTH_RULES): HealthDay[] {
+export function healthDays(
+  read: HealthRead,
+  rules: HealthRules = HEALTH_RULES,
+  context: HealthDaysContext = {},
+): HealthDay[] {
   const rows = new Map<string, HealthDay>();
   const row = (date: string): HealthDay => {
     const r = rows.get(date) ?? { date };
@@ -172,7 +211,7 @@ export function healthDays(read: HealthRead, rules: HealthRules = HEALTH_RULES):
   for (const [date, min] of sleepByDate(read.sleep ?? [], rules)) row(date).sleepMin = min;
   for (const [date, p] of firstPerDate(read.restingHr ?? [], (r) => r.bpm))
     row(date).restingHr = Math.round(p.v);
-  for (const [date, h] of hrvByDate(read.hrv ?? []))
+  for (const [date, h] of hrvByDate(read.hrv ?? [], context.hrvSource))
     Object.assign(row(date), { hrvMs: h.ms, hrvSource: h.source });
   for (const [date, kcal] of energyByDate(read.activeEnergy ?? [])) row(date).activeKcal = kcal;
   for (const [date, list] of workoutsByDate(read.workouts ?? [])) row(date).workouts = list;

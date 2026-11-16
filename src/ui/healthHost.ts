@@ -60,11 +60,14 @@ export type HealthHostDeps = {
   now: () => number;
   /** Re-render whatever is on screen, if it shows Health data (Today, Settings → Health, Fuel). */
   render: () => void;
-  /** Today is a training day in his plan (undefined while the plan isn't loaded). */
+  /**
+   * Today is a training day in his plan that isn't done yet (undefined while the plan isn't
+   * loaded). Also checked on every Today render: the card goes once today's workout is done.
+   */
   trainingDay: () => boolean | undefined;
   /** A workout is running. */
   inWorkout: () => boolean;
-  /** Gym Clean sessions for the weekly load. */
+  /** Gym Clean sessions for the weekly load and the card (WHOOP logging his own session). */
   sessions: () => readonly LoadSession[];
   /** A sync imported weigh-ins: Fuel reloads its list. */
   onWeighIns: () => void;
@@ -155,6 +158,7 @@ export function createHealthHost(deps: HealthHostDeps) {
       today: localDate(now),
       ...(trainingDay !== undefined ? { trainingDay } : {}),
       inWorkout: deps.inWorkout(),
+      gymSessions: deps.sessions(),
     });
     card = res.card;
     if (!health) return; // PWA: nothing stored, nothing to show
@@ -291,13 +295,18 @@ export function createHealthHost(deps: HealthHostDeps) {
       });
       void sync();
     },
-    /** Today's Health props: the card (null on the PWA / no card) and the weekly-load line. */
+    /**
+     * Today's Health props: the card (null on the PWA / no card) and the weekly-load line. The
+     * card from the last sync is shown only while it is still today's and today is still a
+     * training day that isn't done (no sync needed for it to go after midnight or the workout).
+     */
     todayProps(): { readiness: ReadinessCard | null; weekLoad: WeekLoad | null } {
       if (!api) return { readiness: null, weekLoad: null };
       const weekLoad = settings.enabled.workouts
         ? weeklyLoad({ sessions: deps.sessions(), healthDays: days, today: deps.now() })
         : null;
-      return { readiness: card, weekLoad };
+      const readiness = card && card.date === today() && deps.trainingDay() === true ? card : null;
+      return { readiness, weekLoad };
     },
     /** The card's buttons; `open` opens the coach on that M10 chip. */
     readinessActions(open: (chip: CardChip) => void): ReadinessActions {

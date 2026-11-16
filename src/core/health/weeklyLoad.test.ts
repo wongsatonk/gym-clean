@@ -114,6 +114,10 @@ describe('weeklyLoad', () => {
     expect(load.outside).toEqual([]);
   });
 
+  it('GYM_CLEAN_SOURCES holds source names only (workouts carry no bundle id; the plugin drops ours by bundle id)', () => {
+    for (const s of GYM_CLEAN_SOURCES) expect(s).not.toMatch(/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i);
+  });
+
   it('the same workout stored twice (re-read) counts once', () => {
     const w = wo(8, 7, 40, 'running');
     const load = weeklyLoad({

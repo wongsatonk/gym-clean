@@ -72,13 +72,16 @@ function fakeApi() {
   return { api, calls };
 }
 
-function host(api: HealthApi | null) {
+function host(
+  api: HealthApi | null,
+  clock = { now: NOW, trainingDay: true as boolean | undefined },
+) {
   const renders = { n: 0 };
   const h = createHealthHost({
     db,
-    now: () => NOW,
+    now: () => clock.now,
     render: () => renders.n++,
-    trainingDay: () => true,
+    trainingDay: () => clock.trainingDay,
     inWorkout: () => false,
     sessions: () => [],
     onWeighIns: () => undefined,
@@ -174,6 +177,24 @@ describe('healthHost', () => {
     expect((await listHealthDays(db)).some((d) => d.sleepMin !== undefined)).toBe(false);
     expect((await getHealthSettings(db)).readiness?.lastCard).toBeUndefined();
     expect(calls.requestRead).toHaveLength(1); // turning off asks iOS nothing
+  });
+
+  it("no card once its date has passed or today's workout is done, even before the next sync", async () => {
+    const { api } = fakeApi();
+    const clock = { now: NOW, trainingDay: true as boolean | undefined };
+    const { h } = host(api, clock);
+    await connect(h);
+    expect(h.todayProps().readiness?.date).toBe(TODAY);
+    // He finished today's workout: the effective day is done (trainingDay → false).
+    clock.trainingDay = false;
+    expect(h.todayProps().readiness).toBeNull();
+    clock.trainingDay = undefined;
+    expect(h.todayProps().readiness).toBeNull();
+    // Past midnight with yesterday's card still in memory.
+    clock.trainingDay = true;
+    expect(h.todayProps().readiness).not.toBeNull();
+    clock.now = NOW + 20 * HOUR;
+    expect(h.todayProps().readiness).toBeNull();
   });
 
   it('a switch turned on asks iOS for that type only, then reads', async () => {

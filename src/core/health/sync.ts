@@ -6,9 +6,17 @@
  *
  * One sync:
  * 1. Plugin missing / unavailable (PWA) or no type on → quiet no-op (nothing written, no card).
- * 2. Read only the enabled types: the last 35 days on the first read, then whole days from the
- *    day before `lastReadAt` (so daily totals, nights across midnight and the earliest morning
- *    weigh-in are never cut in half; re-reading a day is harmless because merges are per field).
+ * 2. Read only the enabled types from local midnight of the window's first day (`since`): 35 days
+ *    back on the first read, else the day before `lastReadAt`. Merges are per field (a new value
+ *    replaces the stored one), so only whole days may be merged:
+ *    - dates from `localDate(since)` on are whole: their totals, first-of-day resting HR / HRV
+ *      and weigh-ins start at that midnight, and the night that woke on that first day is whole
+ *      because the plugin looks back 18 h before `since` for sleep;
+ *    - anything the read returns for an EARLIER date is cut off by the window (above all the
+ *      tail of an older night from that sleep look-back) and is dropped, never merged, so it
+ *      can't replace the full value stored by an earlier read;
+ *    - today is still in progress; the next read re-reads it (and the day before) whole.
+ *    The HRV source already stored for his recent days is kept (see `preferredHrvSource`).
  * 3. Re-check the switches after the read: a type turned off while it ran is dropped, never stored.
  * 4. Merge per-day summaries, import morning weigh-ins, save `lastReadAt` (only after an 'ok' read;
  *    a locked phone or failed read is skipped quietly and retried next time).
@@ -25,9 +33,10 @@ import {
   type ReadinessCard,
   type WeighIn,
 } from '../types';
-import { healthDays, type HealthRead } from './days';
+import { healthDays, preferredHrvSource, type HealthRead } from './days';
 import { readinessCard, type ReadinessHistory } from './readiness';
 import { HEALTH_RULES, type HealthRules } from './rules';
+import type { LoadSession } from './weeklyLoad';
 import type { BodyMassSample } from './weighIns';
 
 /** Days read on the first connect (and the furthest back any read goes). */
@@ -70,6 +79,11 @@ export type HealthSyncInput = {
   trainingDay?: boolean;
   /** A workout is running → no card. */
   inWorkout?: boolean;
+  /**
+   * His Gym Clean sessions: a Health workout overlapping a finished one is that session (e.g.
+   * WHOOP logging the same lifting), never a "hard outside workout" signal.
+   */
+  gymSessions?: readonly LoadSession[];
   rules?: HealthRules;
 };
 
@@ -132,11 +146,9 @@ export async function syncHealth(input: HealthSyncInput): Promise<HealthSyncResu
     const asked = enabledTypes(before);
     if (asked.length === 0) return EMPTY('off');
 
-    const read = await health.read({
-      types: asked,
-      since: healthReadSince(before.lastReadAt, today, now),
-      until: now,
-    });
+    const since = healthReadSince(before.lastReadAt, today, now);
+    const firstFullDay = localDate(since);
+    const read = await health.read({ types: asked, since, until: now });
     const status: HealthSyncStatus =
       (read.status ?? 'ok') === 'ok' ? 'ok' : read.status === 'locked' ? 'locked' : 'failed';
 
@@ -147,11 +159,22 @@ export async function syncHealth(input: HealthSyncInput): Promise<HealthSyncResu
       const after = await store.getSettings();
       const keep = asked.filter((t) => after.enabled[t]);
       const kept = only(read, keep);
-      const days = healthDays(kept, rules);
+      // Keep the HRV source his recent stored days already use (a short read can't flip it).
+      const hrvSource = keep.includes('hrv')
+        ? preferredHrvSource(
+            await store.listDays(addDate(firstFullDay, -rules.baselineDays), today),
+          )
+        : undefined;
+      // Only whole days (see 2.): an earlier date is cut off by the read window.
+      const days = healthDays(kept, rules, hrvSource === undefined ? {} : { hrvSource }).filter(
+        (d) => d.date >= firstFullDay,
+      );
       if (days.length > 0) await store.mergeDays(days);
       daysMerged = days.length;
       if (keep.includes('bodyMass')) {
-        const samples = (kept.bodyMass ?? []).map((p) => ({ time: p.start, kg: p.kg }));
+        const samples = (kept.bodyMass ?? [])
+          .filter((p) => p.start >= since)
+          .map((p) => ({ time: p.start, kg: p.kg }));
         if (samples.length > 0) weighIns = await store.importWeighIns(samples);
       }
       await store.patchSettings(() => ({ lastReadAt: now }));
@@ -176,7 +199,15 @@ async function todaysCard(
   // plus the 2 days the outside-workout check looks up by time.
   const from = addDate(today, -(rules.baselineDays + rules.deloadWindowDays + 2));
   const days = await store.listDays(from, today);
-  const card = readinessCard({ date: today, now, days, trainingDay: true, history, rules });
+  const card = readinessCard({
+    date: today,
+    now,
+    days,
+    trainingDay: true,
+    history,
+    rules,
+    ...(input.gymSessions ? { gymSessions: input.gymSessions } : {}),
+  });
   if (card && history.lastCard !== card) {
     await store.patchSettings((s) => ({
       readiness: {

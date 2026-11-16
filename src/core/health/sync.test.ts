@@ -393,4 +393,109 @@ describe('syncHealth', () => {
     expect(store.settings.readiness?.lastDeloadOfferDate).toBe(TODAY);
     expect(store.settings.readiness?.lastCard?.date).toBe(next);
   });
+
+  it('incremental: a night cut off by the read window never replaces the full stored night', async () => {
+    const store = new FakeStore();
+    await run(new FakeHealth(usualRead()), store);
+    const early = addDate(TODAY, -2); // before the first full day of the next read
+    const fullBefore = structuredClone(store.days.get(early));
+    expect(fullBefore?.sleepMin).toBe(420);
+
+    // Next morning: since = midnight of TODAY-1. HealthKit returns only the tail of the night
+    // that woke on TODAY-2 (from the 18 h sleep look-back), a late resting-HR sample and a
+    // partial energy total for that date, plus the usual full data for TODAY-1 and TODAY.
+    const next = addDate(TODAY, 1);
+    const earlyWake = Date.parse(`${early}T06:30:00+07:00`);
+    const base = usualRead(next, 2);
+    const health = new FakeHealth({
+      ...base,
+      sleep: [
+        ...(base.sleep ?? []),
+        { start: earlyWake - HOUR, end: earlyWake, asleepMin: 50, source: 'WHOOP' },
+      ],
+      restingHr: [
+        ...(base.restingHr ?? []),
+        { start: earlyWake + 14 * HOUR, bpm: 70, source: 'WHOOP' },
+      ],
+      activeEnergy: [
+        ...(base.activeEnergy ?? []),
+        { date: early, start: midnight(early), kcal: 30 },
+      ],
+      hrv: [...(base.hrv ?? []), { start: earlyWake + 14 * HOUR, ms: 20, source: 'WHOOP' }],
+    });
+    const res = await syncHealth({ health, store, now: NOW + 24 * HOUR, today: next });
+    expect(health.calls[0]?.since).toBe(midnight(addDate(TODAY, -1)));
+    expect(res.status).toBe('ok');
+    expect(store.days.get(early)).toEqual(fullBefore);
+    for (const m of store.merges.slice(1))
+      for (const d of m) expect(d.date >= addDate(TODAY, -1)).toBe(true);
+  });
+
+  it('first connect: the oldest (cut-off) date before the window is not stored', async () => {
+    const store = new FakeStore();
+    const oldest = addDate(TODAY, -36); // a night from the 18 h look-back, before the window
+    const wake = Date.parse(`${oldest}T06:30:00+07:00`);
+    const read = usualRead();
+    const health = new FakeHealth({
+      ...read,
+      sleep: [
+        { start: wake - HOUR, end: wake, asleepMin: 40, source: 'WHOOP' },
+        ...(read.sleep ?? []),
+      ],
+    });
+    await run(health, store);
+    expect(store.days.has(oldest)).toBe(false);
+  });
+
+  it('passes his finished gym sessions to the card: a WHOOP log of the same lifting is no signal', async () => {
+    const y = addDate(TODAY, -1);
+    const gymStart = Date.parse(`${y}T18:00:00+07:00`);
+    const base = usualRead();
+    const read: HealthRead = {
+      ...base,
+      workouts: [
+        {
+          start: gymStart + 5 * 60_000,
+          minutes: 70,
+          kind: 'traditionalStrengthTraining',
+          source: 'WHOOP',
+        },
+      ],
+      sleep: [
+        ...(base.sleep ?? []),
+        { start: NOW - 6 * HOUR, end: NOW - HOUR, asleepMin: 300, source: 'WHOOP' },
+      ],
+    };
+    const gym = [
+      { sessionId: 's', dayId: 'push-a', startedAt: gymStart, endedAt: gymStart + 75 * 60_000 },
+    ];
+    const without = await run(new FakeHealth(read), new FakeStore());
+    expect(without.card?.signals).toEqual(['sleepShort', 'hardOutsideWorkout']);
+    const withGym = await run(new FakeHealth(read), new FakeStore(), { gymSessions: gym });
+    expect(withGym.card).toBeNull();
+  });
+
+  it('HRV: a 2-day incremental read keeps the source already stored, even on a tie', async () => {
+    // First read: WHOOP has more dates than Watch, so WHOOP is his HRV source.
+    const base = usualRead();
+    const watch = [];
+    for (let k = 1; k <= 10; k++) {
+      const d = addDate(TODAY, -k);
+      watch.push({ start: Date.parse(`${d}T07:00:00+07:00`), ms: 40, source: 'Watch' });
+    }
+    const store = new FakeStore();
+    await run(new FakeHealth({ ...base, hrv: [...(base.hrv ?? []), ...watch] }), store);
+    expect(store.days.get(addDate(TODAY, -1))?.hrvSource).toBe('WHOOP');
+
+    // Next morning: both sources wrote on both days of the window (a tie).
+    const next = addDate(TODAY, 1);
+    const hrv = [];
+    for (const d of [TODAY, next]) {
+      hrv.push({ start: Date.parse(`${d}T07:30:00+07:00`), ms: 60, source: 'WHOOP' });
+      hrv.push({ start: Date.parse(`${d}T07:00:00+07:00`), ms: 40, source: 'Watch' });
+    }
+    await syncHealth({ health: new FakeHealth({ hrv }), store, now: NOW + 24 * HOUR, today: next });
+    expect(store.days.get(TODAY)?.hrvSource).toBe('WHOOP');
+    expect(store.days.get(next)?.hrvSource).toBe('WHOOP');
+  });
 });

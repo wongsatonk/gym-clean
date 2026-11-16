@@ -9,17 +9,23 @@ import type { HealthDay, ReadinessCard, ReadinessSignal } from '../types';
 import { baseline, workoutKcalBaseline } from './baseline';
 import { deloadReason, reasonText, SIGNAL_ORDER, type SignalDetail } from './copy';
 import { HEALTH_RULES, type HealthRules } from './rules';
+import { isOwnWorkout, overlapsGymSession, type LoadSession } from './weeklyLoad';
 
 const HOUR = 3_600_000;
 const EPS = 1e-9;
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
-/** Today's signals with the size of each change, in `SIGNAL_ORDER`. Missing data → no signal. */
+/**
+ * Today's signals with the size of each change, in `SIGNAL_ORDER`. Missing data → no signal.
+ * `gymSessions`: his Gym Clean sessions; a Health workout overlapping a finished one (WHOOP
+ * logging the same lifting) is that session, not an outside workout (same rule as weeklyLoad).
+ */
 export function readinessSignals(
   days: readonly HealthDay[],
   date: string,
   now: number,
   rules: HealthRules = HEALTH_RULES,
+  gymSessions: readonly LoadSession[] = [],
 ): SignalDetail[] {
   const out: SignalDetail[] = [];
   const t = days.find((d) => d.date === date);
@@ -51,6 +57,7 @@ export function readinessSignals(
   const hard = days
     .filter((d) => d.date >= from && d.date <= date)
     .flatMap((d) => d.workouts ?? [])
+    .filter((w) => !isOwnWorkout(w) && !overlapsGymSession(w, gymSessions))
     .filter((w) => {
       const end = w.start + w.minutes * 60_000;
       return w.start <= now && end <= now && end > now - rules.hardWorkoutWindowH * HOUR;
@@ -84,11 +91,12 @@ export function firedDaysBefore(
   days: readonly HealthDay[],
   date: string,
   rules: HealthRules = HEALTH_RULES,
+  gymSessions: readonly LoadSession[] = [],
 ): number {
   let n = 0;
   for (let i = 1; i <= rules.deloadWindowDays; i++) {
     const d = addDate(date, -i);
-    if (readinessSignals(days, d, noonOf(d), rules).length >= rules.minSignals) n++;
+    if (readinessSignals(days, d, noonOf(d), rules, gymSessions).length >= rules.minSignals) n++;
   }
   return n;
 }
@@ -114,20 +122,22 @@ export type ReadinessInput = {
   inWorkout?: boolean;
   history?: ReadinessHistory;
   rules?: HealthRules;
+  /** His Gym Clean sessions (finished ones are matched against Health workouts). */
+  gymSessions?: readonly LoadSession[];
 };
 
 /** Today's card, or null. */
 export function readinessCard(input: ReadinessInput): ReadinessCard | null {
-  const { date, now, days, history = {}, rules = HEALTH_RULES } = input;
+  const { date, now, days, history = {}, rules = HEALTH_RULES, gymSessions = [] } = input;
   if (!input.trainingDay || input.inWorkout) return null;
   if (history.answeredDate === date) return null;
   if (history.lastCard?.date === date) return history.lastCard;
 
-  const details = readinessSignals(days, date, now, rules);
+  const details = readinessSignals(days, date, now, rules, gymSessions);
   if (details.length < rules.minSignals) return null;
 
   const reasons = details.map(reasonText);
-  const fired = firedDaysBefore(days, date, rules);
+  const fired = firedDaysBefore(days, date, rules, gymSessions);
   const last = history.lastDeloadOfferDate;
   const spaced = last === undefined || addDate(last, rules.deloadSpacingDays) <= date;
   const deload = fired >= rules.deloadFiredDays && spaced;
