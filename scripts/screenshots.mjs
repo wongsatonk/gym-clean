@@ -2597,6 +2597,17 @@ async function m10e(browser) {
   steps.smithInfoBadge = await smith.locator('[data-badge="info"]').count();
   steps.legPressAfterApply = await preview.locator('[data-ex="Leg_Press"]').count();
   await m10eShot(p, 'applied-preview');
+  // Reload keeps the swap.
+  await page.reload();
+  await page.locator('[data-hero="legs-b"]').waitFor();
+  await page.waitForTimeout(500);
+  steps.promptAfterApplyReload = await prompt.count();
+  await page.locator('[data-hero="legs-b"] [data-start]').click();
+  await smith.waitFor();
+  steps.smithAfterReload = await smith.count();
+  steps.smithInfoAfterReload = await smith.locator('[data-badge="info"]').count();
+  steps.legPressAfterReload = await preview.locator('[data-ex="Leg_Press"]').count();
+  await m10eShot(p, 'applied-preview-reloaded');
   await preview.getByRole('button', { name: '‹ Back' }).click();
   await page.locator('[data-tab="settings"]').click();
   await page.locator('[data-plan-changes-open]').click();
@@ -2613,6 +2624,21 @@ async function m10e(browser) {
   await page.locator('[data-hero="legs-b"] [data-start]').click();
   await preview.locator('li.ex-row').first().waitFor();
   steps.legPressAfterUndo = await preview.locator('[data-ex="Leg_Press"]').count();
+  await preview.getByRole('button', { name: '‹ Back' }).click();
+
+  // Keep it: hides the prompt, survives a reload, Leg Press stays.
+  await prompt.locator('[data-gym-keep]').click();
+  await page.waitForTimeout(300);
+  steps.promptAfterKeep = await prompt.count();
+  await m10eShot(p, 'kept-today');
+  await page.reload();
+  await page.locator('[data-hero="legs-b"]').waitFor();
+  await page.waitForTimeout(500);
+  steps.promptAfterKeepReload = await prompt.count();
+  await page.locator('[data-hero="legs-b"] [data-start]').click();
+  await preview.locator('li.ex-row').first().waitFor();
+  steps.legPressAfterKeep = await preview.locator('[data-ex="Leg_Press"]').count();
+  steps.previewPromptAfterKeep = await preview.locator('[data-gym-prompt]').count();
   await preview.getByRole('button', { name: '‹ Back' }).click();
 
   // My gym ticks.

@@ -234,9 +234,9 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Done when: render tests + 390×844 screenshot; e2e: untick Smith machine → the Legs B swap offers the barbell squat first.
   - Deps: 6, 9.
 - [ ] 12. *(can-follow, after M10e-q4 is answered)* [anatomy-3d-engineer] Face pull / pushdown 3D demos with a single handle (src/ui/demo3d/**). Not this round.
-- [ ] 13. [reviewer] Review the branch diff: core pure (no DOM/DB in `src/core/trainer`), kit needs as data with no exercise-id branches, nothing applied without a tap, Undo works, copy passes `checkCopy`, 56 / 20px and tokens, no network, ownership respected, vendored entries match upstream. Deps: 10 (and 11 if built).
-- [ ] 14. [verifier] Verify the milestone against SPEC M10e Accept: `npm run check`, `npm run e2e`, `npm run build`, intent-eval score, 390×844 screenshots `docs/screenshots/m10e-*.png` (prompt, proposal, applied preview with Info, My gym if built), console clean, 0 off-device requests; evidence into PROGRESS. Deps: 13.
-- [ ] 15. [main] Merge `m10-equipment` + **ask Wongsaton before pushing** (push = deploy). Deps: 14.
+- [x] 13. [reviewer] Review the branch diff: core pure (no DOM/DB in `src/core/trainer`), kit needs as data with no exercise-id branches, nothing applied without a tap, Undo works, copy passes `checkCopy`, 56 / 20px and tokens, no network, ownership respected, vendored entries match upstream. Deps: 10 (and 11 if built).
+- [x] 14. [verifier] Verify the milestone against SPEC M10e Accept: `npm run check`, `npm run e2e`, `npm run build`, intent-eval score, 390×844 screenshots `docs/screenshots/m10e-*.png` (prompt, proposal, applied preview with Info, My gym if built), console clean, 0 off-device requests; evidence into PROGRESS. Deps: 13.
+- [x] 15. [main] Merge `m10-equipment` + **ask Wongsaton before pushing** (push = deploy). Deps: 14.
 - [ ] 16. 🧍 **Checkpoint E (extended):** at the gym, Legs B runs with the leg-press swap; he reports the replacement's weight and whether the prompt felt right. Deps: 15.
 
 **Parallel waves:**
@@ -2562,6 +2562,28 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   2. The Undo toast from a log follows across tabs and into the coach and scan sheets for its full 10 s (seen on Settings, Coach and Scan). This is the M10 behaviour.
   3. Main chunk +35 kB gzip (Fuel screens + nutrition core). The food list and the scanner are lazy, as planned.
   4. The setup screenshot shows the sticky Save targets bar just below "Stays on this phone." with no gap. It isn't clipped.
+
+### M10e + backup (2026-11-15)
+- Verified on `m10-equipment` at **2acf4e2** (clean tree apart from untracked `fixtures-staging/`; app code untouched). Reviewer PASS at ff3f318. **GitHub CI on 2acf4e2: run 43743340017 passed** (check + full e2e + build, Linux); the full e2e wasn't repeated locally.
+- `npm run check`: typecheck + lint clean, Vitest **99 files / 2,707 tests passed**, node script tests **56/56**. M10e + B1 suites alone (intents, equipment, swapCandidates, gym, backup, catalog): 6 files / 121 passed. Intent eval: **100%** (95/95 rule-supported items, no miss printed; 6 gym/"no leg press" items incl. Thai), safety flags 100%. Covered by name: Leg Press → Smith squat, barbell squat, split squat in order; no smith → barbell first; never rope / never kit the gym lacks, with or without an avoid area; every program exercise has a candidate; `missingKit` on Legs B / after a swap / kept / rest day / overrides; gymSwap Apply → Undo restores Leg Press exactly; free text reaches the same proposal; every missing-kit reply passes `checkCopy`; profile default / round trip / unknown id rejected / keep / save clears kept / still Dexie v5.
+- `npm run build`: OK. Main `index` **614.15 kB / 184.32 kB gzip** vs origin/main (c818def, `vite build` of a `git archive` copy) **587.39 / 177.49 kB** → **+26.8 kB raw / +6.8 kB gzip**. CSS 87.71 kB. Lazy unchanged: three.module 535.59, landmarker 154.39, scene 38.65, reader 37.72, viewer 5.73, skeleton3d 2.36 kB. **Precache still has `assets/usda-foods-CEIZg-2w.json` (2.65 MB) and `assets/zxing_reader-BCjuyud6.wasm` (947 kB)**, same hashes as main. 26 entries here vs 24 on the archive copy: the extra two are `mediapipe/wasm/*` from the gitignored `public/mediapipe/` that exists only in a checkout with `npm install`, not a branch change.
+- Targeted e2e, `E2E_PORT=5371 npx playwright test e2e/{equipment,backup,fuel,barcode,trainer,history,history-flow}.spec.ts`: **36 passed, 1 skipped** (`history.spec.ts` HISTORY_SHOTS, opt-in), 0 failed, 11.0 s. Flakiness: `equipment.spec.ts` + `backup.spec.ts` `--repeat-each=5`: **35/35 passed**.
+- Click-through (`SHOT_PORT=5372 node scripts/screenshots.mjs m10e`; clock Fri 13 Nov 18:00, Push A…Pull B seeded so Legs B is next; Open Food Facts routed):
+  - Today: "Your gym has no kit for Leg Press." See a swap / Keep it; preview still lists Leg Press before any tap (1 row);
+  - See a swap → proposal "Swap Leg Press from now on · Legs B · Leg Press → Legs B · Smith Machine Squat", why "No leg press here. This works the same main muscles."; chips Try Barbell Squat, Try Split Squat with Dumbbells, Just today, Keep Leg Press;
+  - Apply → Undo toast, prompt gone; preview Smith Machine Squat with **Info** badge, Leg Press 0 rows; **reload keeps it** (Smith 1 row + Info, Leg Press 0, no prompt);
+  - Settings → Plan changes → Undo → Today prompt back, preview lists Leg Press again;
+  - **Keep it** → prompt gone, still gone **after reload**, preview keeps Leg Press and shows no prompt;
+  - My gym: Leg press unticked / Smith ticked by default → tick Leg press → reload → no prompt, still ticked → untick → reload → prompt back (Keep reset by the profile change);
+  - Backup: Back up downloads `gym-clean-2026-11-13.gymclean-backup.json`; switch to lb; Restore → "Replace all data on this phone? … 5 workouts." → first tap "Tap again to replace" → second tap → "Restored from the backup." + Undo toast, unit back to kg → Undo → "Restore undone.", unit lb again;
+  - M7: Fuel setup → Coach "what should I eat" → 3 rows (555 kcal · 54 g, 708 · 50 g, 775 · 45 g), **no decimal grams**.
+  - Off-device requests: **0** (offsite list empty, 0 Open Food Facts calls).
+- Screenshots 390×844 (DPR 2), every one **scrollWidth 390**, **0 console errors/warnings, 0 page errors**, **no visible button under 56px**: `docs/screenshots/m10e-verify-{prompt-today,prompt-preview,proposal,applied-today,applied-preview,applied-preview-reloaded,plan-changes,plan-changes-undone,kept-today,settings,my-gym,my-gym-ticked,backup,restore-confirm,restore-tap-again,restored,restore-undone,coach-food}.png`.
+- Non-blocking observations:
+  1. 18px text on screen: the hero muscle chips (Quadriceps / Hamstrings / Calves), the streak weekday letters and the tab-bar labels. All predate this branch: its CSS only adds rules for the new gym prompt, My gym and backup panel, which use `--fs-body` / `--fs-cue`, and the measure found no new text under 20px.
+  2. The proposal screenshot opens with the coach's reply line scrolled half out under the sheet header ("…Leg Press. Here's a swap." visible). The card itself is whole.
+  3. After Restore → Undo, "Restore undone." shows both inline and in the toast at the same time.
+  4. Main chunk +6.8 kB gzip (equipment/kit data, My gym, backup panel).
 
 ## Blockers / questions for Wongsaton
 - **M9 native iOS shell: ANSWERED 2026-11-15 — Wongsaton: "Go with your defaults for all 9, I'm using iPhone 17 Pro". q1 free Apple ID first; q2 ios-engineer added to CLAUDE.md (its agent file in the main checkout still needs the §M8 / HealthKit / spike-order fix: Claude is not allowed to edit .claude/agents there; M9 briefs override it); q3 iOS 26.0; q4–q8 defaults; q9 Xcode: installed at /Applications/Xcode.app but `xcodebuild` fails to load CoreDevice ("Error loading required libraries… reinstall") — he must open Xcode and finish/repair its component install before task 3. (Was: planned 2026-11-15; BLOCKING: no code until you answer, or say "go with the defaults"). The platform facts are in Decisions "M9 native shell plan" and get re-checked against live docs before any code:**
