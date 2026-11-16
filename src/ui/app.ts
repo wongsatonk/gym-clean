@@ -682,6 +682,8 @@ export function mountApp(root: HTMLElement): void {
       ensureBody3d();
       placeBody3d();
     }
+    // Settings shows "Restore undone." inline: the notice would say it twice.
+    if (view.screen === 'settings' && toast?.dataset.notice === 'restore') removeToast();
     placeToast();
   }
 
@@ -1309,6 +1311,7 @@ export function mountApp(root: HTMLElement): void {
     toast?.dispose?.();
     toast?.remove();
     toast = null;
+    document.documentElement.style.removeProperty('--toast-space');
   }
 
   /**
@@ -1319,15 +1322,29 @@ export function mountApp(root: HTMLElement): void {
   function placeToast(): void {
     if (!toast) return;
     let top = window.innerHeight;
-    for (const el of root.querySelectorAll<HTMLElement>('[data-tabbar], .sticky-bottom')) {
-      const r = el.getBoundingClientRect();
-      if (r.height > 0 && r.bottom > 0 && r.top < top) top = r.top;
+    // A Fuel sheet covers the screen's chrome: the toast drops to the bottom edge instead, and
+    // the sheet keeps its main button above it (--toast-space, fuel.css). `.fuel-sheet` is the
+    // class src/ui/fuel gives every body-level sheet; a new sheet kind that needs this layout
+    // must carry it. data-toast-over records the choice for e2e (fuel.spec.ts).
+    const sheet = document.querySelector('.fuel-sheet');
+    toast.dataset.toastOver = sheet ? 'sheet' : 'screen';
+    if (!sheet) {
+      for (const el of root.querySelectorAll<HTMLElement>('[data-tabbar], .sticky-bottom')) {
+        const r = el.getBoundingClientRect();
+        if (r.height > 0 && r.bottom > 0 && r.top < top) top = r.top;
+      }
     }
     const above = window.innerHeight - top;
     if (above > 0) toast.style.setProperty('--toast-bottom', `${Math.round(above + 8)}px`);
     else toast.style.removeProperty('--toast-bottom');
+    // Room the toast takes from the bottom of the screen (plus a gap), for sheets under it.
+    const space = window.innerHeight - toast.getBoundingClientRect().top + 8;
+    document.documentElement.style.setProperty('--toast-space', `${Math.round(space)}px`);
   }
   window.addEventListener('resize', placeToast);
+  // Fuel sheets open and close as body children: the toast moves with them (over a sheet it sits
+  // at the bottom edge; back on a screen, above the tab bar again).
+  new MutationObserver(placeToast).observe(document.body, { childList: true });
 
   function showUndoToast(text: string, id?: number): void {
     removeToast();
@@ -1366,11 +1383,11 @@ export function mountApp(root: HTMLElement): void {
   }
 
   /** A short status line in the toast slot (no Undo), gone after 4 s. */
-  function showNotice(text: string): void {
+  function showNotice(text: string, kind = 'status'): void {
     removeToast();
     const el = h(
       'div',
-      { class: 'undo-toast', role: 'status', 'data-notice': true },
+      { class: 'undo-toast', role: 'status', 'data-notice': kind },
       h('p', { class: 'undo-text' }, text),
     );
     toast = el;
@@ -1847,7 +1864,8 @@ export function mountApp(root: HTMLElement): void {
       await importAll(db, undo, { now: now() });
       await reloadStored();
       restoreStep = { kind: 'message', text: 'Restore undone.', error: false };
-      showNotice('Restore undone.');
+      // Said once: Settings shows it inline; elsewhere a short notice says it.
+      if (view.screen !== 'settings') showNotice('Restore undone.', 'restore');
     } catch (err) {
       restoreStep = restoreError(err);
     }

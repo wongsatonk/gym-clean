@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { endWorkout, leaveSettings } from './workout.helpers';
+import { openCameraSheet } from './hands-free.helpers';
 
 const CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
 const PRESS = '/fixtures/landmarks/shoulder-press/synthetic-01__reps-4__partials-0.json';
@@ -30,6 +31,7 @@ declare global {
   interface Window {
     __said: Said[];
     __freezeAt: number | null;
+    __freezeAtIdx: number | null;
     __noPerson: boolean;
     __fxIdx: number;
     __repsAt: Record<number, number>;
@@ -149,6 +151,13 @@ async function installMocks(page: Page, fixture: string): Promise<void> {
               base ??= t;
               const i = Math.floor((t - base) / 33.333) % frames.length;
               window.__fxIdx = i;
+              // Hold the start position once the clip (on the frame clock) reaches this frame.
+              if (window.__freezeAtIdx != null && i >= window.__freezeAtIdx) {
+                window.__freezeAtIdx = null;
+                window.__freezeAt = 0;
+                base = null;
+                return { ...frames[0], t };
+              }
               return { ...frames[i], t };
             },
             close() {},
@@ -225,10 +234,7 @@ async function openCamera(page: Page, day: RegExp, exercise: string): Promise<Lo
   const list = page.getByRole('dialog', { name: 'Exercise list' });
   await list.locator('.ex-row-btn', { hasText: exercise }).click();
   await expect(page.getByRole('heading', { name: exercise })).toBeVisible();
-  await page.getByRole('button', { name: 'Camera', exact: true }).click();
-  const cam = page.getByRole('dialog', { name: 'Camera' });
-  await expect(cam).toHaveAttribute('data-person', 'true', { timeout: 15_000 });
-  return cam;
+  return openCameraSheet(page);
 }
 
 const reps = (cam: Locator) => cam.locator('.rep-num[data-reps]');
@@ -236,11 +242,17 @@ const banner = (cam: Locator) => cam.locator('[data-auto-stop="pending"]');
 
 /** Plays the clip from the start position and holds it once `n` reps are counted. */
 async function repsThenFreeze(page: Page, cam: Locator, n: number): Promise<number> {
+  await page.evaluate(() => (window.__repsAt = {}));
   await freezeWhenReps(page, n);
   await play(page);
   await expect(reps(cam)).toHaveAttribute('data-reps', String(n), { timeout: 20_000 });
   expect(await page.evaluate(() => window.__freezeAt)).toBe(0);
-  return wallNow(page);
+  // When the count showed n and the clip froze (in the page, the same moment), not when this
+  // test got round to seeing it: on a loaded machine that can be seconds later.
+  // A page-side time of 0 would make every "x - frozenAt" check below pass vacuously.
+  const at = await page.evaluate((n) => window.__repsAt[n] ?? 0, n);
+  expect(at, `page recorded when rep ${n} showed`).toBeGreaterThan(0);
+  return at;
 }
 
 /** m:ss → seconds. */
@@ -263,6 +275,7 @@ test('(i, v) still → "Set done. 2 reps." + Undo; saved only after the window, 
 
   const frozenAt = await repsThenFreeze(page, cam, 2);
   const lastRepAt = await page.evaluate(() => window.__repsAt[2] ?? 0);
+  expect(lastRepAt).toBeGreaterThan(0);
 
   // ~6 s still in the start band → the stop is proposed and spoken (nothing saved yet).
   await expect(banner(cam)).toBeVisible({ timeout: 10_000 });
@@ -340,10 +353,9 @@ test('(ii) Undo → "Keep going.", nothing saved, counting continues; the next s
   // Counting goes on from 2.
   const frozenAt = await repsThenFreeze(page, cam, 3);
   await expect(reps(cam)).toHaveText('3');
-  // After a cancel the still stop needs 2 × 6 s.
-  await page.waitForTimeout(9_000);
-  expect((await texts(page)).filter((t) => t.startsWith('Set done'))).toHaveLength(1);
-  await expect.poll(() => texts(page), { timeout: 8_000 }).toContain('Set done. 3 reps.');
+  // After a cancel the still stop needs 2 × 6 s (timed from the freeze, in the page).
+  await expect.poll(() => texts(page), { timeout: 20_000 }).toContain('Set done. 3 reps.');
+  expect((await texts(page)).filter((t) => t.startsWith('Set done'))).toHaveLength(2);
   const second = (await said(page)).find((s) => s.text === 'Set done. 3 reps.');
   expect((second?.at ?? 0) - frozenAt).toBeGreaterThanOrEqual(11_000);
   expect(w.thirdParty).toEqual([]);
@@ -381,13 +393,22 @@ test('(iv) rest mode: reps before 10 s of rest start nothing; later 2 reps auto-
   const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
   await repsThenFreeze(page, cam, 2);
   // Manual Set done: rest starts now (not backdated); hands-free keeps the camera, in rest mode.
+  // Two reps at ~3.3 s and ~8.3 s of rest (before the 10 s arming), then hold at 8.8 s. Played
+  // from the moment rest begins and held by clip frame, both on the camera's frame clock, so a
+  // slow test or late timers can't push a rep past the arming time.
+  await page.evaluate(() => {
+    const el = document.querySelector<HTMLElement>('[role=dialog][aria-label="Camera"]');
+    if (!el) throw new Error('no camera sheet');
+    const obs = new MutationObserver(() => {
+      if (el.dataset.camMode !== 'rest') return;
+      obs.disconnect();
+      window.__freezeAtIdx = Math.round(8_800 / 33.333);
+      window.__play();
+    });
+    obs.observe(el, { attributes: true, attributeFilter: ['data-cam-mode'] });
+  });
   await cam.getByRole('button', { name: 'Set done' }).click();
   await expect(cam).toHaveAttribute('data-cam-mode', 'rest');
-  // Two reps at ~4 s and ~9 s of rest (before arming), then hold.
-  await page.evaluate(() => {
-    setTimeout(() => window.__play(), 500);
-    setTimeout(() => (window.__freezeAt = 0), 500 + 8_800);
-  });
   await expect.poll(async () => (await setRows(page)).length).toBe(1);
   const [set1] = await setRows(page);
   await page.waitForTimeout(12_500);
@@ -525,6 +546,7 @@ test('out of frame: no person for 3 s after 2 reps → the set goes on hold (M5c
   const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
   await repsThenFreeze(page, cam, 2);
   const lastRepAt = await page.evaluate(() => window.__repsAt[2] ?? 0);
+  expect(lastRepAt).toBeGreaterThan(0);
   const goneAt = await page.evaluate(() => {
     window.__noPerson = true;
     return Date.now();
@@ -567,6 +589,7 @@ test('(b) Close during the Undo window saves the set (backdated) and closes the 
   const cam = await openCamera(page, /Pull A/, 'Dumbbell Bicep Curl');
   await repsThenFreeze(page, cam, 2);
   const lastRepAt = await page.evaluate(() => window.__repsAt[2] ?? 0);
+  expect(lastRepAt).toBeGreaterThan(0);
   await expect(banner(cam)).toBeVisible({ timeout: 10_000 });
   expect(await setRows(page)).toEqual([]);
   await cam.locator('.cam-top').getByRole('button', { name: 'Close', exact: true }).click();

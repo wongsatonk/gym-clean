@@ -9,6 +9,7 @@
 //   origin; the stream stops on a hit and on Close.
 // Fuel is never mid-set, so nothing is spoken (asserted).
 import { expect, test, type Page, type Request } from '@playwright/test';
+import { expectClearOfToast, tapInPlace } from './app.helpers';
 
 declare global {
   interface Window {
@@ -278,24 +279,24 @@ test('on: typed digits → one GET with only the code → detail → Log; saved 
   await expect(page.locator('[data-undo-toast]')).toContainText(
     'Saved Made-up oat drink (Test brand) to My foods.',
   );
-  // Log scrolls clear of the Undo toast.
+  // Log sits above the Undo toast, no scroll needed: a tap where it is lands on it.
   const logBtn = detail.locator('[data-log-confirm]');
-  await logSheet(page).evaluate((el) => el.scrollTo(0, el.scrollHeight));
-  const toastTop = (await page.locator('[data-undo-toast]').boundingBox())?.y ?? 0;
-  const logBox = await logBtn.boundingBox();
-  expect((logBox?.y ?? 0) + (logBox?.height ?? 0)).toBeLessThanOrEqual(toastTop);
-  expect(logBox?.height ?? 0).toBeGreaterThanOrEqual(56);
+  await expectClearOfToast(page, logBtn);
   if (SHOTS) await page.screenshot({ path: 'docs/screenshots/m7-scan-found.png' });
   await noOverflow(page);
 
-  await detail.locator('[data-log-confirm]').click();
+  await tapInPlace(page, logBtn);
   await expect(logSheet(page)).toHaveCount(0);
   await expect(page.locator('main[data-screen="fuel"] [data-entry]')).toHaveCount(1);
   await expect(page.locator('[data-undo-toast]')).toContainText('Logged Made-up oat drink');
 
-  // Next time: found on the phone, no request.
+  // Next time: found on the phone, no request. The "Logged" toast is still up: Look up stays
+  // clear of it.
   await openScanner(page, 'myFoods');
-  await typeCode(page, CODE);
+  await scanSheet(page).locator('#scan-digits').fill(CODE);
+  const lookUp = scanSheet(page).locator('[data-scan-lookup]');
+  await expectClearOfToast(page, lookUp);
+  await tapInPlace(page, lookUp);
   await expect(logSheet(page).locator(`[data-log-detail="food:off:${CODE}"]`)).toBeVisible();
   expect(off.requests).toHaveLength(1);
 
@@ -348,10 +349,14 @@ test('not found → Add it to My foods with the barcode → the next lookup is l
     'Saved Made-up crackers to My foods.',
   );
 
-  // The same code again: on the phone now, no request.
+  // The same code again: on the phone now, no request. Look up and Log stay clear of the toast.
   await logSheet(page).locator('[data-scan-open]').click();
-  await typeCode(page, CODE2);
+  await scanSheet(page).locator('#scan-digits').fill(CODE2);
+  const lookUp = scanSheet(page).locator('[data-scan-lookup]');
+  await expectClearOfToast(page, lookUp);
+  await tapInPlace(page, lookUp);
   await expect(logSheet(page).locator('[data-log-detail]')).toContainText('Made-up crackers');
+  await expectClearOfToast(page, logSheet(page).locator('[data-log-confirm]'));
   expect(off.requests).toHaveLength(1);
   // Chrome logs the mocked 404 itself; nothing else.
   expect(errors.filter((e) => !/status of 404/.test(e))).toEqual([]);

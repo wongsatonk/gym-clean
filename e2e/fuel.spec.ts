@@ -8,6 +8,7 @@
 // - offline search after the first load, against the production preview (service worker).
 // Fuel is never mid-set, so nothing is spoken; no request ever leaves the device.
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expectClearOfToast, tapInPlace } from './app.helpers';
 
 declare global {
   interface Window {
@@ -519,6 +520,59 @@ test('weekly check at the top of the surplus range → an info card with nothing
 
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
   expect(offDevice(requests, new URL(baseURL ?? '').origin)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("the Undo toast never covers a sheet's main button: Thai detail Log, food editor Save and fields", async ({
+  page,
+}) => {
+  const { errors } = record(page);
+  await openApp(page, at(11, 12));
+  await goFuel(page);
+  await setUpTargets(page);
+  await openLog(page, 'thai');
+  const dish = logSheet(page).locator(`[data-log-item="thai:${PAD_KRA_PAO}"]`);
+  await dish.click();
+  await confirmLog(page, 'Pad kra pao');
+
+  // The "Logged" toast is up for 10 s: the same dish again. Log needs no scroll and a tap where
+  // it sits logs it; the Meal chips scroll clear of the toast and of Log.
+  await openLog(page, 'thai');
+  await dish.click();
+  const log = logSheet(page).locator('[data-log-confirm]');
+  // placeToast saw the sheet: the toast sits at the bottom edge, not above the (covered) tab bar.
+  await expect(page.locator('[data-undo-toast]')).toHaveAttribute('data-toast-over', 'sheet');
+  await expectClearOfToast(page, log);
+  const chip = logSheet(page).locator('[data-slot-chip]').first();
+  await logSheet(page).evaluate((el) => el.scrollTo(0, el.scrollHeight)); // scrolled to the end
+  await expectClearOfToast(page, chip);
+  await expectClearOfToast(page, log);
+  await noHorizontalOverflow(page);
+  await tapInPlace(page, log);
+  await expect(logSheet(page)).toHaveCount(0);
+  await expect(page.locator('[data-undo-toast]')).toContainText('Logged Pad kra pao');
+  await expect(page.locator('[data-undo-toast]')).toHaveAttribute('data-toast-over', 'screen');
+  await expect(entries(page)).toHaveCount(2);
+
+  // A new food with the toast up: every field scrolls clear of it; Save is always in reach.
+  await openLog(page, 'myFoods');
+  await logSheet(page).locator('[data-new-food]').click();
+  const editor = page.locator('[data-my-food-editor]');
+  await expect(editor).toBeVisible();
+  const save = editor.locator('[data-food-save]');
+  await expectClearOfToast(page, save);
+  for (const id of ['food-name', 'food-kcal', 'food-protein']) {
+    const input = editor.locator(`#${id}`);
+    await input.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await expectClearOfToast(page, input, 0);
+  }
+  await expectClearOfToast(page, save);
+  await editor.locator('#food-name').fill('Toast check bar');
+  await editor.locator('[data-basis="per100g"]').click();
+  await editor.locator('#food-kcal').fill('200');
+  await editor.locator('#food-protein').fill('20');
+  await tapInPlace(page, save);
+  await expect(editor).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

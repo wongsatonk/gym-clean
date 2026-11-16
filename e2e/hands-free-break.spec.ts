@@ -11,6 +11,7 @@
 // - window.__hideWrists = true hides both wrists (a visibility gap, never a break).
 // Real timers (autoSet runs on the camera frame clock); speech is mocked and recorded in order.
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { openCameraSheet } from './hands-free.helpers';
 
 const ORIGIN_HOSTS = new Set(['localhost', '127.0.0.1']);
 const PROMPT = 'Set on hold. Tap to continue.';
@@ -176,11 +177,15 @@ function watch(page: Page) {
 const said = (page: Page) => page.evaluate(() => window.__said);
 const texts = async (page: Page) => (await said(page)).map((s) => s.text);
 const wallNow = (page: Page) => page.evaluate(() => Date.now());
+/** Sets a pose hook; returns when it took effect, on the page's wall clock. */
 const setHook = (page: Page, name: 'sit' | 'noPerson' | 'hideWrists', on: boolean) =>
-  page.evaluate(([k, v]) => ((window as unknown as Record<string, boolean>)[`__${k}`] = v), [
-    name,
-    on,
-  ] as const);
+  page.evaluate(
+    ([k, v]) => {
+      (window as unknown as Record<string, boolean>)[`__${k}`] = v;
+      return Date.now();
+    },
+    [name, on] as const,
+  );
 
 /** Waits until `text` is said at or after list index `from`; returns that entry. */
 async function waitSaid(page: Page, text: string, timeout: number, from = 0): Promise<Said> {
@@ -223,10 +228,7 @@ async function openCamera(page: Page): Promise<Locator> {
   const list = page.getByRole('dialog', { name: 'Exercise list' });
   await list.locator('.ex-row-btn', { hasText: 'Pushups' }).click();
   await expect(page.getByRole('heading', { name: 'Pushups' })).toBeVisible();
-  await page.getByRole('button', { name: 'Camera', exact: true }).click();
-  const cam = page.getByRole('dialog', { name: 'Camera' });
-  await expect(cam).toHaveAttribute('data-person', 'true', { timeout: 15_000 });
-  return cam;
+  return openCameraSheet(page);
 }
 
 const reps = (cam: Locator) => cam.locator('.rep-num[data-reps]');
@@ -241,7 +243,10 @@ async function repsThenFreeze(page: Page, cam: Locator, n: number): Promise<numb
   }, n);
   await expect(reps(cam)).toHaveAttribute('data-reps', String(n), { timeout: 20_000 });
   expect(await page.evaluate(() => window.__freezeAt)).toBe(0);
-  return page.evaluate((n) => window.__repsAt[n] ?? 0, n);
+  // A page-side time of 0 would make every "x - lastRepAt" check pass vacuously.
+  const at = await page.evaluate((n) => window.__repsAt[n] ?? 0, n);
+  expect(at, `page recorded when rep ${n} showed`).toBeGreaterThan(0);
+  return at;
 }
 
 /** The hold panel is up for `reason`, and its buttons are gym-sized. */
@@ -271,8 +276,7 @@ test('(1, 8, 9, 10) no person for 3 s after 2 reps → hold + prompt, nothing sa
   const cam = await openCamera(page);
   const lastRepAt = await repsThenFreeze(page, cam, 2);
   const from = (await said(page)).length;
-  const goneAt = await wallNow(page);
-  await setHook(page, 'noPerson', true);
+  const goneAt = await setHook(page, 'noPerson', true);
   const prompt = await waitSaid(page, PROMPT, 8_000, from);
   expect(prompt.at - goneAt).toBeGreaterThanOrEqual(2_500);
   expect(prompt.at - goneAt).toBeLessThan(5_500);
@@ -308,8 +312,7 @@ test('(5, 2, 3) sitting 5 s → body-line hold; reps while held: not counted, re
   const cam = await openCamera(page);
   await repsThenFreeze(page, cam, 2);
   let from = (await said(page)).length;
-  const satAt = await wallNow(page);
-  await setHook(page, 'sit', true);
+  const satAt = await setHook(page, 'sit', true);
   const prompt = await waitSaid(page, PROMPT, 10_000, from);
   expect(prompt.at - satAt).toBeGreaterThanOrEqual(4_500);
   expect(prompt.at - satAt).toBeLessThan(7_500);

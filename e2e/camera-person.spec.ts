@@ -21,16 +21,19 @@ test('tracks a person on the live camera and drives the 3D skeleton', async ({ p
   await cam.getByRole('button', { name: 'Side' }).click();
   await expect(skel).toHaveAttribute('data-angle', '-1.57');
 
-  // Overlay canvas has drawn something (non-transparent pixels)
-  const drawn = await cam.locator('.cam-overlay').evaluate((c: HTMLCanvasElement) => {
-    const ctx = c.getContext('2d');
-    if (!ctx || !c.width) return 0;
-    const d = ctx.getImageData(0, 0, c.width, c.height).data;
-    let n = 0;
-    for (let i = 3; i < d.length; i += 4 * 16) if ((d[i] ?? 0) > 0) n++;
-    return n;
-  });
-  expect(drawn).toBeGreaterThan(50);
+  // Overlay canvas has drawn something (non-transparent pixels). The overlay is redrawn every
+  // frame and cleared on a frame with no pose (the clip loops, and a loaded machine drops
+  // frames), so a single read can land on an empty frame: poll until one shows the skeleton.
+  const overlayPixels = () =>
+    cam.locator('.cam-overlay').evaluate((c: HTMLCanvasElement) => {
+      const ctx = c.getContext('2d');
+      if (!ctx || !c.width) return 0;
+      const d = ctx.getImageData(0, 0, c.width, c.height).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4 * 16) if ((d[i] ?? 0) > 0) n++;
+      return n;
+    });
+  await expect.poll(overlayPixels, { timeout: 15_000 }).toBeGreaterThan(50);
   expect(errors).toEqual([]);
 });
 

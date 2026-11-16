@@ -293,10 +293,21 @@
   padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
 }
 
-/* An Undo toast over a sheet (saved / deleted from inside it): room to scroll the sheet's last
-   buttons (Log, Save) clear of it. */
-body:has(> [data-undo-toast]) .fuel-sheet {
-  padding-bottom: calc(248px + env(safe-area-inset-bottom));
+/* A toast over a sheet (an Undo toast for 10 s, or a notice): app.ts measures the room it takes
+   into --toast-space. The sheet scrolls everything clear of it, and its main button (Look up, Log,
+   Save) sticks just above it, so it is never under the toast and needs no scroll to reach. */
+body:has(> .undo-toast) .fuel-sheet {
+  padding-bottom: calc(var(--toast-space, 248px) + 16px);
+  /* Focus / scrollIntoView keep a field clear of the toast and of the sticky button. */
+  scroll-padding-bottom: calc(var(--toast-space, 248px) + 96px);
+}
+
+/* Sticky edges are measured inside the sheet's padding, which already holds the toast's room. */
+body:has(> .undo-toast) .fuel-sheet .cta-btn {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  box-shadow: 0 0 0 8px var(--bg);
 }
 
 .fuel-sheet > * {

@@ -17,7 +17,7 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { seedHandsFreeOff } from './hands-free.helpers';
+import { openCameraSheet, seedHandsFreeOff } from './hands-free.helpers';
 import { endWorkout as endViaPause, leaveSettings } from './workout.helpers';
 
 const RUSHED = '/fixtures/landmarks/curl/synthetic-03-rushed-lowering__reps-8__partials-0.json';
@@ -71,6 +71,8 @@ declare global {
     __slowMs: number;
     __play: () => void;
     __holdWhenReps: (n: number, frame: number) => void;
+    __heldAt: number;
+    __setModeAt: number;
     __shared: File[];
   }
 }
@@ -87,11 +89,20 @@ async function installMocks(page: Page, fixture: string): Promise<void> {
       window.__freezeAt = null;
     };
     // Hold `frame` the moment the camera's count reaches n (no test latency).
+    // When the camera last switched to set mode (wall clock), seen in the page, not by the test.
+    window.__setModeAt = 0;
+    new MutationObserver((records) => {
+      for (const r of records) {
+        const el = r.target as HTMLElement;
+        if (el.dataset?.camMode === 'set') window.__setModeAt = Date.now();
+      }
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ['data-cam-mode'] });
     window.__holdWhenReps = (n: number, frame: number) => {
       const check = () => {
         const el = document.querySelector<HTMLElement>('[role=dialog] .rep-num[data-reps]');
         if (el && Number(el.dataset.reps) >= n) {
           window.__freezeAt = frame;
+          window.__heldAt = Date.now();
           obs.disconnect();
         }
       };
@@ -205,6 +216,12 @@ function watch(page: Page) {
   return { errors, thirdParty };
 }
 
+/**
+ * Computed font size in px. Polled by callers: a screen that renders twice can swap the element
+ * out between locating and measuring (a detached element has no computed size, NaN).
+ */
+const fontPx = (target: Locator) =>
+  target.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)).catch(() => NaN);
 const said = (page: Page) => page.evaluate(() => window.__said);
 const texts = async (page: Page) => (await said(page)).map((s) => s.text);
 const play = (page: Page, from = 0) =>
@@ -214,15 +231,16 @@ const play = (page: Page, from = 0) =>
   }, from);
 const freezeWhenReps = (page: Page, n: number, frame = 0) =>
   page.evaluate(([n, frame]) => window.__holdWhenReps(n, frame), [n, frame] as const);
+/** Sets a pose hook; returns when it took effect, on the page's wall clock. */
 const setHook = (page: Page, hook: 'noPerson' | 'hideWrists', on: boolean) =>
   page.evaluate(
     ([hook, on]) => {
       if (hook === 'noPerson') window.__noPerson = on;
       else window.__hideWrists = on;
+      return Date.now();
     },
     [hook, on] as const,
   );
-const wallNow = (page: Page) => page.evaluate(() => Date.now());
 
 /** Waits until `text` has been said (after index `from` of the speech log); returns the entry. */
 async function waitSaid(page: Page, text: string, timeout: number, from = 0): Promise<Said> {
@@ -290,20 +308,22 @@ async function goToCurl(page: Page): Promise<void> {
 /** Camera on the current (exercise-phase) set; waits for the fixture person. */
 async function openCam(page: Page): Promise<Locator> {
   await page.evaluate(() => (window.__freezeAt = 0));
-  await page.getByRole('button', { name: 'Camera', exact: true }).click();
-  const cam = page.getByRole('dialog', { name: 'Camera' });
-  await expect(cam).toHaveAttribute('data-person', 'true', { timeout: 15_000 });
-  return cam;
+  return openCameraSheet(page);
 }
 
 const reps = (cam: Locator) => cam.locator('.rep-num[data-reps]');
 
 /** Plays the clip and holds `frame` once `n` reps are counted. */
 async function repsThenFreeze(page: Page, cam: Locator, n: number, frame = 0): Promise<number> {
+  await page.evaluate(() => (window.__heldAt = 0));
   await freezeWhenReps(page, n, frame);
   await play(page);
   await expect(reps(cam)).toHaveAttribute('data-reps', String(n), { timeout: 45_000 });
-  return wallNow(page);
+  // When the clip was held (in the page), not when this test saw the count: under load the
+  // test can see it seconds later.
+  const heldAt = await page.evaluate(() => window.__heldAt);
+  expect(heldAt, 'page recorded when the clip was held').toBeGreaterThan(0);
+  return heldAt;
 }
 
 /** End workout (two taps) → Summary. */
@@ -370,9 +390,7 @@ test('(1, 6, 7, 8) rushed sets: cue after a count word; rows scored; Summary Foc
   // Shown in the coach line (≥ 20px) with its id.
   const coach = cam.locator('.rep-coach[data-cue="rushedLowering"]');
   await expect(coach).toHaveText(CUE.rushedLowering);
-  expect(
-    await coach.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
-  ).toBeGreaterThanOrEqual(20);
+  await expect.poll(() => fontPx(coach)).toBeGreaterThanOrEqual(20);
 
   await cam.getByRole('button', { name: 'Set done' }).click();
   await expect(cam).toHaveCount(0);
@@ -414,9 +432,7 @@ test('(1, 6, 7, 8) rushed sets: cue after a count word; rows scored; Summary Foc
   await expect(s1).toHaveAttribute('data-focus-score', '75');
   await expect(s2).toHaveAttribute('data-focus-score', '80');
   await expect(s2.locator('.focus-score')).toHaveText('80');
-  expect(
-    await s2.locator('.focus-score').evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
-  ).toBeGreaterThanOrEqual(64);
+  await expect.poll(() => fontPx(s2.locator('.focus-score'))).toBeGreaterThanOrEqual(64);
   await expect(s1.locator('[data-focus-cue="rushedLowering"]')).toHaveText('Slow the lowering ×2');
   await expect(s1.locator('[data-focus-partials]')).toHaveText('1 partial');
   // Coach: two rushed sets → T1.
@@ -610,10 +626,12 @@ test('(4, 5) hands-free: held outside the band → stalled cue ~5 s then stop ~1
   // Set 2 (auto start; the count shows 2 at once) held in the start band: only "Set done" ~6 s.
   await page.waitForTimeout(5_500);
   let from = (await said(page)).length;
+  await page.evaluate(() => (window.__setModeAt = 0)); // set 1's switch must not count here
   await freezeWhenReps(page, 2);
   await play(page);
   await expect(cam).toHaveAttribute('data-cam-mode', 'set', { timeout: 15_000 });
-  const started = await wallNow(page);
+  const started = await page.evaluate(() => window.__setModeAt);
+  expect(started, 'page recorded when set mode began').toBeGreaterThan(0);
   const done2 = await waitSaid(page, 'Set done. 2 reps.', 12_000, from);
   expect(done2.at - started).toBeGreaterThan(4_500);
   expect((await texts(page)).slice(from).filter(isFocusText)).toEqual([]);
@@ -627,8 +645,7 @@ test('(4, 5) hands-free: held outside the band → stalled cue ~5 s then stop ~1
   await freezeWhenReps(page, 2);
   await play(page);
   await expect(cam).toHaveAttribute('data-cam-mode', 'set', { timeout: 15_000 });
-  const goneAt = await wallNow(page);
-  await setHook(page, 'noPerson', true);
+  const goneAt = await setHook(page, 'noPerson', true);
   const prompt = await waitSaid(page, 'Set on hold. Tap to continue.', 10_000, from);
   expect(prompt.at - goneAt).toBeGreaterThan(2_500);
   expect(prompt.at - goneAt).toBeLessThan(5_500);
@@ -678,8 +695,7 @@ test('(1, 4, 5) hands-free off: partial speaks only its hint; stalled ~8 s; hidd
 
   // Wrists hidden while the body is in view: "Step back into frame." after ~2 s.
   await page.waitForTimeout(6_500); // outside the 6 s hint gap
-  await setHook(page, 'hideWrists', true);
-  const hiddenAt = await wallNow(page);
+  const hiddenAt = await setHook(page, 'hideWrists', true);
   const out = await waitSaid(page, CUE.outOfFrame, 6_000);
   expect(out.at - hiddenAt).toBeGreaterThan(1_500);
   await setHook(page, 'hideWrists', false);

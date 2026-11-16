@@ -153,11 +153,35 @@ test('back up → wipe → restore (two taps) → History and settings are back;
   // Undo (the toast is still up for 10 s): the wiped state comes back.
   await toast.getByRole('button', { name: 'Undo' }).click();
   await expect.poll(() => count(page, 'sessions')).toBe(0);
+  // Away from Settings a short notice says it; on Settings it shows once, inline (no toast).
+  const notice = page.locator('[data-notice]');
+  await expect(notice).toHaveText('Restore undone.');
   await openSettings(page);
   await expect(page.locator('[data-unit="kg"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-backup-status="ok"]')).toHaveText('Restore undone.');
+  await expect(notice).toHaveCount(0);
+  await expect(page.getByText('Restore undone.')).toHaveCount(1);
 
   expect(offDevice(requests, baseURL)).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('Undo on Settings: "Restore undone." shows once, inline, with no toast', async ({ page }) => {
+  const { errors } = record(page);
+  await openApp(page, at(13, 18));
+  await seed(page, SESSIONS, SETS);
+  await openSettings(page);
+  const file = await backUp(page);
+  await wipe(page);
+  await openSettings(page);
+  await pickAndReplace(page, file.path);
+  const toast = page.locator('[data-undo-toast]');
+  await expect(toast).toContainText('Data restored.');
+  await toast.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('[data-backup-status="ok"]')).toHaveText('Restore undone.');
+  await expect.poll(() => count(page, 'sessions')).toBe(0);
+  await expect(page.locator('.undo-toast')).toHaveCount(0);
+  await expect(page.getByText('Restore undone.')).toHaveCount(1);
   expect(errors).toEqual([]);
 });
 

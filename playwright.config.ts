@@ -8,6 +8,16 @@ const PORT = Number(process.env.E2E_PORT ?? 5174);
 const PWA_PORT = Number(process.env.E2E_PWA_PORT ?? PORT + 1000);
 const PWA_OUT = 'node_modules/.cache/e2e-pwa-dist'; // ignored by git, eslint and prettier
 
+// Specs that count reps on the wall clock: a fixture clip replayed in place of the pose model
+// (CLIP_SPECS) or the real model on the fake camera's synthetic person (PERSON_SPECS). Starved
+// of CPU by parallel workers they drop frames, miss the curl's turnarounds and read 0 reps. So
+// they never run beside other tests: the parallel phase (mobile, pwa) runs first, then
+// mobile-person-camera alone, then mobile-clips alone (project dependencies, one worker each).
+// A failure in an earlier phase skips the later ones (the run is red either way). To run one of
+// these specs on its own without the phases before it: `npx playwright test <file> --no-deps`.
+const CLIP_SPECS = /(^|\/)(focus-cues|hands-free|hands-free-break|learning|coach-voice)\.spec\.ts/;
+const PERSON_SPECS = /(^|\/)(camera-person|rep-count|devlog-camera|hands-free-live)\.spec\.ts/;
+
 export default defineConfig({
   testDir: 'e2e',
   globalSetup: './e2e/fake-camera.setup.ts',
@@ -25,12 +35,13 @@ export default defineConfig({
   },
   projects: [
     {
-      // M5 focus cues replay a fixture clip on the wall clock over several sets: under parallel
-      // load the page drops frames and misses rep turnarounds. One test at a time, like the
-      // live-camera project (CI already runs workers: 1). M4f learning.spec counts a clip too.
+      // Fixture clips counted on the wall clock (CLIP_SPECS): last, alone, one test at a time.
+      // CI already runs workers: 1 overall.
       name: 'mobile-clips',
       workers: 1,
-      testMatch: /(focus-cues|hands-free-break|learning)\.spec\.ts/,
+      fullyParallel: false,
+      dependencies: ['mobile-person-camera'],
+      testMatch: CLIP_SPECS,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -45,8 +56,7 @@ export default defineConfig({
     },
     {
       name: 'mobile',
-      testIgnore:
-        /(camera-person|rep-count|devlog-camera|hands-free-live|focus-cues|hands-free-break|learning|pwa)\.spec\.ts/,
+      testIgnore: [CLIP_SPECS, PERSON_SPECS, /pwa\.spec\.ts/],
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },
@@ -70,9 +80,11 @@ export default defineConfig({
       // Same phone, but the fake camera plays the synthetic mannequin clip (a "person").
       name: 'mobile-person-camera',
       // Live pose inference is CPU-heavy: in parallel, pages drop to 3–6 fps and miss the curl
-      // bottom (reps read as partials). One at a time they run at ~20 fps.
+      // bottom (reps read as partials). Alone, one at a time, after the parallel phase: ~20 fps.
       workers: 1,
-      testMatch: /(camera-person|rep-count|devlog-camera|hands-free-live)\.spec\.ts/,
+      fullyParallel: false,
+      dependencies: ['mobile', 'pwa'],
+      testMatch: PERSON_SPECS,
       use: {
         browserName: 'chromium',
         viewport: { width: 390, height: 844 },

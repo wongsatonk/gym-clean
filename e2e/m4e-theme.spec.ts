@@ -159,8 +159,15 @@ test('Volt survives a reload, is applied before the app script runs, and turns s
 
   // Before first paint: with the app module blocked, only index.html's inline script and the
   // stylesheet run. The accent must already be on <html> from the localStorage copy.
-  await page.route('**/src/main.ts', (r) => r.abort());
+  // A regex, not '**/src/main.ts': once Vite has invalidated a module during a full run it serves
+  // the entry as /src/main.ts?t=<timestamp>, which the glob misses (the app then boots).
+  let blocked = 0;
+  await page.route(/\/src\/main\.ts(\?.*)?$/, (r) => {
+    blocked++;
+    return r.abort();
+  });
   await page.reload();
+  expect(blocked).toBeGreaterThan(0);
   await expect(page.locator('html')).toHaveAttribute('data-accent', 'volt');
   expect(await varOf(page, '--success')).toBe(GOLD);
   await expect(page.locator('#app')).toBeEmpty();

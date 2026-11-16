@@ -21,6 +21,8 @@
 //                                            #   hammer, tuned curl): card/Got it/count geometry
 //   node scripts/screenshots.mjs m7         # M7 Fuel click-through (clock mocked, OFF routed):
 //                                            #   docs/screenshots/m7-verify-*.png
+//   node scripts/screenshots.mjs cam-verify  # Undo toast over Fuel sheets: Thai, barcode, photo
+//                                            #   main buttons clear of the toast (2026-11-16)
 //   node scripts/screenshots.mjs m5c-hold    # M5c breaks inside a set: body-line hold, Continue →
 //                                            #   one set; last-set hold (Save set); dev-log export
 //                                            #   to test-results/verify-m5c-hold/
@@ -2724,6 +2726,145 @@ async function m10e(browser) {
   await p.ctx.close();
 }
 
+// ---- Camera e2e stability + toast placement over Fuel sheets (2026-11-16) ----
+/** Where `loc` sits relative to the toast, as it is now (no scroll): the gym-rule checks. */
+async function clearOfToast(page, loc) {
+  return loc.evaluate((el) => {
+    const t = document.querySelector('.undo-toast');
+    const tr = t?.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return {
+      toastUp: !!t, toastText: t?.textContent?.trim().slice(0, 40) ?? null,
+      btnTop: Math.round(r.top), btnBottom: Math.round(r.bottom), btnHeight: Math.round(r.height),
+      toastTop: tr ? Math.round(tr.top) : null,
+      onScreen: r.top >= 0 && r.bottom <= innerHeight, aboveToast: !!tr && r.bottom <= tr.top,
+      tall: r.height >= 56, hitsButton: hit !== null && el.contains(hit),
+    };
+  });
+}
+
+async function tapWhereItIs(page, loc) {
+  const b = await loc.boundingBox();
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+}
+
+async function camVerify(browser) {
+  const p = await m7Phone(browser, m7At(18, 12, 10), { noDetector: true });
+  const { page } = p;
+  await page.addInitScript(() => {
+    window.__fakeFoodResult = [{ categoryName: 'pad_thai', score: 0.82 },
+      { categoryName: 'som_tum', score: 0.09 }, { categoryName: 'tom_yum_goong', score: 0.05 }];
+    window.__gymCleanFakeFoodClassifier = { classify: () => window.__fakeFoodResult };
+  });
+  await page.reload();
+  await page.locator('[data-screen="today"]').waitFor();
+  const steps = {};
+  const sheet = page.locator('[data-log-sheet]');
+  const cs = async (name, extra = {}) => {
+    await page.waitForTimeout(200);
+    await shot(page, p.log, `cam-verify-${name}`, { sizes: await m7Sizes(page), ...extra });
+  };
+  // Settings: food model (fake) + barcode lookup on.
+  await page.locator('[data-tab="settings"]').click();
+  const fp = page.locator('[data-food-photos]');
+  await fp.scrollIntoViewIfNeeded();
+  await fp.locator('input[data-food-model-file]').setInputFiles({ name: 'made-up-food.tflite',
+    mimeType: 'application/octet-stream', buffer: Buffer.from([1, 2, 3, 4]) });
+  await fp.locator('[data-food-model][data-state="ready"]').waitFor();
+  const sw = page.locator('[data-setting="barcode-lookup"]');
+  await sw.scrollIntoViewIfNeeded();
+  await sw.click();
+  await page.locator('[data-barcode-on]').click();
+  // Fuel targets.
+  await m7GoFuel(page);
+  const setup = await m7SetUp(page);
+  await setup.locator('[data-setup-save]').click();
+  await page.locator('main[data-screen="fuel"] [data-ring="kcal"]').waitFor();
+
+  // 1. Thai dish → Logged toast.
+  const openThai = async () => {
+    await page.locator('[data-log-open]').click();
+    await sheet.locator('[data-log-section="thai"]').click();
+    await sheet.locator('[data-log-item="thai:thai:pad-kra-pao-moo-rice-egg"]').click();
+  };
+  await openThai();
+  await sheet.locator('[data-log-confirm]').click();
+  await sheet.waitFor({ state: 'detached' });
+  await page.locator('[data-undo-toast]').waitFor();
+  await cs('fuel-toast');
+  // 2. Thai dish again while the toast is up.
+  await openThai();
+  const thaiLog = sheet.locator('[data-log-confirm]');
+  await page.waitForTimeout(300);
+  steps.thaiLog = await clearOfToast(page, thaiLog);
+  await cs('thai-detail-toast', { clear: steps.thaiLog });
+  await tapWhereItIs(page, thaiLog);
+  await sheet.waitFor({ state: 'detached' });
+  steps.thaiToastAfter = (await page.locator('[data-undo-toast]').textContent())?.trim();
+  // 3. Barcode while the toast is up: scan sheet Look up, then the found item's Log.
+  await page.locator('[data-log-open]').click();
+  await sheet.locator('[data-log-section="search"]').click();
+  await sheet.locator('[data-scan-open]').click();
+  const scan = page.locator('[data-scan-sheet]');
+  await scan.waitFor();
+  await scan.locator('#scan-digits').fill('4006381333931');
+  await scan.locator('#scan-digits').blur();
+  const lookUp = scan.locator('[data-scan-lookup]');
+  await page.waitForTimeout(300);
+  steps.toastUpAtScan = await page.locator('.undo-toast').count();
+  steps.scanLookUp = await clearOfToast(page, lookUp);
+  steps.scanDigits = await clearOfToast(page, scan.locator('#scan-digits'));
+  await cs('scan-toast', { clear: steps.scanLookUp });
+  await tapWhereItIs(page, lookUp);
+  await sheet.locator('[data-log-detail="food:off:4006381333931"]').waitFor();
+  const bcLog = sheet.locator('[data-log-confirm]');
+  await page.waitForTimeout(300);
+  steps.barcodeLog = await clearOfToast(page, bcLog);
+  await cs('barcode-detail-toast', { clear: steps.barcodeLog });
+  await tapWhereItIs(page, bcLog);
+  await sheet.waitFor({ state: 'detached' });
+  steps.barcodeToastAfter = (await page.locator('[data-undo-toast]').textContent())?.trim();
+  // 4. Photo while the "Logged" toast is up.
+  await page.locator('[data-log-open]').click();
+  await sheet.waitFor();
+  const png = Buffer.from(await page.evaluate(() => {
+    const cv = document.createElement('canvas'); cv.width = 640; cv.height = 480;
+    const c = cv.getContext('2d'); c.fillStyle = '#c2410c'; c.fillRect(0, 0, 640, 480);
+    return cv.toDataURL('image/png').split(',')[1];
+  }), 'base64');
+  await sheet.locator('[data-photo-input]').setInputFiles({ name: 'made-up.png', mimeType: 'image/png', buffer: png });
+  const ph = page.locator('[data-photo-sheet]');
+  await ph.waitFor();
+  await ph.locator('[data-photo-state="confident"]').waitFor();
+  const phLog = ph.locator('[data-photo-log]');
+  await page.waitForTimeout(300);
+  steps.toastUpAtPhoto = await page.locator('.undo-toast').count();
+  steps.photoLog = await clearOfToast(page, phLog);
+  await cs('photo-toast', { clear: steps.photoLog });
+  // Scrolled to the end: the plate-size chips come clear of the toast and of the sticky Log.
+  await ph.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  await page.waitForTimeout(300);
+  steps.photoLargeChipScrolled = await clearOfToast(page, ph.locator('[data-portion="Large"]'));
+  steps.photoLogScrolled = await clearOfToast(page, phLog);
+  await cs('photo-toast-scrolled', { clear: steps.photoLargeChipScrolled });
+  await tapWhereItIs(page, phLog);
+  await ph.waitFor({ state: 'detached' });
+  steps.photoToastAfter = (await page.locator('[data-undo-toast]').textContent())?.trim();
+  await page.waitForTimeout(300);
+  steps.entries = await page.locator('main[data-screen="fuel"] [data-entry]').count();
+  steps.toastSpaceAfterSheetsClosed = await page.evaluate(() =>
+    document.documentElement.style.getPropertyValue('--toast-space'));
+  steps.toastBottom = await page.locator('.undo-toast').evaluate((t) => {
+    const tb = document.querySelector('[data-tabbar]')?.getBoundingClientRect();
+    return { toastBottom: Math.round(t.getBoundingClientRect().bottom), tabbarTop: tb ? Math.round(tb.top) : null };
+  });
+  await cs('fuel-after');
+  steps.spoken = await page.evaluate(() => window.__spoken);
+  results.push({ flow: 'cam-verify', steps, offsite: p.offsite, off: p.off, console: p.log });
+  await p.ctx.close();
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -2758,6 +2899,7 @@ try {
   else if (milestone === 'm4f-setup') await m4fSetup(browser);
   else if (milestone === 'm7') await m7(browser);
   else if (milestone === 'm10e') await m10e(browser);
+  else if (milestone === 'cam-verify') await camVerify(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));

@@ -1,7 +1,7 @@
 // Shared by the M10e equipment and M9 backup specs (not a spec itself). Copied from
 // trainer.spec.ts (left unchanged): speech + wake-lock mocks, request/error recording, the
 // IndexedDB seed, and the 56px tap-target check.
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 
 declare global {
   interface Window {
@@ -162,4 +162,35 @@ export async function openApp(page: Page, time: number) {
 
 export async function noHorizontalOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+}
+
+/**
+ * A toast is up and `target` is on screen without scrolling, wholly above the toast, at least
+ * 56px tall (buttons), and a tap at its centre lands on it (nothing covers it).
+ */
+export async function expectClearOfToast(page: Page, target: Locator, minHeight = 56) {
+  await expect(page.locator('.undo-toast')).toBeVisible();
+  await expect(target).toBeVisible();
+  await expect
+    .poll(() =>
+      target.evaluate((el, min) => {
+        const toast = document.querySelector('.undo-toast')?.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return {
+          onScreen: r.top >= 0,
+          aboveToast: toast !== undefined && r.bottom <= toast.top,
+          tall: r.height >= min,
+          hit: hit !== null && el.contains(hit),
+        };
+      }, minHeight),
+    )
+    .toEqual({ onScreen: true, aboveToast: true, tall: true, hit: true });
+}
+
+/** Taps `target` at its centre as it sits now (no scroll into view first). */
+export async function tapInPlace(page: Page, target: Locator) {
+  const b = await target.boundingBox();
+  if (!b) throw new Error('target has no box');
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
 }

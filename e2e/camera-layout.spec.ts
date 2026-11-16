@@ -3,7 +3,7 @@
 // sentence spoken once), and the 3D skeleton is collapsed behind "3D". The fake camera here is a
 // test pattern (no person), so the card stays up. The view is mounted from its module with a
 // target, because app.ts wires `target` in a later task.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const FIXTURE = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
 
@@ -600,11 +600,27 @@ for (const vp of [
     await expect(gauge.locator('.gauge-angle')).toHaveText(/^\d+°$/);
 
     // Not over the count panel, the stage buttons, or the middle of the video (the person).
-    const g = (await gauge.boundingBox()) as Box;
-    const stage = (await cam.locator('.cam-stage').boundingBox()) as Box;
-    const panel = (await cam.locator('.rep-panel').boundingBox()) as Box;
-    const sw = (await cam.getByRole('button', { name: 'Switch camera' }).boundingBox()) as Box;
-    const phone = (await cam.getByRole('button', { name: 'Phone position' }).boundingBox()) as Box;
+    // Measured on a held frame: on a loaded machine a dropped frame can briefly hide the gauge
+    // (no stable tracking) between two reads. Everything measured is visible first.
+    await page.evaluate(() => {
+      const w = window as unknown as { __gaugeFreezeAt: number | null; __gaugeIdx: number };
+      w.__gaugeFreezeAt = w.__gaugeIdx;
+    });
+    const box = async (target: Locator): Promise<Box> => {
+      let b: Box | null = null;
+      await expect
+        .poll(async () => {
+          b = (await target.isVisible()) ? await target.boundingBox() : null;
+          return b !== null;
+        })
+        .toBe(true);
+      return b as unknown as Box;
+    };
+    const g = await box(gauge);
+    const stage = await box(cam.locator('.cam-stage'));
+    const panel = await box(cam.locator('.rep-panel'));
+    const sw = await box(cam.getByRole('button', { name: 'Switch camera' }));
+    const phone = await box(cam.getByRole('button', { name: 'Phone position' }));
     expect(overlaps(g, panel)).toBe(false);
     expect(overlaps(g, sw)).toBe(false);
     expect(overlaps(g, phone)).toBe(false);
@@ -645,6 +661,9 @@ for (const vp of [
       { text: 'Target', inViewport: true, inGauge: true, clippedBy: [] },
       { text: 'Start', inViewport: true, inGauge: true, clippedBy: [] },
     ]);
+    await page.evaluate(() => {
+      (window as unknown as { __gaugeFreezeAt: number | null }).__gaugeFreezeAt = null;
+    });
 
     // "Phone position" brings the card back over the width of the video: the gauge steps aside.
     await cam.getByRole('button', { name: 'Phone position' }).click();
