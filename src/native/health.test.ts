@@ -275,12 +275,44 @@ describe('loadHealth', () => {
     expect(importCore).not.toHaveBeenCalled();
   });
 
-  it('native without the GymHealth plugin header → unavailable', async () => {
+  it('native without the GymHealth header calls the native side directly (in-app plugin header can arrive late)', async () => {
+    const plugin = fakeBridge();
+    const methods = plugin as unknown as Record<string, (o?: unknown) => Promise<unknown>>;
+    const nativePromise = vi.fn(async (_p: string, m: string, o?: unknown): Promise<unknown> => {
+      const fn = methods[m];
+      if (!fn) throw new Error('no method');
+      return fn(o);
+    });
     const importCore = vi.fn();
-    const cap = { isNativePlatform: () => true, PluginHeaders: [{ name: 'Haptics' }] };
+    const cap = {
+      isNativePlatform: () => true,
+      PluginHeaders: [{ name: 'Haptics' }],
+      nativePromise,
+    };
     const h = await loadHealth({ cap, importCore });
-    expect(await h.isAvailable()).toBe(false);
+    expect(await h.isAvailable()).toBe(true);
+    expect(nativePromise).toHaveBeenCalledWith('GymHealth', 'isAvailable', {});
     expect(importCore).not.toHaveBeenCalled();
+  });
+
+  it('native without the header and the plugin missing → unavailable, never throws', async () => {
+    const nativePromise = vi.fn(async () => {
+      throw new Error('"GymHealth" plugin is not implemented on ios');
+    });
+    const cap = {
+      isNativePlatform: () => true,
+      PluginHeaders: [{ name: 'Haptics' }],
+      nativePromise,
+    };
+    const h = await loadHealth({ cap });
+    expect(await h.isAvailable()).toBe(false);
+    expect((await h.read({ types: ['sleep'], since: 0 })).status).toBe('unavailable');
+  });
+
+  it('native without the header and no nativePromise → unavailable', async () => {
+    const cap = { isNativePlatform: () => true, PluginHeaders: [] };
+    const h = await loadHealth({ cap });
+    expect(await h.isAvailable()).toBe(false);
   });
 
   it('native with the header → registers GymHealth through @capacitor/core', async () => {

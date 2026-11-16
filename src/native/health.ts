@@ -261,6 +261,8 @@ export type CapacitorGlobal = {
   isNativePlatform?: () => boolean;
   PluginHeaders?: readonly { name: string }[];
   Plugins?: Record<string, unknown>;
+  /** Capacitor's native call, injected by the iOS bridge before the page runs. */
+  nativePromise?: (plugin: string, method: string, options?: unknown) => Promise<unknown>;
 };
 
 type CoreModule = { registerPlugin: (name: string) => unknown };
@@ -303,8 +305,23 @@ export async function loadHealth(env: LoadHealthEnv = {}): Promise<Health> {
   const existing = cap?.Plugins?.[GYM_HEALTH_PLUGIN];
   if (looksLikeBridge(existing)) return createHealth(existing);
 
-  const hasNative = cap?.PluginHeaders?.some((h) => h.name === GYM_HEALTH_PLUGIN) === true;
-  if (!hasNative) return createHealth(null);
+  const hasHeader = cap?.PluginHeaders?.some((h) => h.name === GYM_HEALTH_PLUGIN) === true;
+  if (!hasHeader) {
+    // GymHealth is an in-app plugin registered in `capacitorDidLoad`; its header script can land
+    // after the page has started (seen on the iPhone, 2026-11-16), and Capacitor's registerPlugin
+    // then treats it as unimplemented. Call the native side directly instead: if the plugin really
+    // isn't there, isAvailable() rejects and createHealth turns that into "unavailable".
+    const call = cap?.nativePromise;
+    if (typeof call !== 'function') return createHealth(null);
+    const direct: HealthBridge = {
+      isAvailable: () =>
+        call.call(cap, GYM_HEALTH_PLUGIN, 'isAvailable', {}) as Promise<{ available: boolean }>,
+      requestRead: (o) =>
+        call.call(cap, GYM_HEALTH_PLUGIN, 'requestRead', o) as Promise<{ requested: boolean }>,
+      read: (o) => call.call(cap, GYM_HEALTH_PLUGIN, 'read', o),
+    };
+    return createHealth(direct);
+  }
 
   try {
     const importCore = env.importCore ?? (() => import('@capacitor/core'));

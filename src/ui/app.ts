@@ -1821,6 +1821,9 @@ export function mountApp(root: HTMLElement): void {
         onHealth: () => {
           view = { screen: 'healthSettings' };
           render();
+          // Settings is a long page: open Health at its top, where Connect is (it kept
+          // Settings' scroll position on the iPhone, 2026-11-16).
+          window.scrollTo(0, 0);
         },
       },
     );

@@ -109,6 +109,8 @@ async function openHealthSettings(page: Page) {
   await page.locator('[data-tab="settings"]').click();
   await page.locator('[data-health-open]').click();
   await expect(healthScreen(page)).toBeVisible();
+  // Settings is long and the Health row sits low on it: the Health screen must open at its top.
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 }
 
 async function backToToday(page: Page) {
