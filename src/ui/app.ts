@@ -177,6 +177,7 @@ import { ruleStatus } from '../core/exercises';
 import { h } from './dom';
 import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { createFuel } from './fuel/fuelController';
+import { createFoodVisionHost } from './fuel/foodVisionHost';
 import type { FoodSuggestion } from '../core/types';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
@@ -296,6 +297,14 @@ export function mountApp(root: HTMLElement): void {
 
   // ---------- M7 Fuel (state, sub-views and sheets live in fuel/fuelController.ts) ----------
   // Nutrition data never goes to the developer log (no `rec` calls on this path).
+  // M7b food photos: classifier + Settings → Food photos (fuel/foodVisionHost.ts).
+  const foodVision = createFoodVisionHost({
+    db,
+    now: () => now(),
+    onChange: (next) => fuel.setPhoto(next),
+    toast: (text, onUndo) => showActionToast(text, onUndo),
+    logError: (err) => logDbError(err),
+  });
   const fuel = createFuel({
     db,
     root,
@@ -313,6 +322,7 @@ export function mountApp(root: HTMLElement): void {
     goTab: (t) => goTab(t),
     toast: (text, onUndo) => showActionToast(text, onUndo),
     logError: (err) => logDbError(err),
+    photo: foodVision.photoHost,
   });
 
   // Developer log (M4c): numbers only, stays on the phone. Calls queue until the recorder exists,
@@ -1704,6 +1714,7 @@ export function mountApp(root: HTMLElement): void {
         }).el,
         speakerCheck: voiceTest(),
         nutrition: fuel.settingsBlock(),
+        foodPhotos: foodVision.settingsEl(),
         backup: backupPanel(
           { restore: restoreStep },
           {

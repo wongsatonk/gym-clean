@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BACKUP_NOTE,
+  BACKUP_PHOTOS_NOTE,
   REPLACE_QUESTION,
   backupErrorText,
   backupFileName,
@@ -41,6 +42,8 @@ describe('backup panel', () => {
     const { el, calls } = render();
     expect(el.textContent).toContain(BACKUP_NOTE);
     expect(BACKUP_NOTE).toMatch(/Nothing is uploaded/);
+    expect(attr(el, 'data-backup-photos-note').textContent).toBe(BACKUP_PHOTOS_NOTE);
+    expect(BACKUP_PHOTOS_NOTE).toMatch(/Food photos and the food model aren’t in the backup/);
     attr(el, 'data-backup-export').click();
     expect(calls.export).toBe(1);
     expect(attr(el, 'data-backup-restore').textContent).toBe('Restore from a file');

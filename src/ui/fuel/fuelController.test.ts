@@ -5,7 +5,19 @@ import 'fake-indexeddb/auto';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { weekStartOf } from '../../core/nutrition/adjust';
 import { NUTRITION_DEFAULTS } from '../../core/nutrition/targets';
-import type { FoodSuggestion, NutritionSettings, WeeklyCheck } from '../../core/types';
+import type {
+  FoodModelRecord,
+  FoodSuggestion,
+  NutritionSettings,
+  WeeklyCheck,
+} from '../../core/types';
+import type { ScoredLabel } from '../../food-vision/decide';
+import {
+  countPhotos,
+  listPhotos,
+  saveModel,
+  setFoodVisionSettings,
+} from '../../data/nutrition/photoStore';
 import { foodDate as localDate } from '../../core/nutrition/day';
 import { GymDb } from '../../data/db';
 import {
@@ -22,7 +34,7 @@ import {
 } from '../../data/nutrition/store';
 import type { TabId } from '../tabBar';
 import { FakeEl, asFake, useFakeDom } from '../screens/testDom';
-import { createFuel, type FuelController } from './fuelController';
+import { createFuel, type FuelController, type FuelPhotoHost } from './fuelController';
 
 useFakeDom();
 
@@ -93,7 +105,7 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
 };
 
-function makeApp(now = EVENING) {
+function makeApp(now = EVENING, photo?: FuelPhotoHost) {
   const root = new FakeEl('main');
   (root as unknown as { querySelector: (s: string) => FakeEl | null }).querySelector = (s) =>
     select(root, s);
@@ -126,6 +138,7 @@ function makeApp(now = EVENING) {
     logError: (err) => {
       throw err;
     },
+    photo,
   });
   const openFuel = async () => {
     await ctrl.open();
@@ -495,5 +508,203 @@ describe('barcode', () => {
     const saved = (await db.foods.toArray()).find((f) => f.name === 'Made-up crackers');
     expect(saved?.barcode).toBe(CODE);
     expect(app.toasts.at(-1)?.text).toBe('Saved Made-up crackers to My foods.');
+  });
+});
+
+// ---------- M7b photo flow (task 16a) ----------
+
+describe('photo flow (M7b)', () => {
+  const MODEL: FoodModelRecord = {
+    id: 'food',
+    name: 'made-up.tflite',
+    sizeBytes: 10,
+    labels: ['pad_thai', 'som_tum'],
+    importedAt: 1,
+    blob: new Blob([new Uint8Array([1, 2, 3])]),
+  };
+  const CONFIDENT: ScoredLabel[] = [
+    { categoryName: 'pad_thai', score: 0.82 },
+    { categoryName: 'som_tum', score: 0.1 },
+  ];
+  const UNSURE: ScoredLabel[] = [
+    { categoryName: 'pad_thai', score: 0.45 },
+    { categoryName: 'som_tum', score: 0.3 },
+  ];
+
+  function fakePhoto(result: ScoredLabel[] | (() => never)) {
+    const calls = { load: 0, dispose: 0, prepare: [] as boolean[] };
+    const host: FuelPhotoHost = {
+      load: () => {
+        calls.load++;
+        return Promise.resolve({
+          classify: () => ({ categories: typeof result === 'function' ? result() : result }),
+        });
+      },
+      dispose: () => calls.dispose++,
+      prepare: (_file, { keepBlob }) => {
+        calls.prepare.push(keepBlob);
+        return Promise.resolve({
+          canvas: new FakeEl('canvas') as unknown as HTMLCanvasElement,
+          w: 4,
+          h: 3,
+          blob: keepBlob ? new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])]) : undefined,
+        });
+      },
+    };
+    return { host, calls };
+  }
+
+  async function takePhoto(app: ReturnType<typeof makeApp>) {
+    app.onScreen('data-log-open').click();
+    await flush();
+    const input = app.inSheet('data-photo-input') as FakeEl & { files?: unknown };
+    input.files = [{ name: 'meal.jpg' }];
+    input.dispatch('change', {});
+    await flush();
+  }
+
+  const todays = () => entriesBetween(db, localDate(EVENING), localDate(EVENING));
+
+  it('no model: the log sheet shows the Settings hint, not the button', async () => {
+    await setUp();
+    const app = makeApp(EVENING, fakePhoto(CONFIDENT).host);
+    await app.openFuel();
+    app.onScreen('data-log-open').click();
+    await flush();
+    expect(app.inSheet('data-photo-hint').textContent).toMatch(/add a food model in Settings/);
+    expect(() => app.inSheet('data-photo-open')).toThrow();
+  });
+
+  it('confident → Log at Regular in one tap: photo-local entry with confidence, nothing saved (off)', async () => {
+    await setUp();
+    await saveModel(db, MODEL);
+    const { host, calls } = fakePhoto(CONFIDENT);
+    const app = makeApp(EVENING, host);
+    await app.openFuel();
+    await takePhoto(app);
+    expect(calls.prepare).toEqual([false]);
+    expect(app.inSheet('data-photo-state').getAttribute('data-photo-state')).toBe('confident');
+    app.inSheet('data-photo-log').click();
+    await flush();
+    const [e] = await todays();
+    expect(e).toMatchObject({
+      source: 'photo-local',
+      estimate: true,
+      photoConfidence: 0.82,
+      ref: { foodId: 'thai:pad-thai-goong' },
+    });
+    expect(await countPhotos(db)).toBe(0);
+    expect(app.toasts.at(-1)?.text).toMatch(/^Logged /);
+    expect(app.sheet()).toBeUndefined();
+  });
+
+  it('save-photos on: 1 photo labelled with the confirmed dish; Undo removes entry and photo', async () => {
+    await setUp();
+    await saveModel(db, MODEL);
+    await setFoodVisionSettings(db, { savePhotos: true });
+    const { host, calls } = fakePhoto(CONFIDENT);
+    const app = makeApp(EVENING, host);
+    await app.openFuel();
+    await takePhoto(app);
+    expect(calls.prepare).toEqual([true]);
+    app.inSheet('data-photo-variant', 'thai:pad-thai-gai').click();
+    app.inSheet('data-portion', 'Large').click();
+    app.inSheet('data-photo-log').click();
+    await flush();
+    const photos = await listPhotos(db);
+    expect(photos.map((p) => p.dishId)).toEqual(['thai:pad-thai-gai']);
+    expect(photos[0]?.createdAt).toBe(EVENING);
+    const [e] = await todays();
+    expect(e?.ref).toEqual({ foodId: 'thai:pad-thai-gai' });
+    app.toasts.at(-1)?.onUndo();
+    await flush();
+    expect(await todays()).toHaveLength(0);
+    expect(await countPhotos(db)).toBe(0);
+  });
+
+  it('unsure: nothing preselected, Log disabled until a pick', async () => {
+    await setUp();
+    await saveModel(db, MODEL);
+    const app = makeApp(EVENING, fakePhoto(UNSURE).host);
+    await app.openFuel();
+    await takePhoto(app);
+    expect(app.inSheet('data-photo-state').getAttribute('data-photo-state')).toBe('unsure');
+    expect(app.inSheet('data-photo-log').getAttribute('disabled')).not.toBeNull();
+    app.inSheet('data-photo-option', 'som_tum').click();
+    app.inSheet('data-photo-log').click();
+    await flush();
+    const [e] = await todays();
+    expect(e).toMatchObject({ source: 'photo-local', photoConfidence: 0.3 });
+  });
+
+  it('None of these → search → a Thai dish: photo source, no confidence, photo saved when on', async () => {
+    await setUp();
+    await saveModel(db, MODEL);
+    await setFoodVisionSettings(db, { savePhotos: true });
+    const app = makeApp(EVENING, fakePhoto(UNSURE).host);
+    await app.openFuel();
+    await takePhoto(app);
+    app.inSheet('data-photo-search').click();
+    await flush();
+    expect(app.inSheet('data-section-panel').getAttribute('data-section-panel')).toBe('search');
+    // Pick from the Thai list (search results use the same items).
+    app.inSheet('data-log-section', 'thai').click();
+    app.inSheet('data-log-item', 'thai:thai:tom-yum-goong').click();
+    app.inSheet('data-log-confirm').click();
+    await flush();
+    const [e] = await todays();
+    expect(e?.source).toBe('photo-local');
+    expect(e?.photoConfidence).toBeUndefined();
+    expect((await listPhotos(db)).map((p) => p.dishId)).toEqual(['thai:tom-yum-goong']);
+  });
+
+  it('cancel: nothing logged or saved; a classifier error shows the error state', async () => {
+    await setUp();
+    await saveModel(db, MODEL);
+    await setFoodVisionSettings(db, { savePhotos: true });
+    const app = makeApp(EVENING, fakePhoto(CONFIDENT).host);
+    await app.openFuel();
+    await takePhoto(app);
+    app.inSheet('data-close').click();
+    await flush();
+    expect(app.sheet()).toBeUndefined();
+    expect(await todays()).toHaveLength(0);
+    expect(await countPhotos(db)).toBe(0);
+  });
+
+  it('a classifier that throws → the error state, Log by hand opens search', async () => {
+    await setUp();
+    await saveModel(db, MODEL);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const app = makeApp(
+      EVENING,
+      fakePhoto(() => {
+        throw new Error('boom');
+      }).host,
+    );
+    await app.openFuel();
+    await takePhoto(app);
+    expect(app.inSheet('data-photo-state').getAttribute('data-photo-state')).toBe('error');
+    app.inSheet('data-photo-search').click();
+    await flush();
+    expect(app.inSheet('data-section-panel').getAttribute('data-section-panel')).toBe('search');
+    warn.mockRestore();
+  });
+
+  it('model removed / replaced → classifier disposed; removed → hint again', async () => {
+    await setUp();
+    await saveModel(db, MODEL);
+    const { host, calls } = fakePhoto(CONFIDENT);
+    const app = makeApp(EVENING, host);
+    await app.openFuel();
+    app.ctrl.setPhoto({ model: { ...MODEL, importedAt: 2 } });
+    expect(calls.dispose).toBe(1);
+    app.ctrl.setPhoto({ model: { ...MODEL, importedAt: 2 } });
+    expect(calls.dispose).toBe(1);
+    app.ctrl.setPhoto({ model: null });
+    expect(calls.dispose).toBe(2);
+    app.onScreen('data-log-open').click();
+    await flush();
+    expect(() => app.inSheet('data-photo-hint')).not.toThrow();
   });
 });

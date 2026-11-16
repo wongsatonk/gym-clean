@@ -840,6 +840,18 @@ PWA from M6).
   the Claude backup (if enabled) or manual logging.
 - Report per-class accuracy and a confusion list (which dishes get mixed up).
 
+**Local part first (scope added 2026-11-15, see PROGRESS Decision "M7b local part plan")**
+- Steps 1–3 and 5 plus the `ml/` pipeline are built first. Step 4 (Claude backup) waits for the
+  paid-key decision. Until then, low confidence shows the top 3 with nothing preselected, plus search.
+- A dataset licence check comes before any training. A model may be **bundled** in the app
+  (`public/food-vision/`, precached) only if every training set allows training and publishing the
+  weights, and the model is ≤ 25 MB. Otherwise the import-from-Files rule above stands.
+- Classifier labels map to `thai:*` dish ids in `src/food-vision/classMap.json` (one label may
+  cover look-alike variants; the first is the default). `FoodEntry` gains
+  `source?: 'photo-local' | 'photo-ai'`.
+- Saved photos export as a zip: `<dishId>/<createdAt>.jpg` + `labels.csv`, which `ml/` reads. The
+  held-out ≥ 100 personal photos are chosen by file hash and never used for training.
+
 **iPhone specifics**
 - Test in Safari on a real iPhone; GPU delegate where it works, CPU/WASM fallback.
 - Don't depend on WebGPU or on-device vision-language models (too large and slow on a phone;
@@ -1245,7 +1257,8 @@ type FoodEntry = MacroSet & {
   label: string; ref?: { foodId?: string; recipeId?: string };
   amount: { servings: number } | { grams: number };
   estimate: boolean;                                 // quick estimates / photo guesses
-  photoConfidence?: number;                          // M7b: top-1 confidence of the accepted guess
+  source?: 'photo-local' | 'photo-ai';               // M7b: set on entries logged from a photo
+  photoConfidence?: number;                          // M7b: confidence of the accepted guess (if it was offered)
 };
 type WeighIn = { date: string; kg: number };
 type NutritionSettings = {

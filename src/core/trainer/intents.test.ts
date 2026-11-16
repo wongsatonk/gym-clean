@@ -207,6 +207,34 @@ describe('missing kit (M10e)', () => {
     // Discomfort keeps the avoid-area path (the referral line comes first).
     expect(matchIntent('my knee is sore, no leg press', ctx).intent).toBe('avoidArea');
   });
+  it('"no more squats", "no squats today", "no legs today please" are not missing-kit swaps', () => {
+    // Squats and curls on today's plan, so a generic word would resolve to an exercise.
+    const today: MatchContext = {
+      ...ctx,
+      todayExerciseIds: ['Goblet_Squat', 'Dumbbell_Bicep_Curl', 'Leg_Press'],
+    };
+    for (const c of [ctx, today]) {
+      for (const text of [
+        'no more squats',
+        'no squats today',
+        'no legs today please',
+        'no more curls',
+        'no curls anymore',
+        'no leg press today',
+        'ไม่มี squat วันนี้',
+      ]) {
+        expect(matchIntent(text, c).intent, text).not.toBe('swap');
+      }
+      expect(matchIntent('no legs today please', c)).toEqual({
+        intent: 'avoidArea',
+        slots: { area: 'legs', date: 'today' },
+        safety: 'none',
+      });
+      // A plain statement about the gym still is one.
+      expect(matchIntent('no leg press here', c).intent).toBe('swap');
+      expect(matchIntent('my gym has no leg press', c).intent).toBe('swap');
+    }
+  });
 });
 
 describe('eval set (SPEC M10 Accept)', () => {
@@ -215,6 +243,15 @@ describe('eval set (SPEC M10 Accept)', () => {
     for (const item of ITEMS) {
       expect(item.text).not.toMatch(/@|\+?\d[\d\s-]{6,}\d|https?:/);
       expect(item.text).not.toMatch(/\b\d+(\.\d+)?\s?(kg|lb|cm)\b/i);
+    }
+  });
+
+  it('has the missing-kit negatives (reviewer note on M10e) as rule-supported non-swaps', () => {
+    for (const text of ['no more squats', 'no squats today', 'no legs today please']) {
+      const item = ITEMS.find((i) => i.text.toLowerCase() === text);
+      expect(item, text).toBeDefined();
+      expect(item?.ruleSupported).toBe(true);
+      expect(item?.intent).not.toBe('swap');
     }
   });
 

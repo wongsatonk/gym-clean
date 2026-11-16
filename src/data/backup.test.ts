@@ -5,15 +5,57 @@ import { GymDb } from './db';
 import {
   BACKUP_FORMAT,
   BACKUP_TABLES,
+  DEVLOG_TABLES,
+  LOCAL_ONLY_TABLES,
   BACKUP_VERSION,
   BackupError,
   exportAll,
   importAll,
+  validateBackup,
   type BackupFile,
 } from './backup';
 
 // Made-up data only (public repo).
 const T0 = 1_700_000_000_000;
+
+const SET_ROW = {
+  sessionId: 's1',
+  exerciseId: 'curl',
+  setIndex: 0,
+  reps: 10,
+  weightKg: 12.5,
+  restTakenSec: 90,
+  startedAt: T0,
+  endedAt: T0 + 1,
+};
+const FOOD_ROW = {
+  id: 'f9',
+  name: 'Made-up food',
+  source: 'custom',
+  basis: { per100g: true },
+  kcal: 130,
+  proteinG: 3,
+};
+const ENTRY_ROW = {
+  id: 'e9',
+  date: '2026-01-05',
+  time: T0,
+  slot: 'lunch',
+  label: 'Bowl',
+  amount: { servings: 1 },
+  estimate: false,
+  kcal: 260,
+  proteinG: 5,
+};
+const CHECK_ROW = {
+  weekStart: '2026-01-05',
+  avgKg: 70.1,
+  prevAvgKg: null,
+  ratePct: null,
+  kind: 'needData',
+  deltaKcal: 0,
+  outcome: 'pending',
+};
 
 const state = (version: number): TrainerState => ({
   version,
@@ -188,7 +230,7 @@ describe('exportAll', () => {
     expect(file.format).toBe('gym-clean-backup');
     expect(file.version).toBe(BACKUP_VERSION);
     expect(file.dexieVersion).toBe(a.verno);
-    expect(file.dexieVersion).toBe(5);
+    expect(file.dexieVersion).toBe(6);
     expect(file.appVersion).toBe('abc123');
     expect(file.createdAt).toBe(T0 + 5);
     expect(Object.keys(file.tables).sort()).toEqual(
@@ -215,8 +257,57 @@ describe('exportAll', () => {
 
   it('covers every Dexie table: each one is either backed up or deliberately left out', async () => {
     const all = a.tables.map((t) => t.name).sort();
-    const left = ['devlogChunks', 'devlogSessions', 'devlogSets'];
+    const left = ['devlogChunks', 'devlogSessions', 'devlogSets', 'foodModels', 'foodPhotos'];
     expect([...BACKUP_TABLES, ...left].sort()).toEqual(all);
+    expect([...DEVLOG_TABLES, ...LOCAL_ONLY_TABLES].sort()).toEqual(left);
+  });
+
+  it('leaves saved food photos and the food model out of the file (M7b)', async () => {
+    await seed(a);
+    await a.foodPhotos.put({
+      id: 'ph1',
+      dishId: 'thai:made-up',
+      createdAt: T0,
+      w: 2,
+      h: 2,
+      blob: new Blob([new Uint8Array([1, 2])], { type: 'image/jpeg' }),
+    });
+    await a.foodModels.put({
+      id: 'food',
+      name: 'made-up.tflite',
+      sizeBytes: 2,
+      labels: ['a', 'b'],
+      importedAt: T0,
+      blob: new Blob([new Uint8Array([3, 4])]),
+    });
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(Object.keys(file.tables)).not.toContain('foodPhotos');
+    expect(Object.keys(file.tables)).not.toContain('foodModels');
+    expect(JSON.stringify(file)).not.toMatch(/ph1|made-up\.tflite/);
+  });
+
+  it('a restore leaves the photos and model already on this phone alone (M7b)', async () => {
+    await seed(a);
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.foodPhotos.put({
+      id: 'ph1',
+      dishId: 'thai:made-up',
+      createdAt: T0,
+      w: 2,
+      h: 2,
+      blob: new Blob([new Uint8Array([1, 2])], { type: 'image/jpeg' }),
+    });
+    await b.foodModels.put({
+      id: 'food',
+      name: 'm',
+      sizeBytes: 2,
+      labels: ['a', 'b'],
+      importedAt: T0,
+      blob: new Blob([new Uint8Array([3, 4])]),
+    });
+    await importAll(b, file);
+    expect(await b.foodPhotos.count()).toBe(1);
+    expect(await b.foodModels.count()).toBe(1);
   });
 
   it('never writes an API key or other secret, even if one is stored', async () => {
@@ -331,7 +422,7 @@ describe('importAll', () => {
       ['not an object', () => '[1,2,3]', 'corrupt'],
       ['another format', (f) => ({ ...f, format: 'something-else' }), 'format'],
       ['a newer backup version', (f) => ({ ...f, version: BACKUP_VERSION + 1 }), 'newer'],
-      ['a newer Dexie schema', (f) => ({ ...f, dexieVersion: 6 }), 'newer'],
+      ['a newer Dexie schema', (f) => ({ ...f, dexieVersion: f.dexieVersion + 1 }), 'newer'],
       ['a bad dexieVersion', (f) => ({ ...f, dexieVersion: 'five' }), 'corrupt'],
       ['no tables', (f) => ({ ...f, tables: undefined }), 'corrupt'],
       ['an unknown table', (f) => ({ ...f, tables: { ...f.tables, devlogChunks: [] } }), 'corrupt'],
@@ -369,6 +460,36 @@ describe('importAll', () => {
         }),
         'corrupt',
       ],
+      // Row shapes per table (reviewer note on M9 B1): checked before the confirm step.
+      ...(
+        [
+          ['sessions', [{ sessionId: 'x', startedAt: 1 }]],
+          ['sessions', [{ sessionId: 'x', dayId: 'push', startedAt: 1, endedAt: 'later' }]],
+          ['sets', [{ ...SET_ROW, reps: '10' }]],
+          ['sets', [{ ...SET_ROW, endedAt: undefined }]],
+          ['sets', [{ ...SET_ROW, cues: 'rushedLowering' }]],
+          ['exerciseNotes', [{ exerciseId: 'curl', machineSetting: 'pin 4', note: 5 }]],
+          ['sessionNotes', [{ sessionId: 's1', exerciseId: 'curl', note: 'x' }]],
+          ['settings', [{ key: 'unit' }]],
+          ['trainer', [{ key: 'current', state: 'v3' }]],
+          ['trainer', [{ key: 'current', state: { version: 3, plan: {}, schedule: {} } }]],
+          ['planChanges', [{ createdAt: 1, action: 'lighter', title: 't', source: 'chip' }]],
+          ['foods', [{ ...FOOD_ROW, kcal: '130' }]],
+          ['foods', [{ ...FOOD_ROW, basis: undefined }]],
+          ['foods', [{ ...FOOD_ROW, estimate: 'yes' }]],
+          ['recipes', [{ id: 'r', name: 'n', ingredients: {}, servings: 1, updatedAt: 1 }]],
+          ['foodEntries', [{ ...ENTRY_ROW, estimate: undefined }]],
+          ['foodEntries', [{ ...ENTRY_ROW, amount: 2 }]],
+          ['weighIns', [{ date: '2026-01-01', kg: '70' }]],
+          ['favorites', [{ id: 'f', amount: { grams: 1 }, createdAt: 1 }]],
+          ['weeklyChecks', [{ ...CHECK_ROW, avgKg: 'x' }]],
+          ['weeklyChecks', [{ ...CHECK_ROW, deltaKcal: null }]],
+        ] as [string, unknown[]][]
+      ).map(([table, rows], i): [string, (f: BackupFile) => unknown, BackupError['code']] => [
+        `a bad "${table}" row (#${i})`,
+        (f) => ({ ...f, tables: { ...f.tables, [table]: JSON.parse(JSON.stringify(rows)) } }),
+        'corrupt',
+      ]),
     ];
 
     it.each(cases)('%s', async (_name, mutate, code) => {
@@ -406,5 +527,75 @@ describe('importAll', () => {
     expect(err).toBeInstanceOf(BackupError);
     expect((err as BackupError).code).toBe('write');
     expect(await dump(b)).toEqual(before);
+  });
+});
+
+describe('validateBackup row shapes', () => {
+  it('accepts every row the app itself writes (seeded db, nulls where allowed)', async () => {
+    await seed(a);
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(() => validateBackup(b, viaFile(file))).not.toThrow();
+  });
+
+  it('refuses a bad row with code corrupt and names the table, without writing', async () => {
+    await seed(b);
+    const before = await dump(b);
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    file.tables.weighIns = [{ date: '2026-01-01', kg: 'heavy' }];
+    let err: unknown = null;
+    try {
+      validateBackup(b, viaFile(file));
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(BackupError);
+    expect((err as BackupError).code).toBe('corrupt');
+    expect((err as BackupError).message).toMatch(/weighIns/);
+    expect(await dump(b)).toEqual(before);
+  });
+
+  it('accepts unknown extra fields (a newer app may add some)', async () => {
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    file.tables.foods = [{ ...FOOD_ROW, someLaterField: [1] }];
+    file.tables.sets = [{ ...SET_ROW, id: 7, futureFlag: true }];
+    await importAll(b, viaFile(file));
+    expect(await b.foods.count()).toBe(1);
+    expect(await b.sets.count()).toBe(1);
+  });
+});
+
+describe('secret stripping is narrow (settings only, explicit names)', () => {
+  it('keeps secret-sounding fields outside settings, e.g. a future tokenCount', async () => {
+    await a.foodEntries.put({ ...ENTRY_ROW, tokenCount: 42 } as never);
+    await a.planChanges.add({
+      createdAt: T0,
+      action: 'lighter',
+      title: 'Lighter today',
+      source: 'claude',
+      before: state(1),
+      after: state(2),
+      passwordHint: 'kept',
+    } as never);
+    const text = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    const tables = JSON.parse(text).tables;
+    expect(tables.foodEntries[0].tokenCount).toBe(42);
+    expect(tables.planChanges[0].passwordHint).toBe('kept');
+    await importAll(b, text);
+    expect(((await b.foodEntries.get('e9')) as unknown as { tokenCount: number }).tokenCount).toBe(
+      42,
+    );
+  });
+
+  it('keeps settings fields that only contain a secret word (tokenCount), drops listed ones', async () => {
+    await a.settings.bulkPut([
+      { key: 'coach', value: { apiKey: 'sk-ant-made-up', tokenCount: 1500, model: 'x' } },
+      { key: 'coachTokens', value: { tokenCount: 3 } },
+      { key: 'claudeApiKey', value: 'sk-ant-made-up-2' },
+    ]);
+    const text = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    expect(text).not.toMatch(/sk-ant/);
+    const rows = JSON.parse(text).tables.settings as { key: string; value: unknown }[];
+    expect(rows.map((r) => r.key).sort()).toEqual(['coach', 'coachTokens']);
+    expect(rows.find((r) => r.key === 'coach')?.value).toEqual({ tokenCount: 1500, model: 'x' });
   });
 });

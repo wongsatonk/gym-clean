@@ -17,6 +17,9 @@ export const REPLACE_CONFIRM_MS = 3000;
 export const REPLACE_QUESTION = 'Replace all data on this phone?';
 export const BACKUP_NOTE =
   'Saves your workouts, plan and settings to a file on this phone. Nothing is uploaded.';
+/** M7b: the food photos and the food model stay out of the backup (src/data/backup.ts). */
+export const BACKUP_PHOTOS_NOTE =
+  'Food photos and the food model aren’t in the backup. Export the photos in Food photos.';
 
 /** Where the restore is. `summary` names what's in the picked file, e.g. "12 workouts". */
 export type RestoreStep =
@@ -146,6 +149,7 @@ export function backupPanel(props: BackupPanelProps, actions: BackupPanelActions
     'div',
     { class: 'backup-panel', 'data-backup': true },
     h('p', { class: 'set-note muted' }, BACKUP_NOTE),
+    h('p', { class: 'set-note muted', 'data-backup-photos-note': true }, BACKUP_PHOTOS_NOTE),
     h(
       'button',
       {

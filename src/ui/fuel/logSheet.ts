@@ -10,7 +10,8 @@
 // e2e hooks: dialog `[data-log-sheet]`, `[data-log-section=<id>]` buttons (aria-pressed),
 // `[data-section-panel=<id>]`, `[data-log-item=<key>]`, `[data-portion=<label>]`,
 // `[data-stepper=portion]`, `[data-slot-chip=<slot>]`, `[data-log-confirm]`, `[data-quick-*]`,
-// `[data-scan-open]` (Search and My foods, only while barcode lookup is on), `[data-item-note]`.
+// `[data-scan-open]` (Search and My foods, only while barcode lookup is on), `[data-item-note]`,
+// `[data-log-photo]` (M7b: the Photo button row, or `[data-photo-hint]` without a food model).
 import { scaleFood } from '../../core/nutrition/portions';
 import type { Food, FoodAmount, MacroSet, MealSlot, NutritionMode } from '../../core/types';
 import { h } from '../dom';
@@ -28,6 +29,10 @@ import {
   stepper,
 } from './common';
 import { GRAM_STEP, SERVING_STEP, slotChips } from './entrySheet';
+import { photoButton } from './photoCapture';
+
+/** M7b-q4: shown in place of the Photo button until a food model is imported. */
+export const PHOTO_HINT = 'Log from a photo: add a food model in Settings.';
 
 export type LogSection = 'favorites' | 'recipes' | 'thai' | 'quick' | 'search' | 'myFoods';
 
@@ -99,6 +104,11 @@ export type LogSheetProps = {
   scan?: boolean | undefined;
   /** Macros for an amount (core portion scaling). Default: `scaleItem`. */
   preview?: ((item: LogItem, amount: FoodAmount, factor: number) => MacroSet) | undefined;
+  /**
+   * M7b: a food model is on the phone, so the top of the sheet offers Photo (needs `onPhoto`).
+   * False → one line pointing to Settings instead (M7b-q4). Ignored without `onPhoto`.
+   */
+  photoAvailable?: boolean | undefined;
 };
 
 export type LogChoice = {
@@ -123,6 +133,8 @@ export type LogSheetActions = {
   onEditItem: (item: LogItem) => void;
   /** "Scan a barcode" (shown only with `scan`); the section it was tapped in. */
   onScan?: ((from: LogSection) => void) | undefined;
+  /** M7b: a meal photo was taken or picked. Omitted → no photo row at all. */
+  onPhoto?: ((file: File) => void) | undefined;
   onClose: () => void;
 };
 
@@ -224,7 +236,18 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
   );
   const nav = h('div', { class: 'log-secs', role: 'group', 'aria-label': 'Food sources' }, ...tabs);
   const panel = h('div', { class: 'log-panel' });
-  shell.body.append(nav, panel);
+  // M7b: Photo first (the quickest way in), or the Settings hint without a model (M7b-q4).
+  const onPhoto = a.onPhoto;
+  const photoRow = onPhoto
+    ? p.photoAvailable
+      ? h(
+          'div',
+          { class: 'log-photo', 'data-log-photo': true },
+          photoButton({ onFile: (f) => onPhoto(f), label: 'Log from a photo' }),
+        )
+      : h('p', { class: 'fuel-hint log-photo-hint', 'data-photo-hint': true }, PHOTO_HINT)
+    : null;
+  appendAll(shell.body, photoRow, nav, panel);
 
   /** Detail → list. The detail (and the focused control) is gone: focus stays in the sheet. */
   function back(): void {
@@ -640,11 +663,13 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
     clear(panel);
     if (detail) {
       nav.setAttribute('hidden', '');
+      photoRow?.setAttribute('hidden', '');
       const d = detailPanel(detail);
       panel.append(d);
       focusFirst(d);
     } else {
       nav.removeAttribute('hidden');
+      photoRow?.removeAttribute('hidden');
       panel.append(sectionPanel());
     }
   }

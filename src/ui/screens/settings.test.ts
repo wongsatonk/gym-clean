@@ -276,3 +276,24 @@ describe('settingsScreen M10e Gym and M9 Backup sections', () => {
     expect(sec.find((e) => e.hasAttribute('data-backup'))).toHaveLength(1);
   });
 });
+
+describe('settingsScreen M7b Food photos slot', () => {
+  it('no foodPhotos prop → no Food photos section (unchanged)', () => {
+    const { el } = render();
+    const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+    expect(keys).toEqual(['accent', 'voice', 'camera', 'unit', 'devlog']);
+  });
+
+  it('places the food photos block in a "Food photos" section right after Nutrition', () => {
+    const { el } = render({
+      nutrition: slot('data-nutrition'),
+      foodPhotos: slot('data-food-photos'),
+    });
+    const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+    expect(keys.indexOf('food-photos')).toBe(keys.indexOf('nutrition') + 1);
+    const sec = byAttr(el, 'data-section', 'food-photos');
+    expect(sec.textContent).toContain('Food photos');
+    expect(sec.getAttribute('aria-labelledby')).toBe('set-food-photos');
+    expect(sec.find((e) => e.hasAttribute('data-food-photos'))).toHaveLength(1);
+  });
+});

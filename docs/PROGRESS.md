@@ -19,6 +19,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - The 🧍 gym checkpoints.
   - **M4f Camera for more exercises (planned 2026-11-14):** the M4f-q questions under "Blockers / questions" are not blocking; their defaults get built.
   - **M10 AI trainer (planned 2026-11-14):** the M10-q questions under "Blockers / questions". Phase A can start once q1–q3 and q8 have answers, or on the defaults if he says so.
+  - **M7b local food photos (planned 2026-11-15):** the M7b-q questions under "Blockers / questions" are not blocking; their defaults get built. M7b-q1 (dataset licence / who trains) matters most.
   - **M7 Fuel (planned 2026-11-15):** the M7-q questions under "Blockers / questions" are not blocking; their defaults get built. M7-q5 answered: barcode is built, off by default.
 
 ## Milestone checklist
@@ -39,12 +40,285 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [~] M5c Hands-free sets: **built and live** (c3c1f85, verifier PASS) → waiting for 🧍 Checkpoint B3 (hands-free gym test). Follow-up "Breaks inside a set: tap to continue" planned below
 - [ ] M6 Polish & install
 - [x] M7 Fuel: food & nutrition. Built 2026-11-15 on `m7-fuel` (Fuel tab, targets + weekly check, Thai dishes, USDA search offline, recipes, coach food ideas, opt-in barcode). Reviewer PASS, verifier PASS (Verification evidence → M7).
-- [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
+- [ ] M7b Food photo recognition: **local part planned 2026-11-15** (plan below; Claude backup out) → 🧍 Checkpoint D (my meal photos, train, test a week)
 - [ ] M9 Native iOS shell (Capacitor). **Planned 2026-11-15 on paper (SPEC M9 + plan below); waiting on the M9-q answers, no build** → 🧍 Checkpoint G
 - [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
 - [ ] M10e Equipment-aware swaps (follow-up to M10 phase A): **planned 2026-11-15** on `m10-equipment` (gym profile, kit needs as data, the coach proposes a swap for kit his gym lacks, e.g. Leg Press) → extends 🧍 Checkpoint E
 
 ## Current milestone plan
+
+### M7b — Food photo recognition, local part (planned 2026-11-15)
+**Contract:** SPEC M7b steps 1–3 and 5 plus the "Training" section, as limited by the Decision "M7b local part plan" (2026-11-15) and `docs/cloud-briefs.md` Session 1.
+- All logic is **tests first**: decision logic, class map, entry builder, stores, zip writer, and the Python split/mapping code.
+- **Privacy:** photos and inference stay on the phone. No new network call, and the CSP doesn't change (`connect-src` gets no new origin). The model and the MediaPipe wasm are loaded from our own origin or from IndexedDB. Photos never go into the dev log. Nothing is stored unless "Save photos to improve recognition" is on, and it's **off** by default.
+- **Out of scope:** step 4, the Claude backup (paid key + the open proxy-vs-own-key decision). No Claude client, no "Ask Claude" button, no `api.anthropic.com`. The SPEC Accept items about Claude (JSON parsing, mocked Claude e2e) wait for that part. `decide()` takes a `claudeAvailable` input that is always `false` for now, so step 4 can plug in later.
+- **Datasets, photos and models are never committed** unless the Decision allows it (bundled model: only if task 1 finds a dataset whose licence allows training **and** publishing the weights, and the model is ≤ 25 MB).
+- **Copy:** coaching language only. No health or diet claims. Every new string passes `checkCopy`. Values carry the "estimate" tag.
+- **No GPU on this Mac** (and none in the cloud session): training must be CPU-feasible. The plan uses a small pretrained backbone (EfficientNet-Lite0 or MobileNetV3, 224 px), mostly frozen, with features cached once. Budget: about 2 h of CPU for ≤ 50 classes and ~15k images. Anything bigger goes to Google Colab (free GPU) on public data only, never his photos, unless he says otherwise.
+- **Order:** M6 is open and Checkpoints B3 / E / F1 are open. M7b proceeds on the cloud-brief Wongsaton prepared (as M7 did on his word). It touches neither the camera nor the workout.
+
+**Branch:** `m7b-food-vision`, cut from main at c818def (M7 live). This plan was written on a worktree branch based on c818def.
+
+**Fit with the current code (why the plan looks like this):**
+- `FoodSource` already has `'photo-local'`, and `FoodEntry` has `photoConfidence?`, but **`FoodEntry` has no `source` field**. Main adds `source?: 'photo-local' | 'photo-ai'` (task 2) so the SPEC's `source: 'photo-local'` is stored on the entry. `isEstimateFood` already treats the photo sources as estimates.
+- `entryFromFood(food, amount, { portion })` already does S/R/L for the 47 Thai dishes (`thai:*` ids, `THAI_PORTIONS` 0.75 / 1 / 1.4). The photo builder wraps it, so photo entries match a hand-logged dish exactly.
+- **The MediaPipe vision wasm is already same-origin and precached:** `scripts/copy-mediapipe-wasm.mjs` copies it to `public/mediapipe/wasm` and Workbox globs `mediapipe/wasm/*`. `src/pose/landmarker.ts` builds `${BASE_URL}mediapipe/wasm`. The Image Classifier uses the same fileset, so food-vision builds the same URL itself and doesn't import the pose module. `@mediapipe/tasks-vision` is already a lazy chunk.
+- `.gitignore` already ignores `ml/data/`, `ml/runs/`, `ml/models/` and `*.tflite`. A bundled model (verdict A only) needs one narrow exception. `public/models/**` belongs to pose-engineer, so a bundled food model would go to `public/food-vision/` (main).
+- Dexie is at **version 5**. M7b adds **version 6** with new tables only (`foodModels`, `foodPhotos`).
+- The M7 barcode loader (`src/ui/fuel/barcodeDecoder.ts`) is the pattern to copy: dynamic import, one shared instance, a failed load isn't cached.
+- E2E can't load a real food model (it isn't committed, and none may exist), so the e2e uses a **fake classifier** through a test seam that exists only in dev builds (task 11). An opt-in smoke spec covers the real MediaPipe path (task 19).
+
+**Ownership:**
+- ml-engineer: `ml/**`, `src/food-vision/**`.
+- core-engineer: `src/core/nutrition/photo.ts`, `src/core/zip.ts`, `src/data/db.ts`, `src/data/nutrition/photoStore.ts`.
+- ui-engineer: `src/ui/fuel/{photoCapture,photoSheet,foodVisionSettings}.ts`, `logSheet.ts`, `fuelController.ts`, `src/ui/screens/settings.ts`, `src/styles.css`, `e2e/food-photo.spec.ts`, `e2e/food-vision-smoke.spec.ts`.
+- main: `src/core/types.ts`, `src/ui/app.ts`, `vite.config.ts`, `.gitignore`, `public/food-vision/**` (verdict A only), `package.json`, git.
+
+#### Data and licence (first)
+- [x] 1. [ml-engineer] Dataset licence research. **Done 2026-11-15: verdict B** (ml/DATASETS.md). THFOOD-50/100 are non-commercial research/education only, with third-party images; Food-101 and UEC-256 are research only; the Kaggle image sets have unverifiable provenance; Commons and Open Images allow it but are too small or noisy per dish. Backbone EfficientNet-Lite0 is Apache 2.0. Main records the Decision. **No training data is downloaded before this is done.**
+  - Files: ml/DATASETS.md.
+  - Check, from the official pages (quote the licence text and link it):
+    - THFOOD-50 and THFOOD-100 (the SPEC names them; believed non-commercial research only);
+    - Food-101 (Thai classes such as pad thai; images from Foodspotting, no clear licence);
+    - UEC-Food256 and other Asian food sets;
+    - Kaggle "Thai food" sets (check each uploader's licence and where the images came from);
+    - Wikimedia Commons Thai-food categories (per-file CC0 / CC BY / CC BY-SA; attribution needed);
+    - Open Images.
+  - Also check the pretrained backbone's licence (e.g. EfficientNet-Lite / MobileNet weights, Apache-2.0).
+  - For each candidate record:
+    - may we **train** on it, and may we **publish the trained weights** in a public repo / on the public site?
+    - attribution needed?
+    - image count, download size;
+    - which classes overlap our 47 `thai:*` dishes.
+  - End with a verdict:
+    - **A:** one or more sets allow training and redistribution → train in task 6 and the model may be bundled (task 17);
+    - **B:** none does → build the pipeline, **stop before real training**, and the model reaches the phone only through Settings → Import, trained by Wongsaton himself (M7b-q1).
+  - A set put together from per-file-licensed Commons images counts only if the download script keeps each file's licence and author for attribution.
+  - Done when: ml/DATASETS.md has the table with links and the verdict. Main records it as a Decision.
+  - Deps: none.
+
+#### Shared
+- [x] 2. [main] Shared types. **Done 2026-11-15 (core-engineer, delegated):** `FoodEntry.source?`, `FoodPhoto`, `FoodModelRecord`, `FoodVisionSettings` in src/core/types.ts; tsc green, `npm run check` 101 files / 2736 tests green.
+  - Files: src/core/types.ts.
+  - `FoodEntry.source?: 'photo-local' | 'photo-ai'`.
+  - `FoodPhoto = { id, dishId, createdAt, w, h, blob: Blob }`.
+  - `FoodModelRecord = { id: 'food', name, sizeBytes, labels: string[], importedAt, blob: Blob }`.
+  - `FoodVisionSettings = { savePhotos: boolean }` (default false).
+  - Done when: typecheck passes and existing tests stay green.
+  - Deps: none.
+
+#### ML pipeline (`ml/**`, Python; tests in `ml/tests`, pure Python where possible)
+- [x] 3. [ml-engineer] Class → dish map, **tests first**. **Done 2026-11-15:** 23 classes cover 31 of the 47 dishes. They are THFOOD-50 overlaps; each class lists its `datasets.thfood50` source names. 16 dishes have no public class yet (fried rice, pad see ew, …), and 27 THFOOD-50 classes have no dish; both lists are in ml/DATASETS.md. `npx vitest run src/food-vision` 15/15.
+  - Files: src/food-vision/classMap.json, src/food-vision/classMap.ts(+test).
+  - Map: classifier label (lower snake ASCII) → `{ dishes: ['thai:…', …] }`. The first dish is the default.
+  - Look-alike dishes share one class (e.g. `pad_kra_pao` → pork / chicken / shrimp variants). The sheet then offers the variants (M7b-q2).
+  - The Python pipeline reads this same JSON, so it's the single source of truth.
+  - Start from the 47 dishes. Narrow to the dataset classes once task 1 lands. List dataset classes that have no dish in ml/DATASETS.md (M7b-q2).
+  - Done when: tests check that every class has ≥ 1 dish, every dish id exists in `src/data/nutrition/thaiDishes.json`, no dish is in two classes, labels are unique and in the right format, and there are ≥ 2 classes.
+  - Deps: 1 for the final class set. A draft can start now.
+- [x] 4. [ml-engineer] Pipeline scaffold and environment. **Done 2026-11-16:** ml/README.md (Mac + Colab steps, THFOOD licence acceptance), pinned ml/requirements.txt (TF 2.21.0, mediapipe 1.2.3, Python 3.12) + requirements-colab.txt, ml/config.yaml, ml/gymfood/ package, ml/.gitignore (.venv). **Tooling:** Model Maker is stale (0.2.1.4, Apr 2024; pins tensorflow<2.16 + tensorflow-addons, no current Apple Silicon/py3.12 wheels), so TF TFLite converter + the mediapipe metadata writer (needs a 1-function shim: the mediapipe 1.2.3 wheel lacks `_pywrap_metadata_version`). Frozen EfficientNet-Lite0, cached embeddings, numpy softmax head. Fresh-venv `python -m pytest ml/tests --runslow` 49/49 green.
+  - Files: ml/README.md, ml/requirements.txt (pinned), ml/config.yaml, ml/tests/.
+  - Check the **current** tooling before choosing (Context7 / official docs):
+    - MediaPipe Model Maker `image_classifier`. Check Python version limits and its Apple Silicon install status.
+    - Or Keras + the TFLite converter + the MediaPipe metadata writer (`mediapipe.tasks.python.metadata.metadata_writers.image_classifier`).
+  - Record the choice and the reason in the README.
+  - CPU plan: a 224 px small backbone, frozen, with cached embeddings and a trained head. Optionally unfreeze the last block. Time estimates are written down.
+  - README has steps for his Mac (CPU) and for Colab (public data only).
+  - Done when: `python -m pytest ml/tests` passes in a fresh venv. Tests: the label list equals the classMap keys, and the config loads.
+  - Deps: 3.
+- [x] 5. [ml-engineer] Download and prepare, **tests first**. **Done 2026-11-16:** `download.py` (backbone + Commons allowed; THFOOD-50 pinned HF revision with sha256s and THFOOD-100 `--from-file` need `--accept-licence`; safe unpack; Commons CC0/PD/CC BY only with sha1 check + ATTRIBUTION.csv), `prepare.py` (classMap `datasets` mapping, unmapped dropped + reported, salted sha256 split, labels only from labels.csv, ≥ 100 / 30% personal held out as `personal_test`, never in train/val, duplicates removed). Fixture zip written by the app's own `buildPhotoExport` (ml/tests/fixtures/gen-photo-zip.ts). No dataset downloaded.
+  - Files: ml/scripts/download.py, ml/scripts/prepare.py, ml/tests/test_prepare.py, ml/tests/fixtures/ (made-up generated images only).
+  - `download.py`:
+    - fetches only datasets marked allowed in DATASETS.md, with checksums, into gitignored `ml/data/`;
+    - a non-allowed set needs `--accept-licence <name>`, which is for Wongsaton's private run on his Mac only;
+    - keeps per-image licence and author when the source needs attribution.
+  - `prepare.py`:
+    - maps dataset classes → our labels through classMap and drops unmapped ones (and reports them);
+    - makes a deterministic train/val/test split by file hash;
+    - imports the photo zip from task 10 (`labels.csv` + `<dishId>/…jpg`; dishId → class through classMap);
+    - holds out ≥ 100 personal photos by hash that **never** go into train or val (SPEC).
+  - Done when: pytest on the fixture covers the mapping, unmapped classes dropped, a split that is the same on every run, no holdout leaking into training, and parsing a zip written by task 10's format (a checked-in tiny zip made from made-up images).
+  - Deps: 4, 10 (the zip format; can use the documented layout first).
+- [x] 6. [ml-engineer] Train, evaluate, export. **Smoke only (verdict B), 2026-11-16:** `train.py` (resumable embedding chunks + head checkpoint), `evaluate.py` (top-1/top-3/per-class/10 confused pairs → runs/<id>/report.md), `export.py` (float16 .tflite + metadata, ≤ 25 MB check, MediaPipe Python load + top-1 agreement on 20 images). Smoke: 2 made-up classes (`pad_thai`, `tom_yum_goong`), 1 epoch, M4 Pro CPU, 13 s → `ml/models/smoke.tflite` 6.76 MB, MediaPipe Python agreement 20/20, 3 ms/image (Mac CPU, not iPhone). **Real training waits on Wongsaton** (Mac with his photos, or `ml/train_colab.ipynb` on public THFOOD-50 only, per M7b-q1).
+  - Files: ml/scripts/train.py, ml/scripts/evaluate.py, ml/scripts/export.py, ml/tests/test_export_smoke.py (opt-in, marked slow).
+  - Evaluate:
+    - top-1, top-3, per-class accuracy, the 10 most-confused dish pairs;
+    - `ml/runs/<id>/report.md` (gitignored);
+    - separate numbers for the public test split and for his held-out photos (when there are any).
+  - Export:
+    - `.tflite` (float16 or int8; choose by accuracy vs size) with image-classifier metadata (labels = classMap keys, normalization);
+    - fails above 25 MB;
+    - checks that the MediaPipe **Python** `ImageClassifier` loads it with the right labels and gives the same top-1 as the trained model on 20 test images.
+  - Smoke run: 2 made-up classes named with **real classMap labels**, 1 epoch, CPU, < 5 min. It produces `ml/models/smoke.tflite` (gitignored), which task 19 uses.
+  - **Real training only on verdict A:** record the CPU time and the public-split metrics in PROGRESS. **Verdict B:** stop after the smoke run. The README gives Wongsaton the exact commands.
+  - Done when: the smoke test passes, and (A) a real model ≤ 25 MB with its report exists, or (B) the PROGRESS entry says training is waiting on M7b-q1.
+  - Deps: 5.
+
+#### Core (tests first)
+- [x] 7. [ml-engineer] Decision logic, **tests first**. **Done 2026-11-16:** src/food-vision/decide.ts (+18 tests): `decide(categories, classMap, { threshold?, claudeAvailable })` → `{ kind, options ≤ 3 {label, dishIds, score}, preselect? (default dish id), offerClaude }`; assignable to photoSheet's `PhotoDecision` (checked in a test). Repeated labels keep the best score; dishes offered higher up aren't repeated.
+  - Files: src/food-vision/decide.ts(+test).
+  - `decide(categories, classMap, { threshold: 0.6, claudeAvailable })` → `{ kind: 'confident' | 'unsure' | 'noMatch', options (≤ 3: label, dishIds, score), preselect?, offerClaude: boolean }`.
+  - Rules:
+    - top-1 ≥ 0.6 → confident, top-1 default dish preselected;
+    - below that → unsure, nothing preselected (M7b-q3);
+    - no known label → noMatch (search);
+    - unknown labels and NaN or out-of-range scores are ignored;
+    - sort by score, ties keep a stable order;
+    - `offerClaude` only when `claudeAvailable` and (unsure or noMatch). It is always false in this milestone.
+  - No DOM, no MediaPipe import.
+  - Done when tests cover: exactly 0.6 vs 0.59, fewer than 3 categories, unknown labels, two labels → the same dish deduplicated, empty input, and `claudeAvailable: false` never offering Claude.
+  - Deps: 3.
+- [x] 8. [core-engineer] Photo entry builder, **tests first**. **Done 2026-11-16:** `entryFromPhoto(dish, portion, confidence | undefined, opts)` in src/core/nutrition/photo.ts (8 tests). One plate via `entryFromFood` (identical macros/label/amount/ref), plus `source: 'photo-local'`, `estimate: true`, `photoConfidence` (2 dp, only when a confidence is passed). Null for a non-Thai dish (needs `thai:*` id and `thai-estimate` source), a portion not in the dish's list, or a confidence that isn't finite 0–1.
+  - Files: src/core/nutrition/photo.ts(+test).
+  - `entryFromPhoto(dish, portion, confidence | undefined, opts)` wraps `entryFromFood`, adding `source: 'photo-local'`, `estimate: true` and `photoConfidence` (2 dp).
+  - `photoConfidence` is only set when the logged dish was one of the offered options. A dish picked through "search" keeps `source` but has no confidence.
+  - Rejects confidence outside 0–1 and non-Thai/unknown portions.
+  - Done when tests cover: Large values equal `entryFromFood(dish, …, { portion: 'Large' })`, Small/Regular, source + estimate, confidence rounding and rejection, and the search case.
+  - Deps: 2.
+- [x] 9. [core-engineer] Persistence, **tests first**. **Done 2026-11-16:** Dexie v6 (`foodModels: 'id'`, `foodPhotos: 'id, createdAt, dishId'`, no upgrade fn; v5 → v6 test keeps every row of all 16 old tables). src/data/nutrition/photoStore.ts (16 tests): `getFoodVisionSettings` / `setFoodVisionSettings` (key 'foodVision', default off, only explicit `true` is on), `maybeSavePhoto` (off → writes nothing, returns false), `listPhotos` (oldest first), `countPhotos`, `deletePhotos(ids?)` (none = all; returns rows for Undo), `restorePhotos`, `saveModel` / `getModel` / `removeModel` (returns the old record for Undo). Backup: new `LOCAL_ONLY_TABLES = ['foodPhotos', 'foodModels']` in src/data/backup.ts, not backed up; restore leaves them alone (tests). `npm run check` 104 files / 2785 tests green.
+  - Files: src/data/db.ts(+test), src/data/nutrition/photoStore.ts(+test).
+  - Dexie **version(6)**, new tables only: `foodModels: 'id'` and `foodPhotos: 'id, createdAt, dishId'`.
+  - Settings key `'foodVision'` with `{ savePhotos: false }` by default.
+  - Store:
+    - `saveModel` / `getModel` / `removeModel`;
+    - `maybeSavePhoto(settings, photo)`, which writes **nothing** when `savePhotos` is off (the SPEC "photo not kept" unit test);
+    - `listPhotos`, `countPhotos`, `deletePhotos`, `restorePhotos` (for Undo).
+  - Done when tests cover: v5 → v6 keeps every row, the off setting writes nothing, delete + restore, and every existing db test passing. Record the version bump as a Decision.
+  - Deps: 2.
+- [x] 10. [core-engineer ∥] Photo export zip, **tests first**. **Done 2026-11-15:** `zipStore` / `readZip` / `crc32` in src/core/zip.ts (18 tests: CRC vectors, headers, UTF-8 flag + names, deterministic, `unzip -t` and Python `zipfile` read it back), `buildPhotoExport` / `exportFoodPhotos` / `dishFolder` / `photoExportFilename` in src/core/nutrition/photoExport.ts (11 tests). Folder = dish id made safe (`thai:pad_thai` → `thai_pad_thai`); `labels.csv` (`file` relative to `gym-clean-food-photos/`, exact `dishId`, `createdAt` epoch ms) is the label source of truth. Same-ms duplicates get `-2`. DOS times use UTC fields.
+  - Files: src/core/zip.ts(+test), src/core/nutrition/photoExport.ts(+test).
+  - A pure store-only zip writer (JPEGs don't compress) with CRC-32. No new dependency.
+  - Layout: `gym-clean-food-photos/<dishId>/<createdAt>.jpg` plus `labels.csv` (`file,dishId,createdAt`). Nothing else: no nutrition, no confidence, no device info.
+  - Done when tests cover: CRC-32 known vectors, local/central headers parsed back, a file count of 0 → no zip, and the layout. Task 5 reads a zip from this writer in Python.
+  - Deps: none.
+
+#### App (`src/food-vision/**` + UI)
+- [x] 11. [ml-engineer] Classifier wrapper. **Done 2026-11-16:** src/food-vision/classifier.ts (+ index.ts). `loadFoodClassifier({ blob, importedAt })` → shared `FoodClassifier { delegate, classify(image) → { categories (score desc), ms }, close() }`: lazy `import('@mediapipe/tasks-vision')`, same-origin `${BASE_URL}mediapipe/wasm`, `modelAssetBuffer` from the stored blob, `runningMode: 'IMAGE'`, `maxResults: 5`, GPU then CPU (also CPU when the GPU warm-up classify throws); a new `importedAt` closes the old one; a failed load isn't cached; `disposeFoodClassifier()` (closes a pending load when it lands). **Preprocessing contract** (= ml/gymfood/export.py docstring, added 2026-11-16 on main's request): `classify(image)` first stretches the photo (no crop) onto one reused 224×224 canvas with `imageSmoothingEnabled = true`, `imageSmoothingQuality = 'high'`; a side ≥ 448 px is halved step by step first (`resizePlan`, each step ≥ 2×), so the downscale is antialiased like Pillow's training resize. MediaPipe never sees the raw photo (its own downscale isn't antialiased, ~5% flipped answers); `ms` = resize + classify; the warm-up uses the same path. `validateModel(file)` → `{ ok: true, labels } | { ok: false, reason: 'mismatch' | 'unreadable' }` (= foodPhotos `ModelCheck`): labels read from the .tflite metadata zip (`readModelLabels`, pure, via core/zip `readZip`) must each be a known CLASS_MAP label, no repeats, ≥ 2 (`checkLabels`; **a subset is fine**, so a 23-class model keeps working after the class map grows to 30; changed from set equality on main's request 2026-11-16), returns the model's labels in model order (UI shows "N dishes"), then a trial MediaPipe load (closed again) → unreadable if it fails. No `{ url }` model (verdict B, nothing bundled). E2E seam `window.__gymCleanFakeFoodClassifier = { labels?, classify?: ScoredLabel[] | (img) => ScoredLabel[], unreadable?, failLoad? }`, read only under `import.meta.env.DEV`. Tests: `npx vitest run src/food-vision` 4 files / 72 tests (fake MediaPipe: 224×224 input for 4032×3024 / 512×384 / 224 / 100×80 / 300×1000, halving plan, natural size of img/video, canvas reuse, ms covers resize, single lazy load, GPU → CPU on load and on warm-up, retry after failure, model swap, dispose, validate ok / subset ok / unknown-label mismatch / unreadable; decide options only hold labels the model returned; real smoke.tflite labels read in Node when present; classifier.build.test.ts builds classifier.ts with Vite as production → no `__gymCleanFake`, tasks-vision still a dynamic import, no http URL; development build keeps it as the control). Real load (dev server, headless Chromium, M4 Pro, SwiftShader GL): smoke.tflite → validateModel `mismatch` under the old set rule (its 2 labels `pad_thai`, `tom_yum_goong` are known classes, so the subset rule now accepts it; the Node test asserts ok), loadFoodClassifier GPU delegate, load 3.0 s cold, classify 1024×768 canvas 67–79 ms (before the resize step); after it, validateModel ok (subset rule), GPU, 4032×3024 canvas resize + classify 101–108 ms (186 ms first), shared instance reused, closed after dispose; only request host 127.0.0.1 (MediaPipe's own `odml.pa.googleapis.com` log call blocked by the existing CSP, as in M3). **iPhone inference ms not measured yet** (needs a real model + the wired UI, task 19 / Checkpoint D). `npm run build`: no `__gymCleanFake` in dist/, no new host; classifier isn't in the app graph until task 16b, so main chunk Δ = 0.
+  - Files: src/food-vision/classifier.ts(+test), src/food-vision/index.ts.
+  - `loadFoodClassifier(model: { buffer: Uint8Array } | { url: string })`:
+    - dynamic `import('@mediapipe/tasks-vision')`;
+    - `FilesetResolver.forVisionTasks(`${BASE_URL}mediapipe/wasm`)` (same origin, already precached);
+    - `ImageClassifier.createFromOptions` with `runningMode: 'IMAGE'`, `maxResults: 5`, GPU delegate first, CPU on error;
+    - one shared instance; a failed load isn't cached.
+  - `classify(canvas)` → `{ categories, ms }`.
+  - `listLabels()` classifies a blank canvas with `maxResults: -1`. The pure `validateModel(labels, classMap)` checks that every label is in classMap and there are ≥ 2.
+  - The model URL must be same-origin (assert). Nothing is fetched from anywhere else.
+  - Test seam: `setFoodClassifierFactory()` for unit tests. The e2e fake `window.__gymCleanFakeFoodClassifier` is read **only under `import.meta.env.DEV`**, so it's dropped from the prod build.
+  - Done when:
+    - unit tests (fake factory) cover a single lazy load, GPU → CPU fallback, retry after a failed load, and validateModel;
+    - `npm run build` shows tasks-vision still lazy, main chunk Δ < 3 kB gzip, and no `__gymCleanFake` string in `dist/`.
+  - Deps: 2, 3, 7.
+- [x] 12. [ui-engineer ∥] Capture and resize. **Done 2026-11-15:** src/ui/fuel/photoCapture.ts: `fitWithin`, `preparePhoto(file, { keepBlob, deps? })` → `{ canvas, w, h, blob? }` (createImageBitmap `from-image`, `<img>` + revoked object URL fallback, bitmap closed, JPEG q 0.85 only with `keepBlob`), `photoButton({ onFile })` (hidden `accept=image/*` `capture=environment` input, cleared after each pick). 14 tests (portrait / landscape / no upscale / URL revoked on success and failure / no fetch or IndexedDB / JPEG only when kept).
+  - Files: src/ui/fuel/photoCapture.ts(+test).
+  - A ≥ 56px "Photo" button over a hidden `<input type="file" accept="image/*" capture="environment">`. It opens the iPhone camera, and Photos is still offered.
+  - Pure `fitWithin(w, h, 512)` (no upscaling).
+  - Decode with `createImageBitmap(file, { imageOrientation: 'from-image' })`, falling back to `<img>` + object URL (revoked). Draw to a canvas with a ≤ 512 px long edge.
+  - Return the canvas. A JPEG blob (q 0.85) is made only when save-photos is on.
+  - The `File` and bitmap are released after classify. Clear the input value so the same photo can be picked again.
+  - Done when tests cover: portrait, landscape, small images not upscaled, the object URL revoked, and no store call.
+  - Deps: 2.
+- [x] 13. [ui-engineer ∥] Confirm sheet. **Done 2026-11-15:** src/ui/fuel/photoSheet.ts + photo.css (tokens only). `photoSheet({ mode, slot, dishes: LogItem[], state, photo?, preview? }, { onLog, onSearch, onCancel })`, `setState()`; `PhotoDecision` restates food-vision `Decision` (assignability checked in the test). States looking / confident / unsure / noMatch / error; ≥ 56px option rows with English + Thai name and "82%"; variant rows for multi-dish classes; S/R/L (Regular); meal chips; preview + estimate tag; sticky Log (disabled until a pick); "None of these: search". 19 render tests (1 tap Regular, 2 taps Large, checkCopy, no Claude/Ask in text or attributes). Screenshots docs/screenshots/m7b-photo-*.png (390×844, 3 accents, scrollWidth 390).
+  - Files: src/ui/fuel/photoSheet.ts(+test), src/styles.css.
+  - States:
+    - "Looking…";
+    - confident (top-1 preselected);
+    - unsure ("Not sure. Pick one or search.", nothing preselected);
+    - noMatch;
+    - error ("Couldn't read the photo. Log it by hand.").
+  - Option rows (≥ 56px): English + Thai name and the confidence as a small % (M7b-q6). Variant chips when a class has more than one dish.
+  - S / R / L chips (Regular by default) with a kcal / protein preview from the M7 values and the "estimate" tag.
+  - "None of these: search" opens the existing log-sheet search. Then Log and Cancel.
+  - Focus trap + Escape, as in the M7 sheets. **No "Ask Claude" control.** A small preview of the photo is fine; it's never stored.
+  - Done when:
+    - render tests cover each state;
+    - logging a confident top-1 at Regular is 1 tap after the photo (Log), and at Large is 2;
+    - 390×844 harness screenshots in the 3 accents.
+  - Deps: 2, 7.
+- [x] 14. [ui-engineer ∥] Settings → Food photos. **Done 2026-11-15:** `createFoodPhotosSettings(props, actions) → { el, update }` in src/ui/screens/foodPhotos.ts (+ .css, 23 tests; moved from src/ui/fuel/ to keep clear of the parallel Fuel work), plugged into Settings as the optional `foodPhotos` prop (section `food-photos` after Nutrition; omitted → Settings unchanged, 2 tests). Model card (none / name, MB, dishes), Import/Replace (.tflite; non-.tflite and > 25 MB stopped before `validateModel`; mismatch / unreadable / save errors in words), Remove (app shows the Undo toast). Switch off by default, explainer "Photos stay on this phone. Only you can export them." + Turn on / Not now before it turns on; off is one tap. Count; Export (.zip) via `exportFoodPhotos` → `navigator.share({ files })` when `canShare`, else download; Safari NotAllowedError after the async zip → "Share the zip" tap; share-sheet cancel silent. Delete saved photos = two taps (3 s arm), app shows Undo. Export/Delete hidden at 0. All copy passes checkCopy. `npx vitest run src/ui` 46 files / 1000 tests green, eslint clean, tsc clean outside src/food-vision (ml-engineer's tests-first decide.ts). Screenshots docs/screenshots/m7b-settings-{empty,explainer,import-error,model,delete-armed}.png (390×844, scrollWidth 390, min tap 60px, min font 20px, no console errors). Wiring is task 16b.
+  - Files: src/ui/fuel/foodVisionSettings.ts(+test), src/ui/screens/settings.ts(+test).
+  - Model:
+    - status (none / name, size, number of dishes);
+    - "Import model (.tflite)" file input: > 25 MB → message; a failed `validateModel` → "This model doesn't match the dish list.";
+    - Remove model.
+  - "Save photos to improve recognition" switch, **off by default**. Its explainer shows before it turns on: "Photos stay on this phone, labelled with the dish you confirm. Export them to train a better model."
+  - The saved-photo count, "Export photos (.zip)" (`navigator.share` with files → Save to Files, else a download), and "Delete saved photos" (Undo toast).
+  - Done when render tests cover: off by default, the explainer before on, export hidden at 0 photos, and the import error states. Screenshots.
+  - Deps: 2.
+- [x] 15. [ui-engineer] Log sheet entry point. **Done 2026-11-16:** `photoAvailable` prop + `onPhoto(file)` action in src/ui/fuel/logSheet.ts. With `onPhoto` and a model: a full-width ≥ 56px "Log from a photo" button (photoCapture `photoButton`, `[data-log-photo]`) above the section buttons; without a model: the line "Log from a photo: add a food model in Settings." (`[data-photo-hint]`, M7b-q4); no `onPhoto` → sheet unchanged. Hidden while a detail is open. 4 new render tests (21 in the file).
+  - Files: src/ui/fuel/logSheet.ts(+test).
+  - The Photo button sits at the top of the log sheet when `photoAvailable` is true. Otherwise there's one line: "Log from a photo: add a food model in Settings." (M7b-q4).
+  - Done when: render tests cover both, and the existing logSheet tests are green.
+  - Deps: 12, 13.
+- [x] 16a. [ui-engineer] Photo flow in the Fuel controller. **Done 2026-11-16:** `FuelHost.photo?: FuelPhotoHost { load(model), dispose(), prepare? }`; the controller reads `getModel` + `getFoodVisionSettings` with its other data and exposes `setPhoto({ model?, settings? })` (a new/removed model → `dispose`). Flow: `preparePhoto(keepBlob: savePhotos)` → photo sheet "Looking…" (error state if the photo can't be read) → `load(model).classify(canvas)` → `decide(…, CLASS_MAP, { claudeAvailable: false })` → result; a stale classify (new photo / closed sheet) is dropped. Log → `entryFromPhoto` → saveEntry → `maybeSavePhoto` (labelled with the confirmed dish, createdAt = when the photo was taken) → Undo toast removes the entry **and** the saved photo. "None of these" / "Log by hand" → log sheet Search, carrying the photo in that sheet's callbacks only: a Thai dish logged there at 1 plate → `photo-local`, no confidence, photo saved when on; anything else logs normally and the photo is dropped. Classify errors go to `console.warn`, never the developer log. 8 new controller tests (confident 1 tap, off → 0 writes, on → 1 write with the confirmed variant + Undo removes both, unsure, search, cancel, classifier error, dispose on replace/remove).
+  - Files: src/ui/fuel/fuelController.ts(+test).
+  - Flow: capture → injected classifier → `decide` → sheet → `entryFromPhoto` → store → Undo toast. `maybeSavePhoto` runs only when the setting is on. Drop the canvas and blob after logging or cancelling.
+  - The slot comes from `slotFor(now, …)`, as other entries. Photos and results never go to the dev log.
+  - Done when: controller tests with fakes cover confident / unsure / search / cancel, the off setting → 0 photo writes, and on → 1 write labelled with the dish he confirmed.
+  - Deps: 8, 9, 11, 13, 15.
+- [x] 16b. [main → ui-engineer] Wiring. **Done 2026-11-16:** new src/ui/fuel/foodVisionHost.ts keeps app.ts to +11 lines: `photoHost` (lazy `import('../../food-vision/classifier')` for `loadFoodClassifier` / `disposeFoodClassifier` / `validateModel`), and one Settings → Food photos instance (kept across Settings re-renders, numbers re-read on each show): import → `saveModel` (importedAt always new) + toast "Food model added./replaced." with Undo (puts the old model back / removes), Remove + Undo, save-photos switch, Export, Delete + Undo (`restorePhotos`). Each change calls `fuel.setPhoto`. Settings → Back up gains "Food photos and the food model aren’t in the backup. Export the photos in Food photos." (`BACKUP_PHOTOS_NOTE`). Photo → Large → logged with rings updated is checked by e2e (task 18) rather than by hand.
+  - Files: src/ui/app.ts.
+  - Pass the food-vision loader (model from `photoStore.getModel()`, or the bundled URL on verdict A), the photo store and the settings handlers. Open Dexie v6.
+  - Done when, by hand in dev with the fake classifier: photo → Large → logged, with rings updated.
+  - Deps: 9, 14, 16a.
+- [ ] 17. [main] Bundled model and precache (**verdict A only; skip on B**).
+  - Files: public/food-vision/food-classifier.tflite, public/food-vision/LICENSE-ATTRIBUTION.md, .gitignore (`!public/food-vision/food-classifier.tflite`), vite.config.ts (`food-vision/*.tflite` glob; check `maximumFileSizeToCacheInBytes`).
+  - Done when: `npm run build` precaches it (size Δ recorded in the Decision) and the prod-preview offline photo flow works.
+  - Deps: 6, 16b.
+
+#### E2E
+- [x] 18. [ui-engineer] E2E `e2e/food-photo.spec.ts` (390×844). **Done 2026-11-16:** 5 tests, fake classifier via `addInitScript` (result set per test), a 640×480 solid-colour PNG drawn in the page. Covers: no model → hint, no button; non-.tflite and label-mismatch imports refused, nothing stored; confident → 82% preselected, 1 tap Regular and 2 taps Large equal `entryFromFood` values + `photo-local` / `estimate` / `photoConfidence`, rings update; unsure → nothing preselected, Log disabled; no match → search → `photo-local` without confidence; save off → 0 `foodPhotos`; on → explainer → 1 photo (512×384, confirmed variant) → Export downloads `gym-clean-food-photos-2026-11-18.zip` with the jpg + exact `labels.csv` → Delete (2 taps) → Undo. Every test: 0 off-device requests, no console errors, nothing spoken, buttons ≥ 56px, scrollWidth 390, no "Claude" / "Ask". `--repeat-each=3` 15/15; with fuel/barcode/backup/settings specs 21/21; `npm run check` 110 files / 2934 tests green. Full `npm run e2e`: 149 passed, 1 skipped, 3 failed, all wall-clock camera/clip specs (focus-cues ×2, hands-free-live) under full parallel load, which this change doesn't touch; rerun alone (focus-cues + hands-free-live) 6/6 passed. Screenshots docs/screenshots/m7b-wired-*.png (10, `FOOD_SHOTS=1`).
+  - Setup: a fake classifier through `addInitScript`. `setInputFiles` uses a **made-up image generated in the test** (a solid-colour PNG), never a real photo.
+  - Cases:
+    - confident → top 3 → Large → the entry has the Thai dish's Large values, `source: 'photo-local'`, `estimate: true`, `photoConfidence`;
+    - unsure (0.45) → nothing preselected, no "Claude" text anywhere;
+    - None of these → search → log;
+    - no model → no Photo button, plus the Settings hint;
+    - Settings import with a bad file → error;
+    - save-photos off → `foodPhotos` count 0 after logging (read IndexedDB);
+    - on → 1 photo with the right dishId → Export gives a zip with `labels.csv`;
+    - **0 off-device requests** in every case.
+  - Done when: green with `--repeat-each=3`, and the full `npm run e2e` is green.
+  - Deps: 16b.
+- [ ] 19. [ui-engineer] Opt-in real-classifier smoke `e2e/food-vision-smoke.spec.ts`.
+  - Runs only when `FOOD_MODEL_SMOKE=<path>` is set (e.g. task 6's `ml/models/smoke.tflite`); skipped in CI.
+  - Flow: Settings → Import → photo → real MediaPipe categories shown. Logs the inference ms.
+  - Done when: it passes locally with the smoke model and is skipped without it.
+  - Deps: 6, 16b.
+
+#### Close
+- [ ] 20. [reviewer] Review the branch diff against CLAUDE.md:
+  - no network: CSP unchanged, no `fetch` in `src/food-vision` except the same-origin wasm/model, nothing in the dev log;
+  - nothing stored when save-photos is off;
+  - `git ls-files` has no dataset, photo or `.tflite` (except `public/food-vision/` on verdict A, with the licence recorded);
+  - the DEV-only test seam isn't in `dist/`;
+  - `decide` is pure; no Claude code, key or `api.anthropic.com`;
+  - 64 / 20 / 56px, tokens only, `checkCopy` on new copy;
+  - ml scripts don't download non-allowed sets without the flag.
+  - Deps: 6, 18, 19.
+- [ ] 21. [verifier] Verify against the SPEC M7b Accept items that are in scope:
+  - run `npm run check`, `npm run e2e`, `npm run build`, and `python -m pytest ml/tests` (when Python is available);
+  - bundle and precache sizes;
+  - 390×844 screenshots `docs/screenshots/m7b-*`, console clean;
+  - evidence goes into PROGRESS.
+  - State plainly what waits:
+    - top-3 ≥ 90% on his photos, < 300 ms on his iPhone (Checkpoint D);
+    - the Claude items (step 4);
+    - real training (on verdict B).
+  - Deps: 20.
+- [ ] 22. [main] Merge `m7b-food-vision` and deploy. Deploy was approved by Wongsaton for cloud-brief work, as relayed by the main session. Run as a cloud session, `docs/cloud-briefs.md` says to push the branch and open a PR instead of pushing `main`; follow the brief there.
+  - Deps: 21.
+- [ ] 🧍 **Checkpoint D stays open:**
+  - turn on save-photos and collect ≥ 100 + training photos;
+  - export the zip;
+  - run `ml/` (on verdict B, with THFOOD under its own terms, M7b-q1);
+  - import the model and use it for a week.
+
+**Parallel waves:**
+- **Start now:** 1 [ml], 2 [main], 10 [core], and a draft of 3 [ml].
+- **After 2:** core 8 → 9. ui 12, 13, 14 (2 instances). ml 7 (after the draft of 3).
+- **After 1:** finish 3 → 4 → 5 → 6 (ml, one instance; long). 11 [ml] can run alongside it once 7 is done, in a second ml instance.
+- **Then:** 15 → 16a → 16b → 17 (A only) → 18 and 19 → 20 → 21 → 22.
+- **Critical path:** app side 2 → 7 → 11 → 16a → 16b → 18 → 20. ML side 1 → 3 → 4 → 5 → 6 (training time on CPU). The app path doesn't wait on the ML path, except task 19 and verdict A's task 17.
 
 ### M9 — Native iOS shell (planned 2026-11-15 — waiting on M9-q answers, no build)
 **Contract:** SPEC M9 and the Decision "M9 native shell plan" (2026-11-15). Wongsaton: "Plan M9… No code until you answer." Nothing below starts until he answers M9-q1–q6 (or says "go with the defaults"). Logic is **tests first**. 🧍 = needs his Mac / Xcode / iPhone / Apple ID.
@@ -1881,6 +2155,30 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-16: **M7b export check + Mac model.** Root cause of the Colab export failure: the self-check fed MediaPipe full-size photos, whose non-antialiased downscale flips ~5% of top-1 answers vs the head trained on Pillow-resized 224×224 photos (the .tflite itself matched 100%). Fix: metadata written in pure Python (no libEGL on bare Linux), check runs on photos pre-resized to 224×224 stretched, 200 check images, `min_top1_agreement` 0.98 (raised, not lowered); model + json written before the check. App contract: classifier.ts pre-resizes to 224×224 stretched with high-quality smoothing before MediaPipe. Mac model `food-classifier-mac-1.tflite` (30 classes, THFOOD-50 only, gitignored, copied to his Downloads): test top-1 81.5% / top-3 95.1%, agreement 1.000, 6.84 MB, 3.6 ms/image on Mac CPU. 23-class rerun mac-0 85.2% / 96.8% matches Colab colab-1. Weakest: larb_moo, moo_tod_kratiem, kor_moo_yang (~42% top-1).
+- 2026-11-16: **Backup + coach hardening (reviewer notes on M10e/backup).** `validateBackup` now checks every row against a per-table shape (required fields + types; optional fields typed when present; `weeklyChecks` avg/prev/rate may be null; extra fields allowed for a newer app at the same schema) before the confirm step, refusing with `'corrupt'` and naming the table/field, db untouched. Secret stripping only touches `settings` rows, by an explicit name list (`SECRET_NAMES` in `src/data/backup.ts`, exact match ignoring case and `-`/`_`): such a settings row is dropped and such a property is removed inside settings values; other tables and names like `tokenCount` are kept. `LOCAL_ONLY_TABLES` (foodPhotos, foodModels) and the devlog stay out. Coach: `phrases.json` `missingKit.bareNot` ("no more", "anymore", "today", "tonight", "tomorrow", "this week", "for now", วันนี้, …) blocks the bare-"no" missing-kit swap, so "no more squats" / "no squats today" → help and "no legs today please" → avoidArea legs today; explicit statements ("my gym has no leg press", "no leg press here") still swap. Eval set +2 items (100 total, 97 rule-supported), rule matcher still 100%.
+- 2026-11-16: **7 more Thai dishes (54 total).** `thai:pad-pak-ruam-mit`, `thai:kor-moo-yang`, `thai:khao-mok-gai`, `thai:suki-nam-moo`, `thai:yentafo`, `thai:kuay-jab`, `thai:goong-pao`: our own reference recipes in `thaiDishes.src.json` mapped to USDA rows (stand-ins named in each note: shoulder blade for pork neck, surimi for fish balls, catsup + miso for the pink sauce, sriracha for suki sauce, cooked shrimp for river prawns, canned sweet corn for baby corn), rebuilt with `node scripts/build-foods.mjs --dishes-only` (thaiDishes.json 7.1 kB gzip). foods.test.ts dish cap raised 50 → 60. The class map (`src/food-vision/classMap.json`) is the ml/food-vision owners' to extend.
+- 2026-11-16: **Overnight approvals (Wongsaton: "Yes to all three")**: (1) deploy M7b food photos tonight if review + verifier + CI pass (inert until he imports a model); (2) build + deploy the backup/coach hardening (per-table row checks, settings-only secret stripping, "no more squats" not a missing-kit swap); (3) add 7 dishes (pad pak ruam mit, kor moo yang, khao mok gai, suki, yentafo, kuay jab, goong pao) and include them in the Mac retrain (30 classes).
+- 2026-11-16: **M11 (Apple Health + WHOOP) answers** — plan on branch `m11-health` (f015871). Wongsaton: M11-q2 **route A** (WHOOP → Apple Health → Gym Clean, no network; so no HRV / Recovery / Strain, which WHOOP doesn't export to Health); M11-q3 **if HealthKit needs the paid Apple account, pause M11**; M11-q5 **read-only for now, plan writing to Health later**; other defaults (6 types, kept out of backups/dev log/Claude) stand. His Xcode test (Signing & Capabilities → + HealthKit on the free Personal Team) decides go/pause. M11 will need Dexie v7 (M7b took v6).
+- 2026-11-16: **Dexie version 6 (M7b).** New tables only, `foodModels: 'id'` and `foodPhotos: 'id, createdAt, dishId'`, no upgrade function (v5 → v6 test keeps every row). Both are left out of the JSON backup (`LOCAL_ONLY_TABLES` in src/data/backup.ts): they hold large Blobs; photos leave the phone through the zip export, the model is re-imported in Settings. A restore leaves them untouched. The 'foodVision' setting lives in `settings` and is backed up.
+- 2026-11-16: **M7b dataset verdict B** (ml/DATASETS.md): no public set both allows training+publishing weights and has enough of our dishes (THFOOD-50/100, Food-101, UEC: non-commercial research only; Commons CC0/CC BY too few per dish; Open Images counts unknown). So: pipeline + 2-class smoke run only in the repo; Wongsaton trains privately on his Mac (THFOOD under its terms + his own photos) and imports the model in Settings; task 17 (bundled model) is dropped. Class map: 23 classes covering 31 of 47 dishes. Answers 2026-11-16: M7b-q2…q6 "yes" (defaults); q1 Colab still asked (public data only, never his photos). Open route to A later: a Commons + Open Images (CC BY) set, needs his OK to download the Open Images label files.
+- 2026-11-16: **M7b photo export folder names.** The zip uses a safe folder per dish (`thai:pad_thai` → `thai_pad_thai`; any char outside `[A-Za-z0-9._-]` → `_`), because `:` doesn't extract cleanly on macOS/Windows. `labels.csv` (`file,dishId,createdAt`) keeps the exact id and is the only source of labels for `ml/prepare.py` (task 5).
+- 2026-11-15: **M7b local part plan (planner).** It follows `docs/cloud-briefs.md` Session 1, which Wongsaton prepared. Plan under "Current milestone plan"; contract: SPEC M7b steps 1–3, 5 and Training. Branch `m7b-food-vision` from c818def.
+  - **Step 4 (Claude backup) is out:** it needs a paid key and his open proxy-vs-own-key decision. No Claude client, button, key or CSP entry. `decide()` keeps a `claudeAvailable` input (always false) so step 4 can plug in later. The SPEC Accept items about Claude wait for it.
+  - **Datasets need a licence check first (task 1).** The SPEC names THFOOD-50/100, which it describes as non-commercial research only. The cloud session trains only on data whose licence allows training **and** publishing the weights (verdict A). Otherwise it builds and smoke-tests the pipeline and **stops before real training** (verdict B).
+  - **Model delivery.** This reconciles SPEC ("never commit the trained model; import it once in Settings") with the brief ("commit the model only if ≤ 25 MB and the licence allows redistribution"):
+    - Settings → Import (stored in IndexedDB) is always built;
+    - a bundled, precached model at `public/food-vision/` (one `.gitignore` exception) is added **only on verdict A**;
+    - otherwise the SPEC rule stands, and the model never enters the repo.
+  - **No network:** the MediaPipe vision wasm is the existing same-origin, precached `mediapipe/wasm/` fileset. The model comes from IndexedDB or the same origin. The CSP doesn't change.
+  - **Class map:** `src/food-vision/classMap.json` maps each classifier label to one or more `thai:*` dish ids (look-alike variants share a class; the first one is the default). The app and the Python pipeline both read it, and a test checks that every class has a dish in `thaiDishes.json`.
+  - **Data model:** `FoodEntry` gains `source?: 'photo-local' | 'photo-ai'`, because the SPEC's entry `source` didn't exist on `FoodEntry`. `photoConfidence` is set only when the logged dish was one of the offered options. Dexie **version 6** adds new tables only (`foodModels`, `foodPhotos`). Food-vision settings live under settings key `'foodVision'`, with `savePhotos: false`.
+  - **Photo export** is a pure store-only zip writer in `src/core/zip.ts`, with no new dependency. It holds the photos plus `labels.csv` (file, dishId, createdAt) only.
+  - **E2E** uses a fake classifier through a seam that exists only under `import.meta.env.DEV` (it must not appear in `dist/`). The real MediaPipe path has an opt-in smoke spec on a 2-class smoke model.
+  - **Compute:** no GPU on his Mac or in the cloud session. Training uses a small frozen backbone with cached embeddings (≈ 2 h of CPU). Colab is allowed for public data only.
+  - **Split ownership:** the pure decision logic lives in `src/food-vision/decide.ts` (ml-engineer, DOM-free, tests first), as the brief asks. The FoodEntry builder lives in `src/core/nutrition/photo.ts` (core-engineer).
+  - The M7b-q defaults are provisional until he answers.
+
 - 2026-11-15: **Hand-off to the cloud (Wongsaton flying, Mac offline).** Branch `m10-equipment` (M10e equipment swaps, M7 follow-ups, M9 B1–B3 backup, M9 docs) is reviewer PASS (ff3f318); the local verifier was stopped mid-run (partial screenshots `docs/screenshots/m10e-verify-*.png` committed, no verdict) — the cloud session re-runs verification, then merges and deploys (his approval: "Deploy it when it's ready", "merge and deploy them too"). M9 task 3 (Capacitor iOS project) is on branch `m9-native` (e89ee6f, not for main yet). **Device checklist on his iPhone 17 Pro, 2026-11-15: 4/4 pass** (dark launch, no white flash; works in Airplane Mode; portrait only; camera prompt with the right words). Reviewer non-blocking notes for M10e/backup: validate row shapes per table before restore; narrow secret stripping to settings rows / an explicit list; negative eval cases so "no more squats" isn't a missing-kit swap; never render vendored `instructions` (Barbell/Smith squat text mentions knee stress).
 - 2026-11-15: **M10e vendored swap pool (task 3).** From yuhonas/free-exercise-db at commit `f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5` (licence checked: Unlicense), fields unchanged, no images: `Smith_Machine_Squat`, `Barbell_Squat` (the plain back squat; `Barbell_Full_Squat` is the full-depth variant), `Smith_Machine_Calf_Raise`. `Split_Squat_with_Dumbbells` is already rear-foot-elevated upstream, so no extra split squat. Swap pool now 30.
 - 2026-11-15: **M9 native shell plan (planner, paper only).** Wongsaton said yes to "Plan M9 … No code until you answer." SPEC M9 is now a full section (it replaces the outline); the plan is under "Current milestone plan", marked waiting on the M9-q answers. Supersedes M10-q9.
@@ -2585,7 +2883,42 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   3. After Restore → Undo, "Restore undone." shows both inline and in the toast at the same time.
   4. Main chunk +6.8 kB gzip (equipment/kit data, My gym, backup panel).
 
+### M7b local part (2026-11-16)
+- Verified on `m7b-food-vision` at **d84547b** (tree clean apart from untracked `fixtures-staging/`; app code untouched). Reviewer PASS on d84547b. Scope: SPEC M7b steps 1–3, 5 + Training; task 17 dropped (verdict B), task 19 opt-in (no `e2e/food-vision-smoke.spec.ts`; the real-model check below stands in for it).
+- `npm run check`: typecheck + lint clean, Vitest **110 files / 2,945 tests passed**, node script tests **56/56**. Covers decide (0.6 vs 0.59, dedupe, `claudeAvailable: false` never offers Claude), `entryFromPhoto`, classMap (30 classes, every dish in the Thai table: 54 dishes incl. the 7 new ones), photoStore (off → 0 writes), Dexie v5 → v6, zip, classifier (224 px pre-resize, subset label check), backup hardening (per-table row checks, settings-only secret stripping, `tokenCount` kept), "no more squats" not a missing-kit swap.
+- `ml/.venv/bin/python -m pytest ml/tests --runslow`: **54 passed** (39.9 s).
+- `npm run build`: OK. Main `index` **652.35 kB / 195.81 kB gzip** vs origin/main 000f26f (separate worktree, wasm copied) **614.15 / 184.32 kB** → **+38.2 kB raw / +11.5 kB gzip** (photo sheet, Food photos settings, zip, photo store, class map, 7 dishes, hardening; the classifier itself is lazy). Lazy: `classifier` 3.93 kB, tasks-vision now a shared `vision_bundle` 154.07 kB (main had it inside `landmarker` 154.39 kB; `landmarker` is now 0.84 kB). **No `__gymCleanFake` in dist/**. URL hosts in dist/ identical to main; CSP `connect-src` unchanged (`'self' blob: data: https://world.openfoodfacts.org`); no `api.anthropic.com`. Precache 28 entries (25,383 KiB) vs 26 (25,339 KiB): only `classifier-*.js` and `vision_bundle-*.js` added.
+- Targeted e2e (port 5391 was held by another worktree's dev server, so `E2E_PORT=5397`): `food-photo, fuel, barcode, backup, equipment, settings, trainer` **38/38 passed** (21.9 s). `food-photo.spec.ts --repeat-each=5`: **25/25**.
+- **Linux CI check** (`mcr.microsoft.com/playwright:v1.65.0-noble`, `CI=1 --retries=1`, full `npm run e2e`): **151 passed, 1 flaky, 1 skipped** (22.4 min), exit 0. Flaky: `camera-person.spec.ts` (`drawn` ≤ 50 on the GPU-less first try, passed on retry); no camera/pose file changed vs origin/main. Skipped: `history.spec.ts` HISTORY_SHOTS (opt-in). food-photo 5/5 green on Linux. GitHub CI on origin/main (43796074793) green; d84547b not pushed yet.
+- **Real model** (dev server, headless Chromium 390×844, no fake seam): Settings → Food photos → import `ml/models/food-classifier-mac-1.tflite` → validated and stored in 2.0 s, card "6.5 MB · 30 dishes", 30 labels in IndexedDB. Fuel → Log food → Log from a photo with a held-out THFOOD-50 **test-split** pad thai image (local file, nothing uploaded) → **confident**, Pad thai with shrimp 70% preselected (then khao moo daeng 14%, suki 6%) → Large → Log → entry `Pad thai with shrimp (Large)`, 776 kcal / 36.3 g (= 554 × 1.4, 25.9 × 1.4), `source: 'photo-local'`, `estimate: true`, `photoConfidence: 0.7`, 0 saved photos (save off). Solid blue 1024×768 image → **unsure** (21/19/14%), nothing preselected, Log disabled. Direct classify, same shared classifier, GPU delegate (SwiftShader), 7 held-out test images (pad thai, tom yum, som tum, khao man gai, pad kra pao, massaman, gai yang): **top-1 correct 7/7**; 4032×3024 resize + classify **96–153 ms** (first call ~140 ms), native-size **63–73 ms**; first photo end-to-end incl. model load + warm-up 1.9 s, later photos 84 ms. Mac numbers, not iPhone. Off-device requests **0**. Console: MediaPipe's own `odml.pa.googleapis.com/v1/log` blocked by the existing CSP (2 errors, same as pose since M3) and GL driver warnings; no app errors.
+- Screenshots 390×844 (DPR 2), all **scrollWidth 390**, min button 56px: `docs/screenshots/m7b-verify-{settings-no-model,settings-model,log-sheet,photo-real-padthai,photo-real-padthai-large,fuel-logged,photo-real-solid,photo-real-somtum,photo-real-somtum-end}.png`.
+- Still waiting (not claimed): top-3 ≥ 90% on ≥ 100 of his own held-out meals and < 300 ms on his iPhone (Checkpoint D); the Claude items (step 4); training on his photos.
+- Non-blocking observations:
+  1. The Undo toast ("Food model added." / "Logged …") stays over the photo sheet for its few seconds and covers the variant / plate-size rows; Log lifts above it, so nothing is blocked.
+  2. Main chunk +11.5 kB gzip.
+  3. The model card shows 6.5 MB for 6,835,511 bytes (MiB).
+
 ## Blockers / questions for Wongsaton
+- **New (M7b food photos, local part, planned 2026-11-15; not blocking. The defaults below are what gets built unless you say otherwise):**
+  - **(M7b-q1) Training data licence.** The datasets the SPEC names (THFOOD-50/100) look like non-commercial research only, so a model trained on them can't be published in the public repo or site. **Default:**
+    - if task 1 finds a dataset that allows training and publishing, the cloud session trains on it and the app ships the model;
+    - if not, the pipeline is built and tested, and **you** train on your Mac with THFOOD (after reading its terms) plus your own photos;
+    - you then import the model in Settings. It stays on your phone and is never committed.
+    - Is that OK? And would Google Colab (free GPU) be OK for the public-data part? Your photos stay on your Mac either way.
+  - **(M7b-q2) Which dishes the camera knows.** **Default:**
+    - it only learns dishes that are already in the 47-dish Thai list;
+    - look-alikes share one guess (pad kra pao pork / chicken / shrimp → you pick the kind in the sheet; pork comes first);
+    - dataset dishes that aren't on the list are dropped, and listed in `ml/DATASETS.md`. Tell us which to add (each one needs a reference recipe first).
+  - **(M7b-q3) When it isn't sure** (top guess below 60%). Without the Claude backup, **default:** show the top 3 with nothing preselected, plus "Not sure. Pick one or search." Above 60%, the top guess is preselected.
+  - **(M7b-q4) No model on the phone yet.** **Default:** the log sheet shows "Log from a photo: add a food model in Settings." in place of the Photo button. Alternative: hide it completely until a model exists.
+  - **(M7b-q5) Saved photos.** **Default:**
+    - when "Save photos to improve recognition" is on, each confirmed photo is saved at ≤ 512 px (about 50–100 KB), labelled with the dish;
+    - turning the setting off stops saving but keeps what's there until you tap "Delete saved photos";
+    - no limit, and the count is shown.
+    - Is 512 px enough? (The model looks at 224 px.)
+  - **(M7b-q6) Showing confidence.** **Default:** a small "82%" next to each guess. Alternative: words ("likely" / "maybe") or nothing.
+  - **Paid accounts:** none for this part. Step 4 (Claude backup) still waits on the paid key and on your choice of proxy or your own key stored on the phone.
+
 - **M9 native iOS shell: ANSWERED 2026-11-15 — Wongsaton: "Go with your defaults for all 9, I'm using iPhone 17 Pro". q1 free Apple ID first; q2 ios-engineer added to CLAUDE.md (its agent file in the main checkout still needs the §M8 / HealthKit / spike-order fix: Claude is not allowed to edit .claude/agents there; M9 briefs override it); q3 iOS 26.0; q4–q8 defaults; q9 Xcode: installed at /Applications/Xcode.app but `xcodebuild` fails to load CoreDevice ("Error loading required libraries… reinstall") — he must open Xcode and finish/repair its component install before task 3. (Was: planned 2026-11-15; BLOCKING: no code until you answer, or say "go with the defaults"). The platform facts are in Decisions "M9 native shell plan" and get re-checked against live docs before any code:**
   - **(M9-q1) How the app gets signed.**
     - **Free Apple ID:** costs nothing. The app stops opening 7 days after each install until you plug in (or same Wi-Fi) and re-run it from Xcode on your Mac. At most ~3 such apps on the phone. No TestFlight.

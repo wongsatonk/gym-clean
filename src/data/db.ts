@@ -4,6 +4,8 @@ import type {
   Favorite,
   Food,
   FoodEntry,
+  FoodModelRecord,
+  FoodPhoto,
   PlanChange,
   ProposalAction,
   RepEvent,
@@ -142,6 +144,11 @@ export class GymDb extends Dexie {
   weighIns!: Table<WeighIn, string>;
   favorites!: Table<Favorite, string>;
   weeklyChecks!: Table<WeeklyCheck, string>;
+  // M7b food photos (on device only; see src/data/nutrition/photoStore.ts). Not in backups.
+  /** The one imported food classifier (`id` is always 'food'). */
+  foodModels!: Table<FoodModelRecord, string>;
+  /** Labelled meal photos, saved only when "Save photos" is on. */
+  foodPhotos!: Table<FoodPhoto, string>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -174,6 +181,12 @@ export class GymDb extends Dexie {
       weighIns: 'date',
       favorites: 'id, createdAt',
       weeklyChecks: 'weekStart',
+    });
+    // M7b food photos. New tables only, no upgrade function; existing data is untouched. The
+    // food-vision settings live in the existing `settings` table under key 'foodVision'.
+    this.version(6).stores({
+      foodModels: 'id',
+      foodPhotos: 'id, createdAt, dishId',
     });
   }
 }

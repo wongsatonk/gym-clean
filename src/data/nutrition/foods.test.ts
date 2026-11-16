@@ -24,9 +24,9 @@ function servingG(f: Food): number {
 }
 
 describe('Thai dishes', () => {
-  it('has about 40 dishes with unique thai: ids', () => {
+  it('has about 40-60 dishes with unique thai: ids', () => {
     expect(THAI_DISHES.length).toBeGreaterThanOrEqual(38);
-    expect(THAI_DISHES.length).toBeLessThanOrEqual(50);
+    expect(THAI_DISHES.length).toBeLessThanOrEqual(60);
     const ids = THAI_DISHES.map((d) => d.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of ids) expect(id).toMatch(/^thai:[a-z0-9-]+$/);
@@ -48,6 +48,19 @@ describe('Thai dishes', () => {
     ]) {
       expect(findStaticFood(id), id).toBeDefined();
     }
+  });
+
+  it('includes the M7b additions with Thai names', () => {
+    const want: [string, string][] = [
+      ['thai:pad-pak-ruam-mit', 'ผัดผักรวมมิตร'],
+      ['thai:kor-moo-yang', 'คอหมูย่าง'],
+      ['thai:khao-mok-gai', 'ข้าวหมกไก่'],
+      ['thai:suki-nam-moo', 'สุกี้น้ำหมู'],
+      ['thai:yentafo', 'เย็นตาโฟ'],
+      ['thai:kuay-jab', 'ก๋วยจั๊บ'],
+      ['thai:goong-pao', 'กุ้งแม่น้ำเผา'],
+    ];
+    for (const [id, nameTh] of want) expect(findStaticFood(id)?.nameTh, id).toBe(nameTh);
   });
 
   it.each(THAI_DISHES.map((d) => [d.id, d] as const))(

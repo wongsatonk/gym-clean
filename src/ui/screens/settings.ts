@@ -36,6 +36,8 @@ export type SettingsProps = {
   devLog: HTMLElement;
   /** M7: `nutritionSettings(...)` (src/ui/fuel). Omitted → no Nutrition section. */
   nutrition?: HTMLElement | null | undefined;
+  /** M7b: `createFoodPhotosSettings(...).el` (./foodPhotos). Omitted → no Food photos section. */
+  foodPhotos?: HTMLElement | null | undefined;
   /** M9 B2: `backupPanel(...)`. Omitted → no Backup section. */
   backup?: HTMLElement | null | undefined;
 };
@@ -165,6 +167,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
       h('p', { class: 'muted set-note' }, unitNote(props.unit)),
     ),
     props.nutrition ? section('nutrition', 'flame', 'Nutrition', props.nutrition) : null,
+    props.foodPhotos ? section('food-photos', 'bowl', 'Food photos', props.foodPhotos) : null,
     actions.onMyGym
       ? section(
           'gym',
