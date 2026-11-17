@@ -9,8 +9,13 @@ import { addDate } from '../trainer/plan';
 import { checkCopy, SPOKEN_MAX_WORDS } from '../trainer/replies';
 import { wordCount } from '../advice';
 import { periodScore, type CompletionInput } from './completion';
-import { recapDue, weekRecapText } from './recap';
-import type { FocusBlock } from '../types';
+import { NEXT_BLOCK_CHIP, recapDue, weekRecapText } from './recap';
+import programJson from '../../data/program.json';
+import { trainerCatalog } from '../testkit/trainerCatalog';
+import { groupLabel } from '../trainer/actions/focusBlock';
+import { nextGroup, proposeNextBlock, type NextBlockArgs } from '../trainer/nextBlock';
+import { seedPlan } from '../trainer/plan';
+import type { FocusBlock, Program } from '../types';
 
 // Made-up history (fixtures/twoWeeks.json); the repo is public.
 const SESSIONS = FIXTURE_SESSIONS;
@@ -114,7 +119,21 @@ describe('block recap', () => {
     expect(b?.score.focus).toEqual({ group: 'chest', sets: 9, target: 14 });
     expect(b?.text).toMatch(/^Chest block done: /);
     expect(b?.text).toMatch(/Chest sets: 9 of 14\./);
+    // M12 1b: a lighter week, then the next block (same group, or the next in the order);
+    // "Keep going" still starts another block right away.
+    expect(b?.text).toMatch(/ Next up: a lighter week, then another block\?$/);
+    expect(b?.say).toBe('Chest block done. Lighter week, then another block?');
     expect(b?.chips).toEqual([
+      {
+        id: 'nextBlock',
+        label: 'Lighter week, then Chest',
+        args: { group: 'chest', weeks: 2, weekdays: [1, 3, 5], lighterWeek: true },
+      },
+      {
+        id: 'nextBlock',
+        label: 'Lighter week, then Back',
+        args: { group: 'back', weeks: 2, weekdays: [1, 3, 5], lighterWeek: true },
+      },
       {
         id: 'focusBlock',
         label: 'Keep going',
@@ -133,6 +152,33 @@ describe('block recap', () => {
       ),
     ).toBe(false);
     expect(recapDue({ ...i, today: '2026-11-24' }, { week: '2026-11-16' })).toEqual([]);
+  });
+
+  it('the next-block chips follow the group order and build a real proposal', () => {
+    const legs = { ...block, id: 'focus-legs', group: 'legs' as const };
+    const [b] = recapDue(input({ state: state({ blocks: [legs] }) }), { week: '2026-11-09' });
+    const next = b?.chips.filter((c) => c.id === NEXT_BLOCK_CHIP) ?? [];
+    expect(next.map((c) => c.label)).toEqual([
+      'Lighter week, then Legs',
+      `Lighter week, then ${groupLabel(nextGroup('legs'))}`,
+    ]);
+    for (const c of b?.chips ?? []) expect(checkCopy(c.label).hits, c.label).toEqual([]);
+
+    // The chip's args are what proposeNextBlock takes (made-up plan: the repo's default program).
+    const args = next[0]?.args as NextBlockArgs;
+    const r = proposeNextBlock(
+      {
+        state: seedPlan(programJson as Program),
+        sessions: [],
+        today: '2026-11-16',
+        unit: 'kg',
+        lastWeightKg: {},
+      },
+      args,
+      trainerCatalog(),
+    );
+    expect(r.ok && r.proposal.title).toBe('Lighter week, then Legs focus: 2 weeks');
+    expect(r.ok && r.proposal.next.blocks?.at(-1)?.startDate).toBe('2026-11-23');
   });
 
   it('week and block recaps together, week first', () => {

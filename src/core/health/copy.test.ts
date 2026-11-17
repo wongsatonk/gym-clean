@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { checkCopy } from '../trainer/replies';
+import type { BodyArea } from '../types';
 import {
   CARD_TITLE,
   checkHealthCopy,
   deloadReason,
   durationText,
+  easyOnOfferText,
   HEALTH_BANNED_TERMS,
   kindText,
   reasonText,
+  SIGNAL_ORDER,
+  soreAreasText,
   type SignalDetail,
 } from './copy';
 
@@ -141,5 +145,51 @@ describe('reasonText', () => {
 describe('deloadReason', () => {
   it('counts the days', () => {
     expect(deloadReason(3, 7)).toBe('This came up on 3 of the last 7 days.');
+  });
+});
+
+describe('M12 1b feel-today copy', () => {
+  const AREAS: BodyArea[] = ['arms', 'shoulders', 'chest', 'back', 'legs', 'core'];
+
+  it('states what he said, nothing more', () => {
+    expect(reasonText({ signal: 'feltLow' })).toBe('You said your energy is low today.');
+    expect(reasonText({ signal: 'sore', areas: ['shoulders'] })).toBe(
+      'You said your shoulders are sore.',
+    );
+    expect(reasonText({ signal: 'sore', areas: ['chest'] })).toBe('You said your chest is sore.');
+    expect(reasonText({ signal: 'sore', areas: ['back', 'legs'] })).toBe(
+      'You said your back and legs are sore.',
+    );
+    expect(reasonText({ signal: 'sore', areas: ['arms', 'chest', 'core'] })).toBe(
+      'You said your arms, chest and core are sore.',
+    );
+  });
+
+  it('joins areas in plain words', () => {
+    expect(soreAreasText(['core'])).toBe('core');
+    expect(soreAreasText(['arms', 'legs'])).toBe('arms and legs');
+  });
+
+  it('the offer is a question about today only', () => {
+    expect(easyOnOfferText('shoulders')).toBe('Go easy on shoulders today?');
+    expect(easyOnOfferText('core')).toBe('Go easy on core today?');
+  });
+
+  it('the feel signals come after the Health ones in the fixed order', () => {
+    expect(SIGNAL_ORDER.slice(-2)).toEqual(['feltLow', 'sore']);
+    expect(new Set(SIGNAL_ORDER).size).toBe(7);
+  });
+
+  it('every feel reason and offer passes checkCopy + the M11 list, with no medical wording', () => {
+    const texts = [reasonText({ signal: 'feltLow' }), ...AREAS.map(easyOnOfferText)];
+    for (let mask = 1; mask < 1 << AREAS.length; mask++) {
+      const areas = AREAS.filter((_, i) => mask & (1 << i));
+      texts.push(reasonText({ signal: 'sore', areas }));
+    }
+    for (const t of texts) {
+      expect(checkCopy(t).hits, t).toEqual([]);
+      expect(checkHealthCopy(t).hits, t).toEqual([]);
+      expect(t, t).not.toMatch(/you'll|you will|faster|better|heal|rest it|doctor|ache/i);
+    }
   });
 });

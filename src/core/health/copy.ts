@@ -5,7 +5,7 @@
  */
 import { normalizeText } from '../trainer/intents';
 import { checkCopy, type CopyCheck } from '../trainer/replies';
-import type { ReadinessSignal } from '../types';
+import type { BodyArea, ReadinessSignal } from '../types';
 
 /**
  * Banned on top of `checkCopy` (SPEC M11 list + a few diagnosis-style words). Matched as whole
@@ -78,7 +78,38 @@ export type SignalDetail =
   | { signal: 'hrvLow'; lowerByPct: number }
   | { signal: 'restingHrHigh'; higherByBpm: number }
   | { signal: 'hardOutsideWorkout'; kind: string; minutes: number }
-  | { signal: 'whoopLow' };
+  | { signal: 'whoopLow' }
+  /** M12 1b "feel today": he said his energy is low. */
+  | { signal: 'feltLow' }
+  /** M12 1b "feel today": the areas he said are sore (at least one, in `FEEL_AREAS` order). */
+  | { signal: 'sore'; areas: BodyArea[] };
+
+/** The areas "feel today" can name, in the order they are listed and offered. */
+export const FEEL_AREAS: readonly BodyArea[] = [
+  'arms',
+  'shoulders',
+  'chest',
+  'back',
+  'legs',
+  'core',
+];
+
+/** Areas named as one thing ("your chest is sore"); the others read as plural. */
+const SINGULAR_AREAS: readonly BodyArea[] = ['chest', 'back', 'core'];
+
+/** "shoulders" / "back and legs" / "arms, chest and core". */
+export function soreAreasText(areas: readonly BodyArea[]): string {
+  if (areas.length <= 1) return areas[0] ?? '';
+  return `${areas.slice(0, -1).join(', ')} and ${areas[areas.length - 1]}`;
+}
+
+/**
+ * The question next to a sore area: today's "go easy on" proposal (M10 avoid-area), nothing
+ * else. Coaching words only.
+ */
+export function easyOnOfferText(area: BodyArea): string {
+  return `Go easy on ${area} today?`;
+}
 
 /** The one-line fact for a signal. */
 export function reasonText(d: SignalDetail): string {
@@ -93,6 +124,13 @@ export function reasonText(d: SignalDetail): string {
       return `You did ${durationText(d.minutes)} of ${kindText(d.kind)} in the last day.`;
     case 'whoopLow':
       return 'Your WHOOP score today is in its lowest band.';
+    case 'feltLow':
+      return 'You said your energy is low today.';
+    case 'sore': {
+      const [only] = d.areas;
+      const one = d.areas.length === 1 && only !== undefined && SINGULAR_AREAS.includes(only);
+      return `You said your ${soreAreasText(d.areas)} ${one ? 'is' : 'are'} sore.`;
+    }
   }
 }
 
@@ -101,11 +139,13 @@ export function deloadReason(firedDays: number, windowDays: number): string {
   return `This came up on ${firedDays} of the last ${windowDays} days.`;
 }
 
-/** Fixed order the reasons are listed in. */
+/** Fixed order the reasons are listed in (Health facts first, then what he said). */
 export const SIGNAL_ORDER: readonly ReadinessSignal[] = [
   'sleepShort',
   'hrvLow',
   'restingHrHigh',
   'hardOutsideWorkout',
   'whoopLow',
+  'feltLow',
+  'sore',
 ];

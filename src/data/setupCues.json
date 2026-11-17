@@ -1,0 +1,169 @@
+{
+  "note": "M12 1b setup cues (trainer-kit item 10): 2-3 short setup checks per exercise, spoken once before the first working set. They cover what the camera can't judge (grip, feet, bench and seat position, bracing), written for this app in coaching language, at most 8 words each.",
+  "cues": {
+    "Arnold_Dumbbell_Press": [
+      "Sit tall, back on the pad.",
+      "Feet flat.",
+      "Palms face you to start."
+    ],
+    "Barbell_Squat": [
+      "Bar on your upper back.",
+      "Feet shoulder width.",
+      "Big breath, brace your core."
+    ],
+    "Bench_Dips": ["Hands on the bench edge.", "Hips close to the bench.", "Shoulders down."],
+    "Bent_Over_Two-Dumbbell_Row": [
+      "Hinge at the hips.",
+      "Back flat, core tight.",
+      "Knees a little bent."
+    ],
+    "Cable_Chest_Press": ["Sit tall, chest up.", "Handles at chest height.", "Feet flat."],
+    "Cable_Crossover": ["Pulleys set high.", "One foot forward.", "Lean in a little."],
+    "Cable_Rear_Delt_Fly": ["Pulleys set high.", "Cross the cables.", "Stand tall, core tight."],
+    "Cable_Rope_Overhead_Triceps_Extension": [
+      "Face away from the pulley.",
+      "One foot forward.",
+      "Ribs down, core tight."
+    ],
+    "Calf_Press_On_The_Leg_Press_Machine": [
+      "Balls of your feet on the edge.",
+      "Knees a little bent.",
+      "Back flat on the pad."
+    ],
+    "Close-Grip_Front_Lat_Pulldown": ["Thigh pad snug.", "Hands close on the bar.", "Chest up."],
+    "Concentration_Curls": [
+      "Sit, feet wide.",
+      "Elbow against your inner thigh.",
+      "Free hand on your knee."
+    ],
+    "Cross_Body_Hammer_Curl": ["Stand tall.", "Thumbs up grip.", "Elbows at your sides."],
+    "Dumbbell_Bench_Press": ["Feet flat.", "Shoulder blades back.", "Wrists over elbows."],
+    "Dumbbell_Bicep_Curl": ["Stand tall, core tight.", "Palms forward.", "Elbows at your sides."],
+    "Dumbbell_Flyes": ["Feet flat.", "Shoulder blades back.", "Elbows a little bent."],
+    "Dumbbell_Incline_Row": ["Chest on the pad.", "Feet planted.", "Arms hang straight down."],
+    "Dumbbell_Lunges": ["Stand tall.", "Feet hip width.", "Eyes forward."],
+    "Dumbbell_Rear_Lunge": ["Stand tall.", "Feet hip width.", "Core tight."],
+    "Dumbbell_Seated_One-Leg_Calf_Raise": [
+      "Ball of your foot on the block.",
+      "Dumbbell on your knee.",
+      "Sit tall."
+    ],
+    "Dumbbell_Shoulder_Press": ["Back on the pad.", "Feet flat.", "Core tight, ribs down."],
+    "Dumbbell_Squat": ["Feet shoulder width.", "Toes a little out.", "Chest up, core tight."],
+    "Dumbbell_Step_Ups": ["Whole foot on the box.", "Stand tall.", "Eyes forward."],
+    "Face_Pull": ["Handle at face height.", "Step back, stand tall.", "Core tight."],
+    "Flat_Bench_Cable_Flyes": [
+      "Bench between the pulleys.",
+      "Pulleys set low.",
+      "Shoulder blades back."
+    ],
+    "Front_Dumbbell_Raise": [
+      "Stand tall, core tight.",
+      "Palms face your thighs.",
+      "Shoulders down."
+    ],
+    "Goblet_Squat": ["Hold the weight at your chest.", "Feet shoulder width.", "Elbows tucked in."],
+    "Hammer_Curls": ["Stand tall.", "Thumbs up grip.", "Elbows at your sides."],
+    "Incline_Dumbbell_Curl": [
+      "Bench at a low incline.",
+      "Back and head on the pad.",
+      "Arms hang straight down."
+    ],
+    "Incline_Dumbbell_Flyes": [
+      "Bench at a low incline.",
+      "Shoulder blades back.",
+      "Elbows a little bent."
+    ],
+    "Incline_Dumbbell_Press": ["Bench at a low incline.", "Feet flat.", "Shoulder blades back."],
+    "Incline_Push-Up": ["Hands on the bench edge.", "Body in one line.", "Core tight."],
+    "Leg_Extensions": ["Sit back on the seat.", "Pad on your lower shins.", "Hold the handles."],
+    "Leg_Press": [
+      "Feet shoulder width on the plate.",
+      "Back flat on the pad.",
+      "Hold the handles."
+    ],
+    "Lying_Dumbbell_Tricep_Extension": [
+      "Feet flat.",
+      "Arms straight over your shoulders.",
+      "Palms face each other."
+    ],
+    "Lying_Leg_Curls": [
+      "Knees just off the pad.",
+      "Pad above your heels.",
+      "Hips down, hold the handles."
+    ],
+    "One-Arm_Dumbbell_Row": ["Free hand on the bench.", "Feet staggered.", "Back flat."],
+    "Pushups": ["Hands a bit wider than shoulders.", "Body in one line.", "Core tight."],
+    "Reverse_Flyes": ["Chest on the pad.", "Feet planted.", "Elbows a little bent."],
+    "Seated_Bent-Over_Rear_Delt_Raise": [
+      "Sit on the bench edge.",
+      "Chest toward your thighs.",
+      "Elbows a little bent."
+    ],
+    "Seated_Cable_Rows": ["Sit tall, chest up.", "Knees a little bent.", "Feet braced."],
+    "Seated_Dumbbell_Curl": ["Sit tall, feet flat.", "Palms forward.", "Elbows at your sides."],
+    "Seated_Dumbbell_Press": ["Back on the pad.", "Feet flat.", "Wrists over elbows."],
+    "Seated_Leg_Curl": ["Pad under your lower calves.", "Lap pad snug.", "Back on the seat."],
+    "Seated_One-arm_Cable_Pulley_Rows": [
+      "Sit tall, chest up.",
+      "Knees a little bent.",
+      "Shoulders square."
+    ],
+    "Side_Lateral_Raise": ["Stand tall, core tight.", "Elbows a little bent.", "Shoulders down."],
+    "Single_Leg_Glute_Bridge": [
+      "Lie on your back.",
+      "One foot flat, close to you.",
+      "Arms on the floor."
+    ],
+    "Smith_Machine_Calf_Raise": [
+      "Balls of your feet on the plate.",
+      "Bar on your upper back.",
+      "Stand tall."
+    ],
+    "Smith_Machine_Squat": ["Bar on your upper back.", "Feet a little forward.", "Core tight."],
+    "Split_Squat_with_Dumbbells": [
+      "Back foot on the bench.",
+      "Front foot well forward.",
+      "Stand tall."
+    ],
+    "Standing_Biceps_Cable_Curl": [
+      "Pulley set low.",
+      "Stand tall, palms up.",
+      "Elbows at your sides."
+    ],
+    "Standing_Calf_Raises": ["Balls of your feet on the edge.", "Knees straight.", "Stand tall."],
+    "Standing_Dumbbell_Calf_Raise": [
+      "Balls of your feet on the step.",
+      "Dumbbells at your sides.",
+      "Stand tall."
+    ],
+    "Standing_Dumbbell_Triceps_Extension": [
+      "Both hands under the top plate.",
+      "Elbows point forward.",
+      "Ribs down, core tight."
+    ],
+    "Stiff-Legged_Dumbbell_Deadlift": [
+      "Feet hip width.",
+      "Knees a little bent.",
+      "Back flat, shoulders back."
+    ],
+    "Straight-Arm_Pulldown": [
+      "Pulley set high.",
+      "Step back, hinge a little.",
+      "Arms long, core tight."
+    ],
+    "Tricep_Dumbbell_Kickback": ["Hinge at the hips.", "Back flat.", "Upper arms by your ribs."],
+    "Triceps_Pushdown": ["Pulley set high.", "Elbows at your sides.", "Stand tall, core tight."],
+    "Triceps_Pushdown_-_Rope_Attachment": [
+      "Pulley set high.",
+      "Thumbs up on the rope.",
+      "Elbows at your sides."
+    ],
+    "Underhand_Cable_Pulldowns": [
+      "Thigh pad snug.",
+      "Palms face you, shoulder width.",
+      "Chest up."
+    ],
+    "Wide-Grip_Lat_Pulldown": ["Thigh pad snug.", "Hands wide on the bar.", "Chest up."]
+  }
+}

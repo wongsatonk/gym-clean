@@ -1,8 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { addDate } from '../trainer/plan';
-import type { HealthDay, HealthWorkout, ReadinessCard } from '../types';
+import type { BodyArea, DayFeel, HealthDay, HealthWorkout, ReadinessCard } from '../types';
 import { checkHealthCopy } from './copy';
-import { firedDaysBefore, readinessCard, readinessSignals, type ReadinessInput } from './readiness';
+import {
+  feelOffers,
+  feelSignals,
+  firedDaysBefore,
+  readinessCard,
+  readinessSignals,
+  todaysFeelOffers,
+  type ReadinessInput,
+} from './readiness';
+import { HEALTH_RULES } from './rules';
 
 /** Made-up numbers only (the repo is public). */
 let tz: string | undefined;
@@ -266,5 +275,104 @@ describe('deload nudge', () => {
 
   it('no card today means no deload either (the nudge rides on the card)', () => {
     expect(readinessCard(input([...withFired([1, 2, 3]), today({})]))).toBeNull();
+  });
+});
+
+describe('M12 1b feel today → signals', () => {
+  const feel = (over: Partial<DayFeel>): DayFeel => ({ date: TODAY, ...over });
+
+  it('energy ≤ 2 is feltLow; any sore area is sore; nothing said is no signal', () => {
+    expect(feelSignals(undefined)).toEqual([]);
+    expect(feelSignals(feel({}))).toEqual([]);
+    expect(feelSignals(feel({ energy: 3, sore: [] }))).toEqual([]);
+    expect(feelSignals(feel({ energy: 2 }))).toEqual([{ signal: 'feltLow' }]);
+    expect(feelSignals(feel({ energy: 1 }))).toEqual([{ signal: 'feltLow' }]);
+    expect(feelSignals(feel({ energy: 5, sore: ['shoulders'] }))).toEqual([
+      { signal: 'sore', areas: ['shoulders'] },
+    ]);
+  });
+
+  it('sore areas are listed once each, in the fixed area order; unknown values are dropped', () => {
+    const sore = ['legs', 'shoulders', 'legs', 'neck'] as BodyArea[];
+    expect(feelSignals(feel({ sore }))).toEqual([{ signal: 'sore', areas: ['shoulders', 'legs'] }]);
+    expect(feelSignals(feel({ sore: ['neck'] as unknown as BodyArea[] }))).toEqual([]);
+  });
+
+  it('the energy threshold is data', () => {
+    expect(feelSignals(feel({ energy: 3 }), { ...HEALTH_RULES, feelLowEnergy: 3 })).toEqual([
+      { signal: 'feltLow' },
+    ]);
+  });
+
+  it("only the asked day's row counts", () => {
+    const feels = [feel({ date: addDate(TODAY, -1), energy: 1, sore: ['legs'] })];
+    expect(readinessCard(input([], { feels }))).toBeNull();
+  });
+
+  it('without Health: low energy + a sore area show the card; one alone does not', () => {
+    const card = readinessCard(input([], { feels: [feel({ energy: 2, sore: ['shoulders'] })] }));
+    expect(card).toEqual({
+      date: TODAY,
+      signals: ['feltLow', 'sore'],
+      reasons: ['You said your energy is low today.', 'You said your shoulders are sore.'],
+      offer: 'lighter',
+    });
+    expect(readinessCard(input([], { feels: [feel({ energy: 1 })] }))).toBeNull();
+    expect(readinessCard(input([], { feels: [feel({ sore: ['legs', 'back'] })] }))).toBeNull();
+    expect(readinessCard(input([], { feels: [feel({ energy: 4 })] }))).toBeNull();
+  });
+
+  it('with Health: one feel signal + one Health signal show the card, Health reasons first', () => {
+    const one = [...usual(), today({ sleepMin: 340 })];
+    expect(readinessCard(input(one))).toBeNull();
+    expect(readinessCard(input(one, { feels: [feel({ energy: 4 })] }))).toBeNull();
+    const low = readinessCard(input(one, { feels: [feel({ energy: 2 })] }));
+    expect(low?.signals).toEqual(['sleepShort', 'feltLow']);
+    expect(low?.reasons).toEqual([
+      'Sleep was about 1 h 20 m shorter than usual.',
+      'You said your energy is low today.',
+    ]);
+    const sore = readinessCard(input(one, { feels: [feel({ sore: ['legs'] })] }));
+    expect(sore?.signals).toEqual(['sleepShort', 'sore']);
+    expect(sore?.reasons.at(-1)).toBe('You said your legs are sore.');
+  });
+
+  it('with Health: two Health signals + both feel signals list all four', () => {
+    const two = [...usual(), today({ sleepMin: 340, restingHr: 62 })];
+    const card = readinessCard(input(two, { feels: [feel({ energy: 1, sore: ['core'] })] }));
+    expect(card?.signals).toEqual(['sleepShort', 'restingHrHigh', 'feltLow', 'sore']);
+    for (const r of card?.reasons ?? []) expect(checkHealthCopy(r).hits, r).toEqual([]);
+  });
+
+  it('rest day, mid-workout and an answered card still win', () => {
+    const feels = [feel({ energy: 1, sore: ['arms'] })];
+    expect(readinessCard(input([], { feels, trainingDay: false }))).toBeNull();
+    expect(readinessCard(input([], { feels, inWorkout: true }))).toBeNull();
+    expect(readinessCard(input([], { feels, history: { answeredDate: TODAY } }))).toBeNull();
+  });
+
+  it('feel days count toward the deload week like any other fired day', () => {
+    const feels = [0, 1, 2, 5].map((ago) =>
+      feel({ date: addDate(TODAY, -ago), energy: 2, sore: ['back'] }),
+    );
+    expect(firedDaysBefore([], TODAY, undefined, [], feels)).toBe(3);
+    const card = readinessCard(input([], { feels }));
+    expect(card?.offer).toBe('deload');
+    expect(card?.reasons.at(-1)).toBe('This came up on 3 of the last 7 days.');
+  });
+
+  it('a sore area offers "go easy on" for today, also when there is no card', () => {
+    expect(feelOffers(undefined)).toEqual([]);
+    expect(feelOffers(feel({ energy: 1 }))).toEqual([]);
+    expect(feelOffers(feel({ sore: ['legs', 'shoulders'] }))).toEqual([
+      { area: 'shoulders', text: 'Go easy on shoulders today?' },
+      { area: 'legs', text: 'Go easy on legs today?' },
+    ]);
+    expect(todaysFeelOffers([feel({ date: addDate(TODAY, -1), sore: ['legs'] })], TODAY)).toEqual(
+      [],
+    );
+    expect(todaysFeelOffers([feel({ sore: ['chest'] })], TODAY)).toEqual([
+      { area: 'chest', text: 'Go easy on chest today?' },
+    ]);
   });
 });

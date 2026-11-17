@@ -23,6 +23,9 @@ export const HEALTH_RULES = {
   /** Route B only: WHOOP recovery at or under this % (WHOOP's lowest band). */
   whoopLowPct: 33,
 
+  /** M12 1b "feel today": energy (1–5) at or under this is the `feltLow` signal. */
+  feelLowEnergy: 2,
+
   /** The card shows with at least this many signals. */
   minSignals: 2,
   /** Deload instead of Lighter when the 2-signal rule fired on ≥ N of the last M days… */
