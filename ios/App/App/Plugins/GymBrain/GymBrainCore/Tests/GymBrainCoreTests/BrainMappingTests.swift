@@ -138,3 +138,80 @@ final class BrainErrorMappingTests: XCTestCase {
         XCTAssertEqual(GymBrainService.defaultTimeout, .seconds(15))
     }
 }
+
+/// The finer error kind that only goes to the "GymBrain" log line.
+final class BrainErrorKindTests: XCTestCase {
+    private let ctx = LanguageModelSession.GenerationError.Context(debugDescription: "secret prompt text")
+
+    func testIOS26GenerationErrorKinds() {
+        typealias E = LanguageModelSession.GenerationError
+        let cases: [(E, BrainErrorKind)] = [
+            (E.guardrailViolation(ctx), .guardrailViolation),
+            (E.refusal(E.Refusal(transcriptEntries: []), ctx), .refusal),
+            (E.exceededContextWindowSize(ctx), .contextSizeExceeded),
+            (E.unsupportedLanguageOrLocale(ctx), .unsupportedLanguageOrLocale),
+            (E.assetsUnavailable(ctx), .assetsUnavailable),
+            (E.unsupportedGuide(ctx), .unsupportedGuide),
+            (E.decodingFailure(ctx), .decodingFailure),
+            (E.rateLimited(ctx), .rateLimited),
+            (E.concurrentRequests(ctx), .concurrentRequests),
+        ]
+        for (error, kind) in cases {
+            XCTAssertEqual(brainErrorKind(for: error), kind)
+        }
+    }
+
+    func testIOS27ErrorKinds() throws {
+        guard #available(iOS 27.0, macOS 27.0, *) else {
+            throw XCTSkip("LanguageModelError needs iOS 27 (run on the iOS 27 simulator)")
+        }
+        typealias E = LanguageModelError
+        XCTAssertEqual(brainErrorKind(for: E.guardrailViolation(.init(debugDescription: "t"))), .guardrailViolation)
+        XCTAssertEqual(brainErrorKind(for: E.refusal(.init(explanation: "no", debugDescription: "t"))), .refusal)
+        XCTAssertEqual(
+            brainErrorKind(for: E.contextSizeExceeded(.init(contextSize: 4096, tokenCount: 5000, debugDescription: "t"))),
+            .contextSizeExceeded)
+        XCTAssertEqual(
+            brainErrorKind(for: E.unsupportedLanguageOrLocale(.init(languageCode: .init("th"), debugDescription: "t"))),
+            .unsupportedLanguageOrLocale)
+        XCTAssertEqual(brainErrorKind(for: E.timeout(.init(debugDescription: "t"))), .modelTimeout)
+        XCTAssertEqual(brainErrorKind(for: E.rateLimited(.init(resetDate: nil, debugDescription: "t"))), .rateLimited)
+        XCTAssertEqual(
+            brainErrorKind(for: E.unsupportedGenerationGuide(.init(schemaName: nil, debugDescription: "t"))),
+            .unsupportedGuide)
+        XCTAssertEqual(
+            brainErrorKind(for: E.unsupportedTranscriptContent(.init(unsupportedContent: [], debugDescription: "t"))),
+            .unsupportedTranscriptContent)
+        XCTAssertEqual(brainErrorKind(for: LanguageModelSession.Error.concurrentRequests), .concurrentRequests)
+        XCTAssertEqual(
+            brainErrorKind(for: LanguageModelSession.Error.transcriptMutationWhileResponding),
+            .transcriptMutationWhileResponding)
+        // GeneratedContent.ParsingError (→ decodingFailure) has no public initializer to test with.
+    }
+
+    func testOurTimeoutToolErrorsAndEverythingElse() {
+        XCTAssertEqual(brainErrorKind(for: BrainTimeoutError()), .timeout)
+        XCTAssertEqual(brainErrorKind(for: CancellationError()), .cancelled)
+        XCTAssertEqual(brainErrorKind(for: NoSuchTool()), .unknown)
+        let toolError = LanguageModelSession.ToolCallError(
+            tool: LighterTodayTool(recorder: ToolCallRecorder()), underlyingError: NoSuchTool())
+        XCTAssertEqual(brainErrorKind(for: toolError), .toolCallError)
+    }
+
+    /// The kind is a fixed name: nothing from the error's text can reach the log.
+    func testKindNamesAreFixedIdentifiers() {
+        for kind in BrainErrorKind.allCases {
+            XCTAssertTrue(kind.rawValue.allSatisfy { $0.isLetter }, kind.rawValue)
+        }
+        XCTAssertEqual(Set(BrainErrorKind.allCases.map(\.rawValue)).count, BrainErrorKind.allCases.count)
+    }
+
+    /// Logging the kind leaves the bridge code unchanged.
+    func testRespondStillReturnsTheSameCode() async {
+        let error = LanguageModelSession.GenerationError.concurrentRequests(ctx)
+        let model = FakeModel { _, _ in throw error }
+        let result = await GymBrainService(model: model).respond(request())
+        guard case .failure(let failure) = result else { return XCTFail("expected a failure") }
+        XCTAssertEqual(failure.code, .other)
+    }
+}

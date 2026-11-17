@@ -1,6 +1,7 @@
 import Foundation
 import FoundationModels
 import Synchronization
+import os
 
 // MARK: Request and replies
 
@@ -153,7 +154,9 @@ public final class GymBrainService: Sendable {
             let text = try await Self.race(timeout: timeout) { try await session.respond(to: request.prompt) }
             return .success(BrainReply(text: text, toolCalls: recorder.recorded, latencyMs: elapsed()))
         } catch {
-            return .failure(BrainFailure(code: brainErrorCode(for: error), latencyMs: elapsed()))
+            let failure = BrainFailure(code: brainErrorCode(for: error), latencyMs: elapsed())
+            Self.logFailure(kind: brainErrorKind(for: error), latencyMs: failure.latencyMs)
+            return .failure(failure)
         }
     }
 
@@ -183,6 +186,16 @@ public final class GymBrainService: Sendable {
         let session = model.makeSession(
             instructions: request.instructions, tools: TrainerTools.make(recorder: recorder, results: results))
         return (session, recorder)
+    }
+
+    /// One line per failed `respond` in the Xcode console / Console.app, category "GymBrain":
+    /// the fixed error-kind name and the latency only. Never the prompt, reply or tool text, and
+    /// never Apple's error description (it can quote the prompt).
+    private static let log = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "GymBrainCore", category: "GymBrain")
+
+    private static func logFailure(kind: BrainErrorKind, latencyMs: Int) {
+        log.error("respond failed: \(kind.rawValue, privacy: .public) after \(latencyMs) ms")
     }
 
     static func milliseconds(_ d: Duration) -> Int {

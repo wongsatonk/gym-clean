@@ -214,8 +214,10 @@ phone plugged into the Mac and the app started from Xcode ▶ so the Xcode conso
     about 300 instructions, about 1,580 tools, context at most 1,070. No token line = tell me
     which iOS version you're on.
 13. Export report and send me the file (ids and scores only). The app shows these failures only
-    as "error", so also type `unsupported` into the Xcode console's filter box: any line there
-    (Apple's own log) means a tool's rules were too strict for the model. Tell me how many.
+    as "error", so also type `GymBrain` into the Xcode console's filter box. Each failed answer
+    leaves one line like `respond failed: unsupportedGuide after 2140 ms` (just the error name and
+    the time, never what you said). Copy all of those lines to me. `unsupportedGuide` or
+    `decodingFailure` means a tool's rules were too strict for the model.
 
 **Reminders** (Settings → Reminders)
 14. Turn one on: iOS asks for notifications **once**. Turning a second one on doesn't ask again.
@@ -233,7 +235,8 @@ phone plugged into the Mac and the app started from Xcode ▶ so the Xcode conso
 20. If a reply ever falls back with "Apple Intelligence didn't answer, so quick replies did", ask
     again straight away. The second one should answer normally. Two fallbacks in a row right
     after a slow one = tell me (that's the case we're watching for). If the phone is on Xcode at
-    the time, filter the console for `concurrent`: any line = tell me.
+    the time, filter the console for `GymBrain`: any `respond failed: concurrentRequests` or
+    `rateLimited` line = tell me (copy the line).
 
 ## On-device checklist (task 3)
 
@@ -399,6 +402,17 @@ Errors thrown by `respond`:
 | (none; our own 15 s timer) | `LanguageModelError.timeout` | `timeout` |
 | `.assetsUnavailable`, `.unsupportedGuide`, `.decodingFailure`, `.rateLimited`, `.concurrentRequests` | `SystemLanguageModel.Error.assetsUnavailable`, `LanguageModelError.unsupportedGenerationGuide` / `.rateLimited` / `.unsupportedCapability` / `.unsupportedTranscriptContent`, `LanguageModelSession.Error.concurrentRequests`, `GeneratedContent.ParsingError` | `other` |
 | `LanguageModelSession.ToolCallError` | same | `other` |
+
+The code above is all the app sees. For diagnosis, `GymBrainService` also writes one `os.Logger`
+line per failed `respond` (subsystem = the app bundle id, category `GymBrain`, level error):
+`respond failed: <kind> after <ms> ms`, where `<kind>` is a fixed `BrainErrorKind` name
+(`guardrailViolation`, `refusal`, `contextSizeExceeded`, `unsupportedLanguageOrLocale`,
+`assetsUnavailable`, `unsupportedGuide`, `decodingFailure`, `rateLimited`, `concurrentRequests`,
+`unsupportedCapability`, `unsupportedTranscriptContent`, `transcriptMutationWhileResponding`,
+`timeout` (our 15 s timer), `modelTimeout` (Apple's, iOS 27), `toolCallError`, `cancelled`,
+`unknown…`). Both error families use the same name for the same failure. Only the kind is
+`privacy: .public`; the prompt, reply, tool text and Apple's error description are never logged.
+Filter Xcode's console or Console.app for `GymBrain`.
 
 Prewarm: Apple says to call `prewarm` only with a strong signal that a request comes within a few
 seconds and at least 1 second before `respond`. Recommendation: prewarm when the text box gets focus

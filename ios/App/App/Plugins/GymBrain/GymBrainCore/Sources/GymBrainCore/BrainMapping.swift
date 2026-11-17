@@ -98,3 +98,90 @@ private func generationErrorCode(_ e: LanguageModelSession.GenerationError) -> B
     default: return .other  // assetsUnavailable, unsupportedGuide, decodingFailure, rateLimited, concurrentRequests, unknown
     }
 }
+
+// MARK: Error kinds (log only)
+
+/// The specific Apple error behind a failed `respond`, for the one `os.Logger` line (category
+/// "GymBrain"). Finer than `BrainErrorCode`, which stays the bridge contract. Only this fixed
+/// name is logged (never the error's description, the prompt, the reply or tool text). Both
+/// error families use the same name for the same failure, so one console filter finds either.
+public enum BrainErrorKind: String, Sendable, Equatable, CaseIterable {
+    /// Our own 15 s timer.
+    case timeout
+    /// Apple's own timeout (`LanguageModelError.timeout`, iOS 27).
+    case modelTimeout
+    case guardrailViolation
+    case refusal
+    case contextSizeExceeded
+    case unsupportedLanguageOrLocale
+    case assetsUnavailable
+    case unsupportedGuide
+    case decodingFailure
+    case rateLimited
+    case concurrentRequests
+    case unsupportedCapability
+    case unsupportedTranscriptContent
+    case transcriptMutationWhileResponding
+    case toolCallError
+    case cancelled
+    case unknownGenerationError
+    case unknownLanguageModelError
+    case unknown
+}
+
+/// Pure: which `BrainErrorKind` an error is. Independent of `brainErrorCode(for:)`.
+public func brainErrorKind(for error: any Error) -> BrainErrorKind {
+    if error is BrainTimeoutError { return .timeout }
+    if error is CancellationError { return .cancelled }
+    if error is LanguageModelSession.ToolCallError { return .toolCallError }
+    if #available(iOS 27.0, macOS 27.0, *), let kind = ios27ErrorKind(error) {
+        return kind
+    }
+    if let e = error as? LanguageModelSession.GenerationError {
+        return generationErrorKind(e)
+    }
+    return .unknown
+}
+
+@available(iOS 27.0, macOS 27.0, *)
+private func ios27ErrorKind(_ error: any Error) -> BrainErrorKind? {
+    if let e = error as? LanguageModelError {
+        switch e {
+        case .guardrailViolation: return .guardrailViolation
+        case .refusal: return .refusal
+        case .contextSizeExceeded: return .contextSizeExceeded
+        case .unsupportedLanguageOrLocale: return .unsupportedLanguageOrLocale
+        case .timeout: return .modelTimeout
+        case .rateLimited: return .rateLimited
+        case .unsupportedCapability: return .unsupportedCapability
+        case .unsupportedTranscriptContent: return .unsupportedTranscriptContent
+        case .unsupportedGenerationGuide: return .unsupportedGuide
+        @unknown default: return .unknownLanguageModelError
+        }
+    }
+    if let e = error as? LanguageModelSession.Error {
+        switch e {
+        case .concurrentRequests: return .concurrentRequests
+        case .transcriptMutationWhileResponding: return .transcriptMutationWhileResponding
+        @unknown default: return .unknownLanguageModelError
+        }
+    }
+    if error is SystemLanguageModel.Error { return .assetsUnavailable }
+    if error is GeneratedContent.ParsingError { return .decodingFailure }
+    return nil
+}
+
+private func generationErrorKind(_ e: LanguageModelSession.GenerationError) -> BrainErrorKind {
+    switch e {
+    case .guardrailViolation: return .guardrailViolation
+    case .refusal: return .refusal
+    case .exceededContextWindowSize: return .contextSizeExceeded
+    case .unsupportedLanguageOrLocale: return .unsupportedLanguageOrLocale
+    case .assetsUnavailable: return .assetsUnavailable
+    case .unsupportedGuide: return .unsupportedGuide
+    case .decodingFailure: return .decodingFailure
+    case .rateLimited: return .rateLimited
+    case .concurrentRequests: return .concurrentRequests
+    @unknown default: return .unknownGenerationError
+    }
+}
