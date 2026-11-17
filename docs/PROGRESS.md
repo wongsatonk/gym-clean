@@ -196,7 +196,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Deps: 21, 22.
 - [x] 24. [verifier] Verify milestone against SPEC acceptance criteria (M12 slice 2 + M10 phase B): `npm run check`, full `npm run e2e`, `npm run build` (contains `1.14.0`), simulator build + XCTests, contract/codegen diff; 390×844 screenshots (mic listening, Apple reply with badge, brain-off note, check-in card, Coach settings, Reminders, eval report) via `scripts/screenshots.mjs`; evidence into Verification evidence → M12 slice 2.
   - Deps: 23.
-- [ ] 25. [main] merge + ask to push (his call; with slices 1, 1c, 1b if still unmerged). Install on his iPhone (push-notify him when the phone must be plugged in).
+- [ ] 25. [main] merge + ask to push (his call; with slices 1, 1c, 1b if still unmerged). Install on his iPhone (push-notify him when the phone must be plugged in). **Install done 2026-11-18:** 1.14.0 build 267 (m12-slice2 at 3b69419) installed on his iPhone 17 Pro via devicectl. Merge/push still his call.
   - Deps: 24.
 - [ ] 26. 🧍 **Checkpoint J (his iPhone, Apple Intelligence on):** a few days with the Apple brain and the mic (free questions, at least one proposal from free text, the mic between sets), the dev eval run once (report into PROGRESS: action + args ≥ 85%, 100% safe, 0 applied without a tap, p50 latency), a reminder on, a check-in, plus the slice 1b trainer kit at the gym. He reports wrong answers, wrong actions and how the voice felt (the Checkpoint J to-do + Copy report → `/feedback`).
 
