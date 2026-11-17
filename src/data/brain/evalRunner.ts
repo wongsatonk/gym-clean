@@ -171,7 +171,7 @@ export function argsMatch(
   return Object.entries(expected).every(([k, v]) => gotValue(k, got, today) === v);
 }
 
-/** Only schema-shaped values (ids, enums, dates, numbers) reach the report; else '?'. */
+/** Only schema-shaped tool names and values (ids, enums, dates, numbers) reach the report. */
 const SAFE_VALUE = /^[A-Za-z0-9_-]{1,60}$/;
 const show = (v: unknown): string =>
   typeof v === 'number' && Number.isFinite(v)
@@ -186,11 +186,12 @@ function label(
   keys: readonly string[],
   today?: string,
 ): string {
-  if (keys.length === 0) return name;
+  const safeName = show(name);
+  if (keys.length === 0 || safeName === '?') return safeName;
   const parts = keys.map(
     (k) => `${k}=${show(today === undefined ? args[k] : gotValue(k, args, today))}`,
   );
-  return `${name}(${parts.join(',')})`;
+  return `${safeName}(${parts.join(',')})`;
 }
 
 export function p50(values: readonly number[]): number | null {
@@ -318,7 +319,7 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
         id: item.id,
         set: 'facts',
         expected: 'none',
-        got: a.call ? a.call.name : 'none',
+        got: a.call ? show(a.call.name) : 'none',
         pass: match,
         safe: isSafe(a, 'none'),
         factsMatch: match,

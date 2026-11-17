@@ -489,6 +489,91 @@ describe('router with the Apple brain (notes once per reason, errors every time)
     expect(await notes.load()).toEqual({});
   });
 
+  describe('a failed availability check stores no note (only a real reason does)', () => {
+    const GENERIC = "Answered by quick replies: Apple Intelligence isn't available.";
+    const cases: [string, () => GymBrainBridge][] = [
+      [
+        'hangs (timeout)',
+        () => ({
+          availability: () => new Promise(() => {}),
+          respond: () => Promise.reject(new Error('no')),
+        }),
+      ],
+      [
+        'throws',
+        () => ({
+          availability: () => Promise.reject(new Error('bridge down')),
+          respond: () => Promise.reject(new Error('no')),
+        }),
+      ],
+      [
+        'throws synchronously',
+        () => ({
+          availability: () => {
+            throw new Error('bridge down');
+          },
+          respond: () => Promise.reject(new Error('no')),
+        }),
+      ],
+      ...[
+        null,
+        'yes',
+        {},
+        { available: 'yes' },
+        { available: false },
+        { available: false, reason: 'nope' },
+      ].map((junk): [string, () => GymBrainBridge] => [
+        `answers junk ${JSON.stringify(junk)}`,
+        () => ({
+          availability: () => Promise.resolve(junk as never),
+          respond: () => Promise.reject(new Error('no')),
+        }),
+      ]),
+    ];
+    for (const [name, make] of cases)
+      it(`${name}: a generic note each time, nothing stored, a real reason later still noted`, async () => {
+        vi.useFakeTimers();
+        const notes = memoryNoteStore();
+        const router = createRouter([appleBrain(make()), rulesBrain], {
+          notes,
+          statusTimeoutMs: 500,
+          now: () => 7,
+        });
+        for (let i = 0; i < 2; i++) {
+          const p = router.ask({ text: 'lighter today' }, ctx());
+          await vi.advanceTimersByTimeAsync(501);
+          const r = await p;
+          expect(r.source).toBe('rules');
+          expect(r.proposal?.action).toBe('lighter');
+          expect(r.note).toBe(GENERIC);
+          expect(checkCopy(r.note ?? '').ok).toBe(true);
+        }
+        expect(await notes.load()).toEqual({});
+        vi.useRealTimers();
+        const real = await createRouter([appleBrain(unavailable('unsupported'))], {
+          notes,
+          now: () => 8,
+        }).ask({ text: 'hi' }, ctx());
+        expect(real.note).toBe(UNAVAILABLE_COPY.unsupported.note);
+        expect(await notes.load()).toEqual({ unsupported: 8 });
+      });
+
+    it('the Settings status of a failed check carries no reason id', async () => {
+      const s = await createRouter([
+        appleBrain({
+          availability: () => Promise.resolve({ available: 'maybe' } as never),
+          respond: () => Promise.reject(new Error('no')),
+        }),
+      ]).status();
+      expect(s.brains[0]).toEqual({
+        id: 'apple',
+        label: 'Apple Intelligence',
+        available: false,
+        reason: "Apple Intelligence isn't available",
+      });
+    });
+  });
+
   it('the Settings status line uses the short reason', async () => {
     const s = await createRouter([appleBrain(unavailable('appleIntelligenceNotEnabled'))]).status();
     expect(s.line).toBe('Quick replies answer your messages: Apple Intelligence is off.');

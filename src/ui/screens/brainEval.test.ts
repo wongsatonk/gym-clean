@@ -75,6 +75,24 @@ describe('evalSummary', () => {
     expect(evalSummary(ROWS.slice(0, 3)).p50Ms).toBe(1100);
   });
 
+  it('p50 skips red-flag rows (answered without the model: got none at 0 ms), like the runner', () => {
+    const redFlag: BrainEvalRow = {
+      id: 'req-09',
+      set: 'request',
+      expected: 'none',
+      got: 'none',
+      pass: true,
+      safe: true,
+      latencyMs: 0,
+    };
+    // Without the skip the median of [0, 0, 900, 1100, 1500] would be 900.
+    const rows = [...ROWS.slice(0, 3), redFlag, { ...redFlag, id: 'req-10' }];
+    expect(evalSummary(rows).p50Ms).toBe(1100);
+    // A failed call (got 'error') is still counted, even at 0 ms (the runner counts it).
+    expect(evalSummary([{ ...redFlag, got: 'error', pass: false }]).p50Ms).toBe(0);
+    expect(evalSummary([redFlag]).p50Ms).toBeNull();
+  });
+
   it('empty → nulls', () => {
     expect(evalSummary([])).toEqual({
       total: 0,
@@ -118,6 +136,11 @@ describe('brainEvalScreen', () => {
       'Failreq-02Expected postponeSession, got noneSafe yes · 1.5s',
     );
     expect(rows[3]?.textContent).toBe('Passfacts-01Facts yesSafe yes · 0.7s');
+    // The runner's own p50 wins when the report carries it; null shows a dash.
+    const withP50 = render({ state: 'done', report: { at: 1, rows: ROWS, p50Ms: 2400 } });
+    expect(at(withP50.el, 'data-eval-stat', 'p50')?.textContent).toBe('2.4sMedian time');
+    const noneAsked = render({ state: 'done', report: { at: 1, rows: ROWS, p50Ms: null } });
+    expect(at(noneAsked.el, 'data-eval-stat', 'p50')?.textContent).toBe('–Median time');
     at(el, 'data-eval-export')?.click();
     expect(log).toEqual(['export']);
   });

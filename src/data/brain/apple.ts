@@ -2,7 +2,8 @@
  * M12 slice 2 (task 8, M10 B5): the Apple on-device brain behind the `CoachBrain` seam.
  *
  * - `status()` maps the bridge's `availability()` to `{ available, reason, reasonId }`; the
- *   router shows the plain note for `reasonId` once (notes.ts).
+ *   router shows the plain note for `reasonId` once (notes.ts). A junk answer has no `reasonId`
+ *   (a failed check must not store a note forever); a throw/hang is the router's generic note.
  * - `ask()` builds one request: the guardrail instructions, the context text (the last 8 turns
  *   live inside it), **only the new message** (≤ MESSAGE_MAX_CHARS) and the read-only tool
  *   results; then `sanitizeReply` on every reply. The first valid `propose*` call becomes the
@@ -56,8 +57,9 @@ export type GymBrainBridge = {
   respond(req: GymBrainRequest): Promise<GymBrainResponse>;
 };
 
+/** `reasonId` only when the bridge gave a real reason (a failed/junk check has none). */
 export type AppleStatus =
-  { available: true } | { available: false; reason: string; reasonId: BrainUnavailableReason };
+  { available: true } | { available: false; reason: string; reasonId?: BrainUnavailableReason };
 
 export interface AppleBrain extends CoachBrain {
   id: 'apple';
@@ -397,11 +399,9 @@ export function appleBrain(bridge: GymBrainBridge, deps: AppleDeps = {}): AppleB
             reasonId: o.reason,
           };
       }
-      return {
-        available: false,
-        reason: UNAVAILABLE_COPY.unsupported.status,
-        reasonId: 'unsupported',
-      };
+      // A junk answer is a failed check, not a reason: no reasonId, so the router shows a
+      // one-off generic note and remembers nothing (a later real reason is still noted).
+      return { available: false, reason: "Apple Intelligence isn't available" };
     },
     async ask(text, ctx) {
       return (await askApple(bridge, text, ctx, deps)).reply;

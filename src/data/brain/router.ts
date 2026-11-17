@@ -14,7 +14,9 @@
  *   brain whose status carries a `reasonId` (Apple) gets its plain note (notes.ts) **once per
  *   reason**, remembered in the injected note store (settings 'coach' → `brainNotes`); a
  *   rejection carrying a `code` (BrainError) gets its one-line error note **every time**. Other
- *   failures keep the generic "Answered by …: …" note.
+ *   failures keep the generic "Answered by …: …" note. A status check that hangs, throws or
+ *   answers junk has no `reasonId`: it gets the generic note each time and stores nothing, so a
+ *   slow first check can't leave a wrong "not available on this iPhone" note for good.
  *
  * Lives in src/data (not core) because it deals with async brains and timers.
  */

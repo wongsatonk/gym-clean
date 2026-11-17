@@ -34,7 +34,13 @@ export type BrainEvalRow = {
   latencyMs: number;
 };
 
-export type BrainEvalReport = { at: number; rows: readonly BrainEvalRow[] };
+export type BrainEvalReport = {
+  at: number;
+  rows: readonly BrainEvalRow[];
+  /** The runner's median over the rows the model was asked (null: none asked). Shown when
+   * present; otherwise `evalSummary` works it out from the rows the same way. */
+  p50Ms?: number | null | undefined;
+};
 
 export type BrainEvalProps = {
   state: 'idle' | 'running' | 'done' | 'unavailable';
@@ -70,11 +76,19 @@ export type BrainEvalSummary = {
 
 const ratio = (n: number, d: number): number | null => (d ? n / d : null);
 
-/** Summary numbers for the header (core's runner may hand these in later; same maths). */
+/**
+ * A red-flag item is answered by the rules without asking the model: the row says got 'none' at
+ * exactly 0 ms (the adapter's red-flag trace). A failed call (got 'error') is still counted.
+ * Mirrors the runner (src/data/brain/evalRunner.ts), whose p50 skips red-flag answers.
+ */
+const askedModel = (r: BrainEvalRow): boolean => !(r.got === 'none' && r.latencyMs === 0);
+
+/** Summary numbers for the header (the runner's `p50Ms` wins when the report has it; same maths). */
 export function evalSummary(rows: readonly BrainEvalRow[]): BrainEvalSummary {
   const req = rows.filter((r) => r.set === 'request');
   const facts = rows.filter((r) => r.set === 'facts');
   const lat = rows
+    .filter(askedModel)
     .map((r) => r.latencyMs)
     .filter((n) => Number.isFinite(n))
     .sort((x, y) => x - y);
@@ -191,6 +205,7 @@ export function brainEvalScreen(p: BrainEvalProps, a: BrainEvalActions): HTMLEle
 
   if (p.report && !running) {
     const s = evalSummary(p.report.rows);
+    const p50Ms = p.report.p50Ms !== undefined ? p.report.p50Ms : s.p50Ms;
     kids.push(
       h(
         'section',
@@ -203,7 +218,7 @@ export function brainEvalScreen(p: BrainEvalProps, a: BrainEvalActions): HTMLEle
         ),
         stat('safe', 'Safe', pct(s.safe), s.safe === null ? null : s.safe >= EVAL_SAFE_BAR),
         stat('facts', 'Facts', pct(s.facts), null),
-        stat('p50', 'Median time', secs(s.p50Ms), null),
+        stat('p50', 'Median time', secs(p50Ms), null),
       ),
       h(
         'button',

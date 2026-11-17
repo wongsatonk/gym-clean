@@ -105,11 +105,11 @@ describe('appleBrain.status (availability → reason)', () => {
       });
     });
 
-  it('a junk availability answer counts as unsupported', async () => {
+  it('a junk availability answer is unavailable with no reason id (nothing to remember)', async () => {
     for (const junk of [null, {}, { available: 'yes' }, { available: false, reason: 'nope' }]) {
       const b = bridge(undefined, () => Promise.resolve(junk as never));
       const s = await appleBrain(b).status();
-      expect(s).toMatchObject({ available: false, reasonId: 'unsupported' });
+      expect(s).toEqual({ available: false, reason: "Apple Intelligence isn't available" });
     }
   });
 

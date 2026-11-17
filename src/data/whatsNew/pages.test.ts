@@ -87,6 +87,12 @@ describe('WHATS_NEW_PAGES', () => {
     expect(text('speak-replies')).toMatch(/Speak replies/);
     expect(text('reminders')).toMatch(/off until you turn them on/i);
     expect(text('check-in')).toMatch(/energy/i);
+    // No platform field: iPhone-only pages say so, like "Chat freely".
+    for (const id of ['chat-freely', 'hold-to-talk', 'speak-replies', 'reminders'])
+      expect(r114.find((x) => x.id === id)?.what, id).toMatch(/^In the iPhone app, /);
+    // The session reminder comes at the time you pick on training days (not "before").
+    expect(text('reminders')).toMatch(/time you pick on training days/i);
+    expect(text('reminders')).not.toMatch(/before a training day/i);
   });
 
   it('holds only releases 1.12.0, 1.13.0 and 1.14.0, every page in one of them', () => {

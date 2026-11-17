@@ -292,6 +292,29 @@ describe('runBrainEval (fake bridge)', () => {
     expect(JSON.stringify(out.report)).not.toContain('ZEBRA');
   });
 
+  it('odd tool names never reach the report (request and facts rows)', async () => {
+    const odd: Script = {
+      'made-up: easy on legs': {
+        text: '',
+        toolCalls: [{ name: 'ZEBRA free text from the model', args: { area: 'legs' } }],
+      },
+      'made-up fact question one': {
+        text: 'made-up reply',
+        toolCalls: [{ name: 'ZEBRA <b>name</b>', args: {} }],
+      },
+    };
+    const out = await runBrainEval(
+      deps(fake(odd), {
+        requests: requests.slice(0, 1),
+        facts: { scenario, items: facts.items.slice(0, 1) },
+      }),
+    );
+    if (!out.ok) throw new Error('unavailable');
+    expect(out.report.rows.map((r) => r.got)).toEqual(['?', '?']);
+    expect(out.report.rows[0]?.pass).toBe(false);
+    expect(JSON.stringify(out.report)).not.toContain('ZEBRA');
+  });
+
   it('fits the UI report type (src/ui/screens/brainEval.ts)', async () => {
     const out = await runBrainEval(
       deps(fake(), { requests: requests.slice(0, 1), facts: { scenario, items: [] } }),
