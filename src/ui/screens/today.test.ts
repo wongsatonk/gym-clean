@@ -346,7 +346,7 @@ describe('todayScreen with M10 trainer props', () => {
   ];
 
   function renderM10(over: Partial<TodayProps> = {}, withActions = true) {
-    const calls = { start: [] as string[], train: [] as string[], coach: 0, undo: 0 };
+    const calls = { start: [] as string[], train: [] as string[], undo: 0 };
     const el = asFake(
       todayScreen(props(over), {
         onStart: (d) => calls.start.push(d.id),
@@ -354,7 +354,6 @@ describe('todayScreen with M10 trainer props', () => {
         onTab: () => undefined,
         ...(withActions
           ? {
-              onCoach: () => calls.coach++,
               onUndoAdjust: () => calls.undo++,
               onTrainAnyway: (d: ProgramDay) => calls.train.push(d.id),
             }
@@ -373,14 +372,13 @@ describe('todayScreen with M10 trainer props', () => {
     expect(el.oneByClass('days-head').textContent).toBe(`Your week${DAYS.length}-day split`);
   });
 
-  it('M13: no Coach button in the app bar, even with onCoach (the Coach tab is the way in)', () => {
-    const { el, calls } = renderM10();
+  it('M13: no Coach button in the app bar, even with every M10 action (the Coach tab is the way in)', () => {
+    const { el } = renderM10();
     expect(el.find((e) => e.hasAttribute('data-coach-open'))).toHaveLength(0);
     expect(el.byClass('coach-btn')).toHaveLength(0);
     const bar = el.oneByClass('appbar');
     expect(bar.children.map((c) => c.classes[0])).toEqual(['brand', 'date']);
     expect(bar.oneByClass('date').textContent).toBe('Fri 13 Nov');
-    expect(calls.coach).toBe(0);
   });
 
   it('shows "Adjusted today: …" with Undo as the one notice, right below the hero', () => {
@@ -901,7 +899,6 @@ describe('Today: hero first + "things to sort" (M13)', () => {
     onStart: () => {},
     onOpenDay: () => {},
     onTab: () => {},
-    onCoach: () => {},
     onLighterToday: () => {},
     onNotToday: () => {},
     onTrainAsPlanned: () => {},

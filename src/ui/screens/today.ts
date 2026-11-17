@@ -28,7 +28,7 @@
 // follow it: none → nothing; one → that card; two or more → one compact row "N things to sort"
 // (`[data-notices]`, toggle `[data-notices-toggle]`, aria-expanded) that opens them in place
 // (`[data-notices-list]`). `noticesOpen` / `onNoticesToggle` let app.ts keep it open across a
-// re-render. The header Coach button is gone (the Coach tab is the way in): `onCoach` is ignored.
+// re-render. The header Coach button is gone (the Coach tab is the way in).
 // Only Start is a filled orange button here; today.css turns the cards' own CTAs into outlines.
 import type { WeekDot } from '../../core/stats';
 import type { MissedDay } from '../../core/progress/completion';
@@ -172,11 +172,6 @@ export type TodayActions = ReadinessActions & {
   /** A day card in the strip (opens the preview, as the old day list did). */
   onOpenDay: (day: ProgramDay) => void;
   onTab: (tab: TabId) => void;
-  /**
-   * @deprecated M13: Today has no header Coach button any more (the Coach tab is the way in).
-   * Ignored here; app.ts stops passing it in task 31.
-   */
-  onCoach?: (() => void) | undefined;
   /** M13: the "N things to sort" row was opened (true) or closed (false). */
   onNoticesToggle?: ((open: boolean) => void) | undefined;
   /** Undo on the Adjusted banner. */

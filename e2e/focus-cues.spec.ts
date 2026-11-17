@@ -457,95 +457,105 @@ test('(1, 6, 7, 8) rushed sets: cue after a count word; rows scored; Summary Foc
   expect(w.errors).toEqual([]);
 });
 
-test('(9) drill persona: the cue is spoken rewritten and logged as spoken; dev log has focusCue/focusScore; converter prints them', async ({
-  page,
-}) => {
-  const w = watch(page);
-  await installMocks(page, RUSHED);
-  await page.goto('/');
-  await seedHandsFreeOff(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
-  await page.locator('[data-coach-voice]').getByRole('button', { name: 'Drill sergeant' }).click();
-  await expect(page.locator('[data-coach-voice] [data-rudeness="2"]')).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
-  await leaveSettings(page);
-  await startPullA(page);
-  await goToCurl(page);
+// M13: the developer log records only with owner mode on (a fresh install is off).
+test.describe('owner mode on (dev log)', () => {
+  test.use({ owner: 'on' });
 
-  const cam = await openCam(page);
-  await repsThenFreeze(page, cam, 8);
-  const lines = await page.evaluate(async () => {
-    const p = '/src/core/personas.ts';
-    const m = (await import(p)) as {
-      drillVariants: (c: string, k: string, l: number) => string[];
-    };
-    return m.drillVariants('Slow the lowering.', 'hint', 2);
-  });
-  await expect
-    .poll(async () => (await texts(page)).some((t) => lines.includes(t)), { timeout: 10_000 })
-    .toBe(true);
-  const spoken = (await texts(page)).find((t) => lines.includes(t)) ?? '';
-  expect(await texts(page)).not.toContain(CUE.rushedLowering); // never the calm line…
-  // …but the screen shows the calm cue text.
-  await expect(cam.locator('.rep-coach[data-cue="rushedLowering"]')).toHaveText(CUE.rushedLowering);
-  await cam.getByRole('button', { name: 'Set done' }).click();
-  await expect(cam).toHaveCount(0);
-  await endWorkout(page);
-  await page.getByRole('button', { name: 'Done' }).click();
-
-  // Settings → Export last session (mocked share sheet).
-  await page.getByRole('button', { name: 'Settings' }).click();
-  const panel = page.locator('[data-devlog=panel]');
-  await panel.locator('[data-devlog=export-last]').click();
-  await expect(panel.locator('[data-devlog=status]')).toHaveText('Shared.', { timeout: 15_000 });
-  const text = await page.evaluate(async () => {
-    const file = window.__shared.at(-1);
-    if (!file) return '';
-    const stream = file.name.endsWith('.gz')
-      ? file.stream().pipeThrough(new DecompressionStream('gzip'))
-      : file.stream();
-    return new Response(stream).text();
-  });
-  const session = (JSON.parse(text) as ExportLog).sessions[0];
-  if (!session) throw new Error('no session in the export');
-
-  // focusCue: one per detection (reps 6 and 8), ids and numbers only.
-  const cues = session.events.filter((e) => e.type === 'focusCue');
-  expect(cues.map((e) => e.data?.id)).toEqual(['rushedLowering', 'rushedLowering']);
-  expect(cues.map((e) => e.data?.reps)).toEqual([6, 8]);
-  for (const e of cues) {
-    const d = e.data ?? {};
-    expect(Object.keys(d).sort()).toEqual(
-      ['baseline', 'id', 'reps', 't', 'threshold', 'value'].sort(),
+  test('(9) drill persona: the cue is spoken rewritten and logged as spoken; dev log has focusCue/focusScore; converter prints them', async ({
+    page,
+  }) => {
+    const w = watch(page);
+    await installMocks(page, RUSHED);
+    await page.goto('/');
+    await seedHandsFreeOff(page);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page
+      .locator('[data-coach-voice]')
+      .getByRole('button', { name: 'Drill sergeant' })
+      .click();
+    await expect(page.locator('[data-coach-voice] [data-rudeness="2"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
     );
-    for (const k of ['t', 'reps', 'value', 'baseline', 'threshold'])
-      expect(typeof d[k], k).toBe('number');
-    expect(Number(d.value)).toBeLessThan(Number(d.threshold));
-  }
-  const scores = session.events.filter((e) => e.type === 'focusScore');
-  expect(scores.map((e) => e.data)).toEqual([{ score: 80, cues: 2, partials: 0 }]);
-  // The speech log has the line actually spoken (the drill rewrite), as a hint.
-  const set = session.sets.find((s) => s.exerciseId === CURL_ID);
-  const speech = set?.camera?.speech ?? [];
-  expect(speech.some((s) => s.kind === 'hint' && s.text === spoken && !s.dropped)).toBe(true);
-  expect(speech.some((s) => s.text === CUE.rushedLowering && !s.dropped)).toBe(false);
+    await leaveSettings(page);
+    await startPullA(page);
+    await goToCurl(page);
 
-  // The converter prints the focus section (dry run: nothing written).
-  const file = test.info().outputPath('devlog-focus.json');
-  writeFileSync(file, text);
-  const out = execFileSync('node', ['scripts/devlog.mjs', file, '--dry-run'], {
-    encoding: 'utf8',
+    const cam = await openCam(page);
+    await repsThenFreeze(page, cam, 8);
+    const lines = await page.evaluate(async () => {
+      const p = '/src/core/personas.ts';
+      const m = (await import(p)) as {
+        drillVariants: (c: string, k: string, l: number) => string[];
+      };
+      return m.drillVariants('Slow the lowering.', 'hint', 2);
+    });
+    await expect
+      .poll(async () => (await texts(page)).some((t) => lines.includes(t)), { timeout: 10_000 })
+      .toBe(true);
+    const spoken = (await texts(page)).find((t) => lines.includes(t)) ?? '';
+    expect(await texts(page)).not.toContain(CUE.rushedLowering); // never the calm line…
+    // …but the screen shows the calm cue text.
+    await expect(cam.locator('.rep-coach[data-cue="rushedLowering"]')).toHaveText(
+      CUE.rushedLowering,
+    );
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await expect(cam).toHaveCount(0);
+    await endWorkout(page);
+    await page.getByRole('button', { name: 'Done' }).click();
+
+    // Settings → Export last session (mocked share sheet).
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const panel = page.locator('[data-devlog=panel]');
+    await panel.locator('[data-devlog=export-last]').click();
+    await expect(panel.locator('[data-devlog=status]')).toHaveText('Shared.', { timeout: 15_000 });
+    const text = await page.evaluate(async () => {
+      const file = window.__shared.at(-1);
+      if (!file) return '';
+      const stream = file.name.endsWith('.gz')
+        ? file.stream().pipeThrough(new DecompressionStream('gzip'))
+        : file.stream();
+      return new Response(stream).text();
+    });
+    const session = (JSON.parse(text) as ExportLog).sessions[0];
+    if (!session) throw new Error('no session in the export');
+
+    // focusCue: one per detection (reps 6 and 8), ids and numbers only.
+    const cues = session.events.filter((e) => e.type === 'focusCue');
+    expect(cues.map((e) => e.data?.id)).toEqual(['rushedLowering', 'rushedLowering']);
+    expect(cues.map((e) => e.data?.reps)).toEqual([6, 8]);
+    for (const e of cues) {
+      const d = e.data ?? {};
+      expect(Object.keys(d).sort()).toEqual(
+        ['baseline', 'id', 'reps', 't', 'threshold', 'value'].sort(),
+      );
+      for (const k of ['t', 'reps', 'value', 'baseline', 'threshold'])
+        expect(typeof d[k], k).toBe('number');
+      expect(Number(d.value)).toBeLessThan(Number(d.threshold));
+    }
+    const scores = session.events.filter((e) => e.type === 'focusScore');
+    expect(scores.map((e) => e.data)).toEqual([{ score: 80, cues: 2, partials: 0 }]);
+    // The speech log has the line actually spoken (the drill rewrite), as a hint.
+    const set = session.sets.find((s) => s.exerciseId === CURL_ID);
+    const speech = set?.camera?.speech ?? [];
+    expect(speech.some((s) => s.kind === 'hint' && s.text === spoken && !s.dropped)).toBe(true);
+    expect(speech.some((s) => s.text === CUE.rushedLowering && !s.dropped)).toBe(false);
+
+    // The converter prints the focus section (dry run: nothing written).
+    const file = test.info().outputPath('devlog-focus.json');
+    writeFileSync(file, text);
+    const out = execFileSync('node', ['scripts/devlog.mjs', file, '--dry-run'], {
+      encoding: 'utf8',
+    });
+    expect(out).toContain('Focus cues:');
+    expect(out).toMatch(/score 80 \(2 cues, 0 partials\)/);
+    expect(out).toMatch(/rep 6\s+rushedLowering/);
+    expect(out).toMatch(/rep 8\s+rushedLowering/);
+
+    await commonSpeechChecks(page);
+    expect(w.thirdParty).toEqual([]);
+    expect(w.errors).toEqual([]);
   });
-  expect(out).toContain('Focus cues:');
-  expect(out).toMatch(/score 80 \(2 cues, 0 partials\)/);
-  expect(out).toMatch(/rep 6\s+rushedLowering/);
-  expect(out).toMatch(/rep 8\s+rushedLowering/);
-
-  await commonSpeechChecks(page);
-  expect(w.thirdParty).toEqual([]);
-  expect(w.errors).toEqual([]);
 });
 
 test('(2, 3) hands-free: rushed reps in rest mode → no cue; auto-started set seeds the baseline and cues; none in the Undo window', async ({

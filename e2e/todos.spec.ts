@@ -20,6 +20,9 @@ import {
   todoReady,
 } from './app.helpers';
 
+// M13: the to-dos (card, list, Copy report) are owner tools; this spec is about them.
+test.use({ owner: 'on' });
+
 /** Topics for the web app (platform 'any'); the 4 iPhone-only ones don't count here. */
 const WEB_TOTAL = 10; // 1.13.0 adds "Trainer kit at the gym"; 1.15.0 "Published look"
 const NOW = at(16, 18);

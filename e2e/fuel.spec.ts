@@ -8,7 +8,7 @@
 // - offline search after the first load, against the production preview (service worker).
 // Fuel is never mid-set, so nothing is spoken; no request ever leaves the device.
 import { expect, test, type Locator, type Page } from './fixtures';
-import { expectClearOfToast, tapInPlace } from './app.helpers';
+import { animationsSettled, expectClearOfToast, tapInPlace } from './app.helpers';
 
 declare global {
   interface Window {
@@ -193,6 +193,9 @@ async function confirmLog(page: Page, label: string) {
 /** Every visible button in `scope` is at least 56px tall (gym rule). */
 async function expectTapTargets(page: Page, selector: string) {
   await expect(page.locator(`${selector} button`).first()).toBeVisible();
+  // Let rise-ins finish first: mid-animation a 56px button can measure 55.9999px (as app.helpers).
+  // Not for the undo toast: its countdown is a finite animation that ends with the toast.
+  if (selector !== '[data-undo-toast]') await animationsSettled(page);
   let heights: (readonly [string, number])[] = [];
   await expect
     .poll(async () => {

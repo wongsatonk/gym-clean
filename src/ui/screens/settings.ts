@@ -33,6 +33,7 @@ import type { Accent, BodyArea, Intake } from '../../core/types';
 import type { Unit } from '../../core/units';
 import { APP_NAME } from '../../core/brand';
 import { CREDIT, versionLabel } from '../../core/version';
+import { ONBOARDING_BUTTONS } from '../../data/onboarding';
 import { accentPicker } from '../accentPicker';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
@@ -115,6 +116,8 @@ export type SettingsActions = {
   onBrainEval?: (() => void) | undefined;
   /** M13: opens Settings → About (route 'settings/about'). Omitted → no About row. */
   onAbout?: (() => void) | undefined;
+  /** M13: "Show the welcome again" (route 'welcome'). Omitted → no row. Shown owner on or off. */
+  onRerunWelcome?: (() => void) | undefined;
 };
 
 export const GOAL_NOT_SET = 'Not set yet.';
@@ -327,10 +330,20 @@ function aboutRow(onAbout: () => void): HTMLElement {
   );
 }
 
+/** The row that shows the first-launch welcome again (M13). */
+function rerunWelcomeRow(onRerun: () => void): HTMLElement {
+  return h(
+    'button',
+    { type: 'button', class: 'set-action', 'data-welcome-rerun': true, onclick: () => onRerun() },
+    ONBOARDING_BUTTONS.rerun,
+  );
+}
+
 /**
  * About, always the last section. Owner on: today's name / version / credit lines (M12 slice
  * 1c), plus the About row when `onAbout` is set. Owner off: the About row only (the version, the
- * privacy promise and the credit are on the About screen).
+ * privacy promise and the credit are on the About screen). "Show the welcome again" follows the
+ * About row either way when `onRerunWelcome` is set.
  */
 function aboutSection(
   props: SettingsProps,
@@ -344,7 +357,8 @@ function aboutSection(
   ) => HTMLElement,
 ): HTMLElement | null {
   const open = actions.onAbout ? aboutRow(actions.onAbout) : null;
-  if (!owner) return open ? section('about', 'logo', 'About', open) : null;
+  const rerun = actions.onRerunWelcome ? rerunWelcomeRow(actions.onRerunWelcome) : null;
+  if (!owner) return open || rerun ? section('about', 'logo', 'About', open, rerun) : null;
   // Plain text, no links, nothing sent.
   return section(
     'about',
@@ -354,6 +368,7 @@ function aboutSection(
     h('p', { class: 'set-note', 'data-about': 'version' }, props.version ?? versionLabel()),
     h('p', { class: 'muted set-note', 'data-about': 'credit' }, CREDIT),
     open,
+    rerun,
   );
 }
 

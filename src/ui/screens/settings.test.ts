@@ -693,8 +693,34 @@ describe('settingsScreen M13 owner mode', () => {
     expect(log).toEqual(['about']);
   });
 
+  it('"Show the welcome again" follows the About row, owner off or on, and calls back', () => {
+    for (const owner of [false, true]) {
+      const log: string[] = [];
+      const el = renderM13(
+        { owner },
+        { onAbout: () => log.push('about'), onRerunWelcome: () => log.push('welcome') },
+      );
+      const about = byAttr(el, 'data-section', 'about');
+      const rows = about.byTag('button');
+      expect(rows.map((b) => b.textContent)).toEqual(['About Gym Clean', 'Show the welcome again']);
+      expect(rows[1]?.hasAttribute('data-welcome-rerun')).toBe(true);
+      expect(rows[1]?.classes).toContain('set-action');
+      rows[1]?.click();
+      expect(log).toEqual(['welcome']);
+    }
+  });
+
+  it('without onRerunWelcome → no welcome row; with it alone, owner off still gets an About section', () => {
+    expect(has(renderM13({ owner: false }, { onAbout: () => {} }), 'data-welcome-rerun')).toBe(
+      false,
+    );
+    const el = renderM13({ owner: false }, { onRerunWelcome: () => {} });
+    const about = byAttr(el, 'data-section', 'about');
+    expect(about.byTag('button').map((b) => b.textContent)).toEqual(['Show the welcome again']);
+  });
+
   it('new copy passes the coaching-words check', () => {
-    for (const s of ['What changed in this version.', 'About Gym Clean'])
+    for (const s of ['What changed in this version.', 'About Gym Clean', 'Show the welcome again'])
       expect(checkCopy(s).ok).toBe(true);
   });
 });

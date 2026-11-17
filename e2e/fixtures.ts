@@ -7,9 +7,12 @@
 // - `warmups: 'off'` (default) stores settings 'trainerKit' = { warmups: 'off' }, so "Set 1 of 4"
 //   is the first set of the first heavy lift. The trainer-kit spec uses `warmups: 'default'`.
 //
-// - `owner: 'on'` (default) stores settings 'ownerMode' = on, as on his install (M13): the to-dos,
-//   developer log, build hash and Coach eval show as before. `owner: 'off'` leaves it to the app
-//   (a fresh install decides off).
+// - `owner: 'off'` (default) leaves owner mode to the app: a fresh install decides off, as on a
+//   new user's phone (M13). Specs about the to-dos, developer log, version + build hash or Coach
+//   eval use `test.use({ owner: 'on' })`, which stores settings 'ownerMode' = on as on his install.
+//
+// Onboarding is done by default: the 'intakeSkipped' row (firstRun 'skip') also means the M13
+// first-launch welcome does not open (shouldOnboard). first-launch.spec.ts uses firstRun 'fresh'.
 //
 // How: an init script wraps IDBFactory.open. When the app's database is created (upgrade from
 // version 0), the first successful open writes those rows in a readwrite transaction started
@@ -58,12 +61,12 @@ export const test = base.extend<{
   firstRun: 'skip' | 'fresh';
   /** 'off' (default): no warm-up sets; 'default': the trainer kit's default rule. */
   warmups: 'off' | 'default';
-  /** 'on' (default): owner mode on, as on his install; 'off': the app decides (fresh → off). */
+  /** 'off' (default): the app decides (fresh → off); 'on': owner mode on, as on his install. */
   owner: 'on' | 'off';
 }>({
   firstRun: ['skip', { option: true }],
   warmups: ['off', { option: true }],
-  owner: ['on', { option: true }],
+  owner: ['off', { option: true }],
   context: async ({ context, firstRun, warmups, owner }, use) => {
     await freshDbDefaults(context, {
       skipIntake: firstRun === 'skip',

@@ -25,6 +25,10 @@ import {
 import { endWorkout } from './workout.helpers';
 import { WHATS_NEW_PAGES } from '../src/data/whatsNew/pages';
 
+// M13: the tour's to-do pages, its version text and the build line are owner surfaces, as on his
+// install. A fresh install (owner off) is covered in owner-mode.spec.ts.
+test.use({ owner: 'on' });
+
 const TOUR = '[data-tour="whats-new"]';
 const tour = (page: Page) => page.locator(TOUR);
 const wn = (page: Page, part: string) => tour(page).locator(`[data-wn="${part}"]`);

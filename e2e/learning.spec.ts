@@ -568,105 +568,110 @@ async function installFixtureLandmarker(page: Page): Promise<void> {
   );
 }
 
-test('fixture landmarker: Hammer Curls counts 4 reps with the chip, Fix works, dev log says learning vs tuned', async ({
-  page,
-}, testInfo) => {
-  test.setTimeout(90_000);
-  const errors: string[] = [];
-  const thirdParty: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
-  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
-  page.on('request', (r) => {
-    const url = new URL(r.url());
-    if (url.protocol.startsWith('http') && !ORIGIN_HOSTS.has(url.hostname))
-      thirdParty.push(r.url());
+// M13: the developer log records only with owner mode on (a fresh install is off).
+test.describe('owner mode on (dev log)', () => {
+  test.use({ owner: 'on' });
+
+  test('fixture landmarker: Hammer Curls counts 4 reps with the chip, Fix works, dev log says learning vs tuned', async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const errors: string[] = [];
+    const thirdParty: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+    page.on('request', (r) => {
+      const url = new URL(r.url());
+      if (url.protocol.startsWith('http') && !ORIGIN_HOSTS.has(url.hostname))
+        thirdParty.push(r.url());
+    });
+    await installFixtureLandmarker(page);
+    await page.reload(); // the route and init script apply from here
+
+    // A tuned camera set first: Dumbbell Bicep Curl, nobody in frame, Set done (0 reps).
+    const curlCam = await openCameraFor(page, 'Dumbbell Bicep Curl');
+    await expect(curlCam.locator('[data-learning]')).toHaveCount(0);
+    // The model is up (the camera meta reaches the dev log then).
+    await expect(curlCam).toHaveAttribute('data-delegate', 'CPU', { timeout: 15_000 });
+    await curlCam.getByRole('button', { name: 'Set done' }).click();
+    await expect(curlCam).toHaveCount(0);
+    await expect(page.locator('[data-rest-clock]')).toBeVisible();
+
+    // Hammer Curls on the clip: the list jump lands on its rest, then Start set.
+    await page.getByRole('button', { name: 'Exercise list' }).click();
+    await page
+      .getByRole('dialog', { name: 'Exercise list' })
+      .locator('.ex-row-btn', { hasText: 'Hammer Curls' })
+      .click();
+    await expect(page.locator('[data-rest-clock]')).toBeVisible();
+    await page.getByRole('button', { name: 'Start set' }).click();
+    await expect(page.getByRole('heading', { name: 'Hammer Curls' })).toBeVisible();
+    await page.evaluate((f) => {
+      (window as unknown as { __fixture: string }).__fixture = f;
+    }, HAMMER);
+    await page.getByRole('button', { name: 'Camera', exact: true }).click();
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    await expect(cam).toHaveAttribute('data-delegate', 'CPU', { timeout: 15_000 });
+    await expect(cam.getByRole('note', { name: CHIP_NAME })).toBeVisible();
+    await expect(cam.locator('.cam-setup .setup-learning')).toHaveText(SETUP_LINE);
+    await expect(cam.locator('[data-gauge]')).toHaveCount(1);
+    const count = cam.locator('[data-reps]');
+    await expect(count).toHaveText('0');
+
+    // Step in (start position held), then play the clip once.
+    await page.evaluate(() => {
+      (window as unknown as { __noPerson: boolean }).__noPerson = false;
+    });
+    await expect(cam.locator('.cam-setup')).toBeHidden({ timeout: 10_000 }); // person found
+    await expect(cam.locator('[data-gauge]')).toBeVisible();
+    await page.evaluate(() => (window as unknown as { __play: () => void }).__play());
+    await expect(count).toHaveText('4', { timeout: 30_000 });
+    await page.waitForTimeout(1_500); // the last frame is held: no fifth rep
+    await expect(count).toHaveText('4');
+    await expect(cam.getByRole('note', { name: CHIP_NAME })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('learning-hammer-counted.png') });
+
+    // Set done → Rest: the learning note under Fix; Fix changes the row (4 → 5).
+    await cam.getByRole('button', { name: 'Set done' }).click();
+    await expect(cam).toHaveCount(0);
+    const fix = page.locator('[data-lsc=panel]');
+    await expect(fix).toHaveAttribute('data-reps', '4');
+    await expect(fix.locator('[data-lsc=learning]')).toHaveText(REST_LINE);
+    await fix.locator('[data-lsc=fix]').click();
+    await fix.locator('[data-lsc=reps-plus]').click();
+    await fix.locator('[data-lsc=save]').click();
+    await expect(fix).toHaveAttribute('data-reps', '5');
+
+    // End → Summary → Done → Settings → Export last session (mocked share sheet).
+    await endWorkout(page);
+    await page.getByRole('button', { name: 'Done' }).click();
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const panel = page.locator('[data-devlog=panel]');
+    await panel.locator('[data-devlog=export-last]').click();
+    await expect(panel.locator('[data-devlog=status]')).toHaveText('Shared.', { timeout: 15_000 });
+    const text = await page.evaluate(async () => {
+      const file = (window as unknown as { __shared: File[] }).__shared.at(-1);
+      if (!file) return '';
+      const stream = file.name.endsWith('.gz')
+        ? file.stream().pipeThrough(new DecompressionStream('gzip'))
+        : file.stream();
+      return new Response(stream).text();
+    });
+    const sets = (JSON.parse(text) as DevLogExport).sessions[0]?.sets ?? [];
+    const hammer = sets.filter((x) => x.exerciseId === 'Hammer_Curls');
+    const curl = sets.filter((x) => x.exerciseId === 'Dumbbell_Bicep_Curl');
+    expect(hammer).toHaveLength(1);
+    expect(curl).toHaveLength(1);
+    expect(hammer[0]?.camera?.folder).toBe('hammer-curl');
+    expect(hammer[0]?.camera?.ruleStatus).toBe('learning');
+    expect(curl[0]?.camera?.folder).toBe('curl');
+    expect(curl[0]?.camera?.ruleStatus).toBe('tuned');
+
+    // Nothing about learning is spoken; nothing leaves the device.
+    expect((await spoken(page)).filter((t) => /learning/i.test(t))).toEqual([]);
+    expect(thirdParty).toEqual([]);
+    expect(errors).toEqual([]);
   });
-  await installFixtureLandmarker(page);
-  await page.reload(); // the route and init script apply from here
-
-  // A tuned camera set first: Dumbbell Bicep Curl, nobody in frame, Set done (0 reps).
-  const curlCam = await openCameraFor(page, 'Dumbbell Bicep Curl');
-  await expect(curlCam.locator('[data-learning]')).toHaveCount(0);
-  // The model is up (the camera meta reaches the dev log then).
-  await expect(curlCam).toHaveAttribute('data-delegate', 'CPU', { timeout: 15_000 });
-  await curlCam.getByRole('button', { name: 'Set done' }).click();
-  await expect(curlCam).toHaveCount(0);
-  await expect(page.locator('[data-rest-clock]')).toBeVisible();
-
-  // Hammer Curls on the clip: the list jump lands on its rest, then Start set.
-  await page.getByRole('button', { name: 'Exercise list' }).click();
-  await page
-    .getByRole('dialog', { name: 'Exercise list' })
-    .locator('.ex-row-btn', { hasText: 'Hammer Curls' })
-    .click();
-  await expect(page.locator('[data-rest-clock]')).toBeVisible();
-  await page.getByRole('button', { name: 'Start set' }).click();
-  await expect(page.getByRole('heading', { name: 'Hammer Curls' })).toBeVisible();
-  await page.evaluate((f) => {
-    (window as unknown as { __fixture: string }).__fixture = f;
-  }, HAMMER);
-  await page.getByRole('button', { name: 'Camera', exact: true }).click();
-  const cam = page.getByRole('dialog', { name: 'Camera' });
-  await expect(cam).toHaveAttribute('data-delegate', 'CPU', { timeout: 15_000 });
-  await expect(cam.getByRole('note', { name: CHIP_NAME })).toBeVisible();
-  await expect(cam.locator('.cam-setup .setup-learning')).toHaveText(SETUP_LINE);
-  await expect(cam.locator('[data-gauge]')).toHaveCount(1);
-  const count = cam.locator('[data-reps]');
-  await expect(count).toHaveText('0');
-
-  // Step in (start position held), then play the clip once.
-  await page.evaluate(() => {
-    (window as unknown as { __noPerson: boolean }).__noPerson = false;
-  });
-  await expect(cam.locator('.cam-setup')).toBeHidden({ timeout: 10_000 }); // person found
-  await expect(cam.locator('[data-gauge]')).toBeVisible();
-  await page.evaluate(() => (window as unknown as { __play: () => void }).__play());
-  await expect(count).toHaveText('4', { timeout: 30_000 });
-  await page.waitForTimeout(1_500); // the last frame is held: no fifth rep
-  await expect(count).toHaveText('4');
-  await expect(cam.getByRole('note', { name: CHIP_NAME })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('learning-hammer-counted.png') });
-
-  // Set done → Rest: the learning note under Fix; Fix changes the row (4 → 5).
-  await cam.getByRole('button', { name: 'Set done' }).click();
-  await expect(cam).toHaveCount(0);
-  const fix = page.locator('[data-lsc=panel]');
-  await expect(fix).toHaveAttribute('data-reps', '4');
-  await expect(fix.locator('[data-lsc=learning]')).toHaveText(REST_LINE);
-  await fix.locator('[data-lsc=fix]').click();
-  await fix.locator('[data-lsc=reps-plus]').click();
-  await fix.locator('[data-lsc=save]').click();
-  await expect(fix).toHaveAttribute('data-reps', '5');
-
-  // End → Summary → Done → Settings → Export last session (mocked share sheet).
-  await endWorkout(page);
-  await page.getByRole('button', { name: 'Done' }).click();
-  await page.getByRole('button', { name: 'Settings' }).click();
-  const panel = page.locator('[data-devlog=panel]');
-  await panel.locator('[data-devlog=export-last]').click();
-  await expect(panel.locator('[data-devlog=status]')).toHaveText('Shared.', { timeout: 15_000 });
-  const text = await page.evaluate(async () => {
-    const file = (window as unknown as { __shared: File[] }).__shared.at(-1);
-    if (!file) return '';
-    const stream = file.name.endsWith('.gz')
-      ? file.stream().pipeThrough(new DecompressionStream('gzip'))
-      : file.stream();
-    return new Response(stream).text();
-  });
-  const sets = (JSON.parse(text) as DevLogExport).sessions[0]?.sets ?? [];
-  const hammer = sets.filter((x) => x.exerciseId === 'Hammer_Curls');
-  const curl = sets.filter((x) => x.exerciseId === 'Dumbbell_Bicep_Curl');
-  expect(hammer).toHaveLength(1);
-  expect(curl).toHaveLength(1);
-  expect(hammer[0]?.camera?.folder).toBe('hammer-curl');
-  expect(hammer[0]?.camera?.ruleStatus).toBe('learning');
-  expect(curl[0]?.camera?.folder).toBe('curl');
-  expect(curl[0]?.camera?.ruleStatus).toBe('tuned');
-
-  // Nothing about learning is spoken; nothing leaves the device.
-  expect((await spoken(page)).filter((t) => /learning/i.test(t))).toEqual([]);
-  expect(thirdParty).toEqual([]);
-  expect(errors).toEqual([]);
 });
 
 test.describe('small phone (375×667)', () => {

@@ -2,6 +2,9 @@ import { expect, test, type Page } from './fixtures';
 import { seedHandsFreeOff } from './hands-free.helpers';
 import { endWorkout } from './workout.helpers';
 
+// M13: the developer log is an owner tool (off on a fresh install); this spec is about it.
+test.use({ owner: 'on' });
+
 // M4c gym-session data path: a real camera set (fake camera = synthetic curl clip) is recorded in
 // the developer log with frames, rep events, spoken counts, counted vs corrected numbers, and the
 // export carries all of it. Runs in the `mobile-person-camera` project (one worker).

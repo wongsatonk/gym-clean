@@ -1,4 +1,5 @@
 import { expect, test, type Page } from './fixtures';
+import { at, guardNetwork, openApp, record } from './app.helpers';
 
 /**
  * M13 tasks 19, 23, 24 (polish), mounted from the real modules with made-up data. The harness
@@ -9,6 +10,11 @@ import { expect, test, type Page } from './fixtures';
  * - Rest "Next" card: the 2D map shows at once; the real 3D body fades in over it once it has
  *   drawn; moved away (the 3D sheet), the 2D comes back. Instant under reduced motion.
  * - Fuel entry rows: no always-visible Delete block; the row opens the sheet (Edit / Delete).
+ *
+ * - The real app (task 33), fresh install at 390×844 and 360×740: Start is inside the first
+ *   viewport, it is the only filled orange button on Today, the five tab labels read in full,
+ *   nothing scrolls sideways.
+ * Every test fails on a request that leaves the device (the harness ones too).
  *
  * M13_SHOTS=1 also saves 390×844 screenshots to docs/screenshots/m13-*.png.
  */
@@ -39,7 +45,13 @@ const shot = async (page: Page, name: string) => {
 };
 const width = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth);
 
+const offsiteBy = new WeakMap<Page, string[]>();
+test.afterEach(({ page }) => {
+  expect(offsiteBy.get(page) ?? [], 'requests that left the device').toEqual([]);
+});
+
 async function stubs(page: Page): Promise<void> {
+  offsiteBy.set(page, await guardNetwork(page));
   await page.addInitScript(() => {
     window.__spoken = [];
     window.__calls = [];
@@ -119,7 +131,6 @@ async function mountToday(page: Page, notices: 'none' | 'two' | 'one'): Promise<
             onStart: (d: { id: string }) => log(`start:${d.id}`),
             onOpenDay: (d: { id: string }) => log(`open:${d.id}`),
             onTab: (t: string) => log(`tab:${t}`),
-            onCoach: () => log('coach'),
             onLighterToday: () => log('lighter'),
             onNotToday: () => log('notToday'),
             onTrainAsPlanned: () => log('keep'),
@@ -437,3 +448,35 @@ test('Fuel entry rows at 390×844: one full-width row button, no Delete block; i
   await row.locator('[data-entry-edit]').click();
   expect(await page.evaluate(() => window.__calls)).toEqual(['edit:e1']);
 });
+
+// ---------- The real app (task 33): Today's first viewport and the tab bar ----------
+
+for (const vp of [
+  { width: 390, height: 844 },
+  { width: 360, height: 740 },
+]) {
+  test(`real app at ${vp.width}×${vp.height}: Start in the first viewport, the only filled button; tab labels in full`, async ({
+    page,
+  }) => {
+    offsiteBy.set(page, await guardNetwork(page));
+    const { errors } = record(page);
+    await page.setViewportSize(vp);
+    await openApp(page, at(13, 18));
+    const start = page.locator('main[data-screen="today"] [data-start]').first();
+    await expect(start).toBeInViewport({ ratio: 1 });
+    expect((await start.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(56);
+    expect(await filledButtons(page)).toEqual(['Start workout']);
+
+    const labels = page.locator('[data-tabbar] .tab-label');
+    await expect(labels).toHaveText(['Today', 'Fuel', 'Coach', 'Calendar', 'Settings']);
+    // In full: no label is clipped (its text fits its own box).
+    const clipped = await labels.evaluateAll((els) =>
+      els.filter((e) => e.scrollWidth > e.clientWidth + 0.5).map((e) => e.textContent),
+    );
+    expect(clipped).toEqual([]);
+    await expect(page.locator('[data-tabbar]')).toBeInViewport();
+    expect(await width(page)).toBe(vp.width);
+    expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}
