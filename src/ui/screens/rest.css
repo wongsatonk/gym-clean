@@ -6,6 +6,9 @@
 
 .rest-card-fig {
   position: relative;
+  /* Its own stacking context: the slot's z-index (and the 3D canvas in it) stays inside the
+     figure, so nothing in the card can paint over the sticky Start set dock below. */
+  isolation: isolate;
 }
 
 .rest-card-fig .rest-fig-2d {
@@ -44,4 +47,12 @@
 
 .rest-card-fig[data-3d='shown'] .rest-fig-2d {
   opacity: 0;
+}
+
+/* The sticky Start set dock paints above everything that scrolls under it (the Next card's 3D
+   canvas included), so the whole button is tappable at every scroll position
+   (e2e/rest-dock.spec.ts). */
+.rest .sticky-bottom {
+  position: sticky;
+  z-index: 2;
 }

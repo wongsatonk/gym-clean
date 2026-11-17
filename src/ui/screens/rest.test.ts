@@ -589,4 +589,13 @@ describe('Rest "Next" card: 2D at once, 3D fades in over it (M13)', () => {
     // Reduced motion: the one global rule in styles.css (the tokens are 0ms), no second block here.
     expect(css).not.toMatch(/@media \(prefers-reduced-motion/);
   });
+
+  it('rest.css: the card figure keeps its layers to itself; the sticky Start set dock is on top', () => {
+    const css = readFileSync(join(__dirname, 'rest.css'), 'utf8');
+    // The slot's z-index (and the 3D canvas in it) stays inside the figure's own stacking context…
+    expect(css).toMatch(/\.rest-card-fig \{[^}]*isolation: isolate;/);
+    // …and the dock paints above every in-flow layer of the screen.
+    expect(css).toMatch(/\.rest \.sticky-bottom \{[^}]*z-index: \d+;/);
+    expect(css).toMatch(/\.rest \.sticky-bottom \{[^}]*position: sticky;/);
+  });
 });
