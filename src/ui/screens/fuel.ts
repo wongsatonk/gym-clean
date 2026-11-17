@@ -15,6 +15,9 @@
 // M12 slice 1b (optional): the "Measurements" row (`[data-measurements-open]`, fuel/measurements.ts)
 // when `measurements` and `onMeasurements` are both set. It sits under today's food, a monthly
 // thing out of the way of logging; once it is time to measure again it moves up under the header.
+// M12 slice 1b task 33 (optional): the protein-per-meal nudge (`[data-protein-nudge]`,
+// fuel/proteinNudge.ts) under Log food, right where the meal was just logged, when
+// `proteinNudge` and `onDismissProteinNudge` are both set; "Why?" shows with `onProteinWhy`.
 import type {
   FoodEntry,
   MacroSet,
@@ -27,6 +30,7 @@ import { h } from '../dom';
 import { SLOT_LABEL, amountText, estimateTag, fmtNum, fromHealthTag } from '../fuel/common';
 import { nudgeBanner } from '../fuel/links';
 import { measurementsEntryRow, type MeasurementsEntry } from '../fuel/measurements';
+import { proteinNudge, type ProteinNudgeProps } from '../fuel/proteinNudge';
 import { fuelRings } from '../fuel/rings';
 import { icon } from '../icons';
 import { tabBar, type TabId } from '../tabBar';
@@ -51,6 +55,8 @@ export type FuelProps = {
   nudge?: string | null | undefined;
   /** M12 1b: when he last measured and whether it's time again (`measurementsEntry(...)`). */
   measurements?: MeasurementsEntry | null | undefined;
+  /** M12 1b: core's protein-per-meal nudge for the latest light meal, or null (none / dismissed). */
+  proteinNudge?: ProteinNudgeProps | null | undefined;
 };
 
 export type FuelActions = {
@@ -64,6 +70,10 @@ export type FuelActions = {
   onDismissNudge?: (() => void) | undefined;
   /** M12 1b: opens the Measurements screen. Needed (with `measurements`) to show the row. */
   onMeasurements?: (() => void) | undefined;
+  /** M12 1b: "Got it" on the protein nudge (main records the meal key). Needed to show it. */
+  onDismissProteinNudge?: ((mealKey: string) => void) | undefined;
+  /** M12 1b: "Why?" on the protein nudge: main opens the protein learn card from `opener`. */
+  onProteinWhy?: ((opener: HTMLElement) => void) | undefined;
   onTab: (tab: TabId) => void;
 };
 
@@ -210,6 +220,14 @@ export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement 
       ? measurementsEntryRow(props.measurements, onMeasurements)
       : null;
   const measureDue = props.measurements?.due === true;
+  const onNudgeDismiss = actions.onDismissProteinNudge;
+  const mealNudge =
+    props.proteinNudge && onNudgeDismiss
+      ? proteinNudge(props.proteinNudge, {
+          onDismiss: onNudgeDismiss,
+          onWhy: actions.onProteinWhy,
+        })
+      : null;
   return h(
     'main',
     { class: `screen fuel has-tabbar ${moodClass('pro')}`, 'data-screen': 'fuel' },
@@ -228,6 +246,7 @@ export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement 
       icon('plus', 'lg'),
       'Log food',
     ),
+    mealNudge,
     entriesSection(props, actions),
     measureDue ? null : measure,
     tabBar('fuel', actions.onTab),

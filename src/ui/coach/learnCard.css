@@ -1,0 +1,132 @@
+/* M12 slice 1b task 33: the learn-card sheet and the shared "Why?" button
+   (src/ui/coach/learnCard.ts). Tokens only, Pro mood. Body ≥ 20px, taps ≥ 56px.
+   Colour roles: "Got it" is a neutral surface-2 button (closing is not an action to push);
+   the "Why it helps" block has a cue-colour edge (a coaching line), never a warning colour.
+   Layer: above sheets and the coach sheet (20), below How-to (50). The veil fades in (CSS, zeroed
+   by the global reduced-motion rule); the panel's rise is motion.ts enterScreen. */
+
+.learn-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.learn-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--veil);
+  animation: motion-fade var(--dur-base) var(--ease-standard);
+}
+
+.learn-panel {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: 88dvh;
+  margin: 0 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 16px max(16px, env(safe-area-inset-bottom));
+  background: var(--surface);
+  color: var(--text);
+  border-top: var(--line-w) solid var(--line);
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  min-width: 0;
+}
+
+.learn-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.learn-eyebrow .ic {
+  color: var(--info);
+}
+
+.learn-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.learn-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.learn-body p,
+.learn-whyblock p {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.learn-whyblock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-left: 4px solid var(--cue);
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+}
+
+.learn-why-h {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.learn-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap-cta);
+  margin-top: 4px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* ---------- "Why?" (chat bubble, protein nudge; the rest screen has its own .effort-why) ---------- */
+
+.learn-why {
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 96px;
+  min-height: var(--tap-min);
+  padding: 0 12px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  background: transparent;
+  border-color: transparent;
+}
+
+.learn-why .ic {
+  color: var(--info);
+}

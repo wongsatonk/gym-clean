@@ -1,0 +1,64 @@
+/* M12 slice 1b task 33: the Fuel protein-per-meal nudge and the Summary post-workout meal idea
+   (src/ui/fuel/proteinNudge.ts). Tokens only. Body ≥ 20px, taps ≥ 56px. Colour roles: the nudge
+   is information (a cue-colour edge + icon + words), not a warning; its buttons are neutral.
+   The meal idea reuses the coach food card rows (foodCard.css: fc-*). */
+
+.pn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: var(--line-w) solid var(--line);
+  border-left: 4px solid var(--cue);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.pn-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.pn-title .ic {
+  flex: none;
+  color: var(--cue);
+}
+
+.pn-text {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.pn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pn-dismiss {
+  flex: 1 1 140px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-min);
+  padding: 0 16px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+/* Summary: the idea card sits on the Energy page like the protein line, as one row. */
+.meal-idea .meal-idea-row {
+  border-top: 0;
+  padding-bottom: 0;
+}

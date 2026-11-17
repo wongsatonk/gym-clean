@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NewBest } from '../../core/stats';
-import type { SetLog } from '../../core/types';
+import type { FoodSuggestion, SetLog } from '../../core/types';
 import { FakeEl, asFake, useFakeDom } from './testDom';
 import {
   barWidths,
@@ -370,5 +370,58 @@ describe('summaryScreen M7 protein line', () => {
     const tiles = kids.findIndex((k) => k.includes('sum-tiles'));
     expect(kids[tiles + 1]).toContain('FUEL');
     expect(el.textContent).toContain('45 g protein to go today');
+  });
+});
+
+describe('summaryScreen M12 1b post-workout meal idea', () => {
+  // Made-up suggestion (the M10 coach food suggestion shape, core suggestFood).
+  const IDEA: FoodSuggestion = {
+    label: 'Chicken rice bowl',
+    ref: { recipeId: 'r1' },
+    amount: { servings: 1 },
+    macros: { kcal: 520, proteinG: 38 },
+    why: 'Fits your 45 g protein left',
+  };
+  const ideaOf = (el: FakeEl) => el.find((e) => e.hasAttribute('data-meal-idea'));
+
+  it('hidden without mealIdea, with null, or without onLogMealIdea', () => {
+    expect(ideaOf(render().el)).toHaveLength(0);
+    expect(ideaOf(render({ mealIdea: null }).el)).toHaveLength(0);
+    expect(ideaOf(render({ mealIdea: { suggestion: IDEA } }).el)).toHaveLength(0);
+  });
+
+  it('shown right after the protein line; Log hands the suggestion back', () => {
+    const logged: FoodSuggestion[] = [];
+    const el = asFake(
+      summaryScreen(
+        props({
+          fuel: { proteinG: 85, targetG: 130, hint: '45 g protein to go today' },
+          mealIdea: { suggestion: IDEA },
+        }),
+        { onDone: () => {}, onLogMealIdea: (s) => logged.push(s) },
+      ),
+    );
+    const kids = el.children.map(
+      (c) =>
+        (c.hasAttribute('data-fuel-protein') && 'FUEL') ||
+        (c.hasAttribute('data-meal-idea') && 'IDEA') ||
+        c.tag,
+    );
+    expect(kids.indexOf('IDEA')).toBe(kids.indexOf('FUEL') + 1);
+    expect(el.textContent).toContain('Chicken rice bowl');
+    expect(el.textContent).toContain('1 serving · 520 kcal · 38 g protein');
+    el.find((e) => e.hasAttribute('data-meal-idea-log'))[0]?.click();
+    expect(logged).toEqual([IDEA]);
+  });
+
+  it('logged: shows "Logged" and no Log button', () => {
+    const el = asFake(
+      summaryScreen(props({ mealIdea: { suggestion: IDEA, logged: true } }), {
+        onDone: () => {},
+        onLogMealIdea: () => {},
+      }),
+    );
+    expect(el.find((e) => e.hasAttribute('data-meal-idea-log'))).toHaveLength(0);
+    expect(el.find((e) => e.hasAttribute('data-meal-idea-logged'))).toHaveLength(1);
   });
 });

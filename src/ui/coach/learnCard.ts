@@ -1,0 +1,226 @@
+// M12 slice 1b task 33 (SPEC M12 trainer kit item 12): the learn-card sheet. A short "why" card
+// (core data `LearnCard = { id; title; body; why? }`, ~10 of them in src/data/learnCards.ts) that
+// the coach and screens link to with a "Why?" button: a coach bubble with `learnId` (chat.ts),
+// the rest screen's effort row (`onEffortWhy(opener)`), the Fuel protein nudge.
+//
+// Props in, callbacks out: the caller passes the card itself (main looks it up by id); nothing
+// here imports the card list. Shown, never spoken: it opens only on a tap, and every opener is
+// between sets or off the workout (rest screen, chat, Fuel), never during a set.
+//
+// The sheet is a bottom sheet over a veil (role="dialog", aria-modal): title (sheet title size),
+// the body (paragraphs split on blank lines, ≥ 20px), the optional `why` as a "Why it helps"
+// block, and one "Got it" button (≥ 56px). Close by Got it, the veil, or Escape; Tab stays on
+// the sheet's one control. On close the sheet is removed and focus goes back to the opener (when
+// it is still on the page). Motion: the panel rises with `enterScreen(…, 'up')` (motion.ts:
+// nothing under reduced motion), the veil fade is CSS (zeroed by the global reduced-motion rule).
+//
+// `openLearnCard(card, opener)` mounts it on document.body; only one is open at a time.
+// `closeLearnCard()` closes it from outside (main calls it when a set starts, so a card left
+// open on the rest screen never covers the Exercise screen).
+//
+// e2e hooks: `[data-learn-sheet=<id>]` (the dialog), `[data-learn-title]`, `[data-learn-body]`,
+// `[data-learn-why]`, `[data-learn-close]`, `[data-learn-veil]`; "Why?" buttons from
+// `whyButton(...)` carry `data-learn-open=<id>` (or the caller's own hook).
+import type { LearnCard } from '../../core/types';
+import { h } from '../dom';
+import { icon } from '../icons';
+import { enterScreen, type Stop } from '../motion';
+import { moodClass } from '../tokens';
+import './learnCard.css';
+
+export const GOT_IT = 'Got it';
+export const WHY_LABEL = 'Why?';
+export const WHY_HEADING = 'Why it helps';
+
+/** The body split into paragraphs on blank lines; single newlines become spaces. Pure. */
+export function bodyParagraphs(body: string): string[] {
+  return body
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+/** The card with this id, or null (a stale `learnId` shows no link). Pure. */
+export function findLearnCard(
+  cards: readonly LearnCard[],
+  id: string | undefined,
+): LearnCard | null {
+  if (!id) return null;
+  return cards.find((c) => c.id === id) ?? null;
+}
+
+export type WhyButtonOptions = {
+  /** Screen-reader name, e.g. "Why? About protein". Default "Why?". */
+  label?: string | undefined;
+  /** Extra hook attributes (e.g. `{ 'data-nudge-why': true }`). */
+  attrs?: Record<string, string | boolean> | undefined;
+  /** Extra class names. */
+  className?: string | undefined;
+};
+
+/**
+ * The "Why?" link-style button (≥ 56px, help icon + word, underlined like the rest screen's).
+ * `onWhy` gets the button itself, so the sheet can hand focus back to it on close.
+ */
+export function whyButton(
+  onWhy: (opener: HTMLElement) => void,
+  opts: WhyButtonOptions = {},
+): HTMLButtonElement {
+  const btn: HTMLButtonElement = h(
+    'button',
+    {
+      type: 'button',
+      class: `learn-why${opts.className ? ` ${opts.className}` : ''}`,
+      'aria-label': opts.label,
+      ...(opts.attrs ?? {}),
+      onclick: () => onWhy(btn),
+    },
+    icon('help', 'sm'),
+    h('span', {}, WHY_LABEL),
+  );
+  return btn;
+}
+
+export type LearnSheetActions = {
+  /** Got it, the veil, or Escape. */
+  onClose: () => void;
+};
+
+let sheets = 0;
+
+type Built = { root: HTMLElement; panel: HTMLElement; gotIt: HTMLElement };
+
+/** The sheet element (pure render; `openLearnCard` mounts it and handles focus). */
+export function learnCardSheet(card: LearnCard, a: LearnSheetActions): HTMLElement {
+  return buildSheet(card, a).root;
+}
+
+function buildSheet(card: LearnCard, a: LearnSheetActions): Built {
+  const titleId = `learn-title-${++sheets}`;
+  const bodyId = `learn-body-${sheets}`;
+  const close = h(
+    'button',
+    {
+      type: 'button',
+      class: 'learn-close',
+      'data-learn-close': true,
+      onclick: () => a.onClose(),
+    },
+    icon('check', 'md'),
+    h('span', {}, GOT_IT),
+  );
+  const paras = bodyParagraphs(card.body);
+  const panel = h(
+    'div',
+    { class: 'learn-panel' },
+    h('p', { class: 'learn-eyebrow caps' }, icon('help', 'sm'), h('span', {}, 'Coach tip')),
+    h('h2', { class: 'learn-title', id: titleId, 'data-learn-title': true }, card.title),
+    h(
+      'div',
+      { class: 'learn-body', id: bodyId, 'data-learn-body': true },
+      ...paras.map((p) => h('p', {}, p)),
+    ),
+    card.why
+      ? h(
+          'section',
+          { class: 'learn-whyblock', 'data-learn-why': true, 'aria-label': WHY_HEADING },
+          h('h3', { class: 'learn-why-h' }, WHY_HEADING),
+          h('p', {}, card.why),
+        )
+      : null,
+    close,
+  );
+  const veil = h('div', {
+    class: 'learn-veil',
+    'data-learn-veil': true,
+    'aria-hidden': 'true',
+    onclick: () => a.onClose(),
+  });
+  const root = h(
+    'div',
+    {
+      class: `learn-sheet ${moodClass('pro')}`,
+      role: 'dialog',
+      'aria-modal': 'true',
+      'aria-labelledby': titleId,
+      'aria-describedby': bodyId,
+      'data-learn-sheet': card.id,
+    },
+    veil,
+    panel,
+  );
+  // Escape closes; Tab / Shift+Tab stay on Got it (the sheet's only control).
+  root.addEventListener('keydown', (ev) => {
+    const kev = ev as KeyboardEvent;
+    if (kev.key === 'Escape') {
+      kev.preventDefault();
+      a.onClose();
+    } else if (kev.key === 'Tab') {
+      kev.preventDefault();
+      close.focus();
+    }
+  });
+  return { root, panel, gotIt: close };
+}
+
+export type LearnCardHandle = {
+  el: HTMLElement;
+  /** Removes the sheet and returns focus to the opener. Safe to call more than once. */
+  close: () => void;
+};
+
+export type OpenLearnCardOptions = {
+  /** Where to mount (default document.body). */
+  parent?: HTMLElement | undefined;
+  /** Called once after the sheet closed (any way). */
+  onClosed?: (() => void) | undefined;
+};
+
+let current: LearnCardHandle | null = null;
+
+/**
+ * Opens `card` as a sheet over the current screen and focuses Got it. On close, focus goes back
+ * to `opener` (when it is still in the page). Opening another card replaces the open one.
+ */
+export function openLearnCard(
+  card: LearnCard,
+  opener?: HTMLElement | null,
+  opts: OpenLearnCardOptions = {},
+): LearnCardHandle {
+  current?.close();
+  let closed = false;
+  let stopMotion: Stop = () => {};
+  const handle: LearnCardHandle = {
+    el: null as unknown as HTMLElement,
+    close: () => {
+      if (closed) return;
+      closed = true;
+      stopMotion();
+      const el = handle.el as Partial<HTMLElement>;
+      if (typeof el.remove === 'function') el.remove();
+      if (current === handle) current = null;
+      if (opener && opener.isConnected !== false && typeof opener.focus === 'function') {
+        opener.focus();
+      }
+      opts.onClosed?.();
+    },
+  };
+  const built = buildSheet(card, { onClose: handle.close });
+  handle.el = built.root;
+  const parent = opts.parent ?? document.body;
+  parent.append(built.root);
+  current = handle;
+  stopMotion = enterScreen(built.panel, 'up');
+  built.gotIt.focus();
+  return handle;
+}
+
+/** Closes the open learn card, if any (focus goes back to its opener). */
+export function closeLearnCard(): void {
+  current?.close();
+}
+
+/** True while a learn card is open. */
+export function learnCardOpen(): boolean {
+  return current !== null;
+}

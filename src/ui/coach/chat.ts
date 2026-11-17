@@ -22,6 +22,10 @@
 // `data-coach-followup=<index>`, the text box labelled "Ask the coach", button "Send"; the sheet
 // is a dialog named "Coach" with "Close". New: `[data-chat]` (+ `data-variant`),
 // `data-coach-starter=<id>`, `data-msg-id`, `[data-chat-typing]`, `[data-chat-clear]`.
+//
+// M12 slice 1b task 33: a coach message with `learnId` gets a "Why?" button under its bubble
+// (`data-learn-open=<id>`) when `onLearn` is passed; main finds the card and opens it with
+// `openLearnCard(card, opener)` (learnCard.ts), which hands focus back to the button on close.
 import { dateText } from '../../core/trainer/actions/lighter';
 import {
   QUICK_CHIPS,
@@ -37,6 +41,7 @@ import { icon, type IconName } from '../icons';
 import { moodClass } from '../tokens';
 import { buildFoodCard } from './foodCard';
 import { buildFocusBlockCard, buildMissingBlockCard } from './focusBlockCard';
+import { whyButton } from './learnCard';
 import { buildRedFlagCard, buildThreadProposalCard, type Built } from './proposalCard';
 import './coach.css';
 import './chat.css';
@@ -153,6 +158,8 @@ export type ChatActions = {
   onClearChat?: (() => void) | undefined;
   /** Sheet only: Close / Escape. */
   onClose?: (() => void) | undefined;
+  /** M12 1b: "Why?" under a coach message with `learnId`; omit → no link. */
+  onLearn?: ((learnId: string, opener: HTMLElement) => void) | undefined;
 };
 
 // ---------- pure selectors ----------
@@ -351,6 +358,17 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       item.append(recapCard({ ...m, card }));
     } else {
       if (m.text) item.append(bubble(m));
+      const learnId = m.learnId;
+      if (learnId && m.role === 'coach' && a.onLearn) {
+        const onLearn = a.onLearn;
+        const why = whyButton((opener) => onLearn(learnId, opener), {
+          label: 'Why? Read more',
+          className: 'chat-learn',
+          attrs: { 'data-learn-open': learnId },
+        });
+        item.append(why);
+        cycle.push(why);
+      }
       const outcome = {
         onUndo:
           a.onUndo && (!undoable || (m.id !== undefined && undoable.has(m.id)))

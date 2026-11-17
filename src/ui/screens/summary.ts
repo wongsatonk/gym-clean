@@ -24,11 +24,15 @@
 // keeps, plus `[data-stat="reps"|"exercises"]`, `[data-volume-mode]`, `[data-vs-last]`
 // (data-tone up|flat|down), `[data-bar="last"|"today"]`, `[data-bests]`, `[data-best]`
 // (data-best-kind weight|reps).
+// M12 slice 1b task 33: the post-workout meal idea (`[data-meal-idea]`, fuel/proteinNudge.ts)
+// under the protein line, when `mealIdea` and `onLogMealIdea` are both set. The idea is the M10
+// coach food suggestion (core suggestFood), passed in; Log hands it back to main.
 import { formatDuration } from '../../core/format';
 import { sessionVolume, type NewBest } from '../../core/stats';
-import type { SetLog } from '../../core/types';
+import type { FoodSuggestion, SetLog } from '../../core/types';
 import { formatWeight, toUnit, type Unit } from '../../core/units';
 import { proteinLine, type SummaryFuel } from '../fuel/links';
+import { postWorkoutIdea, type MealIdea } from '../fuel/proteinNudge';
 import { createStallCards, type StallCardData, type StallCardOption } from '../coachSummary';
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -70,12 +74,16 @@ export type SummaryProps = {
   stalls?: readonly StallCardData[] | undefined;
   /** M7: today's protein vs target + the post-workout hint. Omitted/null (no targets) → hidden. */
   fuel?: SummaryFuel | null | undefined;
+  /** M12 1b: a post-workout meal idea (the M10 food suggestion); omitted/null → hidden. */
+  mealIdea?: MealIdea | null | undefined;
 };
 
 export type SummaryActions = {
   onDone: () => void;
   /** M10: a stall option tapped; app.ts opens its Proposal. Omitted → no stall card. */
   onStallOption?: ((exerciseId: string, option: StallCardOption) => void) | undefined;
+  /** M12 1b: Log on the meal idea; main logs it (post-workout slot), shows Undo, re-renders. */
+  onLogMealIdea?: ((suggestion: FoodSuggestion) => void) | undefined;
 };
 
 export type VolumeMode = 'compare' | 'first' | 'bodyweight';
@@ -328,6 +336,7 @@ export function summaryScreen(p: SummaryProps, a: SummaryActions): HTMLElement {
     bestsBlock(p),
     h('div', { class: 'stats sum-tiles', 'data-count': tiles.length }, ...tiles),
     p.fuel ? proteinLine(p.fuel) : null,
+    p.mealIdea && a.onLogMealIdea ? postWorkoutIdea(p.mealIdea, a.onLogMealIdea) : null,
     p.fixEl ?? null,
     p.focusEl ?? null,
     h('h2', { class: 'section-title' }, 'Sets'),
