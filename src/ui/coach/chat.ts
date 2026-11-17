@@ -34,6 +34,7 @@
 // text badge: "On-device AI" (source 'apple') or "Quick replies" ('rules' / 'chip')
 // (`[data-chat-source]`). A message's `note` (the brain note) is a muted system line with an
 // info icon (`.chat-note`, role="note"). The typing state reads "Thinking…".
+// Task 21: `onInputFocus` fires when the text box gets focus (main warms Apple's model then).
 // Task 17: `card.kind === 'checkIn'` draws the weekly check-in card (checkInCard.ts) with
 // `checkInQuestions` / `checkIns` from props and `onCheckInDone` / `onCheckInSkip`.
 import { dateText } from '../../core/trainer/actions/lighter';
@@ -198,6 +199,8 @@ export type ChatActions = {
   /** M12 slice 2: check-in card Done (answers given, ≥ 1) / Skip this week, by message id. */
   onCheckInDone?: ((messageId: number, answers: CheckInAnswers) => void) | undefined;
   onCheckInSkip?: ((messageId: number) => void) | undefined;
+  /** M12 slice 2: the text box got focus (a question is likely coming: main prewarms). */
+  onInputFocus?: (() => void) | undefined;
 };
 
 // ---------- pure selectors ----------
@@ -224,6 +227,17 @@ export function visibleChatChips(
     p.chips ?? (p.variant === 'sheet' ? WORKOUT_CHAT_CHIPS : CHAT_CHIPS.map((c) => c.id)),
   );
   return CHAT_CHIPS.filter((c) => allow.has(c.id));
+}
+
+/**
+ * Unsent words per frame, kept across re-renders: main rebuilds the chat when anything arrives
+ * (a check-in card on open, a reply), which would otherwise drop what he is typing.
+ */
+const drafts = new Map<'tab' | 'sheet', string>();
+
+/** Test-only: forget unsent words. */
+export function resetChatDrafts(): void {
+  drafts.clear();
 }
 
 /** The trimmed text to send, or null for nothing worth sending. */
@@ -584,10 +598,20 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       maxlength: 200,
     });
     input = box;
+    box.value = drafts.get(p.variant) ?? '';
+    box.addEventListener('input', () => {
+      drafts.set(p.variant, box.value ?? '');
+    });
+    if (a.onInputFocus) {
+      const onFocus = a.onInputFocus;
+      box.addEventListener('focus', () => onFocus());
+    }
     const send = () => {
       if (box.readOnly) return;
       const t = textToSend(box.value ?? '');
-      if (t) onText(t);
+      if (!t) return;
+      drafts.delete(p.variant);
+      onText(t);
     };
     box.addEventListener('keydown', (ev) => {
       if ((ev as KeyboardEvent).key === 'Enter') {
@@ -616,8 +640,10 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       'div',
       { class: 'cs-typing chat-input' },
       h('label', { class: 'sr-only', for: inputId }, 'Ask the coach'),
-      h('div', { class: 'cs-typing-row' }, box, holdBtn, sendEl),
+      // The hint goes above the row: the dock is bottom-anchored, so a line appearing under the
+      // row while listening would lift the held button out from under the finger.
       micView?.hint ?? null,
+      h('div', { class: 'cs-typing-row' }, box, holdBtn, sendEl),
       holdBtn ? null : (micView?.el ?? null),
     );
     box.setAttribute('placeholder', 'Ask the coach');
@@ -726,7 +752,8 @@ const micHandles = new WeakMap<object, MicHandle>();
 
 /**
  * Listening: the text box shows the live words (read-only, the newest words in view) and Send
- * steps aside (disabled + hidden) so the words get the room; release sends them.
+ * is disabled and hidden (chat.css keeps its space, so the mic button never moves under the held
+ * finger); release sends them.
  */
 function applyMicToInput(box: HTMLInputElement, send: HTMLButtonElement, mic: MicProps): void {
   const listening = mic.state === 'listening';

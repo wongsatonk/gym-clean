@@ -29,8 +29,11 @@ const TOUR = '[data-tour="whats-new"]';
 const tour = (page: Page) => page.locator(TOUR);
 const wn = (page: Page, part: string) => tour(page).locator(`[data-wn="${part}"]`);
 
-// The tour's shape comes from the page data, so a new release doesn't break this spec: an update
-// from the release before APP_RELEASE shows APP_RELEASE's pages + "Added to your to-dos".
+// The tour's shape comes from the page and topic data, so a new release doesn't break this spec:
+// an update from the release before APP_RELEASE shows APP_RELEASE's pages, then "Added to your
+// to-dos" only when this release added a topic. The tour lists every added topic on either
+// platform (on the web an iPhone-only one sits under "In the iPhone app" in the list), so the
+// count comes from `since` alone, as todoHost's `addedTopics` does.
 const byNum = (a: string, b: string) => {
   const [x, y] = [a.split('.').map(Number), b.split('.').map(Number)];
   for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
@@ -42,15 +45,42 @@ const PREV_RELEASE = [...new Set(WHATS_NEW_PAGES.map((p) => p.release))]
   .filter((r) => byNum(r, APP_RELEASE) < 0)
   .sort(byNum)
   .at(-1) as string;
-/** This release's feature pages + "Added to your to-dos". */
-const TOTAL = CURRENT_PAGES.length + 1;
+/**
+ * Ids of the topics this release added to the to-dos (the tour's last page lists them; none → no
+ * such page). Read from src/data/todos/topics.ts through the dev server in beforeAll: that module
+ * imports program.json, which Node can't load without an import attribute.
+ */
+let ADDED: string[] = [];
+let HAS_TODO_PAGE = false;
+/** This release's feature pages (+ "Added to your to-dos" when it added a topic). */
+let TOTAL = CURRENT_PAGES.length;
+
+test.beforeAll(async ({ browser }, testInfo) => {
+  const baseURL = testInfo.project.use.baseURL;
+  const ctx = await browser.newContext({
+    ignoreHTTPSErrors: true,
+    ...(baseURL ? { baseURL } : {}),
+  });
+  const p = await ctx.newPage();
+  await p.goto('/');
+  ADDED = await p.evaluate(async (release) => {
+    const path = '/src/data/todos/topics.ts';
+    const m = (await import(/* @vite-ignore */ path)) as {
+      TODO_TOPICS: { id: string; since: string }[];
+    };
+    return m.TODO_TOPICS.filter((t) => t.since === release).map((t) => t.id);
+  }, APP_RELEASE);
+  await ctx.close();
+  HAS_TODO_PAGE = ADDED.length > 0;
+  TOTAL = CURRENT_PAGES.length + (HAS_TODO_PAGE ? 1 : 0);
+});
+/** The last feature page's title (the tour's last page when nothing was added). */
+const LAST_FEATURE = CURRENT_PAGES.at(-1)?.title ?? '';
 /** The first page whose Try it opens another tab (not Today), for the Try it test. */
 const TRY_IDX = CURRENT_PAGES.findIndex((p) =>
   ['calendar', 'coach', 'fuel', 'settings'].includes(p.tryIt ?? ''),
 );
 const TRY_PAGE = CURRENT_PAGES[TRY_IDX];
-/** A topic this release added to the to-dos (shown on the last page). */
-const NEW_TOPIC = 'trainer-kit-gym';
 
 /** A profile updated from the previous release: one finished session, that tour seen. */
 async function openUpdated(page: Page) {
@@ -110,9 +140,17 @@ test('an update shows the tour once: version on page 1, Next / Back, last page, 
     await wn(page, 'next').click();
   }
   await expect(wn(page, 'count')).toHaveText(`${TOTAL} of ${TOTAL}`);
-  await expect(wn(page, 'title')).toHaveText('Added to your to-dos');
-  await expect(wn(page, 'topics').locator(`[data-topic="${NEW_TOPIC}"]`)).toBeVisible();
-  await expect(wn(page, 'open-todos')).toBeVisible();
+  if (HAS_TODO_PAGE) {
+    await expect(wn(page, 'title')).toHaveText('Added to your to-dos');
+    for (const id of ADDED)
+      await expect(wn(page, 'topics').locator(`[data-topic="${id}"]`)).toBeVisible();
+    await expect(wn(page, 'open-todos')).toBeVisible();
+  } else {
+    // No topic added this release: the tour ends on its last feature page.
+    await expect(wn(page, 'title')).toHaveText(LAST_FEATURE);
+    await expect(wn(page, 'topics')).toHaveCount(0);
+    await expect(wn(page, 'open-todos')).toHaveCount(0);
+  }
   await expect(wn(page, 'next')).toHaveAttribute('data-last', 'true');
   await expectTapTargets(page, TOUR);
   await noHorizontalOverflow(page);
@@ -149,7 +187,7 @@ test('Skip closes it on any page and marks the release seen', async ({ page }) =
   expect(offsite).toEqual([]);
 });
 
-test('Try it closes the tour and opens the feature; Open to-dos opens the list', async ({
+test('Try it closes the tour and opens the feature; Open to-dos (when a topic was added) opens the list', async ({
   page,
 }) => {
   const offsite = await guardNetwork(page);
@@ -164,14 +202,21 @@ test('Try it closes the tour and opens the feature; Open to-dos opens the list',
   await expect(page.locator(`[data-tab="${route}"]`)).toHaveAttribute('aria-current', 'page');
   await expect.poll(() => seenRelease(page)).toBe(APP_RELEASE);
 
-  // Replay from Settings, straight to the last page's Open to-dos.
+  // Replay from Settings, straight to the last page (Open to-dos when this release added a topic).
   await page.locator('[data-tab="settings"]').click();
   await page.locator('[data-whats-new-open]').click();
   await expect(tour(page)).toBeVisible();
   for (let i = 1; i < TOTAL; i++) await wn(page, 'next').click();
-  await wn(page, 'open-todos').click();
-  await expect(tour(page)).toHaveCount(0);
-  await expect(page.locator('main[data-screen="todos"]')).toBeVisible();
+  await expect(wn(page, 'count')).toHaveText(`${TOTAL} of ${TOTAL}`);
+  if (HAS_TODO_PAGE) {
+    await wn(page, 'open-todos').click();
+    await expect(tour(page)).toHaveCount(0);
+    await expect(page.locator('main[data-screen="todos"]')).toBeVisible();
+  } else {
+    await expect(wn(page, 'open-todos')).toHaveCount(0);
+    await wn(page, 'next').click(); // Done
+    await expect(tour(page)).toHaveCount(0);
+  }
   expect(offsite).toEqual([]);
 });
 

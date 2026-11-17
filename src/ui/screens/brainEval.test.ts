@@ -145,6 +145,25 @@ describe('brainEvalScreen', () => {
     expect(log).toEqual(['export']);
   });
 
+  it('tokens: one small line "Instructions N · tools N · prompt N of contextSize tokens" (Checkpoint J budget)', () => {
+    const tokens = { instructions: 1180, tools: 1420, prompt: 950, contextSize: 4096 };
+    const { el } = render({ state: 'idle', tokens });
+    const line = at(el, 'data-eval-tokens');
+    expect(line?.textContent).toBe('Instructions 1180 · tools 1420 · prompt 950 of 4096 tokens');
+    expect(line?.classes).toContain('set-note');
+    // Shown with a report too, and while running.
+    const done = render({ state: 'done', report: { at: 1, rows: ROWS }, tokens });
+    expect(at(done.el, 'data-eval-tokens')).toBeDefined();
+    const running = render({ state: 'running', progress: { done: 1, total: 2 }, tokens });
+    expect(at(running.el, 'data-eval-tokens')).toBeDefined();
+    // Omitted or null (iOS can't count, or not measured yet): no line.
+    expect(at(render().el, 'data-eval-tokens')).toBeUndefined();
+    expect(at(render({ tokens: null }).el, 'data-eval-tokens')).toBeUndefined();
+    // Not when the brain can't run.
+    const off = render({ state: 'unavailable', reason: 'modelNotReady', tokens });
+    expect(at(off.el, 'data-eval-tokens')).toBeUndefined();
+  });
+
   it('unavailable: the plain reason, no Run', () => {
     const { el } = render({ state: 'unavailable', reason: 'appleIntelligenceNotEnabled' });
     expect(at(el, 'data-eval-run')).toBeUndefined();

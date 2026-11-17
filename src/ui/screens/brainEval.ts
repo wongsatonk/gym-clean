@@ -8,9 +8,12 @@
 // Summary vs the Checkpoint J bars: action ≥ 85%, safe 100%. Pass / fail is a word + icon,
 // never colour alone.
 //
+// Task 21: optional `tokens` (GymBrain `measure()`, iOS 26.4+) adds one small line, "Instructions
+// N · tools N · prompt N of contextSize tokens", so Checkpoint J can confirm the context budget.
+//
 // e2e hooks: `main[data-screen="brain-eval"]`, `[data-eval-run]`, `[data-eval-progress]`,
 // `[data-eval-summary]`, `[data-eval-stat=<actions|safe|facts|p50>]`, `[data-eval-row=<id>]`
-// (+ `data-pass`), `[data-eval-export]`, `[data-eval-unavailable]`.
+// (+ `data-pass`), `[data-eval-export]`, `[data-eval-unavailable]`, `[data-eval-tokens]`.
 import type { BrainUnavailableReason } from '../../core/types';
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -50,7 +53,22 @@ export type BrainEvalProps = {
   report?: BrainEvalReport | undefined;
   /** Why the Apple brain can't run (state 'unavailable'). */
   reason?: BrainUnavailableReason | undefined;
+  /** Token counts measured on the phone; null / omitted: not measured (or iOS can't count). */
+  tokens?: BrainEvalTokens | null | undefined;
 };
+
+/** Same shape as src/native/gymBrain.ts `BrainTokenCounts` (kept local: ui doesn't import native). */
+export type BrainEvalTokens = {
+  instructions: number;
+  tools: number;
+  prompt: number;
+  contextSize: number;
+};
+
+/** "Instructions 1180 · tools 1420 · prompt 950 of 4096 tokens". */
+export function tokensLine(t: BrainEvalTokens): string {
+  return `Instructions ${t.instructions} · tools ${t.tools} · prompt ${t.prompt} of ${t.contextSize} tokens`;
+}
 
 export type BrainEvalActions = {
   onBack: () => void;
@@ -190,6 +208,10 @@ export function brainEvalScreen(p: BrainEvalProps, a: BrainEvalActions): HTMLEle
         h('span', {}, running ? 'Running…' : p.report ? 'Run again' : 'Run'),
       ),
     );
+  }
+
+  if (p.tokens && p.state !== 'unavailable') {
+    kids.push(h('p', { class: 'set-note', 'data-eval-tokens': true }, tokensLine(p.tokens)));
   }
 
   if (running && p.progress) {

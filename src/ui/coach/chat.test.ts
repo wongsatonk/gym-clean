@@ -12,6 +12,7 @@ import {
   THINKING_LABEL,
   sourceBadge,
   updateChatMic,
+  resetChatDrafts,
   PRIVACY_LINE,
   awaitingAnswer,
   chat,
@@ -31,6 +32,7 @@ import { MIC_HINT, MIC_UNAVAILABLE_LINES, resetMicHold } from './micButton';
 
 useFakeDom();
 beforeEach(() => {
+  resetChatDrafts();
   resetFocusCardMemory();
   resetCheckInMemory();
   resetMicHold();
@@ -238,6 +240,36 @@ describe('chat: tab variant', () => {
     box.dispatch('keydown', ev);
     expect(ev.preventDefault).toHaveBeenCalled();
     expect(log).toEqual(['text:what should I eat tonight', 'text:what should I eat tonight']);
+  });
+
+  it('keeps unsent typing across a re-render (a card posted while typing); Send clears it', () => {
+    const first = mount();
+    const box = input(first.el) as FakeEl & { value?: string };
+    box.value = 'my gym has no';
+    box.dispatch('input', {});
+    // Main re-renders (e.g. the check-in card arrives): the new box still holds the words.
+    const again = mount();
+    const box2 = input(again.el) as FakeEl & { value?: string };
+    expect(box2.value).toBe('my gym has no');
+    // The sheet has its own draft.
+    expect((input(mount({ variant: 'sheet' }).el) as FakeEl & { value?: string }).value ?? '').toBe(
+      '',
+    );
+    box2.value = 'my gym has no leg press';
+    box2.dispatch('input', {});
+    btn(again.el, 'Send').click();
+    expect(again.log).toEqual(['text:my gym has no leg press']);
+    expect((input(mount().el) as FakeEl & { value?: string }).value ?? '').toBe('');
+  });
+
+  it('onInputFocus fires when the text box gets focus (main prewarms Apple’s model)', () => {
+    const log: string[] = [];
+    const { el } = mount({}, { onInputFocus: () => log.push('focus') });
+    (input(el) as FakeEl).dispatch('focus', {});
+    (input(el) as FakeEl).dispatch('focus', {});
+    expect(log).toEqual(['focus', 'focus']);
+    // Without the callback, focus is harmless.
+    expect(() => (input(mount().el) as FakeEl).dispatch('focus', {})).not.toThrow();
   });
 
   it('pending proposal: Apply / Not now by message id; no quick chips or text box while it waits', () => {
@@ -582,6 +614,14 @@ describe('chat: mic (slice 2)', () => {
     expect(log).toEqual([]);
     expect(one(el, 'data-mic-hint').textContent).toBe(MIC_HINT);
     expect(hold(el)?.getAttribute('aria-pressed')).toBe('true');
+    // The hint sits above the text row: the dock is bottom-anchored, so a line under the row would
+    // lift the held button out from under the finger (release = cancel).
+    const typing = el.oneByClass('cs-typing');
+    const kids = typing.children.map((c) =>
+      c.hasAttribute('data-mic-hint') ? 'hint' : c.classes.includes('cs-typing-row') ? 'row' : '',
+    );
+    expect(kids.indexOf('hint')).toBeGreaterThanOrEqual(0);
+    expect(kids.indexOf('hint')).toBeLessThan(kids.indexOf('row'));
   });
 
   it('updateChatMic patches words, level and state in place (no re-render)', () => {

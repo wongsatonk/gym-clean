@@ -519,8 +519,12 @@
   border-color: var(--cta);
 }
 
+/* Listening: Send is disabled and out of sight, but keeps its space. With display: none the mic
+   button would slide right into Send's place under the held finger, and letting go where it went
+   down would land off the button (= cancel, nothing sent). */
 .cs-send[hidden] {
-  display: none;
+  display: inline-flex;
+  visibility: hidden;
 }
 
 /* ---------- M12 slice 2: weekly check-in card (checkInCard.ts) ---------- */
