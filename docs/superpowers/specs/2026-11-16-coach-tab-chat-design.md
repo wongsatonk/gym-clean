@@ -97,6 +97,32 @@ My calls (correctable):
   manual check-off (logging sets is the proof). A day done with **Train anyway** counts as extra.
 - In **slice 1**.
 
+
+## Trainer kit: gaps vs a human personal trainer (research 2026-11-16; he picked **all 12**)
+Research basis: NASM OPT, ACSM 2026 resistance-training summary, Fitbod / Future / Caliber / Ladder reviews.
+New **slice 1b "Trainer kit"** (web + iPhone, after slice 1, before slice 2), except reminders (native → slice 2):
+1. **Effort after each set:** one tap or word, Easy / Good / Hard (~3+ / 2 / 0–1 reps left); M5b's next-set
+   weight uses it. Optional, never blocks the flow.
+2. **Warm-up sets:** auto ramp-up before the day's first big lift (~50%×8, ~70%×4, snapped to his kit),
+   spoken, excluded from volume, bests and completion %.
+3. **Intake + Goal + review:** short first-run (and re-runnable) intake; a Goal card with 1–2 measurable
+   targets + a date; a standing "go easy on" area list until removed; coach review every 4–6 weeks.
+4. **Measurements + e1RM:** monthly tape measurements (arms, chest, waist…) in Fuel; estimated one-rep-max
+   chart per lift.
+5. **Short on time:** "I have 20/30/45 min" proposal — keeps main lifts, pairs accessories, trims sets; Apply/Undo.
+6. **Reminders + check-ins (slice 2, iPhone):** local notifications only, off by default: session reminder,
+   missed-day nudge, Sunday recap; plus a weekly 3-question check-in (energy, sleep, soreness 1–5) in chat.
+7. **Plan beyond a month:** at block end the coach proposes the next block + a lighter week; suggests a
+   deload after ~6 hard weeks or several stalls.
+8. **Progress photos (opt-in):** stored only on the phone, never in backups, dev log, Apple model context or
+   Claude; side-by-side compare; delete any time.
+9. **How do you feel today:** optional energy + soreness-by-area tap before Start; counts as a "Lighter
+   today?" signal (soreness never becomes medical talk).
+10. **Setup cues:** 2–3 spoken setup checks before lifts the camera can't judge (data per exercise).
+11. **Cardio minutes:** weekly cardio line from Health on the week strip / calendar.
+12. **Nutrition nudges + learn cards:** protein-per-meal nudge, post-workout meal idea, ~10 short "why"
+    cards (overload, effort, protein, sleep…) the coach can link to; all copy passes the copy checks.
+
 ## Chat details (my calls, correctable)
 - **History:** the thread is kept on the phone (Dexie `chatMessages`), last 30 days, with "Clear chat".
   Not in backups, not in the dev log (dev log keeps ids/numbers only, as M10). Resolves M10-q12 as "keep".
