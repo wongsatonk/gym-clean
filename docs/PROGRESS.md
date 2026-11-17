@@ -216,12 +216,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **G3:** 37 ∥ 38 [ui] e2e after 36.
 - **G4:** 39 reviewer → 40 verifier → 41 main merge + ask → 42 (no checkpoint of its own; feedback folds into Checkpoint J).
 
-- [ ] 1. [main] Shared types (no behaviour change).
+- [x] 1. [main] Shared types (no behaviour change).
   - Files: src/core/types.ts.
   - Adds per SPEC "// Slice 1b" (as edited 2026-11-17): `SetLog.effort?: 'easy' | 'good' | 'hard'`, `SetLog.warmup?: true`; `GoalKind = 'muscle' | 'fat' | 'strength' | 'general'`; `Goal`; `Intake = { goalKind; goalText?; days; sessionMin: 30|45|60|75; experience: 'new'|'some'|'years'; easyOn: BodyArea[]; at }`; `TrainerState.easyOn?: BodyArea[]`; `Measurement = { date; site; cm }`; `ProgressPhoto`; `DayFeel`; `ReadinessSignal` + `'feltLow' | 'sore'`; `HealthType` + `'bodyFat' | 'leanMass'` (and `HEALTH_TYPES`, `HealthDay.bodyFatPct?`, `leanMassKg?`); `ProposalAction` + `'shortOnTime' | 'starterPlan' | 'easyOn'`; `PlannedExercise.pairWith?: string` (paired accessory, shorter rest) ; `LearnCard = { id; title; body; why? }`; `ChatMessage.learnId?: string`; `NutritionSettings.goalKind?: GoalKind`; `GymFile = { format: 'gym-clean-gym'; version: 1; equipment: string[] }`; `AppRoute` + `'intake' | 'settings/goal' | 'settings/progressPhotos' | 'fuel/measurements'`; `TodoDetectorId` + `'effortSets' | 'warmupSession' | 'intakeDone' | 'measurementLogged' | 'bodyCompDays'`. Placeholder cases for exhaustive switches, noted for the owning task.
   - Done when: `npm run check` passes; no runtime change.
   - Deps: none.
-- [ ] 2. [core-engineer] Follow-up: postpone wording, **tests first**.
+- [x] 2. [core-engineer] Follow-up: postpone wording, **tests first**.
   - Files: src/core/trainer/actions/postpone.ts(+test).
   - Bug (slice 1 verifier): "Push A moves to Saturday and the rest follow. Push A moves to next week." (line ~141: the spill list can name the moved day again when the rotation repeats it in the 7-day window). Fix so a day is never said to move twice: name a different spilled day, or "The next Push A moves to next week."
   - Done when: a test reproduces the old sentence from a made-up schedule and now gets one clear sentence per moved day; all postpone tests and `checkCopy` pass.
@@ -230,7 +230,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: scripts/sync-ios-version.mjs(+test) (planner call: ios-engineer owns it, like gen-trainer-tools.mjs), ios/App/App.xcodeproj/project.pbxproj (`MARKETING_VERSION` = package.json version, `CURRENT_PROJECT_VERSION` = a build number that only grows, e.g. git commit count), ios/App/App/Info.plist (`CFBundleShortVersionString` = `$(MARKETING_VERSION)`, `CFBundleVersion` = `$(CURRENT_PROJECT_VERSION)`), docs/ios-setup.md (one line). Main adds the npm script hook (e.g. run before `cap sync`) in task 34.
   - Done when: a Vitest test fails if `MARKETING_VERSION` ≠ package.json `version`; the script is idempotent; simulator build shows 1.12.0 now (1.13.0 after task 34).
   - Deps: none.
-- [ ] 4. [main] Follow-up: a tab switch resets scroll to the top.
+- [x] 4. [main] Follow-up: a tab switch resets scroll to the top.
   - Files: src/ui/app.ts.
   - Switching tabs (tab bar) scrolls the new screen to the top; Back inside a tab keeps its current behaviour. Test in task 38.
   - Done when: manual run at 390×844 (scroll Calendar, tap Coach, tap Calendar → top); e2e in task 38.
