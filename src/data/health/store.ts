@@ -20,6 +20,17 @@ import type { GymDb } from '../db';
 
 export const HEALTH_SETTINGS_KEY = 'health';
 
+/**
+ * Version of the weigh-in import rule the stored `lastReadAt` was read under. Stored in the
+ * 'health' settings row as `weighInRule` (storage only: not a HealthSettings field, not backed
+ * up). A row without the current version hides its `lastReadAt`, so the first sync after a rule
+ * change re-reads the full 35 days once. 2 = "Health wins" (2026-11-16): before it, a typed
+ * weigh-in won and only morning samples were imported, so his recent Health weights need the
+ * catch-up read to replace older typed ones.
+ */
+export const HEALTH_WEIGH_IN_RULE = 2;
+const WEIGH_IN_RULE_FIELD = 'weighInRule';
+
 /** Nothing is read until he turns a type on (Settings → Health → Connect). */
 export const HEALTH_SETTINGS_DEFAULT: Readonly<HealthSettings> = Object.freeze({
   enabled: Object.freeze({
@@ -98,12 +109,20 @@ function parseReadiness(v: unknown): HealthSettings['readiness'] {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/** The stored settings; `lastReadAt` only if it was read under the current weigh-in rule. */
 export async function getHealthSettings(db: GymDb): Promise<HealthSettings> {
-  return parseHealthSettings((await db.settings.get(HEALTH_SETTINGS_KEY))?.value);
+  const raw: unknown = (await db.settings.get(HEALTH_SETTINGS_KEY))?.value;
+  const s = parseHealthSettings(raw);
+  if (!isObj(raw) || raw[WEIGH_IN_RULE_FIELD] !== HEALTH_WEIGH_IN_RULE) delete s.lastReadAt;
+  return s;
 }
 
+/** Saves the settings with the current weigh-in rule marker (see HEALTH_WEIGH_IN_RULE). */
 export async function saveHealthSettings(db: GymDb, s: HealthSettings): Promise<void> {
-  await db.settings.put({ key: HEALTH_SETTINGS_KEY, value: parseHealthSettings(s) });
+  await db.settings.put({
+    key: HEALTH_SETTINGS_KEY,
+    value: { ...parseHealthSettings(s), [WEIGH_IN_RULE_FIELD]: HEALTH_WEIGH_IN_RULE },
+  });
 }
 
 /**
@@ -210,8 +229,9 @@ export async function clearDisabledHealthTypes(db: GymDb): Promise<void> {
 // ---------- weigh-in import ----------
 
 /**
- * Imports morning body-mass samples as weigh-ins (source 'health'): dates with any stored
- * weigh-in (typed wins) or on the deleted-imports list are skipped. Returns the rows written.
+ * Imports Health's pick per date as weigh-ins (source 'health'; core/health/weighIns): Health
+ * wins over a typed weigh-in on that date and updates an earlier import whose pick changed;
+ * dates on the deleted-imports list are skipped. Returns the rows written.
  */
 export async function importHealthWeighIns(
   db: GymDb,

@@ -77,7 +77,11 @@ class FakeStore implements HealthSyncStore {
       existing: this.weighIns,
       deleted: this.settings.deletedHealthWeighIns ?? [],
     });
-    this.weighIns.push(...rows);
+    // Same as the Dexie store: one row per date, a written row replaces the stored one.
+    const dates = new Set(rows.map((w) => w.date));
+    this.weighIns = [...this.weighIns.filter((w) => !dates.has(w.date)), ...rows].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
     return rows;
   };
 }
@@ -207,6 +211,58 @@ describe('syncHealth', () => {
     expect(res.status).toBe('ok');
     expect(store.days.size).toBe(29); // 28 old + today's (wake-up date TODAY)
     expect(store.settings.lastReadAt).toBe(later);
+  });
+
+  it('Health wins: a typed weigh-in on a date Health has a sample for is replaced', async () => {
+    const store = new FakeStore();
+    const d = addDate(TODAY, -1);
+    store.weighIns = [
+      { date: d, kg: 72.5, source: 'manual' },
+      { date: addDate(TODAY, -40), kg: 73 }, // outside the read: untouched
+    ];
+    const res = await run(new FakeHealth(usualRead()), store);
+    expect(res.weighIns.find((w) => w.date === d)).toEqual({ date: d, kg: 70.1, source: 'health' });
+    expect(store.weighIns.find((w) => w.date === d)).toEqual({ date: d, kg: 70.1, source: 'health' });
+    expect(store.weighIns.find((w) => w.date === addDate(TODAY, -40))).toEqual({
+      date: addDate(TODAY, -40),
+      kg: 73,
+    });
+  });
+
+  it('a date he deleted stays as he left it (typed row kept, nothing imported)', async () => {
+    const d = addDate(TODAY, -1);
+    const store = new FakeStore({ deletedHealthWeighIns: [d] });
+    store.weighIns = [{ date: d, kg: 72.5, source: 'manual' }];
+    await run(new FakeHealth(usualRead()), store);
+    expect(store.weighIns.find((w) => w.date === d)).toEqual({ date: d, kg: 72.5, source: 'manual' });
+  });
+
+  it("a later read updates today's imported weigh-in when a morning sample arrives late", async () => {
+    const store = new FakeStore();
+    const evening = Date.parse(`${TODAY}T19:00:00+07:00`);
+    const morning = Date.parse(`${TODAY}T06:50:00+07:00`);
+    // 1st read (after an evening sync): only the evening sample → afternoon fallback.
+    await syncHealth({
+      health: new FakeHealth({ bodyMass: [{ start: evening, kg: 71.3, source: 'Scale' }] }),
+      store,
+      now: evening + HOUR,
+      today: TODAY,
+    });
+    expect(store.weighIns).toEqual([{ date: TODAY, kg: 71.3, source: 'health' }]);
+    // 2nd read: the scale app synced this morning's sample late.
+    const res = await syncHealth({
+      health: new FakeHealth({
+        bodyMass: [
+          { start: evening, kg: 71.3, source: 'Scale' },
+          { start: morning, kg: 70.6, source: 'Scale' },
+        ],
+      }),
+      store,
+      now: evening + 2 * HOUR,
+      today: TODAY,
+    });
+    expect(res.weighIns).toEqual([{ date: TODAY, kg: 70.6, source: 'health' }]);
+    expect(store.weighIns).toEqual([{ date: TODAY, kg: 70.6, source: 'health' }]);
   });
 
   it('only enabled types are asked for, and only they are stored', async () => {

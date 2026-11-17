@@ -73,6 +73,13 @@ describe('Health settings copy', () => {
     }
   });
 
+  it('Weight says Health wins over a typed weigh-in (rule of 2026-11-16)', () => {
+    const w = HEALTH_TYPE_COPY.bodyMass.explainer;
+    expect(w).toMatch(/weight from Health/);
+    expect(w).toMatch(/replaces a typed weigh-in/);
+    expect(w).not.toMatch(/unless you typed/);
+  });
+
   it('the rendered screen passes too (connected and not)', () => {
     for (const over of [{}, { connected: false }, { native: false }, { reading: true }]) {
       const { el } = render(over);

@@ -9,7 +9,8 @@ import type { HealthRead } from '../core/health/days';
 import { addDate } from '../core/trainer/plan';
 import { HEALTH_TYPES, type HealthType } from '../core/types';
 import { GymDb } from '../data/db';
-import { getHealthSettings, listHealthDays } from '../data/health/store';
+import { HEALTH_SETTINGS_KEY, getHealthSettings, listHealthDays } from '../data/health/store';
+import { listWeighIns, saveWeighIn } from '../data/nutrition/store';
 import { createHealthHost, type CardChip, type HealthApi } from './healthHost';
 import { asFake, useFakeDom, type FakeEl } from './screens/testDom';
 
@@ -212,6 +213,49 @@ describe('healthHost', () => {
     await h.sync();
     expect(calls.requestRead.at(-1)).toEqual(['hrv']);
     expect(calls.read).toBeGreaterThan(reads);
+  });
+});
+
+describe('healthHost weigh-ins (Health wins, 2026-11-16)', () => {
+  it("Health's weight replaces today's typed weigh-in and Fuel is told to reload", async () => {
+    await saveWeighIn(db, { date: TODAY, kg: 72.8, source: 'manual' });
+    const { api } = fakeApi();
+    let reloads = 0;
+    const h = createHealthHost({
+      db,
+      now: () => NOW,
+      render: () => undefined,
+      trainingDay: () => true,
+      inWorkout: () => false,
+      sessions: () => [],
+      onWeighIns: () => reloads++,
+      logError: (err) => {
+        throw err;
+      },
+      loadHealth: async () => api,
+    });
+    await connect(h);
+    expect(await listWeighIns(db)).toEqual([{ date: TODAY, kg: 70.4, source: 'health' }]);
+    expect(reloads).toBeGreaterThan(0);
+  });
+
+  it('an install from before the change re-reads the full 35 days on the next app-open sync', async () => {
+    const enabled = Object.fromEntries(HEALTH_TYPES.map((t) => [t, true]));
+    await db.settings.put({
+      key: HEALTH_SETTINGS_KEY,
+      value: { enabled, route: 'apple', deletedHealthWeighIns: [], lastReadAt: NOW - 2 * HOUR },
+    });
+    const sinces: number[] = [];
+    const { api } = fakeApi();
+    const read = api.read;
+    api.read = async (o) => {
+      sinces.push(o.since);
+      return read(o);
+    };
+    const { h } = host(api);
+    await h.sync();
+    expect(sinces).toEqual([Date.parse(`${addDate(TODAY, -35)}T00:00:00+07:00`)]);
+    expect((await getHealthSettings(db)).lastReadAt).toBe(NOW);
   });
 });
 

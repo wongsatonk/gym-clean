@@ -1210,10 +1210,15 @@ path sits behind `isNative()` + a plugin check, like M9.
 - **Personal baselines, never population norms.** Each signal is compared with his own rolling median over the
   last 28 days (from the same source), and needs ≥ 7 days of data before it's used. No absolute "good/bad"
   thresholds, no scores of his health. Thresholds are data (`src/core/health/rules.ts`), not code branches.
-- **Weigh-in auto-fill (M7):** the earliest body-mass sample of each local day before 12:00 becomes that day's
-  weigh-in (source `health`), unless he already typed one (his entry wins and is never overwritten). Deleting
-  an imported weigh-in in Fuel keeps it deleted. The M7 weekly check uses them like typed ones; nothing else in
-  M7 changes.
+- **Weigh-in auto-fill (M7), Health wins (changed 2026-11-16: "use data from Health because it syncs from my
+  weight scale app"):** when Weight is on, each local date's pick is the earliest body-mass sample before 12:00,
+  or, if that date has none before noon, the earliest sample that day (a scale app may sync later); kg rounded
+  like a typed weigh-in. The pick becomes that date's weigh-in (source `health`) and **replaces a typed
+  weigh-in** for that date. A later read updates the imported value when Health's pick for that date changed
+  (e.g. a morning sample arrived late). A weigh-in he types on a date Health already filled stays until the next
+  read brings a Health value for that date. Deleting an imported weigh-in in Fuel keeps that date as he left it
+  (never re-imported). The first read after this change re-reads the full 35 days once, so recent Health
+  weights replace older typed ones. The M7 weekly check uses them like typed ones; nothing else in M7 changes.
 - **Outside workouts → weekly load:** Today's week strip and the coach context show "This week: 3 gym
   sessions, 2 other workouts (run 40 min, football 90 min)". Gym Clean's own sessions are never counted twice
   (workouts written by Gym Clean, if M11-q5 ever turns writing on, are skipped by source).
@@ -1276,7 +1281,7 @@ type ReadinessCard = { date: string; signals: ReadinessSignal[]; reasons: string
 - Unit tests (tests first, fixtures with made-up numbers in `src/core/health/fixtures/`): baseline (median,
   < 7 days → no signal, source mix kept apart), each signal on/off at its edges, the 2-signal rule, the deload
   nudge and its 14-day spacing, once-per-day, sleep across midnight and DST, weigh-in pick (earliest before
-  12:00, typed wins, deleted stays deleted), workout de-duplication, the activity-level check, and every reason
+  12:00, else earliest that day; Health replaces typed; deleted stays deleted), workout de-duplication, the activity-level check, and every reason
   string passing `checkCopy` + the M11 banned list.
 - The plugin's TS side with a fake bridge: permission denied / partial / not available / locked phone all end
   in "no data", never an error screen. XCTest for the Swift mapping (units: kg, bpm, ms, kcal, minutes).

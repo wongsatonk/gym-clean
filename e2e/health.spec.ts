@@ -2,9 +2,10 @@
 // `window.Capacitor` (isNativePlatform + Plugins.GymHealth) serving MADE-UP data (the repo is
 // public). Connect → per-type switches → Today's "Lighter today?" card with two reasons →
 // Lighter today → the M10 proposal → Apply → Undo; an imported weigh-in shows "from Health" in
-// Fuel; a type turned off takes the card and its stored values with it. The card is shown, never
-// spoken. No request leaves the dev server (route-asserted). The PWA (no native bridge) shows
-// "Health data works in the iPhone app." and never calls the plugin.
+// Fuel and replaces a typed one for the same date (Health wins); a type turned off takes the
+// card and its stored values with it. The card is shown, never spoken. No request leaves the dev
+// server (route-asserted). The PWA (no native bridge) shows "Health data works in the iPhone
+// app." and never calls the plugin.
 import { expect, test, type Page } from '@playwright/test';
 import { at, expectTapTargets, installMocks, noHorizontalOverflow, record } from './app.helpers';
 
@@ -244,6 +245,47 @@ test('an imported weigh-in shows "from Health" in Fuel', async ({ page }, testIn
   await expect(weigh.locator('[data-from-health]')).toHaveText('from Health');
   await noHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('health-fuel-390.png') });
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Health wins: a typed weigh-in for today is replaced by Health's, shown \"from Health\"", async ({
+  page,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  await open(page, true);
+  // He typed 72.8 kg this morning (made up); Health has 70.4 kg at 07:00 for the same date.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('gym-clean');
+        req.onerror = () => reject(new Error('open failed'));
+        req.onsuccess = () => {
+          const d = req.result;
+          const tx = d.transaction('weighIns', 'readwrite');
+          tx.objectStore('weighIns').put({ date: '2026-11-13', kg: 72.8, source: 'manual' });
+          tx.oncomplete = () => {
+            d.close();
+            resolve();
+          };
+          tx.onerror = () => reject(new Error('write failed'));
+        };
+      }),
+  );
+  await page.reload();
+  await page.locator('[data-tab="fuel"]').click();
+  const weigh = page.locator('[data-weigh-in]');
+  await expect(weigh).toContainText('72.8');
+  await expect(weigh.locator('[data-from-health]')).toHaveCount(0);
+
+  await connect(page);
+  await healthScreen(page).getByRole('button', { name: '‹ Back' }).click();
+  await page.locator('[data-tab="fuel"]').click();
+  await expect(weigh).toContainText('70.4');
+  await expect(weigh).not.toContainText('72.8');
+  await expect(weigh.locator('[data-from-health]')).toHaveText('from Health');
+  expect((await stored(page)).healthWeighIns).toBe(1);
   expect(offsite).toEqual([]);
   expect(errors).toEqual([]);
 });

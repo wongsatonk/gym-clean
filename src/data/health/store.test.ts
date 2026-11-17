@@ -2,10 +2,12 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { HealthDay, HealthSettings } from '../../core/types';
 import { GymDb } from '../db';
+import { currentWeight } from '../../core/nutrition/targets';
 import { deleteWeighIn, listWeighIns, saveWeighIn } from '../nutrition/store';
 import {
   HEALTH_SETTINGS_DEFAULT,
   HEALTH_SETTINGS_KEY,
+  HEALTH_WEIGH_IN_RULE,
   clearDisabledHealthTypes,
   clearHealthType,
   getHealthSettings,
@@ -87,6 +89,26 @@ describe('health settings (settings key "health")', () => {
     expect(s.route).toBe('apple');
     expect(s.lastReadAt).toBeUndefined();
     expect(s.deletedHealthWeighIns).toEqual(['2030-01-08']);
+  });
+
+  it('one-time catch-up: a row saved before the Health-wins rule forgets lastReadAt (35-day re-read)', async () => {
+    // An install from before the change: lastReadAt set, no weigh-in rule marker.
+    await db.settings.put({ key: 'health', value: { ...allOn, lastReadAt: 123 } });
+    const old = await getHealthSettings(db);
+    expect(old.lastReadAt).toBeUndefined();
+    expect(old.enabled).toEqual(allOn.enabled);
+    // An older marker counts as missing too.
+    await db.settings.put({ key: 'health', value: { ...allOn, lastReadAt: 123, weighInRule: 1 } });
+    expect((await getHealthSettings(db)).lastReadAt).toBeUndefined();
+
+    // A save (e.g. the sync's lastReadAt) writes the current marker, so it is kept from then on.
+    await saveHealthSettings(db, { ...old, lastReadAt: 456 });
+    expect(HEALTH_WEIGH_IN_RULE).toBe(2);
+    expect((await db.settings.get('health'))?.value).toMatchObject({
+      lastReadAt: 456,
+      weighInRule: HEALTH_WEIGH_IN_RULE,
+    });
+    expect(await getHealthSettings(db)).toEqual({ ...allOn, lastReadAt: 456 });
   });
 
   it('keeps the readiness history and repairs a damaged one field by field', async () => {
@@ -225,16 +247,53 @@ describe('importHealthWeighIns', () => {
     { time: at(2030, 1, 9, 7), kg: 70.6 },
   ];
 
-  it('writes morning picks as health weigh-ins; a typed one wins; deleted dates stay deleted', async () => {
+  it('Health wins: replaces a typed weigh-in on a date it has a sample for; deleted dates stay as he left them', async () => {
     await saveWeighIn(db, { date: '2030-01-07', kg: 69.9 });
+    await saveWeighIn(db, { date: '2030-01-09', kg: 69.7, source: 'manual' });
+    await saveWeighIn(db, { date: '2030-01-10', kg: 69.5 }); // no Health sample that day
     await saveHealthSettings(db, { ...allOn, deletedHealthWeighIns: ['2030-01-09'] });
     expect(await importHealthWeighIns(db, samples)).toEqual([
+      { date: '2030-01-07', kg: 70.2, source: 'health' },
       { date: '2030-01-08', kg: 70.4, source: 'health' },
     ]);
     expect(await listWeighIns(db)).toEqual([
-      { date: '2030-01-07', kg: 69.9 },
+      { date: '2030-01-07', kg: 70.2, source: 'health' },
       { date: '2030-01-08', kg: 70.4, source: 'health' },
+      { date: '2030-01-09', kg: 69.7, source: 'manual' },
+      { date: '2030-01-10', kg: 69.5 },
     ]);
+  });
+
+  it("a later read moves an imported weigh-in to Health's new pick; same value writes nothing", async () => {
+    await importHealthWeighIns(db, [{ time: at(2030, 1, 7, 19), kg: 71.1 }]);
+    expect(await db.weighIns.get('2030-01-07')).toEqual({ date: '2030-01-07', kg: 71.1, source: 'health' });
+    const later = [
+      { time: at(2030, 1, 7, 19), kg: 71.1 },
+      { time: at(2030, 1, 7, 6), kg: 70.5 },
+    ];
+    expect(await importHealthWeighIns(db, later)).toEqual([
+      { date: '2030-01-07', kg: 70.5, source: 'health' },
+    ]);
+    expect(await importHealthWeighIns(db, later)).toEqual([]);
+    expect(await listWeighIns(db)).toEqual([{ date: '2030-01-07', kg: 70.5, source: 'health' }]);
+  });
+
+  it("Fuel's current weight is the Health value after it replaces today's typed weigh-in", async () => {
+    await saveWeighIn(db, { date: '2030-01-09', kg: 74, source: 'manual' });
+    await importHealthWeighIns(db, [{ time: at(2030, 1, 9, 7), kg: 70.6 }]);
+    expect(currentWeight(await listWeighIns(db), '2030-01-09')).toEqual({ kg: 70.6, from: 'avg7' });
+  });
+
+  it('a weigh-in typed over an import stays until the next read brings a Health value for that date', async () => {
+    await importHealthWeighIns(db, samples);
+    await saveWeighIn(db, { date: '2030-01-08', kg: 69.0, source: 'manual' });
+    expect(await db.weighIns.get('2030-01-08')).toEqual({ date: '2030-01-08', kg: 69.0, source: 'manual' });
+    // Next read without a sample that day (e.g. outside its window): the typed row stays.
+    await importHealthWeighIns(db, [{ time: at(2030, 1, 9, 7), kg: 70.6 }]);
+    expect(await db.weighIns.get('2030-01-08')).toEqual({ date: '2030-01-08', kg: 69.0, source: 'manual' });
+    // A read that has that date: Health wins.
+    await importHealthWeighIns(db, samples);
+    expect(await db.weighIns.get('2030-01-08')).toEqual({ date: '2030-01-08', kg: 70.4, source: 'health' });
   });
 
   it('a deleted import is remembered and never comes back; Undo forgets it', async () => {

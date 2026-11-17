@@ -646,9 +646,9 @@ describe('M11 health data in backups', () => {
     expect(await b.healthDays.count()).toBe(0);
   });
 
-  it('backs up the health switches and deleted-import dates but not lastReadAt', async () => {
+  it('backs up the health switches and deleted-import dates but not lastReadAt or the weigh-in rule marker', async () => {
     await seed(a);
-    await a.settings.put(healthRow);
+    await a.settings.put({ ...healthRow, value: { ...healthRow.value, weighInRule: 2 } });
     const file = await exportAll(a, { appVersion: 't', now: T0 });
     const row = (file.tables.settings as { key: string; value: unknown }[]).find(
       (r) => r.key === 'health',

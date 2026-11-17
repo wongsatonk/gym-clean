@@ -55,7 +55,7 @@ export const HEALTH_DELETE_NOTE = 'Stops reading it and deletes what Gym Clean k
 export const HEALTH_TYPE_COPY: Record<HealthType, { label: string; explainer: string }> = {
   bodyMass: {
     label: 'Weight',
-    explainer: 'Fills in your morning weigh-in in Fuel, unless you typed one.',
+    explainer: 'Uses your weight from Health, like a scale app. It replaces a typed weigh-in.',
   },
   workouts: {
     label: 'Other workouts',

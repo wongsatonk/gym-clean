@@ -18,8 +18,9 @@
  *    - today is still in progress; the next read re-reads it (and the day before) whole.
  *    The HRV source already stored for his recent days is kept (see `preferredHrvSource`).
  * 3. Re-check the switches after the read: a type turned off while it ran is dropped, never stored.
- * 4. Merge per-day summaries, import morning weigh-ins, save `lastReadAt` (only after an 'ok' read;
- *    a locked phone or failed read is skipped quietly and retried next time).
+ * 4. Merge per-day summaries, import weigh-ins (Health wins, see weighIns.ts), save `lastReadAt`
+ *    (only after an 'ok' read; a locked phone or failed read is skipped quietly and retried
+ *    next time).
  * 5. Today's `ReadinessCard` from the stored days and `settings.readiness`; a new card is saved as
  *    `lastCard` (+ `lastDeloadOfferDate` when it offers a deload), so it shows once per day.
  * Never throws: any error ends as status 'failed' with no card.
@@ -63,7 +64,7 @@ export interface HealthSyncStore {
   mergeDays(days: readonly HealthDay[]): Promise<void>;
   /** Rows with from <= date <= to, date order. */
   listDays(from?: string, to?: string): Promise<HealthDay[]>;
-  /** Morning weigh-in import (typed wins, deleted stays deleted); returns rows written. */
+  /** Weigh-in import (Health wins over typed, deleted stays deleted); returns rows written. */
   importWeighIns(samples: readonly BodyMassSample[]): Promise<WeighIn[]>;
 }
 

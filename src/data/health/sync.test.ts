@@ -10,9 +10,10 @@ import { answerCard, syncHealth, type HealthSyncSource } from '../../core/health
 import { addDate } from '../../core/trainer/plan';
 import type { HealthType } from '../../core/types';
 import { GymDb } from '../db';
-import { saveWeighIn } from '../nutrition/store';
+import { listWeighIns, saveWeighIn } from '../nutrition/store';
 import {
   HEALTH_SETTINGS_DEFAULT,
+  HEALTH_SETTINGS_KEY,
   getHealthSettings,
   saveHealthSettings,
   setHealthTypeEnabled,
@@ -86,7 +87,7 @@ function plugin(data: HealthRead, afterRead?: () => Promise<void>): HealthSyncSo
 const on = { ...HEALTH_SETTINGS_DEFAULT.enabled, sleep: true, restingHr: true, bodyMass: true };
 
 describe('healthSyncStore (Dexie glue for core syncHealth)', () => {
-  it('stores days, weigh-ins (typed wins), lastReadAt and today’s card; answerCard hides it', async () => {
+  it('stores days, weigh-ins (Health wins over typed), lastReadAt and today’s card; answerCard hides it', async () => {
     await saveHealthSettings(db, { ...HEALTH_SETTINGS_DEFAULT, enabled: on });
     await saveWeighIn(db, { date: TODAY, kg: 71 });
     const store = healthSyncStore(db);
@@ -100,7 +101,7 @@ describe('healthSyncStore (Dexie glue for core syncHealth)', () => {
 
     expect(res.status).toBe('ok');
     expect(await db.healthDays.count()).toBe(29);
-    expect(await db.weighIns.get(TODAY)).toEqual({ date: TODAY, kg: 71 });
+    expect(await db.weighIns.get(TODAY)).toEqual({ date: TODAY, kg: 70.4, source: 'health' });
     expect(await db.weighIns.get(addDate(TODAY, -1))).toEqual({
       date: addDate(TODAY, -1),
       kg: 70.4,
@@ -139,5 +140,34 @@ describe('healthSyncStore (Dexie glue for core syncHealth)', () => {
     const days = await db.healthDays.toArray();
     expect(days.some((d) => d.sleepMin !== undefined)).toBe(false);
     expect(days.find((d) => d.date === TODAY)?.restingHr).toBe(63);
+  });
+
+  it('catch-up: an install from before Health wins re-reads 35 days once; Health replaces older typed weigh-ins', async () => {
+    // Stored by the old build: lastReadAt a day ago, no weigh-in rule marker.
+    const lastReadAt = NOW - 24 * HOUR;
+    await db.settings.put({
+      key: HEALTH_SETTINGS_KEY,
+      value: { ...HEALTH_SETTINGS_DEFAULT, enabled: on, lastReadAt },
+    });
+    const old = addDate(TODAY, -10);
+    await saveWeighIn(db, { date: old, kg: 73, source: 'manual' });
+    const sinces: number[] = [];
+    const base = plugin(read());
+    const spy: HealthSyncSource = {
+      isAvailable: base.isAvailable,
+      read: async (o) => {
+        sinces.push(o.since);
+        return base.read(o);
+      },
+    };
+    const store = healthSyncStore(db);
+    await syncHealth({ health: spy, store, now: NOW, today: TODAY });
+    expect(sinces[0]).toBe(Date.parse(`${addDate(TODAY, -35)}T00:00:00+07:00`));
+    expect(await db.weighIns.get(old)).toEqual({ date: old, kg: 70.4, source: 'health' });
+    expect((await listWeighIns(db)).every((w) => w.source === 'health')).toBe(true);
+
+    // Only once: the next sync is incremental again.
+    await syncHealth({ health: spy, store, now: NOW + HOUR, today: TODAY });
+    expect(sinces[1]).toBe(Date.parse(`${addDate(TODAY, -1)}T00:00:00+07:00`));
   });
 });

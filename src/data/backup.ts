@@ -13,8 +13,9 @@
  * restored switches turn off are deleted, as turning it off in Settings would).
  *
  * Health (M11): imported weigh-ins are weigh-ins and travel like any other. The settings row
- * 'health' (per-type switches, route, deleted-import dates) is backed up without `lastReadAt` and
- * `readiness`, so the restored phone does a fresh first read and keeps its own card history.
+ * 'health' (per-type switches, route, deleted-import dates) is backed up without `lastReadAt`,
+ * `weighInRule` and `readiness`, so the restored phone does a fresh first read and keeps its own
+ * card history.
  * A file without that row keeps this phone's.
  */
 import Dexie from 'dexie';
@@ -148,10 +149,11 @@ const isSecretSetting = (row: unknown): boolean =>
 
 /**
  * Health settings fields that only make sense on the phone that read them (M11): the last read
- * time, and the readiness-card history (today's card, answered date, deload spacing) that comes
- * from this phone's Health data.
+ * time and the weigh-in rule it was read under (`weighInRule`, src/data/health/store.ts), and the
+ * readiness-card history (today's card, answered date, deload spacing) that comes from this
+ * phone's Health data.
  */
-const HEALTH_LOCAL_FIELDS: readonly string[] = ['lastReadAt', 'readiness'];
+const HEALTH_LOCAL_FIELDS: readonly string[] = ['lastReadAt', 'weighInRule', 'readiness'];
 
 const isHealthSetting = (row: unknown): row is { key: string; value: unknown } =>
   isObj(row) && row.key === HEALTH_SETTINGS_KEY;
