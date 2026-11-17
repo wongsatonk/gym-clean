@@ -34,7 +34,12 @@ import {
 } from '../../data/nutrition/store';
 import type { TabId } from '../tabBar';
 import { FakeEl, asFake, useFakeDom } from '../screens/testDom';
-import { createFuel, type FuelController, type FuelPhotoHost } from './fuelController';
+import {
+  createFuel,
+  type FuelController,
+  type FuelHealthHost,
+  type FuelPhotoHost,
+} from './fuelController';
 
 useFakeDom();
 
@@ -105,7 +110,7 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
 };
 
-function makeApp(now = EVENING, photo?: FuelPhotoHost) {
+function makeApp(now = EVENING, photo?: FuelPhotoHost, health?: FuelHealthHost) {
   const root = new FakeEl('main');
   (root as unknown as { querySelector: (s: string) => FakeEl | null }).querySelector = (s) =>
     select(root, s);
@@ -139,6 +144,7 @@ function makeApp(now = EVENING, photo?: FuelPhotoHost) {
       throw err;
     },
     photo,
+    health,
   });
   const openFuel = async () => {
     await ctrl.open();
@@ -706,5 +712,75 @@ describe('photo flow (M7b)', () => {
     app.onScreen('data-log-open').click();
     await flush();
     expect(() => app.inSheet('data-photo-hint')).not.toThrow();
+  });
+});
+
+describe('M11 health pass-through', () => {
+  it('an imported weigh-in carries the "from Health" tag on Fuel and on Weigh-in', async () => {
+    await saveNutritionSettings(db, SETTINGS);
+    // Put directly: the store's own `source` handling is core's (M11 task 7).
+    await db.weighIns.put({ date: localDate(EVENING), kg: 70.2, source: 'health' });
+    const app = makeApp();
+    await app.openFuel();
+    expect(app.onScreen('data-weigh-in').textContent).toContain('from Health');
+    app.onScreen('data-weigh-in').click();
+    expect(app.onScreen('data-weigh-today').textContent).toContain('from Health');
+  });
+
+  it('a typed weigh-in has no tag, before or after Save', async () => {
+    await setUp();
+    const app = makeApp();
+    await app.openFuel();
+    expect(app.root.find((e) => e.hasAttribute('data-from-health'))).toHaveLength(0);
+    app.onScreen('data-weigh-in').click();
+    app.onScreen('data-weigh-save').click();
+    await flush();
+    expect(app.onScreen('data-weigh-today').getAttribute('data-weigh-today')).toBe('saved');
+    expect(app.root.find((e) => e.hasAttribute('data-from-health'))).toHaveLength(0);
+  });
+
+  it('activity line: Keep reports and changes nothing; Switch sets the level with Undo', async () => {
+    await setUp({ activity: 'light' });
+    const answers: [string, string][] = [];
+    let suggest: NutritionSettings['activity'] | null = 'moderate';
+    const health: FuelHealthHost = {
+      activitySuggestion: () => suggest,
+      onActivityAnswered: (a, level) => {
+        answers.push([a, level]);
+        suggest = null;
+      },
+    };
+    const app = makeApp(EVENING, undefined, health);
+    await app.openFuel();
+    app.onScreen('data-weigh-in').click();
+    expect(app.onScreen('data-activity-suggest').getAttribute('data-activity-suggest')).toBe(
+      'moderate',
+    );
+    app.onScreen('data-activity-keep').click();
+    await flush();
+    expect(answers).toEqual([['keep', 'light']]);
+    expect((await getNutritionSettings(db))?.activity).toBe('light');
+    expect(app.root.find((e) => e.hasAttribute('data-activity-suggest'))).toHaveLength(0);
+
+    suggest = 'moderate';
+    const again = makeApp(EVENING, undefined, health);
+    await again.openFuel();
+    again.onScreen('data-weigh-in').click();
+    again.onScreen('data-activity-switch').click();
+    await flush();
+    expect(answers.at(-1)).toEqual(['switch', 'moderate']);
+    expect((await getNutritionSettings(db))?.activity).toBe('moderate');
+    expect(again.toasts.at(-1)?.text).toBe('Activity level changed');
+    again.toasts.at(-1)?.onUndo();
+    await flush();
+    expect((await getNutritionSettings(db))?.activity).toBe('light');
+  });
+
+  it('without a health host there is no activity line', async () => {
+    await setUp({ activity: 'light' });
+    const app = makeApp();
+    await app.openFuel();
+    app.onScreen('data-weigh-in').click();
+    expect(app.root.find((e) => e.hasAttribute('data-activity-suggest'))).toHaveLength(0);
   });
 });

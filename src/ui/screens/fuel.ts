@@ -20,7 +20,7 @@ import type {
 } from '../../core/types';
 import { formatWeight, type Unit } from '../../core/units';
 import { h } from '../dom';
-import { SLOT_LABEL, amountText, estimateTag, fmtNum } from '../fuel/common';
+import { SLOT_LABEL, amountText, estimateTag, fmtNum, fromHealthTag } from '../fuel/common';
 import { nudgeBanner } from '../fuel/links';
 import { fuelRings } from '../fuel/rings';
 import { icon } from '../icons';
@@ -40,6 +40,8 @@ export type FuelProps = {
   unit: Unit;
   /** The latest weigh-in, shown on the Weigh-in button. */
   lastWeighInKg?: number | null | undefined;
+  /** M11: where that weigh-in came from; 'health' adds the "from Health" tag. */
+  lastWeighInSource?: 'manual' | 'health' | undefined;
   /** M7-q6 evening nudge text ("40 g protein to go today"), or null. */
   nudge?: string | null | undefined;
 };
@@ -94,6 +96,7 @@ function header(props: FuelProps, actions: FuelActions): HTMLElement {
         w != null
           ? h('span', { class: 'fuel-weigh-last' }, `${formatWeight(w, props.unit)} ${props.unit}`)
           : null,
+        w != null && props.lastWeighInSource === 'health' ? fromHealthTag() : null,
       ),
     ),
   );

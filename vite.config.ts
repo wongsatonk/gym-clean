@@ -16,8 +16,15 @@ function appVersion(): string {
   return `${sha} ${new Date().toISOString()}`;
 }
 
+// M9 native shell: `vite build --mode native` (npm run build:native) makes the bundle that
+// Capacitor copies into the iOS app. It is served from capacitor://localhost/, so base is always
+// "/" (BASE_PATH is ignored), and there is no service worker or web manifest: WKWebView doesn't run
+// service workers for the capacitor:// scheme and the app is bundled (offline) anyway. The CSP meta
+// in index.html is the same in both builds. Every other mode builds the web app exactly as before.
+const NATIVE_MODE = 'native';
+
 // BASE_PATH is set by the GitHub Pages workflow (e.g. "/gym-clean/"); "/" locally.
-const base = process.env.BASE_PATH ?? '/';
+const webBase = process.env.BASE_PATH ?? '/';
 
 // M6 PWA. Build-only: the service worker is never registered by the dev server (devOptions off),
 // so dev and the dev-server e2e run exactly as before. Offline after first load: everything is
@@ -31,12 +38,12 @@ const pwa = VitePWA({
   injectRegister: 'script', // external /registerSW.js: no inline script, no app-code change
   devOptions: { enabled: false },
   manifest: {
-    id: base,
+    id: webBase,
     name: 'Gym Clean',
     short_name: 'Gym Clean',
     description: 'Phone-first workout focus app',
-    start_url: base,
-    scope: base,
+    start_url: webBase,
+    scope: webBase,
     display: 'standalone',
     orientation: 'portrait',
     theme_color: '#0d0f12',
@@ -73,10 +80,10 @@ const pwa = VitePWA({
   },
 });
 
-export default defineConfig({
-  base,
+export default defineConfig(({ mode }) => ({
+  base: mode === NATIVE_MODE ? '/' : webBase,
   // HTTPS so getUserMedia works when the phone opens the dev server over the LAN.
-  plugins: [basicSsl(), pwa],
+  plugins: mode === NATIVE_MODE ? [basicSsl()] : [basicSsl(), pwa],
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   server: { host: true },
   // Pre-bundle lazily imported deps so the dev server never reloads the page mid-session
@@ -89,4 +96,4 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     environment: 'node',
   },
-});
+}));

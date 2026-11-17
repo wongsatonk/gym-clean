@@ -1,0 +1,70 @@
+{
+  "date": "2026-06-30",
+  "now": "2026-06-30T07:30:00+07:00",
+  "timeZone": "Asia/Bangkok",
+  "trainingDay": true,
+  "note": "Made-up numbers. Only 5 days of history (< 7): no baseline, so no signal even with big changes.",
+  "expect": {
+    "signals": [],
+    "offer": null
+  },
+  "days": [
+    {
+      "date": "2026-06-25",
+      "sleepMin": 435,
+      "restingHr": 52,
+      "hrvMs": 63,
+      "hrvSource": "WHOOP",
+      "activeKcal": 500
+    },
+    {
+      "date": "2026-06-26",
+      "sleepMin": 420,
+      "restingHr": 54,
+      "hrvMs": 60,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-06-27",
+      "sleepMin": 445,
+      "restingHr": 56,
+      "hrvMs": 66,
+      "hrvSource": "WHOOP",
+      "activeKcal": 540,
+      "workouts": [
+        {
+          "start": 1782558000000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-28",
+      "sleepMin": 430,
+      "restingHr": 53,
+      "hrvMs": 62,
+      "hrvSource": "WHOOP",
+      "activeKcal": 510
+    },
+    {
+      "date": "2026-06-29",
+      "sleepMin": 440,
+      "restingHr": 55,
+      "hrvMs": 64,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530
+    },
+    {
+      "date": "2026-06-30",
+      "sleepMin": 250,
+      "restingHr": 70,
+      "hrvMs": 30,
+      "hrvSource": "WHOOP",
+      "activeKcal": 500
+    }
+  ]
+}

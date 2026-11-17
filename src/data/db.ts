@@ -6,6 +6,7 @@ import type {
   FoodEntry,
   FoodModelRecord,
   FoodPhoto,
+  HealthDay,
   PlanChange,
   ProposalAction,
   RepEvent,
@@ -149,6 +150,9 @@ export class GymDb extends Dexie {
   foodModels!: Table<FoodModelRecord, string>;
   /** Labelled meal photos, saved only when "Save photos" is on. */
   foodPhotos!: Table<FoodPhoto, string>;
+  // M11 Health (on device only; see src/data/health/store.ts). Not in backups, never in the dev log.
+  /** One derived summary per local date (never raw samples). */
+  healthDays!: Table<HealthDay, string>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -187,6 +191,12 @@ export class GymDb extends Dexie {
     this.version(6).stores({
       foodModels: 'id',
       foodPhotos: 'id, createdAt, dishId',
+    });
+    // M11 Health. New table only, no upgrade function; existing data is untouched. Weigh-ins gain
+    // an optional, unindexed `source` (old rows have none and read as typed by hand). The health
+    // settings live in the existing `settings` table under key 'health'.
+    this.version(7).stores({
+      healthDays: 'date',
     });
   }
 }

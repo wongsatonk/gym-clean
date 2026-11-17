@@ -56,6 +56,8 @@ export type SettingsActions = {
   onPlanChanges?: (() => void) | undefined;
   /** M10e: opens Settings → My gym. Omitted → no Gym section. */
   onMyGym?: (() => void) | undefined;
+  /** M11: opens Settings → Health. Omitted → no Health section. */
+  onHealth?: (() => void) | undefined;
 };
 
 /** The unit help line under the kg / lb choice. */
@@ -184,6 +186,24 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
             'My gym',
           ),
           h('p', { class: 'muted set-note' }, 'The kit your gym has. Swaps use only that.'),
+        )
+      : null,
+    actions.onHealth
+      ? section(
+          'health',
+          'trend',
+          'Health',
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'set-action',
+              'data-health-open': true,
+              onclick: () => actions.onHealth?.(),
+            },
+            'Health',
+          ),
+          h('p', { class: 'muted set-note' }, 'What the coach reads from Apple Health.'),
         )
       : null,
     actions.onPlanChanges

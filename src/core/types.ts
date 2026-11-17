@@ -219,7 +219,8 @@ export type FoodEntry = MacroSet & {
   logged?: { amount: FoodAmount; macros: MacroSet };
 };
 
-export type WeighIn = { date: string; kg: number };
+/** `source` (M11): 'health' = imported from Apple Health; missing = typed by hand ('manual'). */
+export type WeighIn = { date: string; kg: number; source?: 'manual' | 'health' };
 
 export type NutritionSettings = {
   mode: NutritionMode;
@@ -311,4 +312,70 @@ export type FoodSuggestion = {
   macros: MacroSet;
   /** Short plain reason, e.g. "Fits your 40 g protein left". */
   why: string;
+};
+
+// ---- M11 Health data (Apple Health, read-only; SPEC M11) ----
+
+export type HealthType = 'bodyMass' | 'workouts' | 'activeEnergy' | 'sleep' | 'restingHr' | 'hrv';
+
+export const HEALTH_TYPES: readonly HealthType[] = [
+  'bodyMass',
+  'workouts',
+  'activeEnergy',
+  'sleep',
+  'restingHr',
+  'hrv',
+];
+
+export type HealthSettings = {
+  enabled: Record<HealthType, boolean>;
+  /** Epoch ms of the last successful read. */
+  lastReadAt?: number;
+  route: 'apple' | 'whoop-api';
+  /** Dates (YYYY-MM-DD) of imported weigh-ins he deleted; never re-imported. */
+  deletedHealthWeighIns?: string[];
+  /** Readiness card history (once per day, deload spacing); see core/health/readiness ReadinessHistory. */
+  readiness?: {
+    lastCard?: ReadinessCard;
+    answeredDate?: string;
+    lastDeloadOfferDate?: string;
+  };
+};
+
+/** One workout logged by another app (e.g. WHOOP). Gym Clean's own bundle id is excluded. */
+export type HealthWorkout = {
+  /** Epoch ms. */
+  start: number;
+  minutes: number;
+  /** HealthKit activity type name, e.g. 'running'. */
+  kind: string;
+  kcal?: number;
+  avgHr?: number;
+  /** Source app name or bundle id. */
+  source: string;
+};
+
+/** One row per local date. Derived summaries only, never raw samples. */
+export type HealthDay = {
+  /** Local date YYYY-MM-DD (sleep is assigned to the wake-up date). */
+  date: string;
+  sleepMin?: number;
+  restingHr?: number;
+  /** HRV SDNN in ms. */
+  hrvMs?: number;
+  hrvSource?: string;
+  activeKcal?: number;
+  workouts?: HealthWorkout[];
+  /** Route B only. */
+  whoopRecoveryPct?: number;
+};
+
+export type ReadinessSignal = 'sleepShort' | 'hrvLow' | 'restingHrHigh' | 'hardOutsideWorkout' | 'whoopLow';
+
+export type ReadinessCard = {
+  date: string;
+  signals: ReadinessSignal[];
+  /** Plain coaching reasons, each passing checkCopy + the M11 banned list. */
+  reasons: string[];
+  offer: 'lighter' | 'deload';
 };

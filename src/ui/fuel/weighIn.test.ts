@@ -6,7 +6,10 @@ import type { Unit } from '../../core/units';
 import { asFake, useFakeDom } from '../screens/testDom';
 import { checkCopy } from '../../core/trainer/replies';
 import { byAttr, copyHits, oneAttr, typeInto, valueOf } from './fuelTestUtil';
+import { checkHealthCopy } from '../../core/health/copy';
+import { ACTIVITY_CHOICES } from './setup';
 import {
+  activityLine,
   CHART,
   chartGeometry,
   dayNumber,
@@ -316,4 +319,93 @@ it('the whole screen passes the copy check for every card kind', () => {
   for (const kind of ['up', 'down', 'onTrack', 'needData'] as const) {
     expect(copyHits(render({ check: check(kind) }).el)).toEqual([]);
   }
+});
+
+describe('M11: from Health tag and activity line', () => {
+  it('"from Health" shows only for an imported weigh-in saved today', () => {
+    const tagged = render({ todayKg: 70.2, todaySource: 'health' }).el;
+    const tag = oneAttr(tagged, 'data-from-health');
+    expect(tag.textContent).toBe('from Health');
+    expect(tag.tag).toBe('span'); // a static label, not a control
+    expect(oneAttr(tagged, 'data-weigh-today').textContent).toContain('from Health');
+    expect(
+      byAttr(render({ todayKg: 70.2, todaySource: 'manual' }).el, 'data-from-health'),
+    ).toHaveLength(0);
+    expect(byAttr(render({ todayKg: 70.2 }).el, 'data-from-health')).toHaveLength(0);
+    expect(
+      byAttr(render({ todayKg: null, todaySource: 'health' }).el, 'data-from-health'),
+    ).toHaveLength(0);
+  });
+
+  it('activityLine: more / less, null when the same', () => {
+    expect(activityLine({ current: 'light', suggested: 'moderate' })).toBe(
+      'Health shows more activity than “Lightly active”. Switch to “Active”?',
+    );
+    expect(activityLine({ current: 'very', suggested: 'light' })).toBe(
+      'Health shows less activity than “Very active”. Switch to “Lightly active”?',
+    );
+    expect(activityLine({ current: 'light', suggested: 'light' })).toBeNull();
+  });
+
+  it('every activity line passes checkCopy + the M11 list', () => {
+    for (const a of ACTIVITY_CHOICES)
+      for (const b of ACTIVITY_CHOICES) {
+        const line = activityLine({ current: a.value, suggested: b.value });
+        if (line) expect(checkHealthCopy(line).hits, line).toEqual([]);
+      }
+  });
+
+  function renderActivity(over: Partial<WeighInProps>) {
+    const calls = { sw: [] as string[], keep: 0 };
+    const el = asFake(
+      weighInScreen(
+        {
+          unit: 'kg',
+          todayKg: null,
+          lastKg: 70.4,
+          trend: TREND,
+          check: null,
+          kcalTarget: 2650,
+          history: HISTORY,
+          activity: { current: 'light', suggested: 'moderate' },
+          ...over,
+        },
+        {
+          onBack: () => {},
+          onSave: () => {},
+          onAccept: () => {},
+          onDismiss: () => {},
+          onSwitchActivity: (l) => calls.sw.push(l),
+          onKeepActivity: () => calls.keep++,
+        },
+      ),
+    );
+    return { el, calls };
+  }
+
+  it('inside the pending weekly card: asks with Switch / Keep, never applies by itself', () => {
+    const { el, calls } = renderActivity({ check: check('onTrack') });
+    const card = oneAttr(el, 'data-weekly-card');
+    const block = oneAttr(card, 'data-activity-suggest');
+    expect(block.textContent).toContain('Switch to “Active”?');
+    expect(byAttr(el, 'data-activity-card')).toHaveLength(0);
+    expect(calls).toEqual({ sw: [], keep: 0 });
+    const sw = oneAttr(card, 'data-activity-switch');
+    const keep = oneAttr(card, 'data-activity-keep');
+    expect([sw.textContent, keep.textContent]).toEqual(['Switch', 'Keep']);
+    expect(sw.classes).toContain('wi-activity-btn');
+    sw.click();
+    keep.click();
+    expect(calls).toEqual({ sw: ['moderate'], keep: 1 });
+    expect(copyHits(el)).toEqual([]);
+  });
+
+  it('no pending check: its own small card; no callbacks or no suggestion: nothing', () => {
+    const { el } = renderActivity({});
+    expect(byAttr(el, 'data-weekly-card')).toHaveLength(0);
+    expect(oneAttr(el, 'data-activity-card').textContent).toContain('Activity level');
+    expect(byAttr(renderActivity({ activity: null }).el, 'data-activity-suggest')).toHaveLength(0);
+    const unwired = render({ activity: { current: 'light', suggested: 'moderate' } }).el;
+    expect(byAttr(unwired, 'data-activity-suggest')).toHaveLength(0);
+  });
 });

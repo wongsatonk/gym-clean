@@ -134,6 +134,19 @@ export type FuelHost = {
   logError: (err: unknown) => void;
   /** M7b: on-device photo logging. Omitted → the log sheet has no photo row. */
   photo?: FuelPhotoHost | undefined;
+  /** M11: Health pass-through. Omitted → no activity-level line. */
+  health?: FuelHealthHost | undefined;
+};
+
+/** M11-q8: what the weigh-in screen needs from the Health wiring (app.ts). */
+export type FuelHealthHost = {
+  /**
+   * Core's activity-level check (`src/core/nutrition/activityCheck.ts`): the level his 14-day
+   * active energy fits, or null (no Health data, same level, or already answered this check).
+   */
+  activitySuggestion: (current: NutritionSettings['activity']) => NutritionSettings['activity'] | null;
+  /** He answered Switch or Keep: remember it so the line isn't asked again for this check. */
+  onActivityAnswered: (answer: 'switch' | 'keep', level: NutritionSettings['activity']) => void;
 };
 
 /** What the photo flow needs from food-vision (app.ts passes the real classifier). */
@@ -1105,13 +1118,36 @@ export function createFuel(host: FuelHost) {
 
   // ---------- sub-views ----------
 
-  function latestKg(before?: string): number | null {
+  function latestWeighIn(before?: string): WeighIn | null {
     let best: WeighIn | null = null;
     for (const w of weighIns) {
       if (before !== undefined && w.date >= before) continue;
       if (!best || w.date > best.date) best = w;
     }
-    return best?.kg ?? null;
+    return best;
+  }
+
+  function latestKg(before?: string): number | null {
+    return latestWeighIn(before)?.kg ?? null;
+  }
+
+  /** M11-q8: Switch sets the M7 activity level (Undo in the toast); both answers are reported. */
+  function answerActivity(answer: 'switch' | 'keep', level: NutritionSettings['activity']): void {
+    const health = host.health;
+    if (!health || !settings) return;
+    health.onActivityAnswered(answer, level);
+    if (answer === 'keep' || settings.activity === level) return host.render();
+    const prev = settings;
+    const next: NutritionSettings = { ...prev, activity: level };
+    settings = next;
+    void track(saveNutritionSettings(db, next)).catch(host.logError);
+    afterChange();
+    host.toast('Activity level changed', () => {
+      if (settings !== next) return;
+      settings = prev;
+      void track(saveNutritionSettings(db, prev)).catch(host.logError);
+      afterChange();
+    });
   }
 
   function mainScreen(): HTMLElement {
@@ -1124,6 +1160,7 @@ export function createFuel(host: FuelHost) {
         entries: todayEntries(),
         unit: host.unit(),
         lastWeighInKg: latestKg(),
+        lastWeighInSource: latestWeighIn()?.source,
         nudge: nudge?.text ?? null,
       },
       {
@@ -1141,6 +1178,15 @@ export function createFuel(host: FuelHost) {
     );
   }
 
+  /** M11-q8: the activity-level suggestion for the weigh-in screen, or null. */
+  function activityNow(): { current: NutritionSettings['activity']; suggested: NutritionSettings['activity'] } | null {
+    if (!host.health || !settings) return null;
+    const suggested = host.health.activitySuggestion(settings.activity);
+    return suggested && suggested !== settings.activity
+      ? { current: settings.activity, suggested }
+      : null;
+  }
+
   function weighInView(): HTMLElement {
     const d = today();
     const r = targetsResult();
@@ -1148,6 +1194,8 @@ export function createFuel(host: FuelHost) {
       {
         unit: host.unit(),
         todayKg: weighIns.find((w) => w.date === d)?.kg ?? null,
+        todaySource: weighIns.find((w) => w.date === d)?.source,
+        activity: activityNow(),
         lastKg: latestKg(d),
         trend: trend(weighIns, TREND_DAYS, d),
         check: currentCheck(),
@@ -1160,7 +1208,7 @@ export function createFuel(host: FuelHost) {
           host.render();
         },
         onSave: (kg) => {
-          const w: WeighIn = { date: today(), kg };
+          const w: WeighIn = { date: today(), kg, source: 'manual' };
           void track(saveWeighIn(db, w))
             .then(() => {
               weighIns = [...weighIns.filter((x) => x.date !== w.date), w].sort((a, b) =>
@@ -1172,6 +1220,11 @@ export function createFuel(host: FuelHost) {
         },
         onAccept: () => decide('accepted'),
         onDismiss: () => decide('dismissed'),
+        onSwitchActivity: (level) => answerActivity('switch', level),
+        onKeepActivity: () => {
+          const s = activityNow();
+          if (s) answerActivity('keep', s.current);
+        },
       },
     );
   }

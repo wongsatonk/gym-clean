@@ -1,0 +1,65 @@
+/* M11 "Lighter today?" card (src/ui/screens/readinessCard.ts), Today only. Same card as the
+   M10e missing-kit prompt (./gymPrompt.css): amber edge marks attention, icon + words (never
+   colour alone). Reasons as a list at body size, three full-width buttons (≥ 56px), the main
+   choice filled. Tokens from src/styles.css only. */
+
+.readiness-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  border-left: 4px solid var(--warn);
+}
+
+.readiness-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.readiness-title .ic {
+  flex: none;
+  color: var(--warn);
+}
+
+
+.readiness-reasons {
+  margin: 0;
+  padding: 0 0 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.readiness-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.readiness-btn {
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.readiness-cta {
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
