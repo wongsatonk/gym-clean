@@ -476,3 +476,59 @@ describe('settingsScreen M12 slice 1b: Your goal, go-easy list, Progress photos'
       expect(checkCopy(s), s).toEqual({ ok: true, hits: [] });
   });
 });
+
+describe('settingsScreen M12 slice 2 rows: Coach, Reminders, Coach eval', () => {
+  function render2(extra: Partial<SettingsActions>) {
+    const log: string[] = [];
+    const el = asFake(
+      settingsScreen(props(), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onCameraTest: () => {},
+        onTab: () => {},
+        onHealth: () => {},
+        onPlanChanges: () => {},
+        ...extra,
+      }),
+    );
+    return { el, log };
+  }
+  const keys = (el: FakeEl) => el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+
+  it('no callbacks → no rows (the PWA without them, older wiring)', () => {
+    const { el } = render2({});
+    expect(keys(el)).not.toContain('coach');
+    expect(keys(el)).not.toContain('reminders');
+    expect(el.find((e) => e.hasAttribute('data-brain-eval-open'))).toHaveLength(0);
+  });
+
+  it('Coach and Reminders sit after Health, before Plan; each opens its screen', () => {
+    const log: string[] = [];
+    const { el } = render2({
+      onCoachSettings: () => log.push('coach'),
+      onReminders: () => log.push('reminders'),
+    });
+    const k = keys(el);
+    expect(k.indexOf('coach')).toBe(k.indexOf('health') + 1);
+    expect(k.indexOf('reminders')).toBe(k.indexOf('coach') + 1);
+    expect(k.indexOf('plan')).toBe(k.indexOf('reminders') + 1);
+    one(el, (e) => e.hasAttribute('data-coach-settings-open'), 'coach open').click();
+    one(el, (e) => e.hasAttribute('data-reminders-open'), 'reminders open').click();
+    expect(log).toEqual(['coach', 'reminders']);
+  });
+
+  it('Coach eval is a row under the Developer log, after the log panel', () => {
+    const log: string[] = [];
+    const { el } = render2({ onBrainEval: () => log.push('eval') });
+    const dev = byAttr(el, 'data-section', 'devlog');
+    expect(dev.children[1]?.hasAttribute('data-devlog')).toBe(true);
+    const row = dev.children[2];
+    expect(row?.hasAttribute('data-brain-eval-open')).toBe(true);
+    expect(row?.textContent).toBe('Coach eval');
+    row?.click();
+    expect(log).toEqual(['eval']);
+  });
+});

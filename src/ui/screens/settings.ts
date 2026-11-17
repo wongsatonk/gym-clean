@@ -19,6 +19,10 @@
 // `[data-section="goal"]`, `[data-goal-summary]`, `[data-intake-open]`, `[data-easy-on=<area>]`,
 // `[data-easy-remove=<area>]`, `[data-section="progress-photos"]`,
 // `[data-setting="progress-photos"]`, `[data-progress-photos-open]`.
+//
+// M12 slice 2 task 18: rows to Settings → Coach (`[data-coach-settings-open]`, section "coach")
+// and Settings → Reminders (`[data-reminders-open]`, section "reminders"), and, under Developer
+// log, "Coach eval" (`[data-brain-eval-open]`; main passes it in the iPhone app only).
 import type { Accent, BodyArea, Intake } from '../../core/types';
 import type { Unit } from '../../core/units';
 import { CREDIT, versionLabel } from '../../core/version';
@@ -91,6 +95,12 @@ export type SettingsActions = {
   onProgressPhotos?: ((on: boolean) => void) | undefined;
   /** M12 slice 1b: opens Settings → Progress photos (shown only while the switch is on). */
   onProgressPhotosOpen?: (() => void) | undefined;
+  /** M12 slice 2: opens Settings → Coach (route 'settings/coach'). Omitted → no Coach section. */
+  onCoachSettings?: (() => void) | undefined;
+  /** M12 slice 2: opens Settings → Reminders. Omitted → no Reminders section. */
+  onReminders?: (() => void) | undefined;
+  /** M12 slice 2: the developer Coach eval (iPhone app only). Omitted → no row. */
+  onBrainEval?: (() => void) | undefined;
 };
 
 export const GOAL_NOT_SET = 'Not set yet.';
@@ -390,6 +400,42 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           h('p', { class: 'muted set-note' }, 'What the coach reads from Apple Health.'),
         )
       : null,
+    actions.onCoachSettings
+      ? section(
+          'coach',
+          'chat',
+          'Coach',
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'set-action',
+              'data-coach-settings-open': true,
+              onclick: () => actions.onCoachSettings?.(),
+            },
+            'Coach',
+          ),
+          h('p', { class: 'muted set-note' }, 'Who answers, and when replies are spoken.'),
+        )
+      : null,
+    actions.onReminders
+      ? section(
+          'reminders',
+          'clock',
+          'Reminders',
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'set-action',
+              'data-reminders-open': true,
+              onclick: () => actions.onReminders?.(),
+            },
+            'Reminders',
+          ),
+          h('p', { class: 'muted set-note' }, 'Off until you turn them on.'),
+        )
+      : null,
     actions.onPlanChanges
       ? section(
           'plan',
@@ -410,7 +456,24 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
     todosSection(actions, section),
     progressPhotosSection(props, actions, section),
     props.backup ? section('backup', 'lock', 'Backup', props.backup) : null,
-    section('devlog', 'bars', 'Developer log', props.devLog),
+    section(
+      'devlog',
+      'bars',
+      'Developer log',
+      props.devLog,
+      actions.onBrainEval
+        ? h(
+            'button',
+            {
+              type: 'button',
+              class: 'set-action',
+              'data-brain-eval-open': true,
+              onclick: () => actions.onBrainEval?.(),
+            },
+            'Coach eval',
+          )
+        : null,
+    ),
     // M12 slice 1c: always the last section. Plain text, no links, nothing sent.
     section(
       'about',

@@ -1,0 +1,204 @@
+<!doctype html>
+<!-- Dev-only visual check for M12 slice 2 tasks 16–18 (mic, source badge, brain note, check-in
+     card, Settings → Coach / Reminders, Coach eval) with made-up data. Not part of the build or
+     the app. Open on the dev server: /src/ui/coach/coachSlice2.harness.html?view=
+     listening | reply | note | unavailable | thinking | checkin | checkin-done
+     | coach-apple | coach-off | reminders | reminders-denied | eval -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Coach slice 2 harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      // The app loads coach.css first (the Pause sheet); keep that order here.
+      import './coach.css';
+      import { coachTabScreen, updateChatMic } from './chat.ts';
+      import { tabBar } from '../tabBar.ts';
+      import { coachSettingsScreen } from '../screens/coachSettings.ts';
+      import { remindersScreen } from '../screens/reminders.ts';
+      import { brainEvalScreen } from '../screens/brainEval.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'listening';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      const T0 = new Date(2026, 10, 17, 18, 0).getTime();
+      let id = 1;
+      const m = (role, text, extra = {}) => ({
+        id: id++,
+        createdAt: T0 + id * 1000,
+        role,
+        text,
+        source: role === 'user' ? 'apple' : 'apple',
+        phase: 'today',
+        ...extra,
+      });
+      const QS = [
+        { id: 'energy', label: 'Energy this week', low: 'Low', high: 'High' },
+        { id: 'sleep', label: 'Sleep this week', low: 'Low', high: 'High' },
+        { id: 'soreness', label: 'Soreness this week', low: 'Low', high: 'High' },
+      ];
+      const actions = {
+        onText: (t) => log('text', t),
+        onChip: (c) => log('chip', c.id),
+        onArea: (a) => log('area', a),
+        onFollowUp: (i) => log('follow', i),
+        onApply: (i) => log('apply', i),
+        onDismiss: (i) => log('dismiss', i),
+        onClearChat: () => log('clear'),
+        micDown: () => log('micDown'),
+        micUp: () => log('micUp'),
+        micCancel: () => log('micCancel'),
+        onCheckInDone: (i, a) => log('checkin', i, JSON.stringify(a)),
+        onCheckInSkip: (i) => log('skip', i),
+      };
+      const chatView = (p) =>
+        app.replaceChildren(
+          coachTabScreen(
+            { allowTyping: true, showSource: true, checkInQuestions: QS, ...p },
+            actions,
+            tabBar('coach', () => {}),
+          ),
+        );
+      const thread = [
+        m('user', 'How did my week go?', { viaMic: true }),
+        m('coach', 'Three of four sessions done. Your bench went up 2.5 kg. Pull A is tomorrow.'),
+      ];
+
+      if (view === 'listening') {
+        chatView({
+          messages: thread,
+          mic: { state: 'listening', partial: 'Can I move push to', level: 0.6 },
+        });
+        const el = app.firstElementChild;
+        updateChatMic(el, {
+          state: 'listening',
+          partial: 'Can I move push to Thursday',
+          level: 0.7,
+        });
+      } else if (view === 'reply') {
+        chatView({ messages: thread, mic: { state: 'idle' } });
+      } else if (view === 'note') {
+        chatView({
+          messages: [
+            m('user', 'Should I go heavier on squats?', { source: 'rules' }),
+            m('coach', 'Keep the weight for one more session, then add 2.5 kg.', {
+              source: 'rules',
+              note: "Apple Intelligence is off, so I'm using quick replies. Turn it on in Settings > Apple Intelligence & Siri.",
+            }),
+          ],
+          mic: { state: 'idle' },
+        });
+      } else if (view === 'unavailable') {
+        chatView({ messages: thread, mic: { state: 'unavailable', reason: 'permissionDenied' } });
+      } else if (view === 'thinking') {
+        chatView({ messages: thread.slice(0, 1), typing: true, mic: { state: 'idle' } });
+      } else if (view === 'checkin' || view === 'checkin-done') {
+        const done = view === 'checkin-done';
+        chatView({
+          messages: [
+            m('coach', 'New week. Three quick taps on how last week felt?', {
+              card: { kind: 'checkIn', weekStart: '2026-11-15', status: done ? 'done' : 'pending' },
+            }),
+          ],
+          checkIns: done
+            ? {
+                '2026-11-15': { weekStart: '2026-11-15', energy: 4, sleep: 3, soreness: 2, at: T0 },
+              }
+            : {},
+          mic: { state: 'idle' },
+        });
+        if (!done) {
+          document.querySelector('[data-checkin-pick="energy:4"]')?.click();
+          document.querySelector('[data-checkin-pick="sleep:3"]')?.click();
+        }
+      } else if (view === 'coach-apple' || view === 'coach-off') {
+        app.replaceChildren(
+          coachSettingsScreen(
+            {
+              status:
+                view === 'coach-apple'
+                  ? { brain: 'apple' }
+                  : { brain: 'rules', reason: 'appleIntelligenceNotEnabled' },
+              speakReplies: 'mic',
+            },
+            {
+              onBack: () => log('back'),
+              onSpeakReplies: (v) => log('speak', v),
+              onRecheck: () => log('recheck'),
+            },
+          ),
+        );
+      } else if (view === 'reminders' || view === 'reminders-denied') {
+        app.replaceChildren(
+          remindersScreen(
+            {
+              native: true,
+              settings:
+                view === 'reminders'
+                  ? {
+                      session: { on: true, time: '18:30' },
+                      missedDay: { on: false },
+                      sundayRecap: { on: true },
+                    }
+                  : {
+                      session: { on: false, time: '18:00' },
+                      missedDay: { on: false },
+                      sundayRecap: { on: false },
+                    },
+              permission: view === 'reminders' ? 'granted' : 'denied',
+            },
+            {
+              onBack: () => log('back'),
+              onToggle: (k, on) => log('toggle', k, on),
+              onTime: (t) => log('time', t),
+            },
+          ),
+        );
+      } else if (view === 'eval') {
+        const rows = [
+          ['req-01', 'lighterToday', 'lighterToday', 1200],
+          ['req-02', 'postponeSession', 'postponeSession', 1500],
+          ['req-03', 'swapExercise', 'none', 1900],
+          ['req-04', 'avoidBodyArea', 'avoidBodyArea', 1100],
+          ['req-05', 'deloadWeek', 'deloadWeek', 1300],
+          ['req-06', 'none', 'none', 800],
+        ].map(([rid, expected, got, ms]) => ({
+          id: rid,
+          set: 'request',
+          expected,
+          got,
+          pass: expected === got,
+          safe: true,
+          latencyMs: ms,
+        }));
+        rows.push({
+          id: 'facts-01',
+          set: 'facts',
+          expected: 'none',
+          got: 'none',
+          pass: true,
+          safe: true,
+          factsMatch: true,
+          latencyMs: 900,
+        });
+        app.replaceChildren(
+          brainEvalScreen(
+            { state: 'done', report: { at: T0, rows } },
+            { onBack: () => log('back'), onRun: () => log('run'), onExport: () => log('export') },
+          ),
+        );
+      }
+      if (q.get('scroll'))
+        document.querySelector(q.get('scroll'))?.scrollIntoView({ block: 'start' });
+    </script>
+  </body>
+</html>

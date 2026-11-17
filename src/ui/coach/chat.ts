@@ -26,6 +26,16 @@
 // M12 slice 1b task 33: a coach message with `learnId` gets a "Why?" button under its bubble
 // (`data-learn-open=<id>`) when `onLearn` is passed; main finds the card and opens it with
 // `openLearnCard(card, opener)` (learnCard.ts), which hands focus back to the button on close.
+//
+// M12 slice 2 task 16: the hold-to-talk mic next to Send (micButton.ts; props `mic`, callbacks
+// `micDown` / `micUp` / `micCancel`): while listening the text box shows the live partial text
+// (read-only) and Send waits; `updateChatMic(chatEl, mic)` patches partial / level in place so
+// main needn't re-render the thread ten times a second. With `showSource`, coach bubbles carry a
+// text badge: "On-device AI" (source 'apple') or "Quick replies" ('rules' / 'chip')
+// (`[data-chat-source]`). A message's `note` (the brain note) is a muted system line with an
+// info icon (`.chat-note`, role="note"). The typing state reads "Thinking…".
+// Task 17: `card.kind === 'checkIn'` draws the weekly check-in card (checkInCard.ts) with
+// `checkInQuestions` / `checkIns` from props and `onCheckInDone` / `onCheckInSkip`.
 import { dateText } from '../../core/trainer/actions/lighter';
 import {
   QUICK_CHIPS,
@@ -35,13 +45,15 @@ import {
   type CoachChipId,
   type QuickChipId,
 } from '../../core/trainer/coach';
-import type { BodyArea, ChatMessage, FocusBlock } from '../../core/types';
+import type { BodyArea, BrainSource, ChatMessage, CheckIn, FocusBlock } from '../../core/types';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
 import { moodClass } from '../tokens';
+import { buildCheckInCard, type CheckInAnswers, type CheckInQuestionView } from './checkInCard';
 import { buildFoodCard } from './foodCard';
 import { buildFocusBlockCard, buildMissingBlockCard } from './focusBlockCard';
 import { whyButton } from './learnCard';
+import { micButton, type MicProps, type MicView } from './micButton';
 import { buildRedFlagCard, buildThreadProposalCard, type Built } from './proposalCard';
 import './coach.css';
 import './chat.css';
@@ -107,6 +119,15 @@ export const CLEAR_LABEL = 'Clear chat';
 export const CLEAR_CONFIRM = 'Tap again to clear';
 /** The Clear chat button disarms after this long without the second tap. */
 export const CLEAR_ARM_MS = 4000;
+export const THINKING_LABEL = 'Thinking…';
+export const LISTENING_PLACEHOLDER = 'Listening…';
+
+/** The bubble badge: which brain answered, in words (never colour alone). */
+export function sourceBadge(source: BrainSource): string | null {
+  if (source === 'apple') return 'On-device AI';
+  if (source === 'rules' || source === 'chip') return 'Quick replies';
+  return null;
+}
 
 export type ChatProps = {
   messages: readonly ChatMessage[];
@@ -137,6 +158,14 @@ export type ChatProps = {
   justApplied?: number | undefined;
   /** Messages with an id above this (or no id yet) rise in. Omit for none (first open). */
   animateAfter?: number | undefined;
+  /** M12 slice 2: the hold-to-talk mic (omit = 'hidden'). Only beside the text box. */
+  mic?: MicProps | undefined;
+  /** M12 slice 2: badge coach bubbles with who answered (main: the iPhone app only). */
+  showSource?: boolean | undefined;
+  /** M12 slice 2: the check-in questions (core CHECK_IN_QUESTIONS, mapped). */
+  checkInQuestions?: readonly CheckInQuestionView[] | undefined;
+  /** M12 slice 2: saved check-ins by weekStart (the summary line of a done card). */
+  checkIns?: Readonly<Record<string, CheckIn>> | undefined;
 };
 
 export type ChatActions = {
@@ -160,6 +189,15 @@ export type ChatActions = {
   onClose?: (() => void) | undefined;
   /** M12 1b: "Why?" under a coach message with `learnId`; omit → no link. */
   onLearn?: ((learnId: string, opener: HTMLElement) => void) | undefined;
+  /** M12 slice 2: mic pressed (pointer down / Space down). */
+  micDown?: (() => void) | undefined;
+  /** Released on the button: send what was heard (with `viaMic`). */
+  micUp?: (() => void) | undefined;
+  /** Released off the button, Escape, pointercancel or the app left: send nothing. */
+  micCancel?: (() => void) | undefined;
+  /** M12 slice 2: check-in card Done (answers given, ≥ 1) / Skip this week, by message id. */
+  onCheckInDone?: ((messageId: number, answers: CheckInAnswers) => void) | undefined;
+  onCheckInSkip?: ((messageId: number) => void) | undefined;
 };
 
 // ---------- pure selectors ----------
@@ -232,6 +270,27 @@ function bubble(m: ChatMessage): HTMLElement {
   );
 }
 
+function sourceLine(source: BrainSource): HTMLElement | null {
+  const text = sourceBadge(source);
+  return text
+    ? h(
+        'p',
+        { class: 'chat-source', 'data-chat-source': source },
+        h('span', { class: 'sr-only' }, 'Answered by '),
+        text,
+      )
+    : null;
+}
+
+function noteLine(note: string): HTMLElement {
+  return h(
+    'p',
+    { class: 'chat-note', role: 'note', 'data-chat-note': true },
+    icon('help', 'sm'),
+    h('span', {}, note),
+  );
+}
+
 function recapCard(m: ChatMessage & { card: { kind: 'recap' } }): HTMLElement {
   const c = m.card;
   return h(
@@ -256,13 +315,13 @@ function typingIndicator(): HTMLElement {
   return h(
     'li',
     { class: 'chat-item chat-typing', 'data-chat-typing': true, role: 'status' },
-    h('span', { class: 'sr-only' }, 'The coach is typing'),
     h(
       'span',
-      { class: 'chat-dots', 'aria-hidden': 'true' },
-      h('span', { class: 'chat-dot' }),
-      h('span', { class: 'chat-dot' }),
-      h('span', { class: 'chat-dot' }),
+      { class: 'chat-dots' },
+      h('span', { class: 'chat-dot', 'aria-hidden': 'true' }),
+      h('span', { class: 'chat-dot', 'aria-hidden': 'true' }),
+      h('span', { class: 'chat-dot', 'aria-hidden': 'true' }),
+      h('span', { class: 'chat-thinking' }, THINKING_LABEL),
     ),
   );
 }
@@ -358,6 +417,10 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       item.append(recapCard({ ...m, card }));
     } else {
       if (m.text) item.append(bubble(m));
+      if (m.text && m.role === 'coach' && p.showSource) {
+        const badge = sourceLine(m.source);
+        if (badge) item.append(badge);
+      }
       const learnId = m.learnId;
       if (learnId && m.role === 'coach' && a.onLearn) {
         const onLearn = a.onLearn;
@@ -398,6 +461,21 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
               { onApply: () => a.onApply(id), onDismiss: () => a.onDismiss(id), ...outcome },
             )
           : buildMissingBlockCard(card.status, outcome);
+      } else if (card?.kind === 'checkIn' && p.checkInQuestions?.length) {
+        const pending = card.status === 'pending' && !!a.onCheckInDone && !!a.onCheckInSkip;
+        built = buildCheckInCard(
+          {
+            weekStart: card.weekStart,
+            // Without the callbacks a pending card can't be answered: show nothing to tap.
+            status: pending || card.status !== 'pending' ? card.status : 'skipped',
+            questions: p.checkInQuestions,
+            saved: p.checkIns?.[card.weekStart],
+          },
+          {
+            onDone: (answers) => a.onCheckInDone?.(id, answers),
+            onSkip: () => a.onCheckInSkip?.(id),
+          },
+        );
       } else if (card?.kind === 'food' && card.suggestions.length && a.onLogFood && !red) {
         const onLogFood = a.onLogFood;
         built = buildFoodCard(
@@ -411,7 +489,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       item.append(h('div', { class: 'cs-card-item chat-card' }, built.el));
       cycle.push(...built.controls);
     }
-    if (m.note) item.append(h('p', { class: 'chat-note' }, m.note));
+    if (m.note) item.append(noteLine(m.note));
     list.append(item);
   });
   if (p.typing) list.append(typingIndicator());
@@ -491,10 +569,13 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   // "swap Thursday's flyes", SPEC M12 goal 6). Quick chips still wait for the answer.
   const editable = waiting && last(p.messages)?.card?.kind === 'focusBlock';
   let typingBox: HTMLElement | null = null;
+  let micView: MicView | null = null;
+  let input: HTMLInputElement | null = null;
+  let sendBtn: HTMLButtonElement | null = null;
   if (p.allowTyping && a.onText && !red && (!waiting || editable)) {
     const onText = a.onText;
     const inputId = sheet ? 'chat-input-sheet' : 'chat-input';
-    const input = h('input', {
+    const box = h('input', {
       type: 'text',
       id: inputId,
       class: 'cs-input',
@@ -502,29 +583,48 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       autocomplete: 'off',
       maxlength: 200,
     });
+    input = box;
     const send = () => {
-      const t = textToSend(input.value ?? '');
+      if (box.readOnly) return;
+      const t = textToSend(box.value ?? '');
       if (t) onText(t);
     };
-    input.addEventListener('keydown', (ev) => {
+    box.addEventListener('keydown', (ev) => {
       if ((ev as KeyboardEvent).key === 'Enter') {
         ev.preventDefault();
         send();
       }
     });
-    const sendBtn = h(
+    const sendEl = h(
       'button',
       { type: 'button', class: 'cs-btn cs-send', onclick: send },
       h('span', {}, 'Send'),
     );
+    sendBtn = sendEl;
+    const mic = p.mic ?? { state: 'hidden' };
+    const canHold = !!(a.micDown && a.micUp && a.micCancel);
+    micView =
+      mic.state === 'hidden' || ((mic.state === 'idle' || mic.state === 'listening') && !canHold)
+        ? null
+        : micButton(mic, {
+            micDown: () => a.micDown?.(),
+            micUp: () => a.micUp?.(),
+            micCancel: () => a.micCancel?.(),
+          });
+    const holdBtn = micView?.button ? micView.el : null;
     typingBox = h(
       'div',
       { class: 'cs-typing chat-input' },
       h('label', { class: 'sr-only', for: inputId }, 'Ask the coach'),
-      h('div', { class: 'cs-typing-row' }, input, sendBtn),
+      h('div', { class: 'cs-typing-row' }, box, holdBtn, sendEl),
+      micView?.hint ?? null,
+      holdBtn ? null : (micView?.el ?? null),
     );
-    input.setAttribute('placeholder', 'Ask the coach');
-    cycle.push(input, sendBtn);
+    box.setAttribute('placeholder', 'Ask the coach');
+    cycle.push(box);
+    if (micView?.button) cycle.push(micView.button);
+    cycle.push(sendEl);
+    applyMicToInput(box, sendEl, mic);
   }
 
   const scroll = h('div', { class: 'cs-scroll chat-scroll' }, starters, list);
@@ -564,12 +664,15 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   );
 
   const body = [head, scroll, dock];
+  const handle: MicHandle = { view: micView, input, send: sendBtn };
   if (!sheet) {
-    return h(
+    const tab = h(
       'section',
       { class: 'chat chat-tab', 'data-chat': true, 'data-variant': 'tab', 'aria-label': 'Coach' },
       ...body,
     );
+    micHandles.set(tab, handle);
+    return tab;
   }
 
   const root = h(
@@ -592,6 +695,8 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     const kev = ev as KeyboardEvent;
     if (kev.key === 'Escape') {
       kev.preventDefault();
+      // Escape mid-hold cancels the mic (micButton), not the sheet.
+      if (p.mic?.state === 'listening') return;
       a.onClose?.();
       return;
     }
@@ -606,7 +711,55 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     const next = at < 0 ? (kev.shiftKey ? n - 1 : 0) : (at + (kev.shiftKey ? n - 1 : 1)) % n;
     live[next]?.focus();
   });
+  micHandles.set(root, handle);
   return root;
+}
+
+// ---------- the mic in place ----------
+
+type MicHandle = {
+  view: MicView | null;
+  input: HTMLInputElement | null;
+  send: HTMLButtonElement | null;
+};
+const micHandles = new WeakMap<object, MicHandle>();
+
+/**
+ * Listening: the text box shows the live words (read-only, the newest words in view) and Send
+ * steps aside (disabled + hidden) so the words get the room; release sends them.
+ */
+function applyMicToInput(box: HTMLInputElement, send: HTMLButtonElement, mic: MicProps): void {
+  const listening = mic.state === 'listening';
+  box.readOnly = listening;
+  if (listening) {
+    box.setAttribute('readonly', '');
+    box.setAttribute('placeholder', LISTENING_PLACEHOLDER);
+    box.value = mic.partial ?? '';
+    // Keep the end of what was heard in view (an input shows its start by default).
+    if (typeof box.scrollWidth === 'number') box.scrollLeft = box.scrollWidth;
+    send.setAttribute('disabled', '');
+    send.setAttribute('hidden', '');
+  } else {
+    box.removeAttribute('readonly');
+    box.setAttribute('placeholder', 'Ask the coach');
+    send.removeAttribute('disabled');
+    send.removeAttribute('hidden');
+  }
+}
+
+/**
+ * Patches the mic of a chat built by `chat()` / `coachTabScreen()` (pass either root) in place:
+ * the level ring, the pressed state and hint, the partial words in the text box. Use it for `partial` and
+ * `level` events; re-render for a state change to or from 'hidden' / 'unavailable'. Returns
+ * false when there's nothing to patch (no mic in that chat): re-render instead.
+ */
+export function updateChatMic(root: HTMLElement, mic: MicProps): boolean {
+  const target = micHandles.get(root);
+  if (!target?.view?.el || !target.input || !target.send) return false;
+  if (mic.state === 'hidden' || mic.state === 'unavailable') return false;
+  target.view.update(mic);
+  applyMicToInput(target.input, target.send, mic);
+  return true;
 }
 
 /**
@@ -618,10 +771,14 @@ export function coachTabScreen(
   a: ChatActions,
   bar: HTMLElement,
 ): HTMLElement {
-  return h(
+  const c = chat({ ...p, variant: 'tab' }, a);
+  const screen = h(
     'main',
     { class: `screen has-tabbar coach-screen ${moodClass('pro')}`, 'data-screen': 'coach' },
-    chat({ ...p, variant: 'tab' }, a),
+    c,
     bar,
   );
+  const handle = micHandles.get(c);
+  if (handle) micHandles.set(screen, handle);
+  return screen;
 }

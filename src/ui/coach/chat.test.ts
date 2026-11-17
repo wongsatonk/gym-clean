@@ -8,6 +8,10 @@ import {
   CLEAR_CONFIRM,
   CLEAR_LABEL,
   EMPTY_LINE,
+  LISTENING_PLACEHOLDER,
+  THINKING_LABEL,
+  sourceBadge,
+  updateChatMic,
   PRIVACY_LINE,
   awaitingAnswer,
   chat,
@@ -22,9 +26,15 @@ import {
   type ChatProps,
 } from './chat';
 import { resetFocusCardMemory } from './focusBlockCard';
+import { resetCheckInMemory } from './checkInCard';
+import { MIC_HINT, MIC_UNAVAILABLE_LINES, resetMicHold } from './micButton';
 
 useFakeDom();
-beforeEach(() => resetFocusCardMemory());
+beforeEach(() => {
+  resetFocusCardMemory();
+  resetCheckInMemory();
+  resetMicHold();
+});
 
 const T0 = Date.UTC(2026, 10, 16, 9);
 let nextId = 1;
@@ -366,12 +376,13 @@ describe('chat: tab variant', () => {
     expect(input(el)).toBeDefined();
   });
 
-  it('typing indicator: 3 dots with words for screen readers; no starters meanwhile', () => {
+  it('typing indicator: 3 dots and "Thinking…" in words; no starters meanwhile', () => {
     const { el } = mount({ typing: true });
     const t = one(el, 'data-chat-typing');
     expect(t.getAttribute('role')).toBe('status');
     expect(t.byClass('chat-dot')).toHaveLength(3);
-    expect(t.oneByClass('sr-only').textContent).toBe('The coach is typing');
+    expect(t.byClass('chat-dot').every((d) => d.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(t.textContent).toBe(THINKING_LABEL);
     expect(attr(el, 'data-coach-starter')).toHaveLength(0);
   });
 
@@ -389,7 +400,11 @@ describe('chat: tab variant', () => {
     const { el } = mount({
       messages: [msg('coach', 'OK.', { note: 'Answered by quick replies.' })],
     });
-    expect(el.oneByClass('chat-note').textContent).toBe('Answered by quick replies.');
+    const note = el.oneByClass('chat-note');
+    expect(note.textContent).toBe('Answered by quick replies.');
+    // A muted system line: an info icon + words, announced as a note.
+    expect(note.getAttribute('role')).toBe('note');
+    expect(note.find((e) => e.getAttribute('data-icon') === 'help')).toHaveLength(1);
   });
 
   it('new messages rise in; the first open shows the thread in place', () => {
@@ -478,5 +493,270 @@ describe('chat: sheet variant (Pause sheet)', () => {
     expect(asFake(doc.activeElement).textContent.trim()).toBe('Send');
     el.dispatch('keydown', ev('Escape'));
     expect(log).toEqual(['close']);
+  });
+});
+
+// ---------- M12 slice 2 task 16: mic, source badge, brain note, thinking ----------
+
+describe('chat: mic (slice 2)', () => {
+  const g = globalThis as { window?: unknown };
+  let saved: unknown;
+  let winL: Map<string, ((ev: unknown) => void)[]>;
+  beforeEach(() => {
+    saved = g.window;
+    winL = new Map();
+    g.window = {
+      addEventListener: (t: string, cb: (ev: unknown) => void) =>
+        winL.set(t, [...(winL.get(t) ?? []), cb]),
+      removeEventListener: (t: string, cb: (ev: unknown) => void) =>
+        winL.set(
+          t,
+          (winL.get(t) ?? []).filter((x) => x !== cb),
+        ),
+    };
+  });
+  afterEach(() => {
+    g.window = saved;
+  });
+  const micLog = (log: string[]) => ({
+    micDown: () => log.push('micDown'),
+    micUp: () => log.push('micUp'),
+    micCancel: () => log.push('micCancel'),
+  });
+  const mountMic = (mic: ChatProps['mic'], p: Partial<ChatProps> = {}) => {
+    const log: string[] = [];
+    const r = mount(
+      { mic, ...p },
+      {
+        ...micLog(log),
+        onText: (t) => log.push(`text:${t}`),
+        onClose: () => log.push('close'),
+      },
+    );
+    return { ...r, log };
+  };
+  const hold = (el: FakeEl) => attr(el, 'data-mic-hold')[0];
+
+  it('no mic prop / hidden → no mic (PWA, during a set)', () => {
+    expect(attr(mount().el, 'data-mic')).toHaveLength(0);
+    expect(attr(mountMic({ state: 'hidden' }).el, 'data-mic')).toHaveLength(0);
+  });
+
+  it('idle → "Talk" between the text box and Send, in that order', () => {
+    const { el } = mountMic({ state: 'idle' });
+    const row = el.oneByClass('cs-typing-row');
+    expect(row.children.map((c) => c.tag)).toEqual(['input', 'span', 'button']);
+    expect(row.children[1]?.getAttribute('data-mic-state')).toBe('idle');
+    expect(hold(el)?.getAttribute('aria-label')).toBe('Hold to talk');
+    expect(btn(el, 'Send').hasAttribute('disabled')).toBe(false);
+  });
+
+  it('idle without the callbacks → no button (nothing would listen)', () => {
+    expect(attr(mount({ mic: { state: 'idle' } }).el, 'data-mic-hold')).toHaveLength(0);
+  });
+
+  it('hold: pointer down → micDown, release → micUp', () => {
+    const { el, log } = mountMic({ state: 'idle' });
+    hold(el)?.dispatch('pointerdown', { button: 0, preventDefault: () => {} });
+    for (const cb of winL.get('pointerup') ?? []) cb({});
+    expect(log).toEqual(['micDown', 'micUp']);
+  });
+
+  it('keyboard hold: Space down → micDown, Space up → micUp', () => {
+    const { el, log } = mountMic({ state: 'idle' });
+    hold(el)?.dispatch('keydown', { key: ' ', repeat: false, preventDefault: () => {} });
+    for (const cb of winL.get('keyup') ?? []) cb({ key: ' ' });
+    expect(log).toEqual(['micDown', 'micUp']);
+  });
+
+  it('listening → the live words in the text box (read-only), Send waits, the hint shows', () => {
+    const { el, log } = mountMic({ state: 'listening', partial: 'move push to', level: 0.5 });
+    const box = input(el) as FakeEl & { value?: string; readOnly?: boolean };
+    expect(box.value).toBe('move push to');
+    expect(box.readOnly).toBe(true);
+    expect(box.getAttribute('placeholder')).toBe(LISTENING_PLACEHOLDER);
+    expect(btn(el, 'Send').hasAttribute('disabled')).toBe(true);
+    expect(btn(el, 'Send').hasAttribute('hidden')).toBe(true);
+    btn(el, 'Send').click();
+    box.dispatch('keydown', { key: 'Enter', preventDefault: () => {} });
+    expect(log).toEqual([]);
+    expect(one(el, 'data-mic-hint').textContent).toBe(MIC_HINT);
+    expect(hold(el)?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('updateChatMic patches words, level and state in place (no re-render)', () => {
+    const { el } = mountMic({ state: 'listening', partial: 'mo' });
+    const box = input(el) as FakeEl & { value?: string; readOnly?: boolean };
+    expect(
+      updateChatMic(el as unknown as HTMLElement, {
+        state: 'listening',
+        partial: 'move',
+        level: 1,
+      }),
+    ).toBe(true);
+    expect(box.value).toBe('move');
+    expect(one(el, 'data-mic-ring').style.transform).toBe('scale(1.2)');
+    updateChatMic(el as unknown as HTMLElement, { state: 'idle' });
+    expect(box.readOnly).toBe(false);
+    expect(btn(el, 'Send').hasAttribute('disabled')).toBe(false);
+    expect(btn(el, 'Send').hasAttribute('hidden')).toBe(false);
+    expect(hold(el)?.getAttribute('aria-pressed')).toBe('false');
+    // To or from hidden / unavailable: re-render instead.
+    expect(updateChatMic(el as unknown as HTMLElement, { state: 'hidden' })).toBe(false);
+    expect(updateChatMic(mount().el as unknown as HTMLElement, { state: 'idle' })).toBe(false);
+  });
+
+  it('updateChatMic works on the Coach tab screen root too', () => {
+    const log: string[] = [];
+    const scr = asFake(
+      coachTabScreen(
+        { messages: [], allowTyping: true, mic: { state: 'idle' } },
+        {
+          onText: () => {},
+          onChip: () => {},
+          onArea: () => {},
+          onApply: () => {},
+          onDismiss: () => {},
+          ...micLog(log),
+        },
+        document.createElement('nav'),
+      ),
+    );
+    expect(
+      updateChatMic(scr as unknown as HTMLElement, { state: 'listening', partial: 'hi' }),
+    ).toBe(true);
+    expect((input(scr) as FakeEl & { value?: string }).value).toBe('hi');
+  });
+
+  it('unavailable → the short line under the text box; typing and Send still work', () => {
+    const { el, log } = mountMic({ state: 'unavailable', reason: 'permissionDenied' });
+    expect(attr(el, 'data-mic-hold')).toHaveLength(0);
+    expect(one(el, 'data-mic-unavailable').textContent).toBe(
+      MIC_UNAVAILABLE_LINES.permissionDenied,
+    );
+    const box = input(el) as FakeEl & { value?: string };
+    box.value = 'how was my week';
+    btn(el, 'Send').click();
+    expect(log).toEqual(['text:how was my week']);
+  });
+
+  it('no text box (a set, a red flag) → no mic either', () => {
+    expect(attr(mountMic({ state: 'idle' }, { allowTyping: false }).el, 'data-mic')).toHaveLength(
+      0,
+    );
+    const red = msg('coach', RED, { card: { kind: 'redFlag' } });
+    expect(attr(mountMic({ state: 'idle' }, { messages: [red] }).el, 'data-mic')).toHaveLength(0);
+  });
+
+  it('sheet: Escape mid-hold cancels the mic, not the sheet', () => {
+    const { el, log } = mountMic({ state: 'listening' }, { variant: 'sheet' });
+    el.dispatch('keydown', { key: 'Escape', preventDefault: () => {} });
+    expect(log).not.toContain('close');
+    const idle = mountMic({ state: 'idle' }, { variant: 'sheet' });
+    idle.el.dispatch('keydown', { key: 'Escape', preventDefault: () => {} });
+    expect(idle.log).toContain('close');
+  });
+});
+
+describe('chat: source badge (slice 2)', () => {
+  it('words per brain: Apple → "On-device AI", rules / chip → "Quick replies"', () => {
+    expect(sourceBadge('apple')).toBe('On-device AI');
+    expect(sourceBadge('rules')).toBe('Quick replies');
+    expect(sourceBadge('chip')).toBe('Quick replies');
+    expect(sourceBadge('claude')).toBeNull();
+  });
+
+  it('with showSource: under coach bubbles only, as text with a screen-reader lead-in', () => {
+    const { el } = mount({
+      showSource: true,
+      messages: [
+        msg('user', 'How was my week?', { source: 'apple' }),
+        msg('coach', 'Three of four sessions.', { source: 'apple' }),
+        msg('coach', 'Moved.', { source: 'rules' }),
+      ],
+    });
+    const badges = attr(el, 'data-chat-source');
+    expect(badges.map((b) => b.getAttribute('data-chat-source'))).toEqual(['apple', 'rules']);
+    expect(badges.map((b) => b.textContent)).toEqual([
+      'Answered by On-device AI',
+      'Answered by Quick replies',
+    ]);
+    expect(badges[0]?.oneByClass('sr-only').textContent).toBe('Answered by ');
+  });
+
+  it('without showSource (the PWA): no badges', () => {
+    const { el } = mount({ messages: [msg('coach', 'Moved.', { source: 'rules' })] });
+    expect(attr(el, 'data-chat-source')).toHaveLength(0);
+  });
+
+  it('the brain note sits under the reply with its badge', () => {
+    const { el } = mount({
+      showSource: true,
+      messages: [
+        msg('coach', 'Moved.', {
+          source: 'rules',
+          note: "Apple Intelligence is off, so I'm using quick replies.",
+        }),
+      ],
+    });
+    const item = el.oneByClass('chat-item-coach');
+    expect(item.children.map((c) => c.classes[0] ?? c.classes.join(' '))).toEqual([
+      'cs-msg',
+      'chat-source',
+      'chat-note',
+    ]);
+  });
+});
+
+describe('chat: check-in card (slice 2 task 17)', () => {
+  const QS = [
+    { id: 'energy', label: 'Energy this week', low: 'Low', high: 'High' },
+    { id: 'sleep', label: 'Sleep this week', low: 'Low', high: 'High' },
+    { id: 'soreness', label: 'Soreness this week', low: 'Low', high: 'High' },
+  ] as const;
+  const card = (status: 'pending' | 'done' | 'skipped') =>
+    msg('coach', 'Quick check-in for last week.', {
+      card: { kind: 'checkIn', weekStart: '2026-11-15', status },
+    });
+
+  it('draws the card with the questions; Done / Skip call back with the message id', () => {
+    const m = card('pending');
+    const log: string[] = [];
+    const { el } = mount(
+      { messages: [m], checkInQuestions: QS },
+      {
+        onCheckInDone: (id, a) => log.push(`done:${id}:${JSON.stringify(a)}`),
+        onCheckInSkip: (id) => log.push(`skip:${id}`),
+      },
+    );
+    expect(attr(el, 'data-checkin-q')).toHaveLength(3);
+    one(el, 'data-checkin-pick', 'energy:2').click();
+    one(el, 'data-checkin-done').click();
+    one(el, 'data-checkin-skip').click();
+    expect(log).toEqual([`done:${m.id}:{"energy":2}`, `skip:${m.id}`]);
+  });
+
+  it('done → the summary from checkIns', () => {
+    const { el } = mount({
+      messages: [card('done')],
+      checkInQuestions: QS,
+      checkIns: {
+        '2026-11-15': { weekStart: '2026-11-15', energy: 4, sleep: 3, soreness: 2, at: 1 },
+      },
+    });
+    expect(one(el, 'data-checkin-summary').textContent).toBe(
+      'Saved: energy 4, sleep 3, soreness 2.',
+    );
+  });
+
+  it('no questions → no card (just the coach line)', () => {
+    const { el } = mount({ messages: [card('pending')] });
+    expect(attr(el, 'data-checkin-card')).toHaveLength(0);
+    expect(el.oneByClass('chat-bubble').textContent).toContain('Quick check-in');
+  });
+
+  it('pending without the callbacks → nothing to tap', () => {
+    const { el } = mount({ messages: [card('pending')], checkInQuestions: QS });
+    expect(attr(el, 'data-checkin-pick')).toHaveLength(0);
   });
 });

@@ -1,0 +1,283 @@
+/* M12 slice 2 Settings → Coach, Reminders and the developer Coach eval
+   (coachSettings.ts, reminders.ts, brainEval.ts). Pro mood; they reuse Settings' .set-*,
+   .switch-btn and .segmented. Tokens only. Text ≥ 20px, taps ≥ 56px, never colour alone. */
+
+/* ---------- Coach: who answers ---------- */
+
+.brain-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  min-width: 0;
+}
+
+.brain-who-head {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.brain-name {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.brain-why {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.brain-howto,
+.rem-line {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.brain-howto {
+  padding: 12px;
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+  border-left: 4px solid var(--warn);
+}
+
+.brain-howto .ic,
+.rem-line .ic {
+  flex: none;
+  margin-top: 2px;
+}
+
+.settings .brain-recheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.settings .brain-recheck:disabled {
+  opacity: 0.6;
+}
+
+/* Speak replies: three choices, so a smaller word than the kg / lb pair. */
+.settings .segmented.seg-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.settings .seg-3 .seg-btn {
+  min-height: var(--tap-bar);
+  padding: 0 6px;
+  font-size: var(--fs-body);
+  gap: 4px;
+}
+
+/* ---------- Reminders ---------- */
+
+.rem-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rem-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rem-note {
+  margin: 0;
+  padding: 0 4px;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.rem-time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px 0;
+}
+
+.rem-time-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.rem-time-input {
+  min-height: var(--tap-min);
+  min-width: 140px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-btn);
+  color-scheme: dark;
+}
+
+.rem-time-input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.rem-denied {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  border-left: 4px solid var(--warn);
+}
+
+.rem-denied-head {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.rem-denied-head .ic {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* ---------- Coach eval (developer) ---------- */
+
+.eval-run {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.eval-progress {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.eval-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.eval-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  min-width: 0;
+}
+
+.eval-stat[data-ok='false'] {
+  border-color: var(--warn);
+}
+
+.eval-stat-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.eval-stat-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  line-height: 1.2;
+}
+
+.eval-stat-label .ic {
+  flex: none;
+}
+
+.settings .eval-summary + .set-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.eval-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.eval-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: var(--r-btn);
+  border-left: 4px solid var(--line);
+  min-width: 0;
+}
+
+.eval-row[data-pass='false'] {
+  border-left-color: var(--warn);
+}
+
+.eval-row-head {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  min-width: 0;
+}
+
+.eval-row-id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.eval-row-line {
+  margin: 0;
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}

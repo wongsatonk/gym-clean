@@ -152,6 +152,18 @@ describe('chat store (M12)', () => {
     });
   });
 
+  it('marks a check-in card done or skipped, and ignores other statuses', async () => {
+    const card = { kind: 'checkIn', weekStart: '2026-11-09', status: 'pending' } as const;
+    const id = await addMessage(db, msg({ role: 'coach', source: 'rules', card }));
+    expect(await updateCard(db, id, { status: 'applied' })).toBe(true);
+    expect((await db.chatMessages.get(id))?.card).toEqual(card);
+    expect(await updateCard(db, id, { checkIn: 'done' })).toBe(true);
+    expect((await db.chatMessages.get(id))?.card).toEqual({ ...card, status: 'done' });
+    const id2 = await addMessage(db, msg({ role: 'coach', source: 'rules', card }));
+    expect(await updateCard(db, id2, { checkIn: 'skipped' })).toBe(true);
+    expect((await db.chatMessages.get(id2))?.card).toEqual({ ...card, status: 'skipped' });
+  });
+
   it('never changes a card’s kind and ignores fields the kind lacks', async () => {
     const id = await addMessage(
       db,

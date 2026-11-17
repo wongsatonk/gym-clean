@@ -50,6 +50,8 @@ export type ChatCardPatch = {
   changeId?: number;
   /** Food cards: indexes of suggestions he logged. */
   logged?: number[];
+  /** Check-in cards (M12 slice 2): answered or skipped. */
+  checkIn?: 'done' | 'skipped';
 };
 
 function patched(card: ChatCard, p: ChatCardPatch): ChatCard {
@@ -64,9 +66,10 @@ function patched(card: ChatCard, p: ChatCardPatch): ChatCard {
       return { ...card, ...(p.status !== undefined && { status: p.status }) };
     case 'food':
       return { ...card, ...(p.logged !== undefined && { logged: [...p.logged] }) };
+    case 'checkIn':
+      return { ...card, ...(p.checkIn !== undefined && { status: p.checkIn }) };
     case 'redFlag':
     case 'recap':
-    case 'checkIn': // M12 slice 2: task 17 decides how a check-in card is patched.
       return card;
   }
 }
