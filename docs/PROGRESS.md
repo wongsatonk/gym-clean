@@ -230,7 +230,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Bug (slice 1 verifier): "Push A moves to Saturday and the rest follow. Push A moves to next week." (line ~141: the spill list can name the moved day again when the rotation repeats it in the 7-day window). Fix so a day is never said to move twice: name a different spilled day, or "The next Push A moves to next week."
   - Done when: a test reproduces the old sentence from a made-up schedule and now gets one clear sentence per moved day; all postpone tests and `checkCopy` pass.
   - Deps: none.
-- [ ] 3. [ios-engineer] Follow-up: the iOS version follows package.json.
+- [x] 3. [ios-engineer] Follow-up: the iOS version follows package.json.
   - Files: scripts/sync-ios-version.mjs(+test) (planner call: ios-engineer owns it, like gen-trainer-tools.mjs), ios/App/App.xcodeproj/project.pbxproj (`MARKETING_VERSION` = package.json version, `CURRENT_PROJECT_VERSION` = a build number that only grows, e.g. git commit count), ios/App/App/Info.plist (`CFBundleShortVersionString` = `$(MARKETING_VERSION)`, `CFBundleVersion` = `$(CURRENT_PROJECT_VERSION)`), docs/ios-setup.md (one line). Main adds the npm script hook (e.g. run before `cap sync`) in task 34.
   - Done when: a Vitest test fails if `MARKETING_VERSION` ≠ package.json `version`; the script is idempotent; simulator build shows 1.12.0 now (1.13.0 after task 34).
   - Deps: none.
@@ -293,7 +293,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - New types default **off**; an old `'health'` row without the keys reads them as off (no prompt on update). Stored in `healthDays` (local-only, re-read after a restore; planner call per the Decision's "main decides"), never in `weighIns`, never in any coach/brain context (slice 2 task 4 enforces), never in the dev log.
   - Done when tests cover the pick, sync with the switches off/on, old settings rows, trend math, no new backed-up field.
   - Deps: 1.
-- [ ] 16. [ios-engineer] GymHealth reads body fat % + lean body mass.
+- [x] 16. [ios-engineer] GymHealth reads body fat % + lean body mass.
   - Files: ios/App/App/Plugins/GymHealth/GymHealthPlugin.swift, GymHealthCore/Sources/**/GymHealthMapping.swift + Tests, src/native/health.ts(+test).
   - `HKQuantityTypeIdentifier.bodyFatPercentage` (as %), `.leanBodyMass` (kg); read-only; requested **only when he turns that switch on** (the Health sheet then lists 8 types); source names kept for the per-day pick.
   - Done when: XCTests for the mapping (units, empty), TS bridge tests, simulator build.
@@ -374,16 +374,16 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: src/ui/fuel/proteinNudge.ts(+test), src/ui/screens/fuel.ts (slot; after 27), src/ui/screens/summary.ts(+test) (post-workout meal idea with Log), src/ui/coach/learnCard.ts(+test) (sheet), src/ui/coach/chat.ts ("Why?" link on a bubble with `learnId`; after 29).
   - Done when: render tests + 390×844 screenshots (nudge, Summary idea, a learn card).
   - Deps: 27, 29.
-- [ ] 34. [main] Version 1.13.0.
+- [x] 34. [main] Version 1.13.0.
   - Files: package.json (`"version": "1.13.0"` + the `sync-ios-version` hook from task 3).
   - Done when: `npm run check` (incl. the iOS version test) passes; `npm run build` contains `1.13.0`.
   - Deps: 3, 22.
-- [ ] 35. [main] Wiring A: the workout.
+- [x] 35. [main] Wiring A: the workout.
   - Files: src/ui/app.ts.
   - Effort → `SET_EFFORT` + saved on the set; warm-ups from `trainerKit` + gym profile → session; warm-up lines and setup cues spoken between sets through the existing voice (kind `cue`, never over a count, never during a set); Summary gets the post-workout idea and excludes warm-ups.
   - Done when: `npm run check`; manual run at 390×844 through a seeded Push A day (warm-ups, effort, Summary).
   - Deps: 6, 7, 18, 21, 23, 24.
-- [ ] 36. [main] Wiring B: the rest.
+- [x] 36. [main] Wiring B: the rest.
   - Files: src/ui/app.ts, src/main.ts.
   - First run: fresh install (no sessions) → intake before the first Today (Skip for now); existing installs are never forced (Today shows "Set your goal"; the 1.13.0 tour links to it). Intake → stores → proposals (starter plan / easy-on / Fuel targets) through changes.ts. Goal card props; review messages in the chat (once, like recaps); next block + deload offers; short-on-time chip; feel-today → readiness; measurements + body comp + e1RM screens; Health switches → sync; progress photos route (only when on); cardio line; nudges + learn-card sheet; Share/import gym file; routes `intake`, `settings/goal`, `settings/progressPhotos`, `fuel/measurements`. Dev log: ids/numbers only, nothing from photos, measurements or body comp.
   - Done when: `npm run check`; manual 390×844 run with seeded data shows each item; no network request.
