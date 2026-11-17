@@ -10,7 +10,8 @@ import {
   wordCount,
 } from './advice';
 import type { SessionState } from './session';
-import type { FocusCueId, ProgramDay, SetLog } from './types';
+import { EFFORT_RULES } from './trainer/effortRules';
+import type { FocusCueId, ProgramDay, SetEffort, SetLog } from './types';
 import { fromUnit, toUnit, type Unit } from './units';
 
 // Made-up plan; numbers chosen to exercise the rules, not anyone's real training.
@@ -44,7 +45,13 @@ function lg(
   exerciseId: string,
   reps: number,
   weightKg: number,
-  opts: { partials?: number; rest?: number; target?: number; cues?: FocusCueId[] } = {},
+  opts: {
+    partials?: number;
+    rest?: number;
+    target?: number;
+    cues?: FocusCueId[];
+    effort?: SetEffort;
+  } = {},
 ): SetLog {
   t += 100_000;
   return {
@@ -57,6 +64,7 @@ function lg(
     restTakenSec: opts.rest ?? 60,
     ...(opts.target !== undefined ? { restTargetSec: opts.target } : {}),
     ...(opts.cues ? { cues: opts.cues } : {}),
+    ...(opts.effort ? { effort: opts.effort } : {}),
     startedAt: t,
     endedAt: t + 30_000,
   };
@@ -885,5 +893,219 @@ describe('adviceSpeakDue', () => {
   it('is skipped when the rest target is < 17 s', () => {
     expect(adviceSpeakDue(1900, 2100, 17)).toBe(true);
     expect(adviceSpeakDue(1900, 2100, 16)).toBe(false);
+  });
+});
+
+describe('effort → advice (M12 1b)', () => {
+  const E = (effort: SetEffort) => ({ effort });
+
+  it('the rules are data: easy steps up sooner, hard holds, good is the default', () => {
+    expect(EFFORT_RULES.none).toEqual({ stepUp: true, repsFloor: 'top', minSetsAtWeight: 2 });
+    expect(EFFORT_RULES.good).toEqual(EFFORT_RULES.none);
+    expect(EFFORT_RULES.easy).toEqual({ stepUp: true, repsFloor: 'bottom', minSetsAtWeight: 1 });
+    expect(EFFORT_RULES.hard.stepUp).toBe(false);
+  });
+
+  describe('next set', () => {
+    it('easy: steps up after one clean set at the bottom of the range', () => {
+      const a = afterSetAdvice(state([lg('curl', 8, 10, E('easy'))]), name);
+      expect(rule(a)).toBe('A3');
+      expect(a?.text).toBe('Felt easy. Try +2.5 kg next set.');
+      expect(a?.say).toBe('Felt easy. Try plus 2.5 kilos next set.');
+      expect(a?.apply).toEqual({ weightKg: 12.5 });
+      expect(a?.why).toContain('felt easy');
+    });
+
+    it('easy in lb names the snapped jump', () => {
+      const a = afterSetAdvice(state([lg('curl', 9, lb(20), E('easy'))], 'lb'), name);
+      expect(a?.text).toBe('Felt easy. Try +5 lb next set.');
+      expect(toUnit(a?.apply?.weightKg ?? 0, 'lb')).toBeCloseTo(25, 6);
+    });
+
+    it('easy never beats a problem: below the range, partials, or too big a jump', () => {
+      expect(rule(afterSetAdvice(state([lg('curl', 7, 10, E('easy'))]), name))).toBe('A2');
+      const partials = lg('curl', 10, 10, { partials: 2, effort: 'easy' });
+      expect(rule(afterSetAdvice(state([partials]), name))).toBe('A1');
+      const onePartial = lg('curl', 10, 10, { partials: 1, effort: 'easy' });
+      expect(afterSetAdvice(state([onePartial]), name)).toBeNull();
+      expect(afterSetAdvice(state([lg('raise', 12, 5, E('easy'))]), name)).toBeNull();
+    });
+
+    it('easy on a bodyweight set asks for one more rep', () => {
+      const a = afterSetAdvice(state([lg('pushup', 10, 0, E('easy'))]), name);
+      expect(rule(a)).toBe('A4');
+      expect(a?.text).toBe('Felt easy. Try 11 reps next set.');
+    });
+
+    it('hard: holds where the plain rule would step up', () => {
+      const sets = (e?: SetEffort) => [lg('curl', 12, 10), lg('curl', 12, 10, e ? E(e) : {})];
+      expect(rule(afterSetAdvice(state(sets()), name))).toBe('A3');
+      expect(afterSetAdvice(state(sets('hard')), name)).toBeNull();
+      const bw = [lg('raise', 15, 0), lg('raise', 15, 0, E('hard'))];
+      expect(afterSetAdvice(state(bw), name)).toBeNull();
+    });
+
+    it('only the last set decides: an earlier easy set does not step up', () => {
+      expect(
+        afterSetAdvice(state([lg('curl', 8, 10, E('easy')), lg('curl', 8, 10)]), name),
+      ).toBeNull();
+    });
+
+    it('good and no answer give identical advice', () => {
+      const cases: [string, number, number, { partials?: number }?][][] = [
+        [['curl', 10, 10]],
+        [
+          ['curl', 12, 10],
+          ['curl', 12, 10],
+        ],
+        [['curl', 7, 10]],
+        [['curl', 10, 10, { partials: 2 }]],
+        [['pushup', 15, 0]],
+        [
+          ['curl', 12, 10],
+          ['curl', 12, 10],
+          ['curl', 12, 10],
+        ],
+        [
+          ['curl', 12, 10],
+          ['curl', 10, 10],
+          ['curl', 9, 10],
+        ],
+      ];
+      for (const c of cases) {
+        const plain = c.map(([id, r, w, o]) => lg(id, r, w, o));
+        const good = plain.map((l) => ({ ...l, effort: 'good' as const }));
+        expect(afterSetAdvice(state(good), name)).toEqual(afterSetAdvice(state(plain), name));
+      }
+    });
+  });
+
+  describe('next session', () => {
+    const three = (reps: number, e?: SetEffort) => [
+      lg('curl', reps, 10),
+      lg('curl', reps, 10),
+      lg('curl', reps, 10, e ? E(e) : {}),
+    ];
+
+    it('easy: steps up even with reps at the bottom of the range', () => {
+      expect(rule(nextTimeAdvice(state(three(8)), 'curl', [], name))).toBe('N5');
+      const a = nextTimeAdvice(state(three(8, 'easy')), 'curl', [], name);
+      expect(rule(a)).toBe('N3');
+      expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: +2.5 kg.');
+      expect(a?.why).toContain('felt easy');
+    });
+
+    it('easy still needs every planned set, in range and clean', () => {
+      const two = [lg('curl', 8, 10), lg('curl', 8, 10, E('easy'))];
+      expect(rule(nextTimeAdvice(state(two), 'curl', [], name))).toBe('N5');
+      const below = [lg('curl', 7, 10), lg('curl', 8, 10), lg('curl', 8, 10, E('easy'))];
+      expect(rule(nextTimeAdvice(state(below), 'curl', [], name))).toBe('N2');
+      const partial = [
+        lg('curl', 9, 10, { partials: 2 }),
+        lg('curl', 9, 10),
+        lg('curl', 9, 10, E('easy')),
+      ];
+      expect(rule(nextTimeAdvice(state(partial), 'curl', [], name))).toBe('N4');
+    });
+
+    it('hard: holds where the plain rule would step up', () => {
+      expect(rule(nextTimeAdvice(state(three(12)), 'curl', [], name))).toBe('N3');
+      const a = nextTimeAdvice(state(three(12, 'hard')), 'curl', [], name);
+      expect(rule(a)).toBe('N6');
+      expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: repeat 10 kg.');
+      expect(a?.why).toContain('felt hard');
+    });
+
+    it('good and no answer are identical, and so is the Summary', () => {
+      for (const reps of [7, 8, 10, 12]) {
+        const plain = three(reps);
+        const good = plain.map((l) => ({ ...l, effort: 'good' as const }));
+        expect(nextTimeAdvice(state(good), 'curl', [], name)).toEqual(
+          nextTimeAdvice(state(plain), 'curl', [], name),
+        );
+        expect(coachSummary(state(good), {}, name)).toEqual(coachSummary(state(plain), {}, name));
+      }
+    });
+  });
+
+  it('no answer = the advice of before effort existed (snapshot)', () => {
+    const out = [
+      afterSetAdvice(state([lg('curl', 12, 10), lg('curl', 12, 10)]), name),
+      afterSetAdvice(state([lg('pushup', 15, 0)]), name),
+      afterSetAdvice(state([lg('curl', 12, 10), lg('curl', 12, 10), lg('curl', 12, 10)]), name),
+      afterSetAdvice(state([lg('curl', 9, 10), lg('curl', 9, 10), lg('curl', 9, 10)]), name),
+    ];
+    expect(out).toEqual([
+      {
+        exerciseId: 'curl',
+        rule: 'A3',
+        text: 'Strong set. Try +2.5 kg next set.',
+        say: 'Strong set. Try plus 2.5 kilos next set.',
+        why: 'Reps: 12, 12 · 10 kg · no partials · target 8–12',
+        apply: { weightKg: 12.5 },
+      },
+      null,
+      {
+        exerciseId: 'curl',
+        rule: 'N3',
+        text: 'Next time on Dumbbell Bicep Curl: +2.5 kg.',
+        say: 'Next time on Dumbbell Bicep Curl: plus 2.5 kilos.',
+        why: 'Reps: 12, 12, 12 · 10 kg · no partials · target 8–12',
+      },
+      {
+        exerciseId: 'curl',
+        rule: 'N5',
+        text: 'Next time on Dumbbell Bicep Curl: same weight, 12 reps.',
+        say: 'Next time on Dumbbell Bicep Curl: same weight, 12 reps.',
+        why: 'Reps: 9, 9, 9 · 10 kg · no partials · target 8–12',
+      },
+    ]);
+  });
+
+  it('effort wording stays short and coaching-only', () => {
+    const texts = [
+      afterSetAdvice(state([lg('curl', 8, 10, E('easy'))]), name),
+      afterSetAdvice(state([lg('pushup', 10, 0, E('easy'))]), name),
+    ];
+    for (const a of texts) {
+      expect(a).not.toBeNull();
+      expect(wordCount(a?.text ?? '')).toBeLessThanOrEqual(12);
+      expect(wordCount(a?.say ?? '')).toBeLessThanOrEqual(12);
+      for (const w of ADVICE_BANNED_WORDS) expect(a?.text.toLowerCase()).not.toContain(w);
+    }
+  });
+});
+
+describe('warm-up sets are invisible to the coach (M12 1b)', () => {
+  const warm = (reps: number, kg: number): SetLog => ({ ...lg('curl', reps, kg), warmup: true });
+
+  it('no advice right after a warm-up set', () => {
+    expect(afterSetAdvice(state([warm(8, 5)]), name)).toBeNull();
+    expect(afterSetAdvice(state([warm(4, 5), warm(4, 7.5)]), name)).toBeNull();
+    expect(afterSetAdvice(state([lg('bench', 8, 20), warm(8, 5)]), name)).toBeNull();
+  });
+
+  it('warm-ups change no advice, progress line or summary', () => {
+    const working = [lg('curl', 12, 10), lg('curl', 12, 10), lg('curl', 12, 10)];
+    const all = [warm(8, 5), warm(4, 7.5), ...working];
+    for (let n = 1; n <= 3; n++) {
+      const a = afterSetAdvice(state([warm(8, 5), warm(4, 7.5), ...working.slice(0, n)]), name);
+      expect(a).toEqual(afterSetAdvice(state(working.slice(0, n)), name));
+    }
+    expect(nextTimeAdvice(state(all), 'curl', [], name)).toEqual(
+      nextTimeAdvice(state(working), 'curl', [], name),
+    );
+    const last = { curl: [lg('curl', 10, 10), lg('curl', 10, 10), lg('curl', 10, 10)] };
+    expect(coachSummary(state(all), last, name)).toEqual(coachSummary(state(working), last, name));
+    // Warm-ups in last time's sets are ignored too.
+    const lastWarm = { curl: [warm(8, 20), ...last.curl] };
+    expect(coachSummary(state(all), lastWarm, name)).toEqual(
+      coachSummary(state(working), last, name),
+    );
+  });
+
+  it('an exercise with only warm-ups done has no summary entry', () => {
+    expect(coachSummary(state([warm(8, 5)]), {}, name)).toEqual([]);
+    expect(nextTimeAdvice(state([warm(8, 5)]), 'curl', [], name)).toBeNull();
   });
 });

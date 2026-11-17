@@ -1,7 +1,18 @@
 // Workout session state machine (SPEC M1). Pure: every event carries its own timestamp.
 import { focusScore, isFocusCueId } from './focusScore';
-import type { FocusCueId, PlannedExercise, ProgramDay, SetLog } from './types';
+import { isSetEffort } from './trainer/effortRules';
+import type { FocusCueId, PlannedExercise, ProgramDay, SetEffort, SetLog } from './types';
 import { fromUnit, snapToStep, toUnit, type Unit } from './units';
+import {
+  isWarmup,
+  warmupPlan,
+  type WarmupKit,
+  type WarmupLift,
+  type WarmupRule,
+  type WarmupSet,
+  type WarmupStep,
+} from './warmup';
+import { WARMUP_RULES } from './warmupRules';
 
 /** Rest may run this long past target before it counts as an overrun / triggers nudges. */
 export const REST_OVERRUN_GRACE_SEC = 30;
@@ -47,9 +58,25 @@ export type SessionState = {
   readonly unit: Unit;
   /** Weight used last session per exerciseId — preferred default over the plan. */
   readonly lastWeightKg: Readonly<Record<string, number>>;
+  /**
+   * M12 1b: exerciseId → the warm-up sets to run before its first working set (absent = none
+   * anywhere). While one is up (`currentWarmup`), `reps` / `weightKg` hold its values, `setIndex`
+   * stays 0 and SET_DONE logs it with `warmup: true`. SKIP_WARMUPS and REPLACE_UPCOMING drop an
+   * entry.
+   */
+  readonly warmups?: Readonly<Record<string, readonly WarmupSet[]>>;
 };
 
-export type StartOptions = { unit?: Unit; lastWeightKg?: Record<string, number> };
+export type StartOptions = {
+  unit?: Unit;
+  lastWeightKg?: Record<string, number>;
+  /**
+   * M12 1b warm-ups: the `trainerKit.warmups` rule, how each exercise is loaded
+   * (warmup.ts `warmupLifts`), and kit steps from the gym profile (display unit). Left out or
+   * `rule: 'off'` = no warm-up sets.
+   */
+  warmups?: { rule: WarmupRule; lifts: Readonly<Record<string, WarmupLift>>; kit?: WarmupKit };
+};
 
 export type SessionEvent =
   | { type: 'ADJUST'; field: 'reps' | 'weight'; delta: number }
@@ -73,6 +100,13 @@ export type SessionEvent =
    */
   | { type: 'CORRECT_LAST_SET'; reps: number; partials: number }
   /**
+   * M12 1b: the optional Easy / Good / Hard answer for the set just logged (`null` clears it).
+   * Only on Rest, not paused, and only for the last logged set (`setIndex` must be its
+   * `setIndex`, so a stale tap after the next set is ignored). Never during a set. Stored as
+   * `effort` on that log; nothing else changes (advice.ts reads it).
+   */
+  | { type: 'SET_EFFORT'; setIndex: number; effort: SetEffort | null }
+  /**
    * M5b coach "Apply": set the upcoming set's weight (kg, stored as given). Only on Rest, not
    * paused, and only while the upcoming exercise is `exerciseId` (a stale tap after a skip/jump
    * is ignored); non-finite or negative values are ignored. Logs are untouched; the weight then
@@ -93,6 +127,12 @@ export type SessionEvent =
    */
   | { type: 'EXTEND_REST'; sec: number; now: number }
   | { type: 'SKIP_EXERCISE'; now: number }
+  /**
+   * M12 1b: drop the warm-up sets still to do for the current / upcoming exercise and load its
+   * first working set. Only while a warm-up is up (`currentWarmup`), not paused. During a set the
+   * working set starts at `now`; on Rest the rest clock goes on. Warm-ups already logged stay.
+   */
+  | { type: 'SKIP_WARMUPS'; now: number }
   | { type: 'PAUSE'; now: number }
   | { type: 'RESUME'; now: number }
   | { type: 'GO_TO_EXERCISE'; exIndex: number; now: number }
@@ -135,8 +175,29 @@ function planned(day: ProgramDay, exIndex: number): PlannedExercise {
   return p;
 }
 
+/** Every log of the exercise, warm-ups included ("has it been started?"). */
 const loggedFor = (s: Pick<SessionState, 'logs'>, exerciseId: string) =>
   s.logs.filter((l) => l.exerciseId === exerciseId);
+
+/** The exercise's working sets: warm-ups (M12 1b) never count toward its planned sets. */
+const workingFor = (s: Pick<SessionState, 'logs'>, exerciseId: string) =>
+  s.logs.filter((l) => l.exerciseId === exerciseId && !isWarmup(l));
+
+type Defaults = Pick<SessionState, 'logs' | 'unit' | 'lastWeightKg' | 'warmups'>;
+
+/** The warm-up set that is next for exercise `p`, or null (none planned, all done, or working sets begun). */
+function warmupFor(
+  s: Pick<SessionState, 'logs' | 'warmups'>,
+  p: PlannedExercise,
+): WarmupStep | null {
+  const ramp = s.warmups?.[p.exerciseId];
+  if (!ramp) return null;
+  const logs = loggedFor(s, p.exerciseId);
+  const done = logs.filter(isWarmup).length;
+  const set = ramp[done];
+  if (!set || done < logs.length) return null;
+  return { index: done, of: ramp.length, weightKg: set.weightKg, reps: set.reps };
+}
 
 const validKg = (kg: number | undefined): kg is number =>
   kg !== undefined && Number.isFinite(kg) && kg >= 0;
@@ -145,8 +206,8 @@ const validKg = (kg: number | undefined): kg is number =>
  * Values for the next set of exercise `exIndex`: today's last set, else the plan's
  * `weightKgToday` (M10 lighter/deload, used exactly), else last time, else the plan.
  */
-function defaultsFor(s: Pick<SessionState, 'logs' | 'unit' | 'lastWeightKg'>, p: PlannedExercise) {
-  const last = loggedFor(s, p.exerciseId).at(-1);
+function workingDefaults(s: Defaults, p: PlannedExercise) {
+  const last = workingFor(s, p.exerciseId).at(-1);
   if (last) return { reps: last.reps, partials: 0, focusCues: null, weightKg: last.weightKg };
   const weightKg = validKg(p.weightKgToday)
     ? p.weightKgToday
@@ -154,9 +215,16 @@ function defaultsFor(s: Pick<SessionState, 'logs' | 'unit' | 'lastWeightKg'>, p:
   return { reps: p.targetReps[1], partials: 0, focusCues: null, weightKg };
 }
 
+/** Values for the next set of `p`: its next warm-up set (M12 1b) while one is up, else `workingDefaults`. */
+function defaultsFor(s: Defaults, p: PlannedExercise) {
+  const w = warmupFor(s, p);
+  if (w) return { reps: w.reps, partials: 0, focusCues: null, weightKg: w.weightKg };
+  return workingDefaults(s, p);
+}
+
 function isFinished(s: SessionState, exIndex: number): boolean {
   const p = planned(s.day, exIndex);
-  return loggedFor(s, p.exerciseId).length >= p.sets;
+  return workingFor(s, p.exerciseId).length >= p.sets;
 }
 
 /**
@@ -180,6 +248,18 @@ export function startSession(
 ): SessionState {
   const unit = opts.unit ?? 'kg';
   const lastWeightKg = { ...(opts.lastWeightKg ?? {}) };
+  const base: Defaults = { logs: [], unit, lastWeightKg };
+  const ramps = opts.warmups
+    ? warmupPlan({
+        day,
+        rule: opts.warmups.rule,
+        lifts: opts.warmups.lifts,
+        workingKg: (p) => workingDefaults(base, p).weightKg,
+        unit,
+        ...(opts.warmups.kit ? { kit: opts.warmups.kit } : {}),
+      })
+    : {};
+  const warmups = Object.keys(ramps).length > 0 ? { warmups: ramps } : {};
   return {
     sessionId,
     day,
@@ -188,7 +268,7 @@ export function startSession(
     phase: 'exercise',
     exIndex: 0,
     setIndex: 0,
-    ...defaultsFor({ logs: [], unit, lastWeightKg }, planned(day, 0)),
+    ...defaultsFor({ ...base, ...warmups }, planned(day, 0)),
     setStartedAt: now,
     lastRestTakenSec: 0,
     restTargetSec: 0,
@@ -200,11 +280,21 @@ export function startSession(
     restOverruns: 0,
     unit,
     lastWeightKg,
+    ...warmups,
   };
 }
 
 export function currentPlanned(s: SessionState): PlannedExercise {
   return planned(s.day, s.exIndex);
+}
+
+/**
+ * M12 1b: the warm-up set that is running (phase "exercise") or up next (phase "rest"), with its
+ * place in the ramp and its planned weight and reps; null for a working set and on Summary.
+ */
+export function currentWarmup(s: SessionState): WarmupStep | null {
+  if (s.phase === 'summary' || !s.day.exercises[s.exIndex]) return null;
+  return warmupFor(s, currentPlanned(s));
 }
 
 export function restElapsedMs(s: SessionState, now: number): number {
@@ -232,7 +322,7 @@ function goToExercise(s: SessionState, exIndex: number, now: number): SessionSta
   return {
     ...s,
     exIndex,
-    setIndex: loggedFor(s, p.exerciseId).length,
+    setIndex: workingFor(s, p.exerciseId).length,
     ...defaultsFor(s, p),
   };
 }
@@ -254,8 +344,9 @@ function correctLast(
   if (partials > 0) fixed.partials = partials;
   else delete fixed.partials;
   applyScore(fixed);
-  // Reps carry over to the next set of the same exercise, so carry the corrected value.
-  const sameExercise = currentPlanned(s).exerciseId === last.exerciseId;
+  // Reps carry over to the next set of the same exercise, so carry the corrected value
+  // (not from a warm-up set: the set after it has its own reps).
+  const sameExercise = !isWarmup(last) && currentPlanned(s).exerciseId === last.exerciseId;
   return {
     ...s,
     logs: [...s.logs.slice(0, -1), fixed],
@@ -286,7 +377,7 @@ function replaceUpcoming(
       : exercises.filter((_, i) => i !== e.exIndex),
   };
   const skipped = s.skipped.filter((id) => id !== old.exerciseId);
-  const base = { ...s, day, skipped };
+  const base = { ...withoutWarmups(s, old.exerciseId), day, skipped };
 
   if (e.exIndex !== s.exIndex) {
     // Not the current/upcoming exercise: only its position may shift the current index.
@@ -298,6 +389,13 @@ function replaceUpcoming(
   if (day.exercises.length === 0) return toSummary(base, e.now);
   const at = e.exIndex % day.exercises.length;
   return goToExercise({ ...base, exIndex: at }, nextUnfinished(base, at, 0), e.now);
+}
+
+/** `s` without the warm-up ramp of `exerciseId` (the same object when it has none). */
+function withoutWarmups(s: SessionState, exerciseId: string): SessionState {
+  if (!s.warmups || !(exerciseId in s.warmups)) return s;
+  const warmups = Object.fromEntries(Object.entries(s.warmups).filter(([id]) => id !== exerciseId));
+  return { ...s, warmups };
 }
 
 const validSets = (p: PlannedExercise) => Number.isInteger(p.sets) && p.sets >= 1;
@@ -384,6 +482,16 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
     case 'CORRECT_LAST_SET':
       return s.phase === 'rest' ? correctLast(s, e) : s;
 
+    case 'SET_EFFORT': {
+      const last = s.logs.at(-1);
+      if (s.phase !== 'rest' || !last || last.setIndex !== e.setIndex || isWarmup(last)) return s;
+      if (e.effort !== null && !isSetEffort(e.effort)) return s;
+      const fixed: SetLog = { ...last };
+      if (e.effort === null) delete fixed.effort;
+      else fixed.effort = e.effort;
+      return { ...s, logs: [...s.logs.slice(0, -1), fixed] };
+    }
+
     case 'APPLY_NEXT_WEIGHT':
       if (s.phase !== 'rest' || currentPlanned(s).exerciseId !== e.exerciseId) return s;
       if (!Number.isFinite(e.weightKg) || e.weightKg < 0) return s;
@@ -397,30 +505,34 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       if (s.phase !== 'exercise') return s;
       const now = Math.max(e.now, s.setStartedAt);
       const p = currentPlanned(s);
+      const warm = warmupFor(s, p);
       const log: SetLog = {
         sessionId: s.sessionId,
         exerciseId: p.exerciseId,
-        setIndex: s.setIndex,
+        // A warm-up set is numbered within the ramp; working sets start at 0 after it.
+        setIndex: warm ? warm.index : s.setIndex,
         reps: s.reps,
         ...(s.partials > 0 ? { partials: s.partials } : {}),
         weightKg: s.weightKg,
         restTakenSec: s.lastRestTakenSec,
         ...(s.restTargetSec > 0 ? { restTargetSec: s.restTargetSec } : {}),
         ...(s.focusCues ? { cues: [...s.focusCues] } : {}),
+        ...(warm ? { warmup: true as const } : {}),
         startedAt: s.setStartedAt,
         endedAt: now,
       };
       applyScore(log);
       const logged = { ...s, logs: [...s.logs, log] };
-      const moved =
-        s.setIndex + 1 < p.sets
+      const moved = warm
+        ? goToExercise(logged, s.exIndex, now) // the next warm-up, or working set 1 with its own values
+        : s.setIndex + 1 < p.sets
           ? { ...logged, setIndex: s.setIndex + 1, partials: 0, focusCues: null } // keep reps/weight for the next set
           : goToExercise(logged, nextUnfinished(logged, s.exIndex), now);
       if (moved.phase === 'summary') return moved;
       return {
         ...moved,
         phase: 'rest',
-        restTargetSec: p.restSec,
+        restTargetSec: warm ? Math.min(p.restSec, WARMUP_RULES.restSec) : p.restSec,
         restAccumMs: 0,
         restRunningSince: now,
       };
@@ -450,6 +562,12 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       return s.phase === 'rest' ? moved : { ...moved, setStartedAt: e.now };
     }
 
+    case 'SKIP_WARMUPS': {
+      if (!currentWarmup(s)) return s;
+      const moved = goToExercise(withoutWarmups(s, currentPlanned(s).exerciseId), s.exIndex, e.now);
+      return s.phase === 'rest' ? moved : { ...moved, setStartedAt: e.now };
+    }
+
     case 'SKIP_EXERCISE': {
       const skipped = [...s.skipped, currentPlanned(s).exerciseId];
       const withSkip = { ...s, skipped };
@@ -462,9 +580,10 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
 
 export function summarize(s: SessionState): SessionSummary {
   const end = s.endedAt ?? s.startedAt;
+  const working = s.logs.filter((l) => !isWarmup(l)); // warm-ups (M12 1b) are not sets or volume
   return {
-    setsDone: s.logs.length,
-    totalVolumeKg: roundKg(s.logs.reduce((v, l) => v + l.reps * l.weightKg, 0)),
+    setsDone: working.length,
+    totalVolumeKg: roundKg(working.reduce((v, l) => v + l.reps * l.weightKg, 0)),
     restOverruns: s.restOverruns,
     skipped: [...s.skipped],
     durationSec: Math.round((end - s.startedAt) / 1000),

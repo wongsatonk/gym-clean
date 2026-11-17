@@ -505,3 +505,44 @@ describe('proposeStallFix: +1 set', () => {
     if (!r.ok) expect(wordCount(r.reply)).toBeLessThanOrEqual(12);
   });
 });
+
+describe('warm-up sets are excluded (M12 1b)', () => {
+  const warm = (h: Hist, sessionIndex: number, weightKg: number, reps: number): Hist => {
+    const s = must(h.sessions[sessionIndex]);
+    const set: SetLog = {
+      sessionId: s.sessionId,
+      exerciseId: 'bench',
+      setIndex: 0,
+      reps,
+      weightKg,
+      restTakenSec: 0,
+      warmup: true,
+      startedAt: s.startedAt - 60_000,
+      endedAt: s.startedAt - 30_000,
+    };
+    return { ...h, sets: [...h.sets, set] };
+  };
+
+  it('a heavier warm-up is not a gain: the stall still shows, with the working top set', () => {
+    const base = series('bench', 'a', [
+      [20, 10],
+      [20, 10],
+      [20, 9],
+    ]);
+    expect(stalls(base)).toHaveLength(1);
+    // A warm-up logged heavier than the working sets in the last session must not reset the run.
+    const h = warm(base, 2, 25, 4);
+    const [st] = stalls(h);
+    expect(st?.sessions).toBe(3);
+    expect(st?.top).toEqual({ weightKg: 20, reps: 10 });
+  });
+
+  it('a warm-up in the first session does not set a best that hides real gains', () => {
+    const base = series('bench', 'a', [
+      [20, 8],
+      [20, 9],
+      [20, 10],
+    ]);
+    expect(stalls(warm(base, 0, 30, 8))).toEqual([]);
+  });
+});

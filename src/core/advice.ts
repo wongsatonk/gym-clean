@@ -2,8 +2,10 @@
 // One recommendation per exercise per moment; rules are checked in table order, first match wins.
 // Nothing here changes state: `apply` is only a payload the UI may offer behind a button.
 import type { SessionState } from './session';
+import { EFFORT_RULES, EFFORT_WORDS, type EffortRule } from './trainer/effortRules';
 import type { PlannedExercise, SetLog } from './types';
 import { formatWeight, fromUnit, snapToStep, stepFor, toUnit, type Unit } from './units';
+import { isWarmup, workingSets } from './warmup';
 
 export type AdviceRule =
   'A1' | 'A2' | 'A3' | 'A4' | 'A5' | 'N1' | 'N2' | 'T1' | 'N3' | 'N4' | 'N5' | 'N6';
@@ -103,10 +105,42 @@ function setsAtLastWeight(L: readonly SetLog[], unit: Unit): SetLog[] {
 const topAtWeight = (atW: readonly SetLog[], max: number, need: number) =>
   atW.length >= need && atW.every((l) => l.reps >= max && isClean(l));
 
+/** M12 1b: the effort rule of the exercise's last set (no answer = the M5b rule). */
+const effortRuleOf = (set: SetLog | undefined): EffortRule => EFFORT_RULES[set?.effort ?? 'none'];
+/**
+ * Has the exercise earned a step up at its current weight under `rule`? `sets` caps the sets
+ * needed (a 1-set plan can't show 2). Hard never steps up; Easy needs fewer sets and only the
+ * bottom of the range.
+ */
+function earnedStepUp(
+  rule: EffortRule,
+  atW: readonly SetLog[],
+  [min, max]: readonly [number, number],
+  sets: number,
+): boolean {
+  if (!rule.stepUp) return false;
+  const floor = rule.repsFloor === 'top' ? max : min;
+  return topAtWeight(atW, floor, Math.min(rule.minSetsAtWeight, sets));
+}
+/** " · felt easy" for the why line; empty for Good / no answer. */
+function effortWhy(set: SetLog | undefined): string {
+  const e = set?.effort;
+  return e === 'easy' || e === 'hard' ? ` · ${EFFORT_WORDS[e].why}` : '';
+}
+/** "Felt easy." when Easy brought the step up early (the M5b rule alone wouldn't), else "Strong set.". */
+function stepUpLead(set: SetLog, atW: readonly SetLog[], p: PlannedExercise): string {
+  const plain = earnedStepUp(EFFORT_RULES.none, atW, p.targetReps, Infinity);
+  return set.effort === 'easy' && !plain ? EFFORT_WORDS.easy.lead : 'Strong set.';
+}
+
 /** w ± one step, computed in the display unit and snapped (stored as kg). */
 function stepped(w: number, unit: Unit, dir: 1 | -1): number {
   return snapToStep(fromUnit(disp(w, unit) + dir * stepFor(unit), unit), unit);
 }
+
+/** Today's working sets of the exercise: warm-up sets (M12 1b) are invisible to the coach. */
+const setsOf = (s: SessionState, exerciseId: string): SetLog[] =>
+  s.logs.filter((l) => l.exerciseId === exerciseId && !isWarmup(l));
 
 function plannedFor(s: SessionState, exerciseId: string): PlannedExercise | undefined {
   return s.day.exercises.find((p) => p.exerciseId === exerciseId);
@@ -172,7 +206,7 @@ function duringExerciseAdvice(
   if (!set) return null;
   const w = set.weightKg;
   const bw = isBodyweight(w);
-  const why = `${setsWhy(L, unit)} · ${targetWhy(p)}`;
+  const why = `${setsWhy(L, unit)} · ${targetWhy(p)}${effortWhy(set)}`;
 
   if (partialsOf(set) >= 2) {
     return advice(
@@ -187,7 +221,10 @@ function duringExerciseAdvice(
     return advice(id, 'A2', bw ? aim : `Keep the weight. ${aim}`, why);
   }
   // Only sets at the current weight count: one set after a jump doesn't earn the next one.
-  const allTop = topAtWeight(setsAtLastWeight(L, unit), max, 2);
+  // M12 1b: the set's effort moves the bar (Easy: one clean set in range; Hard: never).
+  const atW = setsAtLastWeight(L, unit);
+  const allTop = earnedStepUp(effortRuleOf(set), atW, [min, max], Infinity);
+  const lead = stepUpLead(set, atW, p);
   if (allTop && !bw && !tooBigJump(w, unit)) {
     // Name the real jump to the snapped Apply weight, so text and Apply never disagree
     // (16 kg → 17.5 kg says "+1.5 kg", not "+2.5 kg").
@@ -196,14 +233,14 @@ function duringExerciseAdvice(
     return advice(
       id,
       'A3',
-      `Strong set. Try +${jump} ${unit} next set.`,
+      `${lead} Try +${jump} ${unit} next set.`,
       why,
-      `Strong set. Try plus ${jump} ${unitWord(unit)} next set.`,
+      `${lead} Try plus ${jump} ${unitWord(unit)} next set.`,
       { weightKg: next },
     );
   }
   if (allTop && bw) {
-    return advice(id, 'A4', `Strong set. Try ${set.reps + 1} reps next set.`, why);
+    return advice(id, 'A4', `${lead} Try ${set.reps + 1} reps next set.`, why);
   }
   const i = s.logs.length - 1;
   if (s.logs[i] === set && overran(s, i)) {
@@ -232,15 +269,16 @@ export function nextTimeAdvice(
   name: (id: string) => string,
 ): Advice | null {
   const p = plannedFor(s, exerciseId);
-  const L = s.logs.filter((l) => l.exerciseId === exerciseId);
+  const L = setsOf(s, exerciseId);
   const lastSet = L.at(-1);
   if (!p || !lastSet) return null;
+  last = workingSets(last);
   const [min, max] = p.targetReps;
   const unit = s.unit;
   const w = lastSet.weightKg;
   const bw = isBodyweight(w);
   const head = `Next time on ${name(exerciseId)}:`;
-  const why = `${setsWhy(L, unit)} · ${targetWhy(p)}`;
+  const why = `${setsWhy(L, unit)} · ${targetWhy(p)}${effortWhy(lastSet)}`;
   const mk = (rule: AdviceRule, shownTail: string, sayTail: string = shownTail, w2 = why) =>
     advice(exerciseId, rule, `${head} ${shownTail}`, w2, `${head} ${sayTail}`);
 
@@ -269,7 +307,9 @@ export function nextTimeAdvice(
   // All planned sets done, and the sets at the final weight (≥ 2, or all of a 1-set plan) were
   // clean and at the top: a single set after a mid-workout jump falls through to "repeat".
   const atW = setsAtLastWeight(L, unit);
-  if (L.length >= p.sets && topAtWeight(atW, max, Math.min(2, p.sets))) {
+  // M12 1b: the last set's effort moves the bar (Easy: the bottom of the range is enough; Hard:
+  // hold, which falls through to "same weight" / "repeat").
+  if (L.length >= p.sets && earnedStepUp(effortRuleOf(lastSet), atW, [min, max], p.sets)) {
     if (bw) {
       // Spoken without "on" so it stays ≤ 12 words with the longest name.
       const say = `Next time, ${name(exerciseId)}: plus one rep per set.`;
@@ -305,10 +345,10 @@ export function afterSetAdvice(
   last: Readonly<Record<string, readonly SetLog[]>> = {},
 ): Advice | null {
   const set = s.logs.at(-1);
-  if (!set) return null;
+  if (!set || isWarmup(set)) return null; // nothing to say after a warm-up set
   const p = plannedFor(s, set.exerciseId);
   if (!p) return null;
-  const L = s.logs.filter((l) => l.exerciseId === set.exerciseId);
+  const L = setsOf(s, set.exerciseId);
   if (L.length >= p.sets)
     return nextTimeAdvice(s, set.exerciseId, last[set.exerciseId] ?? [], name);
   return duringExerciseAdvice(s, p, L);
@@ -321,7 +361,8 @@ export function progressLine(
   last: readonly SetLog[],
   name: (id: string) => string,
 ): string | null {
-  const L = s.logs.filter((l) => l.exerciseId === exerciseId);
+  const L = setsOf(s, exerciseId);
+  last = workingSets(last);
   if (L.length === 0 || last.length === 0) return null;
   const unit = s.unit;
   const half = stepFor(unit) / 2;
@@ -350,7 +391,7 @@ export function coachSummary(
   const seen = new Set<string>();
   for (const p of s.day.exercises) {
     const id = p.exerciseId;
-    if (seen.has(id) || !s.logs.some((l) => l.exerciseId === id)) continue;
+    if (seen.has(id) || setsOf(s, id).length === 0) continue;
     seen.add(id);
     const prev = last[id] ?? [];
     out.push({

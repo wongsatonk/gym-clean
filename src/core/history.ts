@@ -1,7 +1,7 @@
 /**
  * M6 History selectors (pure). Takes session rows + set logs; time (`today`, ms) is passed in.
  * Days and Mon–Sun weeks are local time, using the stats.ts helpers (DST-safe). Unfinished
- * sessions and 0-rep sets never count. Bodyweight sets (0 kg) have reps but no volume.
+ * sessions, 0-rep sets and warm-up sets (M12 1b) never count. Bodyweight sets (0 kg) have reps but no volume.
  *
  * `exerciseHistory` / `exercisesWithHistory` only see sets, so feed them sets of finished
  * sessions: `finishedSets(sessions, sets)`, or `finishedHistorySince` in src/data/db.ts.
@@ -18,6 +18,7 @@ import {
   weekStartOf,
 } from './stats';
 import type { SetLog } from './types';
+import { isWarmup } from './warmup';
 
 /** One finished session in the "last N days" list. */
 export type DaySession = {
@@ -75,7 +76,8 @@ export type ExerciseHistory = {
   trend: ExerciseTrend;
 };
 
-const counts = (l: SetLog): boolean => l.reps > 0;
+/** A set History shows: ≥ 1 rep and not a warm-up (M12 1b). */
+const counts = (l: SetLog): boolean => l.reps > 0 && !isWarmup(l);
 
 function avg(xs: readonly number[]): number | null {
   if (xs.length === 0) return null;

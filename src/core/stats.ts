@@ -1,9 +1,10 @@
 /**
  * M4e Home/Summary selectors (pure). Takes session rows + set logs; time (`today`, ms) is passed
  * in. Weeks are Mon–Sun in the device's local time zone. Only finished sessions (`endedAt` set)
- * count anywhere.
+ * count anywhere. Warm-up sets (M12 1b, `warmup: true`) never count for volume or bests.
  */
 import type { SetLog } from './types';
+import { isWarmup } from './warmup';
 
 /** Workouts a Mon–Sun week needs to keep the streak (provisional: Blockers A-q1). */
 export const STREAK_MIN_PER_WEEK = 3;
@@ -128,9 +129,9 @@ export function doneDaysThisWeek(
   return out;
 }
 
-/** Σ reps × kg. Bodyweight sets (0 kg) add 0. */
+/** Σ reps × kg. Bodyweight sets (0 kg) add 0; warm-up sets (M12 1b) are left out. */
 export function sessionVolume(logs: readonly SetLog[]): number {
-  return logs.reduce((sum, l) => sum + l.reps * l.weightKg, 0);
+  return logs.reduce((sum, l) => (isWarmup(l) ? sum : sum + l.reps * l.weightKg), 0);
 }
 
 /** Rounded percent change vs the previous same-day session; null with no previous volume. */
@@ -181,11 +182,11 @@ export function lastSession(
 
 export type Top = { weightKg: number; reps: number };
 
-/** Heaviest set, then most reps at that weight (0-rep sets ignored). */
+/** Heaviest set, then most reps at that weight (0-rep sets and warm-up sets ignored). */
 export function topSet(logs: readonly SetLog[]): Top | null {
   let top: Top | null = null;
   for (const l of logs) {
-    if (l.reps <= 0) continue;
+    if (l.reps <= 0 || isWarmup(l)) continue;
     if (
       !top ||
       l.weightKg > top.weightKg + WEIGHT_EPS_KG ||

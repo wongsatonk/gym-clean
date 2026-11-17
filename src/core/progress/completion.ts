@@ -44,9 +44,11 @@ import {
 import type { PlanSession } from '../trainer/plan';
 import type { TrainerCatalog } from '../trainer/swapCandidates';
 import type { DayCompletion, PeriodScore, PlannedExercise, SetLog, TrainerState } from '../types';
+import { isWarmup } from '../warmup';
 
 export type CompletionSession = PlanSession & { sessionId: string };
-export type CompletionSet = Pick<SetLog, 'sessionId' | 'exerciseId' | 'reps'>;
+/** Warm-up sets (M12 1b, `warmup: true`) are ignored everywhere here. */
+export type CompletionSet = Pick<SetLog, 'sessionId' | 'exerciseId' | 'reps' | 'warmup'>;
 
 export type CompletionInput = {
   state: TrainerState;
@@ -96,8 +98,10 @@ function prepare(input: CompletionInput): Prepared {
     byDate.set(d, [...(byDate.get(d) ?? []), s]);
   }
   const setsBySession = new Map<string, CompletionSet[]>();
-  for (const x of input.sets)
+  for (const x of input.sets) {
+    if (isWarmup(x)) continue;
     setsBySession.set(x.sessionId, [...(setsBySession.get(x.sessionId) ?? []), x]);
+  }
   const first = finished[0];
   const { rotation, restWeekdays } = input.state.schedule;
   const p: Prepared = {

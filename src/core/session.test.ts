@@ -3,6 +3,7 @@ import type { FocusCueId, PlannedExercise, ProgramDay } from './types';
 import {
   REST_OVERRUN_GRACE_SEC,
   currentPlanned,
+  currentWarmup,
   next,
   restElapsedMs,
   startSession,
@@ -1464,5 +1465,294 @@ describe('INSERT_UPCOMING (M10 mid-workout Undo)', () => {
     expect(r.skipped).toEqual(['B']);
     const gone = { ...r, day: { ...r.day, exercises: [exA, exC] }, exIndex: 1 };
     expect(run(gone, insert(1, exB)).skipped).toEqual([]);
+  });
+});
+
+describe('SET_EFFORT on Rest (M12 1b effort)', () => {
+  const rest = () => run(fresh(), { type: 'SET_DONE', now: sec(30) });
+  const effort = (setIndex: number, e: 'easy' | 'good' | 'hard' | null): SessionEvent => ({
+    type: 'SET_EFFORT',
+    setIndex,
+    effort: e,
+  });
+
+  it('stores the effort on the last logged set and leaves everything else alone', () => {
+    const r = rest();
+    const s = run(r, effort(0, 'easy'));
+    expect(s.logs).toHaveLength(1);
+    expect(s.logs[0]).toEqual({ ...r.logs[0], effort: 'easy' });
+    expect({ ...s, logs: r.logs }).toEqual(r);
+  });
+
+  it('can be changed and cleared while still on Rest', () => {
+    const s = run(rest(), effort(0, 'easy'), effort(0, 'hard'));
+    expect(s.logs[0]?.effort).toBe('hard');
+    const cleared = run(s, effort(0, null));
+    expect(cleared.logs[0]).not.toHaveProperty('effort');
+  });
+
+  it('a set without an answer has no effort field', () => {
+    expect(rest().logs[0]).not.toHaveProperty('effort');
+  });
+
+  it('is never accepted during a set, while paused, or on Summary', () => {
+    const inSet = fresh();
+    expect(run(inSet, effort(0, 'easy'))).toBe(inSet);
+    const nextSet = run(rest(), { type: 'START_SET', now: sec(90) });
+    expect(run(nextSet, effort(0, 'easy'))).toBe(nextSet);
+    const paused = run(rest(), { type: 'PAUSE', now: sec(40) });
+    expect(run(paused, effort(0, 'easy'))).toBe(paused);
+    const done = run(rest(), { type: 'FINISH', now: sec(50) });
+    expect(run(done, effort(0, 'easy'))).toBe(done);
+  });
+
+  it('only for the last logged set, and only a known effort', () => {
+    const r = run(rest(), { type: 'START_SET', now: sec(90) }, { type: 'SET_DONE', now: sec(120) });
+    // The last log is set index 1 of A; set 0 is no longer editable.
+    expect(run(r, effort(0, 'easy'))).toBe(r);
+    expect(run(r, effort(1, 'good')).logs.map((l) => l.effort)).toEqual([undefined, 'good']);
+    expect(run(r, { type: 'SET_EFFORT', setIndex: 1, effort: 'huge' as 'easy' })).toBe(r);
+  });
+
+  it('survives a rep correction and is not copied to the next set', () => {
+    const s = run(
+      rest(),
+      effort(0, 'hard'),
+      { type: 'CORRECT_LAST_SET', reps: 9, partials: 0 },
+      { type: 'START_SET', now: sec(90) },
+      { type: 'SET_DONE', now: sec(120) },
+    );
+    expect(s.logs[0]).toMatchObject({ reps: 9, effort: 'hard' });
+    expect(s.logs[1]).not.toHaveProperty('effort');
+  });
+});
+
+describe('warm-up sets (M12 1b)', () => {
+  // A: dumbbells at 20 kg → ramp 10 kg × 8, 12.5 kg × 4 (70% = 14, snapped down). B: 10 kg, light.
+  const lifts = {
+    A: { kind: 'dumbbell', compound: true },
+    B: { kind: 'dumbbell', compound: false },
+  } as const;
+  const warm = (over: Parameters<typeof startSession>[3] = {}, d: ProgramDay = day) =>
+    startSession(d, 's1', T0, { warmups: { rule: 'firstHeavyLift', lifts }, ...over });
+  const done = (t: number): SessionEvent => ({ type: 'SET_DONE', now: sec(t) });
+  const start = (t: number): SessionEvent => ({ type: 'START_SET', now: sec(t) });
+
+  it('without the option nothing changes: no warm-ups, no new state', () => {
+    const s = fresh();
+    expect(s).not.toHaveProperty('warmups');
+    expect(currentWarmup(s)).toBeNull();
+    expect(startSession(day, 's1', T0, {})).toEqual(s);
+  });
+
+  it('rule off: no warm-ups', () => {
+    const s = startSession(day, 's1', T0, { warmups: { rule: 'off', lifts } });
+    expect(currentWarmup(s)).toBeNull();
+    expect(s.weightKg).toBe(20);
+    expect(run(s, done(30)).logs[0]).not.toHaveProperty('warmup');
+  });
+
+  it('starts on warm-up 1 of 2 with its weight and reps', () => {
+    const s = warm();
+    expect(s.warmups).toEqual({
+      A: [
+        { weightKg: 10, reps: 8 },
+        { weightKg: 12.5, reps: 4 },
+      ],
+    });
+    expect(currentWarmup(s)).toEqual({ index: 0, of: 2, weightKg: 10, reps: 8 });
+    expect(s).toMatchObject({ phase: 'exercise', exIndex: 0, setIndex: 0, weightKg: 10, reps: 8 });
+  });
+
+  it('runs the ramp before set 1 and logs each with warmup: true', () => {
+    const w1 = run(warm(), done(30));
+    expect(w1.logs[0]).toMatchObject({
+      exerciseId: 'A',
+      setIndex: 0,
+      weightKg: 10,
+      reps: 8,
+      warmup: true,
+    });
+    expect(w1.phase).toBe('rest');
+    expect(currentWarmup(w1)).toEqual({ index: 1, of: 2, weightKg: 12.5, reps: 4 });
+    expect(w1).toMatchObject({ exIndex: 0, setIndex: 0, weightKg: 12.5, reps: 4 });
+
+    const w2 = run(w1, start(60), done(90));
+    expect(w2.logs[1]).toMatchObject({ setIndex: 1, weightKg: 12.5, reps: 4, warmup: true });
+    // Now the first working set: the plan's weight and reps, set index 0.
+    expect(currentWarmup(w2)).toBeNull();
+    expect(w2).toMatchObject({ phase: 'rest', exIndex: 0, setIndex: 0, weightKg: 20, reps: 12 });
+
+    const set1 = run(w2, start(120), done(150));
+    expect(set1.logs[2]).toMatchObject({ exerciseId: 'A', setIndex: 0, weightKg: 20, reps: 12 });
+    expect(set1.logs[2]).not.toHaveProperty('warmup');
+    expect(set1).toMatchObject({ exIndex: 0, setIndex: 1, weightKg: 20 });
+    // The second working set finishes A (2 sets): on to B, which has no warm-up.
+    const set2 = run(set1, start(200), done(230));
+    expect(currentPlanned(set2).exerciseId).toBe('B');
+    expect(currentWarmup(set2)).toBeNull();
+    expect(set2.weightKg).toBe(10);
+  });
+
+  it('the rest after a warm-up is short, and never longer than the exercise rest', () => {
+    expect(run(warm(), done(30)).restTargetSec).toBe(45);
+    const quick: ProgramDay = { ...day, exercises: [{ ...exA, restSec: 30 }, exC] };
+    expect(run(warm({}, quick), done(30)).restTargetSec).toBe(30);
+    // After the last warm-up too; after a working set, the plan's rest.
+    const s = run(warm(), done(30), start(60), done(90));
+    expect(s.restTargetSec).toBe(45);
+    expect(run(s, start(120), done(150)).restTargetSec).toBe(60);
+  });
+
+  it('the working weight follows last time, and the ramp follows it', () => {
+    const s = warm({ lastWeightKg: { A: 30 } });
+    expect(s.warmups?.A).toEqual([
+      { weightKg: 15, reps: 8 },
+      { weightKg: 20, reps: 4 },
+    ]);
+    const working = run(s, done(30), start(60), done(90));
+    expect(working.weightKg).toBe(30);
+  });
+
+  it('snaps to the display unit and a custom kit', () => {
+    const s = warm({ unit: 'lb', lastWeightKg: { A: 45 * 0.45359237 } });
+    expect(s.warmups?.A?.map((w) => Math.round(toUnit(w.weightKg, 'lb')))).toEqual([20, 30]);
+    const kit = startSession(day, 's1', T0, {
+      warmups: { rule: 'firstHeavyLift', lifts, kit: { dumbbellStep: 2, dumbbellMin: 2 } },
+    });
+    expect(kit.warmups?.A?.map((w) => w.weightKg)).toEqual([10, 14]);
+  });
+
+  it('only the first heavy lift: a light first lift has none, the heavy one after it does', () => {
+    const d: ProgramDay = { ...day, exercises: [day.exercises[1] as PlannedExercise, exA, exC] };
+    const s = warm({}, d);
+    expect(currentWarmup(s)).toBeNull();
+    expect(s.weightKg).toBe(10);
+    const atA = run(s, done(30)); // B has 1 set → rest before A
+    expect(currentPlanned(atA).exerciseId).toBe('A');
+    expect(currentWarmup(atA)).toEqual({ index: 0, of: 2, weightKg: 10, reps: 8 });
+    expect(atA).toMatchObject({ weightKg: 10, reps: 8 });
+  });
+
+  it('bodyweight and unknown lifts get none', () => {
+    const s = warm({}, { ...day, exercises: [exC] });
+    expect(s).not.toHaveProperty('warmups');
+    expect(currentWarmup(s)).toBeNull();
+  });
+
+  it('a warm-up set can be adjusted; what was done is what is logged', () => {
+    const s = run(
+      warm(),
+      { type: 'ADJUST', field: 'weight', delta: 2.5 },
+      { type: 'ADJUST', field: 'reps', delta: -2 },
+      done(30),
+    );
+    expect(s.logs[0]).toMatchObject({ weightKg: 12.5, reps: 6, warmup: true });
+    // The next warm-up still loads its own planned values.
+    expect(s).toMatchObject({ weightKg: 12.5, reps: 4 });
+    expect(currentWarmup(s)?.index).toBe(1);
+  });
+
+  describe('SKIP_WARMUPS', () => {
+    const skip = (t: number): SessionEvent => ({ type: 'SKIP_WARMUPS', now: sec(t) });
+
+    it('before the first warm-up: straight to working set 1', () => {
+      const s = run(warm(), skip(5));
+      expect(currentWarmup(s)).toBeNull();
+      expect(s).toMatchObject({ phase: 'exercise', setIndex: 0, weightKg: 20, reps: 12 });
+      expect(s.setStartedAt).toBe(sec(5));
+      expect(s.logs).toEqual([]);
+      expect(run(s, done(40)).logs[0]).not.toHaveProperty('warmup');
+    });
+
+    it('on Rest between warm-ups: the rest goes on, the working set is next', () => {
+      const r = run(warm(), done(30));
+      const s = run(r, skip(40));
+      expect(currentWarmup(s)).toBeNull();
+      expect(s).toMatchObject({ phase: 'rest', setIndex: 0, weightKg: 20, reps: 12 });
+      expect(s.restRunningSince).toBe(r.restRunningSince);
+      // The warm-up already done stays logged.
+      expect(s.logs).toHaveLength(1);
+      expect(s.logs[0]?.warmup).toBe(true);
+    });
+
+    it('is ignored when no warm-up is up, while paused, and on Summary', () => {
+      const plain = fresh();
+      expect(run(plain, skip(5))).toBe(plain);
+      const working = run(warm(), done(30), start(60), done(90));
+      expect(run(working, skip(95))).toBe(working);
+      const paused = run(warm(), { type: 'PAUSE', now: sec(5) });
+      expect(run(paused, skip(6))).toBe(paused);
+      const fin = run(warm(), { type: 'FINISH', now: sec(5) });
+      expect(run(fin, skip(6))).toBe(fin);
+    });
+  });
+
+  it('skipping the exercise and coming back resumes the ramp where it was', () => {
+    const s = run(
+      warm(),
+      done(30),
+      { type: 'SKIP_EXERCISE', now: sec(40) },
+      { type: 'GO_TO_EXERCISE', exIndex: 0, now: sec(50) },
+    );
+    expect(currentPlanned(s).exerciseId).toBe('A');
+    expect(currentWarmup(s)).toEqual({ index: 1, of: 2, weightKg: 12.5, reps: 4 });
+  });
+
+  it('warm-ups do not count as sets of the exercise', () => {
+    // 2 warm-ups + 1 of 2 working sets: A is not finished, the next set is working set index 1.
+    const s = run(warm(), done(30), start(60), done(90), start(120), done(150));
+    expect(currentPlanned(s).exerciseId).toBe('A');
+    expect(s.setIndex).toBe(1);
+  });
+
+  it('the summary leaves warm-ups out of sets and volume', () => {
+    const s = run(warm(), done(30), start(60), done(90), start(120), done(150), {
+      type: 'FINISH',
+      now: sec(200),
+    });
+    expect(s.logs).toHaveLength(3);
+    expect(summarize(s)).toMatchObject({ setsDone: 1, totalVolumeKg: 240 });
+  });
+
+  it('effort is not taken for a warm-up set', () => {
+    const r = run(warm(), done(30));
+    expect(run(r, { type: 'SET_EFFORT', setIndex: 0, effort: 'easy' })).toBe(r);
+  });
+
+  it('correcting a warm-up count does not change the next set', () => {
+    const last = run(warm(), done(30), start(60), done(90));
+    const s = run(last, { type: 'CORRECT_LAST_SET', reps: 3, partials: 0 });
+    expect(s.logs[1]).toMatchObject({ reps: 3, warmup: true });
+    expect(s.reps).toBe(12);
+    const mid = run(warm(), done(30), { type: 'CORRECT_LAST_SET', reps: 7, partials: 0 });
+    expect(mid.logs[0]).toMatchObject({ reps: 7, warmup: true });
+    expect(mid.reps).toBe(4);
+  });
+
+  it('replacing the warm-up exercise drops its ramp', () => {
+    const d: ProgramDay = { ...day, exercises: [day.exercises[1] as PlannedExercise, exA, exC] };
+    const s = run(warm({}, d), {
+      type: 'REPLACE_UPCOMING',
+      exIndex: 1,
+      planned: { ...exA, exerciseId: 'Z' },
+      now: sec(5),
+    });
+    expect(s.warmups).toEqual({});
+    const atZ = run(s, done(30));
+    expect(currentPlanned(atZ).exerciseId).toBe('Z');
+    expect(currentWarmup(atZ)).toBeNull();
+  });
+
+  it('an exercise with warm-ups logged counts as started (no replace)', () => {
+    const r = run(warm(), done(30));
+    expect(
+      run(r, {
+        type: 'REPLACE_UPCOMING',
+        exIndex: 0,
+        planned: { ...exA, exerciseId: 'Z' },
+        now: sec(40),
+      }),
+    ).toBe(r);
   });
 });

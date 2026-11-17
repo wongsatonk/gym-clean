@@ -20,6 +20,7 @@
  */
 import { stepFor, formatWeight, fromUnit, toUnit, type Unit } from '../../units';
 import { topSet, WEIGHT_EPS_KG, type Top } from '../../stats';
+import { isWarmup } from '../../warmup';
 import { calendar, type PlanSession } from '../plan';
 import type {
   DayOverride,
@@ -103,7 +104,8 @@ export function detectStalls(
   // exerciseId → sessionId → logs
   const byEx = new Map<string, Map<string, SetLog[]>>();
   for (const l of sets) {
-    if (!counted.has(l.sessionId)) continue;
+    // M12 1b: a warm-up set is never a top set, a gain or a session of the exercise.
+    if (!counted.has(l.sessionId) || isWarmup(l)) continue;
     let m = byEx.get(l.exerciseId);
     if (!m) byEx.set(l.exerciseId, (m = new Map()));
     const list = m.get(l.sessionId);

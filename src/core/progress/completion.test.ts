@@ -559,3 +559,37 @@ describe('no fixed rest weekdays: weekly target = rotation length (max 6)', () =
     expect(missedDay(i, [])).toMatchObject({ date: '2026-11-04' });
   });
 });
+
+describe('warm-up sets are excluded (M12 1b)', () => {
+  // 2026-11-09 (day a): press 3 sets, squat 3 sets, all done.
+  const sid = SETS.find((x) => x.exerciseId === 'press')?.sessionId ?? '';
+  const warm = (exerciseId: string): CompletionSet => ({
+    sessionId: sid,
+    exerciseId,
+    reps: 8,
+    warmup: true,
+  });
+
+  it('warm-ups add no sets done and no reps', () => {
+    const withWarm = input({ sets: [warm('press'), warm('press'), ...SETS] });
+    expect(dayCompletion(withWarm, '2026-11-09')).toEqual(dayCompletion(input(), '2026-11-09'));
+    expect(weekScore(withWarm, '2026-11-09')).toEqual(weekScore(input(), '2026-11-09'));
+  });
+
+  it('a warm-up never completes a missing working set', () => {
+    const first = SETS.findIndex((x) => x.sessionId === sid && x.exerciseId === 'press');
+    const dropped = SETS.filter((_, i) => i !== first);
+    expect(dropped).toHaveLength(SETS.length - 1);
+    const c = dayCompletion(input({ sets: [...dropped, warm('press')] }), '2026-11-09');
+    expect(c.status).toBe('partial');
+    expect(c.setsDone).toBe(5);
+    expect(c.exercises[0]).toMatchObject({ exerciseId: 'press', setsDone: 2, status: 'partial' });
+  });
+
+  it('a day with only warm-ups logged is not partly done', () => {
+    const others = SETS.filter((x) => x.sessionId !== sid);
+    const c = dayCompletion(input({ sets: [...others, warm('press')] }), '2026-11-09');
+    expect(c.setsDone).toBe(0);
+    expect(c.exercises.every((e) => e.setsDone === 0)).toBe(true);
+  });
+});

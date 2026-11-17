@@ -379,3 +379,37 @@ describe('doneDaysThisWeek', () => {
     expect(doneDaysThisWeek([], today)).toEqual({});
   });
 });
+
+describe('warm-up sets are excluded (M12 1b)', () => {
+  const warm = (over: Partial<SetLog> = {}) => log({ warmup: true, ...over });
+
+  it('volume counts working sets only', () => {
+    const logs = [warm({ weightKg: 10, reps: 8 }), warm({ weightKg: 15, reps: 4 }), log()];
+    expect(sessionVolume(logs)).toBe(160);
+    expect(sessionVolume([warm()])).toBe(0);
+  });
+
+  it('volume vs last time ignores warm-ups on both sides', () => {
+    const today = [warm({ weightKg: 10 }), log({ reps: 10 })];
+    const prev = [warm({ weightKg: 10, sessionId: 'old' }), log({ sessionId: 'old' })];
+    expect(volumeVsLast(today, prev)).toBe(25);
+    expect(volumeVsLast(today, [warm({ sessionId: 'old' })])).toBeNull();
+  });
+
+  it('a warm-up is never a best, and never the old best to beat', () => {
+    const old = [log({ sessionId: 'old', weightKg: 20, reps: 8 })];
+    // A (mislabelled) heavy warm-up today is not a best.
+    expect(newBests([warm({ weightKg: 30 }), log({ weightKg: 20, reps: 8 })], old)).toEqual([]);
+    // A heavy warm-up in history doesn't hide today's real best.
+    const hist = [...old, warm({ sessionId: 'old', weightKg: 40 })];
+    expect(newBests([log({ weightKg: 22.5 })], hist)).toHaveLength(1);
+    // Only warm-ups in history = no history.
+    expect(newBests([log()], [warm({ sessionId: 'old' })])).toEqual([]);
+  });
+
+  it('the last session card leaves warm-ups out of its volume', () => {
+    const s = sess(at(11, 9));
+    const sets = [warm({ sessionId: s.sessionId, weightKg: 10 }), log({ sessionId: s.sessionId })];
+    expect(lastSession([s], sets)?.volumeKg).toBe(160);
+  });
+});

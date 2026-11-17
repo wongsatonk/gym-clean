@@ -382,3 +382,34 @@ describe('finishedSets', () => {
     expect(finishedSets(sessions, logs).map((l) => l.sessionId)).toEqual(['done']);
   });
 });
+
+describe('warm-up sets are excluded (M12 1b)', () => {
+  const s = sess('w1', at(11, 9));
+  const today = at(11, 10);
+  const sets = [
+    log({ sessionId: 'w1', warmup: true, weightKg: 10, reps: 8, startedAt: at(11, 9) }),
+    log({ sessionId: 'w1', warmup: true, weightKg: 30, reps: 4, startedAt: at(11, 9) + MIN }),
+    log({ sessionId: 'w1', weightKg: 20, reps: 8, startedAt: at(11, 9) + 2 * MIN }),
+  ];
+
+  it('the day list counts working sets and their volume', () => {
+    const [d] = lastDays([s], sets, today);
+    expect(d?.setCount).toBe(1);
+    expect(d?.volumeKg).toBe(160);
+  });
+
+  it('exercise history: sets, top set, best and volume are working sets only', () => {
+    const h = exerciseHistory(sets, BENCH, today);
+    expect(h.sessions[0]?.sets).toEqual([{ weightKg: 20, reps: 8, focusScore: null }]);
+    expect(h.sessions[0]?.topSet).toEqual({ weightKg: 20, reps: 8 });
+    expect(h.sessions[0]?.volumeKg).toBe(160);
+    expect(h.sessions[0]?.date).toBe(at(11, 9) + 2 * MIN);
+    expect(h.trend.bestSet).toMatchObject({ weightKg: 20, reps: 8 });
+  });
+
+  it('an exercise with only warm-up sets has no history', () => {
+    const only = sets.slice(0, 2);
+    expect(exerciseHistory(only, BENCH, today).sessions).toEqual([]);
+    expect(exercisesWithHistory(only, today)).toEqual([]);
+  });
+});
