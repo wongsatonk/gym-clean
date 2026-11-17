@@ -4,7 +4,7 @@ import { DETECTOR_IDS, detectors } from '../../core/todo/detectors';
 import { isAppRoute } from '../../core/todo/routes';
 import { checkCopy } from '../../core/trainer/replies';
 import { RULES } from '../../core/exercises';
-import { TODO_TOPICS, TRAINER_KIT_DEFAULTS } from './topics';
+import { TODO_TOPICS, TRAINER_KIT_DEFAULTS, topicsForRelease } from './topics';
 
 type AskStep = Extract<TodoStep, { kind: 'ask' }>;
 type AutoStep = Extract<TodoStep, { kind: 'auto' }>;
@@ -29,9 +29,10 @@ function strings(t: TodoTopic): string[] {
 }
 
 describe('TODO_TOPICS', () => {
-  it('has the 12 topics of the SPEC table, in order, mapped to their checkpoints', () => {
+  it('has the 12 topics of the SPEC table plus the 1.13.0 one, in order, with their checkpoints', () => {
     expect(TODO_TOPICS.map((t) => [t.id, t.checkpoint])).toEqual([
       ['coach-calendar', 'Checkpoint I'],
+      ['trainer-kit-gym', 'Checkpoint J'],
       ['health-week', 'Checkpoint H'],
       ['iphone-week', 'Checkpoint G'],
       ['coach-gym', 'Checkpoint E'],
@@ -46,8 +47,23 @@ describe('TODO_TOPICS', () => {
     ]);
   });
 
-  it('all came with 1.12.0', () => {
-    for (const t of TODO_TOPICS) expect(t.since).toBe('1.12.0');
+  it('all came with 1.12.0, except the trainer-kit gym topic (1.13.0)', () => {
+    for (const t of TODO_TOPICS)
+      expect(t.since, t.id).toBe(t.id === 'trainer-kit-gym' ? '1.13.0' : '1.12.0');
+  });
+
+  it('topicsForRelease keeps a topic back until the app reaches its release', () => {
+    const ids = (release: string) => topicsForRelease(release).map((t) => t.id);
+    expect(ids('1.12.0')).toHaveLength(12);
+    expect(ids('1.12.0')).not.toContain('trainer-kit-gym');
+    expect(ids('1.12.3')).toEqual(ids('1.12.0'));
+    expect(ids('1.13.0')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.14.0')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.11.0')).toEqual([]);
+    // Data order is kept, and another list can be passed in.
+    expect(topicsForRelease('1.12.0', [byId('trainer-kit-gym'), byId('resign')])).toEqual([
+      byId('resign'),
+    ]);
   });
 
   it('marks the iPhone-only topics native and only the re-sign topic recurring', () => {
@@ -106,6 +122,10 @@ describe('TODO_TOPICS', () => {
     expect(p('camera', 'learning')).toEqual({ min: 3 });
     expect(p('food-photos', 'days')).toEqual({ min: 7 });
     expect(p('resign', 'days-left')).toEqual({ minDaysLeft: 3 });
+    expect(p('trainer-kit-gym', 'effort')).toEqual({ min: 6 });
+    expect(p('trainer-kit-gym', 'warm-ups')).toEqual({ min: 1 });
+    expect(p('trainer-kit-gym', 'measurement')).toEqual({ min: 1 });
+    expect(p('vesync', 'body-comp')).toEqual({ min: 1 });
   });
 
   it('has the auto steps of the SPEC table', () => {
@@ -113,13 +133,14 @@ describe('TODO_TOPICS', () => {
       Object.fromEntries(TODO_TOPICS.map((t) => [t.id, autos(t).map((s) => s.detector)])),
     ).toEqual({
       'coach-calendar': ['chatAsked', 'proposalOutcome', 'calendarAfterSession'],
+      'trainer-kit-gym': ['effortSets', 'warmupSession', 'intakeDone', 'measurementLogged'],
       'health-week': ['healthConnected', 'healthDays'],
       'iphone-week': ['nativeApp', 'nativeSessions'],
       'coach-gym': ['coachChanges', 'legSwapSession'],
       'hands-free': ['handsFreeSession'],
       camera: ['cameraSession', 'learningCamera'],
       'food-photos': ['foodModel', 'photoMealDays'],
-      vesync: [],
+      vesync: ['bodyCompDays'],
       'apple-card': [],
       'trainer-kit': [],
       claude: [],
@@ -146,6 +167,50 @@ describe('TODO_TOPICS', () => {
       'hrv',
     ]);
     expect(asks(byId('camera')).map((s) => s.id)).toContain('commit-landmarks');
+  });
+
+  describe('trainer kit at the gym (1.13.0, feeds Checkpoint J)', () => {
+    const topic = byId('trainer-kit-gym');
+
+    it('is for both the web app and the iPhone app, titled as in the plan', () => {
+      expect(topic.title).toBe('Trainer kit at the gym');
+      expect(topic.platform).toBe('any');
+      expect(topic.recurring).toBeUndefined();
+    });
+
+    it('auto steps first, each with a Try it', () => {
+      expect(topic.steps.slice(0, 4).map((s) => [s.id, s.kind, s.tryIt])).toEqual([
+        ['effort', 'auto', 'today'],
+        ['warm-ups', 'auto', 'today'],
+        ['intake', 'auto', 'intake'],
+        ['measurement', 'auto', 'fuel/measurements'],
+      ]);
+    });
+
+    it('asks about warm-up weights, effort, short on time, setup cues and anything off', () => {
+      expect(asks(topic).map((s) => [s.id, s.options.map((o) => o.id)])).toEqual([
+        ['warmup-weights', ['right', 'light', 'heavy']],
+        ['effort-helped', ['yes', 'mostly', 'no']],
+        ['short-on-time', ['fit', 'over', 'untried']],
+        ['setup-cues', ['helpful', 'many', 'notNeeded']],
+        ['anything-off', ['nothing', 'something']],
+      ]);
+      for (const s of asks(topic)) {
+        expect(s.note, s.id).toBe('optional');
+        expect(s.multi, s.id).toBeUndefined();
+        expect(s.setting, s.id).toBeUndefined();
+      }
+    });
+  });
+
+  it('the VeSync topic gains an iPhone-only body fat / lean mass auto step, after its question', () => {
+    const t = byId('vesync');
+    expect(t.platform).toBe('native');
+    expect(t.steps.map((s) => [s.id, s.kind])).toEqual([
+      ['types', 'ask'],
+      ['body-comp', 'auto'],
+    ]);
+    expect(t.steps[1]?.tryIt).toBe('settings/health');
   });
 
   it('offers every learning exercise (from the rule data) in the miscount question', () => {

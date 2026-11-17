@@ -5,6 +5,7 @@ import type { SetLog, TrainerState } from '../../core/types';
 import { GymDb } from '../db';
 import { startDevLogSession } from '../devlog';
 import { gatherFacts } from './facts';
+import { saveIntake, saveMeasurement } from '../trainerKit/store';
 import { noteBuildSeen, noteSignal } from './store';
 
 // Made-up data only (public repo). Values are distinctive so a leak would be found by text search.
@@ -145,9 +146,51 @@ async function seed(): Promise<void> {
   await manual.finish(day(14, 13));
 }
 
+/** M12 slice 1b rows: effort taps, warm-up sets, the intake, tape measurements, body fat / lean mass. */
+async function seedKit(): Promise<void> {
+  // s1: 2 warm-up sets (one wrongly carrying an effort: not counted) + 3 working sets with effort.
+  // s2: 1 warm-up set + 1 working set with effort. Sets without `cues` (no camera counts change).
+  const kit = (sessionId: string, i: number, extra: Partial<SetLog>): SetLog => ({
+    ...set(sessionId, sessionId === 's1' ? 'Leg_Extensions' : 'Hack_Squat', i, false),
+    ...extra,
+  });
+  await db.sets.bulkAdd([
+    kit('s1', 20, { warmup: true }),
+    kit('s1', 21, { warmup: true, effort: 'easy' }),
+    kit('s1', 22, { effort: 'easy' }),
+    kit('s1', 23, { effort: 'good' }),
+    kit('s1', 24, { effort: 'hard' }),
+    kit('s2', 20, { warmup: true }),
+    kit('s2', 21, { effort: 'good' }),
+    kit('s2', 22, { effort: 'bogus' as unknown as 'good' }),
+  ]);
+
+  await saveIntake(db, {
+    goalKind: 'strength',
+    goalText: 'Made-up goal words',
+    days: 4,
+    sessionMin: 45,
+    experience: 'some',
+    easyOn: ['shoulders'],
+    at: day(11),
+  });
+
+  await saveMeasurement(db, { date: '2026-11-01', site: 'waist', cm: 81.25 });
+  await saveMeasurement(db, { date: '2026-11-01', site: 'chest', cm: 97.75 });
+  await saveMeasurement(db, { date: '2026-10-01', site: 'waist', cm: 82.25 });
+
+  // Body fat / lean mass days, all outside the 7-day Health window (healthDays7 stays as it was):
+  // one with both, one with lean mass only, one with a bad value, one without either.
+  await db.healthDays.put({ date: '2026-10-20', bodyFatPct: 18.6, leanMassKg: 59.3 });
+  await db.healthDays.put({ date: '2026-10-21', leanMassKg: 59.4 });
+  await db.healthDays.put({ date: '2026-10-22', bodyFatPct: Number.NaN });
+  await db.healthDays.put({ date: '2026-10-23', sleepMin: 431 });
+}
+
 describe('gatherFacts', () => {
   it('counts what the detectors need from a made-up db', async () => {
     await seed();
+    await seedKit();
     await noteBuildSeen(db, 'build-old', day(9));
     await noteBuildSeen(db, 'build-new', day(14, 8));
     const f = await gatherFacts(db, 'native', NOW);
@@ -164,12 +207,17 @@ describe('gatherFacts', () => {
       learningCameraExercises: 4,
       photoMealDays: 2,
       legSwapSessions: 1,
+      effortSets: 4,
+      warmupSessions: 2,
+      measurements: 3,
+      bodyCompDays: 2,
     });
     expect(f.flags).toEqual({
       calendarAfterSession: true,
       healthConnected: true,
       foodModel: true,
       signingPaid: true,
+      intakeDone: true,
     });
     // Latest-noted build = the running one unless told otherwise.
     expect(f.buildFirstSeenAt).toBe(day(14, 8));
@@ -184,6 +232,21 @@ describe('gatherFacts', () => {
     expect((await gatherFacts(db, 'native', NOW)).counts.nativeSessions).toBe(2);
   });
 
+  it('trainer-kit facts are 0 / false without their rows (old data has no effort or warm-ups)', async () => {
+    await seed();
+    const f = await gatherFacts(db, 'native', NOW);
+    expect(f.counts.effortSets).toBe(0);
+    expect(f.counts.warmupSessions).toBe(0);
+    expect(f.counts.measurements).toBe(0);
+    expect(f.counts.bodyCompDays).toBe(0);
+    expect(f.flags.intakeDone).toBe(false);
+  });
+
+  it('a damaged intake row does not count as answered', async () => {
+    await db.settings.put({ key: 'intake', value: { goalKind: 'made-up' } });
+    expect((await gatherFacts(db, 'web', NOW)).flags.intakeDone).toBe(false);
+  });
+
   it('is all zeros and false on an empty db (web: no builds, no first-seen time)', async () => {
     const f = await gatherFacts(db, 'web', NOW);
     expect(f).toEqual({
@@ -196,6 +259,7 @@ describe('gatherFacts', () => {
 
   it('returns no raw values: counts are whole numbers, flags booleans, no strings from rows', async () => {
     await seed();
+    await seedKit();
     await noteBuildSeen(db, 'build-x', day(9));
     const f = await gatherFacts(db, 'native', NOW);
     expect(Object.keys(f).sort()).toEqual(['buildFirstSeenAt', 'counts', 'flags', 'now', 'platform']);
@@ -223,6 +287,15 @@ describe('gatherFacts', () => {
       'Hammer',
       'legs-b',
       'paid',
+      '81.25',
+      '97.75',
+      '18.6',
+      '59.3',
+      'waist',
+      'strength',
+      'shoulders',
+      'easy',
+      'hard',
     ])
       expect(text, bad).not.toContain(bad);
   });

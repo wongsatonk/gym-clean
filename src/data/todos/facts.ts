@@ -10,12 +10,17 @@
  * `foodEntries.source` (photo meals), `settings` 'signing' / 'todoSignals' / 'whatsNew', and the
  * developer log's session events: a hands-free auto start or stop is an `autoSet` event
  * (src/ui/cameraView.ts `logAuto`), the only stored hands-free marker.
+ *
+ * M12 slice 1b (trainer kit): `sets.effort` on working sets, sessions with a `sets.warmup` row,
+ * `settings` 'intake' (answered or not), `measurements` (row count) and `healthDays` rows with a
+ * body fat or lean mass reading (day count). The readings, sizes and answers themselves stay put.
  */
 import { ruleStatus } from '../../core/exercises';
 import { FACT_COUNTS, FACT_FLAGS, type FactCount, type FactFlag } from '../../core/todo/detectors';
 import type { ProposalAction, TodoFacts } from '../../core/types';
 import type { GymDb } from '../db';
 import { HEALTH_SETTINGS_KEY } from '../health/store';
+import { getIntake } from '../trainerKit/store';
 import { getTodoSignals, getWhatsNew } from './store';
 
 /** Which logged changes count as "coach changes at the gym" (Not today / Go easy / a swap). */
@@ -25,6 +30,9 @@ const LEG_SWAP = { dayId: 'legs-b', fromExerciseId: 'Leg_Press' } as const;
 /** Dev-log auto-set actions that only happen with hands-free on. */
 const HANDS_FREE_ACTIONS: readonly string[] = ['start', 'stopPending', 'commit', 'hold'];
 const HEALTH_DAYS_WINDOW = 7;
+/** The effort taps a set can carry (anything else in the field is not counted). */
+const EFFORTS: readonly string[] = ['easy', 'good', 'hard'];
+const isReading = (v: unknown): boolean => typeof v === 'number' && Number.isFinite(v);
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const localDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -111,7 +119,11 @@ export async function gatherFacts(
   const cameraPerSession = new Map<string, number>();
   const learning = new Set<string>();
   const exercisesBySession = new Map<string, Set<string>>();
+  const warmupSessions = new Set<string>();
   for (const s of sets) {
+    // Trainer kit: warm-up sets mark their workout; effort counts on working sets only.
+    if (s.warmup === true) warmupSessions.add(s.sessionId);
+    else if (typeof s.effort === 'string' && EFFORTS.includes(s.effort)) counts.effortSets++;
     let ex = exercisesBySession.get(s.sessionId);
     if (!ex) exercisesBySession.set(s.sessionId, (ex = new Set()));
     ex.add(s.exerciseId);
@@ -130,6 +142,13 @@ export async function gatherFacts(
       !ex.has(LEG_SWAP.fromExerciseId)
     );
   }).length;
+
+  counts.warmupSessions = warmupSessions.size;
+  counts.measurements = await db.measurements.count();
+  counts.bodyCompDays = await db.healthDays
+    .filter((d) => isReading(d.bodyFatPct) || isReading(d.leanMassKg))
+    .count();
+  flags.intakeDone = (await getIntake(db)) !== undefined;
 
   counts.handsFreeSessions = await handsFreeSessions(db);
 

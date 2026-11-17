@@ -64,6 +64,10 @@ const COUNT_CASES: [TodoDetectorId, (typeof FACT_COUNTS)[number], number][] = [
   ['cameraSession', 'maxCameraSetsInSession', 6],
   ['learningCamera', 'learningCameraExercises', 3],
   ['photoMealDays', 'photoMealDays', 7],
+  // M12 slice 1b (trainer kit).
+  ['effortSets', 'effortSets', 6],
+  ['warmupSession', 'warmupSessions', 1],
+  ['measurementLogged', 'measurements', 1],
 ];
 
 describe.each(COUNT_CASES)('%s (counts.%s)', (id, key, need) => {
@@ -95,6 +99,7 @@ describe('flag detectors', () => {
   it.each([
     ['calendarAfterSession', 'calendarAfterSession'],
     ['foodModel', 'foodModel'],
+    ['intakeDone', 'intakeDone'],
   ] as const)('%s follows flags.%s on both platforms', (id, flag) => {
     for (const p of BOTH) {
       expect(detectors[id](facts(p, {}, { [flag]: false }), {}).done).toBe(false);
@@ -147,6 +152,56 @@ describe('native-only detectors', () => {
     expect(detectors.nativeSessions(facts('web', { nativeSessions: 3 }), { min: 3 }).done).toBe(
       false,
     );
+  });
+});
+
+describe('trainer-kit detectors (M12 slice 1b)', () => {
+  it('effortSets: 5 sets with an effort tap is not done, 6 is (step params)', () => {
+    expect(detectors.effortSets(facts('web', { effortSets: 5 }), { min: 6 })).toEqual({
+      done: false,
+      have: 5,
+      need: 6,
+    });
+    expect(detectors.effortSets(facts('native', { effortSets: 6 }), { min: 6 })).toEqual({
+      done: true,
+      have: 6,
+      need: 6,
+    });
+  });
+
+  it('warmupSession: no workout with warm-ups is not done, one is', () => {
+    expect(detectors.warmupSession(facts('web', { warmupSessions: 0 }), { min: 1 })).toEqual({
+      done: false,
+      have: 0,
+      need: 1,
+    });
+    expect(detectors.warmupSession(facts('web', { warmupSessions: 1 }), { min: 1 }).done).toBe(true);
+  });
+
+  it('measurementLogged: one logged measurement is enough', () => {
+    expect(detectors.measurementLogged(facts('web'), {}).done).toBe(false);
+    expect(detectors.measurementLogged(facts('web', { measurements: 1 }), {}).done).toBe(true);
+  });
+
+  it('intakeDone has no count, only the flag', () => {
+    expect(detectors.intakeDone(facts('web', {}, { intakeDone: true }), {})).toEqual({ done: true });
+    expect(detectors.intakeDone(facts('web'), {})).toEqual({ done: false });
+  });
+
+  it('bodyCompDays: 0 days is not done, 1 is; never on web', () => {
+    expect(detectors.bodyCompDays(facts('native', { bodyCompDays: 0 }), { min: 1 })).toEqual({
+      done: false,
+      have: 0,
+      need: 1,
+    });
+    expect(detectors.bodyCompDays(facts('native', { bodyCompDays: 1 }), { min: 1 })).toEqual({
+      done: true,
+      have: 1,
+      need: 1,
+    });
+    expect(detectors.bodyCompDays(facts('native', { bodyCompDays: 1 }), {}).done).toBe(true);
+    expect(detectors.bodyCompDays(facts('native', { bodyCompDays: 1 }), { min: 2 }).done).toBe(false);
+    expect(detectors.bodyCompDays(facts('web', { bodyCompDays: 3 }), { min: 1 }).done).toBe(false);
   });
 });
 

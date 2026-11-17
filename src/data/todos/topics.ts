@@ -8,9 +8,13 @@
  * Hands-free (topic 5): its auto step reads the developer log, where every hands-free auto start
  * or stop is an `autoSet` event (src/ui/cameraView.ts `logAuto`). The dev log is on by default; a
  * workout with it off can't tick the step, and he can still finish the topic with Skip.
+ *
+ * Release 1.13.0 (M12 slice 1b) adds "Trainer kit at the gym" and the VeSync topic's body fat /
+ * lean mass auto step. `topicsForRelease` keeps a topic back until the app reaches its `since`.
  */
 import { RULES } from '../../core/exercises';
 import { TRAINER_KIT_DEFAULTS } from '../../core/trainerKit/defaults';
+import { compareReleases } from '../../core/todo/whatsNew';
 import type { TodoOption, TodoTopic } from '../../core/types';
 import { exerciseName } from '../catalog';
 
@@ -42,6 +46,8 @@ const LEARNING_OPTIONS: TodoOption[] = [
 ];
 
 const R = '1.12.0';
+/** M12 slice 1b (trainer kit). */
+const R113 = '1.13.0';
 
 export const TODO_TOPICS: readonly TodoTopic[] = [
   {
@@ -128,6 +134,101 @@ export const TODO_TOPICS: readonly TodoTopic[] = [
         options: [
           { id: 'gym', label: 'Gym only is fine' },
           { id: 'outside', label: 'Add outside workouts' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'trainer-kit-gym',
+    title: 'Trainer kit at the gym',
+    checkpoint: 'Checkpoint J',
+    since: R113,
+    platform: 'any',
+    steps: [
+      {
+        id: 'effort',
+        title: 'Tap Easy, Good or Hard after 6 sets',
+        why: 'The row shows on the rest screen. It is optional and never asked during a set.',
+        tryIt: 'today',
+        kind: 'auto',
+        detector: 'effortSets',
+        params: { min: 6 },
+      },
+      {
+        id: 'warm-ups',
+        title: 'Do one workout with warm-up sets',
+        why: "They come before the day's first heavy lift.",
+        tryIt: 'today',
+        kind: 'auto',
+        detector: 'warmupSession',
+        params: { min: 1 },
+      },
+      {
+        id: 'intake',
+        title: 'Answer the goal questions',
+        why: 'Your goal, training days, session length and areas to go easy on.',
+        tryIt: 'intake',
+        kind: 'auto',
+        detector: 'intakeDone',
+      },
+      {
+        id: 'measurement',
+        title: 'Log one tape measurement',
+        tryIt: 'fuel/measurements',
+        kind: 'auto',
+        detector: 'measurementLogged',
+        params: { min: 1 },
+      },
+      {
+        id: 'warmup-weights',
+        title: 'Were the warm-up weights right?',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'right', label: 'Right' },
+          { id: 'light', label: 'Too light' },
+          { id: 'heavy', label: 'Too heavy' },
+        ],
+      },
+      {
+        id: 'effort-helped',
+        title: 'Did your effort taps lead to a better next weight?',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'short-on-time',
+        title: 'Short on time: did the shorter workout fit your time?',
+        why: 'Tell the coach how many minutes you have.',
+        tryIt: 'coach',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'fit', label: 'It fit' },
+          { id: 'over', label: 'It ran over' },
+          { id: 'untried', label: "Didn't use it" },
+        ],
+      },
+      {
+        id: 'setup-cues',
+        title: 'The setup cues before a lift were:',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'helpful', label: 'Helpful' },
+          { id: 'many', label: 'Too many' },
+          { id: 'notNeeded', label: 'Not needed' },
+        ],
+      },
+      {
+        id: 'anything-off',
+        title: 'Anything off in the trainer kit?',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'nothing', label: 'Nothing' },
+          { id: 'something', label: 'Something, see my note' },
         ],
       },
     ],
@@ -510,6 +611,16 @@ export const TODO_TOPICS: readonly TodoTopic[] = [
           { id: 'notSure', label: 'Not sure' },
         ],
       },
+      {
+        // Release 1.13.0: ticks once Health has given a body fat or lean mass reading.
+        id: 'body-comp',
+        title: 'Body fat or lean mass from Health on 1 day',
+        why: 'Turn on Body fat or Lean mass in Health settings, then step on the scale.',
+        tryIt: 'settings/health',
+        kind: 'auto',
+        detector: 'bodyCompDays',
+        params: { min: 1 },
+      },
     ],
   },
   {
@@ -611,3 +722,15 @@ export const TODO_TOPICS: readonly TodoTopic[] = [
     ],
   },
 ];
+
+/**
+ * The topics the running release knows: those whose `since` is at or before it, in data order.
+ * A topic added for the next release stays out of the list (and the counts) until the version
+ * reaches it.
+ */
+export function topicsForRelease(
+  release: string,
+  topics: readonly TodoTopic[] = TODO_TOPICS,
+): TodoTopic[] {
+  return topics.filter((t) => compareReleases(t.since, release) <= 0);
+}

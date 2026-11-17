@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isAppRoute } from '../../core/todo/routes';
 import { checkCopy } from '../../core/trainer/replies';
-import { compareReleases, tourToShow } from '../../core/todo/whatsNew';
+import { compareReleases, replayPages, tourToShow } from '../../core/todo/whatsNew';
 import { WHATS_NEW_PAGES } from './pages';
 
 const sentences = (s: string) => s.split(/(?<=[.!?])\s+/).filter((x) => x.trim() !== '');
@@ -18,6 +18,47 @@ describe('WHATS_NEW_PAGES', () => {
       'motion',
       'todos',
     ]);
+  });
+
+  const r113 = WHATS_NEW_PAGES.filter((p) => p.release === '1.13.0');
+
+  it('has eight pages for 1.13.0 covering the trainer kit (slice 1b)', () => {
+    expect(r113.map((p) => p.id)).toEqual([
+      'effort',
+      'warm-ups',
+      'goal',
+      'short-on-time',
+      'measurements',
+      'feel-today',
+      'progress-photos',
+      'learn-cards',
+    ]);
+    expect(Object.fromEntries(r113.map((p) => [p.id, p.tryIt]))).toEqual({
+      effort: 'today',
+      'warm-ups': 'today',
+      goal: 'settings/goal',
+      'short-on-time': 'coach',
+      measurements: 'fuel/measurements',
+      'feel-today': 'today',
+      'progress-photos': 'settings/progressPhotos',
+      'learn-cards': 'coach',
+    });
+  });
+
+  it('1.13.0 says what stays optional or off: effort, body fat / lean mass, photos', () => {
+    const text = (id: string) => {
+      const p = r113.find((x) => x.id === id);
+      return `${p?.what} ${p?.why}`;
+    };
+    expect(text('effort')).toMatch(/optional/i);
+    expect(text('measurements')).toMatch(/body fat/i);
+    expect(text('measurements')).toMatch(/lean mass/i);
+    expect(text('measurements')).toMatch(/iPhone app/);
+    expect(text('progress-photos')).toMatch(/off until you turn them on/i);
+  });
+
+  it('holds only releases 1.12.0 and 1.13.0, every page in one of them', () => {
+    expect(r112.length + r113.length).toBe(WHATS_NEW_PAGES.length);
   });
 
   it('has unique ids per release', () => {
@@ -63,5 +104,24 @@ describe('WHATS_NEW_PAGES', () => {
 
   it('is what an update from before 1.12.0 shows', () => {
     expect(tourToShow(WHATS_NEW_PAGES, {}, '1.12.0', true)).toEqual(r112);
+  });
+
+  it('keeps the 1.13.0 pages back while the app is still 1.12.0', () => {
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.12.0' }, '1.12.0', true)).toEqual([]);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.11.0' }, '1.12.0', true)).toEqual(r112);
+    expect(replayPages(WHATS_NEW_PAGES, '1.12.0')).toEqual(r112);
+  });
+
+  it('shows the 1.13.0 pages once the version is 1.13.0', () => {
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.12.0' }, '1.13.0', true)).toEqual(r113);
+    // Skipped 1.12.0: one tour, newest release first.
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.11.0' }, '1.13.0', true)).toEqual([
+      ...r113,
+      ...r112,
+    ]);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.13.0' }, '1.13.0', true)).toEqual([]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.13.0')).toEqual(r113);
+    // A fresh install sees no tour at all.
+    expect(tourToShow(WHATS_NEW_PAGES, {}, '1.13.0', false)).toEqual({ markSeen: true });
   });
 });

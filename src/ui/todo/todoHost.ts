@@ -44,7 +44,7 @@ import {
   saveAnswer,
   skipTopic,
 } from '../../data/todos/store';
-import { TODO_TOPICS } from '../../data/todos/topics';
+import { topicsForRelease } from '../../data/todos/topics';
 import { WHATS_NEW_PAGES } from '../../data/whatsNew/pages';
 import { reportSheet } from './reportSheet';
 import type { TodoCardProps } from './todoCard';
@@ -121,7 +121,7 @@ export function createTodoHost(deps: TodoHostDeps) {
   const release = deps.release ?? APP_RELEASE;
   const build = deps.build ?? APP_BUILD;
   const buildId = deps.buildId ?? __APP_VERSION__;
-  const topics = deps.topics ?? TODO_TOPICS;
+  const topics = deps.topics ?? topicsForRelease(release);
   const pages = deps.pages ?? WHATS_NEW_PAGES;
 
   let answers: TodoAnswer[] = [];

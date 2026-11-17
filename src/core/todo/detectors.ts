@@ -28,6 +28,15 @@ export const FACT_COUNTS = [
   'photoMealDays',
   /** Legs B sessions logged without the leg press (the swap ran). */
   'legSwapSessions',
+  // M12 slice 1b (trainer kit).
+  /** Working sets (not warm-ups) logged with an Easy / Good / Hard tap. */
+  'effortSets',
+  /** Workouts with at least one warm-up set logged. */
+  'warmupSessions',
+  /** Tape measurements logged. */
+  'measurements',
+  /** Health days that carry a body fat or lean mass reading. */
+  'bodyCompDays',
 ] as const;
 
 /** The flags a facts snapshot carries. */
@@ -40,6 +49,8 @@ export const FACT_FLAGS = [
   'foodModel',
   /** The re-sign decision is "paid" (stops the reminder). */
   'signingPaid',
+  /** The goal questions (intake) are answered. */
+  'intakeDone',
 ] as const;
 
 export type FactCount = (typeof FACT_COUNTS)[number];
@@ -99,12 +110,12 @@ export const detectors: Record<TodoDetectorId, Detector> = {
   foodModel: flag('foodModel'),
   photoMealDays: atLeast('photoMealDays', 7),
   resignDaysLeft: resign,
-  // M12 1b placeholders (never done) until task 22 adds the facts and the real rules.
-  effortSets: () => ({ done: false }),
-  warmupSession: () => ({ done: false }),
-  intakeDone: () => ({ done: false }),
-  measurementLogged: () => ({ done: false }),
-  bodyCompDays: () => ({ done: false }),
+  // M12 slice 1b (trainer kit). Body fat / lean mass come from Health: iPhone app only.
+  effortSets: atLeast('effortSets', 6),
+  warmupSession: atLeast('warmupSessions', 1),
+  intakeDone: flag('intakeDone'),
+  measurementLogged: atLeast('measurements', 1),
+  bodyCompDays: atLeast('bodyCompDays', 1, true),
 };
 
 export const DETECTOR_IDS = Object.keys(detectors) as TodoDetectorId[];
