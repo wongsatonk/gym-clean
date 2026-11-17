@@ -1047,6 +1047,12 @@ AI-generated programs (§6 still applies: the coach edits the plan, it doesn't w
 plan editor, speech recognition in the app (iOS keyboard dictation is his choice), calendar sync, push
 reminders, applying anything without a tap, medical or injury advice, and running Apple's model in the
 Safari PWA.
+**Changed by M12 (approved 2026-11-16):** (1) the coach may propose a **focus block** (a dated plan for
+2–6 weeks) — built deterministically by the app from rules as data; a brain only picks the parameters and
+explains, never free-writes workouts; Apply/Undo as any proposal. (2) **Speech recognition in the app is in
+scope** for M12 slice 2: iPhone app only, on-device only, English, hold-to-talk; never in the PWA, never
+always-listening, audio never stored or sent. (3) **Reminders** are in scope for M12 slice 2 as local
+notifications only, off by default (trainer kit item 6); server push stays out. The other non-goals stand.
 
 #### Data model (adds to §4)
 ```ts
@@ -1295,6 +1301,305 @@ type ReadinessCard = { date: string; signals: ReadinessSignal[]; reasons: string
 - 🧍 **Checkpoint H:** a week with Health connected. He reports whether the card showed on the right days,
   whether the reasons matched how he felt, and any weigh-in that came in wrong.
 
+### M12 — Coach tab: chat, focus blocks, calendar, motion (approved 2026-11-16)
+Wongsaton: "Redesign the coach; move it to the middle of the tab. I need it interactive with me, can talk
+everything on it like a chat with my personal trainer. Also, add animation to the app to make it best UX."
+Later the same day: "…this month I need to build my chest, he will help me write a plan for each day" and
+"Add the feature for the calendar to the app as well. I need the coach to follow my plan, help me prove I
+finished the plan he made for each exercise, each day, week, month."
+Approved design: `docs/superpowers/specs/2026-11-16-coach-tab-chat-design.md` (the source for detail; this
+section is the contract). Answers: brain = both, **Apple's on-device model first, Claude optional**; input =
+**typing + hold-to-talk mic**; language = **English** (Thai not supported in v1); start slice 1 now, alongside
+his Checkpoint H week (his call, 2026-11-16). M12 also builds M10 phase B (slice 2) and phase C (slice 3);
+the M10 phase B/C sections above stay the contract for those brains, with the changes listed here.
+
+#### Goals
+1. **Coach is the centre tab.** The tab bar becomes **Today · Fuel · Coach · Calendar · Settings**. The Coach
+   tab is visually distinct (raised/filled centre button) and keeps the tab rules (≥ 56px, visible label,
+   active state not by colour alone). The tab bar stays hidden during a set and on the camera (M1b rule).
+2. **A chat screen** (the Coach tab): message bubbles (his on the right, coach on the left, text ≥ 20px), a
+   text box, Send, quick-action chips above the input (the M10 chips stay as shortcuts), inline Proposal
+   cards (before → after, why, Apply / Not now, then Undo — the M10 path), inline food and focus-block
+   cards, a typing indicator, and starter chips on an empty thread ("How's my week?", "Swap today's squat",
+   "What should I eat tonight?", "Go easy on shoulders"). The mic button arrives in slice 2.
+3. **One home for the coach.** Today's Coach button, the day preview's Coach button, the "Lighter today?"
+   card, the M10e missing-kit prompt and Summary's stall card open the **Coach tab** with their chip already
+   sent. The Pause sheet (between sets) keeps a **compact sheet version of the same chat component** on the
+   same thread; nothing new is reachable mid-set.
+4. **Chat history** is kept on the phone (Dexie `chatMessages`), the last 30 days, with **Clear chat**. Not in
+   backups, not in the dev log (the dev log keeps ids and numbers only, as M10). Resolves M10-q12 as "keep".
+   A proposal in the thread keeps its live Apply only while the plan hasn't changed since (M10
+   `baseVersion`); an old one shows its outcome (applied / not now / undone / expired + "Ask again").
+5. **Brains, in order:** chips → rules directly; free text → Apple Foundation Models in the iPhone app when
+   available (slice 2) → Claude if he turned it on (slice 3) → the rule matcher. A model error falls back to
+   the next brain with a one-line note, never a dead end. Settings shows which brain answers and why.
+   **Slice 1 has only the rule brain**, behind the same router so slices 2/3 plug in.
+6. **Focus block: the coach writes a plan (reverses the §6 / M10 non-goal, deterministic only).** He says
+   e.g. "This month I want to build my chest." The coach asks only what's missing (focus group, 2–6 weeks,
+   training weekdays) and proposes a **focus block**: every day for the next N weeks.
+   - **The app builds the block deterministically** (pure core, tests first) from his current plan, his gym
+     kit (M10e `canDo`), the vendored exercise list and rules as data: the focus group gets about +30–50%
+     weekly sets and appears on ≥ 2 days a week; other groups stay at their current (maintenance) sets; the
+     last week is a lighter week; set/rep ranges and exercise picks follow the existing program's style.
+     A brain (rules, Apple or Claude) only picks the parameters and explains; it never free-writes workouts.
+   - Shown in the chat as a **week-by-week card** (expand a week → days → exercises). Edits ("swap
+     Thursday's flyes", "only 4 days a week") give a revised block. **Apply** replaces the plan for those
+     dates (dated, like overrides); **Undo** and Settings → Plan changes restore the previous plan; after the
+     block's last date the calendar returns to his normal rotation (the recap offers "Keep going", which is a
+     new block proposal).
+   - Works with the rule brain (chips: Build a focus block → focus group → weeks → days), so it's in slice 1.
+7. **Calendar replaces History** (the tab is renamed; the per-exercise history stays one tap deeper).
+   - A **month grid**: each day shows planned vs done (done = filled ring; partly = a partial ring by sets
+     done / sets planned; missed = hollow ring; rest = dim; focus-block days marked; today outlined). Never
+     colour alone: each state also has a shape and an accessible label.
+   - Tap a day → that day's plan with **each exercise done / partly / missed** (sets and reps done vs
+     planned, from logged sessions) and actions: Start (today), **Move** (today or a later planned day) and
+     **Do it today** (a missed day), each opening the coach with the matching M10 proposal.
+   - **Week and month scores:** "This week: 4 of 5 sessions, 92% of planned sets"; the month the same, plus,
+     during a focus block, the focus group's weekly sets vs the block's target. Streaks keep working.
+   - Completion is **computed** (pure core, tests first) from the plan + blocks + overrides + logged
+     sessions; no manual check-off (logging sets is the proof). A session on a rest date (**Train anyway**)
+     counts as **extra**: shown, never in the denominator.
+   - **Share month:** an image made on the phone (the month grid + scores, no body data, no weights, no
+     Health data) that he saves or shares himself through the system share sheet / a download. The app
+     uploads nothing.
+8. **The coach follows the plan.** It reads the scores (rule answers for "How's my week?" and "How am I
+   doing?"; a read-only `progressSummary` tool for the model brains in slices 2/3), mentions a **missed day
+   once** on Today with an offer to move it, and at the end of a week and of a focus block posts a short
+   **recap** in the chat.
+9. **Motion across the app** (transform/opacity only; never slows a tap or hides state):
+   - tokens `--dur-fast 120ms`, `--dur-base 220ms`, `--dur-slow 320ms`, one standard ease, one spring-ish ease;
+   - tab switches: a short cross-fade + 8px slide in the direction of travel; the tab indicator slides;
+   - sheets slide up with a backdrop fade (drag-to-dismiss only where a sheet already has it);
+   - chat bubbles rise + fade in; typing-indicator dots; (slice 2) the mic pulses with a live level ring;
+   - buttons/chips: press scale 0.97 + highlight; Apply → a check morph; the Undo toast slides up;
+   - Today: cards stagger in on first load; streak/kcal numbers count up briefly; the readiness card slides
+     in; Set done → a quick ring fill;
+   - **no new motion on the Exercise/camera screen during a set**; the rep counter number is unchanged;
+   - everything is **off under `prefers-reduced-motion: reduce`** (instant swaps, numbers shown final).
+
+#### Slices
+1. **Slice 1 (web + iPhone app, rule brain only):** Coach tab + chat screen + history, chips + rules, inline
+   Proposals, focus blocks, Calendar + completion + scores + share month, missed-day prompt + recaps, motion.
+   New rule answers: "How's my week?" (this week's sessions and planned sets from the calendar; gym sessions
+   only, see Decision "M12 plan"), "How am I doing?" (week + month scores, streak, focus-block progress), and
+   "What should I eat (tonight)?" in free text (the M7/M10 food suggestion from today's Fuel targets).
+1b. **Slice 1b "Trainer kit" (web + iPhone app, rule brain only; after slice 1, before slice 2):** the gaps
+   versus a human personal trainer that he picked (2026-11-16, all 12), items 1–5 and 7–12 below. Item 6
+   (reminders + weekly check-in) needs native notifications and is in slice 2.
+2. **Slice 2 (iPhone app):** the Apple brain (M10 phase B: `GymBrain` plugin, tools 1:1 with actions, plus
+   read-only `weekSummary` / `progressSummary` / `exerciseInfo` / `foodIdeas` and `proposeFocusBlock`
+   (parameters only)), the **hold-to-talk mic** (below), and **reminders + weekly check-in** (trainer kit
+   item 6, below).
+
+#### Trainer kit (slice 1b; item 6 in slice 2)
+Research basis in the design doc (NASM OPT, ACSM 2026 resistance-training summary, app reviews). Every
+number below is a default held as data and tuned at a checkpoint. Every change to the plan is a Proposal
+(Apply / Undo); all copy passes `checkCopy` (no medical words, no promises).
+1. **Effort after each set:** optional one tap (or, in slice 2, one word) **Easy / Good / Hard** (≈ 3+ / 2 /
+   0–1 reps left) on the rest screen; never blocks the flow, never asked mid-set; stored on the set log. The
+   M5b next-set / next-session weight uses it (Easy → step up sooner, Hard → hold).
+2. **Warm-up sets:** before the day's first big lift (data per exercise), an automatic ramp ≈ 50% × 8 and
+   70% × 4 of the working weight, snapped down to his kit's step, announced by voice; can be skipped; logged
+   as warm-ups and **excluded from volume, bests, stall detection and completion %**.
+3. **Intake + Goal + review:** a short intake on first run (re-runnable from Settings): goal, training days,
+   experience, areas to go easy on. A **Goal card** with 1–2 measurable targets + a date (e.g. "Bench 60 kg
+   × 8 by 2027-02-01", "Arms +1 cm"). A **standing "go easy on" list** (areas) that every proposal and
+   focus block honours until he removes an area. A coach **review every 4–6 weeks** in the chat: progress
+   on the goal, then an offer to adjust (a Proposal or a new focus block).
+4. **Measurements + e1RM:** monthly tape measurements (arms, chest, waist, thighs, … as data) logged in Fuel
+   next to weigh-ins; an **estimated one-rep-max** chart per lift (a standard formula, top set per session,
+   warm-ups excluded) in the exercise history.
+5. **Short on time:** "I have 20 / 30 / 45 min" (chip or text) → a Proposal for today that keeps the main
+   lifts, pairs accessories into supersets and trims sets to fit the estimated time; Apply / Undo.
+6. **Reminders + weekly check-in (slice 2, iPhone app):** **local notifications only** (no server, no push
+   service), **off by default**, each switched on separately: a session reminder at a time he sets, a
+   missed-day nudge, a Sunday recap. A weekly 3-question check-in in the chat (energy, sleep, soreness 1–5)
+   whose answers feed the recap. Notification text has no body or Health data.
+7. **Plan beyond a month:** at a block's end the coach proposes the next block plus a lighter week; it
+   suggests a deload after ≈ 6 hard weeks in a row or several stalls (M10 stall rule). Proposals only.
+8. **Progress photos (opt-in, off by default):** taken or picked in the app, **stored only on the phone**
+   (IndexedDB), **never in backups, the dev log, the Apple model's context or Claude**, never sent anywhere;
+   side-by-side compare of two dates; delete one or all at any time.
+9. **How do you feel today:** an optional energy (1–5) + soreness-by-area tap before Start. Low energy or a
+   sore area counts as one "Lighter today?" signal (M11 card rules; works without Health). Soreness only
+   leads to coaching ("Go easy on shoulders today?"), never medical talk; the M10 discomfort/red-flag rules
+   still apply to typed words.
+10. **Setup cues:** 2–3 short spoken setup checks before lifts the camera can't judge (data per exercise,
+    e.g. "Feet flat. Shoulder blades back."), said once before the first working set, ≤ 8 words each.
+11. **Cardio minutes:** a weekly cardio line ("Cardio this week: 95 min") from Health outside workouts on
+    the week strip and the Calendar's week score (iPhone app with Health on; hidden otherwise). Display only;
+    it does not enter any coach context (M11 rule).
+12. **Nutrition nudges + learn cards:** a protein-per-meal nudge in Fuel when a logged meal is low on
+    protein versus his per-meal share; a post-workout meal idea on Summary (the M10 food suggestion); ~10
+    short "why" cards (progressive overload, effort, warm-ups, protein, sleep, deloads, …) as data that the
+    coach and screens can link to.
+3. **Slice 3:** the Claude brain (M10 phase C). His "both" counts as the yes to build it (M10-q7); default
+   model `claude-opus-5-5`; nothing calls Anthropic until he pastes his own key in Settings.
+
+#### Mic (slice 2, iPhone app only)
+- Hold to talk; **on-device** speech-to-text (Apple Speech with on-device recognition required, or the
+  iOS 26 SpeechAnalyzer — check current docs first, CLAUDE.md rule 8), locale `en`. His words appear live in
+  the text box; release sends. Audio is never stored or sent; if on-device recognition isn't available the
+  mic says so and typing still works.
+- New iOS permissions: Microphone + Speech Recognition, with usage strings, asked on first mic use only.
+- Replies have `text` (shown) and `say` (≤ 12 words; ≤ 8 mid-workout). With **Speak replies** on (default on
+  for mic-sent messages, off for typed) only `say` is spoken, in the chosen coach voice (Calm / Drill
+  sergeant). Never listens or speaks during a set. The PWA has no mic in v1 (Safari's speech recognition may
+  use Apple servers).
+
+#### Brains (slices 2–3), on top of M10 phase B/C
+- Free answers from the context block are allowed without a tool; read-only tools give facts; every change
+  still goes through a `propose*` tool and his tap. Replies ≤ 4 short sentences. M10 safety unchanged.
+- Context: today's plan, the next 7 days, 4 weeks of top sets, active overrides and focus block, week/month
+  scores, today's Fuel totals vs targets, the last ~8 turns, within a test-enforced token budget; for Apple
+  only, the M11 card reasons (see the open item in Decision "M12 plan").
+- **Health never reaches Claude:** a message stores `usedHealth: true` when its context had Health card
+  reasons; Claude requests drop those turns and never get Health context (a request-body test enforces it).
+- A coach reply offers **Ask Claude instead** when Claude is on.
+- Eval adds a "facts" set: numbers quoted must match the context (100%), plus the M10 bars (≥ 85% right
+  action, 100% safe).
+
+#### Non-goals
+Applying anything without his tap; the model writing data or free-writing workouts (focus blocks are built
+by the app); medical advice, diagnosis or injury talk beyond the M10 lines; audio recording or upload;
+always-listening; the mic in the PWA; Thai chat; the coach mid-set or from the camera; Health data to Claude;
+calendar sync, server push (reminders are local notifications only, slice 2), manual day check-offs; uploading
+or backing up progress photos; body-composition or health scores from measurements or photos; motion that
+delays a tap or hides state.
+
+#### Privacy
+- Slice 1 and slice 2: **no network request** (rules, Apple's model and speech run on the phone). The chat
+  thread, focus blocks and completion stay in IndexedDB. Share month makes the image on the phone and only
+  the system share sheet / a download moves it, on his tap.
+- Slice 3 sends only what the M10 phase C explainer lists (now: messages, plan, workout numbers, focus
+  block, scores, Fuel totals), only while it's on, never Health data.
+- Dev log: ids and numbers only (intent, action, card outcome, brain, latency); never message text.
+- **Progress photos (slice 1b):** phone only (IndexedDB), on `LOCAL_ONLY_TABLES` (never in Back up files),
+  never in the dev log, never in the Apple model's context, never sent to Claude, never uploaded; delete one
+  or all at any time. Measurements are numbers like weigh-ins (backed up; not sent to Claude unless the
+  phase C explainer is updated and he agrees).
+- **Reminders (slice 2):** local notifications scheduled on the phone; no push service, no network.
+
+#### Data model (adds to §4; final shape in `src/core/types.ts`)
+```ts
+type FocusGroup = BodyArea;                              // chest, back, arms, shoulders, legs, core
+type FocusBlock = {
+  id: string; group: FocusGroup; startDate: string; weeks: number /* 2–6 */; weekdays: number[];
+  days: { date: string; day: ProgramDay | null /* null = rest */ }[];   // built, dated, deterministic
+  targetSetsPerWeek: number; baseSetsPerWeek: number;  // focus group, for the scores
+};
+// TrainerState gains: blocks?: FocusBlock[]       ProposalAction gains: 'focusBlock'
+type ChatCardStatus = 'pending' | 'applied' | 'dismissed' | 'undone' | 'expired';
+type ChatCard =
+  | { kind: 'proposal'; title: string; lines: { before: string; after: string }[]; why: string;
+      status: ChatCardStatus; baseVersion: number; changeId?: number }
+  | { kind: 'focusBlock'; blockId: string; status: ChatCardStatus }
+  | { kind: 'food'; suggestions: FoodSuggestion[]; logged: number[] }
+  | { kind: 'redFlag' } | { kind: 'recap'; period: 'week' | 'block'; from: string; to: string };
+type ChatMessage = {
+  id?: number; createdAt: number; role: 'user' | 'coach'; text: string; say?: string;
+  source: 'chip' | 'rules' | 'apple' | 'claude'; phase: 'today' | 'preview' | 'workout';
+  card?: ChatCard; chips?: { id: string; label: string; args?: Record<string, unknown> }[];
+  usedHealth?: boolean; note?: string /* "Answered by quick replies: Apple Intelligence is off" */;
+};
+type DayStatus = 'done' | 'partial' | 'missed' | 'rest' | 'planned' | 'extra';
+type DayCompletion = {
+  date: string; status: DayStatus; dayId: string | null; blockId?: string;
+  setsPlanned: number; setsDone: number;
+  exercises: { exerciseId: string; setsPlanned: number; setsDone: number; repsTarget: [number, number];
+               reps: number[]; status: 'done' | 'partial' | 'missed' }[];
+};
+type PeriodScore = { from: string; to: string; sessionsPlanned: number; sessionsDone: number;
+  setsPlanned: number; setsDone: number; extra: number; focus?: { group: FocusGroup; sets: number; target: number } };
+// Slice 1b (trainer kit)
+// SetLog gains: effort?: 'easy' | 'good' | 'hard';  warmup?: true   (warm-ups excluded from volume/bests/completion)
+type Goal = { id: string; text: string; target: { kind: 'lift' | 'measurement' | 'weight';
+  ref?: string; value: number; reps?: number }; due: string; createdAt: number; doneAt?: number };
+type Intake = { goal: string; days: number; experience: 'new' | 'some' | 'years'; easyOn: BodyArea[]; at: number };
+// TrainerState gains: easyOn?: BodyArea[]   (standing "go easy on" list, honoured by every proposal)
+type Measurement = { date: string; site: string /* 'arm-l', 'chest', 'waist', … as data */; cm: number };
+type ProgressPhoto = { id: string; date: string; createdAt: number; blob: Blob; pose?: 'front' | 'side' | 'back' };
+type DayFeel = { date: string; energy?: 1 | 2 | 3 | 4 | 5; sore?: BodyArea[] };
+// ReadinessSignal gains: 'feltLow' (energy ≤ 2 or any sore area)
+```
+
+#### Accept
+- **Slice 1:**
+  - Unit tests, written first:
+    - focus block: weekly sets of the focus group +30–50% over his current plan and on ≥ 2 days/week; other
+      groups unchanged; last week lighter; every pick doable with the gym profile and from the catalog;
+      2 and 6 weeks; 3–6 weekdays; a block starting mid-week; revisions (swap one exercise, fewer days);
+      deterministic (same input → same block); Apply → the calendar shows block days → Undo restores; after
+      the last block date the normal rotation resumes; overrides (lighter, not today) still work on block days;
+    - completion: done / partial / missed / rest / extra per day and per exercise, week and month scores,
+      focus sets vs target, a session spanning midnight, a lighter/deload day (planned = the adjusted day),
+      DST weeks, an empty history;
+    - chat store: Dexie v7 → v8 keeps every row, 30-day pruning, Clear chat, `chatMessages` left out of
+      backups and the dev log;
+    - rule answers: the new intents (week, progress, focus block + its edits) on the eval set (rule items
+      ≥ 90% right, 100% safety flags), every reply passing `checkCopy`, numbers in a reply matching the
+      computed scores;
+    - the brain router: chips → rules; free text → rules when no other brain is registered; a failing
+      brain → the next one with a note;
+    - motion helpers: reduced motion → no animation and final values at once.
+  - E2E (390×844): the tab bar has 5 tabs with Coach in the middle (each ≥ 56px, labelled); Coach tab → a
+    starter → reply; Not today → Apply → Undo inside the thread; reload keeps the thread; Clear chat;
+    Today's Coach button and the "Lighter today?" card open the Coach tab with the chip sent; the Pause
+    sheet shows the compact chat; "This month I want to build my chest" → questions → focus-block card →
+    expand a week → Apply → Calendar marks block days → Undo; Calendar month grid → a day → per-exercise
+    done/partly/missed from seeded sessions → exercise history one tap deeper; week/month scores; Share
+    month produces an image with no network request; a missed day shows once on Today; with
+    `reducedMotion: 'reduce'` nothing animates; no off-device request anywhere; no text box during a set.
+  - 390×844 screenshots: Coach tab (empty with starters, a thread with a proposal, after Apply with Undo),
+    the focus-block card (collapsed and expanded), Calendar month, a day detail, the scores, the share image,
+    Today with the missed-day prompt, the Pause-sheet chat.
+  - Existing e2e specs updated for the new tab bar, the Coach tab and Calendar; the full e2e stays green.
+  - 🧍 **Checkpoint I (after slice 1):** he uses the Coach tab and the Calendar for a few days (at least one
+    question, one proposal applied or undone, and a look at the Calendar after training). He reports what
+    felt off, including the motion.
+- **Slice 1b (trainer kit items 1–5, 7–12):**
+  - Unit tests, written first (made-up data):
+    - (1) effort stored on the set; the M5b recommendation changes with Easy / Good / Hard and is unchanged
+      with no answer;
+    - (2) warm-up ramp: 50% × 8 and 70% × 4 snapped down to the kit step in kg and lb, none for a bodyweight
+      or light first lift (threshold as data), only before the day's first big lift; warm-ups excluded from
+      volume, bests, stall detection, e1RM and completion %;
+    - (3) intake → settings; goal progress from logged sets / measurements / weigh-ins; the standing easy-on
+      list honoured by every action and the focus-block builder; the review due every 4–6 weeks, once;
+    - (4) e1RM formula on known values, top set per session, warm-ups excluded; measurement storage round trip;
+    - (5) short-on-time builder for 20 / 30 / 45 min: main lifts kept, accessories paired, the estimated time
+      (sets × (work + rest), as data) ≤ the limit, Apply / Undo round trip;
+    - (7) next-block proposal at a block's end; deload suggestion after 6 hard weeks or the stall rule, once;
+    - (9) feel-today → the `feltLow` signal: one signal alone shows no card, with one Health signal it does
+      (2-signal rule), and without Health energy ≤ 2 plus a sore area count as two (rule as data);
+    - (10) every program exercise the camera can't judge has 2–3 setup cues ≤ 8 words that pass `checkCopy`;
+    - (11) cardio minutes per week from `healthDays` outside workouts, no double count with gym sessions;
+    - (12) protein-per-meal nudge thresholds; every learn card passes `checkCopy`;
+    - storage: the Dexie bump keeps every row; `progressPhotos` on `LOCAL_ONLY_TABLES` and out of the dev log;
+      measurements, goals, intake and effort in backups.
+  - E2E (390×844): Easy / Good / Hard on the rest screen and skip; warm-up sets announced and logged, Summary
+    volume unchanged by them; intake → Goal card on Today; "I have 30 min" → Proposal → Apply → shorter day →
+    Undo; a measurement in Fuel; e1RM chart in exercise history; feel-today → "Lighter today?" card; a setup
+    cue spoken before the first set; progress photo on → add (a fixture image) → compare → delete, with no
+    network request and absent from a Back up file; a learn card from a coach reply; no new text box or tap
+    asked during a set.
+  - 390×844 screenshots: effort row, warm-up set, intake, Goal card, short-on-time proposal, measurements,
+    e1RM chart, feel-today, progress photo compare (made-up image), a learn card, the cardio line.
+  - Ends with reviewer + verifier like slice 1; his gym feedback on it folds into Checkpoint J.
+- **Slice 2:** the M10 phase B Accept, plus: tool contract includes the read-only tools and
+  `proposeFocusBlock`; the facts eval (100% numbers match); speech plugin XCTest with a fake recognizer;
+  e2e with a fake `GymBrain` and a fake speech bridge (hold → live text → release sends → `say` spoken
+  only when Speak replies is on; never during a set); no network request; Microphone / Speech Recognition
+  asked only on first mic use. Reminders (trainer kit item 6): every notification off by default and
+  scheduled locally (plugin test with a fake scheduler: times, missed-day nudge once, Sunday recap; turning
+  one off cancels it; notification permission asked only when he turns the first one on; no body or Health
+  data in the text); the weekly check-in asks 3 questions once a week and its answers show in the recap.
+  🧍 **Checkpoint J (after slice 2):** on his iPhone he uses the mic and the
+  Apple brain for a few days and reports wrong answers, wrong actions and how the voice felt.
+- **Slice 3:** the M10 phase C Accept, plus: request-body test that turns with `usedHealth` are dropped and
+  no Health context is sent; Ask Claude instead; setting off → 0 requests.
+
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).
@@ -1421,6 +1726,13 @@ Accounts, cloud sync (Google Calendar sync parked for later, 2026-11-13), sharin
 AI-generated programs, photoreal/medical 3D anatomy, multi-person
 tracking, recording/saving video (the M4c developer log stores pose numbers only, never images),
 Apple Watch / heart rate.
+
+**Changed by M12 (approved 2026-11-16):** "AI-generated programs" now allows exactly one thing: the M12
+**focus block**, a 2–6 week dated plan that the app builds deterministically from his plan, his gym kit, the
+vendored catalog and rules as data; the brain only chooses parameters and explains, and nothing applies
+without his tap. Free-written AI programs stay out. **Speech recognition in the app** (M12 slice 2: iPhone
+app, on-device, English, hold-to-talk) is in scope. "Sharing" stays out as an app feature; M12's Share month
+only hands an on-device image to the system share sheet on his tap.
 
 **PROPOSED change (M11, 2026-11-16; applies only if Wongsaton approves M11-q1):** reading a listed set of
 Apple Health types in the native app (body mass, workouts, active energy, sleep, resting HR, HRV — including
