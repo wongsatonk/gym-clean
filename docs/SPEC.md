@@ -1808,6 +1808,173 @@ type CheckIn = { weekStart: string; energy?: 1|2|3|4|5; sleep?: 1|2|3|4|5; soren
 - **Slice 3:** the M10 phase C Accept, plus: request-body test that turns with `usedHealth` are dropped and
   no Health context is sent; Ask Claude instead; setting off → 0 requests.
 
+### M13 — Published look (approved 2026-11-17; builds after M12 slices 1b and 2; release 1.15.0)
+Wongsaton (2026-11-17): "Help me think about the app, how to approve or make it ready to use as a public
+app (not public right now but just need the app look like startup and published app on app store)".
+Audience, his answer: "my friends seeing it on my instagram and my wife using it daily". Approval: "Yes, plan
+it and give me options to turn on owner mode". Planner calls are in Decision "M13 Published look" and can be
+corrected. The app is **not** being published; it only has to look and feel like a finished product to a
+second user and to people who see it in a Story. Built on its own branch from the M12 result so it covers the
+slice 1b and slice 2 screens. Hard rules in CLAUDE.md win everywhere (sizes, dark theme, original art, no
+medical claims, privacy).
+
+#### Goals
+1. **First launch.** A fresh install opens with a short **welcome** (the mark, the name, the tagline, 2–3
+   pages on what the app does, each ≤ 2 short sentences), then the slice 1b **intake** (goal, days, session
+   length, gym kit), then **permission pages that say why** before anything is asked, then Today.
+   - Every page has **Skip**; Back / Next ≥ 56px; the whole flow can be skipped in one tap and re-run from
+     Settings. **An existing install is never put through it** (same "fresh" test as slice 1b: no sessions).
+   - Permission pages, one per permission the platform has: **camera** (counts reps on the phone; no video is
+     saved or sent), **Apple Health** (iPhone app; read-only; stays on the phone), **microphone** (iPhone app;
+     hold to talk; audio is never stored), **notifications** (iPhone app; local reminders, off by default).
+     Each has "Not now". The PWA shows the camera page only.
+   - The earlier rules stand: the **mic** system prompt still appears only on first mic use (its page only
+     explains); **notifications** are asked only when a reminder is switched on (the page's button switches
+     the session reminder on); **Health** uses the existing connect flow; camera asks on its button.
+2. **Works for anyone.** Nothing assumes him, his goal or a man. Slice 1b does most; M13 closes the rest:
+   the drill-sergeant voice picker offers **any installed English voice** (not a fixed list of male names)
+   with a reworded hint; a scan test keeps gendered or owner-specific wording out of copy and data.
+3. **Owner mode** (off by default on a fresh install). Owner/tester material is hidden unless it is on: the
+   To-dos Today card, list, guides and Copy report; the "Re-sign in N days" reminder; the **Developer log**
+   section in Settings (and, while owner mode is off, the developer log records nothing); the **build hash**
+   in About and in the tour; the tour's "Added to your to-dos" page; the slice 2 **dev eval screen**.
+   - With owner mode off a user sees only **"Version 1.15"** (MAJOR.MINOR, plus .PATCH when it isn't 0).
+     With it on everything works **exactly as before M13** ("Version 1.15.0 (build abc1234)", Copy report,
+     dev log export, re-sign reminder).
+   - The state is the `settings` row `'ownerMode'` (local, backed up like other settings). It is decided
+     **once**, on the first launch that has no row: an install that already has sessions or to-do answers
+     (i.e. from before 1.15.0) starts **on**, so his own phone keeps its to-dos; anything else starts **off**.
+   - **How it is switched on (his pick, 2026-11-17: "Go with option A"):** tap the version line in
+     Settings → About **7 times** → an "Owner tools" switch appears there (and stays visible while it is
+     on). The mechanism is one small module.
+   - With owner mode off, the to-do decision steps are unreachable; their settings keep their defaults.
+4. **Brand.** One name constant and one tagline constant (`src/core/brand.ts`); every shown name reads it,
+   so a rename is one edit plus the listed non-TS files (a test names them). Built with the current name
+   "Gym Clean" (keeping it is M13-q1, not blocking).
+   - **Launch screen:** the orange dumbbell-pulse mark on `#0d0f12` in the iPhone app (splash image and
+     storyboard background; today a blank square on a white storyboard) and as a static pre-boot mark in
+     the web app (no script, replaced when the app mounts).
+   - **Favicon** = the real app icon (generated from the same logo path as the PWA icons).
+   - Manifest and page **description** rewritten from the tagline.
+5. **Polish** (from the 2026-11-17 UX review; token system, app icon, workout/rest screens, calendar rings +
+   legend, "Stays on this phone" lines and Apply/Undo stay as they are):
+   - **Today:** the hero with Start comes first; notices collapse into one compact row ("2 things to sort",
+     opens them) or at most one card; secondary buttons are outline, so **the only filled orange button is
+     Start**; nothing is cut by the tab bar; the duplicate Coach button in the header goes.
+   - **Tab bar:** five labels fit without touching at 390px and 360px (condensed label font or shorter
+     names), labels stay ≥ 18px, targets ≥ 56px.
+   - **One look:** the pure-black track style with 8px cards is for in-workout screens (Exercise, Rest,
+     camera) only; Calendar and its day view use the standard surface (`#0d0f12`, 20px cards).
+   - **Back / done / forward** use one shared helper with icons; no typed "‹", "✓" or "→" as controls.
+   - **Rest "Next" card:** the 2D body map shows at once as a placeholder and the 3D view fades in over it;
+     never an empty grey box (checked on a real phone).
+   - **Empty states** (Fuel day, Coach thread, and any other bare-text one found): one small **original**
+     icon/illustration + one line + one action; "Set up targets" is the primary action until done.
+   - **Wording:** no all-caps "STALLED" and no "fell short" line (a "Plateau: let's change something"
+     style, passing `checkCopy`); each Calendar score card shows **one** clearly labelled score.
+   - **Fuel entries:** no large always-visible Delete block; tap the row to edit/delete in the sheet (Undo
+     stays). Re-check the current screen first; skip if already so.
+6. **Trust.** Settings → **About** becomes a screen: the name, tagline, version line, a **privacy promise**
+   ("Everything stays on this phone": video, body data, Health data, chat; the listed opt-in exceptions are
+   the barcode lookup and, later, his own Claude key), **"Coaching, not medical advice."**, **Open-source
+   credits** (a licenses screen generated from the dependency list plus the vendored data: free-exercise-db
+   (Unlicense), USDA food data, the MediaPipe pose model, three.js, Dexie, fonts, …), and **"© 2026
+   Wongsaton Kampusan"**. In-app screens only; no external links; nothing sent.
+7. **Show it off.**
+   - **Share month, Story size:** a second export, **1080×1920 (9:16)**, with the mark and name, **leading
+     with one positive number** he picks in the preview (sessions done — the default; total kg/lb lifted;
+     streak), the month grid with **missed days as quiet grey rings**, no red, no "missed" count. Made on the
+     phone, handed to the system share sheet / a download on his tap; nothing is uploaded. No body data, no
+     Health data, no per-lift weights (the total lifted appears only when he picks it).
+   - **Store-style screenshot set:** phone-size captures with **made-up demo data** (a fictional profile,
+     never his data) from `scripts/screenshots.mjs`, plain and with a headline caption, for his Instagram.
+     The Story pack is made from them (`/story`); **nothing is posted** by any agent.
+   - **Landing page:** one static page in the repo, served by GitHub Pages next to the app at
+     `<site>/welcome/` (`public/welcome/index.html`): the mark, tagline, three screenshots, the privacy
+     promise, "Open the app". **No script, no analytics, no trackers, no third-party request.** The
+     service worker leaves that path alone.
+8. **Her phone.** `docs/ios-setup.md` gains a short checklist: install on his wife's iPhone with the free
+   Apple ID (counts toward 3 devices; re-sign every 7 days from his Mac) versus the PWA (no re-sign; no
+   Apple Health, mic or reminders). No code beyond goals 1–2.
+9. **What's New 1.15.0:** tour pages for the new look, About + privacy, Share to Story and owner tools
+   (the last one only on a phone where owner mode is on).
+
+#### Changes to earlier contracts
+- Slice 1c: "Version x.y.z (build sha)" in About and on the tour's first page, the "Added to your to-dos"
+  page, the Today to-do card and Settings → To-dos now show **only in owner mode**. About gains in-app
+  links (Licenses); still nothing external.
+- Slice 1 Share month ("no weights"): the Story variant may show **total** weight lifted when he picks it.
+- Slice 1b: the fresh-install intake is now the middle of the first-launch flow (welcome before it,
+  permission pages after it).
+
+#### Non-goals
+A paid Apple Developer account, TestFlight, App Review, store privacy labels; accounts or sync; analytics or
+trackers anywhere (app or landing page); renaming the app without his say; posting to Instagram; light
+theme; a second anatomy silhouette (later, anatomy-3d-engineer, only if asked); any change to the
+workout/rest/camera screens beyond the Rest "Next" placeholder.
+
+#### Privacy
+No new network request in the app. The landing page loads only its own files. Share images are made on the
+phone. Demo screenshots use made-up data. `'ownerMode'` and `'onboarding'` are plain settings rows (backed
+up; no personal data). The licenses list is built at dev time and bundled.
+
+#### Data model (adds to §4; final shape in `src/core/types.ts`)
+```ts
+// src/core/brand.ts: APP_NAME = 'Gym Clean'; APP_TAGLINE (one line)
+type OwnerMode = { on: boolean; setAt: number; by: 'fresh' | 'existing' | 'user' };   // settings 'ownerMode'
+type OwnerSurface = 'todos' | 'resign' | 'devlog' | 'buildHash' | 'tourTodos' | 'evalScreen' | 'copyReport';
+type Onboarding = { doneAt?: number; skippedAt?: number };                            // settings 'onboarding'
+type OnboardingStep = { kind: 'welcome'; id: string } | { kind: 'intake' }
+  | { kind: 'permission'; permission: 'camera' | 'health' | 'mic' | 'notifications' };
+type LicenseEntry = { name: string; version?: string; license: string; source: 'npm' | 'data' | 'model' | 'font';
+  text?: string };
+type ShareLead = 'sessions' | 'volume' | 'streak';
+type ShareStats = { sessionsDone: number; volumeKg: number; streakWeeks: number };    // warm-ups excluded
+// AppRoute gains: 'welcome' | 'settings/about' | 'settings/licenses'
+// WhatsNewPage and TodoTopic gain: owner?: true   (shown only in owner mode)
+// No Dexie change.
+```
+
+#### Accept
+- Unit tests, written first (made-up data):
+  - owner mode: first-launch decision (fresh → off; sessions or to-do answers → on; an existing row is
+    never re-decided; a restored backup's row wins), the version line per mode, every `OwnerSurface` hidden
+    when off and unchanged when on, the dev log records nothing while off, the row round-trips a backup;
+  - the unlock mechanism: 7 taps inside the window show the switch, 6 don't, slow taps reset;
+  - first-launch steps per platform (PWA: camera only; iPhone app: all that exist), skipped/finished stored,
+    an install with sessions gets none;
+  - share stats (sessions, total volume in kg and lb, streak; warm-ups excluded; empty month) and the 9:16
+    layout (1080×1920, lead number first, missed days grey, no "missed" text, no body/Health data);
+  - licenses: every runtime dependency in `package.json` has an entry with a licence; the vendored data,
+    model and fonts are listed; the committed list matches a fresh generation;
+  - brand: no shown "Gym Clean" literal outside `brand.ts` and the listed non-TS files; the tagline passes
+    `checkCopy`;
+  - voices: any installed English voice is offered (female and male names in the fixture), the saved voice
+    still wins, the old default order still applies when those voices exist;
+  - copy: no "STALLED" / "fell short"; every new string passes `checkCopy`; the anyone-scan finds no
+    gendered or owner-specific wording.
+- E2E (390×844; no off-device request in any of them):
+  - a fresh profile → welcome → Skip or Next → intake → permission pages (camera granted with the fake
+    device; "Not now" works) → Today; reload doesn't repeat it; a profile with sessions never sees it;
+  - a fresh profile shows no To-dos card, no Settings → To-dos, no Developer log, "Version 1.15" without a
+    build; 7 taps on the version line → Owner tools → on → all of them appear → off hides them again; a
+    seeded pre-1.15 profile (sessions + to-do answers) starts with owner mode on and keeps its to-dos;
+  - About: privacy promise, "Coaching, not medical advice.", credit, Licenses lists free-exercise-db;
+  - Today: Start is inside the first viewport with two notices seeded, exactly one filled primary button,
+    nothing overlapped by the tab bar; tab labels don't overlap at 390 and 360;
+  - Share → Story size → an image 1080×1920 is produced with the picked lead number, no network request;
+  - `/welcome/` loads with zero script tags and zero third-party requests (built preview, service worker on).
+- 390×844 screenshots: welcome, a permission page, Today (fresh and with notices), tab bar, Calendar on the
+  standard surface, About, Licenses, an empty Fuel day, an empty Coach thread, Rest with the placeholder,
+  the Story image, Settings with owner mode off and on, the landing page (phone and desktop width).
+- The **store set**: ≥ 6 captures with demo data (Today, a workout set, Rest, Coach, Calendar, Fuel), plain
+  and captioned, in `docs/screenshots/store/`.
+- iOS simulator build: the launch screen shows the mark on `#0d0f12` (no white flash); version 1.15.0.
+- Existing e2e stays green (helpers default to onboarding done; owner mode on only where a spec needs it).
+- 🧍 **Checkpoint K:** he and his wife each try a **fresh install** (her phone per the checklist), she uses
+  it for a few days; he looks at the Story pack and posts it himself if he wants. They report what still
+  looks home-made, anything that assumed him, and whether the first launch asked too much.
+
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).
@@ -1941,6 +2108,10 @@ vendored catalog and rules as data; the brain only chooses parameters and explai
 without his tap. Free-written AI programs stay out. **Speech recognition in the app** (M12 slice 2: iPhone
 app, on-device, English, hold-to-talk) is in scope. "Sharing" stays out as an app feature; M12's Share month
 only hands an on-device image to the system share sheet on his tap.
+
+**Changed by M13 (approved 2026-11-17):** still no accounts, sync or in-app sharing. M13 adds a second
+on-device share image (Story size, system share sheet on his tap) and one static landing page on GitHub
+Pages with no script and no trackers. The app is not submitted to the App Store.
 
 **PROPOSED change (M11, 2026-11-16; applies only if Wongsaton approves M11-q1):** reading a listed set of
 Apple Health types in the native app (body mass, workouts, active energy, sleep, resting HR, HRV — including
