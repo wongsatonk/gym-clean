@@ -332,8 +332,13 @@ Report each line as pass / fail plus anything odd:
 ```
 npm run ios:sync
 xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator \
-  -configuration Debug CODE_SIGNING_ALLOWED=NO build
+  -configuration Debug CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build
 ```
+
+This builds ad-hoc signed (`CODE_SIGN_IDENTITY=-`), which needs no Apple ID or team. Don't use
+`CODE_SIGNING_ALLOWED=NO`: a fully unsigned simulator build skips the launch storyboard image, so
+the app opens on about half a second of black instead of the launch mark on #0d0f12. iPhone
+builds are always signed and are not affected.
 
 Health plugin unit tests (unit mapping and sleep-stage summing; pure Swift, no Health data needed):
 
