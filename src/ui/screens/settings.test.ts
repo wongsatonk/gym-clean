@@ -710,6 +710,20 @@ describe('settingsScreen M13 owner mode', () => {
     }
   });
 
+  it('Self-check row: shown owner on or off when onSelfCheck is set, and calls back', () => {
+    for (const owner of [false, true]) {
+      const log: string[] = [];
+      const el = renderM13({ owner }, { onSelfCheck: () => log.push('check') });
+      const sec = byAttr(el, 'data-section', 'selfcheck');
+      const btn = one(sec, (e) => e.hasAttribute('data-selfcheck-open'), 'self-check row');
+      expect(btn.textContent).toBe('Self-check');
+      expect(btn.classes).toContain('set-action');
+      btn.click();
+      expect(log).toEqual(['check']);
+    }
+    expect(has(renderM13({ owner: true }, {}), 'data-selfcheck-open')).toBe(false);
+  });
+
   it('without onRerunWelcome → no welcome row; with it alone, owner off still gets an About section', () => {
     expect(has(renderM13({ owner: false }, { onAbout: () => {} }), 'data-welcome-rerun')).toBe(
       false,

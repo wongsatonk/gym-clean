@@ -197,8 +197,6 @@ test('Settings → "Show the welcome again" replays it without the intake; the f
 
   await page.locator('[data-tab="settings"]').click();
   const rerun = page.locator('[data-welcome-rerun]');
-  // TODO(main): remove this guard once app.ts passes onRerunWelcome (→ goRoute('welcome')).
-  test.skip((await rerun.count()) === 0, 'Settings row not wired in app.ts yet');
   await rerun.scrollIntoViewIfNeeded();
   await expect(rerun).toHaveText('Show the welcome again');
   await rerun.click();

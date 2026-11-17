@@ -118,6 +118,8 @@ export type SettingsActions = {
   onAbout?: (() => void) | undefined;
   /** M13: "Show the welcome again" (route 'welcome'). Omitted → no row. Shown owner on or off. */
   onRerunWelcome?: (() => void) | undefined;
+  /** 1.15.0: Self-check (is the app ready for the gym?). Omitted → no row. Shown owner on or off. */
+  onSelfCheck?: (() => void) | undefined;
 };
 
 export const GOAL_NOT_SET = 'Not set yet.';
@@ -498,6 +500,24 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
             'Coach',
           ),
           h('p', { class: 'muted set-note' }, 'Who answers, and when replies are spoken.'),
+        )
+      : null,
+    actions.onSelfCheck
+      ? section(
+          'selfcheck',
+          'check',
+          'Self-check',
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'set-action',
+              'data-selfcheck-open': true,
+              onclick: () => actions.onSelfCheck?.(),
+            },
+            'Self-check',
+          ),
+          h('p', { class: 'muted set-note' }, 'Is the app ready for the gym?'),
         )
       : null,
     actions.onReminders

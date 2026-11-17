@@ -43,6 +43,9 @@ import type {
 } from '../core/types';
 // M13: owner mode, About / credits, first launch, Story share.
 import { isVisible, versionLine } from '../core/ownerMode';
+import { APP_BUILD, APP_RELEASE } from '../core/version';
+import { selfCheckScreen } from './screens/selfCheck';
+import { defaultSelfCheckDeps, selfCheckRuns } from './selfCheckRuns';
 import { resolveOwnerMode, setOwnerMode } from '../data/ownerMode';
 import { aboutScreen } from './screens/about';
 import { licensesView } from './screens/licenses';
@@ -388,6 +391,7 @@ type View =
   // M13: Settings → About and its open-source credits; the first-launch flow.
   | { screen: 'about' }
   | { screen: 'licenses' }
+  | { screen: 'selfCheck' }
   | { screen: 'welcome' }
   | { screen: 'coach' }
   // M12 slice 1c: the to-do list and one topic's guide (`from` = the tab that opened them).
@@ -1020,6 +1024,8 @@ export function mountApp(root: HTMLElement): void {
         return aboutView();
       case 'licenses':
         return licensesScreenView();
+      case 'selfCheck':
+        return selfCheckView();
       case 'welcome':
         return welcomeView();
       case 'intake':
@@ -1059,6 +1065,7 @@ export function mountApp(root: HTMLElement): void {
       case 'brainEval':
       case 'about':
       case 'licenses':
+      case 'selfCheck':
         return 'settings';
       case 'intake':
         return v.from === 'settings' ? 'settings' : v.from === 'today' ? 'today' : null;
@@ -3090,6 +3097,30 @@ export function mountApp(root: HTMLElement): void {
     return licensesEl;
   }
 
+  /** 1.15.0: is the app ready for the gym? Runs once per visit; Run again on the screen. */
+  let selfCheckEl: HTMLElement | null = null;
+  function openSelfCheck(): void {
+    rememberSettingsScroll();
+    selfCheckEl = null;
+    view = { screen: 'selfCheck' };
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function selfCheckView(): HTMLElement {
+    selfCheckEl ??= selfCheckScreen(
+      {
+        checks: selfCheckRuns(
+          defaultSelfCheckDeps(db, { release: APP_RELEASE, build: APP_BUILD, native }),
+        ),
+        // The build hash is an owner surface (M13); the version line follows owner mode.
+        version: versionLine(ownerOn()),
+      },
+      { onBack: backToSettings },
+    );
+    return selfCheckEl;
+  }
+
   function openBrainEval(): void {
     if (!isVisible('evalScreen', ownerOn())) {
       goTab('settings');
@@ -3305,6 +3336,10 @@ export function mountApp(root: HTMLElement): void {
       case 'settings/licenses':
         setEnter('settings');
         openLicenses();
+        return;
+      case 'settings/selfcheck':
+        setEnter('settings');
+        openSelfCheck();
         return;
       // M12 slice 2.
       case 'settings/coach':
@@ -4438,6 +4473,8 @@ export function mountApp(root: HTMLElement): void {
           ? { onBrainEval: () => openBrainEval() }
           : {}),
         onAbout: () => openAbout(),
+        onRerunWelcome: () => goRoute('welcome'),
+        onSelfCheck: () => openSelfCheck(),
       },
     );
   }

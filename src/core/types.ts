@@ -586,7 +586,8 @@ export type AppRoute =
   | 'todos'
   | 'welcome'
   | 'settings/about'
-  | 'settings/licenses';
+  | 'settings/licenses'
+  | 'settings/selfcheck';
 
 /** native = iPhone app only. */
 export type TodoPlatform = 'any' | 'native';

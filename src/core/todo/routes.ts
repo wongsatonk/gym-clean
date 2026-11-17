@@ -20,6 +20,7 @@ const ROUTES: Record<AppRoute, true> = {
   welcome: true,
   'settings/about': true,
   'settings/licenses': true,
+  'settings/selfcheck': true,
   intake: true,
   todos: true,
 };
