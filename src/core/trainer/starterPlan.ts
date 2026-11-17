@@ -17,13 +17,15 @@
  *   muscle in a listed area is never picked (a slot or a whole day can drop out); one that
  *   doesn't load the area at all is preferred; one where the area only helps runs lighter
  *   (one set fewer, or fewer reps for a bodyweight move; `easyOn` in the data).
+ * - A day has at most the experience's `maxExercises` (the template slots in order first).
  * - Each day is then fitted to the session length (`fill` in the data), never over it and at most
- *   `fill.bandMin` minutes short: a short day gets the day's `extras` slots (up to
- *   `fill.maxExercises` exercises), then one more set per row in turn (main lifts first, up to
- *   the experience's `max`; a row where a go-easy area helps stays `easyOn.setsDrop` below it),
- *   then the remaining extras, then sets again; each step only when the day still fits. A day that
- *   is too long is trimmed (`fitToMinutes`, no pairing): accessory sets, then the last
- *   accessories, the main lifts last.
+ *   `fill.bandMin` minutes short unless it already is as big as the experience allows (every
+ *   exercise slot used, every row at its most sets), so a beginner's long session can end
+ *   shorter: a short day gets the day's `extras` slots, then one more set per row in turn (main
+ *   lifts first, up to the experience's `max`; a row where a go-easy area helps stays
+ *   `easyOn.setsDrop` below it); each step only when the day still fits. A day that is too long
+ *   is trimmed (`fitToMinutes`, no pairing): accessory sets, then the last accessories, the main
+ *   lifts last.
  * - Out-of-range answers, or a gym that can do nothing, give an empty plan (the action refuses).
  */
 import templatesJson from '../../data/templates/starterTemplates.json';
@@ -63,8 +65,8 @@ export type StarterTemplates = {
   days: Record<string, DayDef>;
   slots: Record<string, SlotDef>;
   prescription: Record<GoalKind, Record<SlotKind, { reps: number[]; restSec: number }>>;
-  sets: Record<Intake['experience'], Record<SlotKind | 'max', number>>;
-  fill: { bandMin: number; maxExercises: number };
+  sets: Record<Intake['experience'], Record<SlotKind | 'max' | 'maxExercises', number>>;
+  fill: { bandMin: number };
   easyOn: { setsDrop: number; minSets: number; bodyweightRepsFactor: number };
   bodyweightEquipment: string;
 };
@@ -207,7 +209,10 @@ export function buildStarterPlan(
     const def = templates.days[key];
     if (!def) continue;
     const b: Built = { def, rows: [], caps: new Map(), main: [], inDay: new Set() };
-    for (const s of def.slots) addTo(b, s.slot, s.main ? 'main' : 'accessory', false);
+    for (const s of def.slots) {
+      if (b.rows.length >= sets.maxExercises) break;
+      addTo(b, s.slot, s.main ? 'main' : 'accessory', false);
+    }
     if (b.rows.length > 0) built.push(b);
   }
 
@@ -235,9 +240,11 @@ export function buildStarterPlan(
       }
     };
     if (fitsIn(rows)) {
-      addExtras(templates.fill.maxExercises);
+      addExtras(sets.maxExercises);
       addSets();
-      addExtras(Number.POSITIVE_INFINITY);
+      // A set that didn't fit may leave room for one more exercise below the cap, and the
+      // other way round.
+      addExtras(sets.maxExercises);
       addSets();
     }
     const first = rows[0]?.exerciseId ?? '';

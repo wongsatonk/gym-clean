@@ -94,10 +94,15 @@ describe('starter templates (data)', () => {
       expect(T.sets[e].max).toBeGreaterThanOrEqual(Math.max(T.sets[e].main, T.sets[e].accessory));
     }
     expect(T.sets.new.max).toBeLessThanOrEqual(T.sets.years.max);
+    // At most this many exercises a day: fewer for a beginner.
+    expect([T.sets.new.maxExercises, T.sets.some.maxExercises, T.sets.years.maxExercises]).toEqual([
+      6, 7, 8,
+    ]);
   });
 
   it('every day has extra slots to fill a longer session, and a fill band', () => {
     expect(T.fill.bandMin).toBe(10);
+    expect('maxExercises' in T.fill).toBe(false);
     const days = T.days as Record<string, { extras: { slot: string }[] }>;
     for (const [key, d] of Object.entries(days)) {
       expect(d.extras.length, key).toBeGreaterThanOrEqual(2);
@@ -106,6 +111,14 @@ describe('starter templates (data)', () => {
     }
   });
 });
+
+/** A day at the experience's caps: the most exercises, each at its most sets. */
+const capped = (
+  d: { exercises: readonly PlannedExercise[] },
+  sets: { max: number; maxExercises: number },
+) => d.exercises.length === sets.maxExercises && d.exercises.every((r) => r.sets === sets.max);
+/** Every day's minutes, for the range check at the end. */
+const minutes: number[] = [];
 
 describe('buildStarterPlan', () => {
   for (const goalKind of GOALS) {
@@ -127,9 +140,12 @@ describe('buildStarterPlan', () => {
             for (const d of p.plan.days) {
               const m = estimateMinutes(d);
               expect(m, `${label} ${d.id}`).toBeLessThanOrEqual(sessionMin);
-              expect(m, `${label} ${d.id}`).toBeGreaterThanOrEqual(
-                sessionMin - STARTER_TEMPLATES.fill.bandMin,
-              );
+              expect(d.exercises.length, `${label} ${d.id}`).toBeLessThanOrEqual(sets.maxExercises);
+              // Within 10 min of the chosen length, unless the day is as big as the
+              // experience allows (every exercise slot used, every row at its most sets).
+              if (m < sessionMin - STARTER_TEMPLATES.fill.bandMin)
+                expect(capped(d, sets), `${label} ${d.id} ${m} min`).toBe(true);
+              minutes.push(m);
               expect(d.exercises.length, `${label} ${d.id}`).toBeGreaterThan(0);
               const ids = d.exercises.map((r) => r.exerciseId);
               expect(new Set(ids).size, `${label} ${d.id}`).toBe(ids.length);
@@ -185,12 +201,31 @@ describe('buildStarterPlan', () => {
     }
   });
 
-  it('a longer session gets more exercises before more sets pile onto one', () => {
-    const at45 = build(intake({ days: 3, sessionMin: 45 }));
-    const at75 = build(intake({ days: 3, sessionMin: 75 }));
+  it('a longer session gets more work, up to the experience caps', () => {
+    const at45 = build(intake({ days: 3, sessionMin: 45, experience: 'years' }));
+    const at75 = build(intake({ days: 3, sessionMin: 75, experience: 'years' }));
     const count = (p: StarterPlan) => rowsOf(p).length;
     expect(count(at75)).toBeGreaterThan(count(at45));
     expect(totalSets(at75)).toBeGreaterThan(totalSets(at45));
+  });
+
+  it('a beginner with a long session gets a smaller day, ending below the chosen length', () => {
+    const sets = STARTER_TEMPLATES.sets.new;
+    const p = build(intake({ goalKind: 'fat', days: 3, sessionMin: 75, experience: 'new' }));
+    for (const d of p.plan.days) {
+      expect(d.exercises).toHaveLength(sets.maxExercises);
+      expect(capped(d, sets)).toBe(true);
+      expect(estimateMinutes(d)).toBeLessThan(75 - STARTER_TEMPLATES.fill.bandMin);
+    }
+  });
+
+  it('the per-case minutes stay in range (logged for the report)', () => {
+    expect(minutes.length).toBeGreaterThan(0);
+    const lo = Math.min(...minutes);
+    const hi = Math.max(...minutes);
+    console.info(`starter day minutes: ${lo}–${hi} over ${minutes.length} days`);
+    expect(lo).toBeGreaterThan(0);
+    expect(hi).toBeLessThanOrEqual(75);
   });
 
   it('a shorter session has less work, never more', () => {

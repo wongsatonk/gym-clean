@@ -1,5 +1,5 @@
 {
-  "note": "M12 1b starter-plan templates (SPEC M12 trainer kit item 3: a plan for anyone who answers the intake). Data only: src/core/trainer/starterPlan.ts builds a plan from the intake answers with these and nothing else. 'byDays' picks the split by training days a week (full body 2-3, upper/lower 4, push/pull/legs 5-6) and its rotation of day templates; 'trainWeekdays' are the default training weekdays (0 = Sunday), the others become rest weekdays. A day is a list of slots in priority order ('main' slots are the day's main lifts, kept longest when the day is trimmed to the session length). A slot is a movement pattern: an exercise fits when one of its primary muscles is in 'muscles' and, when given, its 'mechanic' and 'force' match (free-exercise-db fields); 'prefer' orders the fits (ids from src/data/exercises.json, generic picks, nobody's personal list), then catalog order; 'orElse' names the slot to use when the gym has nothing for this one. 'prescription' is reps and rest per goal, 'sets' is sets per experience (and the most one exercise gets when a long session is filled); 'extras' are more slots for a longer session (see 'fill'); no weights (each person picks their own). 'copy' is the proposal text ({days}, {goal}, {minutes}, {areas} are filled in).",
+  "note": "M12 1b starter-plan templates (SPEC M12 trainer kit item 3: a plan for anyone who answers the intake). Data only: src/core/trainer/starterPlan.ts builds a plan from the intake answers with these and nothing else. 'byDays' picks the split by training days a week (full body 2-3, upper/lower 4, push/pull/legs 5-6) and its rotation of day templates; 'trainWeekdays' are the default training weekdays (0 = Sunday), the others become rest weekdays. A day is a list of slots in priority order ('main' slots are the day's main lifts, kept longest when the day is trimmed to the session length). A slot is a movement pattern: an exercise fits when one of its primary muscles is in 'muscles' and, when given, its 'mechanic' and 'force' match (free-exercise-db fields); 'prefer' orders the fits (ids from src/data/exercises.json, generic picks, nobody's personal list), then catalog order; 'orElse' names the slot to use when the gym has nothing for this one. 'prescription' is reps and rest per goal, 'sets' is sets per experience (plus the most one exercise gets and the most exercises a day, used when a long session is filled); 'extras' are more slots for a longer session (see 'fill'); no weights (each person picks their own). 'copy' is the proposal text ({days}, {goal}, {minutes}, {areas} are filled in).",
   "byDays": {
     "2": {
       "split": "fullBody",
@@ -798,23 +798,25 @@
     "new": {
       "main": 3,
       "accessory": 2,
-      "max": 4
+      "max": 4,
+      "maxExercises": 6
     },
     "some": {
       "main": 3,
       "accessory": 3,
-      "max": 4
+      "max": 4,
+      "maxExercises": 7
     },
     "years": {
       "main": 4,
       "accessory": 3,
-      "max": 5
+      "max": 5,
+      "maxExercises": 8
     }
   },
   "fill": {
-    "note": "A day is filled up to the session length she picks, never over it, and ends at most bandMin minutes short: first extra slots (each day's 'extras', in order) until the day has maxExercises, then one more set per row in turn (main lifts first) up to the experience's 'max', then the remaining extras, then sets again. A day longer than the session is trimmed instead (accessory sets, then the last accessories, the main lifts last).",
-    "bandMin": 10,
-    "maxExercises": 7
+    "note": "A day is filled up to the session length, never over it, and ends at most bandMin minutes short unless it is already as big as the experience allows ('sets': at most maxExercises exercises, each at most 'max' sets; a beginner's long session can end shorter). Order: the template slots (only the first maxExercises), then each day's 'extras' in order, then one more set per row in turn (main lifts first) up to 'max', then sets again after any further extra. A day longer than the session is trimmed instead (accessory sets, then the last accessories, the main lifts last).",
+    "bandMin": 10
   },
   "easyOn": {
     "note": "A pick that only helps with a go-easy area (secondary muscle) runs lighter: one set fewer (never below minSets), or for a bodyweight move the rep range times bodyweightRepsFactor. Picks whose primary muscle is in the area are never made.",
@@ -838,6 +840,7 @@
       "fat": "lose fat",
       "strength": "get stronger",
       "general": "general fitness"
-    }
+    },
+    "whyShorter": "That is under the {chosen} min you picked: a good amount of work for where you are, and you can add more later."
   }
 }

@@ -4,6 +4,7 @@ import programJson from '../../../data/program.json';
 import { wordCount } from '../../advice';
 import { applyProposal, undoLast } from '../changes';
 import { estimateMinutes } from '../estimate';
+import { estimateMinutes as dayMinutes } from '../../dayInfo';
 import { effectiveDay, seedPlan, upNext, type PlanSession } from '../plan';
 import { checkCopy, proposalReply } from '../replies';
 import { buildStarterPlan, STARTER_TEMPLATES } from '../starterPlan';
@@ -78,7 +79,9 @@ describe('proposeStarterPlan', () => {
         expect(p.title).toBe(copy.title.replace('{days}', String(days)));
         expect(p.why).toContain(copy.goals[goalKind]);
         expect(p.why).toContain(`${days} days a week`);
-        expect(p.why).toContain('45 min');
+        // The real length: the longest day, as Today shows it ("~N min"), when under 45.
+        const real = Math.max(...p.next.plan.days.map((d) => dayMinutes(d)));
+        expect(p.why).toContain(`about ${Math.min(real, 45)} min a session`);
         expect(p.why).toContain('until you tap Apply');
         expect(p.say).toBe(copy.say);
         expect(wordCount(p.say ?? '')).toBeLessThanOrEqual(8);
@@ -89,6 +92,22 @@ describe('proposeStarterPlan', () => {
         expect(proposalReply(p)).toMatchObject({ title: p.title, why: p.why, say: p.say });
       }
     }
+  });
+
+  it('says the real length when the days come out shorter than chosen', () => {
+    const i = intake({ goalKind: 'fat', days: 3, sessionMin: 75, experience: 'new' });
+    const p = proposal(proposeStarterPlan(ctxFor(), i));
+    const real = Math.max(...p.next.plan.days.map((d) => dayMinutes(d)));
+    expect(real).toBeLessThan(75);
+    expect(p.why).toContain(`about ${real} min a session`);
+    expect(p.why).toContain('under the 75 min you picked');
+    for (const t of copyOf(p)) expect(checkCopy(t), t).toEqual({ ok: true, hits: [] });
+    // A plan that uses the time says the chosen length, and no extra sentence.
+    const full = proposal(
+      proposeStarterPlan(ctxFor(), intake({ days: 4, sessionMin: 45, experience: 'years' })),
+    );
+    expect(full.why).toContain('about 45 min a session');
+    expect(full.why).not.toContain('you picked');
   });
 
   it('lines: the plan now → the new week, then one line per new day', () => {

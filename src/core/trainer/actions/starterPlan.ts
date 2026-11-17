@@ -13,10 +13,13 @@
  *   one that hasn't started is dropped (both were built from the old plan); the past stays.
  * - Lines: "Now: <current day names>" → "<N> days a week: <new day names>", then one line per
  *   new day with its exercises and estimated minutes.
+ * - The why line says the real length (the longest day, as Today's "~N min" shows it) when the
+ *   days come out shorter than chosen (a beginner's long session), plus `copy.whyShorter`.
  * - Every word comes from the template data (`STARTER_TEMPLATES.copy`); exercise names from the
  *   catalog.
  */
 import type { BodyArea, Intake, Proposal, TrainerState } from '../../types';
+import { estimateMinutes as dayMinutes } from '../../dayInfo';
 import { estimateMinutes } from '../estimate';
 import { cutBlock } from '../focusBlock';
 import { buildStarterPlan, STARTER_TEMPLATES } from '../starterPlan';
@@ -65,12 +68,15 @@ export function proposeStarterPlan(ctx: StarterPlanContext, intake: Intake): Act
       }),
     })),
   ];
+  // The real length: the longest day as Today shows it ("~N min"), when under the chosen one.
+  const real = Math.min(intake.sessionMin, Math.max(...built.plan.days.map((d) => dayMinutes(d))));
   const why = [
     fill(copy.why, {
       goal: copy.goals[intake.goalKind],
       days: intake.days,
-      minutes: intake.sessionMin,
+      minutes: real,
     }),
+    ...(real < intake.sessionMin ? [fill(copy.whyShorter, { chosen: intake.sessionMin })] : []),
     ...(easyOn.length > 0 ? [fill(copy.whyEasyOn, { areas: listText(easyOn) })] : []),
   ].join(' ');
 
