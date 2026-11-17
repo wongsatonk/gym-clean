@@ -12,12 +12,21 @@
 // button, the unit buttons named exactly "kg" / "lb" with aria-pressed, and the slots
 // ([data-coach-voice], [data-voice-test], [data-audio-test], [data-devlog=panel]) in the same
 // order. Changed: the "‹ Back" button is gone; the Today tab (`[data-tab="today"]`) leaves.
-import type { Accent } from '../../core/types';
+//
+// M12 slice 1b task 26: "Your goal" (the intake answers in one line + re-run, the standing
+// go-easy list with Remove; each removal is a proposal the caller shows, nothing is removed
+// here) and "Progress photos" (a switch, off by default, + Open while on). Hooks:
+// `[data-section="goal"]`, `[data-goal-summary]`, `[data-intake-open]`, `[data-easy-on=<area>]`,
+// `[data-easy-remove=<area>]`, `[data-section="progress-photos"]`,
+// `[data-setting="progress-photos"]`, `[data-progress-photos-open]`.
+import type { Accent, BodyArea, Intake } from '../../core/types';
 import type { Unit } from '../../core/units';
 import { CREDIT, versionLabel } from '../../core/version';
 import { accentPicker } from '../accentPicker';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
+import { AREA_LABEL, BODY_AREAS, intakeSummary } from '../intake/intake';
+import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
 
@@ -43,6 +52,12 @@ export type SettingsProps = {
   backup?: HTMLElement | null | undefined;
   /** M12 slice 1c: the About version line. Default `versionLabel()`. */
   version?: string | undefined;
+  /** M12 slice 1b: the stored intake answers (settings 'intake'), null when never answered. */
+  intake?: Intake | null | undefined;
+  /** M12 slice 1b: the standing go-easy list (`TrainerState.easyOn`). */
+  easyOn?: readonly BodyArea[] | undefined;
+  /** M12 slice 1b: is the Progress photos switch on? Default off. */
+  progressPhotos?: boolean | undefined;
 };
 
 export type SettingsActions = {
@@ -65,7 +80,26 @@ export type SettingsActions = {
   onTodos?: (() => void) | undefined;
   /** M12 slice 1c: replays this release's What's New tour. */
   onWhatsNew?: (() => void) | undefined;
+  /** M12 slice 1b: opens the intake again (route 'settings/goal'). Omitted → no goal section. */
+  onIntake?: (() => void) | undefined;
+  /**
+   * M12 slice 1b: Remove on one go-easy area. The caller offers it as a proposal (Apply / Undo);
+   * the row stays until the list in props changes. Omitted → the list has no Remove buttons.
+   */
+  onEasyOnRemove?: ((area: BodyArea) => void) | undefined;
+  /** M12 slice 1b: the Progress photos switch. Omitted → no Progress photos section. */
+  onProgressPhotos?: ((on: boolean) => void) | undefined;
+  /** M12 slice 1b: opens Settings → Progress photos (shown only while the switch is on). */
+  onProgressPhotosOpen?: (() => void) | undefined;
 };
+
+export const GOAL_NOT_SET = 'Not set yet.';
+export const GOAL_SET_LABEL = 'Set your goal';
+export const GOAL_RERUN_LABEL = 'Change your goal & answers';
+export const EASY_ON_HEAD = 'Go easy on';
+export const EASY_ON_EMPTY = 'Nothing on the list.';
+export const EASY_ON_NOTE =
+  'The coach keeps the load light on these. Remove shows the change first; you choose Apply.';
 
 /** The unit help line under the kg / lb choice. */
 export function unitNote(unit: Unit): string {
@@ -138,6 +172,115 @@ function todosSection(
   );
 }
 
+/** M12 slice 1b: "Your goal": the answers in one line, re-run, and the go-easy list. */
+function goalSection(
+  props: SettingsProps,
+  actions: SettingsActions,
+  section: (
+    key: string,
+    iconName: IconName,
+    title: string,
+    ...c: (HTMLElement | null)[]
+  ) => HTMLElement,
+): HTMLElement | null {
+  if (!actions.onIntake) return null;
+  const intake = props.intake ?? null;
+  const areas = BODY_AREAS.filter((a) => (props.easyOn ?? []).includes(a));
+  const onRemove = actions.onEasyOnRemove;
+  return section(
+    'goal',
+    'flag',
+    'Your goal',
+    h(
+      'p',
+      { class: intake ? 'set-goal-summary' : 'muted set-note', 'data-goal-summary': true },
+      intake ? intakeSummary(intake) : GOAL_NOT_SET,
+    ),
+    intake?.goalText
+      ? h('p', { class: 'set-note', 'data-goal-words': true }, intake.goalText)
+      : null,
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'set-action',
+        'data-intake-open': true,
+        onclick: () => actions.onIntake?.(),
+      },
+      intake ? GOAL_RERUN_LABEL : GOAL_SET_LABEL,
+    ),
+    h('h3', { class: 'set-easy-head', id: 'set-easy-h' }, EASY_ON_HEAD),
+    areas.length
+      ? h(
+          'ul',
+          { class: 'set-easy-list', 'aria-labelledby': 'set-easy-h' },
+          ...areas.map((a) =>
+            h(
+              'li',
+              { class: 'set-easy-row', 'data-easy-on': a },
+              h('span', { class: 'set-easy-name' }, AREA_LABEL[a]),
+              onRemove
+                ? h(
+                    'button',
+                    {
+                      type: 'button',
+                      class: 'set-easy-remove',
+                      'data-easy-remove': a,
+                      'aria-label': `Remove ${AREA_LABEL[a]} from the go-easy list`,
+                      onclick: () => onRemove(a),
+                    },
+                    icon('close', 'sm'),
+                    h('span', {}, 'Remove'),
+                  )
+                : null,
+            ),
+          ),
+        )
+      : h('p', { class: 'muted set-note', 'data-easy-empty': true }, EASY_ON_EMPTY),
+    areas.length ? h('p', { class: 'muted set-note' }, EASY_ON_NOTE) : null,
+  );
+}
+
+/** M12 slice 1b: the Progress photos switch (off by default), Open while on, the privacy line. */
+function progressPhotosSection(
+  props: SettingsProps,
+  actions: SettingsActions,
+  section: (
+    key: string,
+    iconName: IconName,
+    title: string,
+    ...c: (HTMLElement | null)[]
+  ) => HTMLElement,
+): HTMLElement | null {
+  const onToggle = actions.onProgressPhotos;
+  if (!onToggle) return null;
+  const on = props.progressPhotos === true;
+  return section(
+    'progress-photos',
+    'camera',
+    'Progress photos',
+    switchRow('progress-photos', 'Progress photos', on, onToggle),
+    on && actions.onProgressPhotosOpen
+      ? h(
+          'button',
+          {
+            type: 'button',
+            class: 'set-action',
+            'data-progress-photos-open': true,
+            onclick: () => actions.onProgressPhotosOpen?.(),
+          },
+          'Open progress photos',
+        )
+      : null,
+    h(
+      'p',
+      { class: 'muted set-note', 'data-progress-photos-privacy': true },
+      icon('lock', 'sm'),
+      ` ${PHOTOS_PRIVACY}`,
+    ),
+  );
+}
+
 export function settingsScreen(props: SettingsProps, actions: SettingsActions): HTMLElement {
   const unitBtn = (u: Unit) => {
     const on = props.unit === u;
@@ -174,6 +317,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
     'main',
     { class: `screen settings has-tabbar ${moodClass('pro')}`, 'data-screen': 'settings' },
     h('h1', { class: 'page-title' }, 'Settings'),
+    goalSection(props, actions, section),
     section('accent', 'palette', 'Accent colour', accentPicker(props.accent, actions.onAccent)),
     section(
       'voice',
@@ -264,6 +408,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
         )
       : null,
     todosSection(actions, section),
+    progressPhotosSection(props, actions, section),
     props.backup ? section('backup', 'lock', 'Backup', props.backup) : null,
     section('devlog', 'bars', 'Developer log', props.devLog),
     // M12 slice 1c: always the last section. Plain text, no links, nothing sent.

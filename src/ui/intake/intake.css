@@ -1,0 +1,502 @@
+/* M12 slice 1b tasks 25–26: the intake (./intake.ts), the Goal card on Today
+   (../screens/goalCard.ts) and the "Your goal" rows in Settings (../screens/settings.ts).
+   Tokens from src/styles.css only. Text ≥ --fs-body (20px), targets ≥ --tap-min (56px).
+   Selected = white fill + check mark (never colour alone); the action colour is only on Next /
+   Apply / Set your goal. */
+
+/* ---------- Intake ---------- */
+.intake.mood-pro {
+  gap: 14px;
+}
+
+.intake-top {
+  align-items: center;
+  gap: 12px;
+}
+
+.intake-count {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.intake-bar {
+  display: flex;
+  gap: 6px;
+}
+
+.intake-seg {
+  flex: 1;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--line);
+}
+
+.intake-seg.done {
+  background: var(--text-2);
+}
+
+.intake-seg.now {
+  background: var(--text);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--cta);
+}
+
+.intake-step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.intake-q {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.intake-q:focus {
+  outline: none;
+}
+
+.intake-why {
+  font-size: var(--fs-body);
+}
+
+.intake-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.intake-opts.row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.intake-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  padding: 8px 14px;
+  text-align: left;
+  font-size: var(--fs-cue);
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.intake-opts.row .intake-opt {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 96px;
+  padding: 8px 4px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.intake-opt-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--text-2);
+}
+
+.intake-opt[role='checkbox'] .intake-opt-mark {
+  border-radius: 8px;
+}
+
+.intake-opts.row .intake-opt-mark {
+  width: 26px;
+  height: 26px;
+}
+
+.intake-opt.on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.intake-opt.on .intake-opt-mark {
+  border-color: var(--on-selected);
+  background: var(--on-selected);
+  color: var(--selected);
+}
+
+.intake-opt-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.intake-opts.row .intake-opt-label {
+  flex: none;
+}
+
+.intake-text-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.intake-text-label {
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.intake-text {
+  font-size: var(--fs-body);
+}
+
+.intake-nav {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.intake-nav.single {
+  grid-template-columns: 1fr;
+}
+
+.intake-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-cta);
+  padding: 0 10px;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.1;
+  background: var(--surface-2);
+}
+
+.intake-nav-next {
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+.intake-nav-next[disabled] {
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-color: var(--line);
+  cursor: default;
+}
+
+.intake-skip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: transparent;
+  color: var(--text-2);
+}
+
+/* The last screen: what the answers change. */
+.intake-answers {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.intake-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.intake-none {
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.intake-change {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.intake-change-title {
+  margin: 0;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.intake-change-lines {
+  margin: 0;
+  padding: 0 0 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-body);
+}
+
+.intake-diff {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-body);
+}
+
+.intake-diff > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.intake-diff dt {
+  color: var(--text-2);
+  font-weight: 700;
+}
+
+.intake-diff dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.intake-diff [data-diff='after'] dd {
+  font-weight: 700;
+}
+
+.intake-apply {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+.intake-apply.done {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--success);
+  cursor: default;
+}
+
+.intake-apply.done .ic {
+  color: var(--success);
+}
+
+.intake-change-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.intake-change-error:empty {
+  display: none;
+}
+
+/* ---------- Goal card (Today) ---------- */
+.goal-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.goal-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.goal-card-title .ic {
+  flex: none;
+  color: var(--text-2);
+}
+
+.goal-prompt-body {
+  font-size: var(--fs-body);
+}
+
+.goal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.goal-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.goal-text {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.goal-bar {
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.goal-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--text);
+}
+
+.goal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.goal-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.goal-status.onTrack .ic,
+.goal-status.done .ic {
+  color: var(--success);
+}
+
+.goal-status.behind .ic {
+  color: var(--warn);
+}
+
+.goal-now,
+.goal-due {
+  font-size: var(--fs-body);
+}
+
+.goal-card-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.goal-card-btn.primary {
+  font-size: var(--fs-cue);
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+/* ---------- Settings → Your goal ---------- */
+.set-goal-summary {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.set-easy-head {
+  margin: 6px 0 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.set-easy-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.set-easy-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tap-bar);
+  padding: 4px 4px 4px 18px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.set-easy-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.set-easy-remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 0 16px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.set-section .set-note .ic {
+  vertical-align: -3px;
+}

@@ -1,11 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import type { Accent } from '../../core/types';
+import type { Accent, BodyArea, Intake } from '../../core/types';
+import { checkCopy } from '../../core/trainer/replies';
+import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import type { Unit } from '../../core/units';
 import { ACCENT_OPTIONS, accentPicker } from '../accentPicker';
 import { ACCENTS } from '../tokens';
 import type { TabId } from '../tabBar';
 import { CREDIT, versionLabel } from '../../core/version';
-import { settingsScreen, unitNote, type SettingsProps } from './settings';
+import {
+  EASY_ON_EMPTY,
+  EASY_ON_HEAD,
+  EASY_ON_NOTE,
+  GOAL_NOT_SET,
+  GOAL_RERUN_LABEL,
+  GOAL_SET_LABEL,
+  settingsScreen,
+  unitNote,
+  type SettingsActions,
+  type SettingsProps,
+} from './settings';
 import { FakeEl, asFake, useFakeDom } from './testDom';
 
 useFakeDom();
@@ -333,5 +346,133 @@ describe('settingsScreen M12 slice 1c About', () => {
     const { el } = render();
     const v = one(el, (e) => e.getAttribute('data-about') === 'version', 'version');
     expect(v.textContent).toBe(versionLabel());
+  });
+});
+
+describe('settingsScreen M12 slice 1b: Your goal, go-easy list, Progress photos', () => {
+  const INTAKE: Intake = {
+    goalKind: 'general',
+    goalText: 'Keep up on long walks',
+    days: 3,
+    sessionMin: 45,
+    experience: 'new',
+    easyOn: [],
+    at: 1,
+  };
+  function render1b(over: Partial<SettingsProps> = {}, act: Partial<SettingsActions> = {}) {
+    const calls = { intake: 0, remove: [] as BodyArea[], photos: [] as boolean[], open: 0 };
+    const el = asFake(
+      settingsScreen(props(over), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onCameraTest: () => {},
+        onTab: () => {},
+        onIntake: () => calls.intake++,
+        onEasyOnRemove: (a) => calls.remove.push(a),
+        onProgressPhotos: (on) => calls.photos.push(on),
+        onProgressPhotosOpen: () => calls.open++,
+        ...act,
+      }),
+    );
+    const sec = (key: string) => el.find((e) => e.getAttribute('data-section') === key)[0];
+    const at = (attr: string, value?: string) =>
+      el.find((e) =>
+        value === undefined ? e.hasAttribute(attr) : e.getAttribute(attr) === value,
+      )[0];
+    return { el, calls, sec, at };
+  }
+
+  it('none of the callbacks → neither section (unchanged)', () => {
+    const { el } = render();
+    const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+    expect(keys).not.toContain('goal');
+    expect(keys).not.toContain('progress-photos');
+  });
+
+  it('Your goal is the first section; no answers yet → "Not set yet." + Set your goal', () => {
+    const { el, calls, sec, at } = render1b();
+    expect(el.byClass('set-section')[0]?.getAttribute('data-section')).toBe('goal');
+    expect(sec('goal')?.byTag('h2')[0]?.textContent).toBe('Your goal');
+    expect(at('data-goal-summary')?.textContent).toBe(GOAL_NOT_SET);
+    expect(at('data-intake-open')?.textContent).toBe(GOAL_SET_LABEL);
+    at('data-intake-open')?.click();
+    expect(calls.intake).toBe(1);
+    expect(at('data-easy-empty')?.textContent).toBe(EASY_ON_EMPTY);
+    expect(sec('goal')?.find((e) => e.hasAttribute('data-easy-remove'))).toHaveLength(0);
+  });
+
+  it('with answers: the one-line summary, own words, and a re-run row', () => {
+    const { at } = render1b({ intake: INTAKE });
+    expect(at('data-goal-summary')?.textContent).toBe('General fitness · 3 days a week · 45 min');
+    expect(at('data-goal-words')?.textContent).toBe('Keep up on long walks');
+    expect(at('data-intake-open')?.textContent).toBe(GOAL_RERUN_LABEL);
+  });
+
+  it('go-easy list: each area with a named Remove that only calls back (a proposal follows)', () => {
+    const { el, calls, sec, at } = render1b({ intake: INTAKE, easyOn: ['legs', 'shoulders'] });
+    const rows = el.find((e) => e.hasAttribute('data-easy-on'));
+    // Fixed body order, not the stored order.
+    expect(rows.map((r) => r.getAttribute('data-easy-on'))).toEqual(['shoulders', 'legs']);
+    expect(rows.map((r) => r.oneByClass('set-easy-name').textContent)).toEqual([
+      'Shoulders',
+      'Legs',
+    ]);
+    const list = sec('goal')?.byTag('ul')[0];
+    const head = el.find((e) => e.getAttribute('id') === list?.getAttribute('aria-labelledby'))[0];
+    expect(head?.textContent).toBe(EASY_ON_HEAD);
+    const btn = at('data-easy-remove', 'legs');
+    expect(btn?.textContent).toBe('Remove');
+    expect(btn?.getAttribute('aria-label')).toBe('Remove Legs from the go-easy list');
+    btn?.click();
+    expect(calls.remove).toEqual(['legs']);
+    // Nothing is removed here: the row stays until the props change.
+    expect(el.find((e) => e.hasAttribute('data-easy-on'))).toHaveLength(2);
+    expect(sec('goal')?.textContent).toContain(EASY_ON_NOTE);
+  });
+
+  it('go-easy list without onEasyOnRemove is read-only', () => {
+    const { el } = render1b({ easyOn: ['core'] }, { onEasyOnRemove: undefined });
+    expect(el.find((e) => e.hasAttribute('data-easy-on'))).toHaveLength(1);
+    expect(el.find((e) => e.hasAttribute('data-easy-remove'))).toHaveLength(0);
+  });
+
+  it('Progress photos: off by default, a switch, the privacy line, no Open row while off', () => {
+    const { el, calls, sec, at } = render1b();
+    const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+    expect(keys.indexOf('progress-photos')).toBe(keys.indexOf('devlog') - 1);
+    const sw = at('data-setting', 'progress-photos');
+    expect(sw?.getAttribute('role')).toBe('switch');
+    expect(sw?.getAttribute('aria-checked')).toBe('false');
+    expect(sw?.oneByClass('switch-label').textContent).toBe('Progress photos');
+    expect(at('data-progress-photos-open')).toBeUndefined();
+    expect(sec('progress-photos')?.textContent).toContain(PHOTOS_PRIVACY);
+    expect(PHOTOS_PRIVACY).toBe('Stays on this phone. Not in backups.');
+    sw?.click();
+    expect(calls.photos).toEqual([true]);
+  });
+
+  it('Progress photos on: the switch reports off, and Open leads to the photos', () => {
+    const { calls, at } = render1b({ progressPhotos: true });
+    const sw = at('data-setting', 'progress-photos');
+    expect(sw?.getAttribute('aria-checked')).toBe('true');
+    at('data-progress-photos-open')?.click();
+    expect(calls.open).toBe(1);
+    sw?.click();
+    expect(calls.photos).toEqual([false]);
+  });
+
+  it('new copy passes the coaching-words check', () => {
+    for (const s of [
+      GOAL_NOT_SET,
+      GOAL_SET_LABEL,
+      GOAL_RERUN_LABEL,
+      EASY_ON_HEAD,
+      EASY_ON_EMPTY,
+      EASY_ON_NOTE,
+    ])
+      expect(checkCopy(s), s).toEqual({ ok: true, hits: [] });
   });
 });
