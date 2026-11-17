@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, freshDbDefaults, test, type Page } from './fixtures';
 
 const IPHONE_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
@@ -100,6 +100,7 @@ for (const vp of [
       ignoreHTTPSErrors: true,
       baseURL: info.project.use.baseURL ?? '',
     });
+    await freshDbDefaults(ctx);
     const page = await ctx.newPage();
     await page.goto('/');
     await page

@@ -4,8 +4,8 @@
 // mark the release seen, so a reload shows nothing. A fresh profile never sees it (marked seen
 // silently). Settings → What's new replays it. Page 1 and Settings → About show the same
 // "Version <package.json version> (build …)" label; About has the credit line. Reduced motion →
-// no page animation. Nothing is spoken; no request leaves the dev server (route-asserted).
-import { expect, test, type Page } from '@playwright/test';
+// no page animation. The tour's pages are read from src/data/whatsNew/pages.ts (this release's). Nothing is spoken; no request leaves the dev server (route-asserted).
+import { expect, test, type Page } from './fixtures';
 import {
   APP_RELEASE,
   MIN,
@@ -23,14 +23,36 @@ import {
   todoReady,
 } from './app.helpers';
 import { endWorkout } from './workout.helpers';
+import { WHATS_NEW_PAGES } from '../src/data/whatsNew/pages';
 
 const TOUR = '[data-tour="whats-new"]';
 const tour = (page: Page) => page.locator(TOUR);
 const wn = (page: Page, part: string) => tour(page).locator(`[data-wn="${part}"]`);
-/** 1.12.0: six feature pages + "Added to your to-dos". */
-const TOTAL = 7;
 
-/** A profile updated from an older release: one finished session, the 1.11.0 tour seen. */
+// The tour's shape comes from the page data, so a new release doesn't break this spec: an update
+// from the release before APP_RELEASE shows APP_RELEASE's pages + "Added to your to-dos".
+const byNum = (a: string, b: string) => {
+  const [x, y] = [a.split('.').map(Number), b.split('.').map(Number)];
+  for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+  return 0;
+};
+const CURRENT_PAGES = WHATS_NEW_PAGES.filter((p) => p.release === APP_RELEASE);
+/** The release with pages just before this one (what an updated profile last saw). */
+const PREV_RELEASE = [...new Set(WHATS_NEW_PAGES.map((p) => p.release))]
+  .filter((r) => byNum(r, APP_RELEASE) < 0)
+  .sort(byNum)
+  .at(-1) as string;
+/** This release's feature pages + "Added to your to-dos". */
+const TOTAL = CURRENT_PAGES.length + 1;
+/** The first page whose Try it opens another tab (not Today), for the Try it test. */
+const TRY_IDX = CURRENT_PAGES.findIndex((p) =>
+  ['calendar', 'coach', 'fuel', 'settings'].includes(p.tryIt ?? ''),
+);
+const TRY_PAGE = CURRENT_PAGES[TRY_IDX];
+/** A topic this release added to the to-dos (shown on the last page). */
+const NEW_TOPIC = 'trainer-kit-gym';
+
+/** A profile updated from the previous release: one finished session, that tour seen. */
 async function openUpdated(page: Page) {
   await openApp(page, at(16, 18));
   await seed(
@@ -46,7 +68,7 @@ async function openUpdated(page: Page) {
         startedAt: at(13, 18) + MIN,
       },
     ],
-    { whatsNewSeen: '1.11.0' },
+    { whatsNewSeen: PREV_RELEASE },
   );
   await expect(tour(page)).toBeVisible();
 }
@@ -65,7 +87,7 @@ test('an update shows the tour once: version on page 1, Next / Back, last page, 
   // Over Today (the screen underneath), never anything else.
   await expect(page.locator('[data-cal]').first()).toBeAttached();
   await expect(wn(page, 'count')).toHaveText(`1 of ${TOTAL}`);
-  await expect(wn(page, 'title')).toHaveText('Meet the Coach tab');
+  await expect(wn(page, 'title')).toHaveText(CURRENT_PAGES[0]?.title ?? '');
   await expect(wn(page, 'version')).toHaveText(
     new RegExp(`^Version ${APP_RELEASE.replace(/\./g, '\\.')} \\(build [0-9a-z-]+\\)$`),
   );
@@ -89,7 +111,7 @@ test('an update shows the tour once: version on page 1, Next / Back, last page, 
   }
   await expect(wn(page, 'count')).toHaveText(`${TOTAL} of ${TOTAL}`);
   await expect(wn(page, 'title')).toHaveText('Added to your to-dos');
-  await expect(wn(page, 'topics').locator('[data-topic="coach-calendar"]')).toBeVisible();
+  await expect(wn(page, 'topics').locator(`[data-topic="${NEW_TOPIC}"]`)).toBeVisible();
   await expect(wn(page, 'open-todos')).toBeVisible();
   await expect(wn(page, 'next')).toHaveAttribute('data-last', 'true');
   await expectTapTargets(page, TOUR);
@@ -132,14 +154,14 @@ test('Try it closes the tour and opens the feature; Open to-dos opens the list',
 }) => {
   const offsite = await guardNetwork(page);
   await openUpdated(page);
-  await wn(page, 'next').click();
-  await wn(page, 'next').click();
-  await expect(wn(page, 'title')).toHaveText('Calendar replaces History');
-  await expect(wn(page, 'try')).toHaveAttribute('data-route', 'calendar');
+  expect(TRY_PAGE, 'a page whose Try it opens a tab').toBeDefined();
+  for (let i = 0; i < TRY_IDX; i++) await wn(page, 'next').click();
+  await expect(wn(page, 'title')).toHaveText(TRY_PAGE?.title ?? '');
+  const route = TRY_PAGE?.tryIt ?? '';
+  await expect(wn(page, 'try')).toHaveAttribute('data-route', route);
   await wn(page, 'try').click();
   await expect(tour(page)).toHaveCount(0);
-  await expect(page.locator('[data-screen="calendar"]')).toBeVisible();
-  await expect(page.locator('[data-tab="calendar"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator(`[data-tab="${route}"]`)).toHaveAttribute('aria-current', 'page');
   await expect.poll(() => seenRelease(page)).toBe(APP_RELEASE);
 
   // Replay from Settings, straight to the last page's Open to-dos.
@@ -227,7 +249,7 @@ test('never over a workout or its preview, even on foreground; back on Today it 
   // foreground: facts refresh, but no tour over the preview.
   await page.locator('[data-start]').first().click();
   await expect(page.locator('[data-screen="preview"]')).toBeVisible();
-  await putSetting(page, 'whatsNew', { seenRelease: '1.11.0' });
+  await putSetting(page, 'whatsNew', { seenRelease: PREV_RELEASE });
   const before = await todoCounts(page);
   await foreground(page);
   await expect

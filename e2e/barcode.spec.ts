@@ -8,7 +8,7 @@
 // - the camera: BarcodeDetector where it exists, else the on-device zxing reader from our own
 //   origin; the stream stops on a hit and on Close.
 // Fuel is never mid-set, so nothing is spoken (asserted).
-import { expect, test, type Page, type Request } from '@playwright/test';
+import { expect, test, type Page, type Request } from './fixtures';
 import { animationsSettled, expectClearOfToast, tapInPlace } from './app.helpers';
 
 declare global {

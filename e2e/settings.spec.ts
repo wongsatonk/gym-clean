@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 /**
  * M4e A17: the Settings screen (src/ui/screens/settings.ts) and the accent picker, mounted from

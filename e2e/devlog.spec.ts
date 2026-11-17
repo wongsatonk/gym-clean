@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { endWorkout, leaveSettings } from './workout.helpers';
 
 // M4c developer log + "Last set" correction (task 11, devlog part). A manual Push A set, a fix on

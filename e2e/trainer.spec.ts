@@ -4,7 +4,7 @@
 // a red flag, Plan changes with Reset + Undo, and the plan surviving a reload.
 // Replies on Today and the preview are shown, not spoken; a change applied mid-workout is spoken
 // once as a short cue. No text box on the Exercise screen during a set; no off-device request.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { APP_RELEASE, putSetting } from './app.helpers';
 import { openPause, endWorkout, leaveSettings } from './workout.helpers';
 

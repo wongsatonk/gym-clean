@@ -6,7 +6,7 @@
 // X to which day?") open the tab with their chip already sent; the Pause sheet shows the same
 // thread as a compact chat with the workout chips only; nothing to type during a set; a red flag mid-workout is the one line that is spoken.
 // Replies on the tab are shown, never spoken. No request leaves the dev server (route-asserted).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import {
   MIN,
   at,

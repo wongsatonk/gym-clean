@@ -13,7 +13,7 @@
 // FOOD_SHOTS=1 writes docs/screenshots/m7b-wired-*.png.
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 import { entryFromFood } from '../src/core/nutrition/portions';
 import type { Food, FoodEntry } from '../src/core/types';
 import { readZip } from '../src/core/zip';

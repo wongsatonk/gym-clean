@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('tracks a person on the live camera and drives the 3D skeleton', async ({ page }) => {
   test.setTimeout(60_000);

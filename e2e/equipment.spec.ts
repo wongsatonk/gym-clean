@@ -3,7 +3,7 @@
 // offers a plan-scope swap (Apply / Undo as any plan change), Keep it stops the question, typed
 // "my gym has no leg press" reaches the same proposal, and Settings → My gym edits the list.
 // The prompt is shown, not spoken (it's before a workout). Nothing leaves the phone.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import {
   MIN,
   at,

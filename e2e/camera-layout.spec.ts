@@ -3,7 +3,7 @@
 // sentence spoken once), and the 3D skeleton is collapsed behind "3D". The fake camera here is a
 // test pattern (no person), so the card stays up. The view is mounted from its module with a
 // target, because app.ts wires `target` in a later task.
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 
 const FIXTURE = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
 

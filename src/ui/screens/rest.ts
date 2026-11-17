@@ -391,8 +391,10 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
     timer,
     extend,
     p.fixEl ?? null,
-    p.effort !== undefined && a.onEffort ? effortRow(p.effort, a.onEffort, a.onEffortWhy) : null,
+    // The coach tip first: its Apply must end clear of the docked Start set at 390×844 (A22);
+    // the effort row is optional and can sit below it.
     p.coachTipEl ?? null,
+    p.effort !== undefined && a.onEffort ? effortRow(p.effort, a.onEffort, a.onEffortWhy) : null,
     card,
     h(
       'button',

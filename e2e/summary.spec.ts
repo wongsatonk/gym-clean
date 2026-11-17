@@ -1,6 +1,6 @@
 // M4e A14/A15: the Summary's vs-last volume, new bests and the bodyweight reps card, driven
 // through real sessions (IndexedDB history), plus a Fix on Summary that must refresh both.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { endWorkout, skipExercise } from './workout.helpers';
 
 declare global {

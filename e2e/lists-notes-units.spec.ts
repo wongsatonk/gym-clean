@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { endWorkout, leaveSettings } from './workout.helpers';
 
 test('lb units, notes, exercise list jump and last time carry across sessions', async ({

@@ -6,7 +6,7 @@
 // card and its stored values with it. The card is shown, never spoken. No request leaves the dev
 // server (route-asserted). The PWA (no native bridge) shows "Health data works in the iPhone
 // app." and never calls the plugin.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import {
   at,
   coachTab,

@@ -3,7 +3,7 @@
 // phone?" (two taps) → History and the settings are back, with an Undo toast. A file that isn't
 // a backup, or one from a newer app, is refused in plain words and nothing changes.
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import {
   MIN,
   at,
@@ -49,7 +49,10 @@ async function count(page: Page, store: string): Promise<number> {
   );
 }
 
-/** A "new phone": every store emptied, then a reload. */
+/**
+ * A "new phone": every store emptied, then a reload. M12 1b: a fresh phone opens the first-run
+ * intake; "Skip for now" lands on Today (restoring a backup is what a new phone does next).
+ */
 async function wipe(page: Page) {
   await page.evaluate(
     () =>
@@ -70,6 +73,8 @@ async function wipe(page: Page) {
       }),
   );
   await page.reload();
+  await expect(page.locator('main[data-screen="intake"]')).toBeVisible();
+  await page.locator('[data-intake-skip]').click();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
 }
 

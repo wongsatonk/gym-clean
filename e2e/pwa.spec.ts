@@ -1,7 +1,7 @@
 // M6 PWA (project "pwa", runs against `vite preview` of a production build): the app installs a
 // service worker on first load, then works in airplane mode, including the pose model and the
 // MediaPipe wasm, even though the camera was never opened while online.
-import { expect, test, type Page, type Request } from '@playwright/test';
+import { expect, test, type Page, type Request } from './fixtures';
 
 const MODEL = 'models/pose_landmarker_lite.task';
 const WASM = 'mediapipe/wasm/vision_wasm_internal.wasm';

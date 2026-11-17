@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 test('renders the Gym Clean home with no console errors', async ({ page }) => {
   const errors: string[] = [];

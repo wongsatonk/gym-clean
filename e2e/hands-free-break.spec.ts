@@ -10,7 +10,7 @@
 // - window.__noPerson = true returns no pose;
 // - window.__hideWrists = true hides both wrists (a visibility gap, never a break).
 // Real timers (autoSet runs on the camera frame clock); speech is mocked and recorded in order.
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 import { openCameraSheet } from './hands-free.helpers';
 
 const ORIGIN_HOSTS = new Set(['localhost', '127.0.0.1']);

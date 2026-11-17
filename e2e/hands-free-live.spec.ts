@@ -4,7 +4,7 @@
 // has run 10 s, two reps start set 2 by themselves ("Two" is the first word) → Set done → the
 // set's rest taken is the backdated start. Skips below 8 fps in CI, like rep-count.spec.ts; locally
 // only a measured mean under 12 fps (≥ 10 samples) skips a missing auto start.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { openCameraSheet } from './hands-free.helpers';
 
 declare global {

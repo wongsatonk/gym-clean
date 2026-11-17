@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 /**
  * M12 task 14: Today's missed-day card and first-load motion, and the rest screen's set ring,

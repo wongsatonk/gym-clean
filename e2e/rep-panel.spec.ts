@@ -2,7 +2,7 @@
 // The panel is driven with recorded landmark frames (synthetic curl fixture) instead of the live
 // camera, so the count is deterministic. The end-to-end camera → count → Set done flow needs
 // app.ts wiring (M4 task 11) and gets its own spec there.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 const FIXTURE = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
 

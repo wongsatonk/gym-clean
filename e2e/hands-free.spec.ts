@@ -7,7 +7,7 @@
 // ~13 s after it starts playing, with partials at ~5.5 s and ~10.3 s.
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 import { endWorkout, leaveSettings } from './workout.helpers';
 import { openCameraSheet } from './hands-free.helpers';
 
@@ -478,7 +478,12 @@ test("(vi) the exercise's last set closes the camera; Rest's Camera opens the ne
   {
     const list = await said(page);
     const tail = list.slice(list.map((s) => s.text).lastIndexOf('Set done. 2 reps.'));
-    expect(tail.map((s) => s.text)).toHaveLength(2);
+    // M12 1b: then the next exercise's setup checks, between sets (Side Lateral Raise).
+    expect(tail.map((s) => s.text).slice(2)).toEqual([
+      'Stand tall, core tight.',
+      'Elbows a little bent.',
+      'Shoulders down.',
+    ]);
     expect(tail[0]?.text).toBe('Set done. 2 reps.');
     expect(tail[1]?.text).toMatch(NEXT_TIME);
     // At the save (end of the 5 s window), not 2 s into a fresh rest.

@@ -4,7 +4,7 @@
 // expands to days and a day to exercises (focus exercises labelled); Apply marks the block's
 // days on the Calendar (with the focus line in the week score); Undo on the card takes them all
 // away. Shown, never spoken. No request leaves the dev server (route-asserted).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import {
   at,
   coachTab,

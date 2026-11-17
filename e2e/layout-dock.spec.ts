@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 // M4e cleanup (A21/A22): the sticky CTA dock and the tab bar never hide content, and on Rest a
 // coach "Apply" (a filled press) ends clear of the sticky "Start set" (the other filled press).

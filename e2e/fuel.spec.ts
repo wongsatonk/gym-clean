@@ -7,7 +7,7 @@
 // - delete + Undo; the coach's "What should I eat?" → Log → Fuel updates;
 // - offline search after the first load, against the production preview (service worker).
 // Fuel is never mid-set, so nothing is spoken; no request ever leaves the device.
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 import { expectClearOfToast, tapInPlace } from './app.helpers';
 
 declare global {

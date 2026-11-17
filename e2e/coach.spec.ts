@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { endWorkout as endViaPause, leaveSettings } from './workout.helpers';
 
 // M5b task 7: the after-set coach on Rest (tip, speech, Apply), its Settings switch, and the
@@ -12,6 +12,8 @@ declare global {
 
 const BENCH = 'Dumbbell Bench Press';
 const BENCH_CUE = 'Squeeze your chest, slow on the way down.';
+/** M12 1b: Dumbbell Bench Press's setup checks, said once as the workout starts (src/data/setupCues.json). */
+const BENCH_SETUP = ['Feet flat.', 'Shoulder blades back.', 'Wrists over elbows.'];
 const ORIGIN_HOSTS = new Set(['localhost', '127.0.0.1']);
 
 async function installMocks(page: Page) {
@@ -166,7 +168,7 @@ test('lb: two clean Bench sets → "+5 lb" tip, spoken once at 2 s, Apply sets 4
   await doSet(page);
   await page.clock.runFor(3_000);
   await expect(page.locator('[data-coach-tip]')).toHaveCount(0);
-  expect(await spoken(page)).toEqual([BENCH_CUE]);
+  expect(await spoken(page)).toEqual([BENCH_CUE, ...BENCH_SETUP]);
   await nextSet(page);
 
   // Set 2 at the top → A3.
@@ -181,8 +183,9 @@ test('lb: two clean Bench sets → "+5 lb" tip, spoken once at 2 s, Apply sets 4
   expect((await apply.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(56);
   await expectSpokenOnceAt2s(page, 'Strong set. Try plus 5 pounds next set.');
   // Queued behind the set-start cue; nothing was cancelled or reordered.
-  expect((await spoken(page)).slice(0, 3)).toEqual([
+  expect((await spoken(page)).slice(0, 6)).toEqual([
     BENCH_CUE,
+    ...BENCH_SETUP,
     BENCH_CUE,
     'Strong set. Try plus 5 pounds next set.',
   ]);

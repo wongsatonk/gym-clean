@@ -5,7 +5,7 @@
 // sheet, the coach chat (bubbles, typing), the Calendar's numbers (shown final) — instant swaps.
 // No request leaves the dev server (route-asserted); nothing here is spoken except the
 // workout's own cues.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { at, coachTab, guardNetwork, noHorizontalOverflow, openApp, record } from './app.helpers';
 import { openPause } from './workout.helpers';
 

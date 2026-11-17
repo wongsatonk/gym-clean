@@ -3,7 +3,7 @@
 // history selectors; the per-exercise history is one tap deeper, under a day). Two finished sessions this week and one unfinished one that must not show up
 // anywhere; open an exercise, read its detail, Back, then the Today tab. History is read at rest,
 // so nothing is spoken. No third-party requests, no console errors.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { APP_RELEASE, putSetting } from './app.helpers';
 
 declare global {

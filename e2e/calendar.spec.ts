@@ -12,7 +12,7 @@
 // card: a rotation miss offers Start it (today's preview), a focus-block miss Move it (doToday).
 // Nothing on these screens is spoken.
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import {
   MIN,
   at,

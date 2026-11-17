@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { skipExercise } from './workout.helpers';
 
 test('camera test runs on-device pose inference on the live stream', async ({ page }) => {

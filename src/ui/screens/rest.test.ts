@@ -408,7 +408,9 @@ describe('restScreen: effort row (M12 1b task 23)', () => {
     expect(asFake(view.el).find((e) => e.hasAttribute('data-effort-why'))).toEqual([]);
   });
 
-  it('sits after the Fix and before the coach tip and the Next card', () => {
+  // The coach tip comes first: its Apply must end clear of the docked Start set at 390×844
+  // (M4e A22, e2e/layout-dock.spec.ts); the optional effort row can sit below it.
+  it('sits after the Fix and the coach tip, before the Next card', () => {
     const fix = new FakeEl('section');
     const tip = new FakeEl('section');
     const { el } = render({
@@ -427,7 +429,7 @@ describe('restScreen: effort row (M12 1b task 23)', () => {
               ? 'next'
               : '',
     );
-    expect(order.filter(Boolean)).toEqual(['fix', 'effort', 'tip', 'next']);
+    expect(order.filter(Boolean)).toEqual(['fix', 'tip', 'effort', 'next']);
   });
 });
 

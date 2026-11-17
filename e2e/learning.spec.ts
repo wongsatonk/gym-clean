@@ -5,7 +5,7 @@
 // and Set done saves a 0-rep camera set. One test swaps the pose model for a fixture player
 // (like hands-free.spec.ts) to count a real clip; it plays on the wall clock, so this spec runs
 // one test at a time (the `mobile-clips` Playwright project).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { seedHandsFreeOff } from './hands-free.helpers';
 import { endWorkout } from './workout.helpers';
 

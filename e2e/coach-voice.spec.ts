@@ -1,7 +1,7 @@
 // Drill-sergeant coach voice (design 2026-11-13): Settings → "Coach voice". Speech is mocked and
 // records each utterance with its voice, rate and pitch; getVoices() returns window.__cvVoices.
 // The live count part replaces the pose model with a fixture player (like hands-free.spec.ts).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { leaveSettings } from './workout.helpers';
 
 test.describe.configure({ timeout: 90_000 });

@@ -1,7 +1,7 @@
 // M4e A20: the redesign end to end in the real app. Accent persistence and the pre-paint copy,
 // +30 s on Rest (and what's spoken), Skip/End only in the Pause sheet, self-hosted fonts, the
 // Today tiles after a finished session, and no third-party request anywhere.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { APP_RELEASE, putSetting } from './app.helpers';
 import { endWorkout, openPause, skipExercise } from './workout.helpers';
 

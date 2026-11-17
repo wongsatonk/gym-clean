@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 /**
  * M6 History screen (src/ui/screens/history.ts), mounted from the real module. The harness

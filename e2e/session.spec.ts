@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { openPause, skipExercise } from './workout.helpers';
 
 declare global {
@@ -58,6 +58,8 @@ async function installMocks(page: Page) {
 const COACH_TIP = 'Keep the weight. Aim for 8 reps.';
 const spoken = (page: Page) => page.evaluate(() => window.__spoken);
 const BENCH_CUE = 'Squeeze your chest, slow on the way down.';
+/** M12 1b: Dumbbell Bench Press's setup checks, said once as the workout starts (src/data/setupCues.json). */
+const BENCH_SETUP = ['Feet flat.', 'Shoulder blades back.', 'Wrists over elbows.'];
 const INCLINE_CUE = 'Upper chest drives it, slow lowering.';
 
 async function readSets(page: Page) {
@@ -128,12 +130,17 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await page.clock.runFor(109_000);
   await expect(clock).toHaveText('0:11');
   // focus cue at set start, then the after-set coach tip 2 s into rest (6 reps < 8)
-  expect(await spoken(page)).toEqual([BENCH_CUE, COACH_TIP]);
+  expect(await spoken(page)).toEqual([BENCH_CUE, ...BENCH_SETUP, COACH_TIP]);
 
   await page.clock.runFor(1_000);
   await expect
     .poll(() => spoken(page))
-    .toEqual([BENCH_CUE, COACH_TIP, 'Ten seconds. Next: Dumbbell Bench Press, set 2.']);
+    .toEqual([
+      BENCH_CUE,
+      ...BENCH_SETUP,
+      COACH_TIP,
+      'Ten seconds. Next: Dumbbell Bench Press, set 2.',
+    ]);
 
   await page.clock.runFor(10_000);
   await expect.poll(() => spoken(page)).toContain('Go.');

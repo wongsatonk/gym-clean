@@ -16,7 +16,7 @@
 // disabled elbowDrift / bodySwing rules are checked as "never spoken" across every test.
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 import { openCameraSheet, seedHandsFreeOff } from './hands-free.helpers';
 import { endWorkout as endViaPause, leaveSettings } from './workout.helpers';
 

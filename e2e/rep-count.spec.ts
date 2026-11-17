@@ -5,7 +5,7 @@
 // Covered elsewhere (not duplicated here): a manual exercise has no Camera button and so no
 // counter, in camera.spec.ts "pose-tracked exercises offer the camera; manual ones do not"; the
 // Settings camera test has no counter, in rep-panel.spec.ts.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { leaveSettings } from './workout.helpers';
 import { seedHandsFreeOff } from './hands-free.helpers';
 

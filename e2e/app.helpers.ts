@@ -199,6 +199,63 @@ export async function putSetting(page: Page, key: string, value: unknown) {
     .toBe(true);
 }
 
+/** Puts rows into one IndexedDB store of the app once Dexie has created it (no reload). */
+export async function putRows(page: Page, store: string, rows: unknown[]) {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ store, rows }) =>
+          new Promise<boolean>((resolve) => {
+            void indexedDB.databases().then((dbs) => {
+              if (!dbs.some((d) => d.name === 'gym-clean')) return resolve(false);
+              const open = indexedDB.open('gym-clean');
+              open.onerror = () => resolve(false);
+              open.onsuccess = () => {
+                const d = open.result;
+                if (!d.objectStoreNames.contains(store)) {
+                  d.close();
+                  return resolve(false);
+                }
+                const tx = d.transaction(store, 'readwrite');
+                for (const r of rows) tx.objectStore(store).put(r);
+                tx.oncomplete = () => {
+                  d.close();
+                  resolve(true);
+                };
+                tx.onerror = () => resolve(false);
+              };
+            });
+          }),
+        { store, rows },
+      ),
+    )
+    .toBe(true);
+}
+
+/** Every row of one IndexedDB store of the app. */
+export async function getRows<T = unknown>(page: Page, store: string): Promise<T[]> {
+  return page.evaluate(
+    (store) =>
+      new Promise<T[]>((resolve, reject) => {
+        const open = indexedDB.open('gym-clean');
+        open.onerror = () => reject(new Error('open failed'));
+        open.onsuccess = () => {
+          const d = open.result;
+          const req = d.transaction(store, 'readonly').objectStore(store).getAll();
+          req.onsuccess = () => {
+            d.close();
+            resolve(req.result as T[]);
+          };
+          req.onerror = () => {
+            d.close();
+            reject(new Error('read failed'));
+          };
+        };
+      }),
+    store,
+  );
+}
+
 /** Reads one `settings` row's value (undefined when missing). */
 export async function getSetting(page: Page, key: string): Promise<unknown> {
   return page.evaluate(

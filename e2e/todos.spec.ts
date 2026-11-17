@@ -7,7 +7,7 @@
 // clipboard, marks the answers sent ("Nothing new" → Copy all again; the next report has only
 // newer answers). The card hides when everything is done or skipped, and to-dos never show or
 // speak during a workout. No request leaves the dev server (route-asserted).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import {
   APP_RELEASE,
   at,
@@ -21,7 +21,7 @@ import {
 } from './app.helpers';
 
 /** Topics for the web app (platform 'any'); the 4 iPhone-only ones don't count here. */
-const WEB_TOTAL = 8;
+const WEB_TOTAL = 9; // 1.13.0 adds "Trainer kit at the gym"
 const NOW = at(16, 18);
 
 const card = (page: Page) => page.locator('[data-todo-card]');
@@ -348,6 +348,7 @@ test('nothing during a workout; the card hides when every web topic is done or s
   await page.goto('/');
   const ids = [
     'coach-calendar',
+    'trainer-kit-gym',
     'coach-gym',
     'hands-free',
     'camera',
