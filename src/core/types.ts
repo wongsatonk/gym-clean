@@ -17,6 +17,8 @@ export type PlannedExercise = {
   weightKgToday?: number;
   /** M10: why this row differs from the plan (shown as an "Adjusted" badge). */
   adjusted?: 'lighter' | 'deload' | 'swap' | 'avoidArea';
+  /** M12 1b "short on time": exerciseId of the accessory done back to back with this one (shorter rest). */
+  pairWith?: string;
 };
 
 export type ProgramDay = { id: string; name: string; exercises: PlannedExercise[] };
@@ -49,6 +51,8 @@ export type FocusCueId =
   | 'bodySwing'
   | 'hipSag';
 
+export type SetEffort = 'easy' | 'good' | 'hard';
+
 export type SetLog = {
   sessionId: string;
   exerciseId: string;
@@ -62,6 +66,10 @@ export type SetLog = {
   focusScore?: number;
   /** M5: one entry per focus/form detection in the set (ids, never text). */
   cues?: FocusCueId[];
+  /** M12 1b: one tap on the rest screen; feeds the M5b advice. */
+  effort?: SetEffort;
+  /** M12 1b: a warm-up set (left out of volume, bests, stalls, e1RM and completion). */
+  warmup?: true;
   startedAt: number;
   endedAt: number;
 };
@@ -133,10 +141,22 @@ export type TrainerState = {
   overrides: DayOverride[];
   /** M12 focus blocks (dated, built by the app); missing = none. */
   blocks?: FocusBlock[];
+  /** M12 1b: the standing "go easy on" list, changed by Proposal, honoured by every proposal. */
+  easyOn?: BodyArea[];
 };
 
 export type ProposalAction =
-  'postpone' | 'avoidArea' | 'lighter' | 'deload' | 'swap' | 'stall' | 'food' | 'focusBlock';
+  | 'postpone'
+  | 'avoidArea'
+  | 'lighter'
+  | 'deload'
+  | 'swap'
+  | 'stall'
+  | 'food'
+  | 'focusBlock'
+  | 'shortOnTime'
+  | 'starterPlan'
+  | 'easyOn';
 
 export type Proposal = {
   action: ProposalAction;
@@ -236,6 +256,8 @@ export type NutritionSettings = {
   gainPctPerWeek: [min: number, max: number];
   overrides?: Partial<MacroSet>;
   barcodeLookup: boolean;
+  /** M12 1b: targets follow the goal (and sex); none = today's surplus behaviour. */
+  goalKind?: GoalKind;
 };
 
 export type Favorite = {
@@ -318,9 +340,20 @@ export type FoodSuggestion = {
 
 // ---- M11 Health data (Apple Health, read-only; SPEC M11) ----
 
+// M12 1b adds 'bodyFat' | 'leanMass' with task 15 (core) + 16 (native), in one step with their readers.
 export type HealthType = 'bodyMass' | 'workouts' | 'activeEnergy' | 'sleep' | 'restingHr' | 'hrv';
 
 export const HEALTH_TYPES: readonly HealthType[] = [
+  'bodyMass',
+  'workouts',
+  'activeEnergy',
+  'sleep',
+  'restingHr',
+  'hrv',
+];
+
+/** The types Connect turns on (SPEC M11 default list). Body fat / lean mass have their own switches. */
+export const HEALTH_CONNECT_TYPES: readonly HealthType[] = [
   'bodyMass',
   'workouts',
   'activeEnergy',
@@ -370,9 +403,22 @@ export type HealthDay = {
   workouts?: HealthWorkout[];
   /** Route B only. */
   whoopRecoveryPct?: number;
+  /** M12 1b: body fat in percent (0–100), the day's pick like weight. */
+  bodyFatPct?: number;
+  /** M12 1b: lean body mass in kg. */
+  leanMassKg?: number;
 };
 
-export type ReadinessSignal = 'sleepShort' | 'hrvLow' | 'restingHrHigh' | 'hardOutsideWorkout' | 'whoopLow';
+export type ReadinessSignal =
+  | 'sleepShort'
+  | 'hrvLow'
+  | 'restingHrHigh'
+  | 'hardOutsideWorkout'
+  | 'whoopLow'
+  /** M12 1b "feel today": energy ≤ 2. */
+  | 'feltLow'
+  /** M12 1b "feel today": any sore area. */
+  | 'sore';
 
 export type ReadinessCard = {
   date: string;
@@ -441,6 +487,8 @@ export type ChatMessage = {
   phase: 'today' | 'preview' | 'workout';
   card?: ChatCard;
   chips?: { id: string; label: string; args?: Record<string, unknown> }[];
+  /** M12 1b: a learn card (by id) opened from this message. */
+  learnId?: string;
   /** True when this turn's context included M11 card reasons: never sent to Claude. */
   usedHealth?: boolean;
   /** e.g. "Answered by quick replies: Apple Intelligence is off". */
@@ -510,6 +558,10 @@ export type AppRoute =
   | 'settings/myGym'
   | 'settings/foodPhotos'
   | 'settings/devlog'
+  | 'settings/goal'
+  | 'settings/progressPhotos'
+  | 'fuel/measurements'
+  | 'intake'
   | 'todos';
 
 /** native = iPhone app only. */
@@ -530,7 +582,12 @@ export type TodoDetectorId =
   | 'learningCamera'
   | 'foodModel'
   | 'photoMealDays'
-  | 'resignDaysLeft';
+  | 'resignDaysLeft'
+  | 'effortSets'
+  | 'warmupSession'
+  | 'intakeDone'
+  | 'measurementLogged'
+  | 'bodyCompDays';
 
 export type TodoOption = { id: string; label: string };
 
@@ -612,3 +669,48 @@ export type TrainerKitSettings = {
 };
 
 export type SigningSettings = { signing?: 'free' | 'paid' };
+
+// ---- M12 slice 1b: trainer kit (SPEC M12 "// Slice 1b" data model) ----
+
+export type GoalKind = 'muscle' | 'fat' | 'strength' | 'general';
+
+export type Goal = {
+  id: string;
+  text: string;
+  target: { kind: 'lift' | 'measurement' | 'weight'; ref?: string; value: number; reps?: number };
+  /** Local date YYYY-MM-DD. */
+  due: string;
+  createdAt: number;
+  doneAt?: number;
+};
+
+/** The first-run questions (settings key 'intake'). */
+export type Intake = {
+  goalKind: GoalKind;
+  goalText?: string;
+  /** Training days a week, 2–6. */
+  days: number;
+  sessionMin: 30 | 45 | 60 | 75;
+  experience: 'new' | 'some' | 'years';
+  easyOn: BodyArea[];
+  at: number;
+};
+
+/** One tape measurement; `site` is an id from settings 'trainerKit' (e.g. 'leftArm', 'waist'). */
+export type Measurement = { date: string; site: string; cm: number };
+
+/** Kept on this phone only (LOCAL_ONLY_TABLES): never backed up, logged, sent or shown to a coach. */
+export type ProgressPhoto = {
+  id: string;
+  date: string;
+  createdAt: number;
+  blob: Blob;
+  pose?: 'front' | 'side' | 'back';
+};
+
+export type DayFeel = { date: string; energy?: 1 | 2 | 3 | 4 | 5; sore?: BodyArea[] };
+
+export type LearnCard = { id: string; title: string; body: string; why?: string };
+
+/** "Share my gym": equipment ids only, no personal data. */
+export type GymFile = { format: 'gym-clean-gym'; version: 1; equipment: string[] };

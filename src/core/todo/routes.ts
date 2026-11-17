@@ -12,6 +12,10 @@ const ROUTES: Record<AppRoute, true> = {
   'settings/myGym': true,
   'settings/foodPhotos': true,
   'settings/devlog': true,
+  'settings/goal': true,
+  'settings/progressPhotos': true,
+  'fuel/measurements': true,
+  intake: true,
   todos: true,
 };
 

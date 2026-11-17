@@ -23,6 +23,7 @@ import { weeklyLoad, type LoadSession } from '../core/health/weeklyLoad';
 import { activityCheck } from '../core/nutrition/activityCheck';
 import { addDate, localDate } from '../core/trainer/plan';
 import {
+  HEALTH_CONNECT_TYPES,
   HEALTH_TYPES,
   type HealthDay,
   type HealthSettings,
@@ -88,6 +89,9 @@ const SIGNAL_TYPE: Record<ReadinessSignal, HealthType | null> = {
   restingHrHigh: 'restingHr',
   hardOutsideWorkout: 'workouts',
   whoopLow: null,
+  // M12 1b "feel today" signals don't come from Health.
+  feltLow: null,
+  sore: null,
 };
 
 /** True only inside the Capacitor native app (no Capacitor import needed to ask). */
@@ -211,7 +215,7 @@ export function createHealthHost(deps: HealthHostDeps) {
         s = {
           ...s,
           enabled: Object.fromEntries(
-            HEALTH_TYPES.map((t) => [t, true]),
+            HEALTH_CONNECT_TYPES.map((t) => [t, true]),
           ) as HealthSettings['enabled'],
         };
         delete s.lastReadAt; // first connect reads the full 35 days

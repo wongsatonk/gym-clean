@@ -99,6 +99,12 @@ export const detectors: Record<TodoDetectorId, Detector> = {
   foodModel: flag('foodModel'),
   photoMealDays: atLeast('photoMealDays', 7),
   resignDaysLeft: resign,
+  // M12 1b placeholders (never done) until task 22 adds the facts and the real rules.
+  effortSets: () => ({ done: false }),
+  warmupSession: () => ({ done: false }),
+  intakeDone: () => ({ done: false }),
+  measurementLogged: () => ({ done: false }),
+  bodyCompDays: () => ({ done: false }),
 };
 
 export const DETECTOR_IDS = Object.keys(detectors) as TodoDetectorId[];

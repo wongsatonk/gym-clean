@@ -140,6 +140,21 @@ const FALLBACK: Record<ProposalAction, { title: string; why: string; say: string
     why: 'More sets for one area, the rest kept as it is. The last week is lighter.',
     say: 'Done. Focus block is on.',
   },
+  shortOnTime: {
+    title: 'Short on time',
+    why: 'Main lifts stay. The smaller moves are paired or trimmed, today only.',
+    say: 'Done. Today is shorter.',
+  },
+  starterPlan: {
+    title: 'Starter plan',
+    why: 'Built from your goal, your days and your gym.',
+    say: 'Done. Your plan is set.',
+  },
+  easyOn: {
+    title: 'Go easy on',
+    why: 'Every plan and change goes lighter on these areas.',
+    say: 'Done. I will go easy there.',
+  },
 };
 
 export type ProposalText = {

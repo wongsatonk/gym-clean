@@ -35,6 +35,11 @@ describe('detector registry', () => {
       foodModel: true,
       photoMealDays: true,
       resignDaysLeft: true,
+      effortSets: true,
+      warmupSession: true,
+      intakeDone: true,
+      measurementLogged: true,
+      bodyCompDays: true,
     };
     expect([...DETECTOR_IDS].sort()).toEqual(Object.keys(all).sort());
     expect(Object.keys(detectors).sort()).toEqual(Object.keys(all).sort());
