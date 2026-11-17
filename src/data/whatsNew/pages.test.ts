@@ -57,8 +57,52 @@ describe('WHATS_NEW_PAGES', () => {
     expect(text('progress-photos')).toMatch(/off until you turn them on/i);
   });
 
-  it('holds only releases 1.12.0 and 1.13.0, every page in one of them', () => {
-    expect(r112.length + r113.length).toBe(WHATS_NEW_PAGES.length);
+  const r114 = WHATS_NEW_PAGES.filter((p) => p.release === '1.14.0');
+
+  it('has five pages for 1.14.0 covering slice 2 (Apple coach, mic, voice, reminders, check-in)', () => {
+    expect(Object.fromEntries(r114.map((p) => [p.id, p.tryIt]))).toEqual({
+      'chat-freely': 'coach',
+      'hold-to-talk': 'coach',
+      'speak-replies': 'settings/coach',
+      reminders: 'settings/reminders',
+      'check-in': 'coach',
+    });
+    expect(r114.map((p) => p.id)).toEqual([
+      'chat-freely',
+      'hold-to-talk',
+      'speak-replies',
+      'reminders',
+      'check-in',
+    ]);
+  });
+
+  it('1.14.0 says the model runs on the phone, reminders start off, and the rules fallback', () => {
+    const text = (id: string) => {
+      const p = r114.find((x) => x.id === id);
+      return `${p?.title} ${p?.what} ${p?.why}`;
+    };
+    expect(text('chat-freely')).toMatch(/on this phone|on your phone|on-device/i);
+    expect(text('chat-freely')).toMatch(/quick replies/i);
+    expect(text('hold-to-talk')).toMatch(/hold/i);
+    expect(text('speak-replies')).toMatch(/Speak replies/);
+    expect(text('reminders')).toMatch(/off until you turn them on/i);
+    expect(text('check-in')).toMatch(/energy/i);
+  });
+
+  it('holds only releases 1.12.0, 1.13.0 and 1.14.0, every page in one of them', () => {
+    expect(r112.length + r113.length + r114.length).toBe(WHATS_NEW_PAGES.length);
+  });
+
+  it('shows the 1.14.0 pages once the version is 1.14.0, and keeps them back before', () => {
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.13.0' }, '1.13.0', true)).toEqual([]);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.13.0' }, '1.14.0', true)).toEqual(r114);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.12.0' }, '1.14.0', true)).toEqual([
+      ...r114,
+      ...r113,
+    ]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.14.0')).toEqual(r114);
+    expect(replayPages(WHATS_NEW_PAGES, '1.13.0')).toEqual(r113);
+    expect(tourToShow(WHATS_NEW_PAGES, {}, '1.14.0', false)).toEqual({ markSeen: true });
   });
 
   it('has unique ids per release', () => {

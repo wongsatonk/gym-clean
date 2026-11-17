@@ -14,10 +14,17 @@
  * M12 slice 1b (trainer kit): `sets.effort` on working sets, sessions with a `sets.warmup` row,
  * `settings` 'intake' (answered or not), `measurements` (row count) and `healthDays` rows with a
  * body fat or lean mass reading (day count). The readings, sizes and answers themselves stay put.
+ *
+ * M12 slice 2 (Checkpoint J): coach messages with `source: 'apple'`, his messages with `viaMic`,
+ * `settings` 'reminders' (via `mergeReminders`: any of session / missed day / Sunday recap on) and
+ * `checkIns` answered (not skipped, `checkInStatus`). Times and check-in answers stay put.
  */
+import { checkInStatus } from '../../core/checkIn/checkIn';
 import { ruleStatus } from '../../core/exercises';
+import { mergeReminders } from '../../core/reminders/schedule';
 import { FACT_COUNTS, FACT_FLAGS, type FactCount, type FactFlag } from '../../core/todo/detectors';
 import type { ProposalAction, TodoFacts } from '../../core/types';
+import { listCheckIns } from '../checkIn/store';
 import type { GymDb } from '../db';
 import { HEALTH_SETTINGS_KEY } from '../health/store';
 import { getIntake } from '../trainerKit/store';
@@ -86,6 +93,19 @@ export async function gatherFacts(
   const flags = Object.fromEntries(FACT_FLAGS.map((k) => [k, false])) as Record<FactFlag, boolean>;
 
   counts.chatQuestions = await db.chatMessages.filter((m) => m.role === 'user').count();
+  // M12 slice 2: Apple's replies and his mic-sent messages.
+  counts.appleReplies = await db.chatMessages
+    .filter((m) => m.role === 'coach' && m.source === 'apple')
+    .count();
+  counts.micMessages = await db.chatMessages
+    .filter((m) => m.role === 'user' && m.viaMic === true)
+    .count();
+  const reminders = mergeReminders((await db.settings.get('reminders'))?.value);
+  flags.reminderOn =
+    reminders.session.on || reminders.missedDay.on || reminders.sundayRecap.on;
+  counts.checkInsDone = (await listCheckIns(db)).filter(
+    (c) => checkInStatus(c) === 'answered',
+  ).length;
 
   const changes = await db.planChanges.toArray();
   counts.proposalOutcomes = changes.filter((c) => c.action !== 'reset').length;

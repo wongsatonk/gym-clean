@@ -11,6 +11,10 @@
  *
  * Release 1.13.0 (M12 slice 1b) adds "Trainer kit at the gym" and the VeSync topic's body fat /
  * lean mass auto step. `topicsForRelease` keeps a topic back until the app reaches its `since`.
+ *
+ * Release 1.14.0 (M12 slice 2) adds "Coach on your iPhone" (Checkpoint J): Apple's on-device
+ * coach, the mic, reminders and the weekly check-in. Its last question collects trainer-kit
+ * feedback too (slice 1b folds into Checkpoint J).
  */
 import { RULES } from '../../core/exercises';
 import { TRAINER_KIT_DEFAULTS } from '../../core/trainerKit/defaults';
@@ -48,6 +52,8 @@ const LEARNING_OPTIONS: TodoOption[] = [
 const R = '1.12.0';
 /** M12 slice 1b (trainer kit). */
 const R113 = '1.13.0';
+/** M12 slice 2 (Apple brain, mic, reminders, check-in). */
+const R114 = '1.14.0';
 
 export const TODO_TOPICS: readonly TodoTopic[] = [
   {
@@ -134,6 +140,103 @@ export const TODO_TOPICS: readonly TodoTopic[] = [
         options: [
           { id: 'gym', label: 'Gym only is fine' },
           { id: 'outside', label: 'Add outside workouts' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'coach-iphone',
+    title: 'Coach on your iPhone',
+    checkpoint: 'Checkpoint J',
+    since: R114,
+    platform: 'native',
+    steps: [
+      {
+        id: 'apple-answers',
+        title: "Get 5 answers from Apple's on-device coach",
+        why: 'Ask in your own words, like "What should I train if my legs are tired?"',
+        tryIt: 'coach',
+        kind: 'auto',
+        detector: 'appleAnswers',
+        params: { min: 5 },
+      },
+      {
+        id: 'mic',
+        title: 'Send 3 messages with the mic',
+        why: 'Hold the mic button, speak, then let go. Good between sets.',
+        tryIt: 'coach',
+        kind: 'auto',
+        detector: 'micUses',
+        params: { min: 3 },
+      },
+      {
+        id: 'reminder',
+        title: 'Turn on one reminder',
+        why: 'Reminders are off until you turn them on.',
+        tryIt: 'settings/reminders',
+        kind: 'auto',
+        detector: 'reminderOn',
+      },
+      {
+        id: 'check-in',
+        title: 'Answer one weekly check-in',
+        why: 'The coach asks about your energy, sleep and soreness once a week.',
+        tryIt: 'coach',
+        kind: 'auto',
+        detector: 'checkInDone',
+        params: { min: 1 },
+      },
+      {
+        id: 'wrong-answers',
+        title: 'How many answers were wrong?',
+        why: 'Write what you asked and what it said in the note.',
+        kind: 'ask',
+        note: 'optional',
+        options: WRONG_COUNT,
+      },
+      {
+        id: 'wrong-action',
+        title: 'Did the coach offer a wrong change to your plan?',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'no', label: 'No' },
+          { id: 'yes', label: 'Yes, see my note' },
+        ],
+      },
+      {
+        id: 'voice',
+        title: 'How did the spoken replies feel?',
+        why: 'Speak replies in Coach settings sets when the coach talks.',
+        tryIt: 'settings/coach',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'right', label: 'Just right' },
+          { id: 'much', label: 'Too much' },
+          { id: 'little', label: 'Too little' },
+        ],
+      },
+      {
+        id: 'mic-heard',
+        title: 'Did the mic hear you right?',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'mostly', label: 'Mostly' },
+          { id: 'half', label: 'About half' },
+          { id: 'rarely', label: 'Rarely' },
+        ],
+      },
+      {
+        id: 'kit-off',
+        title: 'Anything in the trainer kit that felt off?',
+        why: 'Effort taps, warm-ups, your goal, short on time, tape and photos.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'nothing', label: 'Nothing' },
+          { id: 'something', label: 'Something, see my note' },
         ],
       },
     ],

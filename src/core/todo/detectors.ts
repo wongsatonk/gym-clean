@@ -37,6 +37,13 @@ export const FACT_COUNTS = [
   'measurements',
   /** Health days that carry a body fat or lean mass reading. */
   'bodyCompDays',
+  // M12 slice 2 (Checkpoint J).
+  /** Coach replies written by Apple's on-device model (`source: 'apple'`). */
+  'appleReplies',
+  /** His messages sent with the hold-to-talk mic (`viaMic`). */
+  'micMessages',
+  /** Weekly check-ins answered (skipped weeks don't count). */
+  'checkInsDone',
 ] as const;
 
 /** The flags a facts snapshot carries. */
@@ -51,6 +58,8 @@ export const FACT_FLAGS = [
   'signingPaid',
   /** The goal questions (intake) are answered. */
   'intakeDone',
+  /** M12 slice 2: any reminder (session, missed day, Sunday recap) switched on. */
+  'reminderOn',
 ] as const;
 
 export type FactCount = (typeof FACT_COUNTS)[number];
@@ -116,11 +125,11 @@ export const detectors: Record<TodoDetectorId, Detector> = {
   intakeDone: flag('intakeDone'),
   measurementLogged: atLeast('measurements', 1),
   bodyCompDays: atLeast('bodyCompDays', 1, true),
-  // M12 slice 2: placeholders until task 15 adds their counts (never met until then).
-  appleAnswers: () => ({ done: false }),
-  micUses: () => ({ done: false }),
-  reminderOn: () => ({ done: false }),
-  checkInDone: () => ({ done: false }),
+  // M12 slice 2 (Checkpoint J). Its topic is iPhone-only; the facts are 0 on the web anyway.
+  appleAnswers: atLeast('appleReplies', 5),
+  micUses: atLeast('micMessages', 3),
+  reminderOn: flag('reminderOn'),
+  checkInDone: atLeast('checkInsDone', 1),
 };
 
 export const DETECTOR_IDS = Object.keys(detectors) as TodoDetectorId[];

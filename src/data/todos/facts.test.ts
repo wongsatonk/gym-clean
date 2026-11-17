@@ -6,6 +6,7 @@ import { GymDb } from '../db';
 import { startDevLogSession } from '../devlog';
 import { gatherFacts } from './facts';
 import { saveIntake, saveMeasurement } from '../trainerKit/store';
+import { saveCheckIn, skipCheckIn } from '../checkIn/store';
 import { noteBuildSeen, noteSignal } from './store';
 
 // Made-up data only (public repo). Values are distinctive so a leak would be found by text search.
@@ -187,6 +188,35 @@ async function seedKit(): Promise<void> {
   await db.healthDays.put({ date: '2026-10-23', sleepMin: 431 });
 }
 
+/** M12 slice 2: Apple replies, mic messages, reminders, check-ins (made-up). */
+async function seedSlice2(): Promise<void> {
+  const msg = (role: 'user' | 'coach', source: 'rules' | 'apple', viaMic = false) =>
+    db.chatMessages.add({
+      createdAt: day(15),
+      role,
+      text: `Made-up ${role} ${source}`,
+      source,
+      phase: 'today',
+      ...(viaMic ? { viaMic: true as const } : {}),
+    });
+  // 3 Apple replies, 1 rules reply; 2 mic-sent messages, 1 typed.
+  for (let i = 0; i < 3; i++) await msg('coach', 'apple');
+  await msg('coach', 'rules');
+  await msg('user', 'rules', true);
+  await msg('user', 'rules', true);
+  await msg('user', 'rules');
+  // A coach message wrongly marked viaMic does not count as his mic use.
+  await msg('coach', 'apple', true);
+  await db.settings.put({
+    key: 'reminders',
+    value: { session: { on: false, time: '06:47' }, missedDay: { on: false }, sundayRecap: { on: true } },
+  });
+  // 2 answered weeks, 1 skipped.
+  await saveCheckIn(db, { weekStart: '2026-11-02', energy: 4, sleep: 3 }, day(2));
+  await saveCheckIn(db, { weekStart: '2026-11-09', soreness: 2 }, day(9));
+  await skipCheckIn(db, '2026-11-16', day(16));
+}
+
 describe('gatherFacts', () => {
   it('counts what the detectors need from a made-up db', async () => {
     await seed();
@@ -211,6 +241,9 @@ describe('gatherFacts', () => {
       warmupSessions: 2,
       measurements: 3,
       bodyCompDays: 2,
+      appleReplies: 0,
+      micMessages: 0,
+      checkInsDone: 0,
     });
     expect(f.flags).toEqual({
       calendarAfterSession: true,
@@ -218,6 +251,7 @@ describe('gatherFacts', () => {
       foodModel: true,
       signingPaid: true,
       intakeDone: true,
+      reminderOn: false,
     });
     // Latest-noted build = the running one unless told otherwise.
     expect(f.buildFirstSeenAt).toBe(day(14, 8));
@@ -242,6 +276,39 @@ describe('gatherFacts', () => {
     expect(f.flags.intakeDone).toBe(false);
   });
 
+  it('counts Apple replies, mic-sent messages, answered check-ins and any reminder on', async () => {
+    await seedSlice2();
+    const f = await gatherFacts(db, 'native', NOW);
+    expect(f.counts.appleReplies).toBe(4); // coach role + source apple
+    expect(f.counts.micMessages).toBe(2); // his messages only
+    expect(f.counts.checkInsDone).toBe(2); // the skipped week doesn't count
+    expect(f.counts.chatQuestions).toBe(3);
+    expect(f.flags.reminderOn).toBe(true);
+  });
+
+  it.each([
+    ['session', { session: { on: true, time: '18:00' } }],
+    ['missed day', { missedDay: { on: true } }],
+    ['Sunday recap', { sundayRecap: { on: true } }],
+  ])('any reminder on sets reminderOn (%s)', async (_, value) => {
+    await db.settings.put({ key: 'reminders', value });
+    expect((await gatherFacts(db, 'native', NOW)).flags.reminderOn).toBe(true);
+  });
+
+  it('reminders off, asked-permission only, or a damaged row is not "on"', async () => {
+    for (const value of [
+      { session: { on: false, time: '18:00' }, missedDay: { on: false }, sundayRecap: { on: false } },
+      { askedPermission: true },
+      { session: 'on', missedDay: true, sundayRecap: { on: 'yes' } },
+      'junk',
+    ]) {
+      await db.settings.put({ key: 'reminders', value });
+      expect((await gatherFacts(db, 'native', NOW)).flags.reminderOn, JSON.stringify(value)).toBe(
+        false,
+      );
+    }
+  });
+
   it('a damaged intake row does not count as answered', async () => {
     await db.settings.put({ key: 'intake', value: { goalKind: 'made-up' } });
     expect((await gatherFacts(db, 'web', NOW)).flags.intakeDone).toBe(false);
@@ -260,6 +327,7 @@ describe('gatherFacts', () => {
   it('returns no raw values: counts are whole numbers, flags booleans, no strings from rows', async () => {
     await seed();
     await seedKit();
+    await seedSlice2();
     await noteBuildSeen(db, 'build-x', day(9));
     const f = await gatherFacts(db, 'native', NOW);
     expect(Object.keys(f).sort()).toEqual(['buildFirstSeenAt', 'counts', 'flags', 'now', 'platform']);
@@ -296,6 +364,10 @@ describe('gatherFacts', () => {
       'shoulders',
       'easy',
       'hard',
+      '"apple"',
+      '06:47',
+      '2026-11',
+      'sundayRecap',
     ])
       expect(text, bad).not.toContain(bad);
   });

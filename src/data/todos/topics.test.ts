@@ -29,9 +29,10 @@ function strings(t: TodoTopic): string[] {
 }
 
 describe('TODO_TOPICS', () => {
-  it('has the 12 topics of the SPEC table plus the 1.13.0 one, in order, with their checkpoints', () => {
+  it('has the 12 topics of the SPEC table plus the 1.13.0 and 1.14.0 ones, in order, with their checkpoints', () => {
     expect(TODO_TOPICS.map((t) => [t.id, t.checkpoint])).toEqual([
       ['coach-calendar', 'Checkpoint I'],
+      ['coach-iphone', 'Checkpoint J'],
       ['trainer-kit-gym', 'Checkpoint J'],
       ['health-week', 'Checkpoint H'],
       ['iphone-week', 'Checkpoint G'],
@@ -47,9 +48,9 @@ describe('TODO_TOPICS', () => {
     ]);
   });
 
-  it('all came with 1.12.0, except the trainer-kit gym topic (1.13.0)', () => {
-    for (const t of TODO_TOPICS)
-      expect(t.since, t.id).toBe(t.id === 'trainer-kit-gym' ? '1.13.0' : '1.12.0');
+  it('all came with 1.12.0, except the trainer-kit gym topic (1.13.0) and the iPhone coach (1.14.0)', () => {
+    const since: Record<string, string> = { 'trainer-kit-gym': '1.13.0', 'coach-iphone': '1.14.0' };
+    for (const t of TODO_TOPICS) expect(t.since, t.id).toBe(since[t.id] ?? '1.12.0');
   });
 
   it('topicsForRelease keeps a topic back until the app reaches its release', () => {
@@ -57,8 +58,10 @@ describe('TODO_TOPICS', () => {
     expect(ids('1.12.0')).toHaveLength(12);
     expect(ids('1.12.0')).not.toContain('trainer-kit-gym');
     expect(ids('1.12.3')).toEqual(ids('1.12.0'));
-    expect(ids('1.13.0')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.13.0')).toEqual(TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'coach-iphone'));
+    expect(ids('1.13.4')).toEqual(ids('1.13.0'));
     expect(ids('1.14.0')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.15.0')).toEqual(TODO_TOPICS.map((t) => t.id));
     expect(ids('1.11.0')).toEqual([]);
     // Data order is kept, and another list can be passed in.
     expect(topicsForRelease('1.12.0', [byId('trainer-kit-gym'), byId('resign')])).toEqual([
@@ -68,6 +71,7 @@ describe('TODO_TOPICS', () => {
 
   it('marks the iPhone-only topics native and only the re-sign topic recurring', () => {
     expect(TODO_TOPICS.filter((t) => t.platform === 'native').map((t) => t.id)).toEqual([
+      'coach-iphone',
       'health-week',
       'iphone-week',
       'vesync',
@@ -126,6 +130,9 @@ describe('TODO_TOPICS', () => {
     expect(p('trainer-kit-gym', 'warm-ups')).toEqual({ min: 1 });
     expect(p('trainer-kit-gym', 'measurement')).toEqual({ min: 1 });
     expect(p('vesync', 'body-comp')).toEqual({ min: 1 });
+    expect(p('coach-iphone', 'apple-answers')).toEqual({ min: 5 });
+    expect(p('coach-iphone', 'mic')).toEqual({ min: 3 });
+    expect(p('coach-iphone', 'check-in')).toEqual({ min: 1 });
   });
 
   it('has the auto steps of the SPEC table', () => {
@@ -133,6 +140,7 @@ describe('TODO_TOPICS', () => {
       Object.fromEntries(TODO_TOPICS.map((t) => [t.id, autos(t).map((s) => s.detector)])),
     ).toEqual({
       'coach-calendar': ['chatAsked', 'proposalOutcome', 'calendarAfterSession'],
+      'coach-iphone': ['appleAnswers', 'micUses', 'reminderOn', 'checkInDone'],
       'trainer-kit-gym': ['effortSets', 'warmupSession', 'intakeDone', 'measurementLogged'],
       'health-week': ['healthConnected', 'healthDays'],
       'iphone-week': ['nativeApp', 'nativeSessions'],
@@ -200,6 +208,39 @@ describe('TODO_TOPICS', () => {
         expect(s.multi, s.id).toBeUndefined();
         expect(s.setting, s.id).toBeUndefined();
       }
+    });
+  });
+
+  describe('coach on your iPhone (1.14.0, Checkpoint J)', () => {
+    const topic = byId('coach-iphone');
+
+    it('is iPhone-only, titled as in the plan, not recurring, no decision steps', () => {
+      expect(topic.title).toBe('Coach on your iPhone');
+      expect(topic.checkpoint).toBe('Checkpoint J');
+      expect(topic.platform).toBe('native');
+      expect(topic.recurring).toBeUndefined();
+      for (const s of asks(topic)) expect(s.setting, s.id).toBeUndefined();
+    });
+
+    it('auto steps first, each with a Try it (reminders to its own screen)', () => {
+      expect(topic.steps.slice(0, 4).map((s) => [s.id, s.kind, s.tryIt])).toEqual([
+        ['apple-answers', 'auto', 'coach'],
+        ['mic', 'auto', 'coach'],
+        ['reminder', 'auto', 'settings/reminders'],
+        ['check-in', 'auto', 'coach'],
+      ]);
+    });
+
+    it('asks about wrong answers, a wrong action, the voice, the mic and the trainer kit', () => {
+      expect(asks(topic).map((s) => [s.id, s.options.map((o) => o.id), s.note])).toEqual([
+        ['wrong-answers', ['none', 'few', 'many'], 'optional'],
+        ['wrong-action', ['no', 'yes'], 'optional'],
+        ['voice', ['right', 'much', 'little'], 'optional'],
+        ['mic-heard', ['mostly', 'half', 'rarely'], 'optional'],
+        ['kit-off', ['nothing', 'something'], 'optional'],
+      ]);
+      expect(asks(topic).find((s) => s.id === 'voice')?.tryIt).toBe('settings/coach');
+      for (const s of asks(topic)) expect(s.multi, s.id).toBeUndefined();
     });
   });
 

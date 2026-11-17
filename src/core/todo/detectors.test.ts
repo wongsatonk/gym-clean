@@ -72,6 +72,10 @@ const COUNT_CASES: [TodoDetectorId, (typeof FACT_COUNTS)[number], number][] = [
   ['effortSets', 'effortSets', 6],
   ['warmupSession', 'warmupSessions', 1],
   ['measurementLogged', 'measurements', 1],
+  // M12 slice 2 (Checkpoint J).
+  ['appleAnswers', 'appleReplies', 5],
+  ['micUses', 'micMessages', 3],
+  ['checkInDone', 'checkInsDone', 1],
 ];
 
 describe.each(COUNT_CASES)('%s (counts.%s)', (id, key, need) => {
@@ -104,6 +108,7 @@ describe('flag detectors', () => {
     ['calendarAfterSession', 'calendarAfterSession'],
     ['foodModel', 'foodModel'],
     ['intakeDone', 'intakeDone'],
+    ['reminderOn', 'reminderOn'],
   ] as const)('%s follows flags.%s on both platforms', (id, flag) => {
     for (const p of BOTH) {
       expect(detectors[id](facts(p, {}, { [flag]: false }), {}).done).toBe(false);
@@ -206,6 +211,58 @@ describe('trainer-kit detectors (M12 slice 1b)', () => {
     expect(detectors.bodyCompDays(facts('native', { bodyCompDays: 1 }), {}).done).toBe(true);
     expect(detectors.bodyCompDays(facts('native', { bodyCompDays: 1 }), { min: 2 }).done).toBe(false);
     expect(detectors.bodyCompDays(facts('web', { bodyCompDays: 3 }), { min: 1 }).done).toBe(false);
+  });
+});
+
+describe('Checkpoint J detectors (M12 slice 2)', () => {
+  it('appleAnswers: 4 Apple replies is not done, 5 is (step params)', () => {
+    expect(detectors.appleAnswers(facts('native', { appleReplies: 4 }), { min: 5 })).toEqual({
+      done: false,
+      have: 4,
+      need: 5,
+    });
+    expect(detectors.appleAnswers(facts('native', { appleReplies: 5 }), { min: 5 })).toEqual({
+      done: true,
+      have: 5,
+      need: 5,
+    });
+    expect(detectors.appleAnswers(facts('native'), {})).toEqual({ done: false, have: 0, need: 5 });
+  });
+
+  it('micUses: 2 mic-sent messages is not done, 3 is', () => {
+    expect(detectors.micUses(facts('native', { micMessages: 2 }), { min: 3 })).toEqual({
+      done: false,
+      have: 2,
+      need: 3,
+    });
+    expect(detectors.micUses(facts('native', { micMessages: 3 }), { min: 3 })).toEqual({
+      done: true,
+      have: 3,
+      need: 3,
+    });
+  });
+
+  it('reminderOn follows the flag only (no count)', () => {
+    expect(detectors.reminderOn(facts('native'), {})).toEqual({ done: false });
+    expect(detectors.reminderOn(facts('native', {}, { reminderOn: false }), {})).toEqual({
+      done: false,
+    });
+    expect(detectors.reminderOn(facts('native', {}, { reminderOn: true }), {})).toEqual({
+      done: true,
+    });
+  });
+
+  it('checkInDone: no answered check-in is not done, one is', () => {
+    expect(detectors.checkInDone(facts('native', { checkInsDone: 0 }), { min: 1 })).toEqual({
+      done: false,
+      have: 0,
+      need: 1,
+    });
+    expect(detectors.checkInDone(facts('native', { checkInsDone: 1 }), { min: 1 })).toEqual({
+      done: true,
+      have: 1,
+      need: 1,
+    });
   });
 });
 
