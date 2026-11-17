@@ -34,6 +34,9 @@
 //                                            #   data): warm-up, effort, learn cards, short on
 //                                            #   time, feel today, intake, Goal card, e1RM,
 //                                            #   measurements, photo compare, cardio, 1.13.0 tour
+//   node scripts/screenshots.mjs --store     # M13 store set: restores the made-up demo backup (owner
+//                                            #   mode off) at 390x844 @3x, 6 screens plain + captioned
+//                                            #   on the brand background: docs/screenshots/store/*.png
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -3746,7 +3749,232 @@ async function m12b(browser, only) {
   }
 }
 
-const milestone = process.argv[2] ?? 'm4';
+// ---------- M13 task 35: store-style screenshot set (`--store`) ----------
+// A made-up person only: the page builds `buildDemoBackup(now, { release })` (src/data/demo) and
+// restores it with the app's own `importAll` on a blank same-origin page before the app boots
+// (owner mode off, first launch done, tour seen). Then Today, a set, Rest, Coach (two chips),
+// Calendar and Fuel at 390x844 @3x, each plain and captioned on the brand background. Every
+// request off localhost is aborted and recorded. Writes docs/screenshots/store/*.png.
+const STORE_OUT = `${OUT}/store`;
+const STORE_BG = '#0d0f12';
+// A Wednesday evening: a training day with no session yet, breakfast-to-snack logged in Fuel.
+const STORE_AT = Number(process.env.STORE_AT ?? new Date(2026, 10, 18, 17, 30).getTime());
+
+function storeBrand() {
+  const src = execFileSync('cat', ['src/core/brand.ts'], { encoding: 'utf8' });
+  const pick = (k) => new RegExp(`export const ${k} = '([^']*)'`).exec(src)?.[1];
+  return { name: pick('APP_NAME'), tagline: pick('APP_TAGLINE') };
+}
+
+async function storePhone(browser, release) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+    ignoreHTTPSErrors: true,
+    reducedMotion: 'reduce',
+  });
+  const offsite = [];
+  await ctx.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'localhost') return route.continue();
+    offsite.push(url.href);
+    return route.abort();
+  });
+  await ctx.route(`${BASE}/__store-blank`, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>restore</title>' }));
+  const page = await ctx.newPage();
+  const log = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => log.push(`pageerror: ${e.message}`));
+  await page.addInitScript(() => {
+    window.__spoken = [];
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => window.__spoken.push(u.text), cancel: () => {}, pause: () => {},
+        resume: () => {}, getVoices: () => [], addEventListener: () => {},
+        speaking: false, pending: false, paused: false,
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => {}, release: async () => {} }) },
+    });
+    for (const k of ['share', 'canShare'])
+      Object.defineProperty(navigator, k, { configurable: true, value: undefined });
+  });
+  await page.clock.install({ time: STORE_AT });
+  // Restore the demo backup through the app's restore function, before the app opens.
+  await page.goto(`${BASE}/__store-blank`);
+  const restored = await page.evaluate(async ({ now, release }) => {
+    await import('/@vite/env'); // the dev server's define globals (__APP_RELEASE__ …)
+    const { buildDemoBackup } = await import('/src/data/demo/demoBackup.ts');
+    const { importAll } = await import('/src/data/backup.ts');
+    const { GymDb } = await import('/src/data/db.ts');
+    const file = buildDemoBackup(now, { release });
+    const db = new GymDb();
+    await db.open();
+    const r = await importAll(db, file, { appVersion: release, now });
+    const owner = (await db.settings.get('ownerMode'))?.value;
+    const trainer = (await db.trainer.get('current'))?.state;
+    db.close();
+    return { counts: r.counts, owner, restWeekdays: trainer?.schedule?.restWeekdays,
+      rotation: trainer?.schedule?.rotation };
+  }, { now: STORE_AT, release });
+  await page.goto(BASE + '/');
+  return { ctx, page, log, offsite, restored };
+}
+
+/** Text that must never be in a store shot: to-dos, the dev log, a build hash. */
+async function storeLeaks(page) {
+  return page.evaluate(() => {
+    const vis = (el) => el.getClientRects().length > 0;
+    const text = document.body.innerText;
+    return {
+      todoCard: [...document.querySelectorAll('[data-todo-card]')].filter(vis).length,
+      devlog: [...document.querySelectorAll('[data-devlog]')].filter(vis).length,
+      todoWord: /to-?do/i.test(text),
+      devLogWord: /developer log|dev log/i.test(text),
+      hashLike: (text.match(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/g) ?? []),
+      buildWord: /\bbuild\b(?! a focus block)/i.test(text),
+    };
+  });
+}
+
+const storeResults = [];
+async function storeShot(p, name, caption) {
+  await p.page.waitForTimeout(400);
+  const file = `${STORE_OUT}/${name}.png`;
+  await p.page.screenshot({ path: file });
+  const scrollWidth = await p.page.evaluate(() => document.documentElement.scrollWidth);
+  const leaks = await storeLeaks(p.page);
+  storeResults.push({ name, file, caption, scrollWidth, leaks, console: [...p.log] });
+}
+
+async function storeCaptioned(browser, brand) {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
+  const offsite = [];
+  await ctx.route('**/*', (route) => {
+    const u = route.request().url();
+    if (u.startsWith('data:')) return route.continue();
+    offsite.push(u);
+    return route.abort();
+  });
+  const page = await ctx.newPage();
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  for (const r of storeResults) {
+    const png = execFileSync('base64', ['-i', r.file], { encoding: 'utf8', maxBuffer: 64 << 20 }).replace(/\s/g, '');
+    await page.setContent(`<!doctype html><html><head><style>
+      html,body{margin:0;width:390px;height:844px;background:${STORE_BG};color:#f4f6f8;overflow:hidden;
+        font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+      .cap{position:absolute;top:40px;left:24px;right:24px;text-align:center}
+      h1{margin:0;font-size:30px;line-height:1.15;font-weight:800;letter-spacing:-.01em}
+      .shot{position:absolute;top:150px;left:50%;transform:translateX(-50%);width:288px;height:623px;
+        border-radius:34px;overflow:hidden;box-shadow:0 0 0 6px #23272e,0 18px 40px rgba(0,0,0,.6)}
+      .shot img{width:100%;height:100%;display:block}
+      .brand{position:absolute;bottom:22px;left:0;right:0;text-align:center;font-size:15px;color:#a9b0bb}
+      .brand b{color:#f4f6f8;font-weight:700}
+    </style></head><body>
+      <div class="cap"><h1>${esc(r.caption)}</h1></div>
+      <div class="shot"><img src="data:image/png;base64,${png}" alt=""></div>
+      <div class="brand"><b>${esc(brand.name)}</b> · ${esc(brand.tagline)}</div>
+    </body></html>`);
+    await page.locator('img').evaluate((img) => img.decode());
+    const file = `${STORE_OUT}/${r.name}-captioned.png`;
+    await page.screenshot({ path: file });
+    r.captioned = file;
+  }
+  await ctx.close();
+  return offsite;
+}
+
+async function store(browser) {
+  mkdirSync(STORE_OUT, { recursive: true });
+  const release = JSON.parse(execFileSync('cat', ['package.json'], { encoding: 'utf8' })).version;
+  const brand = storeBrand();
+  const p = await storePhone(browser, release);
+  const flow = { restored: p.restored, release, at: new Date(STORE_AT).toString() };
+  const tab = (t) => p.page.locator(`[data-tab="${t}"]`).click();
+
+  await p.page.locator('[data-tab="today"]').waitFor();
+  if (process.env.STORE_PROBE) {
+    await p.page.waitForTimeout(4000);
+    console.log(JSON.stringify(flow, null, 2));
+    console.log(await p.page.locator('body').innerText());
+    await p.page.screenshot({ path: 'test-results/store-probe.png' });
+    await p.ctx.close();
+    return;
+  }
+  // The demo plan is an edited one, so Today offers the newer default; answer it as a person would.
+  await p.page.locator('[data-start]').first().waitFor();
+  const keep = p.page.getByRole('button', { name: 'Keep mine' });
+  flow.newDefaultNotice = await keep.waitFor({ timeout: 5000 }).then(() => true, () => false);
+  if (flow.newDefaultNotice) {
+    await keep.click();
+    await keep.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+  }
+  await storeShot(p, '1-today', "Today's workout, ready to start");
+
+  await tab('calendar');
+  await p.page.locator('main[data-screen="calendar"]').waitFor();
+  await storeShot(p, '5-calendar', 'Your training month at a glance');
+
+  await tab('fuel');
+  await p.page.locator('main[data-screen="fuel"]').waitFor();
+  await storeShot(p, '6-fuel', 'Log meals against your daily targets');
+
+  await tab('coach');
+  const coach = p.page.locator('[data-screen="coach"]');
+  await coach.waitFor();
+  flow.chips = await coach.locator('[data-coach-chip]').evaluateAll((els) =>
+    els.map((e) => `${e.getAttribute('data-coach-chip')}: ${e.textContent.trim()}`));
+  // A short made-up exchange (chat is not in backups): two chip taps, no typing.
+  const chipTaps = (process.env.STORE_CHIPS ?? 'Build a focus block|Back').split('|');
+  flow.coachTaps = [];
+  for (const label of chipTaps) {
+    const btn = coach.locator('[data-coach-chip], [data-coach-followup]').filter({ hasText: label }).last();
+    await btn.click();
+    await p.page.waitForTimeout(900);
+    flow.coachTaps.push({ label, next: await coach.locator('[data-coach-chip], [data-coach-followup]')
+      .evaluateAll((els) => els.filter((e) => e.getClientRects().length).map((e) => e.textContent.trim())) });
+  }
+  await storeShot(p, '4-coach', 'Ask the coach about your plan');
+
+  await tab('today');
+  await p.page.locator('[data-start]').first().click();
+  await p.page.getByRole('button', { name: 'Start workout' }).click();
+  await p.page.locator('[data-screen="exercise"]').waitFor();
+  await storeShot(p, '2-set', 'One set at a time, in big numbers');
+
+  await p.page.getByRole('button', { name: 'Set done' }).click();
+  await p.page.locator('[data-screen="rest"]').waitFor();
+  await p.page.waitForTimeout(1500);
+  // Is anything drawn over the sticky Start set button (e.g. the next-set 3D figure)?
+  flow.restOverlap = await p.page.evaluate(() => {
+    const btn = [...document.querySelectorAll('button')].find((b) => /Start set/.test(b.textContent));
+    if (!btn) return null;
+    const r = btn.getBoundingClientRect();
+    return [0.1, 0.2, 0.5, 0.9].map((fx) => {
+      const el = document.elementFromPoint(r.left + r.width * fx, r.top + r.height / 2);
+      return { fx, hitsButton: !!el && (el === btn || btn.contains(el)),
+        el: el ? `${el.tagName.toLowerCase()}.${el.className?.baseVal ?? el.className}` : null };
+    });
+  });
+  await storeShot(p, '3-rest', 'A rest timer with the next set lined up');
+
+  flow.offsite = p.offsite;
+  flow.spoken = await p.page.evaluate(() => window.__spoken);
+  await p.ctx.close();
+  storeResults.sort((a, b) => a.name.localeCompare(b.name));
+  flow.captionOffsite = await storeCaptioned(browser, brand);
+  results.push(flow, ...storeResults);
+}
+
+const milestone = (process.argv[2] ?? 'm4').replace(/^--/, '');
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
 const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
@@ -3784,6 +4012,7 @@ try {
   else if (milestone === 'm11') await m11(browser);
   else if (milestone === 'm12') await m12(browser);
   else if (milestone === 'm12b') await m12b(browser, process.argv[3]);
+  else if (milestone === 'store') await store(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
