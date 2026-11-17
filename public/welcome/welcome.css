@@ -1,0 +1,270 @@
+/* M13 task 36: landing page styles. Same colours as the app (src/styles.css :root tokens),
+   dark only. Fonts are the app's own Barlow files (SIL OFL 1.1), copied next to this file. */
+
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/barlow-condensed-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/barlow-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/barlow-latin-700-normal.woff2') format('woff2');
+}
+
+:root {
+  --bg: #0d0f12;
+  --surface: #16191e;
+  --line: #323842;
+  --text: #f2f4f7;
+  --text-2: #a9b1bc;
+  --cta: #ff7a1a;
+  --on-cta: #1a0b00;
+  --success: #3be38b;
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Barlow Condensed', 'Barlow', system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: max(32px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right))
+    max(40px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+
+/* Hero */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 0 40px;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 120px;
+  height: 120px;
+  border: 2px solid var(--line);
+  border-radius: 24px;
+  background: var(--bg);
+  color: var(--cta);
+}
+
+.name {
+  margin: 12px 0 0;
+  font-family: var(--font-display);
+  font-size: 72px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.tagline {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--cta);
+}
+
+.lede {
+  max-width: 36ch;
+  margin: 8px 0 12px;
+  color: var(--text-2);
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 0 32px;
+  border-radius: 16px;
+  background: var(--cta);
+  color: var(--on-cta);
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.cta:hover {
+  filter: brightness(1.08);
+}
+
+.cta:focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 3px;
+}
+
+/* Sections */
+.section-title {
+  margin: 0 0 20px;
+  font-family: var(--font-display);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.shots,
+.privacy {
+  padding: 32px 0;
+  border-top: 2px solid var(--line);
+}
+
+.shot-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 32px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+figure {
+  margin: 0 auto;
+  max-width: 320px;
+}
+
+figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 2px solid var(--line);
+  border-radius: 28px;
+  background: var(--surface);
+}
+
+figcaption {
+  margin-top: 12px;
+  color: var(--text-2);
+}
+
+.points {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.points li {
+  position: relative;
+  padding-left: 32px;
+}
+
+/* A green check drawn in CSS (no image, no font glyph). */
+.points li::before {
+  content: '';
+  position: absolute;
+  top: 0.45em;
+  left: 4px;
+  width: 8px;
+  height: 14px;
+  border: solid var(--success);
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+}
+
+.exception {
+  margin-top: 24px;
+  padding: 20px;
+  border: 2px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.exception-head {
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.exception p {
+  margin: 0;
+}
+
+.page-note {
+  margin: 20px 0 0;
+  color: var(--text-2);
+}
+
+/* Footer */
+.foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 32px 0 0;
+  border-top: 2px solid var(--line);
+}
+
+.medical {
+  margin: 0;
+  font-weight: 700;
+}
+
+/* Desktop: hero beside nothing, shots in a row, privacy in a narrower column. */
+@media (min-width: 900px) {
+  main {
+    padding-top: 64px;
+  }
+
+  .name {
+    font-size: 96px;
+  }
+
+  .tagline {
+    font-size: 32px;
+  }
+
+  .shot-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .privacy > * {
+    max-width: 760px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
