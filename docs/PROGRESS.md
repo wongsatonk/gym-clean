@@ -3038,6 +3038,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - Not run: `ios:*` scripts (no `ios/` until task 3; Xcode broken on this Mac, M9-q9).
 
 ### M11 Apple Health (2026-11-16)
+- **On his iPhone (task 13, 2026-11-16):** first install showed no Connect (GymHealth header arrived late → fixed in 271bbdc, verified in the simulator); after Connect + Read now, Fuel showed his Health weight tagged "from Health" once Health-wins (77eddd9) was in: **pass** (he confirmed). Still to confirm: the iOS sheet listed only the six types; WHOOP sleep/RHR/HRV came in.
 Verifier on `m11-build` at 424cafd (reviewer PASS on the same commit). **Verdict: PASS for everything that can run on the Mac; the 🧍 iPhone items (task 13) and Checkpoint H are pending.**
 - `npm run check`: typecheck + lint clean, Vitest **125 files / 3157 tests passed**, script tests **56/56**. Health tests: `src/core/health/{days,baseline,readiness,readiness.fixtures,copy,weighIns,weeklyLoad,sync}.test.ts`, `src/core/nutrition/activityCheck.test.ts`, `src/native/health.test.ts` (fake bridge: no plugin, unavailable, denied → empty ok, partial, locked → `status: locked`, other failure → `failed`, never throws); fixtures in `src/core/health/fixtures/` (normal week, short sleep + high RHR, one signal only, sparse, mixed HRV sources ×2).
 - `E2E_PORT=5731 E2E_PWA_PORT=6731 npm run e2e` (all phases): **159 passed, 1 skipped** (the opt-in `HISTORY_SHOTS` test), 18.1 min. `e2e/health.spec.ts` 5/5; `--repeat-each=5` on it: **25/25**.
