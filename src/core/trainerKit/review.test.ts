@@ -93,6 +93,15 @@ describe('reviewDue', () => {
     expect(r?.lines).toHaveLength(2);
   });
 
+  it('text holds each goal line exactly once (the chat bubble posts text alone, not text + lines)', () => {
+    const r = reviewDue([bench, arm], undefined, 5, '2026-07-06', {
+      progress: [progress('g1', 'onTrack', 71), progress('g2', 'behind', 10)],
+    });
+    const text = r?.text ?? '';
+    expect(r?.lines).toHaveLength(2);
+    for (const line of r?.lines ?? []) expect(text.split(line).length - 1).toBe(1);
+  });
+
   it('behind → offers to change the goal (date or target) first', () => {
     const r = reviewDue([bench, arm], undefined, 5, '2026-07-06', {
       progress: [progress('g1', 'behind', 10), progress('g2', 'onTrack', 40)],

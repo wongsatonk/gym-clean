@@ -34,6 +34,8 @@ function isTrainerState(v: unknown): v is TrainerState {
 
 /** True when the stored plan came from another program.json than `program` (edited plans only stay so). */
 export function defaultProgramChanged(state: TrainerState, program: Program): boolean {
+  // A starter plan (M12 1b intake) isn't built from the default program, so its updates don't apply.
+  if (state.plan.seededFrom?.startsWith('starter:')) return false;
   return state.plan.seededFrom !== programHash(program);
 }
 

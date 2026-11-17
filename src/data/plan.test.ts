@@ -144,6 +144,13 @@ describe('loadTrainerState (M10)', () => {
     expect(defaultProgramChanged(kept, PROGRAM)).toBe(false);
   });
 
+  it('never offers a new default program to a starter plan built from the intake', async () => {
+    const first = await loadTrainerState(db, PROGRAM);
+    const starter = { ...first, plan: { ...first.plan, edited: true, seededFrom: 'starter:abc' } };
+    expect(defaultProgramChanged(starter, PROGRAM_V2)).toBe(false);
+    expect(defaultProgramChanged(starter, PROGRAM)).toBe(false);
+  });
+
   it('re-seeds a stored row that isn’t a trainer state', async () => {
     await db.trainer.put({ key: 'current', state: { junk: true } as unknown as TrainerState });
     expect(await loadTrainerState(db, PROGRAM)).toEqual(seedPlan(PROGRAM));

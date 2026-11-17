@@ -3775,7 +3775,7 @@ export function mountApp(root: HTMLElement): void {
       await postMessage({
         createdAt: now(),
         role: 'coach',
-        text: [review.text, ...review.lines].join(' '),
+        text: review.text,
         say: review.say,
         source: 'rules',
         phase: 'today',

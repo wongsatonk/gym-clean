@@ -11,7 +11,7 @@ import { GymDb, type SessionRow } from '../db';
 import { getNutritionSettings, listWeighIns } from '../nutrition/store';
 import { ONBOARDING_KEY } from '../onboarding';
 import { OWNER_MODE_KEY } from '../ownerMode';
-import { loadTrainerState } from '../plan';
+import { defaultProgramChanged, loadTrainerState } from '../plan';
 import { getIntake, listGoals } from '../trainerKit/store';
 import { buildDemoBackup } from './demoBackup';
 
@@ -120,6 +120,13 @@ describe('buildDemoBackup(now): a made-up person for the store screenshots (M13 
     const sites = rows<{ date: string; cm: number }>(buildDemoBackup(NOW), 'measurements');
     const firstDate = sites.map((m) => m.date).sort()[0];
     for (const m of sites.filter((x) => x.date === firstDate)) expect(m.cm % 5).toBe(0);
+  });
+
+  it('restored, Today offers no "new default program" (the plan counts as seen against program.json)', async () => {
+    await importAll(db, buildDemoBackup(NOW));
+    const state = await loadTrainerState(db, program);
+    expect(state.plan.edited).toBe(true);
+    expect(defaultProgramChanged(state, program)).toBe(false);
   });
 
   it('no session falls on a rest weekday of the restored schedule', () => {

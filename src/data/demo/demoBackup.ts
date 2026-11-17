@@ -21,11 +21,12 @@ import {
   defaultGymProfile,
   exerciseName,
   gymCanDo,
+  program,
 } from '../catalog';
 import { GymDb, type SessionRow } from '../db';
 import { NUTRITION_DEFAULTS } from '../../core/nutrition/targets';
 import { buildFocusBlock } from '../../core/trainer/focusBlock';
-import { addDate, localDate, weekdayOf, type PlanSession } from '../../core/trainer/plan';
+import { addDate, localDate, programHash, weekdayOf, type PlanSession } from '../../core/trainer/plan';
 import { buildStarterPlan } from '../../core/trainer/starterPlan';
 import type { TrainerCatalog } from '../../core/trainer/swapCandidates';
 import type {
@@ -238,7 +239,9 @@ export function buildDemoBackup(now: number, opts: DemoOptions = {}): BackupFile
   }));
   const base: TrainerState = {
     version: 4,
-    plan: { ...starter.plan, days, edited: true },
+    // seededFrom = this program.json's hash, as "Keep mine" stores it: a restore shows no
+    // "a new default program is available" notice over the screenshots.
+    plan: { ...starter.plan, days, edited: true, seededFrom: programHash(program) },
     schedule: starter.schedule,
     overrides: [],
     easyOn: [],
