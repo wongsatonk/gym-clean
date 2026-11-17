@@ -3,7 +3,9 @@
  * passed in. Built on the plan.ts calendar, where rest days never use up a rotation day:
  *
  * - `pushWeek`: a rest override on today. Today's day moves to the next training date and every
- *   later one slides with it; the last one of the 7 days spills into next week.
+ *   later one slides with it; the last one of the 7 days spills into next week. The why names
+ *   each moved day once: when the spilled one is today's day again (a rotation shorter than the
+ *   week) it is "The next <day> moves to next week."
  * - `useRestDay`: the same, plus a bare `{ date }` override (= train that date with the pending
  *   rotation day) on the first rest date in the next 6 days, so the 7 days keep every session.
  *   With no such date (no rest weekdays, or already used by an earlier postpone) it slides the
@@ -136,10 +138,25 @@ export function proposePostpone(
       if (k >= 0) left.splice(k, 1);
       else spill.push(nameOf(e.dayId));
     }
+    // A day is never said to move twice. Today's day that has no date left in the 7 days is
+    // already "moves to next week" in `movedTo`; a repeat of it later in the week (a rotation
+    // shorter than the week) is "The next <day>".
+    if (!lands) {
+      const k = spill.indexOf(moved);
+      if (k >= 0) spill.splice(k, 1);
+    }
+    const names = [...new Set(spill)].map((name) => (name === moved ? `the next ${name}` : name));
     const lead =
       opts.mode === 'useRestDay' ? 'No rest day left this week, so the week slides a day. ' : '';
-    const tail = spill.length > 0 ? ` ${spill.join(' and ')} moves to next week.` : '';
-    why = `${lead}${movedTo} and the rest follow.${tail}`;
+    const follow = after.some((e) => !e.rest && e.dayId !== null && e !== lands)
+      ? ' and the rest follow'
+      : '';
+    const list = names.join(' and ');
+    const tail =
+      names.length > 0
+        ? ` ${list.charAt(0).toUpperCase()}${list.slice(1)} ${names.length > 1 ? 'move' : 'moves'} to next week.`
+        : '';
+    why = `${lead}${movedTo}${follow}.${tail}`;
   }
 
   return {

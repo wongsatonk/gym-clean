@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { proposePostpone, type PostponeResult } from './postpone';
 import { applyProposal } from '../changes';
 import { calendar, seedPlan, upNext, type PlanSession } from '../plan';
+import { checkCopy } from '../replies';
 import { ADVICE_BANNED_WORDS, wordCount } from '../../advice';
 import type {
   DayOverride,
@@ -275,5 +276,90 @@ describe('proposePostpone: move to a date', () => {
     const state = st([{ date: '2026-11-12', rest: true }]);
     const p = ok(proposePostpone(state, [], MON, { mode: 'useRestDay', to: '2026-11-12' }));
     expect(p.next.overrides).toEqual([{ date: MON, rest: true }, { date: '2026-11-12' }]);
+  });
+});
+
+describe('proposePostpone: a day is never said to move twice (M12 1b task 2)', () => {
+  /** A made-up rotation shorter than the week, so the 7 days repeat a day. */
+  const short = (rotation: string[], restWeekdays = [0]): TrainerState => {
+    const s = st([], restWeekdays);
+    return { ...s, schedule: { ...s.schedule, rotation } };
+  };
+  /** How many sentences say `name` moves ("The next A" is the repeat, a different session). */
+  const moves = (why: string, name: string): number =>
+    why.split(/(?<=\.)\s+/).filter((t) => new RegExp(`(?<!next )\\b${name} moves? to\\b`).test(t))
+      .length;
+
+  it('the spilled day is the moved day again: "The next A moves to next week."', () => {
+    // Five days, Sunday rest: Saturday repeats A, and that second A is the one that spills.
+    const state = short(['a', 'b', 'c', 'd', 'e']);
+    expect(ids(state, [], MON)).toEqual(['a', 'b', 'c', 'd', 'e', 'a', '-']);
+    const p = ok(proposePostpone(state, [], MON, { mode: 'pushWeek' }));
+    expect(ids(p.next, [], MON)).toEqual(['-', 'a', 'b', 'c', 'd', 'e', '-']);
+    // The slice 1 sentence was "A moves to Tuesday and the rest follow. A moves to next week."
+    expect(p.why).not.toBe('A moves to Tuesday and the rest follow. A moves to next week.');
+    expect(p.why).toBe('A moves to Tuesday and the rest follow. The next A moves to next week.');
+    expect(p.why.match(/(?<!next )A moves to/g)).toHaveLength(1);
+    expectCleanCopy(p);
+    expect(checkCopy(p.why).ok, p.why).toBe(true);
+  });
+
+  it('the same with no rest day left: the lead stays, the moved day is named once', () => {
+    const state = short(['a', 'b', 'c', 'd', 'e', 'f'], []);
+    expect(ids(state, [], MON)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'a']);
+    const p = ok(proposePostpone(state, [], MON, { mode: 'useRestDay' }));
+    expect(p.why).toBe(
+      'No rest day left this week, so the week slides a day. ' +
+        'A moves to Tuesday and the rest follow. The next A moves to next week.',
+    );
+    expect(checkCopy(p.why).ok, p.why).toBe(true);
+  });
+
+  it('a different spilled day is named as itself', () => {
+    const state = short(['a', 'b', 'c']);
+    expect(ids(state, [], MON)).toEqual(['a', 'b', 'c', 'a', 'b', 'c', '-']);
+    const p = ok(proposePostpone(state, [], MON, { mode: 'pushWeek' }));
+    expect(p.why).toBe('A moves to Tuesday and the rest follow. C moves to next week.');
+    expect(moves(p.why, 'A')).toBe(1);
+    expect(moves(p.why, 'C')).toBe(1);
+    expect(checkCopy(p.why).ok, p.why).toBe(true);
+  });
+
+  it('the only session of the week: one sentence, not "moves to next week" twice', () => {
+    // Train Mondays only: nothing else is left in the 7 days to follow.
+    const state = short(['a', 'b'], [0, 2, 3, 4, 5, 6]);
+    expect(ids(state, [], MON)).toEqual(['a', '-', '-', '-', '-', '-', '-']);
+    const p = ok(proposePostpone(state, [], MON, { mode: 'pushWeek' }));
+    expect(p.why).toBe('A moves to next week.');
+    expect(checkCopy(p.why).ok, p.why).toBe(true);
+  });
+
+  it('every slide in a made-up month names each moved day in one sentence only', () => {
+    const rotations = [
+      ['a', 'b'],
+      ['a', 'b', 'c'],
+      ['a', 'b', 'c', 'd'],
+      ['a', 'b', 'c', 'd', 'e'],
+    ];
+    const rests = [[], [0], [0, 3], [0, 6], [0, 2, 4, 6]];
+    for (const rotation of rotations) {
+      for (const rest of rests) {
+        for (let d = 2; d <= 29; d++) {
+          const today = `2026-11-${String(d).padStart(2, '0')}`;
+          for (const mode of ['pushWeek', 'useRestDay'] as const) {
+            const r = proposePostpone(short(rotation, rest), [], today, { mode });
+            if (!r.ok) continue;
+            const why = r.proposal.why;
+            const at = `${rotation.join('')} rest ${rest.join('')} ${today} ${mode}: ${why}`;
+            for (const id of rotation) {
+              const name = id.toUpperCase();
+              expect(moves(why, name), at).toBeLessThanOrEqual(1);
+            }
+            expect(why, at).not.toMatch(/moves to next week.*moves to next week/);
+            expect(checkCopy(why).ok, at).toBe(true);
+          }
+        }
+      }
+    }
   });
 });
