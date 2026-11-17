@@ -10,16 +10,12 @@
  * workout with it off can't tick the step, and he can still finish the topic with Skip.
  */
 import { RULES } from '../../core/exercises';
-import type { TodoOption, TodoTopic, TrainerKitSettings } from '../../core/types';
+import { TRAINER_KIT_DEFAULTS } from '../../core/trainerKit/defaults';
+import type { TodoOption, TodoTopic } from '../../core/types';
 import { exerciseName } from '../catalog';
 
-/** M12-q4 defaults (confirmed by the trainer-kit decision step; read by slice 1b). */
-export const TRAINER_KIT_DEFAULTS: TrainerKitSettings = {
-  measurementSites: ['leftArm', 'rightArm', 'chest', 'waist', 'hips', 'leftThigh', 'rightThigh'],
-  e1rmFormula: 'epley',
-  warmups: 'firstHeavyLift',
-  reviewWeeks: 5,
-};
+/** M12-q4 defaults (confirmed by the trainer-kit decision step); they live in core since slice 1b. */
+export { TRAINER_KIT_DEFAULTS };
 
 const YES_MOSTLY_NO: TodoOption[] = [
   { id: 'yes', label: 'Yes' },

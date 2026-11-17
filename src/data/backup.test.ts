@@ -189,6 +189,49 @@ async function seed(db: GymDb): Promise<void> {
       release: '1.12.0',
     },
   ]);
+  // M12 slice 1b: goals, tape measurements and day feels are backed up; the intake answers and the
+  // trainer-kit setting travel in `settings`.
+  await db.goals.bulkPut([
+    {
+      id: 'g1',
+      text: 'Made-up press 40 kg x 8',
+      target: { kind: 'lift', ref: 'press', value: 40, reps: 8 },
+      due: '2026-06-01',
+      createdAt: T0,
+    },
+    {
+      id: 'g2',
+      text: 'Made-up waist',
+      target: { kind: 'measurement', ref: 'waist', value: 78 },
+      due: '2026-06-01',
+      createdAt: T0 + 1,
+      doneAt: T0 + 9,
+    },
+  ]);
+  await db.measurements.bulkPut([
+    { date: '2026-01-05', site: 'waist', cm: 80.5 },
+    { date: '2026-01-05', site: 'chest', cm: 95 },
+    { date: '2026-02-05', site: 'waist', cm: 80 },
+  ]);
+  await db.dayFeels.bulkPut([
+    { date: '2026-01-05', energy: 2, sore: ['legs'] },
+    { date: '2026-01-06', energy: 4 },
+    { date: '2026-01-07', sore: ['arms', 'back'] },
+  ]);
+  await db.settings.bulkPut([
+    { key: 'trainerKit', value: { reviewWeeks: 6 } },
+    {
+      key: 'intake',
+      value: {
+        goalKind: 'fat',
+        days: 3,
+        sessionMin: 45,
+        experience: 'new',
+        easyOn: ['shoulders'],
+        at: T0,
+      },
+    },
+  ]);
   // Developer log: never in a backup.
   await db.devlogSessions.put({
     id: 'dl1',
@@ -253,7 +296,7 @@ describe('exportAll', () => {
     expect(file.format).toBe('gym-clean-backup');
     expect(file.version).toBe(BACKUP_VERSION);
     expect(file.dexieVersion).toBe(a.verno);
-    expect(file.dexieVersion).toBe(9);
+    expect(file.dexieVersion).toBe(10);
     expect(file.appVersion).toBe('abc123');
     expect(file.createdAt).toBe(T0 + 5);
     expect(Object.keys(file.tables).sort()).toEqual(
@@ -272,6 +315,9 @@ describe('exportAll', () => {
         'favorites',
         'weeklyChecks',
         'todoAnswers',
+        'measurements',
+        'goals',
+        'dayFeels',
       ].sort(),
     );
     expect(file.tables.sets).toHaveLength(2);
@@ -290,6 +336,7 @@ describe('exportAll', () => {
       'foodModels',
       'foodPhotos',
       'healthDays',
+      'progressPhotos',
     ];
     expect([...BACKUP_TABLES, ...left].sort()).toEqual(all);
     expect([...DEVLOG_TABLES, ...LOCAL_ONLY_TABLES].sort()).toEqual(left);
@@ -842,5 +889,148 @@ describe('M11 health data in backups', () => {
     const f = await exportAll(a, { appVersion: 't', now: T0 });
     f.tables.weighIns = [{ date: '2026-01-07', kg: 70, source: 3 }];
     expect(() => validateBackup(b, f)).toThrow(BackupError);
+  });
+});
+
+describe('M12 slice 1b trainer-kit data in backups', () => {
+  const blob = (): Blob => new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' });
+
+  it('carries goals, measurements, day feels, the intake answers and the trainer-kit setting', async () => {
+    await seed(a);
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(file.tables.goals).toHaveLength(2);
+    expect(file.tables.measurements).toHaveLength(3);
+    expect(file.tables.dayFeels).toHaveLength(3);
+    await importAll(b, viaFile(file));
+    expect(await b.goals.toArray()).toEqual(await a.goals.toArray());
+    expect(await b.measurements.toArray()).toEqual(await a.measurements.toArray());
+    expect(await b.measurements.get(['2026-01-05', 'waist'])).toEqual({
+      date: '2026-01-05',
+      site: 'waist',
+      cm: 80.5,
+    });
+    expect(await b.dayFeels.toArray()).toEqual(await a.dayFeels.toArray());
+    expect((await b.settings.get('trainerKit'))?.value).toEqual({ reviewWeeks: 6 });
+    expect((await b.settings.get('intake'))?.value).toMatchObject({ goalKind: 'fat', days: 3 });
+  });
+
+  it('a restore replaces this phone’s goals, measurements and day feels', async () => {
+    await seed(a);
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.goals.put({
+      id: 'gone',
+      text: 'Made-up',
+      target: { kind: 'weight', value: 60 },
+      due: '2026-03-01',
+      createdAt: T0,
+    });
+    await b.measurements.put({ date: '2025-12-01', site: 'hips', cm: 90 });
+    await b.dayFeels.put({ date: '2025-12-01', energy: 1 });
+    const res = await importAll(b, file);
+    expect(res.counts).toMatchObject({ goals: 2, measurements: 3, dayFeels: 3 });
+    expect(await b.goals.get('gone')).toBeUndefined();
+    expect(await b.measurements.get(['2025-12-01', 'hips'])).toBeUndefined();
+    expect(await b.dayFeels.get('2025-12-01')).toBeUndefined();
+    // Undo puts them back.
+    await importAll(b, res.undo);
+    expect(await b.goals.get('gone')).toBeDefined();
+    expect(await b.measurements.count()).toBe(1);
+    expect(await b.dayFeels.count()).toBe(1);
+  });
+
+  it('leaves progress photos out of the file', async () => {
+    await seed(a);
+    await a.progressPhotos.put({
+      id: 'made-up-progress-photo',
+      date: '2026-01-05',
+      createdAt: T0,
+      blob: blob(),
+      pose: 'front',
+    });
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(LOCAL_ONLY_TABLES).toContain('progressPhotos');
+    expect(Object.keys(file.tables)).not.toContain('progressPhotos');
+    expect(JSON.stringify(file)).not.toMatch(/made-up-progress-photo|progressPhotos/);
+  });
+
+  it('a restore leaves the progress photos already on this phone alone', async () => {
+    await seed(a);
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.progressPhotos.bulkPut([
+      { id: 'pp1', date: '2026-01-05', createdAt: T0, blob: blob() },
+      { id: 'pp2', date: '2026-02-05', createdAt: T0 + 1, blob: blob(), pose: 'side' },
+    ]);
+    await importAll(b, file);
+    expect((await b.progressPhotos.toArray()).map((p) => p.id)).toEqual(['pp1', 'pp2']);
+    expect((await b.progressPhotos.get('pp2'))?.pose).toBe('side');
+  });
+
+  it('refuses a file that tries to carry progress photos', async () => {
+    const f = await exportAll(a, { appVersion: 't', now: T0 });
+    const bad = { ...f, tables: { ...f.tables, progressPhotos: [] } };
+    expect(() => validateBackup(b, JSON.stringify(bad))).toThrow(BackupError);
+  });
+
+  it('accepts a v9 file (before slice 1b): the new tables end up empty', async () => {
+    await seed(a);
+    const file = await exportAll(a, { appVersion: 'old', now: T0 });
+    const tables = { ...file.tables };
+    delete tables.goals;
+    delete tables.measurements;
+    delete tables.dayFeels;
+    await seed(b);
+    await importAll(b, JSON.stringify({ ...file, dexieVersion: 9, tables }));
+    expect(await b.sets.count()).toBe(2);
+    expect(await b.goals.count()).toBe(0);
+    expect(await b.measurements.count()).toBe(0);
+    expect(await b.dayFeels.count()).toBe(0);
+  });
+
+  it('refuses damaged goal, measurement and day-feel rows', async () => {
+    await seed(a);
+    const bad: [string, unknown[]][] = [
+      ['goals', [{ id: 'g', text: 'x', target: 'bench', due: '2026-06-01', createdAt: T0 }]],
+      ['goals', [{ id: 'g', text: 'x', target: { kind: 'lift', value: 1 }, createdAt: T0 }]],
+      ['measurements', [{ date: '2026-01-05', site: 'waist', cm: 'wide' }]],
+      ['measurements', [{ date: '2026-01-05', cm: 80 }]],
+      [
+        'measurements',
+        [
+          { date: '2026-01-05', site: 'waist', cm: 80 },
+          { date: '2026-01-05', site: 'waist', cm: 81 },
+        ],
+      ],
+      ['dayFeels', [{ date: '2026-01-05', energy: 'low' }]],
+      ['dayFeels', [{ date: '2026-01-05', sore: 'legs' }]],
+      ['dayFeels', [{ energy: 3 }]],
+    ];
+    for (const [table, rows] of bad) {
+      const f = await exportAll(a, { appVersion: 't', now: T0 });
+      let err: unknown = null;
+      try {
+        validateBackup(b, JSON.stringify({ ...f, tables: { ...f.tables, [table]: rows } }));
+      } catch (e) {
+        err = e;
+      }
+      expect(err, `${table} ${JSON.stringify(rows)}`).toBeInstanceOf(BackupError);
+      expect((err as BackupError).code).toBe('corrupt');
+      expect((err as BackupError).message).toContain(table);
+    }
+  });
+
+  it('keeps a set’s effort and warm-up mark, and refuses badly typed ones', async () => {
+    const f = await exportAll(a, { appVersion: 't', now: T0 });
+    f.tables.sets = [
+      { ...SET_ROW, id: 1, effort: 'hard' },
+      { ...SET_ROW, id: 2, setIndex: 1, warmup: true },
+    ];
+    await importAll(b, viaFile(f));
+    expect((await b.sets.get(1))?.effort).toBe('hard');
+    expect((await b.sets.get(2))?.warmup).toBe(true);
+    for (const over of [{ effort: 3 }, { warmup: 'yes' }]) {
+      const g = await exportAll(a, { appVersion: 't', now: T0 });
+      g.tables.sets = [{ ...SET_ROW, id: 1, ...over }];
+      expect(() => validateBackup(b, viaFile(g))).toThrow(BackupError);
+    }
   });
 });

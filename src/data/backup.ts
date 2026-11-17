@@ -22,6 +22,10 @@
  * first seen on this phone, the 7-day re-sign clock); a restore keeps this phone's `builds` and the
  * later of this phone's and the file's `seenRelease` (an old backup doesn't replay the tour), and a
  * file without the row keeps this phone's row.
+ *
+ * Trainer kit (M12 slice 1b): goals, tape measurements and day feels are backed up, and so are the
+ * settings rows 'trainerKit' and 'intake'. Progress photos never are (LOCAL_ONLY_TABLES): a file
+ * can't carry them and a restore leaves this phone's alone.
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';
@@ -53,6 +57,10 @@ export const BACKUP_TABLES = [
   'weeklyChecks',
   // M12 slice 1c: his to-do answers and notes (no Health values; key-like strings removed on save).
   'todoAnswers',
+  // M12 slice 1b: tape measurements, goals and "how I feel today" answers (his own entries).
+  'measurements',
+  'goals',
+  'dayFeels',
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];
@@ -69,12 +77,15 @@ export const DEVLOG_TABLES = ['devlogSessions', 'devlogSets', 'devlogChunks'] as
  *   the restored phone. Imported weigh-ins are in `weighIns` and are backed up.
  * - M12: `chatMessages`, the coach chat thread (private text, kept 30 days). The coach UI state
  *   in `settings` key 'coach' holds no message text and is backed up.
+ * - M12 slice 1b: `progressPhotos`, his progress photos (private image Blobs). They never leave
+ *   this phone in any file.
  */
 export const LOCAL_ONLY_TABLES = [
   'foodPhotos',
   'foodModels',
   'healthDays',
   'chatMessages',
+  'progressPhotos',
 ] as const;
 
 /** Every table a backup never carries (a restore leaves them alone). */
@@ -298,6 +309,7 @@ const any: Check = () => true;
 const numOrNull: Check = (v) => v === null || num(v);
 const trainerState: Check = (v) =>
   isObj(v) && num(v.version) && isObj(v.plan) && isObj(v.schedule) && Array.isArray(v.overrides);
+const goalTarget: Check = (v) => isObj(v) && str(v.kind) && num(v.value);
 
 const MACROS = { kcal: num, proteinG: num, 'carbsG?': num, 'fatG?': num };
 
@@ -323,6 +335,8 @@ const ROW_SHAPES: Record<BackupTable, Record<string, Check>> = {
     'restTargetSec?': num,
     'focusScore?': num,
     'cues?': arr,
+    'effort?': str,
+    'warmup?': bool,
     startedAt: num,
     endedAt: num,
   },
@@ -385,6 +399,9 @@ const ROW_SHAPES: Record<BackupTable, Record<string, Check>> = {
     release: str,
     'sentAt?': num,
   },
+  measurements: { date: str, site: str, cm: num },
+  goals: { id: str, text: str, target: goalTarget, due: str, createdAt: num, 'doneAt?': num },
+  dayFeels: { date: str, 'energy?': num, 'sore?': arr },
   favorites: { id: str, ref: obj, amount: obj, createdAt: num },
   weeklyChecks: {
     weekStart: str,

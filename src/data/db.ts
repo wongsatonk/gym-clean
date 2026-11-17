@@ -2,13 +2,17 @@ import Dexie, { type Table } from 'dexie';
 import type {
   Accent,
   ChatMessage,
+  DayFeel,
   Favorite,
   Food,
   FoodEntry,
   FoodModelRecord,
   FoodPhoto,
+  Goal,
   HealthDay,
+  Measurement,
   PlanChange,
+  ProgressPhoto,
   ProposalAction,
   RepEvent,
   Recipe,
@@ -162,6 +166,16 @@ export class GymDb extends Dexie {
   // Health values); never in the dev log. Tour / to-do state lives in `settings` keys 'whatsNew',
   // 'todos' and 'todoSignals'.
   todoAnswers!: Table<TodoAnswer, string>;
+  // M12 slice 1b trainer kit (see src/data/trainerKit/store.ts). Backed up; never in the dev log.
+  // The intake answers and the trainer-kit setting live in `settings` keys 'intake' / 'trainerKit'.
+  /** One tape measurement per local date and site; saving the same pair again replaces it. */
+  measurements!: Table<Measurement, [string, string]>;
+  goals!: Table<Goal, string>;
+  /** One "how I feel today" answer per local date. */
+  dayFeels!: Table<DayFeel, string>;
+  // M12 slice 1b progress photos (see src/data/progressPhotos/store.ts). This phone only: not in
+  // backups, never in the dev log, never sent or shown to a coach.
+  progressPhotos!: Table<ProgressPhoto, string>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -215,6 +229,14 @@ export class GymDb extends Dexie {
     // M12 slice 1c to-do answers. New table only, no upgrade function; existing data is untouched.
     this.version(9).stores({
       todoAnswers: 'id, topicId, at, sentAt',
+    });
+    // M12 slice 1b trainer kit. New tables only, no upgrade function; existing data is untouched.
+    // `SetLog.effort` / `warmup` are optional and unindexed (old rows have neither).
+    this.version(10).stores({
+      measurements: '[date+site], date',
+      goals: 'id, createdAt',
+      dayFeels: 'date',
+      progressPhotos: 'id, date, createdAt',
     });
   }
 }
