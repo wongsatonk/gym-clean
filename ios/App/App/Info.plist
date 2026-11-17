@@ -30,6 +30,10 @@
 	<string>Counts your reps on this phone. Video never leaves it.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Reads sleep, heart rate, workouts and weight so the coach can suggest a lighter day. Stays on this phone.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Lets you talk to the coach. Audio stays on this phone.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Turns what you say to the coach into text on this phone.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
