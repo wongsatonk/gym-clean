@@ -92,8 +92,11 @@ Keep these script names stable; add them in milestone 0.
 
 ## Hard rules
 
-- **Privacy:** all video and inference stays on the device. Never upload frames, never record
-  video in the app, never add analytics. Other people use this gym.
+- **Privacy:** all video and inference stays on the device. Never upload frames, never add
+  analytics. Other people use this gym. The only recording allowed is the opt-in **best-rep
+  clips** feature (his change, 2026-11-17): off by default, a visible recording dot, background
+  people blurred, short clips saved **only on his phone** (app storage, excluded from iCloud
+  backup, never synced or uploaded by the app); he alone shares a clip, via the share sheet.
 - **Fixtures:** raw videos in `fixtures/videos/` are gitignored (they show me). Only the
   extracted landmark JSON in `fixtures/landmarks/` is committed.
 - **Readable at 2 m:** main numbers ≥ 64px, body text ≥ 20px, high contrast, dark theme,
