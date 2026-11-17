@@ -152,8 +152,27 @@ import {
   type MissedDay,
 } from '../core/progress/completion';
 import { recapDue } from '../core/progress/recap';
-import { createRouter } from '../data/brain/router';
+import { createRouter, type CoachRouter } from '../data/brain/router';
 import { rulesBrain } from '../data/brain/rules';
+// M12 slice 2: Apple's on-device brain, the mic, reminders, the weekly check-in.
+import { appleBrain, askApple, type AppleDeps, type AppleTrace } from '../data/brain/apple';
+import { coachNoteStore } from '../data/brain/notes';
+import { runBrainEval } from '../data/brain/evalRunner';
+import { brainInstructions } from '../core/trainer/brain/instructions';
+import { micAllowed, sayFor, shouldSpeak } from '../core/trainer/speakRules';
+import { mergeReminders, reminderPlan } from '../core/reminders/schedule';
+import { CHECK_IN_QUESTIONS, CHECK_IN_SCALE, checkInDue } from '../core/checkIn/checkIn';
+import { listCheckIns, saveCheckIn, skipCheckIn } from '../data/checkIn/store';
+// Native modules load only inside the iPhone app (dynamic import in initSlice2).
+import type { GymBrain } from '../native/gymBrain';
+import type { Speech } from '../native/speech';
+import type { Reminders } from '../native/reminders';
+import type { MicProps } from './coach/micButton';
+import { updateChatMic } from './coach/chat';
+import type { CheckInAnswers, CheckInQuestionView } from './coach/checkInCard';
+import { coachSettingsScreen, type BrainStatusView } from './screens/coachSettings';
+import { remindersScreen, type NotificationPermission } from './screens/reminders';
+import { brainEvalScreen, type BrainEvalProps } from './screens/brainEval';
 import {
   addMessage,
   clearChat,
@@ -162,6 +181,7 @@ import {
   patchCoachUi,
   pruneChat,
   updateCard,
+  COACH_UI_KEY,
   type ChatCardPatch,
   type CoachUiState,
 } from '../data/chat/store';
@@ -281,7 +301,14 @@ import { createFuel } from './fuel/fuelController';
 import { createFoodVisionHost } from './fuel/foodVisionHost';
 import { createHealthHost } from './healthHost';
 import { isAppRoute } from '../core/todo/routes';
-import type { AppRoute, WhatsNewPage } from '../core/types';
+import type {
+  AppRoute,
+  CheckIn,
+  CoachSettings,
+  ReminderKind,
+  ReminderSettings,
+  WhatsNewPage,
+} from '../core/types';
 import { noteSignal } from '../data/todos/store';
 import { createTodoHost, nativeShell } from './todo/todoHost';
 import type { WhatsNewTour } from './todo/whatsNewTour';
@@ -327,6 +354,10 @@ type View =
   | { screen: 'planChanges' }
   | { screen: 'myGym' }
   | { screen: 'healthSettings' }
+  // M12 slice 2: Settings → Coach, Reminders, and the dev-only Coach eval (iPhone app).
+  | { screen: 'coachSettings' }
+  | { screen: 'reminders' }
+  | { screen: 'brainEval' }
   | { screen: 'coach' }
   // M12 slice 1c: the to-do list and one topic's guide (`from` = the tab that opened them).
   | { screen: 'todos'; from: 'today' | 'settings' }
@@ -373,7 +404,9 @@ export function mountApp(root: HTMLElement): void {
   // ----- M12 coach chat (one thread: the Coach tab + the Pause sheet's compact chat) -----
   // Slice 1 registers the rule brain only (no network). Live Proposals (with their `next`
   // state) stay in memory by message id; the stored cards keep only what the thread shows.
-  const router = createRouter([rulesBrain]);
+  // M12 slice 2: the iPhone app puts Apple's on-device brain first once its plugin loads
+  // (initSlice2); the PWA keeps the rules only.
+  let router: CoachRouter = createRouter([rulesBrain]);
   let thread: ChatMessage[] = [];
   let threadReady: Promise<void> | null = null;
   let chatBusy = false;
@@ -929,6 +962,12 @@ export function mountApp(root: HTMLElement): void {
         });
       case 'myGym':
         return myGymView();
+      case 'coachSettings':
+        return coachSettingsView();
+      case 'reminders':
+        return remindersView();
+      case 'brainEval':
+        return brainEvalView();
       case 'intake':
         return intakeView(v);
       case 'progressPhotos':
@@ -961,6 +1000,9 @@ export function mountApp(root: HTMLElement): void {
       case 'myGym':
       case 'healthSettings':
       case 'progressPhotos':
+      case 'coachSettings':
+      case 'reminders':
+      case 'brainEval':
         return 'settings';
       case 'intake':
         return v.from === 'settings' ? 'settings' : v.from === 'today' ? 'today' : null;
@@ -1717,6 +1759,9 @@ export function mountApp(root: HTMLElement): void {
     view = { screen: 'coach' };
     render();
     await loadCoachHistory();
+    // M12 slice 2: the mic's availability, and this week's check-in once (Coach tab only).
+    void refreshMic();
+    await postCheckInIfDue();
     if (first) await coachSend(first, saidFor(first), phase);
   }
 
@@ -1802,6 +1847,8 @@ export function mountApp(root: HTMLElement): void {
       next = { ...card, status: patch.status };
     else if (card.kind === 'food' && patch.logged !== undefined)
       next = { ...card, logged: [...patch.logged] };
+    else if (card.kind === 'checkIn' && patch.checkIn !== undefined)
+      next = { ...card, status: patch.checkIn };
     thread = thread.map((x, k) => (k === i ? { ...m, card: next } : x));
     if (id > 0) void updateCard(db, id, patch).catch(logDbError);
   }
@@ -1896,7 +1943,12 @@ export function mountApp(root: HTMLElement): void {
   }
 
   /** One turn: his message, the router's answer (chips → rules), both stored. */
-  async function coachSend(input: CoachInput, said: string, phase: CoachPhase): Promise<void> {
+  async function coachSend(
+    input: CoachInput,
+    said: string,
+    phase: CoachPhase,
+    opts: { viaMic?: boolean } = {},
+  ): Promise<void> {
     if (chatBusy || !trainer) return;
     chatBusy = true;
     try {
@@ -1908,6 +1960,7 @@ export function mountApp(root: HTMLElement): void {
         text: said,
         source: chip ? 'chip' : 'rules',
         phase,
+        ...(opts.viaMic ? { viaMic: true as const } : {}),
         // The chip he tapped (id + args), so Ask again can send it again.
         ...(chip
           ? {
@@ -1919,8 +1972,10 @@ export function mountApp(root: HTMLElement): void {
       });
       chatTyping = true;
       renderCoachViews();
+      lastAppleTrace = null;
       const r = await router.ask(input, { coach: coachContext(phase), turns: thread });
       chatTyping = false;
+      brainLog(r.source, opts.viaMic === true);
       const msg: ChatMessage = {
         createdAt: now(),
         role: 'coach',
@@ -1965,6 +2020,19 @@ export function mountApp(root: HTMLElement): void {
       }
       // Only the red-flag line is spoken, and only mid-workout (core sets `say` then).
       if (r.say && phase === 'workout') voice.speak(r.say, { kind: 'cue' });
+      // M12 slice 2: Speak replies (default: answers to mic-sent messages). The chat is never
+      // open during a set (the Pause sheet is paused), so a reply never talks over a count.
+      else if (
+        shouldSpeak({
+          speakReplies: coachSettings.speakReplies,
+          viaMic: opts.viaMic,
+          phase,
+          inSet: false,
+        })
+      ) {
+        const line = sayFor({ reply: r.reply, say: r.say }, phase);
+        if (line) voice.speak(line, { kind: 'cue' });
+      }
     } finally {
       chatBusy = false;
       chatTyping = false;
@@ -2199,6 +2267,11 @@ export function mountApp(root: HTMLElement): void {
       undoable: undoableIds(),
       justApplied,
       animateAfter: chatSeen,
+      // M12 slice 2 (iPhone app only): the mic, and who answered on each coach bubble.
+      mic: micProps(sheet),
+      showSource: native,
+      // The check-in card is answered on the Coach tab only (never in the Pause sheet).
+      ...(sheet ? {} : { checkInQuestions: CHECK_IN_VIEWS, checkIns: checkInMap() }),
     };
   }
 
@@ -2238,6 +2311,9 @@ export function mountApp(root: HTMLElement): void {
         closeChatSheet();
         dispatch({ type: 'FINISH', now: now() });
       },
+      micDown: () => micDown(),
+      micUp: () => void micUp(),
+      micCancel: () => void micCancel(),
     };
   }
 
@@ -2250,9 +2326,15 @@ export function mountApp(root: HTMLElement): void {
   function coachTabView(): HTMLElement {
     const el = coachTabScreen(
       chatProps(false),
-      { ...chatActions(), onClearChat: () => void clearThread() },
+      {
+        ...chatActions(),
+        onClearChat: () => void clearThread(),
+        onCheckInDone: (id, answers) => void checkInDone(id, answers),
+        onCheckInSkip: (id) => void checkInSkip(id),
+      },
       tabBar('coach', (t) => goTab(t)),
     );
+    coachTabEl = el;
     chatRendered();
     return el;
   }
@@ -2287,6 +2369,520 @@ export function mountApp(root: HTMLElement): void {
       if (refocusInput) root.querySelector<HTMLElement>('#chat-input')?.focus();
     }
     refocusInput = false;
+  }
+
+  // ---------- M12 slice 2: Apple brain, mic, reminders (iPhone app), weekly check-in ----------
+  // Nothing here makes a network request: Apple's model, speech and notifications run on the
+  // phone. The PWA keeps the rules brain, shows no mic and no source badge, and has no reminders.
+  const native = nativeShell();
+  let gymBrain: GymBrain | null = null;
+  let speech: Speech | null = null;
+  let reminders: Reminders | null = null;
+  /** settings 'coach' (slice 2 fields), read at startup and again on every Apple ask. */
+  let coachSettings: CoachSettings = {};
+  /** settings 'reminders', merged over the defaults (all off). */
+  let reminderSettings: ReminderSettings = mergeReminders(undefined);
+  let notifPermission: NotificationPermission = 'unknown';
+  let brainStatus: BrainStatusView = {
+    brain: 'rules',
+    reason: native ? 'unsupported' : 'notNative',
+  };
+  let brainChecking = native;
+  /** The Apple turn just answered (dev log: ids and numbers only). */
+  let lastAppleTrace: AppleTrace | null = null;
+  let checkInRows: CheckIn[] = [];
+  let coachTabEl: HTMLElement | null = null;
+  let evalState: BrainEvalProps = { state: 'idle' };
+  const REMINDERS_KEY = 'reminders';
+  const CHECK_IN_TEXT = 'Check-in: how did this week feel?';
+  const CHECK_IN_VIEWS: readonly CheckInQuestionView[] = CHECK_IN_QUESTIONS.map((q) => ({
+    id: q.id,
+    label: q.label,
+    low: CHECK_IN_SCALE.low,
+    high: CHECK_IN_SCALE.high,
+  }));
+
+  const isRecord = (v: unknown): v is Record<string, unknown> =>
+    typeof v === 'object' && v !== null && !Array.isArray(v);
+
+  /** The slice 2 fields of settings 'coach' (speak replies, the M12-q1 card-reasons decision). */
+  async function loadCoachSettings(): Promise<CoachSettings> {
+    try {
+      const v = (await db.settings.get(COACH_UI_KEY))?.value;
+      const o = isRecord(v) ? v : {};
+      const sr = o.speakReplies;
+      coachSettings = {
+        ...(sr === 'mic' || sr === 'always' || sr === 'off' ? { speakReplies: sr } : {}),
+        ...(typeof o.appleCardReasons === 'boolean'
+          ? { appleCardReasons: o.appleCardReasons }
+          : {}),
+      };
+    } catch (err) {
+      logDbError(err);
+    }
+    return coachSettings;
+  }
+
+  /** Merges `patch` into settings 'coach'; every other field of the row is kept. */
+  async function patchCoachRow(patch: Partial<CoachSettings>): Promise<void> {
+    await db.transaction('rw', db.settings, async () => {
+      const prev = (await db.settings.get(COACH_UI_KEY))?.value;
+      await db.settings.put({
+        key: COACH_UI_KEY,
+        value: { ...(isRecord(prev) ? prev : {}), ...patch },
+      });
+    });
+  }
+
+  /** What the Apple brain reads beyond the BrainContext (read on every ask). */
+  const appleDeps: AppleDeps = {
+    extras: async () => {
+      const cs = await loadCoachSettings();
+      const card = health.todayProps().readiness;
+      return {
+        lighterCard: card ? { signals: card.signals, reasons: card.reasons } : null,
+        ...(intake
+          ? { goalKind: intake.goalKind, ...(intake.goalText ? { goalText: intake.goalText } : {}) }
+          : {}),
+        goals,
+        ...(cs.appleCardReasons !== undefined ? { appleCardReasons: cs.appleCardReasons } : {}),
+        voice: coachVoice.persona,
+      };
+    },
+  };
+
+  /** iPhone app: load the plugins, put Apple's brain before the rules, plan reminders. */
+  async function initSlice2(): Promise<void> {
+    await loadCoachSettings();
+    try {
+      reminderSettings = mergeReminders((await db.settings.get(REMINDERS_KEY))?.value);
+    } catch (err) {
+      logDbError(err);
+    }
+    if (!native) return;
+    const [gb, sp, rm] = await Promise.all([
+      import('../native/gymBrain').then((m) => m.loadGymBrain()),
+      import('../native/speech').then((m) => m.loadSpeech()),
+      import('../native/reminders').then((m) => m.loadReminders()),
+    ]);
+    gymBrain = gb;
+    speech = sp;
+    reminders = rm;
+    const apple = appleBrain(gb, appleDeps);
+    router = createRouter(
+      [
+        {
+          id: 'apple',
+          status: () => apple.status(),
+          // askApple = apple.ask plus its trace (ids and numbers, never text) for the dev log.
+          ask: async (text, ctx) => {
+            const a = await askApple(gb, text, ctx, appleDeps);
+            lastAppleTrace = a.trace;
+            return a.reply;
+          },
+        },
+        rulesBrain,
+      ],
+      { notes: coachNoteStore(db) },
+    );
+    void refreshBrainStatus();
+    void syncReminders();
+    if (view.screen === 'coach') void refreshMic();
+  }
+
+  /** Dev log: which brain answered, the action, latency, mic yes/no. Never any text. */
+  function brainLog(source: string, mic: boolean): void {
+    const t = source === 'apple' ? lastAppleTrace : null;
+    rec((r) =>
+      r.logEvent('coachBrain', {
+        brain: source,
+        mic,
+        ...(t
+          ? {
+              action: t.action,
+              calls: t.calls.map((c) => c.name),
+              latencyMs: t.latencyMs,
+              replaced: t.replaced,
+            }
+          : {}),
+      }),
+    );
+  }
+
+  // ----- the hold-to-talk mic (GymSpeech, on-device; Coach tab and Pause sheet only) -----
+  type MicRun = { partial: string; level: number; started: Promise<boolean> };
+  /** null: not checked yet (the mic stays hidden until it is). */
+  let micAvail: { available: true } | { available: false; reason: string } | null = null;
+  let micRun: MicRun | null = null;
+
+  function micProps(sheet: boolean): MicProps {
+    if (!speech || !micAvail) return { state: 'hidden' };
+    // The chat is only up on the Coach tab or the Pause sheet (paused: no set running).
+    if (!micAllowed({ native, inSet: false, screen: sheet ? 'pause' : 'coach' }))
+      return { state: 'hidden' };
+    if (!micAvail.available) return { state: 'unavailable', reason: micAvail.reason };
+    if (micRun) return { state: 'listening', partial: micRun.partial, level: micRun.level };
+    return { state: 'idle' };
+  }
+
+  async function refreshMic(): Promise<void> {
+    if (!speech) return;
+    try {
+      micAvail = await speech.availability();
+    } catch {
+      micAvail = { available: false, reason: 'unsupported' };
+    }
+    renderCoachViews();
+  }
+
+  /** Partial text / level in place (about ten a second); a full render only when needed. */
+  function patchMic(): void {
+    const el = chatSheet?.el ?? (view.screen === 'coach' ? coachTabEl : null);
+    if (!el || !updateChatMic(el, micProps(chatSheet !== null))) renderCoachViews();
+  }
+
+  function micDown(): void {
+    const sp = speech;
+    if (!sp || micRun || chatBusy || !micAvail?.available) return;
+    // A strong signal a question follows: warm Apple's model with the same instructions.
+    if (gymBrain)
+      void gymBrain.prewarm(brainInstructions({ phase: phaseNow(), voice: coachVoice.persona }));
+    const run: MicRun = { partial: '', level: 0, started: Promise.resolve(false) };
+    micRun = run;
+    run.started = sp
+      .start({
+        partial: (t) => {
+          if (micRun !== run) return;
+          run.partial = t;
+          patchMic();
+        },
+        level: (rms) => {
+          if (micRun !== run) return;
+          run.level = rms;
+          patchMic();
+        },
+        error: (code) => {
+          if (micRun !== run) return;
+          micRun = null;
+          if (code === 'permissionDenied')
+            micAvail = { available: false, reason: 'permissionDenied' };
+          renderCoachViews();
+        },
+      })
+      .then((res) => {
+        if (res.ok) return true;
+        if (micRun === run) micRun = null;
+        if (res.code === 'permissionDenied')
+          micAvail = { available: false, reason: 'permissionDenied' };
+        else if (res.code === 'unavailable') void refreshMic();
+        renderCoachViews();
+        return false;
+      })
+      .catch(() => {
+        if (micRun === run) micRun = null;
+        renderCoachViews();
+        return false;
+      });
+    patchMic();
+  }
+
+  /** Released on the button: what was heard is sent, marked as said with the mic. */
+  async function micUp(): Promise<void> {
+    const run = micRun;
+    const sp = speech;
+    if (!run || !sp) return;
+    const ok = await run.started;
+    if (micRun !== run) return; // cancelled or failed meanwhile
+    micRun = null;
+    let text = '';
+    if (ok) {
+      try {
+        text = (await sp.stop()).trim();
+      } catch {
+        text = '';
+      }
+    }
+    text ||= run.partial.trim();
+    patchMic();
+    if (text) await coachSend({ text }, text, phaseNow(), { viaMic: true });
+  }
+
+  /** Released off the button, Escape, focus lost (e.g. the iOS permission alert): nothing sent. */
+  async function micCancel(): Promise<void> {
+    const run = micRun;
+    if (!run) return;
+    micRun = null;
+    patchMic();
+    if (await run.started) {
+      try {
+        await speech?.stop();
+      } catch {
+        // nothing to send either way
+      }
+    }
+  }
+
+  // ----- reminders (local notifications; all off until he turns one on) -----
+  let reminderSync: Promise<void> = Promise.resolve();
+
+  /** Re-plans the next 14 days and hands iOS the changes (queued, one at a time). */
+  function syncReminders(sets?: readonly SetRow[]): Promise<void> {
+    reminderSync = reminderSync.then(() => planReminders(sets)).catch(logDbError);
+    return reminderSync;
+  }
+
+  async function planReminders(given?: readonly SetRow[]): Promise<void> {
+    const api = reminders;
+    if (!native || !api?.available || !trainer) return;
+    const sessions = await db.sessions.toArray();
+    const sets =
+      given ??
+      (await setsForSessions(
+        db,
+        sessions.filter((x) => x.endedAt !== undefined).map((x) => x.sessionId),
+      ));
+    const ui = await getCoachUi(db);
+    const pending = await api.pending();
+    const plan = reminderPlan(
+      reminderSettings,
+      { state: trainer, sessions, sets, answeredMissed: ui.missedAnswered, pending },
+      now(),
+    );
+    if (plan.cancel.length) await api.cancel(plan.cancel);
+    if (plan.schedule.length) await api.schedule(plan.schedule, now());
+  }
+
+  async function saveReminders(): Promise<void> {
+    try {
+      await db.settings.put({ key: REMINDERS_KEY, value: reminderSettings });
+    } catch (err) {
+      logDbError(err);
+    }
+    void syncReminders();
+  }
+
+  async function refreshPermission(): Promise<void> {
+    if (!reminders?.available) return;
+    const p = await reminders.permission();
+    notifPermission = p === 'granted' ? 'granted' : p === 'denied' ? 'denied' : 'unknown';
+    if (view.screen === 'reminders') render();
+  }
+
+  async function toggleReminder(kind: ReminderKind, on: boolean): Promise<void> {
+    const s = reminderSettings;
+    let next: ReminderSettings =
+      kind === 'session'
+        ? { ...s, session: { ...s.session, on } }
+        : kind === 'missedDay'
+          ? { ...s, missedDay: { on } }
+          : { ...s, sundayRecap: { on } };
+    reminderSettings = next;
+    render();
+    // iOS asks for permission only the first time one is turned on.
+    if (on && !s.askedPermission && reminders?.available) {
+      const p = await reminders.request();
+      notifPermission = p === 'granted' ? 'granted' : p === 'denied' ? 'denied' : 'unknown';
+      next = { ...reminderSettings, askedPermission: true };
+      reminderSettings = next;
+    }
+    await saveReminders();
+    if (view.screen === 'reminders') render();
+  }
+
+  // ----- the weekly check-in (Coach tab; answers never reach any brain) -----
+  function checkInMap(): Record<string, CheckIn> {
+    return Object.fromEntries(checkInRows.map((c) => [c.weekStart, c]));
+  }
+
+  async function postCheckInIfDue(): Promise<void> {
+    try {
+      checkInRows = await listCheckIns(db);
+      const week = checkInDue(todayDate(), checkInRows);
+      if (!week) return;
+      // Only about a week he trained in (a fresh install or a week off gets no check-in).
+      const [y, m, d] = week.split('-').map(Number) as [number, number, number];
+      const weekEnd = localDate(new Date(y, m - 1, d + 6, 12).getTime());
+      const trained = trainerSessions.some((x) => {
+        const day = localDate(x.startedAt);
+        return x.endedAt !== undefined && day >= week && day <= weekEnd;
+      });
+      if (!trained) return;
+      if (thread.some((m) => m.card?.kind === 'checkIn' && m.card.weekStart === week)) return;
+      await postMessage({
+        createdAt: now(),
+        role: 'coach',
+        text: CHECK_IN_TEXT,
+        source: 'rules',
+        phase: 'today',
+        card: { kind: 'checkIn', weekStart: week, status: 'pending' },
+      });
+      renderCoachViews();
+    } catch (err) {
+      logDbError(err);
+    }
+  }
+
+  async function checkInDone(id: number, answers: CheckInAnswers): Promise<void> {
+    const card = thread.find((m) => m.id === id)?.card;
+    if (card?.kind !== 'checkIn' || card.status !== 'pending') return;
+    try {
+      await saveCheckIn(db, { weekStart: card.weekStart, ...answers }, now());
+      checkInRows = await listCheckIns(db);
+    } catch (err) {
+      logDbError(err);
+    }
+    patchCard(id, { checkIn: 'done' });
+    renderCoachViews();
+  }
+
+  async function checkInSkip(id: number): Promise<void> {
+    const card = thread.find((m) => m.id === id)?.card;
+    if (card?.kind !== 'checkIn' || card.status !== 'pending') return;
+    try {
+      await skipCheckIn(db, card.weekStart, now());
+      checkInRows = await listCheckIns(db);
+    } catch (err) {
+      logDbError(err);
+    }
+    patchCard(id, { checkIn: 'skipped' });
+    renderCoachViews();
+  }
+
+  // ----- Settings → Coach, Reminders, Coach eval -----
+  function backToSettings(): void {
+    view = { screen: 'settings' };
+    render();
+  }
+
+  async function refreshBrainStatus(): Promise<void> {
+    if (!native) {
+      brainStatus = { brain: 'rules', reason: 'notNative' };
+      brainChecking = false;
+      return;
+    }
+    const gb = gymBrain;
+    if (!gb) return; // initSlice2 checks once the plugin is loaded
+    brainChecking = true;
+    if (view.screen === 'coachSettings') render();
+    const a = await gb.availability();
+    brainStatus = a.available ? { brain: 'apple' } : { brain: 'rules', reason: a.reason };
+    brainChecking = false;
+    if (view.screen === 'coachSettings') render();
+  }
+
+  function openCoachSettings(): void {
+    view = { screen: 'coachSettings' };
+    render();
+    window.scrollTo(0, 0);
+    void refreshBrainStatus();
+  }
+
+  function coachSettingsView(): HTMLElement {
+    return coachSettingsScreen(
+      { status: brainStatus, speakReplies: coachSettings.speakReplies, checking: brainChecking },
+      {
+        onBack: backToSettings,
+        onSpeakReplies: (v) => {
+          coachSettings = { ...coachSettings, speakReplies: v };
+          void patchCoachRow({ speakReplies: v }).catch(logDbError);
+          render();
+        },
+        ...(native ? { onRecheck: () => void refreshBrainStatus() } : {}),
+      },
+    );
+  }
+
+  function openReminders(): void {
+    view = { screen: 'reminders' };
+    render();
+    window.scrollTo(0, 0);
+    void refreshPermission();
+  }
+
+  function remindersView(): HTMLElement {
+    return remindersScreen(
+      { native, settings: reminderSettings, permission: notifPermission },
+      {
+        onBack: backToSettings,
+        onToggle: (kind, on) => void toggleReminder(kind, on),
+        onTime: (time) => {
+          reminderSettings = {
+            ...reminderSettings,
+            session: { ...reminderSettings.session, time },
+          };
+          void saveReminders();
+          render();
+        },
+      },
+    );
+  }
+
+  function openBrainEval(): void {
+    view = { screen: 'brainEval' };
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function brainEvalView(): HTMLElement {
+    return brainEvalScreen(evalState, {
+      onBack: backToSettings,
+      onRun: () => void runEval(),
+      onExport: () => exportEval(),
+    });
+  }
+
+  async function runEval(): Promise<void> {
+    if (evalState.state === 'running') return;
+    const gb = gymBrain;
+    if (!gb) {
+      evalState = { state: 'unavailable', reason: 'notNative' };
+      render();
+      return;
+    }
+    const prev = evalState.report;
+    evalState = {
+      state: 'running',
+      progress: { done: 0, total: 0 },
+      ...(prev ? { report: prev } : {}),
+    };
+    render();
+    try {
+      const res = await runBrainEval({
+        bridge: gb,
+        program,
+        catalog: trainerCatalog,
+        now: () => now(),
+        onProgress: (done, total) => {
+          evalState = { ...evalState, progress: { done, total } };
+          if (view.screen === 'brainEval') render();
+        },
+      });
+      evalState = res.ok
+        ? { state: 'done', report: res.report }
+        : { state: 'unavailable', reason: res.reason };
+    } catch (err) {
+      logDbError(err);
+      evalState = { state: 'idle', ...(prev ? { report: prev } : {}) };
+    }
+    if (view.screen === 'brainEval') render();
+  }
+
+  /** The eval report (ids, actions, pass/safe, latency; no text) as a file on this phone. */
+  function exportEval(): void {
+    const report = evalState.report;
+    if (!report) return;
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }),
+    );
+    const a = h('a', {
+      href: url,
+      download: `gym-clean-coach-eval-${localDate(report.at)}.json`,
+      hidden: true,
+    });
+    document.body.append(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   // ---------- M12 slice 1c: What's New tour + to-dos (todo/todoHost.ts) ----------
@@ -2395,10 +2991,14 @@ export function mountApp(root: HTMLElement): void {
       case 'intake':
         openIntake(tabOf(view) === 'settings' ? 'settings' : 'today');
         return;
-      // M12 slice 2: the Coach and Reminders screens land in task 20; Settings until then.
+      // M12 slice 2.
       case 'settings/coach':
+        setEnter('settings');
+        openCoachSettings();
+        return;
       case 'settings/reminders':
-        goTab('settings');
+        setEnter('settings');
+        openReminders();
         return;
       default: {
         const unhandled: never = route;
@@ -2690,10 +3290,16 @@ export function mountApp(root: HTMLElement): void {
         catalog: trainerCatalog,
       };
       missedPrompt = coreMissedDay(input, coachUi.missedAnswered);
-      const due = recapDue(input, {
-        ...(coachUi.lastWeekRecap !== undefined ? { week: coachUi.lastWeekRecap } : {}),
-        ...(coachUi.lastBlockRecap !== undefined ? { block: coachUi.lastBlockRecap } : {}),
-      });
+      // M12 slice 2: the week recap adds that week's check-in line.
+      checkInRows = await listCheckIns(db);
+      const due = recapDue(
+        input,
+        {
+          ...(coachUi.lastWeekRecap !== undefined ? { week: coachUi.lastWeekRecap } : {}),
+          ...(coachUi.lastBlockRecap !== undefined ? { block: coachUi.lastBlockRecap } : {}),
+        },
+        checkInRows,
+      );
       if (due.length) await ensureThread();
       for (const r of due) {
         // Memory first: a recap is never posted twice, even if the app closes mid-way.
@@ -2723,6 +3329,8 @@ export function mountApp(root: HTMLElement): void {
     } finally {
       promptsBusy = false;
     }
+    // M12 slice 2: reminders re-planned on open / foreground (iPhone app; nothing on the web).
+    void syncReminders(sets);
     if (view.screen === 'today') render();
   }
 
@@ -3416,6 +4024,10 @@ export function mountApp(root: HTMLElement): void {
           render();
         },
         onProgressPhotosOpen: () => openProgressPhotos(),
+        // M12 slice 2
+        onCoachSettings: () => openCoachSettings(),
+        onReminders: () => openReminders(),
+        ...(native ? { onBrainEval: () => openBrainEval() } : {}),
       },
     );
   }
@@ -3898,7 +4510,10 @@ export function mountApp(root: HTMLElement): void {
       setsDone,
       totalVolumeKg,
       restOverruns,
-    }).catch(logDbError);
+    })
+      // M12 slice 2: today's session reminder and missed-day nudge go once it's done.
+      .then(() => syncReminders())
+      .catch(logDbError);
   }
 
   /** Rest + Summary: fix the last set's count (the true numbers for the dev log). */
@@ -4455,6 +5070,12 @@ export function mountApp(root: HTMLElement): void {
     .catch(logDbError);
   // M10: the trainer state first (Today's calendar and up next read it).
   const trainerReady = loadTrainer();
+  // M12 slice 2: settings, then (iPhone app) Apple's brain, the mic and reminders.
+  void trainerReady.then(() => initSlice2()).catch(logDbError);
+  document.addEventListener('visibilitychange', () => {
+    // Leaving the app ends a hold: nothing heard is sent (the plugin also stops itself).
+    if (document.visibilityState === 'hidden') void micCancel();
+  });
   // M12: the chat thread pruned to 30 days on start; prompts re-checked when the app comes back.
   void trainerReady.then(() => ensureThread());
   document.addEventListener('visibilitychange', () => {
