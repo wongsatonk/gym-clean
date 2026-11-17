@@ -9,6 +9,7 @@ import { checkCopy, proposalReply } from '../replies';
 import type { TrainerCatalog } from '../swapCandidates';
 import { SHORT_ON_TIME, TIME_RULES } from '../timeRules';
 import { proposeAvoidArea } from './avoidArea';
+import { proposeLighter } from './lighter';
 import type { ActionContext } from './lighter';
 import { ALREADY_FITS, mainLiftIds, proposeShortOnTime, shortOptionFor } from './shortOnTime';
 import source from './shortOnTime.ts?raw';
@@ -133,6 +134,7 @@ describe('proposeShortOnTime', () => {
         expect(p.next.plan).toEqual(ctx.state.plan);
         expect(p.next.overrides).toHaveLength(1);
         expect(p.next.overrides[0]).toMatchObject({ date: TODAY, dayId });
+        expect(p.next.overrides[0]?.adjust?.kind).toBe('shortOnTime');
         // Copy.
         expect(p.title).toBe(`Short on time: ${minutes} min`);
         expect(p.lines.length).toBeGreaterThan(0);
@@ -230,22 +232,85 @@ describe('proposeShortOnTime', () => {
     expect(undone.state.overrides).toEqual([]);
   });
 
-  it('asking again for less time shortens the day further; the same time again already fits', () => {
+  it('asking again rebuilds from the planned day: less time shortens, more time lengthens', () => {
     const ctx = ctxFor('push-a');
-    const first = applyProposal(
+    const apply = (state: TrainerState, minutes: number) => {
+      const r = applyProposal(
+        state,
+        proposal(proposeShortOnTime({ ...ctx, state }, minutes, CATALOG)),
+        NOW,
+        'chip',
+      );
+      if (!r.ok) throw new Error(r.reason);
+      return r.state;
+    };
+    const fresh = (minutes: number) =>
+      todayRows(ctx, proposal(proposeShortOnTime(ctx, minutes, CATALOG)));
+    const at20 = apply(ctx.state, 20);
+    const twenty = estimateMinutes({ exercises: todayRows(ctx, { next: at20 } as Proposal) });
+    // More time: built from the plan day, exactly as if asked first.
+    const more = proposal(proposeShortOnTime({ ...ctx, state: at20 }, 30, CATALOG));
+    const rows = todayRows(ctx, more);
+    expect(rows).toEqual(fresh(30));
+    expect(estimateMinutes({ exercises: rows })).toBeGreaterThan(twenty);
+    expect(estimateMinutes({ exercises: rows })).toBeLessThanOrEqual(30);
+    expect(more.next.overrides).toHaveLength(1);
+    expect(more.next.overrides[0]?.adjust?.replaced).toEqual(
+      proposal(proposeShortOnTime(ctx, 30, CATALOG)).next.overrides[0]?.adjust?.replaced,
+    );
+    // Less time from the 30-minute version: also from the plan day.
+    const at30 = apply(ctx.state, 30);
+    expect(
+      todayRows(ctx, proposal(proposeShortOnTime({ ...ctx, state: at30 }, 20, CATALOG))),
+    ).toEqual(fresh(20));
+    // The same length again: nothing to change.
+    expect(proposeShortOnTime({ ...ctx, state: at30 }, 30, CATALOG)).toEqual({
+      ok: false,
+      reason: 'nothingToChange',
+      reply: 'Today is already set for 30 min.',
+    });
+  });
+
+  it('when the whole planned day fits again, it offers the full day back', () => {
+    const ctx = ctxFor('push-a');
+    const full = estimateMinutes(planDay('push-a'));
+    const short = applyProposal(
       ctx.state,
       proposal(proposeShortOnTime(ctx, 30, CATALOG)),
       NOW,
       'chip',
     );
-    if (!first.ok) throw new Error(first.reason);
-    const again = { ...ctx, state: first.state };
-    expect(proposeShortOnTime(again, 30, CATALOG)).toMatchObject({
-      ok: false,
-      reply: ALREADY_FITS,
+    if (!short.ok) throw new Error(short.reason);
+    const back = proposal(proposeShortOnTime({ ...ctx, state: short.state }, full + 5, CATALOG));
+    expect(back).toMatchObject({
+      action: 'shortOnTime',
+      scope: 'today',
+      title: 'Back to the full day',
     });
-    const p = proposal(proposeShortOnTime(again, 20, CATALOG));
-    expect(estimateMinutes({ exercises: todayRows(again, p) })).toBeLessThanOrEqual(20);
+    expect(back.next.overrides).toEqual([]);
+    expect(effectiveDay(back.next, ctx.sessions, TODAY).day).toEqual(planDay('push-a'));
+    expect(back.lines).toHaveLength(1);
+    expect(back.lines[0]?.after).toBe(`Full day · about ${full} min`);
+    for (const t of copyOf(back)) expect(checkCopy(t), t).toEqual({ ok: true, hits: [] });
+    expect(wordCount(back.say ?? '')).toBeLessThanOrEqual(8);
+    // Without a shorter version in place, a day that fits is simply left alone.
+    expect(proposeShortOnTime(ctx, full + 5, CATALOG)).toMatchObject({ reply: ALREADY_FITS });
+  });
+
+  it('other changes later today stack on the shorter day and keep it', () => {
+    const ctx = ctxFor('push-a');
+    const short = applyProposal(
+      ctx.state,
+      proposal(proposeShortOnTime(ctx, 30, CATALOG)),
+      NOW,
+      'chip',
+    );
+    if (!short.ok) throw new Error(short.reason);
+    const shortRows = effectiveDay(short.state, ctx.sessions, TODAY).day?.exercises ?? [];
+    const lighter = proposeLighter({ ...ctx, state: short.state });
+    if (!lighter.ok) throw new Error(lighter.reason);
+    const rows = todayRows(ctx, lighter.proposal);
+    expect(rows.map((r) => r.exerciseId)).toEqual(shortRows.map((r) => r.exerciseId));
   });
 
   it('stacks on an earlier change today (go easy on an area)', () => {
@@ -302,11 +367,21 @@ describe('proposeShortOnTime', () => {
     const applied = applyProposal(ctx.state, proposal(r), NOW, 'chip');
     if (!applied.ok) throw new Error(applied.reason);
     const again = proposeShortOnTime({ ...ctx, state: applied.state }, 5, CATALOG);
-    expect(again.ok).toBe(false);
-    if (!again.ok) {
-      expect(again.reason).toBe('nothingToChange');
-      expect(again.reply).toMatch(/^Today is already about \d+ min\./);
-      expect(checkCopy(again.reply).ok).toBe(true);
+    expect(again).toEqual({
+      ok: false,
+      reason: 'nothingToChange',
+      reply: 'Today is already set for 20 min.',
+    });
+    // A day that is shorter than the shortest option as planned.
+    const tiny = ctxFor('pull-b');
+    const first = tiny.state.plan.days.find((d) => d.id === 'pull-b');
+    if (!first) throw new Error('no day');
+    first.exercises = first.exercises.slice(0, 2);
+    const t = proposeShortOnTime(tiny, 5, CATALOG);
+    expect(t.ok).toBe(false);
+    if (!t.ok) {
+      expect(t.reply).toMatch(/^Today is already about \d+ min\./);
+      expect(checkCopy(t.reply).ok).toBe(true);
     }
   });
 

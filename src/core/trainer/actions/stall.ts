@@ -17,11 +17,16 @@
  * - `addSet`: +1 set, at most 5.
  *
  * After a fix, pass its time in `since` so the old run doesn't show again straight away.
+ *
+ * M12 1b: with `opts.catalog`, `addSet` is refused on a lift that loads an area on the standing
+ * go-easy list (`state.easyOn`); `lighter` stays.
  */
 import { stepFor, formatWeight, fromUnit, toUnit, type Unit } from '../../units';
 import { topSet, WEIGHT_EPS_KG, type Top } from '../../stats';
 import { isWarmup } from '../../warmup';
 import { calendar, type PlanSession } from '../plan';
+import type { TrainerCatalog } from '../swapCandidates';
+import { easyOnArea } from './avoidArea';
 import type {
   DayOverride,
   PlannedExercise,
@@ -63,7 +68,17 @@ export type Stall = {
   options: StallOption[];
 };
 
-export type StallFixRefusal = 'notInPlan' | 'bodyweight' | 'tooLight' | 'maxSets';
+export type StallFixRefusal = 'notInPlan' | 'bodyweight' | 'tooLight' | 'maxSets' | 'easyOn';
+
+/** M12 1b: "Shoulders are" / "Chest is" in the go-easy refusal. */
+const AREA_IS: Record<string, string> = {
+  arms: 'Arms are',
+  shoulders: 'Shoulders are',
+  chest: 'Chest is',
+  back: 'Back is',
+  legs: 'Legs are',
+  core: 'Core is',
+};
 
 export type StallFixResult =
   { ok: true; proposal: Proposal } | { ok: false; reason: StallFixRefusal; reply: string };
@@ -176,7 +191,12 @@ export function proposeStallFix(
   today: string,
   stall: Stall,
   option: StallOption,
-  opts: { unit: Unit; name: (id: string) => string },
+  opts: {
+    unit: Unit;
+    name: (id: string) => string;
+    /** M12 1b: for the go-easy list check. */
+    catalog?: Pick<TrainerCatalog, 'exercises' | 'areaOf'>;
+  },
 ): StallFixResult {
   const { unit } = opts;
   const id = stall.exerciseId;
@@ -252,6 +272,12 @@ export function proposeStallFix(
     };
   }
 
+  const easy = opts.catalog ? easyOnArea(id, state.easyOn ?? [], opts.catalog) : undefined;
+  if (easy)
+    return refuse(
+      'easyOn',
+      `${AREA_IS[easy] ?? 'That area is'} on your go-easy list, so no extra sets there. Try lighter instead.`,
+    );
   if (
     planDays.every((d) => d.exercises.every((p) => p.exerciseId !== id || p.sets >= STALL_MAX_SETS))
   )

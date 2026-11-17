@@ -85,6 +85,7 @@ import {
   type FocusEdit,
 } from './focusBlock';
 import { FOCUS_RULES } from './focusRules';
+import { proposeNextBlock } from './nextBlock';
 import { groupLabel, proposeFocusBlock } from './actions/focusBlock';
 import { monthScore, periodScore, weekScore, type CompletionInput } from '../progress/completion';
 import { pctOf } from '../progress/recap';
@@ -99,11 +100,12 @@ import {
   type ActionResult,
 } from './actions/lighter';
 import { proposeAvoidArea } from './actions/avoidArea';
+import { easyOnArea, proposeEasyOn } from './actions/easyOn';
 import { proposePostpone, type PostponeMode } from './actions/postpone';
 import { longDate, proposeDoToday, proposeMoveDay } from './actions/move';
 import { proposeSwap, proposeSwapOptions, type SwapScope } from './actions/swap';
 import { proposeRemove } from './actions/remove';
-import { proposeShortOnTime, shortOptionFor } from './actions/shortOnTime';
+import { FULL_DAY_TITLE, proposeShortOnTime, shortOptionFor } from './actions/shortOnTime';
 import { SHORT_ON_TIME } from './timeRules';
 import {
   detectStalls,
@@ -125,6 +127,7 @@ import {
   gymSwapReply,
   gymSwapWhy,
   HELP_TEXT,
+  LEARN_FOR_INTENT,
   proposalReply,
   RED_FLAG_LINE,
   REFERRAL_LINE,
@@ -162,7 +165,12 @@ export type CoachChipId =
   /** M12: args.from, to (local YYYY-MM-DD): move that planned date (no `to`: asks where). */
   | 'moveDay'
   /** M12 1b: args.minutes: fit today into that long (no minutes: asks how long). */
-  | 'shortOnTime';
+  | 'shortOnTime'
+  /**
+   * M12 1b (block recap): args.group, weeks, weekdays (+ lighterWeek, startDate): the next focus
+   * block (nextBlock.ts); missing params fall back to the focus-block questions.
+   */
+  | 'nextBlock';
 
 export type CoachArgs = {
   exerciseId?: string;
@@ -184,6 +192,10 @@ export type CoachArgs = {
   to?: string;
   /** M12 1b shortOnTime: the time he has, in minutes. */
   minutes?: number;
+  /** M12 1b nextBlock: a 7-day lighter week before the block. */
+  lighterWeek?: boolean;
+  /** M12 1b nextBlock: the earliest start (local YYYY-MM-DD). */
+  startDate?: string;
 };
 
 export type CoachChip = { id: CoachChipId; label: string; args?: CoachArgs };
@@ -236,6 +248,8 @@ export type CoachResponse = {
   foods?: FoodSuggestion[];
   /** M12: the block in a focusBlock proposal (for the week-by-week card). */
   focusBlock?: FocusBlock;
+  /** M12 1b: a learn card ("Why?") that fits this answer (src/data/learnCards.ts id). */
+  learnId?: string;
 };
 
 export const QUICK_CHIPS: readonly CoachChip[] = [
@@ -278,6 +292,8 @@ export const ASK_GROUP = 'Which area should the block build?';
 export const ASK_WEEKS = 'For how many weeks?';
 export const ASK_DAYS = 'How many days a week?';
 export const ASK_MINUTES = 'How much time do you have?';
+/** M12 1b: more time than the whole planned day takes, after a shorter version. */
+export const FULL_DAY_REPLY = 'Your whole day fits. Here it is.';
 /** M12 1b: the "Short on time" quick chip (asks how long, then proposes). */
 export const SHORT_ON_TIME_CHIP: CoachChip = { id: 'shortOnTime', label: 'Short on time' };
 
@@ -353,6 +369,8 @@ function finish(ctx: CoachContext, safety: Safety, intent: Intent, body: Body): 
   if (body.say) out.say = body.say;
   if (body.foods && body.foods.length > 0) out.foods = body.foods;
   if (body.focusBlock) out.focusBlock = body.focusBlock;
+  const learnId = LEARN_FOR_INTENT[intent];
+  if (learnId && safety === 'none' && !isWorkout(ctx)) out.learnId = learnId;
   return out;
 }
 
@@ -408,6 +426,8 @@ function shortOnTime(ctx: CoachContext, minutes: number | undefined): Body {
   }
   const r = proposeShortOnTime(actionCtx(ctx), minutes, ctx.catalog);
   if (!r.ok) return { reply: r.reply };
+  if (r.proposal.title === FULL_DAY_TITLE)
+    return { reply: FULL_DAY_REPLY, proposal: r.proposal, chips: timeChips() };
   const limit = shortOptionFor(minutes);
   const lead = minutes < limit ? `The shortest plan I build is ${limit} min. ` : '';
   return {
@@ -469,9 +489,20 @@ function calendarDayId(ctx: CoachContext, date: string): string | null {
   return e && !e.rest ? (e.day?.id ?? null) : null;
 }
 
-function avoid(ctx: CoachContext, area: BodyArea | undefined): Body {
+function avoid(ctx: CoachContext, area: BodyArea | undefined, scope?: 'today' | 'plan'): Body {
   if (!area) return { reply: ASK_AREA, chips: areaChips() };
+  // M12 1b: "from now on" (outside a workout) changes the standing go-easy list.
+  if (scope === 'plan' && !isWorkout(ctx))
+    return fromResult(ctx, proposeEasyOn(actionCtx(ctx), { add: [area] }, ctx.catalog));
   return fromResult(ctx, proposeAvoidArea(actionCtx(ctx), area, ctx.catalog));
+}
+
+/** M12 1b: a block on a listed group → "Remove X from your go-easy list first?" + that change. */
+function easyFirst(ctx: CoachContext, group: BodyArea | undefined): Body | undefined {
+  if (!group || !(ctx.state.easyOn ?? []).includes(group)) return undefined;
+  const r = proposeEasyOn(actionCtx(ctx), { remove: [group] }, ctx.catalog);
+  const reply = `Remove ${group} from your go-easy list first?`;
+  return r.ok ? { reply, proposal: r.proposal } : { reply };
 }
 
 /** Today's rows (as they will run) that can still change. */
@@ -628,6 +659,12 @@ const noStalls = (gym: CoachChip[]): Body => ({
   ],
 });
 
+/** A stall's fixes, without one more set on a lift that loads a go-easy area (M12 1b). */
+function optionsOf(ctx: CoachContext, stall: Stall): StallOption[] {
+  const easy = easyOnArea(stall.exerciseId, ctx.state.easyOn ?? [], ctx.catalog);
+  return easy ? stall.options.filter((o) => o !== 'addSet') : [...stall.options];
+}
+
 function stallFlow(ctx: CoachContext, exerciseId?: string, option?: StallOption): Body {
   const all = stalls(ctx);
   const stall = exerciseId ? all.find((s) => s.exerciseId === exerciseId) : all[0];
@@ -638,30 +675,37 @@ function stallFlow(ctx: CoachContext, exerciseId?: string, option?: StallOption)
       return { reply: `${nameOf(ctx, exerciseId)} is still moving. No change needed.` };
     return noStalls(gym);
   }
-  const pick = option && stall.options.includes(option) ? option : stall.options[0];
+  const options = optionsOf(ctx, stall);
+  const pick = option && stall.options.includes(option) ? option : options[0];
   if (!pick) return { reply: stallLine(stall, (id) => nameOf(ctx, id)) };
   const r = proposeStallFix(ctx.state, ctx.sessions, ctx.today, stall, pick, {
     unit: ctx.unit,
     name: (id) => nameOf(ctx, id),
+    catalog: ctx.catalog,
   });
   const line = stallLine(stall, (id) => nameOf(ctx, id));
   if (!r.ok) return { reply: `${line} ${r.reply}` };
   const chips: CoachChip[] = [
     ...gym,
-    ...stall.options
+    ...options
       .filter((o) => o !== pick)
       .map((o) => ({
         id: 'stallFix' as const,
         label: OPTION_LABEL[o],
         args: { exerciseId: stall.exerciseId, option: o },
       })),
-    ...all
-      .filter((s) => s !== stall && s.options[0] !== undefined)
-      .map((s) => ({
-        id: 'stallFix' as const,
-        label: `${nameOf(ctx, s.exerciseId)}: ${OPTION_LABEL[s.options[0] ?? 'addSet']}`,
-        args: { exerciseId: s.exerciseId, option: s.options[0] ?? 'addSet' },
-      })),
+    ...all.flatMap((s) => {
+      const first = optionsOf(ctx, s)[0];
+      return s === stall || first === undefined
+        ? []
+        : [
+            {
+              id: 'stallFix' as const,
+              label: `${nameOf(ctx, s.exerciseId)}: ${OPTION_LABEL[first]}`,
+              args: { exerciseId: s.exerciseId, option: first },
+            },
+          ];
+    }),
   ];
   return { ...fromResult(ctx, r, chips), reply: line };
 }
@@ -797,6 +841,8 @@ function blockBody(r: ReturnType<typeof proposeFocusBlock>, reply: string): Body
 
 function focusFlow(ctx: CoachContext, args: CoachArgs): Body {
   const { group } = args;
+  const first = easyFirst(ctx, group);
+  if (first) return first;
   const known: CoachArgs = {};
   if (group) known.group = group;
   if (args.weeks !== undefined && validWeeks(args.weeks)) known.weeks = args.weeks;
@@ -875,6 +921,26 @@ function focusEdit(ctx: CoachContext, s: IntentSlots): Body {
   );
 }
 
+/** M12 1b: the next block from a block recap chip (with its lighter week when asked). */
+function nextBlock(ctx: CoachContext, args: CoachArgs): Body {
+  const { group, weeks, weekdays } = args;
+  if (!group || weeks === undefined || !weekdays) return focusFlow(ctx, args);
+  const first = easyFirst(ctx, group);
+  if (first) return first;
+  const r = proposeNextBlock(
+    actionCtx(ctx),
+    {
+      group,
+      weeks,
+      weekdays: [...weekdays],
+      ...(args.lighterWeek !== undefined ? { lighterWeek: args.lighterWeek } : {}),
+      ...(args.startDate !== undefined ? { startDate: args.startDate } : {}),
+    },
+    ctx.catalog,
+  );
+  return blockBody(r, `Here's the next ${weeks}-week ${group} block.`);
+}
+
 /** M12: the starters, the swap one naming today's first exercise that can still change. */
 export function starterChips(ctx: CoachContext): CoachChip[] {
   const first = todayDay(actionCtx(ctx));
@@ -905,6 +971,7 @@ const BLOCKED_MID_SESSION = new Set<string>([
   'doToday',
   'moveDay',
   'shortOnTime',
+  'nextBlock',
 ]);
 
 function redFlag(ctx: CoachContext): CoachResponse {
@@ -939,7 +1006,7 @@ function handleText(text: string, ctx: CoachContext): CoachResponse {
     case 'postpone':
       return done(postpone(ctx, 'useRestDay', s));
     case 'avoidArea':
-      return done(avoid(ctx, s.area));
+      return done(avoid(ctx, s.area, s.scope));
     case 'lighter':
       return done(fromResult(ctx, proposeLighter(actionCtx(ctx))));
     case 'deload':
@@ -997,6 +1064,7 @@ const CHIP_INTENT: Partial<Record<CoachChipId, Intent>> = {
   doToday: 'doToday',
   moveDay: 'postpone',
   shortOnTime: 'shortOnTime',
+  nextBlock: 'focusBlock',
 };
 
 function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachResponse {
@@ -1050,6 +1118,8 @@ function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachR
       return done(moveDay(ctx, args.from, args.to));
     case 'shortOnTime':
       return done(shortOnTime(ctx, args.minutes));
+    case 'nextBlock':
+      return done(nextBlock(ctx, args));
     default:
       return done({ reply: HELP_TEXT });
   }

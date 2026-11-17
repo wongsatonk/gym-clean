@@ -12,8 +12,12 @@
  * The adjust records its row map (`replaced`), stacked on the base override's map.
  * When every exercise of the day works the area (e.g. legs on a Legs day), or nothing would be
  * left, there's no training proposal: the reply suggests "Not today" or a different day.
+ *
+ * M12 1b: swap-ins never load an area on the standing go-easy list (`state.easyOn`, through
+ * `easyCatalog`). `avoidAreaRows` is the row treatment, shared with the standing list
+ * (easyOn.ts).
  */
-import type { BodyArea, PlannedExercise, Proposal } from '../../types';
+import type { BodyArea, Exercise, PlannedExercise, Proposal } from '../../types';
 import {
   loadsArea,
   primaryInArea,
@@ -34,6 +38,90 @@ import {
   type ActionContext,
   type ActionResult,
 } from './lighter';
+
+/** Whether any of the exercise's muscles is in one of the areas: the first such area. */
+export function easyOnArea(
+  exerciseId: string,
+  areas: readonly BodyArea[],
+  catalog: Pick<TrainerCatalog, 'exercises' | 'areaOf'>,
+): BodyArea | undefined {
+  if (areas.length === 0) return undefined;
+  const e = catalog.exercises.find((x) => x.id === exerciseId);
+  return e ? areas.find((a) => loadsArea(e, a, catalog.areaOf)) : undefined;
+}
+
+/**
+ * The catalog with `canDo` false for anything that loads a listed area, for picking swaps and
+ * added work. The same catalog when the list is empty.
+ */
+export function easyCatalog<C extends TrainerCatalog>(catalog: C, areas: readonly BodyArea[]): C {
+  if (areas.length === 0) return catalog;
+  const byId = new Map(catalog.exercises.map((e) => [e.id, e]));
+  const loadsAny = (e: Exercise | undefined) =>
+    e !== undefined && areas.some((a) => loadsArea(e, a, catalog.areaOf));
+  return { ...catalog, canDo: (id: string) => catalog.canDo(id) && !loadsAny(byId.get(id)) };
+}
+
+export type AreaRows = {
+  rows: PlannedExercise[];
+  lines: Proposal['lines'];
+  replaced: { fromId: string; toId: string | null }[];
+};
+
+/**
+ * The go-easy row treatment for one area: a row whose primary muscle is in the area is swapped
+ * (best candidate) or removed; a row where the area only helps is lightened (unless
+ * `keepMarked` and it is already marked 'avoidArea', so a row is never eased twice); others stay.
+ * Rows in `started` are never touched.
+ */
+export function avoidAreaRows(
+  rows: readonly PlannedExercise[],
+  area: BodyArea,
+  catalog: TrainerCatalog,
+  ctx: Pick<ActionContext, 'unit' | 'lastWeightKg' | 'exerciseName'>,
+  opts: { started?: readonly string[]; keepMarked?: boolean } = {},
+): AreaRows {
+  const byId = new Map(catalog.exercises.map((e) => [e.id, e]));
+  const started = new Set(opts.started ?? []);
+  const taken = new Set(rows.map((p) => p.exerciseId));
+  const lines: Proposal['lines'] = [];
+  const out: PlannedExercise[] = [];
+  const replaced: { fromId: string; toId: string | null }[] = [];
+  for (const p of rows) {
+    const e = byId.get(p.exerciseId);
+    const before = `${nameOf(ctx, p.exerciseId)} · ${rowText(p, ctx)}`;
+    if (started.has(p.exerciseId) || !e) {
+      out.push(p);
+    } else if (primaryInArea(e, area, catalog.areaOf)) {
+      const [best] = swapCandidates(e, catalog, {
+        avoid: area,
+        exclude: [...taken],
+        tracking: p.tracking,
+        limit: 1,
+      });
+      if (best) {
+        const q = swappedRow(p, best, ctx.lastWeightKg, 'avoidArea');
+        taken.add(q.exerciseId);
+        out.push(q);
+        replaced.push({ fromId: p.exerciseId, toId: q.exerciseId });
+        lines.push({ before, after: `${best.exercise.name} · ${rowText(q, ctx)}` });
+      } else {
+        replaced.push({ fromId: p.exerciseId, toId: null });
+        lines.push({ before, after: 'Removed today' });
+      }
+    } else if (
+      loadsArea(e, area, catalog.areaOf) &&
+      !(opts.keepMarked && p.adjusted === 'avoidArea')
+    ) {
+      const q = lightenRow(p, ctx, 'avoidArea');
+      out.push(q);
+      if (q !== p) lines.push({ before, after: rowText(q, ctx) });
+    } else {
+      out.push(p);
+    }
+  }
+  return { rows: out, lines, replaced };
+}
 
 export function proposeAvoidArea(
   ctx: ActionContext,
@@ -59,41 +147,13 @@ export function proposeAvoidArea(
   );
   if (rows.length > 0 && rows.every(worksArea)) return wholeDay;
 
-  const started = new Set(ctx.started ?? []);
-  const taken = new Set(rows.map((p) => p.exerciseId));
-  const lines: Proposal['lines'] = [];
-  const out: PlannedExercise[] = [];
-  const replaced: { fromId: string; toId: string | null }[] = [];
-  for (const p of rows) {
-    const e = byId.get(p.exerciseId);
-    const before = `${nameOf(named, p.exerciseId)} · ${rowText(p, ctx)}`;
-    if (started.has(p.exerciseId) || !e) {
-      out.push(p);
-    } else if (primaryInArea(e, area, catalog.areaOf)) {
-      const [best] = swapCandidates(e, catalog, {
-        avoid: area,
-        exclude: [...taken],
-        tracking: p.tracking,
-        limit: 1,
-      });
-      if (best) {
-        const q = swappedRow(p, best, ctx.lastWeightKg, 'avoidArea');
-        taken.add(q.exerciseId);
-        out.push(q);
-        replaced.push({ fromId: p.exerciseId, toId: q.exerciseId });
-        lines.push({ before, after: `${best.exercise.name} · ${rowText(q, ctx)}` });
-      } else {
-        replaced.push({ fromId: p.exerciseId, toId: null });
-        lines.push({ before, after: 'Removed today' });
-      }
-    } else if (loadsArea(e, area, catalog.areaOf)) {
-      const q = lightenRow(p, ctx, 'avoidArea');
-      out.push(q);
-      if (q !== p) lines.push({ before, after: rowText(q, ctx) });
-    } else {
-      out.push(p);
-    }
-  }
+  const {
+    rows: out,
+    lines,
+    replaced,
+  } = avoidAreaRows(rows, area, easyCatalog(catalog, ctx.state.easyOn ?? []), named, {
+    started: ctx.started ?? [],
+  });
   if (out.length === 0) return wholeDay;
   if (lines.length === 0) {
     return refuse(

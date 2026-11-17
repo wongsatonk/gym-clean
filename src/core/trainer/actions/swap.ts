@@ -12,6 +12,7 @@
  * - The weight comes from the new exercise's history, else 0 for bodyweight, else blank.
  * - `proposeSwap` validates any target (a model's tool call can name anything): it must be one of
  *   the eligible candidates.
+ * - M12 1b: nothing that loads an area on the standing go-easy list is a candidate.
  */
 import type { DayOverride, PlannedExercise, Proposal, TrainerState } from '../../types';
 import { wordCount } from '../../advice';
@@ -32,6 +33,7 @@ import {
   type ActionContext,
   type ActionResult,
 } from './lighter';
+import { easyCatalog } from './avoidArea';
 
 export type SwapScope = 'today' | 'plan';
 
@@ -178,7 +180,7 @@ export function proposeSwapOptions(
   if (!prep.ok) return prep;
   const from = catalog.exercises.find((e) => e.id === exerciseId);
   if (!from) return refuse('unknownExercise', "I don't know that exercise.");
-  const candidates = swapCandidates(from, catalog, {
+  const candidates = swapCandidates(from, easyCatalog(catalog, ctx.state.easyOn ?? []), {
     exclude: prep.exclude,
     tracking: prep.tracking,
   });
@@ -207,7 +209,7 @@ export function proposeSwap(
   if (!prep.ok) return prep;
   const from = catalog.exercises.find((e) => e.id === fromId);
   if (!from) return refuse('unknownExercise', "I don't know that exercise.");
-  const c = swapCandidates(from, catalog, {
+  const c = swapCandidates(from, easyCatalog(catalog, ctx.state.easyOn ?? []), {
     exclude: prep.exclude,
     limit: Number.POSITIVE_INFINITY,
   }).find((x) => x.exercise.id === toId);

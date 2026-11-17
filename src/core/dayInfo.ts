@@ -1,20 +1,15 @@
 // Small derived facts about a program day, shared by Today, the day preview and the exercise
 // screen (M4e A8). Pure: no DOM, no data imports (the exercise lookup is passed in).
+import { estimateSeconds } from './trainer/estimate';
 import type { Exercise, ProgramDay } from './types';
 
-/** Seconds of work assumed per set for the time estimate (setup + reps). */
-export const WORK_SEC_PER_SET = 40;
-
 /**
- * Rough minutes for a day: every set's work plus every planned rest except the last one,
- * rounded to the nearest 5 (at least 5). Shown as "~45 min".
+ * Rough minutes for a day, shown as "~45 min": the coach's time estimate (trainer/estimate.ts:
+ * set-up, reps and rests from timeRules.ts) rounded to the nearest 5 (at least 5). A day fitted
+ * to N minutes (short on time, starter plans) never shows more than N.
  */
-export function estimateMinutes(day: ProgramDay): number {
-  let sec = 0;
-  for (const p of day.exercises) sec += p.sets * (WORK_SEC_PER_SET + p.restSec);
-  const last = day.exercises.at(-1);
-  if (last) sec -= last.restSec;
-  return Math.max(5, Math.round(sec / 60 / 5) * 5);
+export function estimateMinutes(day: Pick<ProgramDay, 'exercises'>): number {
+  return Math.max(5, Math.round(estimateSeconds(day) / 300) * 5);
 }
 
 /** Total planned sets. */

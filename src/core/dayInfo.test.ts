@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { WORK_SEC_PER_SET, dayMuscles, estimateMinutes, muscleLabel, setCount } from './dayInfo';
-import type { Exercise, PlannedExercise, ProgramDay } from './types';
+import { dayMuscles, estimateMinutes, muscleLabel, setCount } from './dayInfo';
+import programJson from '../data/program.json';
+import {
+  estimateMinutes as trainerMinutes,
+  estimateSeconds,
+  fitToMinutes,
+} from './trainer/estimate';
+import type { Exercise, PlannedExercise, Program, ProgramDay } from './types';
 
 const planned = (exerciseId: string, sets: number, restSec = 90): PlannedExercise => ({
   exerciseId,
@@ -21,10 +27,14 @@ const LOOKUP: Record<string, Muscles> = {
 const lookup = (id: string): Muscles | undefined => LOOKUP[id];
 
 describe('estimateMinutes', () => {
-  it('counts work + rests (no rest after the last set), rounded to 5 min', () => {
-    expect(WORK_SEC_PER_SET).toBe(40);
-    // 3 × 130 + 2 × 100 − 60 = 530 s ≈ 8.8 min → 10
-    expect(estimateMinutes(day([planned('a', 3, 90), planned('b', 2, 60)]))).toBe(10);
+  // The same formula as the coach's time estimate (trainer/estimate.ts), rounded to 5 for "~N min".
+  it('is the trainer estimate rounded to the nearest 5 min', () => {
+    const d = day([planned('a', 3, 90), planned('b', 2, 60)]);
+    const sec = estimateSeconds(d);
+    expect(estimateMinutes(d)).toBe(Math.round(sec / 300) * 5);
+    // 90 + 3 × 12 × 3 + 2 × 90 + 90 + 2 × 12 × 3 + 60 = 600 s = 10 min
+    expect(sec).toBe(600);
+    expect(estimateMinutes(d)).toBe(10);
   });
 
   it('is at least 5 min, also for an empty day', () => {
@@ -32,11 +42,18 @@ describe('estimateMinutes', () => {
     expect(estimateMinutes(day([planned('a', 1, 30)]))).toBe(5);
   });
 
-  it('rounds to the nearest 5', () => {
-    // 4 × (40 + 120) − 120 = 520 s ≈ 8.7 → 10; 2 × 160 − 120 = 200 s ≈ 3.3 → 5
-    expect(estimateMinutes(day([planned('a', 4, 120)]))).toBe(10);
-    // 12 × 160 − 120 = 1800 s = 30 min
-    expect(estimateMinutes(day([planned('a', 12, 120)]))).toBe(30);
+  it('never shows more than a day fitted to N minutes (short on time, starter plans)', () => {
+    for (const n of [20, 30, 45, 60, 75]) {
+      const rows = Array.from({ length: 12 }, (_, i) => planned(`x${i}`, 4, 90));
+      const fitted = fitToMinutes(rows, { minutes: n, main: ['x0'], pair: true });
+      expect(trainerMinutes({ exercises: fitted.rows })).toBeLessThanOrEqual(n);
+      expect(estimateMinutes(day(fitted.rows)), `${n}`).toBeLessThanOrEqual(n);
+    }
+  });
+
+  it('agrees with the trainer estimate within 3 min on every program day', () => {
+    for (const d of (programJson as Program).days)
+      expect(Math.abs(estimateMinutes(d) - trainerMinutes(d)), d.id).toBeLessThanOrEqual(3);
   });
 });
 

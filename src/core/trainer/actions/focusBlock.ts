@@ -11,6 +11,8 @@
  * - Lines: one per block week, "Week 1: 7 days, chest 14 sets" → "5 days, chest 20 sets"
  *   (before = what the calendar runs on those dates now).
  * - The coach never offers it mid-workout (coach.ts).
+ * - M12 1b: a block on a group on the standing go-easy list is refused ("Remove shoulders from
+ *   your go-easy list first?"; the coach offers that proposal); the builder adds no load there.
  */
 import {
   blocksOutside,
@@ -59,6 +61,8 @@ export function proposeFocusBlock(
     return refuse('nothingToChange', 'A focus block runs 2 to 6 weeks.');
   if (!validDaysPerWeek(new Set(input.weekdays).size) || input.weekdays.length > 6)
     return refuse('nothingToChange', 'A focus block trains 3 to 6 days a week.');
+  if ((ctx.state.easyOn ?? []).includes(input.group))
+    return refuse('easyOn', `Remove ${input.group} from your go-easy list first?`);
   if (ctx.state.schedule.rotation.length === 0)
     return refuse('noDay', "There's no plan to build the block from.");
   const group = input.group;

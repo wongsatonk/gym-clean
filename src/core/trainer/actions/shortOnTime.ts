@@ -11,14 +11,19 @@
  *   the last accessories are dropped. Only when the main lifts alone are too long are they
  *   trimmed too.
  * - The day is changed as it will run (stacking on an earlier avoid-area, lighter or swap
- *   override, whose row map is kept), so asking again for less time shortens it further and the
- *   same time again "already fits". Rows in `started` (logged sets) are never touched.
- * - Written as today's override (kind 'swap', like "Remove today": there is no adjust kind of its
- *   own); dropped rows are in its row map. Trimmed rows are marked `adjusted: 'lighter'` unless
- *   they already carry a mark.
+ *   override, whose row map is kept). Rows in `started` (logged sets) are never touched.
+ * - Written as today's override of kind 'shortOnTime'; dropped rows are in its row map. Trimmed
+ *   rows are marked `adjusted: 'lighter'` unless they already carry a mark.
+ * - Asked again while a shorter version is in place, it rebuilds from the planned day (the
+ *   block's version on a block date), so more time gives a longer day and less time a shorter
+ *   one; the same length again → "Today is already set for N min."; a length the whole planned
+ *   day fits in → "Back to the full day" (the override is removed, or reduced to its day pin
+ *   when it pinned another day than the rotation's). A shorter version stacked on another
+ *   change (e.g. go easy on arms) loses that change when rebuilt: there is no record of it.
  */
 import type { PlannedExercise, Proposal } from '../../types';
 import { estimateMinutes, fitToMinutes } from '../estimate';
+import { effectiveDay } from '../plan';
 import type { TrainerCatalog } from '../swapCandidates';
 import { SHORT_ON_TIME, TIME_RULES } from '../timeRules';
 import {
@@ -36,6 +41,8 @@ import {
 } from './lighter';
 
 export const ALREADY_FITS = 'Your day already fits.';
+/** The title of the proposal that brings the whole planned day back. */
+export const FULL_DAY_TITLE = 'Back to the full day';
 
 /** The option a typed length is built for: the nearest lower one, else the shortest. */
 export function shortOptionFor(minutes: number): number {
@@ -71,9 +78,16 @@ export function proposeShortOnTime(
     ...ctx,
     exerciseName: (id) => names.get(id) ?? nameOf(ctx, id),
   };
-  const rows = baseRows(ctx.state, today.day.id, today.override, [], ctx.today);
+  const current = baseRows(ctx.state, today.day.id, today.override, [], ctx.today);
+  const shorter = today.override?.adjust?.kind === 'shortOnTime';
+  const rows = shorter
+    ? baseRows(ctx.state, today.day.id, today.override, ['shortOnTime'], ctx.today)
+    : current;
   const now = estimateMinutes({ exercises: rows });
-  if (now <= minutes) return refuse('nothingToChange', ALREADY_FITS);
+  if (now <= minutes) {
+    if (!shorter) return refuse('nothingToChange', ALREADY_FITS);
+    return fullDayBack(ctx, today.day.id, current, now);
+  }
 
   const limit = shortOptionFor(minutes);
   const fit = fitToMinutes(rows, {
@@ -100,6 +114,8 @@ export function proposeShortOnTime(
       ? { ...q, adjusted: 'lighter' as const }
       : q;
   });
+  if (shorter && JSON.stringify(out) === JSON.stringify(current))
+    return refuse('nothingToChange', `Today is already set for ${limit} min.`);
   const after = new Map(out.map((q) => [q.exerciseId, q]));
 
   const pairs: Proposal['lines'] = [];
@@ -137,13 +153,44 @@ export function proposeShortOnTime(
         `so today takes about ${fit.minutes} min instead of ${now}. Just for today.`,
       say: 'Done. Today is shorter.',
       next: withDayAdjust(ctx.state, ctx.today, today.day.id, {
-        kind: 'swap',
+        kind: 'shortOnTime',
         exercises: out,
         replaced: composeReplaced(
-          baseReplaced(today.override, []),
+          baseReplaced(today.override, ['shortOnTime']),
           fit.dropped.map((fromId) => ({ fromId, toId: null })),
         ),
       }),
+      baseVersion: ctx.state.version,
+    },
+  };
+}
+
+/** The shorter version undone as a proposal: today runs the whole planned day again. */
+function fullDayBack(
+  ctx: ActionContext,
+  dayId: string,
+  current: readonly PlannedExercise[],
+  full: number,
+): ActionResult {
+  const others = ctx.state.overrides.filter((o) => o.date !== ctx.today);
+  const without = { ...ctx.state, overrides: others };
+  const rotationDay = effectiveDay(without, ctx.sessions, ctx.today).day?.id;
+  const overrides = rotationDay === dayId ? others : [...others, { date: ctx.today, dayId }];
+  return {
+    ok: true,
+    proposal: {
+      action: 'shortOnTime',
+      scope: 'today',
+      title: FULL_DAY_TITLE,
+      lines: [
+        {
+          before: `Shorter day · about ${estimateMinutes({ exercises: current })} min`,
+          after: `Full day · about ${full} min`,
+        },
+      ],
+      why: `You have time for the whole planned day today, about ${full} min.`,
+      say: 'Done. The full day is back.',
+      next: { ...ctx.state, overrides },
       baseVersion: ctx.state.version,
     },
   };

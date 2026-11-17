@@ -7,6 +7,7 @@ import { wordCount } from '../advice';
 import { applyProposal, undoLast, type TrainerChange } from './changes';
 import { addDate, effectiveDay, seedPlan } from './plan';
 import { estimateMinutes } from './estimate';
+import { nextBlockOffers, proposeNextBlock } from './nextBlock';
 import type { StallSession } from './actions/stall';
 import type { TrainerCatalog } from './swapCandidates';
 import {
@@ -21,6 +22,7 @@ import {
   PROPOSAL_REPLY,
   QUICK_CHIPS,
   SHORT_ON_TIME_CHIP,
+  FULL_DAY_REPLY,
   handle,
   type CoachContext,
   type CoachInput,
@@ -34,6 +36,7 @@ import {
   REFERRAL_LINE,
   SAY_MAX_WORDS,
   SPOKEN_MAX_WORDS,
+  LEARN_FOR_INTENT,
 } from './replies';
 import source from './coach.ts?raw';
 import { monthScore, weekScore } from '../progress/completion';
@@ -1277,6 +1280,23 @@ describe('M12 1b short on time', () => {
     );
   });
 
+  it('more time after a shorter version: a longer one, or the full day back', () => {
+    const c = ctxFor('push-a');
+    const r = handle(text('I have 20 min'), c);
+    if (!r.proposal) throw new Error('no proposal');
+    const applied = applyProposal(c.state, r.proposal, at(11, 11), 'chip');
+    if (!applied.ok) throw new Error(applied.reason);
+    const later = { ...c, state: applied.state };
+    const longer = handle(text('actually I have 30 min'), later);
+    expect(longer.reply).toBe("Here's a 30-minute version of today.");
+    if (!longer.proposal) throw new Error('no proposal');
+    expect(todayMinutes(c, longer.proposal.next)).toBeGreaterThan(todayMinutes(c, applied.state));
+    const full = handle(text('I have an hour now'), later);
+    expect(full.reply).toBe(FULL_DAY_REPLY);
+    expect(full.proposal?.title).toBe('Back to the full day');
+    expectClean(full, 'full day');
+  });
+
   it('a day that is already short enough → "Your day already fits."', () => {
     for (const input of [
       text('I have 45 minutes'),
@@ -1322,5 +1342,168 @@ describe('M12 1b short on time', () => {
         }
       }
     }
+  });
+});
+
+// ---------- M12 1b: next block chip (from a block recap) ----------
+
+describe('M12 1b next block chip', () => {
+  it('runs the recap chip args through proposeNextBlock; Apply and Undo round trip', () => {
+    const c = ctxFor('push-a');
+    const block = handle(
+      { chip: 'focusBlock', args: { group: 'chest', weeks: 2, days: 4 } },
+      c,
+    ).focusBlock;
+    if (!block) throw new Error('no block');
+    for (const offer of nextBlockOffers(block)) {
+      const args = { ...offer.args, startDate: addDate(TODAY, 2) };
+      const r = handle({ chip: 'nextBlock', args }, c);
+      expect(r.intent).toBe('focusBlock');
+      const want = proposeNextBlock(
+        {
+          state: c.state,
+          sessions: c.sessions,
+          today: TODAY,
+          unit: 'kg',
+          lastWeightKg: {},
+          started: [],
+        },
+        args,
+        CATALOG,
+      );
+      if (!want.ok) throw new Error(want.reason);
+      expect(r.proposal?.next).toEqual(want.proposal.next);
+      expect(r.proposal?.title).toBe(want.proposal.title);
+      expect(r.focusBlock).toEqual(want.proposal.next.blocks?.at(-1));
+      expectClean(r, `nextBlock ${offer.label}`);
+      if (!r.proposal) throw new Error('no proposal');
+      const applied = applyProposal(c.state, r.proposal, at(11, 11), 'chip');
+      if (!applied.ok) throw new Error(applied.reason);
+      expect(applied.state.blocks?.at(-1)?.group).toBe(offer.args.group);
+      const undone = undoLast(applied.state, [applied.change], at(11, 11) + 1000);
+      if (!undone.ok) throw new Error(undone.reason);
+      expect(undone.state.blocks).toEqual(c.state.blocks);
+    }
+  });
+
+  it('a lighter week first is one proposal', () => {
+    const r = handle(
+      {
+        chip: 'nextBlock',
+        args: { group: 'back', weeks: 3, weekdays: [1, 3, 5], lighterWeek: true },
+      },
+      ctxFor('push-a'),
+    );
+    expect(r.proposal?.title).toMatch(/^Lighter week, then /);
+    expect(r.proposal?.next.overrides.some((o) => o.adjust?.kind === 'deload')).toBe(true);
+  });
+
+  it('missing params fall back to the focus-block questions; not mid-workout', () => {
+    expect(handle({ chip: 'nextBlock', args: { group: 'back' } }, ctxFor('push-a')).reply).toBe(
+      ASK_WEEKS,
+    );
+    expect(
+      handle(
+        { chip: 'nextBlock', args: { group: 'back', weeks: 3, weekdays: [1, 3, 5] } },
+        workoutCtx('push-a', []),
+      ).reply,
+    ).toBe(MID_SESSION_REPLY);
+  });
+});
+
+// ---------- M12 1b: the standing go-easy list ----------
+
+describe('M12 1b go-easy list in the coach', () => {
+  const listed = (areas: TrainerState['easyOn'], dayId = 'push-a') => {
+    const c = ctxFor(dayId);
+    return { ...c, state: { ...c.state, ...(areas ? { easyOn: areas } : {}) } };
+  };
+
+  it('"go easy on my shoulders from now on" → the standing-list proposal', () => {
+    const r = handle(text('go easy on my shoulders from now on'), ctxFor('push-a'));
+    expect(r.intent).toBe('avoidArea');
+    expect(r.proposal).toMatchObject({ action: 'easyOn', scope: 'plan' });
+    expect(r.proposal?.next.easyOn).toEqual(['shoulders']);
+    expectClean(r, 'easy on from now on');
+    // Today only stays today's go-easy.
+    expect(handle(text('go easy on my shoulders today'), ctxFor('push-a')).proposal?.action).toBe(
+      'avoidArea',
+    );
+  });
+
+  it('a focus block on a listed group asks to remove it first, with that proposal', () => {
+    const c = listed(['shoulders']);
+    for (const input of [
+      { chip: 'focusBlock', args: { group: 'shoulders', weeks: 4, days: 4 } } as CoachInput,
+      {
+        chip: 'nextBlock',
+        args: { group: 'shoulders', weeks: 4, weekdays: [1, 3, 5] },
+      } as CoachInput,
+      text('build my shoulders'),
+    ]) {
+      const r = handle(input, c);
+      expect(r.reply, JSON.stringify(input)).toBe('Remove shoulders from your go-easy list first?');
+      expect(r.proposal).toMatchObject({ action: 'easyOn', scope: 'plan' });
+      expect(r.proposal?.next.easyOn).toBeUndefined();
+      expect(r.focusBlock).toBeUndefined();
+      expectClean(r, 'easy first');
+    }
+  });
+
+  it('a stalled lift that loads a listed area is offered lighter, never one more set', () => {
+    let h: Hist = { sessions: [], sets: [] };
+    for (const [d, w] of [
+      [3, 15],
+      [5, 15],
+      [7, 15],
+    ] as const)
+      h = addSession(h, 'push-a', at(11, d), [
+        {
+          exerciseId: 'Dumbbell_Bench_Press',
+          sets: [
+            [w, 8],
+            [w, 8],
+          ],
+        },
+      ]);
+    const plain = ctxFor('pull-a', {}, h);
+    const stalled = handle({ chip: 'adjustPlan' }, plain);
+    const base = stalled.proposal?.title ?? '';
+    const c = { ...plain, state: { ...plain.state, easyOn: ['shoulders' as const] } };
+    const r = handle({ chip: 'adjustPlan' }, c);
+    expect(r.proposal?.title).toMatch(/^Lighter and build back up/);
+    expect(r.chips.some((x) => x.id === 'stallFix' && x.args?.option === 'addSet')).toBe(false);
+    const asked = handle(
+      { chip: 'stallFix', args: { exerciseId: 'Dumbbell_Bench_Press', option: 'addSet' } },
+      c,
+    );
+    expect(asked.proposal).toBeUndefined();
+    expect(asked.reply).toMatch(/on your go-easy list/);
+    expect(base.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------- M12 1b: learn cards ----------
+
+describe('M12 1b learn cards on replies', () => {
+  it('links a card where one fits (ids from LEARN_FOR_INTENT)', () => {
+    const c = ctxFor('push-a');
+    expect(handle({ chip: 'deload' }, c).learnId).toBe(LEARN_FOR_INTENT.deload);
+    expect(handle(text('I have 30 min'), c).learnId).toBe('shortSessions');
+    expect(handle({ chip: 'lighter' }, c).learnId).toBe('deloads');
+    expect(handle({ chip: 'week' }, c).learnId).toBe('consistency');
+    expect(
+      handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 3, days: 4 } }, c).learnId,
+    ).toBe('focusBlocks');
+    expect(handle({ chip: 'food' }, { ...c, m7Available: true, fuel: FUEL }).learnId).toBe(
+      'protein',
+    );
+  });
+
+  it('none on help, discomfort, red flags or mid-workout', () => {
+    expect(handle(text('tell me a joke'), ctxFor('push-a')).learnId).toBeUndefined();
+    expect(handle(text('my knee hurts'), ctxFor('legs-a')).learnId).toBeUndefined();
+    expect(handle(text('chest pain and dizzy'), ctxFor('push-a')).learnId).toBeUndefined();
+    expect(handle({ chip: 'lighter' }, workoutCtx('push-a', [])).learnId).toBeUndefined();
   });
 });

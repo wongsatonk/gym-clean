@@ -20,8 +20,11 @@
  *   that exercise's plan row, else the most similar focus row in his plan.
  * - Other groups' rows are never touched, so their weekly sets are unchanged.
  * - The last week is lighter: every row gets the M10 lighter set rule and `adjusted: 'lighter'`.
+ * - M12 1b standing go-easy list (`state.easyOn`): added exercises (and swaps in revisions) never
+ *   load a listed area, and rows that load one are never bumped.
  */
 import { LIGHTER } from './actions/lighter';
+import { easyCatalog, easyOnArea } from './actions/avoidArea';
 import { FOCUS_RULES } from './focusRules';
 import { addDate, blockLastDate, localDate, pendingAt, weekdayOf, type PlanSession } from './plan';
 import {
@@ -229,11 +232,13 @@ type Work = {
 
 export function buildFocusBlock(
   state: TrainerState,
-  catalog: TrainerCatalog,
+  kit: TrainerCatalog,
   params: FocusBlockParams,
   sessions: readonly PlanSession[] = [],
 ): FocusBlock {
   validate(params);
+  const easy = state.easyOn ?? [];
+  const catalog = easyCatalog(kit, easy);
   const R = FOCUS_RULES;
   const { group, weeks, startDate } = params;
   const weekdays = [...new Set(params.weekdays)].sort((a, b) => a - b);
@@ -402,7 +407,8 @@ export function buildFocusBlock(
           (p, k) =>
             !x.bumped.has(k) &&
             p.sets < R.maxSetsPerExercise &&
-            isFocusExercise(p.exerciseId, group, catalog),
+            isFocusExercise(p.exerciseId, group, catalog) &&
+            easyOnArea(p.exerciseId, easy, catalog) === undefined,
         );
         if (i < 0 || room(x) < 1) continue;
         const row = x.day.exercises[i];
@@ -515,7 +521,11 @@ export function reviseFocusBlock(
     const cand = to
       ? { exercise: to, tracking: trackingFor(to.id, catalog) }
       : from
-        ? swapCandidates(from, catalog, { exclude, tracking: row.tracking, limit: 1 })[0]
+        ? swapCandidates(from, easyCatalog(catalog, state.easyOn ?? []), {
+            exclude,
+            tracking: row.tracking,
+            limit: 1,
+          })[0]
         : undefined;
     if (!cand || exclude.includes(cand.exercise.id))
       return { ok: false, reply: `No good swap for ${nameOf(catalog, exerciseId)} with your kit.` };

@@ -554,3 +554,68 @@ describe('focus blocks in the calendar (M12)', () => {
     });
   });
 });
+
+// ---------- M12 1b: the standing go-easy list ----------
+
+describe('go-easy list in the projection (M12 1b)', () => {
+  // A stand-in treatment: drops each day's last row and notes the areas on the name.
+  const calls: { dayId: string; areas: string[]; date: string }[] = [];
+  const treat = (d: ProgramDay, areas: readonly string[], date: string): ProgramDay => {
+    calls.push({ dayId: d.id, areas: [...areas], date });
+    return { ...d, name: `${d.name} (${areas.join('+')})`, exercises: d.exercises.slice(0, 1) };
+  };
+  const listed = (s: TrainerState): TrainerState => ({ ...s, easyOn: ['shoulders', 'arms'] });
+
+  it('applies the treatment to every projected training day, from the plan as written', () => {
+    calls.length = 0;
+    const s = listed(st());
+    const days = effectiveDays(s, [], '2026-11-09', 7, { easyOn: treat });
+    for (const e of days) {
+      expect(e.day?.exercises).toHaveLength(1);
+      expect(e.day?.name).toMatch(/\(shoulders\+arms\)$/);
+      expect(e.easyOn).toEqual(['shoulders', 'arms']);
+    }
+    expect(calls.map((c) => c.date)).toEqual(days.map((e) => e.date));
+    // The stored plan is untouched.
+    expect(s.plan.days[0]?.exercises).toHaveLength(2);
+    expect(effectiveDay(s, [], '2026-11-09', { easyOn: treat }).day?.exercises).toHaveLength(1);
+  });
+
+  it('also on a rest date ("Train anyway") and on an adjusted day, never on a day already done', () => {
+    const adjust: DayOverride = {
+      date: '2026-11-10',
+      dayId: 'b',
+      adjust: { kind: 'lighter', exercises: [ex('b-x'), ex('b-y'), ex('b-z')] },
+    };
+    const s = listed(st([0], [adjust]));
+    const sunday = effectiveDay(s, [], '2026-11-15', { easyOn: treat });
+    expect(sunday.rest).toBe(true);
+    expect(sunday.day?.exercises).toHaveLength(1);
+    const adjusted = effectiveDay(s, [], '2026-11-10', { easyOn: treat });
+    expect(adjusted.adjusted).toBe('lighter');
+    expect(adjusted.day?.exercises).toEqual([ex('b-x')]);
+    const sessions = [done('a', at(11, 9))];
+    const finished = effectiveDay(s, sessions, '2026-11-09', { easyOn: treat });
+    expect(finished.done).toBe(true);
+    expect(finished.easyOn).toBeUndefined();
+  });
+
+  it('without a list, an empty list or no treatment: the plan as before', () => {
+    const plain = effectiveDays(st(), [], '2026-11-09', 7);
+    expect(effectiveDays(st(), [], '2026-11-09', 7, { easyOn: treat })).toEqual(plain);
+    expect(effectiveDays({ ...st(), easyOn: [] }, [], '2026-11-09', 7, { easyOn: treat })).toEqual(
+      plain,
+    );
+    expect(effectiveDays(listed(st()), [], '2026-11-09', 7)).toEqual(plain);
+  });
+
+  it('removing the areas restores every day (it is computed, never stored)', () => {
+    const s = listed(st());
+    const eased = effectiveDays(s, [], '2026-11-09', 7, { easyOn: treat });
+    const { easyOn: _drop, ...rest } = s;
+    void _drop;
+    const back = effectiveDays(rest, [], '2026-11-09', 7, { easyOn: treat });
+    expect(back).toEqual(effectiveDays(st(), [], '2026-11-09', 7));
+    expect(back).not.toEqual(eased);
+  });
+});

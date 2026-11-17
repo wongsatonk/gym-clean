@@ -8,8 +8,9 @@
  * - `say` (spoken after Apply mid-workout) is ≤ 8 words; any spoken line is ≤ 12.
  */
 import { ADVICE_BANNED_WORDS, wordCount } from '../advice';
+import { estimateMinutes } from '../dayInfo';
 import { formatWeight, type Unit } from '../units';
-import { normalizeText } from './intents';
+import { normalizeText, type Intent } from './intents';
 import phrases from './phrases.json';
 import type {
   DayOverride,
@@ -95,6 +96,25 @@ export function checkCopy(text: string): CopyCheck {
 
 const clean = (text: string | undefined, fallback: string): string =>
   text !== undefined && text.trim() !== '' && checkCopy(text).ok ? text : fallback;
+
+// ---------- M12 1b: learn cards ----------
+
+/**
+ * The learn card (src/data/learnCards.ts id) a coach reply links to ("Why?"), by intent. The
+ * coach adds it only to plain answers outside a workout (never on help, discomfort or red flags).
+ */
+export const LEARN_FOR_INTENT: Partial<Record<Intent, string>> = {
+  stall: 'progressiveOverload',
+  lighter: 'deloads',
+  deload: 'deloads',
+  focusBlock: 'focusBlocks',
+  focusEdit: 'focusBlocks',
+  shortOnTime: 'shortSessions',
+  food: 'protein',
+  week: 'consistency',
+  progress: 'consistency',
+  postpone: 'consistency',
+};
 
 // ---------- proposals ----------
 
@@ -216,6 +236,8 @@ export function adjustSummary(
   if (!adjust) return 'Training day (moved)';
   if (adjust.kind === 'lighter') return 'Lighter today';
   if (adjust.kind === 'deload') return 'Deload week';
+  if (adjust.kind === 'shortOnTime')
+    return `Shorter today · ~${estimateMinutes({ exercises: adjust.exercises })} min`;
 
   const head = adjust.kind === 'avoidArea' && adjust.area ? `Easy on ${adjust.area}` : null;
   if (!planDay) return clean(head ?? 'Changed today', 'Changed today');

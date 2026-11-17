@@ -14,10 +14,10 @@
  *      lifts, then trim the first one. `fits` is false when even that is too long.
  *   Rows in `fixed` (exercises with logged sets) are never changed.
  */
-import type { PlannedExercise, ProgramDay } from '../types';
+import type { PlannedExercise } from '../types';
 import { SHORT_ON_TIME, TIME_RULES, type TimeRules } from './timeRules';
 
-type Rows = Pick<ProgramDay, 'exercises'>;
+type Rows = { readonly exercises: readonly PlannedExercise[] };
 
 const restOf = (p: PlannedExercise, rules: TimeRules): number =>
   p.pairWith === undefined ? p.restSec : Math.min(p.restSec, rules.pairRestSec);

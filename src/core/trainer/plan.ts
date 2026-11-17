@@ -25,8 +25,15 @@
  * - The rotation pointer is frozen during a block: nothing on a block date moves it, and sessions
  *   on block dates don't count as "the last finished session", so after a block's last date the
  *   rotation resumes after the last finished session outside every block.
+ *
+ * M12 1b standing go-easy list (`state.easyOn`): with `opts.easyOn` (actions/easyOn.ts
+ * `easyOnTreatment`), every projected day that isn't done (training dates, rest dates' "Train
+ * anyway" day, adjusted days) runs through the treatment for the listed areas. It is computed on
+ * every read and never stored, so removing an area restores the plan. Without `opts` (proposals
+ * build on the plan as written) or with an empty list, days are as before.
  */
 import type {
+  BodyArea,
   DayAdjust,
   DayOverride,
   FocusBlock,
@@ -75,6 +82,20 @@ export type EffectiveDay = {
   override?: DayOverride;
   /** M12: the focus block this date belongs to. */
   blockId?: string;
+  /** M12 1b: the go-easy areas the day was treated for (only when the treatment changed it). */
+  easyOn?: BodyArea[];
+};
+
+/** M12 1b: the go-easy treatment of one day (actions/easyOn.ts `easyOnTreatment`). */
+export type DayTreatment = (
+  day: ProgramDay,
+  areas: readonly BodyArea[],
+  date: string,
+) => ProgramDay;
+
+export type EffectiveOptions = {
+  /** Applied for `state.easyOn` to every projected day that isn't done. */
+  easyOn?: DayTreatment;
 };
 
 // ---------- local dates ----------
@@ -322,8 +343,9 @@ export function effectiveDay(
   state: TrainerState,
   sessions: readonly PlanSession[],
   date: string,
+  opts?: EffectiveOptions,
 ): EffectiveDay {
-  const [e] = effectiveDays(state, sessions, date, 1);
+  const [e] = effectiveDays(state, sessions, date, 1, opts);
   if (!e) throw new Error('unreachable: one projected day');
   return e;
 }
@@ -334,10 +356,15 @@ export function effectiveDays(
   sessions: readonly PlanSession[],
   fromDate: string,
   days: number,
+  opts?: EffectiveOptions,
 ): EffectiveDay[] {
+  const areas = state.easyOn ?? [];
+  const treat = areas.length > 0 ? opts?.easyOn : undefined;
   return project(state, sessions, fromDate, days).map((e) => {
     const adjust = e.rest || e.done ? undefined : e.override?.adjust;
-    const day = resolve(state, e, e.rest ? e.pending : e.dayId, adjust);
+    const planned = resolve(state, e, e.rest ? e.pending : e.dayId, adjust);
+    const day = planned && treat && !e.done ? treat(planned, areas, e.date) : planned;
+    const eased = day !== planned && JSON.stringify(day) !== JSON.stringify(planned);
     return {
       date: e.date,
       rest: e.rest,
@@ -346,6 +373,7 @@ export function effectiveDays(
       adjusted: adjust && day ? adjust.kind : null,
       ...(e.override ? { override: e.override } : {}),
       ...(e.blockId ? { blockId: e.blockId } : {}),
+      ...(eased ? { easyOn: [...areas] } : {}),
     };
   });
 }

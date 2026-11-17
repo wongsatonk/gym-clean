@@ -65,7 +65,9 @@ export type ActionRefusal =
   | 'notInDay'
   | 'notInPlan'
   | 'started'
-  | 'noCandidate';
+  | 'noCandidate'
+  /** M12 1b: the request would load an area on the standing go-easy list. */
+  | 'easyOn';
 
 export type ActionResult =
   | { ok: true; proposal: Proposal }

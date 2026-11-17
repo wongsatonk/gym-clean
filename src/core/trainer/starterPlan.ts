@@ -17,8 +17,13 @@
  *   muscle in a listed area is never picked (a slot or a whole day can drop out); one that
  *   doesn't load the area at all is preferred; one where the area only helps runs lighter
  *   (one set fewer, or fewer reps for a bodyweight move; `easyOn` in the data).
- * - Each day is then trimmed to the session length (`fitToMinutes`, no pairing): accessory sets,
- *   then the last accessories; the main lifts last.
+ * - Each day is then fitted to the session length (`fill` in the data), never over it and at most
+ *   `fill.bandMin` minutes short: a short day gets the day's `extras` slots (up to
+ *   `fill.maxExercises` exercises), then one more set per row in turn (main lifts first, up to
+ *   the experience's `max`; a row where a go-easy area helps stays `easyOn.setsDrop` below it),
+ *   then the remaining extras, then sets again; each step only when the day still fits. A day that
+ *   is too long is trimmed (`fitToMinutes`, no pairing): accessory sets, then the last
+ *   accessories, the main lifts last.
  * - Out-of-range answers, or a gym that can do nothing, give an empty plan (the action refuses).
  */
 import templatesJson from '../../data/templates/starterTemplates.json';
@@ -32,7 +37,7 @@ import type {
   Schedule,
   UserPlan,
 } from '../types';
-import { fitToMinutes } from './estimate';
+import { estimateMinutes, fitToMinutes } from './estimate';
 import { programHash } from './plan';
 import { loadsArea, primaryInArea, trackingFor, type TrainerCatalog } from './swapCandidates';
 
@@ -44,7 +49,12 @@ type SlotDef = {
   prefer?: string[];
   orElse?: string;
 };
-type DayDef = { id: string; name: string; slots: { slot: string; main?: boolean }[] };
+type DayDef = {
+  id: string;
+  name: string;
+  slots: { slot: string; main?: boolean }[];
+  extras?: { slot: string }[];
+};
 
 /** The shape `buildStarterPlan` reads (the JSON file fits). */
 export type StarterTemplates = {
@@ -53,7 +63,8 @@ export type StarterTemplates = {
   days: Record<string, DayDef>;
   slots: Record<string, SlotDef>;
   prescription: Record<GoalKind, Record<SlotKind, { reps: number[]; restSec: number }>>;
-  sets: Record<Intake['experience'], Record<SlotKind, number>>;
+  sets: Record<Intake['experience'], Record<SlotKind | 'max', number>>;
+  fill: { bandMin: number; maxExercises: number };
   easyOn: { setsDrop: number; minSets: number; bodyweightRepsFactor: number };
   bodyweightEquipment: string;
 };
@@ -162,29 +173,80 @@ export function buildStarterPlan(
     return row;
   };
 
-  const days: ProgramDay[] = [];
+  /** The most sets a row may get when a long session is filled. */
+  const capOf = (e: Exercise): number =>
+    helpsEasy(e) && e.equipment !== templates.bodyweightEquipment
+      ? Math.max(templates.easyOn.minSets, sets.max - templates.easyOn.setsDrop)
+      : sets.max;
+  const fitsIn = (rows: readonly PlannedExercise[]) =>
+    estimateMinutes({ exercises: rows }) <= intake.sessionMin;
+
+  type Built = {
+    def: DayDef;
+    rows: PlannedExercise[];
+    caps: Map<PlannedExercise, number>;
+    main: string[];
+    inDay: Set<string>;
+  };
+  const addTo = (b: Built, slot: string, kind: SlotKind, onlyIfFits: boolean): boolean => {
+    const e = pick(slot, b.inDay);
+    if (!e) return false;
+    const row = rowFor(e, kind);
+    if (onlyIfFits && !fitsIn([...b.rows, row])) return false;
+    b.inDay.add(e.id);
+    used.add(e.id);
+    b.rows.push(row);
+    b.caps.set(row, capOf(e));
+    if (kind === 'main') b.main.push(e.id);
+    return true;
+  };
+
+  // 1. Every day's template slots first, so the picks don't depend on the session length.
+  const built: Built[] = [];
   for (const key of split.rotation) {
     const def = templates.days[key];
     if (!def) continue;
-    const rows: PlannedExercise[] = [];
-    const main: string[] = [];
-    const inDay = new Set<string>();
-    for (const s of def.slots) {
-      const e = pick(s.slot, inDay);
-      if (!e) continue;
-      inDay.add(e.id);
-      rows.push(rowFor(e, s.main ? 'main' : 'accessory'));
-      if (s.main) main.push(e.id);
+    const b: Built = { def, rows: [], caps: new Map(), main: [], inDay: new Set() };
+    for (const s of def.slots) addTo(b, s.slot, s.main ? 'main' : 'accessory', false);
+    if (b.rows.length > 0) built.push(b);
+  }
+
+  // 2. Fit each day: fill a short one (extras, then sets, then the other extras, then sets
+  //    again), trim a long one.
+  const days: ProgramDay[] = [];
+  for (const b of built) {
+    const { rows } = b;
+    const extras = [...(b.def.extras ?? [])];
+    const addExtras = (upTo: number) => {
+      while (extras.length > 0 && rows.length < upTo) {
+        const x = extras.shift();
+        if (x) addTo(b, x.slot, 'accessory', true);
+      }
+    };
+    const addSets = () => {
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const r of rows) {
+          if (r.sets >= (b.caps.get(r) ?? sets.max)) continue;
+          r.sets += 1;
+          if (fitsIn(rows)) grew = true;
+          else r.sets -= 1;
+        }
+      }
+    };
+    if (fitsIn(rows)) {
+      addExtras(templates.fill.maxExercises);
+      addSets();
+      addExtras(Number.POSITIVE_INFINITY);
+      addSets();
     }
-    const first = rows[0];
-    if (!first) continue;
+    const first = rows[0]?.exerciseId ?? '';
     const fit = fitToMinutes(rows, {
       minutes: intake.sessionMin,
-      main: main.length > 0 ? main : [first.exerciseId],
+      main: b.main.length > 0 ? b.main : [first],
       minSets: templates.easyOn.minSets,
     });
-    for (const r of fit.rows) used.add(r.exerciseId);
-    days.push({ id: def.id, name: def.name, exercises: fit.rows });
+    days.push({ id: b.def.id, name: b.def.name, exercises: fit.rows });
   }
   if (days.length === 0) return { ...EMPTY(), split: split.split };
 

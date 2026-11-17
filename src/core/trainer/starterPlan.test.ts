@@ -91,6 +91,18 @@ describe('starter templates (data)', () => {
     for (const e of EXPERIENCE) {
       expect(T.sets[e].main).toBeGreaterThanOrEqual(2);
       expect(T.sets[e].accessory).toBeGreaterThanOrEqual(2);
+      expect(T.sets[e].max).toBeGreaterThanOrEqual(Math.max(T.sets[e].main, T.sets[e].accessory));
+    }
+    expect(T.sets.new.max).toBeLessThanOrEqual(T.sets.years.max);
+  });
+
+  it('every day has extra slots to fill a longer session, and a fill band', () => {
+    expect(T.fill.bandMin).toBe(10);
+    const days = T.days as Record<string, { extras: { slot: string }[] }>;
+    for (const [key, d] of Object.entries(days)) {
+      expect(d.extras.length, key).toBeGreaterThanOrEqual(2);
+      for (const x of d.extras)
+        expect((T.slots as Record<string, unknown>)[x.slot], x.slot).toBeDefined();
     }
   });
 });
@@ -113,14 +125,18 @@ describe('buildStarterPlan', () => {
             const rx = STARTER_TEMPLATES.prescription[goalKind];
             const sets = STARTER_TEMPLATES.sets[experience];
             for (const d of p.plan.days) {
-              expect(estimateMinutes(d), `${label} ${d.id}`).toBeLessThanOrEqual(sessionMin);
+              const m = estimateMinutes(d);
+              expect(m, `${label} ${d.id}`).toBeLessThanOrEqual(sessionMin);
+              expect(m, `${label} ${d.id}`).toBeGreaterThanOrEqual(
+                sessionMin - STARTER_TEMPLATES.fill.bandMin,
+              );
               expect(d.exercises.length, `${label} ${d.id}`).toBeGreaterThan(0);
               const ids = d.exercises.map((r) => r.exerciseId);
               expect(new Set(ids).size, `${label} ${d.id}`).toBe(ids.length);
               for (const r of d.exercises) {
                 expect(DEFAULT_GYM.canDo(r.exerciseId), r.exerciseId).toBe(true);
                 expect(r.sets).toBeGreaterThanOrEqual(2);
-                expect(r.sets).toBeLessThanOrEqual(Math.max(sets.main, sets.accessory));
+                expect(r.sets).toBeLessThanOrEqual(sets.max);
                 expect([rx.main.reps, rx.accessory.reps]).toContainEqual(r.targetReps);
                 expect([rx.main.restSec, rx.accessory.restSec]).toContain(r.restSec);
                 expect(r.tracking).toBe(ruleFor(r.exerciseId) ? 'pose' : 'manual');
@@ -145,7 +161,7 @@ describe('buildStarterPlan', () => {
     expect(upper?.name).toBe('Upper A');
     expect(upper?.exercises[0]?.exerciseId).toBe('Dumbbell_Bench_Press');
     expect(upper?.exercises[1]?.exerciseId).toBe('One-Arm_Dumbbell_Row');
-    expect(upper?.exercises[0]?.sets).toBe(STARTER_TEMPLATES.sets.years.main);
+    expect(upper?.exercises[0]?.sets).toBeGreaterThanOrEqual(STARTER_TEMPLATES.sets.years.main);
     expect(upper?.exercises[0]?.targetReps).toEqual(
       STARTER_TEMPLATES.prescription.muscle.main.reps,
     );
@@ -156,9 +172,25 @@ describe('buildStarterPlan', () => {
     const fat = build(intake({ goalKind: 'fat', sessionMin: 75 }));
     expect(strength.plan.days[0]?.exercises[0]).toMatchObject({ targetReps: [5, 8], restSec: 150 });
     expect(fat.plan.days[0]?.exercises[0]).toMatchObject({ targetReps: [10, 12], restSec: 75 });
-    const fresh = build(intake({ experience: 'new', sessionMin: 75 }));
-    const years = build(intake({ experience: 'years', sessionMin: 75 }));
-    expect(totalSets(years)).toBeGreaterThan(totalSets(fresh));
+    for (const experience of EXPERIENCE) {
+      const sets = STARTER_TEMPLATES.sets[experience];
+      for (const sessionMin of [60, 75] as const) {
+        const p = build(intake({ experience, sessionMin, days: 4 }));
+        for (const d of p.plan.days) {
+          // The main lifts start at the experience's sets (a long session only adds to them).
+          expect(d.exercises[0]?.sets ?? 0).toBeGreaterThanOrEqual(sets.main);
+          for (const r of d.exercises) expect(r.sets).toBeLessThanOrEqual(sets.max);
+        }
+      }
+    }
+  });
+
+  it('a longer session gets more exercises before more sets pile onto one', () => {
+    const at45 = build(intake({ days: 3, sessionMin: 45 }));
+    const at75 = build(intake({ days: 3, sessionMin: 75 }));
+    const count = (p: StarterPlan) => rowsOf(p).length;
+    expect(count(at75)).toBeGreaterThan(count(at45));
+    expect(totalSets(at75)).toBeGreaterThan(totalSets(at45));
   });
 
   it('a shorter session has less work, never more', () => {
@@ -252,7 +284,7 @@ describe('buildStarterPlan', () => {
               ].map((n) => Math.round(n * 0.8));
               expect(tops).toContain(r.targetReps[1]);
             } else {
-              expect(r.sets).toBeLessThanOrEqual(Math.max(sets.main, sets.accessory) - 1);
+              expect(r.sets).toBeLessThanOrEqual(sets.max - STARTER_TEMPLATES.easyOn.setsDrop);
             }
           }
         }
@@ -267,7 +299,6 @@ describe('buildStarterPlan', () => {
       );
       expect(rowsOf(plain).some((r) => r.exerciseId === 'Dumbbell_Bicep_Curl')).toBe(true);
       expect(rowsOf(easy).some((r) => r.exerciseId === 'Dumbbell_Bicep_Curl')).toBe(false);
-      expect(totalSets(easy)).toBeLessThan(totalSets(plain));
     });
 
     it('drops a day that only works the area (legs days with legs on the list)', () => {

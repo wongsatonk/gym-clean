@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { wordCount } from '../advice';
 import { fromUnit } from '../units';
+import { estimateMinutes } from '../dayInfo';
 import {
   adjustSummary,
   checkCopy,
@@ -211,6 +212,13 @@ describe('adjustSummary', () => {
     expect(adjustSummary(o, nameOf, day)).toBe('Easy on arms · 1 swap, 1 removed, 1 lighter');
     // Without the plan day the counts are unknown, so only the area is named.
     expect(adjustSummary(o, nameOf)).toBe('Easy on arms');
+  });
+
+  it('a shorter day names its time (the "~N min" figure)', () => {
+    const o = ov({ kind: 'shortOnTime', exercises: [pe('row'), pe('curl')] });
+    const n = estimateMinutes({ exercises: [pe('row'), pe('curl')] });
+    expect(adjustSummary(o, nameOf, day)).toBe(`Shorter today · ~${n} min`);
+    expect(adjustSummary(o, nameOf)).toBe(`Shorter today · ~${n} min`);
   });
 
   it('lighter and deload are named as such', () => {
