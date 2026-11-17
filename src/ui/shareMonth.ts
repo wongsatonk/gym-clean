@@ -6,14 +6,30 @@
 // (`navigator.share({ files })`) or a download link. Nothing is uploaded: no fetch, no new origin.
 //
 // Colours and fonts come from the tokens (cssToken), so this file holds no colour literal.
+//
+// M13 task 25: a second size, the Story (1080×1920, 9:16, `shareStoryLayout`): the lockup (the
+// app mark + name) on top, one positive number he picks in the preview (sessions done by default,
+// total lifted, weeks in a row; core `pickLead` / `shareLeadText`), the month grid with missed
+// days as quiet grey rings (no red, no "missed" text) and a quiet footer. Total lifted is the
+// only weight it may show, and only when picked; never per-lift weights, body or Health data.
+import { APP_NAME } from '../core/brand';
+import { pickLead, shareLeadText } from '../core/progress/shareStats';
 import { pctOf } from '../core/progress/recap';
 import { weekdayOf } from '../core/trainer/plan';
-import type { DayCompletion, DayStatus, PeriodScore } from '../core/types';
+import type { DayCompletion, DayStatus, PeriodScore, ShareLead, ShareStats } from '../core/types';
+import type { Unit } from '../core/units';
+import { ICON_PATHS } from './icons';
 import { cssToken, type TokenName } from './tokens';
 
 /** Portrait 4:5, the size phones and Stories show without cropping the grid. */
 export const SHARE_W = 1080;
 export const SHARE_H = 1350;
+
+/** M13: Story size, 9:16. */
+export const STORY_W = 1080;
+export const STORY_H = 1920;
+
+export type ShareSize = 'post' | 'story';
 
 export type ShareColor = Extract<
   TokenName,
@@ -51,7 +67,9 @@ export type ShareItem =
       font: 'display' | 'body';
       color: ShareColor;
       align: 'left' | 'center' | 'right';
-    };
+    }
+  /** M13: the app mark (the logo path on a 24 grid), stroked at `size` px. */
+  | { kind: 'mark'; x: number; y: number; size: number; color: ShareColor };
 
 export type ShareLayout = { width: number; height: number; items: ShareItem[] };
 
@@ -105,6 +123,86 @@ const GRID_TOP = 300;
 const COL = (SHARE_W - 2 * PAD) / 7;
 const ROW = 104;
 
+type GridOpts = {
+  top: number;
+  pad: number;
+  col: number;
+  row: number;
+  r: number;
+  /** Post: the Calendar's dashed amber ring. Story: a quiet grey dashed ring (no red, M13). */
+  missed: 'dashed-warn' | 'quiet';
+};
+
+/** Weekday letters + one ring per day (Monday first), as on the Calendar. */
+function gridItems(days: readonly ShareDay[], o: GridOpts): ShareItem[] {
+  const items: ShareItem[] = [];
+  ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach((w, i) =>
+    items.push({
+      kind: 'text',
+      x: o.pad + o.col * i + o.col / 2,
+      y: o.top - 30,
+      text: w,
+      size: 32,
+      weight: 700,
+      font: 'body',
+      color: '--text-2',
+      align: 'center',
+    }),
+  );
+  const blanks = days[0] ? (weekdayOf(days[0].date) + 6) % 7 : 0;
+  days.forEach((d, i) => {
+    const slot = blanks + i;
+    const cx = o.pad + o.col * (slot % 7) + o.col / 2;
+    const cy = o.top + o.row * Math.floor(slot / 7) + o.row / 2;
+    const r = o.r;
+    if (d.status !== 'rest') {
+      const missed = d.status === 'missed';
+      const quiet = o.missed === 'quiet';
+      items.push({
+        kind: 'ring',
+        cx,
+        cy,
+        r,
+        width: missed ? (quiet ? 4 : 5) : d.status === 'partial' ? 9 : 4,
+        color: missed && !quiet ? '--warn' : '--line',
+        pct: 100,
+        dash: missed ? [10, 8] : undefined,
+      });
+      const pct = ringPct(d);
+      if (pct > 0) items.push({ kind: 'ring', cx, cy, r, width: 9, color: '--success', pct });
+    }
+    items.push({
+      kind: 'text',
+      x: cx,
+      y: cy + 13,
+      text: String(Number(d.date.slice(8, 10))),
+      size: 36,
+      weight: d.status === 'rest' ? 400 : 700,
+      font: 'body',
+      color:
+        d.status === 'rest' || (d.status === 'missed' && o.missed === 'quiet')
+          ? '--text-2'
+          : '--text',
+      align: 'center',
+    });
+    if (d.status === 'extra')
+      items.push({
+        kind: 'text',
+        x: cx + r - 2,
+        y: cy - r + 18,
+        text: '+',
+        size: 36,
+        weight: 700,
+        font: 'body',
+        color: '--success',
+        align: 'center',
+      });
+    if (d.focus)
+      items.push({ kind: 'rect', x: cx - 18, y: cy + r + 4, w: 36, h: 6, r: 3, color: '--muscle' });
+  });
+  return items;
+}
+
 /** Pure: what to draw. `month` is 'YYYY-MM'; `completion` = monthCompletion(…, month). */
 export function shareMonthLayout(
   month: string,
@@ -119,7 +217,7 @@ export function shareMonthLayout(
       kind: 'text',
       x: PAD,
       y: 110,
-      text: 'GYM CLEAN',
+      text: APP_NAME.toUpperCase(),
       size: 36,
       weight: 700,
       font: 'body',
@@ -138,66 +236,16 @@ export function shareMonthLayout(
       align: 'left',
     },
   ];
-  ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach((w, i) =>
-    items.push({
-      kind: 'text',
-      x: PAD + COL * i + COL / 2,
-      y: GRID_TOP - 30,
-      text: w,
-      size: 32,
-      weight: 700,
-      font: 'body',
-      color: '--text-2',
-      align: 'center',
+  items.push(
+    ...gridItems(days, {
+      top: GRID_TOP,
+      pad: PAD,
+      col: COL,
+      row: ROW,
+      r: 44,
+      missed: 'dashed-warn',
     }),
   );
-  const blanks = days[0] ? (weekdayOf(days[0].date) + 6) % 7 : 0;
-  days.forEach((d, i) => {
-    const slot = blanks + i;
-    const cx = PAD + COL * (slot % 7) + COL / 2;
-    const cy = GRID_TOP + ROW * Math.floor(slot / 7) + ROW / 2;
-    const r = 44;
-    if (d.status !== 'rest') {
-      const missed = d.status === 'missed';
-      items.push({
-        kind: 'ring',
-        cx,
-        cy,
-        r,
-        width: missed ? 5 : d.status === 'partial' ? 9 : 4,
-        color: missed ? '--warn' : '--line',
-        pct: 100,
-        dash: missed ? [10, 8] : undefined,
-      });
-      const pct = ringPct(d);
-      if (pct > 0) items.push({ kind: 'ring', cx, cy, r, width: 9, color: '--success', pct });
-    }
-    items.push({
-      kind: 'text',
-      x: cx,
-      y: cy + 13,
-      text: String(Number(d.date.slice(8, 10))),
-      size: 36,
-      weight: d.status === 'rest' ? 400 : 700,
-      font: 'body',
-      color: d.status === 'rest' ? '--text-2' : '--text',
-      align: 'center',
-    });
-    if (d.status === 'extra')
-      items.push({
-        kind: 'text',
-        x: cx + r - 2,
-        y: cy - r + 18,
-        text: '+',
-        size: 36,
-        weight: 700,
-        font: 'body',
-        color: '--success',
-        align: 'center',
-      });
-    if (d.focus)
-      items.push({ kind: 'rect', x: cx - 18, y: cy + r + 4, w: 36, h: 6, r: 3, color: '--muscle' });
-  });
 
   // Scores under the grid (6 rows always reserved, so the layout never moves).
   const s = scores.month;
@@ -275,7 +323,7 @@ export function shareMonthLayout(
     kind: 'text',
     x: PAD,
     y: SHARE_H - 50,
-    text: 'Every set logged in Gym Clean',
+    text: `Every set logged in ${APP_NAME}`,
     size: 32,
     weight: 400,
     font: 'body',
@@ -287,6 +335,133 @@ export function shareMonthLayout(
 
 /** File name for the image: gym-clean-2026-11.png. */
 export const shareFileName = (month: string): string => `gym-clean-${month}.png`;
+
+/** M13: file name for the Story image: gym-clean-2026-11-story.png. */
+export const shareStoryFileName = (month: string): string => `gym-clean-${month}-story.png`;
+
+/** The `d` of the app logo path (ICON_PATHS.logo, 24×24 grid), for the canvas mark. */
+export function logoPathData(): string {
+  // \x22 is a double quote (kept out of a regex literal so the copy scanners read this file right).
+  return new RegExp('\\sd=\\x22([^\\x22]+)\\x22').exec(ICON_PATHS.logo)?.[1] ?? '';
+}
+
+export type StoryOptions = {
+  stats: ShareStats;
+  /** The lead he picked; one that isn't offered falls back (core `pickLead`). */
+  lead: ShareLead | null | undefined;
+  /** Display unit for "total lifted". */
+  unit: Unit;
+};
+
+const S_PAD = 80;
+const S_GRID_TOP = 900;
+const S_COL = (STORY_W - 2 * S_PAD) / 7;
+const S_ROW = 124;
+
+/**
+ * Pure: the Story image (1080×1920). The lockup on top, the lead number big with its label,
+ * the month grid with missed days as quiet grey rings, a quiet footer. When every number is 0
+ * (`pickLead` → null) the month name takes the lead's place and the grid stands alone.
+ */
+export function shareStoryLayout(
+  month: string,
+  completion: readonly DayCompletion[],
+  opts: StoryOptions,
+): ShareLayout {
+  const days = completion.filter((d) => d.date.startsWith(month)).map(pick);
+  const [y, m] = month.split('-').map(Number) as [number, number];
+  const monthName = `${MONTHS[m - 1] ?? ''} ${y}`;
+  const lead = pickLead(opts.stats, opts.lead ?? undefined);
+  const items: ShareItem[] = [
+    { kind: 'rect', x: 0, y: 0, w: STORY_W, h: STORY_H, r: 0, color: '--bg' },
+    // The lockup: the mark on its tile, the name beside it.
+    { kind: 'rect', x: S_PAD, y: 110, w: 112, h: 112, r: 28, color: '--surface' },
+    { kind: 'mark', x: S_PAD + 16, y: 126, size: 80, color: '--cta' },
+    {
+      kind: 'text',
+      x: S_PAD + 140,
+      y: 190,
+      text: APP_NAME,
+      size: 64,
+      weight: 700,
+      font: 'display',
+      color: '--text',
+      align: 'left',
+    },
+  ];
+  if (lead) {
+    const t = shareLeadText(lead, opts.stats, opts.unit);
+    items.push(
+      {
+        kind: 'text',
+        x: S_PAD,
+        y: 380,
+        text: monthName,
+        size: 56,
+        weight: 700,
+        font: 'body',
+        color: '--text-2',
+        align: 'left',
+      },
+      {
+        kind: 'text',
+        x: S_PAD - 8,
+        y: 650,
+        text: t.value,
+        size: 260,
+        weight: 700,
+        font: 'display',
+        color: '--cta',
+        align: 'left',
+      },
+      {
+        kind: 'text',
+        x: S_PAD,
+        y: 740,
+        text: t.label,
+        size: 64,
+        weight: 700,
+        font: 'body',
+        color: '--text',
+        align: 'left',
+      },
+    );
+  } else {
+    items.push({
+      kind: 'text',
+      x: S_PAD,
+      y: 600,
+      text: monthName,
+      size: 120,
+      weight: 700,
+      font: 'display',
+      color: '--text',
+      align: 'left',
+    });
+  }
+  items.push(
+    ...gridItems(days, {
+      top: S_GRID_TOP,
+      pad: S_PAD,
+      col: S_COL,
+      row: S_ROW,
+      r: 48,
+      missed: 'quiet',
+    }),
+  );
+  items.push({
+    kind: 'text',
+    x: STORY_W / 2,
+    y: STORY_H - 80,
+    text: `Logged in ${APP_NAME}`,
+    size: 34,
+    weight: 400,
+    font: 'body',
+    color: '--text-2',
+    align: 'center',
+  });
+  return { width: STORY_W, height: STORY_H, items };
+}
 
 /** Draws the layout on a canvas and returns a PNG. Needs a DOM with canvas 2D. */
 export async function renderShareMonth(
@@ -326,6 +501,19 @@ export async function renderShareMonth(
       ctx.arc(it.cx, it.cy, it.r, start, start + (2 * Math.PI * it.pct) / 100);
       ctx.stroke();
       ctx.setLineDash([]);
+    } else if (it.kind === 'mark') {
+      const d = logoPathData();
+      if (!d || typeof Path2D !== 'function') continue;
+      ctx.save();
+      ctx.translate(it.x, it.y);
+      ctx.scale(it.size / 24, it.size / 24);
+      ctx.strokeStyle = c(it.color);
+      ctx.lineWidth = 2.25;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([]);
+      ctx.stroke(new Path2D(d));
+      ctx.restore();
     } else {
       ctx.fillStyle = c(it.color);
       ctx.textAlign = it.align;
@@ -356,9 +544,10 @@ export async function shareMonth(
   png: Blob,
   month: string,
   env: ShareEnv = {},
+  size: ShareSize = 'post',
 ): Promise<ShareResult> {
   const nav = env.nav ?? (typeof navigator === 'undefined' ? undefined : navigator);
-  const name = shareFileName(month);
+  const name = size === 'story' ? shareStoryFileName(month) : shareFileName(month);
   const FileCtor = (globalThis as { File?: typeof File }).File;
   if (nav && typeof nav.share === 'function' && typeof nav.canShare === 'function' && FileCtor) {
     const file = new FileCtor([png], name, { type: 'image/png' });

@@ -1,0 +1,114 @@
+<!doctype html>
+<!-- Dev-only visual check for M13 tasks 14, 15 and 25 (About, Licenses, Owner tools, Share month
+     preview + Story image) with made-up data. Not part of the build or the app. Open on the dev
+     server: /src/ui/screens/about.harness.html?view=about | about-owner | licenses | license-text
+     | share-story | share-post | story-png
+     story-png draws the 1080×1920 Story image into an <img id="story"> (window.storyDataUrl). -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>About harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { aboutScreen } from './about.ts';
+      import { licensesView } from './licenses.ts';
+      import { sharePreview } from '../sharePreview.ts';
+      import {
+        renderShareMonth,
+        shareMonthLayout,
+        shareStoryLayout,
+      } from '../shareMonth.ts';
+      import { leadOptions, pickLead } from '../../core/progress/shareStats.ts';
+      import { FIX_MONTH, FIX_MONTH_SCORE, fixtureMonth } from './calendarFixture.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'about';
+      const lead = q.get('lead') ?? 'sessions';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      // Made-up numbers.
+      const stats = { sessionsDone: 14, volumeKg: 31250, streakWeeks: 5 };
+
+      async function storyUrl(size, wanted) {
+        const layout =
+          size === 'story'
+            ? shareStoryLayout(FIX_MONTH, fixtureMonth(), { stats, lead: wanted, unit: 'kg' })
+            : shareMonthLayout(FIX_MONTH, fixtureMonth(), {
+                month: FIX_MONTH_SCORE,
+                streakWeeks: 5,
+              });
+        const png = await renderShareMonth(layout);
+        return URL.createObjectURL(png);
+      }
+
+      if (view === 'about' || view === 'about-owner') {
+        let owner = view === 'about-owner';
+        const show = () =>
+          app.replaceChildren(
+            aboutScreen(
+              { version: owner ? 'Version 1.15.0 (build abc1234)' : 'Version 1.15', owner },
+              {
+                onBack: () => log('back'),
+                onLicenses: () => log('licenses'),
+                onOwnerChange: (on) => (log('owner', on), (owner = on)),
+              },
+            ),
+          );
+        show();
+      } else if (view === 'licenses' || view === 'license-text') {
+        app.replaceChildren(licensesView({ onBack: () => log('back') }));
+        if (view === 'license-text') {
+          const wait = () => {
+            const row = document.querySelector('button[data-license]');
+            if (row) row.click();
+            else setTimeout(wait, 50);
+          };
+          wait();
+        }
+      } else if (view === 'share-story' || view === 'share-post') {
+        let size = view === 'share-story' ? 'story' : 'post';
+        let wanted = lead;
+        const show = async () => {
+          const props = {
+            monthLabel: 'November 2026',
+            size,
+            leads: leadOptions(stats),
+            lead: pickLead(stats, wanted),
+          };
+          const actions = {
+            onSize: (s) => ((size = s), void show()),
+            onLead: (l) => ((wanted = l), void show()),
+            onShare: () => log('share'),
+            onClose: () => log('close'),
+          };
+          app.replaceChildren(sharePreview({ ...props, busy: true }, actions));
+          const image = await storyUrl(size, wanted);
+          app.replaceChildren(sharePreview({ ...props, image }, actions));
+        };
+        void show();
+      } else if (view === 'story-png') {
+        const png = await renderShareMonth(
+          shareStoryLayout(FIX_MONTH, fixtureMonth(), { stats, lead, unit: 'kg' }),
+        );
+        const reader = new FileReader();
+        reader.onload = () => {
+          window.storyDataUrl = reader.result;
+          const img = document.createElement('img');
+          img.id = 'story';
+          img.src = reader.result;
+          img.style.width = '100%';
+          app.replaceChildren(img);
+        };
+        reader.readAsDataURL(png);
+      }
+    </script>
+  </body>
+</html>
