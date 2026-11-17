@@ -7,7 +7,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **Live:** b2c532e on main, deployed 2026-11-15 (CI: 2582 unit, 135 e2e passed): everything above plus the polish batch and **M7 Fuel** (Fuel tab, targets + weekly check, weigh-ins, 47 Thai dishes, offline USDA search, recipes, coach food ideas, opt-in barcode scan). First CI run (e01600c) failed on the short-phone set-up card under Linux text rendering; fixed in b2c532e (reproduced in the Playwright Linux container).
 - **In progress:** cloud sessions during Wongsaton's flight (2026-11-15), per `docs/cloud-briefs.md`. Open follow-up: the 10 s Undo toast covers a Fuel sheet's main button until you scroll (verifier note; in cloud session 2).
 - **Now (2026-11-17, resumed in ~/Develop/gym-clean):** slice 1b verified (PASS). **Slice 2 builds on branch `m12-slice2`** in worktree `.claude/worktrees/resume-4f67e1` (cut from `m12-coach-tab` at 69fb2a1; that session cannot write into the agents-75bc3a worktree). Tasks 1–19 done (G1 reviewer PASS after one fix; G2 reviewer PASS, commits 90c30b4…ea9f8fc; GymBrainCore 30/30, GymHealthCore 21/21, GymSpeechCore 29/29 XCTests and the simulator build passed for ios-engineer, re-run in task 22). Version 1.14.0, iOS build 267. Tasks 1–22 done. Task 21: 4 new e2e specs (coach-apple, mic, reminders, check-in), each 3× green; full e2e 220 passed / 1 skipped / 1 failed (focus-cues.spec.ts:364, passes alone); two chat bugs fixed (mic button moved from under the finger while listening; unsent words lost on re-render). Task 22: simulator build + 80 XCTests; the simulator can't run Apple's model or on-device speech. Follow-ups committed: eval error count, GymBrain error-kind log, Settings Back keeps scroll, prewarm on focus, eval token line, mic in the Pause sheet. Coach tab layout fixed (thread 61% at 390×844). Task 23 reviewer: one blocking (stuck "Checking…" on a failed Apple check) fixed + 4 non-blocking fixed. Task 24 verifier **PASS** (check 5228; full e2e 224 passed/1 skipped on run 2, run 1 had one new load flake motion.spec.ts:39 that passes alone; slice 2 specs 105/105 at repeat-each 5; build contains 1.14.0; simulator build + XCTests 21/29/35; 19 verify screenshots `docs/screenshots/m12s2-verify-*.png`). On-device eval numbers, real Apple answers, token counts, mic and notifications are 🧍 Checkpoint J. Small polish follow-ups (not blocking): text box narrows to ~135px while listening; reminder time picker is 12-hour in Chromium next to 24-hour copy; after the "Apple Intelligence is off" note the rules reply reads "I can help with:" with chips only in the bottom row. **Next:** 25 merge (his call) + install on his iPhone → → 25 merge + ask → 26 🧍 Checkpoint J.
-- **M13 started 2026-11-18** (his go: "Go with 1, 2 then M13") on branch **`m13-published-look`**, cut from `m12-slice2` at 3b69419 (slice 2 verified + polish; slice 2 iPhone install deferred by him: "Later"). Task 1 done (types + `src/core/brand.ts`; new routes open Settings until tasks 30–31). G1 dispatched: core 2→3, 4+5, 6+7, 8+9+34; ui 13+16+20, 17→18, 19+23+24; ios 28; main 26.
+- **M13 started 2026-11-18** (his go: "Go with 1, 2 then M13") on branch **`m13-published-look`**, cut from `m12-slice2` at 3b69419. **Wave 1 done + reviewer PASS** (tasks 1–9, 13, 16–20, 23, 24, 26–28, 34; commits 59ca523…4554931; check 5407 passed; full e2e not yet run on M13). **Wave 2 running:** 10 → 12 [ui], 22 + 21 + 11 + review follow-ups [ui], core follow-ups (Apache licence texts, scan gate, generic demo numbers). Then 14 → 15, 25 [ui] after 10; 29–31 [main]; 32–33 e2e; 35–37; 38 review; 39 verify. Task 29 needs his OK to add the gen-licenses ownership row to CLAUDE.md.
 - **Task 20 wiring notes (from G1):** run stored `'reminders'` through core `mergeReminders` before the screen/plan; re-run `reminderPlan` on app open/foreground **and after a session finishes**; `pending` → string ids via `reminderIdFromNumber`; `answeredMissed` from coach UI state `missedAnswered`; `request()` only from a switch-on. Start GymSpeech only after `micDown`; a cancel from blur (iOS permission alert) is not an error. Post the check-in card on the Coach tab only (omit check-in callbacks in the Pause sheet). Use `updateChatMic` for the ~10/s partial/level events. `showSource` only in the native build. Brain request: turns live in the context text (last 8, 140 chars each), so `GymBrainRequest.messages` carries only the new message (≤ ~400 chars); red flags go to the rules brain. Pass `listCheckIns` to `recapDue`. (G2) Notes store: `coachNoteStore(db)`; GymBrain `prewarm(instructions)` on text-box focus / mic down with the same instructions string; eval UI shows `report.p50Ms`. Generated Swift lives at `ios/App/App/Plugins/GymBrain/GymBrainCore/Sources/GymBrainCore/TrainerTools.generated.swift` (inside the Core package so XCTests compile it).
 - **Earlier next step:** build **M12 slice 1b "Trainer kit"** on `m12-coach-tab` (plan under "Current milestone plan → M12 — slice 1b"; first parallel group: 1b tasks 1 [main] ∥ 2 [core] ∥ 3 [ios] ∥ 4 [main], plus slice 2 tasks 1 and 10 [ios] early), then **slice 2** (Apple brain + mic + reminders + check-in; plan under "→ M12 — slice 2") → 🧍 Checkpoint J. His go-ahead 2026-11-17: "Go ahead slice 2 and 1b". Slices 1 + 1c are verified (745a143) and on his iPhone, not merged; merge/push stays his call. Older gym checkpoints (E, F1, …) are his to-dos in the app.
 - **M12 slices 1b + 2: planned 2026-11-17** (Decision "M12 slices 1b + 2"). Defaults taken for M12-q1 and M12-q4 (planner calls he can correct in the to-do decision steps). Apple Intelligence is on and downloaded on his iPhone (his words 2026-11-17: "It finished"). Nothing blocks on him until Checkpoint J.
@@ -442,42 +442,42 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Adds per SPEC M13 data model: `OwnerMode`, `OwnerSurface`, `Onboarding`, `OnboardingStep`, `LicenseEntry`, `ShareLead`, `ShareStats`; `AppRoute` + `'welcome' | 'settings/about' | 'settings/licenses'`; `WhatsNewPage.owner?`, `TodoTopic.owner?`. `brand.ts`: `APP_NAME = 'Gym Clean'`, `APP_TAGLINE` (default "Your pocket strength coach."; passes `checkCopy`).
   - Done when: `npm run check` passes; no runtime change.
   - Deps: none.
-- [ ] 2. [core-engineer] Owner mode logic + store. Tests first.
+- [x] 2. [core-engineer] Owner mode logic + store. Tests first.
   - Files: src/core/ownerMode.ts(+test), src/data/ownerMode.ts(+test), src/core/version.ts(+test).
   - Pure: `decideOwnerMode({ hasRow, sessions, todoAnswers })` (fresh → off / `by: 'fresh'`; sessions or to-do answers → on / `by: 'existing'`; an existing row is returned untouched); `isVisible(surface, owner)` for every `OwnerSurface`; `versionLine(owner)` → "Version 1.15" (MAJOR.MINOR, + .PATCH when not 0) or the unchanged `versionLabel()`; `devLogRecording(owner, savedSwitch)` → false when owner is off (saved value kept). Store: `resolveOwnerMode()` writes the row once on first launch, `setOwnerMode(on)` (`by: 'user'`).
   - Done when: tests cover fresh / sessions / to-do answers / existing row / restored backup row wins; the row round-trips `backup.ts`; version line both modes; `npm run check`.
   - Deps: 1.
-- [ ] 3. [core-engineer] Owner-only tour pages and topics. Tests first.
+- [x] 3. [core-engineer] Owner-only tour pages and topics. Tests first.
   - Files: src/core/todo/whatsNew.ts(+test), src/core/todo/progress (the Today-card count file)(+test), src/data/todos/topics.ts, src/data/whatsNew/pages.ts.
   - Tour selection takes `owner`: pages with `owner: true` and the "Added to your to-dos" page are left out when off; the first page's version text comes from `versionLine(owner)`. 1.15.0 pages (new look, About + privacy, Share to Story; "Owner tools" with `owner: true`). 1.15.0 topic "Published look (Checkpoint K)" (ask steps: what still looks home-made; anything that assumed you; first launch asked too much / fine; her install: iPhone app / PWA).
   - Done when: tests: owner off → no owner pages, no to-dos page, no build hash; owner on → identical to 1.14.0 behaviour; data tests (unique ids, valid routes, `checkCopy`) pass.
   - Deps: 1, 2.
-- [ ] 4. [core-engineer] First-launch steps. Tests first.
+- [x] 4. [core-engineer] First-launch steps. Tests first.
   - Files: src/core/onboarding.ts(+test), src/data/onboarding.ts(+test).
   - Pure `onboardingSteps({ platform, fresh, intakeDone, has: { health, mic, notifications } })` → welcome pages, intake (skipped if done), permission pages for what the platform has (PWA: camera only); `shouldOnboard` false for any install with sessions or an `'onboarding'` row. Page copy as data (≤ 2 short sentences each; the four "why" texts; all pass `checkCopy`; no "he/his", no goal assumed).
   - Done when: tests per platform, fresh vs existing, skip and finish stored once, copy checks; `npm run check`.
   - Deps: 1.
-- [ ] 5. [core-engineer] Share stats for the Story image. Tests first.
+- [x] 5. [core-engineer] Share stats for the Story image. Tests first.
   - Files: src/core/progress/shareStats.ts(+test).
   - `shareStats(month, sessions, …)` → `{ sessionsDone, volumeKg, streakWeeks }`; warm-ups excluded; lb conversion helper reuse; `pickLead(stats)` default `'sessions'`, never offers a lead whose number is 0.
   - Done when: tests: known month, empty month, warm-ups excluded, kg and lb text, streak from `stats.ts`.
   - Deps: 1.
-- [ ] 6. [core-engineer] Open-source credits data. Tests first.
-  - Files: scripts/gen-licenses.mjs(+test), src/data/licenses.json (generated, committed), src/data/licenses.extra.json (hand list: free-exercise-db Unlicense, USDA FoodData Central, MediaPipe pose model, bundled fonts), src/data/licenses.ts(+test).
+- [x] 6. [core-engineer] Open-source credits data. Tests first.
+  - Files: scripts/gen-licenses.mjs(+test), src/data/licenses.generated.json (generated, committed; renamed from licenses.json because it shadowed licenses.ts on import), src/data/licenses.extra.json (hand list: free-exercise-db Unlicense, USDA FoodData Central, MediaPipe pose model, bundled fonts), src/data/licenses.ts(+test).
   - The script reads `package.json` runtime dependencies + each package's licence field/file from `node_modules`; no network. (scripts/ is not in the ownership table for this file; main adds it to the core-engineer row or takes the script itself.)
   - Done when: test: every runtime dependency has an entry with a licence; the extras are present; a fresh generation equals the committed file; `npm run check`.
   - Deps: 1.
-- [ ] 7. [core-engineer] Name constant in core + data. Tests first.
+- [x] 7. [core-engineer] Name constant in core + data. Tests first.
   - Files: src/core/health/{readiness,weeklyLoad,days,sync}.ts, src/core/todo/report.ts, src/data/backup.ts, src/data/gymFile.ts (shown text only), src/core/brand.test.ts.
   - Replace shown "Gym Clean" literals with `APP_NAME`. The scan test lists what may still hold the literal: `brand.ts`, `index.html`, `capacitor.config.ts`, `ios/App/App/Info.plist`, file-format ids. It starts with an allow-list for ui/native files that tasks 10 and 27 empty.
   - Done when: scan test green for src/core + src/data; existing copy tests unchanged.
   - Deps: 1.
-- [ ] 8. [core-engineer] "Anyone" scan. Tests first.
+- [x] 8. [core-engineer] "Anyone" scan. Tests first.
   - Files: src/core/noPersonal.test.ts (extend the slice 1b scan).
   - Adds: no gendered wording ("he", "his", "man", "guys", "bro", male-only voice wording) in shown copy and data outside persona lines that are already neutral; lists each hit with file:line. Fix hits in core/data files; report ui hits to main for task 13/21.
   - Done when: the scan is green for src/core + src/data and prints the ui list (empty after 13 and 21).
   - Deps: 1.
-- [ ] 9. [core-engineer] Wording in core: plateau, not "stalled / fell short". Tests first.
+- [x] 9. [core-engineer] Wording in core: plateau, not "stalled / fell short". Tests first.
   - Files: src/core/trainer/actions/stall.ts(+test), src/core/advice.ts(+test) (whichever builds the stall-card line; grep first).
   - Shown text only ("Plateau: let's change something" style, `checkCopy`); ids, types and the rule stay `stall`.
   - Done when: copy tests assert no "STALLED" / "fell short" in any built line; eval set still 100% on stall items.
@@ -496,7 +496,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Props: the steps from task 4; callbacks `onNext`, `onBack`, `onSkipAll`, `onAllow(permission)`, `onNotNow`. Page 1 = the lockup + tagline. Skip always visible; Back/Next ≥ 56px; page indicator not colour alone; reduced motion → instant. The mic page has no Allow button (explains only).
   - Done when: render tests (each page kind, skip, PWA shows camera only); 390×844 harness screenshots.
   - Deps: 1, 4, 10.
-- [ ] 13. [ui-engineer] Drill-sergeant voice picker: any installed English voice.
+- [x] 13. [ui-engineer] Drill-sergeant voice picker: any installed English voice.
   - Files: src/ui/voiceNames.ts(+test), src/ui/coachVoiceSettings.ts(+test).
   - `listEnglishVoices` replaces `listMaleVoices` (known names keep their accent label and the default order first; others labelled by region); hint reworded (no "male"). `pickDrillVoice` unchanged.
   - Done when: tests with a fixture holding female and male names: all offered; saved voice wins; default order kept.
@@ -511,27 +511,27 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Pure `tapUnlock(state, now)` (7 taps, each within 3 s of the last, else reset) + a small controller that makes the About version line tappable and shows the "Owner tools" switch (≥ 56px) once unlocked or while owner mode is on. A short status line after the 7th tap ("Owner tools unlocked"), not colour alone. This file is the whole mechanism.
   - Done when: tests: 6 taps → nothing, 7 → switch, slow taps reset, switch stays visible while on; render test inside the About screen.
   - Deps: 14.
-- [ ] 16. [ui-engineer] Settings + tour honour owner mode.
+- [x] 16. [ui-engineer] Settings + tour honour owner mode.
   - Files: src/ui/screens/settings.ts(+test), src/ui/todo/whatsNewTour.ts(+test).
   - Settings takes `owner: boolean`: off → no To-dos section, no Developer log section, no dev eval row; the About section becomes one row opening the About screen. Tour takes the version text as a prop (no build hash of its own).
   - Done when: render tests both modes; owner on renders the same sections as before M13.
   - Deps: 1.
-- [ ] 17. [ui-engineer] Polish: tab bar labels (S).
+- [x] 17. [ui-engineer] Polish: tab bar labels (S).
   - Files: src/ui/tabBar.ts(+test), src/styles.css (the tab block around :749-756).
   - Condensed display font for labels or shorter names so five labels never touch at 390 and 360px; labels ≥ 18px, targets ≥ 56px, active state not colour alone.
   - Done when: harness screenshots at 390 and 360 wide; a render/e2e check that label boxes don't overlap.
   - Deps: 1.
-- [ ] 18. [ui-engineer] Polish: one look (S–M).
+- [x] 18. [ui-engineer] Polish: one look (S–M).
   - Files: src/styles.css (`.mood-track` :123-128 and users), src/ui/screens/calendar.ts, src/ui/screens/calendarDay.ts (+tests).
   - The black track + 8px cards stay on Exercise, Rest and camera only; Calendar and its day view move to the standard surface and 20px cards. Rings and legend unchanged.
   - Done when: tokens test asserts the mood class per screen; before/after screenshots of Calendar, day view, Rest.
   - Deps: 17 (same file).
-- [ ] 19. [ui-engineer] Polish: Today, hero first (M).
+- [x] 19. [ui-engineer] Polish: Today, hero first (M).
   - Files: src/ui/screens/today.ts(+test), a today css file.
   - Hero + Start first; notices (readiness, missed day, program prompt, goal, adjusted) collapse into one compact row "N things to sort" that expands in place, or one card when N = 1; secondary actions outline; the header Coach button removed (the tab is the way in); bottom padding clears the tab bar.
   - Done when: render tests (0 / 1 / 3 notices; exactly one filled primary button); 390×844 screenshot with two notices shows Start in the first viewport.
   - Deps: 1.
-- [ ] 20. [ui-engineer] Polish: shared back / done / forward controls (S).
+- [x] 20. [ui-engineer] Polish: shared back / done / forward controls (S).
   - Files: src/ui/backButton.ts(+test), src/ui/icons.ts(+test) (original chevron-left, check, arrow-right paths), src/ui/screens/{healthSettings,myGym,preview,planChanges}.ts, src/ui/todo/todoGuide.ts, src/ui/coach/proposalCard.ts.
   - Done when: no typed "‹", "✓ done" or "→" used as a control in src/ui (a scan test, app.ts excluded until task 30); each back button ≥ 56px with an accessible name.
   - Deps: 1 (icons.ts is also edited by 22; run 20 then 22).
@@ -545,12 +545,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - One icon + one line + one action each; Fuel shows "Set up targets" as the primary action until targets exist.
   - Done when: render tests per state; screenshots of an empty Fuel day and an empty Coach thread.
   - Deps: 20.
-- [ ] 23. [ui-engineer] Polish: Rest "Next" card placeholder (S–M).
+- [x] 23. [ui-engineer] Polish: Rest "Next" card placeholder (S–M).
   - Files: src/ui/screens/rest.ts(+test).
   - The 2D body map (existing `src/ui/bodyMap.ts` API) renders at once; the 3D view fades in over it (motion helper; instant under reduced motion). If `bodyMap.ts` needs a change, main opens a small [anatomy-3d-engineer] task.
   - Done when: render test: the card is never empty before 3D resolves, or when 3D fails; noted for the real-phone check in task 41.
   - Deps: 1.
-- [ ] 24. [ui-engineer] Polish: Fuel entry rows (M; check first).
+- [x] 24. [ui-engineer] Polish: Fuel entry rows (M; check first).
   - Files: src/ui/fuel/* (the entry list + sheet)(+tests).
   - Re-check the current screen at 390×844. If a large Delete block is still always visible: tap the row → the sheet with Edit / Delete; Undo toast unchanged. If already so: tick with a screenshot, no code.
   - Done when: screenshot; render tests if changed.
@@ -560,16 +560,16 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `shareStoryLayout(month, stats, lead)` 1080×1920: lockup on top, the lead number large with its label, the month grid with missed days as grey rings (no red, no "missed" text), a quiet footer. Preview offers Post size / Story size and the lead picker (sessions default; total lifted; streak). File name `gym-clean-<month>-story.png`.
   - Done when: layout tests (size, lead first, no body/Health/per-lift data, grey missed rings); a rendered sample PNG screenshot.
   - Deps: 5, 10.
-- [ ] 26. [main] Icon script: favicon + iOS splash output.
+- [x] 26. [main] Icon script: favicon + iOS splash output.
   - Files: scripts/icons.mjs, public/icons/favicon.svg, public/icons/favicon-32.png.
-  - Same logo path as the PWA icons; `--splash <dir>` renders the 2732×2732 splash (mark centred on `#0d0f12`) ×3.
+  - Same logo path as the PWA icons; `--splash <dir>` renders the iOS splash (mark centred on `#0d0f12`) at 455/910/1365 px (2732 px exceeded iOS's launch-image memory limit and showed black).
   - Done when: files generated; the favicon matches the app icon in a side-by-side screenshot.
   - Deps: 1.
-- [ ] 27. [ios-engineer] iOS launch screen + name constant in native.
+- [x] 27. [ios-engineer] iOS launch screen + name constant in native.
   - Files: ios/App/App/Assets.xcassets/Splash.imageset/*, ios/App/App/Base.lproj/LaunchScreen.storyboard (background `#0d0f12`, image aspect-fit), src/native/health.ts(+test) (`APP_NAME`).
   - Done when: simulator launch screenshot shows the mark with no white flash; XCTests and `npm run check` pass; task 7's allow-list has no native file left.
   - Deps: 7, 26.
-- [ ] 28. [ios-engineer] "Her phone" checklist.
+- [x] 28. [ios-engineer] "Her phone" checklist.
   - Files: docs/ios-setup.md.
   - Two short lists: iPhone app on her phone (free Apple ID: one of 3 devices, re-sign every 7 days from his Mac, gets Health / mic / reminders) vs PWA (Add to Home Screen, no re-sign, no Health / mic / reminders); which to pick; her data stays on her phone; "Share my gym" to copy the kit.
   - Done when: the section exists and matches the facts already in the file (3 devices, 7 days).
@@ -596,7 +596,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: e2e/first-launch.spec.ts, e2e/owner-mode.spec.ts, e2e/about.spec.ts, e2e/share-story.spec.ts, e2e/polish.spec.ts (Today first viewport, one filled button, tab labels at 390/360, empty states), e2e/landing.spec.ts (built preview: zero script tags, zero third-party requests, service worker doesn't swallow `/welcome/`). Every spec asserts no off-device request.
   - Done when: each passes 3× in a row; full e2e green.
   - Deps: 31; landing.spec also needs 36.
-- [ ] 34. [core-engineer] Demo profile for screenshots (made-up person). Tests first.
+- [x] 34. [core-engineer] Demo profile for screenshots (made-up person). Tests first.
   - Files: src/data/demo/demoBackup.ts(+test).
   - `buildDemoBackup(now)` → a valid backup object (6 weeks of sessions, a goal, Fuel days, a focus block, a short chat is not in backups so the script sends two chips). Not imported by the app.
   - Done when: test: passes `validateBackup`; no personal name or real numbers (the noPersonal scan covers it); no non-test app file imports it.
