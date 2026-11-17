@@ -167,6 +167,21 @@ async function seed(db: GymDb): Promise<void> {
     deltaKcal: 0,
     outcome: 'pending',
   });
+  // M12 slice 1c: his to-do answers are backed up (his own words, no Health values).
+  await db.todoAnswers.bulkPut([
+    {
+      id: 'ask:camera:cues:1',
+      topicId: 'camera',
+      stepId: 'cues',
+      kind: 'ask',
+      optionIds: ['yes'],
+      note: 'made-up note',
+      at: T0,
+      release: '1.12.0',
+      sentAt: T0 + 5,
+    },
+    { id: 'skip:vesync::2', topicId: 'vesync', stepId: '', kind: 'skip', at: T0, release: '1.12.0' },
+  ]);
   // Developer log: never in a backup.
   await db.devlogSessions.put({
     id: 'dl1',
@@ -231,7 +246,7 @@ describe('exportAll', () => {
     expect(file.format).toBe('gym-clean-backup');
     expect(file.version).toBe(BACKUP_VERSION);
     expect(file.dexieVersion).toBe(a.verno);
-    expect(file.dexieVersion).toBe(8);
+    expect(file.dexieVersion).toBe(9);
     expect(file.appVersion).toBe('abc123');
     expect(file.createdAt).toBe(T0 + 5);
     expect(Object.keys(file.tables).sort()).toEqual(
@@ -249,9 +264,11 @@ describe('exportAll', () => {
         'weighIns',
         'favorites',
         'weeklyChecks',
+        'todoAnswers',
       ].sort(),
     );
     expect(file.tables.sets).toHaveLength(2);
+    expect(file.tables.todoAnswers).toHaveLength(2);
     expect(file.tables.foods).toHaveLength(1);
     expect(JSON.stringify(file)).not.toMatch(/devlog|dl1/);
   });
@@ -355,6 +372,43 @@ describe('exportAll', () => {
     expect(text).not.toMatch(/api[-_]?key/i);
     const coach = JSON.parse(text).tables.settings.find((r: { key: string }) => r.key === 'coach');
     expect(coach.value).toEqual({ brain: 'claude', model: 'x' });
+  });
+});
+
+describe("What's New builds (M12 slice 1c)", () => {
+  it('leave the per-phone build first-seen times out of the file', async () => {
+    await seed(a);
+    await a.settings.put({
+      key: 'whatsNew',
+      value: { seenRelease: '1.12.0', builds: { 'made-up-build': T0 } },
+    });
+    const text = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    expect(text).not.toContain('made-up-build');
+    const row = JSON.parse(text).tables.settings.find((r: { key: string }) => r.key === 'whatsNew');
+    expect(row.value).toEqual({ seenRelease: '1.12.0' });
+  });
+
+  it("a restore keeps this phone's builds (the re-sign clock) and takes the file's seen release", async () => {
+    await seed(a);
+    await a.settings.put({ key: 'whatsNew', value: { seenRelease: '1.13.0', builds: { x: 1 } } });
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.settings.put({ key: 'whatsNew', value: { seenRelease: '1.12.0', builds: { mine: 7 } } });
+    await importAll(b, file);
+    expect((await b.settings.get('whatsNew'))?.value).toEqual({
+      seenRelease: '1.13.0',
+      builds: { mine: 7 },
+    });
+  });
+
+  it("a restore from a file without the row keeps this phone's row", async () => {
+    await seed(a);
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.settings.put({ key: 'whatsNew', value: { seenRelease: '1.12.0', builds: { mine: 7 } } });
+    await importAll(b, file);
+    expect((await b.settings.get('whatsNew'))?.value).toEqual({
+      seenRelease: '1.12.0',
+      builds: { mine: 7 },
+    });
   });
 });
 

@@ -13,6 +13,7 @@ import type {
   RepEvent,
   Recipe,
   SetLog,
+  TodoAnswer,
   TrainerState,
   WeeklyCheck,
   WeighIn,
@@ -157,6 +158,10 @@ export class GymDb extends Dexie {
   // M12 chat (on device only; see src/data/chat/store.ts). Not in backups, never in the dev log.
   /** The coach thread, last 30 days (pruned by `pruneChat`). */
   chatMessages!: Table<ChatMessage, number>;
+  // M12 slice 1c to-dos (see src/data/todos/store.ts). Backed up (his own answers and notes, no
+  // Health values); never in the dev log. Tour / to-do state lives in `settings` keys 'whatsNew',
+  // 'todos' and 'todoSignals'.
+  todoAnswers!: Table<TodoAnswer, string>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -206,6 +211,10 @@ export class GymDb extends Dexie {
     // (missed-day answers, last recaps) lives in the existing `settings` table under key 'coach'.
     this.version(8).stores({
       chatMessages: '++id, createdAt',
+    });
+    // M12 slice 1c to-do answers. New table only, no upgrade function; existing data is untouched.
+    this.version(9).stores({
+      todoAnswers: 'id, topicId, at, sentAt',
     });
   }
 }

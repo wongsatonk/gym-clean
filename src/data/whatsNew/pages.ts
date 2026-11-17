@@ -1,0 +1,65 @@
+/**
+ * M12 slice 1c: What's New tour pages, per release (data only; a release without pages shows no
+ * tour). Each page: a short title, what changed and why, each at most 2 short sentences, and a
+ * Try it route. `icon` names an original icon drawn by the UI. Copy passes `checkCopy`
+ * (pages.test.ts). A release with pages is a new MINOR (version policy, Decision "M12 slice 1c").
+ */
+import type { WhatsNewPage } from '../../core/types';
+
+export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
+  // 1.12.0: M12 slice 1 (Coach tab, chat, focus blocks, Calendar, missed days, motion) + 1c.
+  {
+    release: '1.12.0',
+    id: 'coach-tab',
+    title: 'Meet the Coach tab',
+    what: 'Coach now sits in the middle of the tab bar. Ask about your week, your plan or food in plain words.',
+    why: 'Changing your plan should feel like talking to a trainer. Every change shows Apply and Undo.',
+    tryIt: 'coach',
+    icon: 'coach',
+  },
+  {
+    release: '1.12.0',
+    id: 'focus-block',
+    title: 'Focus on one area',
+    what: 'Ask the coach for a focus block: more sets for one area for 2 to 6 weeks.',
+    why: 'The rest of your plan stays as it is. The last week is lighter so you finish fresh.',
+    tryIt: 'coach',
+    icon: 'focus',
+  },
+  {
+    release: '1.12.0',
+    id: 'calendar',
+    title: 'Calendar replaces History',
+    what: 'Each day shows done, partly done or missed, with scores for the week. Share a month as a picture.',
+    why: 'Your work at a glance, and proof of it when you want to show it.',
+    tryIt: 'calendar',
+    icon: 'calendar',
+  },
+  {
+    release: '1.12.0',
+    id: 'missed-day',
+    title: 'Missed a day?',
+    what: 'Today asks what happened and offers Do it today or Move it. A short recap comes after each week.',
+    why: 'One missed day should not throw off the whole week.',
+    tryIt: 'today',
+    icon: 'missed',
+  },
+  {
+    release: '1.12.0',
+    id: 'motion',
+    title: 'Smoother screens',
+    what: 'Screens slide and cards settle gently when something changes.',
+    why: 'It is easier to follow what moved. Reduce Motion on your phone turns it off.',
+    tryIt: 'today',
+    icon: 'motion',
+  },
+  {
+    release: '1.12.0',
+    id: 'todos',
+    title: 'Your to-dos',
+    what: 'Your open checks are now step-by-step guides. The app ticks the steps it can see by itself.',
+    why: 'When you are ready, copy one report and paste it where you want. The app sends nothing.',
+    tryIt: 'todos',
+    icon: 'todos',
+  },
+];

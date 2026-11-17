@@ -17,10 +17,15 @@
  * `weighInRule` and `readiness`, so the restored phone does a fresh first read and keeps its own
  * card history.
  * A file without that row keeps this phone's.
+ *
+ * What's New (M12 slice 1c): the settings row 'whatsNew' is backed up without `builds` (build id →
+ * first seen on this phone, the 7-day re-sign clock); a restore keeps this phone's `builds`, and a
+ * file without the row keeps this phone's row.
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';
 import { HEALTH_SETTINGS_KEY, clearDisabledHealthTypes } from './health/store';
+import { WHATS_NEW_KEY } from './todos/store';
 
 export const BACKUP_FORMAT = 'gym-clean-backup';
 /** The file layout's own version (bump when the header or table encoding changes). */
@@ -44,6 +49,8 @@ export const BACKUP_TABLES = [
   'weighIns',
   'favorites',
   'weeklyChecks',
+  // M12 slice 1c: his to-do answers and notes (no Health values; key-like strings removed on save).
+  'todoAnswers',
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];
@@ -174,13 +181,27 @@ function localHealthReadiness(rows: readonly unknown[]): unknown {
   return row && isObj(row.value) ? row.value.readiness : undefined;
 }
 
+const isWhatsNewSetting = (row: unknown): row is { key: string; value: unknown } =>
+  isObj(row) && row.key === WHATS_NEW_KEY;
+
+/** The 'whatsNew' row without `builds` (the re-sign clock belongs to the phone that ran them). */
+function stripWhatsNewLocal(row: unknown): unknown {
+  if (!isWhatsNewSetting(row) || !isObj(row.value)) return row;
+  const value = Object.fromEntries(Object.entries(row.value).filter(([k]) => k !== 'builds'));
+  return { ...row, value };
+}
+
 /**
  * Backed-up rows of one table: only settings rows are touched (secret rows and fields removed,
- * the health row loses its phone-only fields).
+ * the health and whatsNew rows lose their phone-only fields).
  */
 function cleanRows(name: BackupTable, rows: unknown[]): unknown[] {
   if (name !== 'settings') return rows;
-  return rows.filter((r) => !isSecretSetting(r)).map(stripSecrets).map(stripHealthLocal);
+  return rows
+    .filter((r) => !isSecretSetting(r))
+    .map(stripSecrets)
+    .map(stripHealthLocal)
+    .map(stripWhatsNewLocal);
 }
 
 async function readTables(db: GymDb): Promise<Record<BackupTable, unknown[]>> {
@@ -338,6 +359,17 @@ const ROW_SHAPES: Record<BackupTable, Record<string, Check>> = {
     'logged?': obj,
   },
   weighIns: { date: str, kg: num, 'source?': str },
+  todoAnswers: {
+    id: str,
+    topicId: str,
+    stepId: str,
+    kind: str,
+    'optionIds?': arr,
+    'note?': str,
+    at: num,
+    release: str,
+    'sentAt?': num,
+  },
   favorites: { id: str, ref: obj, amount: obj, createdAt: num },
   weeklyChecks: {
     weekStart: str,
@@ -443,6 +475,8 @@ export async function importAll(
       const fileHasHealth = fileRows.some(isHealthSetting);
       const localHealth = fileHasHealth ? [] : localRows.filter(isHealthSetting);
       const localReadiness = fileHasHealth ? localHealthReadiness(localRows) : undefined;
+      const localWhatsNew = localRows.find(isWhatsNewSetting);
+      const fileHasWhatsNew = fileRows.some(isWhatsNewSetting);
       const counts = {} as Record<BackupTable, number>;
       for (const name of BACKUP_TABLES) {
         const table = db.table(name);
@@ -458,6 +492,15 @@ export async function importAll(
         if (row && isObj(row.value)) {
           await db.settings.put({ ...row, value: { ...row.value, readiness: localReadiness } });
         }
+      }
+      if (localWhatsNew) {
+        const restored = await db.settings.get(WHATS_NEW_KEY);
+        if (!fileHasWhatsNew || !restored) await db.settings.put(localWhatsNew);
+        else if (isObj(localWhatsNew.value) && localWhatsNew.value.builds !== undefined)
+          await db.settings.put({
+            key: WHATS_NEW_KEY,
+            value: { ...(isObj(restored.value) ? restored.value : {}), builds: localWhatsNew.value.builds },
+          });
       }
       await clearDisabledHealthTypes(db);
       return { counts, undo };
