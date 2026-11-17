@@ -1,13 +1,13 @@
 {
   "name": "gym-clean",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "Phone-first workout focus app",
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
     "build:native": "npm run typecheck && vite build --mode native",
     "cap:telemetry-off": "cap telemetry off",
-    "ios:sync": "npm run build:native && npm run cap:telemetry-off && cap sync ios",
+    "ios:sync": "npm run ios:version && npm run build:native && npm run cap:telemetry-off && cap sync ios",
     "ios:open": "npm run cap:telemetry-off && cap open ios",
     "ios:run": "npm run ios:sync && cap run ios",
     "preview": "vite preview",
@@ -23,7 +23,8 @@
     "synthetic": "node scripts/synthetic.mjs",
     "devlog": "node scripts/devlog.mjs",
     "icons": "node scripts/icons.mjs",
-    "build-foods": "node scripts/build-foods.mjs"
+    "build-foods": "node scripts/build-foods.mjs",
+    "ios:version": "node scripts/sync-ios-version.mjs"
   },
   "type": "module",
   "devDependencies": {
