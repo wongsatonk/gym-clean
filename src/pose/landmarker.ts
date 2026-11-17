@@ -1,7 +1,9 @@
 // Wraps MediaPipe Pose Landmarker (lite, VIDEO mode) and emits LandmarkFrame objects.
 // Model and wasm are self-hosted under public/ (no CDN, no uploads).
-import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
+import { PoseLandmarker } from '@mediapipe/tasks-vision';
 import type { LandmarkFrame } from '../core/types';
+import { isNativeScheme, loadModelBuffer, loadWasmFileset } from './fileset';
+import { describeLoadError } from './loadError';
 
 export type Delegate = 'GPU' | 'CPU';
 
@@ -16,26 +18,59 @@ const base = import.meta.env.BASE_URL;
 export const MODEL_URL = `${base}models/pose_landmarker_lite.task`;
 export const WASM_URL = `${base}mediapipe/wasm`;
 
-async function create(delegate: Delegate): Promise<PoseLandmarker> {
-  const fileset = await FilesetResolver.forVisionTasks(WASM_URL);
-  return PoseLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: MODEL_URL, delegate },
-    runningMode: 'VIDEO',
-    numPoses: 1,
+export type CreateOptions = {
+  /**
+   * Fetch the wasm loader + model ourselves (blob: loader, modelAssetBuffer) instead of letting
+   * MediaPipe load them. Defaults to on for the native app (capacitor://), off on the web.
+   */
+  ownFetch?: boolean;
+};
+
+async function create(delegate: Delegate, ownFetch: boolean): Promise<PoseLandmarker> {
+  const { fileset, release } = await loadWasmFileset({
+    base,
+    native: ownFetch,
+    origin: location.origin,
+    fetchFn: (url) => fetch(url),
+    createObjectURL: (b) => URL.createObjectURL(b),
+    revokeObjectURL: (u) => URL.revokeObjectURL(u),
   });
+  try {
+    const baseOptions = ownFetch
+      ? { modelAssetBuffer: await loadModelBuffer(new URL(MODEL_URL, location.origin).href, (u) => fetch(u)), delegate }
+      : { modelAssetPath: MODEL_URL, delegate };
+    return await PoseLandmarker.createFromOptions(fileset, { baseOptions, runningMode: 'VIDEO', numPoses: 1 });
+  } finally {
+    release();
+  }
+}
+
+/** A thrown Error with a readable message (MediaPipe can reject with a bare script error Event). */
+function readable(err: unknown): Error {
+  if (err instanceof Error && err.message) return err;
+  return new Error(describeLoadError(err), { cause: err });
 }
 
 /** GPU delegate first; falls back to CPU if the GPU path fails to initialise. */
-export async function createPoseTracker(prefer: Delegate = 'GPU'): Promise<PoseTracker> {
+export async function createPoseTracker(prefer: Delegate = 'GPU', opts: CreateOptions = {}): Promise<PoseTracker> {
+  const ownFetch = opts.ownFetch ?? isNativeScheme(location.protocol);
   let delegate: Delegate = prefer;
   let landmarker: PoseLandmarker;
   try {
-    landmarker = await create(prefer);
+    landmarker = await create(prefer, ownFetch);
   } catch (err) {
-    if (prefer === 'CPU') throw err;
+    if (prefer === 'CPU') {
+      console.error('Pose model failed to load', err);
+      throw readable(err);
+    }
     console.warn('Pose GPU delegate failed, using CPU', err);
     delegate = 'CPU';
-    landmarker = await create('CPU');
+    try {
+      landmarker = await create('CPU', ownFetch);
+    } catch (err2) {
+      console.error('Pose model failed to load', err2);
+      throw readable(err2);
+    }
   }
   let lastTs = -1;
   return {

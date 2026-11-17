@@ -4,8 +4,8 @@
   "description": "Phone-first workout focus app",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build",
-    "build:native": "npm run typecheck && vite build --mode native",
+    "build": "npm run typecheck && node scripts/copy-mediapipe-wasm.mjs --strict && vite build",
+    "build:native": "npm run typecheck && node scripts/copy-mediapipe-wasm.mjs --strict && vite build --mode native",
     "cap:telemetry-off": "cap telemetry off",
     "ios:sync": "npm run ios:version && npm run build:native && npm run cap:telemetry-off && cap sync ios",
     "ios:open": "npm run cap:telemetry-off && cap open ios",

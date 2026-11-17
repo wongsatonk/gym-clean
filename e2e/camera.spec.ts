@@ -59,6 +59,36 @@ test('camera test runs on-device pose inference on the live stream', async ({ pa
   expect(errors).toEqual([]);
 });
 
+// The native app (capacitor://) loads the wasm loader as a blob: URL and the model as a buffer
+// from our own fetches (src/pose/fileset.ts). Chromium can't serve capacitor://, so force that
+// path here and prove MediaPipe accepts it; on the real scheme it is chosen automatically.
+test('pose model loads through the native own-fetch path (blob: loader + model buffer)', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  const requests: string[] = [];
+  page.on('request', (r) => requests.push(r.url()));
+  await page.goto('/');
+  const out = await page.evaluate(async () => {
+    const m = (await import('/src/pose/landmarker.ts' as string)) as typeof import('../src/pose/landmarker');
+    const t = await m.createPoseTracker('CPU', { ownFetch: true });
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const frame = t.detect(c, 1);
+    t.close();
+    return { delegate: t.delegate, frame };
+  });
+  expect(out).toEqual({ delegate: 'CPU', frame: null });
+  const origin = new URL(page.url()).origin;
+  expect(requests).toContain(`${origin}/mediapipe/wasm/vision_wasm_internal.js`);
+  expect(requests).toContain(`${origin}/models/pose_landmarker_lite.task`);
+  expect(requests.some((u) => u.startsWith('blob:'))).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test('pose-tracked exercises offer the camera; manual ones do not', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Pull A/ }).click();

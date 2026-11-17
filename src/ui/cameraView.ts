@@ -27,6 +27,7 @@ import type { FocusCueId, LandmarkFrame, RepEvent } from '../core/types';
 import type { DevLogRecorder } from '../data/devlog';
 import { openCamera, stopStream, type Facing } from '../pose/camera';
 import type { PoseTracker } from '../pose/landmarker';
+import { describeLoadError } from '../pose/loadError';
 import { createAutoStopBanner, type AutoStopBannerHandle } from './autoStopBanner';
 import { createHoldPanel, type HoldPanelHandle } from './holdPanel';
 import {
@@ -1570,7 +1571,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         }
         tracker = await createPoseTracker('GPU');
       } catch (err) {
-        setStatus(`Pose model failed to load: ${(err as Error).message}`, { error: 'model' });
+        console.error('Pose model failed to load', err);
+        setStatus(`Pose model failed to load: ${describeLoadError(err)}`, { error: 'model' });
         return;
       }
       if (!running) {
