@@ -19,6 +19,10 @@ export interface HealthBridge {
 
 /** One body-mass sample in kg. Times are epoch ms. */
 export type HealthMassSample = { start: number; kg: number; source: string; bundleId?: string };
+/** One body-fat sample as a percentage 0–100 (HealthKit's fraction × 100). */
+export type HealthBodyFatSample = { start: number; pct: number; source: string; bundleId?: string };
+/** One lean-body-mass sample in kg. */
+export type HealthLeanMassSample = { start: number; kg: number; source: string; bundleId?: string };
 /** One resting-heart-rate sample in beats per minute. */
 export type HealthRestingHrSample = {
   start: number;
@@ -49,6 +53,10 @@ export type HealthReadResult = {
   sleep: HealthSleepSession[];
   restingHr: HealthRestingHrSample[];
   hrv: HealthHrvSample[];
+  /** M12 slice 1b. Present (maybe empty) only when `bodyFat` was asked for. */
+  bodyFat?: HealthBodyFatSample[];
+  /** M12 slice 1b. Present (maybe empty) only when `leanMass` was asked for. */
+  leanMass?: HealthLeanMassSample[];
 };
 
 export type HealthReadOptions = {
@@ -72,6 +80,8 @@ export const GYM_HEALTH_PLUGIN = 'GymHealth';
 // data-quality filters only, never judgments about his health.
 const RANGE = {
   kg: [20, 400],
+  bodyFatPct: [1, 75],
+  leanKg: [10, 300],
   bpm: [20, 250],
   ms: [1, 500],
   kcalDay: [0, 20_000],
@@ -123,7 +133,7 @@ function sourceOf(r: Obj): { source: string; bundleId?: string } | undefined {
   return bundleId ? { source, bundleId } : { source };
 }
 
-function samples<K extends 'kg' | 'bpm' | 'ms'>(
+function samples<K extends 'kg' | 'bpm' | 'ms' | 'pct'>(
   reply: Obj,
   key: string,
   field: K,
@@ -201,6 +211,8 @@ export function mapHealthReply(reply: unknown, types: readonly HealthType[]): He
   if (want.has('activeEnergy')) r.activeEnergy = energyDays(reply);
   if (want.has('sleep')) r.sleep = sleepSessions(reply);
   if (want.has('workouts')) r.workouts = workouts(reply);
+  if (want.has('bodyFat')) r.bodyFat = samples(reply, 'bodyFat', 'pct', RANGE.bodyFatPct);
+  if (want.has('leanMass')) r.leanMass = samples(reply, 'leanMass', 'kg', RANGE.leanKg);
   return r;
 }
 

@@ -237,6 +237,65 @@ describe('createHealth: read', () => {
     expect(r.activeEnergy).toEqual([]);
   });
 
+  it('body fat and lean mass (M12 1b): mapped only when asked for, with range filters', async () => {
+    const reply = {
+      ...FULL_REPLY,
+      bodyFat: [
+        { start: 1_790_000_700_000, pct: 18.5, source: 'Scale App', bundleId: 'com.example.scale' },
+        { start: 1_790_000_700_001, pct: 0.185, source: 'Scale App' }, // a fraction, not a percent
+        { start: 1_790_000_700_002, pct: 0, source: 'Scale App' },
+        { start: 1_790_000_700_003, pct: 100, source: 'Scale App' },
+        { start: 1_790_000_700_004, pct: Number.NaN, source: 'Scale App' },
+        { start: 1_790_000_700_005, pct: 22 }, // no source
+        { pct: 22, source: 'Scale App' }, // no time
+        'junk',
+      ],
+      leanMass: [
+        { start: 1_790_000_800_000, kg: 61.34, source: 'Scale App' },
+        { start: 1_790_000_800_001, kg: 3, source: 'Scale App' },
+        { start: 1_790_000_800_002, kg: 900, source: 'Scale App' },
+      ],
+    };
+    const b = fakeBridge({ read: vi.fn(async () => reply) });
+    const h = createHealth(b);
+
+    const both = await h.read({ types: ['bodyFat', 'leanMass'], since: SINCE, until: UNTIL });
+    expect(b.read).toHaveBeenCalledWith({
+      types: ['bodyFat', 'leanMass'],
+      since: SINCE,
+      until: UNTIL,
+    });
+    expect(both.status).toBe('ok');
+    expect(both.bodyFat).toEqual([
+      { start: 1_790_000_700_000, pct: 18.5, source: 'Scale App', bundleId: 'com.example.scale' },
+    ]);
+    expect(both.leanMass).toEqual([{ start: 1_790_000_800_000, kg: 61.34, source: 'Scale App' }]);
+    expect(both.bodyMass).toEqual([]); // not asked for
+
+    // Switches off (the default): the keys are absent even if the plugin sent data.
+    const neither = await h.read({ types: ['bodyMass'], since: SINCE });
+    expect(neither.bodyMass).toHaveLength(1);
+    expect('bodyFat' in neither).toBe(false);
+    expect('leanMass' in neither).toBe(false);
+
+    // Asked for but nothing in Health (or denied): empty arrays.
+    const empty = await createHealth(fakeBridge()).read({
+      types: ['bodyFat', 'leanMass'],
+      since: SINCE,
+    });
+    expect(empty.bodyFat).toEqual([]);
+    expect(empty.leanMass).toEqual([]);
+  });
+
+  it('requestRead passes the two new types through only when listed', async () => {
+    const b = fakeBridge();
+    const h = createHealth(b);
+    await h.requestRead(['sleep']);
+    expect(b.requestRead).toHaveBeenLastCalledWith({ types: ['sleep'] });
+    await h.requestRead(['bodyFat', 'leanMass']);
+    expect(b.requestRead).toHaveBeenLastCalledWith({ types: ['bodyFat', 'leanMass'] });
+  });
+
   it('a junk reply is an empty ok result', async () => {
     const b = fakeBridge({ read: vi.fn(async () => 'nonsense' as never) });
     const r = await createHealth(b).read({ types: ['sleep'], since: SINCE });

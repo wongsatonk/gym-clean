@@ -1,9 +1,11 @@
 import Foundation
 import HealthKit
 
-/// The six read-only types (SPEC M11). Raw values match `HealthType` in src/core/types.ts.
+/// The read-only types: six from SPEC M11, plus body fat and lean mass (M12 slice 1b; each is
+/// asked for only when its own switch is turned on). Raw values match `HealthType` in
+/// src/core/types.ts.
 public enum GymHealthKind: String, CaseIterable, Sendable {
-    case bodyMass, workouts, activeEnergy, sleep, restingHr, hrv
+    case bodyMass, workouts, activeEnergy, sleep, restingHr, hrv, bodyFat, leanMass
 
     /// Known kinds from the JS array, in order, without duplicates.
     public static func parse(_ names: [String]) -> [GymHealthKind] {
@@ -76,6 +78,8 @@ public enum GymHealthMapping {
     }
 
     public static func kilograms(_ q: HKQuantity) -> Double? { convert(q, to: kilogramUnit, places: 2) }
+    /// Body fat as a percentage 0...100. HealthKit stores it as a fraction (0.185 = 18.5%).
+    public static func percent(_ q: HKQuantity) -> Double? { convert(q, to: .percent(), places: 3).map { round($0 * 100, places: 1) } }
     public static func beatsPerMinute(_ q: HKQuantity) -> Double? { convert(q, to: beatsPerMinuteUnit, places: 1) }
     public static func milliseconds(_ q: HKQuantity) -> Double? { convert(q, to: millisecondUnit, places: 1) }
     public static func kilocalories(_ q: HKQuantity) -> Double? { convert(q, to: kilocalorieUnit, places: 1) }

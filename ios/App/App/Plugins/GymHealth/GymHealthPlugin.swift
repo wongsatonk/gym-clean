@@ -5,8 +5,10 @@ import HealthKit
 
 /// M11 task 4: read-only Apple Health bridge (SPEC M11, route A).
 ///
-/// - Reads six types only: body mass, workouts, active energy, sleep, resting heart rate, HRV.
-///   No write methods, no share types, no background delivery, no observer queries.
+/// - Reads eight types only: body mass, workouts, active energy, sleep, resting heart rate, HRV,
+///   and (M12 slice 1b) body fat percentage and lean body mass. The last two are off by default
+///   and reach `requestRead` only when their own switch is turned on, so the Health sheet lists
+///   them only then. No write methods, no share types, no background delivery, no observer queries.
 /// - Swift stays thin: it queries HealthKit, converts to app units (GymHealthCore) and hands the
 ///   values to the web view. It stores nothing and makes no network request. Per-day summaries,
 ///   baselines and coaching live in TypeScript (src/core/health/**).
@@ -102,6 +104,8 @@ public class GymHealthPlugin: CAPPlugin, CAPBridgedPlugin {
         case .sleep: [HKCategoryType(.sleepAnalysis)]
         case .restingHr: [HKQuantityType(.restingHeartRate)]
         case .hrv: [HKQuantityType(.heartRateVariabilitySDNN)]
+        case .bodyFat: [HKQuantityType(.bodyFatPercentage)]
+        case .leanMass: [HKQuantityType(.leanBodyMass)]
         }
     }
 
@@ -115,6 +119,10 @@ public class GymHealthPlugin: CAPPlugin, CAPBridgedPlugin {
             return try await quantities(.restingHeartRate, since: since, until: until, field: "bpm", GymHealthMapping.beatsPerMinute)
         case .hrv:
             return try await quantities(.heartRateVariabilitySDNN, since: since, until: until, field: "ms", GymHealthMapping.milliseconds)
+        case .bodyFat:
+            return try await quantities(.bodyFatPercentage, since: since, until: until, field: "pct", GymHealthMapping.percent)
+        case .leanMass:
+            return try await quantities(.leanBodyMass, since: since, until: until, field: "kg", GymHealthMapping.kilograms)
         case .activeEnergy:
             return try await dailyActiveEnergy(since: since, until: until)
         case .sleep:

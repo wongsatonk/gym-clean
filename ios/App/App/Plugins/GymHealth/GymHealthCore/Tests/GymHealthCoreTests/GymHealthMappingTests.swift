@@ -13,6 +13,21 @@ final class GymHealthMappingTests: XCTestCase {
         XCTAssertEqual(GymHealthMapping.kilograms(HKQuantity(unit: .gram(), doubleValue: 79_901)), 79.9)
     }
 
+    func testBodyFatFractionBecomesPercent() {
+        XCTAssertEqual(GymHealthMapping.percent(HKQuantity(unit: .percent(), doubleValue: 0.185)), 18.5)
+        XCTAssertEqual(GymHealthMapping.percent(HKQuantity(unit: .percent(), doubleValue: 0.2244)), 22.4)
+        XCTAssertEqual(GymHealthMapping.percent(HKQuantity(unit: .percent(), doubleValue: 0)), 0)
+        XCTAssertEqual(GymHealthMapping.percent(HKQuantity(unit: .percent(), doubleValue: 1)), 100)
+        XCTAssertNil(GymHealthMapping.percent(HKQuantity(unit: .gramUnit(with: .kilo), doubleValue: 20)))
+        XCTAssertNil(GymHealthMapping.percent(HKQuantity(unit: .percent(), doubleValue: .nan)))
+    }
+
+    func testLeanBodyMassUsesKilograms() {
+        XCTAssertEqual(GymHealthMapping.kilograms(HKQuantity(unit: .gramUnit(with: .kilo), doubleValue: 61.337)), 61.34)
+        XCTAssertEqual(GymHealthMapping.kilograms(HKQuantity(unit: .pound(), doubleValue: 132.28)), 60.0)
+        XCTAssertNil(GymHealthMapping.kilograms(HKQuantity(unit: .percent(), doubleValue: 0.2)))
+    }
+
     func testIncompatibleUnitIsNil() {
         XCTAssertNil(GymHealthMapping.kilograms(HKQuantity(unit: .count(), doubleValue: 3)))
         XCTAssertNil(GymHealthMapping.beatsPerMinute(HKQuantity(unit: .gram(), doubleValue: 3)))
@@ -173,7 +188,11 @@ final class GymHealthMappingTests: XCTestCase {
     }
 
     func testTypeNamesMatchTheTypeScriptSide() {
-        XCTAssertEqual(GymHealthKind.allCases.map(\.rawValue), ["bodyMass", "workouts", "activeEnergy", "sleep", "restingHr", "hrv"])
+        XCTAssertEqual(
+            GymHealthKind.allCases.map(\.rawValue),
+            ["bodyMass", "workouts", "activeEnergy", "sleep", "restingHr", "hrv", "bodyFat", "leanMass"])
+        XCTAssertEqual(GymHealthKind.parse(["bodyFat", "leanMass", "bodyFat"]), [.bodyFat, .leanMass])
+        XCTAssertEqual(GymHealthKind.parse([]), [])
         XCTAssertEqual(GymHealthKind.parse(["sleep", "steps", "hrv", "sleep"]), [.sleep, .hrv])
     }
 }
