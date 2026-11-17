@@ -1384,6 +1384,10 @@ the M10 phase B/C sections above stay the contract for those brains, with the ch
    New rule answers: "How's my week?" (this week's sessions and planned sets from the calendar; gym sessions
    only, see Decision "M12 plan"), "How am I doing?" (week + month scores, streak, focus-block progress), and
    "What should I eat (tonight)?" in free text (the M7/M10 food suggestion from today's Fuel targets).
+1c. **Slice 1c "What's New + To-dos" (web + iPhone app, no network; right after slice 1, before slice 1b;
+   approved 2026-11-16):** a What's New tour once per release, step-by-step to-do guides for his open
+   checkpoints and decisions, one in-app Copy report, and the app version + his copyright credit in
+   Settings → About. Details in "What's New tour + To-do guides" below.
 1b. **Slice 1b "Trainer kit" (web + iPhone app, rule brain only; after slice 1, before slice 2):** the gaps
    versus a human personal trainer that he picked (2026-11-16, all 12), items 1–5 and 7–12 below. Item 6
    (reminders + weekly check-in) needs native notifications and is in slice 2.
@@ -1391,6 +1395,120 @@ the M10 phase B/C sections above stay the contract for those brains, with the ch
    read-only `weekSummary` / `progressSummary` / `exerciseInfo` / `foodIdeas` and `proposeFocusBlock`
    (parameters only)), the **hold-to-talk mic** (below), and **reminders + weekly check-in** (trainer kit
    item 6, below).
+
+#### What's New tour + To-do guides (slice 1c)
+Wongsaton (2026-11-16): "Plan to add everything in the list to the app such as wizard that I need to do step
+by step on the app to finish each topic" · "Go with A, copy report but keep it in the app since I export it
+one time. I need it guide me as wizard same as when the other app publishes the new version." · "Yes, add it
+to the plan". Source: design doc section "Slice 1c". Planner calls are in Decision "M12 slice 1c" and can be
+corrected.
+
+**Goals**
+1. **What's New tour.** After an app update (a new **release key**, see below) the app opens once with a
+   full-screen tour: one page per change (what changed + why, ≤ 2 short sentences each), a **Try it** button
+   per page that closes the tour and deep-links to the feature, **Skip** always visible, Back / Next buttons
+   ≥ 56px (swipe is a shortcut, never the only way), a page indicator that isn't colour alone. The last page
+   is **"Added to your to-dos"** listing the topics new in this release, with **Open to-dos**. The tour shows
+   only on app open on Today, never during a workout or on the camera. Replay any time from **Settings →
+   What's new**. Pages are data per release; a release with no pages shows nothing.
+   - **Version = release key:** `package.json` `version`, read at build time and exposed as
+     `__APP_RELEASE__` (e.g. `1.12.0`), plus `__APP_BUILD__` = the short git sha. Shown as **"Version 1.12.0
+     (build abc1234)"**. The tour's key is the semver part only (the build sha changes on every build). The
+     dev-log `__APP_VERSION__` (sha + build time) is unchanged. The last version whose tour he finished or
+     skipped is stored in `settings` key `'whatsNew'`.
+   - **Version policy (planner call, correctable):** MAJOR stays `1` (the app is live); **MINOR +1 for each
+     shipped milestone slice** (M12 slice 1 + 1c ship as `1.12.0`; the next shipped slice is `1.13.0`, and
+     so on, whatever its milestone number); **PATCH +1 for a fix-only deploy** (no tour pages). Main bumps it
+     in the merge commit; a version with tour pages must be a new MINOR.
+   - The tour's **first page** shows "Version 1.12.0 (build abc1234)" under its title.
+   - **Fresh install** (no sessions and no `'whatsNew'` row): the tour is marked seen without showing (nothing
+     "changed" for a new install); the to-do list is still in Settings.
+   - Several unseen releases → one tour with every unseen release's pages, newest first.
+2. **To-do guides.** A **Today card** ("To-dos: 6 of 12 done", ≥ 56px, below the Start card so it never
+   pushes Start down; hidden during a workout) → the **To-do list** (each topic: title, which checkpoint, done
+   / n of m steps; native-only topics labelled "In the iPhone app" in the PWA and left out of its count) →
+   each topic is a **step-by-step guide** (one step per screen, Back / Next, "Step 2 of 5", **Skip this
+   topic**). The card hides when every topic for this platform is done or skipped; Settings → To-dos always
+   opens the list.
+   - **Auto steps:** the app ticks them from its own data (e.g. model imported, Health connected, N sessions
+     logged, N days with photo meals, days left before the 7-day re-sign). Each is a **pure detector**
+     (`src/core/todo/`) of a counts-only `TodoFacts` snapshot. Once ticked, the tick is stored with its time
+     and stays ticked. An unticked auto step shows what's missing ("2 of 3 sessions") and its **Try it** link.
+   - **Ask steps:** a question with tap answers (single or multi) + an optional note (≤ 500 characters).
+     Changeable until copied; after copying, a change is a new answer (reported next time).
+   - **Decision steps** are ask steps whose answer **sets a setting directly** (data maps option → setting).
+     The Claude **key** is never asked for in a to-do or a report; the decision step only records whether he
+     wants Claude, and the key gets its own Settings screen in slice 3.
+   - A topic is **done** when every auto step is ticked and every ask step is answered, or when skipped
+     (reported as skipped). **Recurring** topics (the 7-day re-sign) are done while their condition holds.
+   - Topics, steps, options and pages are **data**; a future release adds to-dos and pages without new
+     screens.
+3. **One report.** Answers are kept in the app (IndexedDB table `todoAnswers`, backed up like settings). At
+   the bottom of the to-do list, **Copy report** builds **one plain text** with every answer and auto tick
+   since the last copy (grouped by topic, checkpoint name, date, app release, PWA or iPhone app), shows a
+   **preview** first, then copies it with the system clipboard (fallback: a selectable text box) and marks
+   those answers as sent. With nothing new it offers "Copy all again". **The app sends nothing**; he pastes
+   it where he wants.
+   - The report **never contains**: Health values (auto steps report counts / yes-no only, e.g. "Health
+     data on 7 of 7 days"), photos or photo data, API keys or key-like strings (a note containing one has it
+     replaced by "[key removed]"), chat message text, food or body numbers from the app's data. His own
+     notes and taps are included as he typed them.
+
+4. **About + credit.** A small **About** section at the bottom of Settings: "Gym Clean", "Version 1.12.0
+   (build abc1234)", and the credit line **"© 2026 Wongsaton Kampusan"** (his request: "don't forget to put
+   version number and my name as copyright credit"). Text ≥ 20px except the label-size rules already allowed
+   (M4e `--fs-label`); no links, nothing sent. The copy report header includes the version and build, **not**
+   his name.
+
+**Initial topics (release 1.12.0, his current to-do list; exact copy is data, checked by `checkCopy`)**
+
+| # | Topic (checkpoint) | Where | Auto steps | Ask steps |
+|---|---|---|---|---|
+| 1 | Coach tab + Calendar (🧍 Checkpoint I) | both | asked the coach ≥ 1 question; ≥ 1 proposal applied or undone; Calendar opened after a training day | what felt off (note); motion: just right / too much / too little; M12-q2 old Calendar days: keep as now / show what was planned then; M12-q3 focus-block size: right / too much / too little / didn't try; "How's my week?" gym-only OK / add outside workouts |
+| 2 | Apple Health week (🧍 Checkpoint H) | iPhone | Health connected; Health data on 7 of the last 7 days | card on the right days (yes / mostly / no); reasons matched how you felt; any wrong weigh-in (no / yes + note); which types WHOOP writes (multi: weight, workouts, active calories, sleep, resting HR, HRV; M11 task 2) |
+| 3 | iPhone app week (🧍 Checkpoint G) | iPhone | running in the iPhone app; 3 gym sessions logged in it | voice ducked the music; screen stayed on; camera OK; anything different from the web app (note) |
+| 4 | Coach at the gym (🧍 Checkpoint E, extended) | both | ≥ 2 coach changes applied (Not today / Go easy / a swap); a Legs B session with the leg-press swap logged | weight you used on the replacement (note); the gym prompt felt right; coach answers helpful |
+| 5 | Hands-free sets (🧍 Checkpoint B3) | both | a session with hands-free on (signal chosen by core-engineer; an ask step if no reliable one) | wrong auto starts (0 / 1–2 / 3+); wrong auto stops; 6 s still stop (right / too quick / too slow); 5 s Undo; push-up hold + tap felt right; dev log exported (yes / not yet; Try it → Settings) |
+| 6 | Camera counting, form cues, learning exercises (🧍 Checkpoints C + F1) | both | one full camera session (≥ 6 camera-counted sets); camera sets on ≥ 3 learning exercises | counts right (all / off by 1–2 / often wrong + which); cues helpful; which learning exercises miscounted (multi, from data); OK to commit landmark JSON of the sets you OK (M4f-q8) |
+| 7 | Food photos (🧍 Checkpoint D) | both | food model imported; meals logged from a photo on 7 days | top guess right (mostly / half / rarely); fast enough; anything it never gets (note) |
+| 8 | VeSync types check | iPhone | — | in Health → Body Measurements, does VeSync write Body Fat % and Lean Body Mass? (both / body fat only / neither / not sure) |
+| 9 | Decision: Apple's coach and the Health card (M12-q1) | both | — | Apple's on-device coach may read the card's reason sentences, never numbers, never Claude: yes (default) / no → sets `coach.appleCardReasons` |
+| 10 | Decision: trainer-kit defaults (M12-q4) | both | — | keep the defaults / change something (note) → sets `trainerKit` (defaults confirmed or left for the planner) |
+| 11 | Decision: Claude brain + your key | both | — | want Claude later: yes, I'll add my key in Settings / not now / no → sets `coach.claudeWanted`; the key itself only on its own screen (slice 3) |
+| 12 | 7-day re-sign (recurring; M9-q1) | iPhone | ≥ 3 days left on this install (free Apple ID) | keep the free weekly re-sign / switch to the paid account → `signing` setting; "paid" stops the reminder |
+
+The re-sign detector counts days since the app first saw the current build id (stored on first launch of
+each build); the Today card shows "Re-sign in N days" when ≤ 2 days are left.
+
+**Privacy:** no network request (clipboard only, on his tap); no answers, notes or report text in the dev
+log; `todoAnswers` is in backups (his own words, no Health values); the report rules above are unit-tested.
+
+**Data model (adds to §4; final shape in `src/core/types.ts`)**
+```ts
+type AppRoute = 'today' | 'fuel' | 'coach' | 'calendar' | 'settings' | 'settings/health' | 'settings/myGym'
+  | 'settings/foodPhotos' | 'settings/devlog' | 'todos';               // deep links for Try it (as data)
+type TodoPlatform = 'any' | 'native';                                  // native = iPhone app only
+type TodoDetectorId = 'chatAsked' | 'proposalOutcome' | 'calendarAfterSession' | 'healthConnected'
+  | 'healthDays' | 'nativeApp' | 'nativeSessions' | 'coachChanges' | 'legSwapSession' | 'handsFreeSession'
+  | 'cameraSession' | 'learningCamera' | 'foodModel' | 'photoMealDays' | 'resignDaysLeft';
+type TodoOption = { id: string; label: string };
+type TodoStep = { id: string; title: string; why?: string; tryIt?: AppRoute } & (
+  | { kind: 'auto'; detector: TodoDetectorId; params?: Record<string, number> }
+  | { kind: 'ask'; options: TodoOption[]; multi?: boolean; note?: 'optional' | 'none';
+      setting?: { key: string; path: string; values: Record<string, unknown> } }); // decision steps
+type TodoTopic = { id: string; title: string; checkpoint?: string; since: string /* release */;
+  platform: TodoPlatform; recurring?: boolean; steps: TodoStep[] };
+type TodoAnswer = { id: string; topicId: string; stepId: string; kind: 'ask' | 'auto' | 'skip';
+  optionIds?: string[]; note?: string; at: number; release: string; sentAt?: number };
+type TodoFacts = { platform: 'web' | 'native'; now: number; counts: Record<string, number>;
+  flags: Record<string, boolean>; buildFirstSeenAt?: number };        // counts/flags only, never values
+type DetectorResult = { done: boolean; have?: number; need?: number };
+type WhatsNewPage = { release: string; id: string; title: string; what: string; why: string;
+  tryIt?: AppRoute; icon?: string };
+// settings rows: 'whatsNew' = { seenRelease?: string; builds?: Record<string, number> /* id → first seen */ }
+//                'todos' = { lastCopiedAt?: number }   'todoSignals' = { calendarAfterSessionAt?: number }
+// Dexie v9: todoAnswers: 'id, topicId, at, sentAt' (backed up)
+```
 
 #### Trainer kit (slice 1b; item 6 in slice 2)
 Research basis in the design doc (NASM OPT, ACSM 2026 resistance-training summary, app reviews). Every
@@ -1473,7 +1591,8 @@ or backing up progress photos; body-composition or health scores from measuremen
 delays a tap or hides state.
 
 #### Privacy
-- Slice 1 and slice 2: **no network request** (rules, Apple's model and speech run on the phone). The chat
+- Slices 1, 1c and 2: **no network request** (rules, Apple's model and speech run on the phone; the 1c
+  report leaves only through the clipboard, on his tap). The chat
   thread, focus blocks and completion stay in IndexedDB. Share month makes the image on the phone and only
   the system share sheet / a download moves it, on his tap.
 - Slice 3 sends only what the M10 phase C explainer lists (now: messages, plan, workout numbers, focus
@@ -1562,6 +1681,42 @@ type DayFeel = { date: string; energy?: 1 | 2 | 3 | 4 | 5; sore?: BodyArea[] };
   - 🧍 **Checkpoint I (after slice 1):** he uses the Coach tab and the Calendar for a few days (at least one
     question, one proposal applied or undone, and a look at the Calendar after training). He reports what
     felt off, including the motion.
+- **Slice 1c (What's New + To-dos):**
+  - Unit tests, written first (made-up data):
+    - every detector at its boundary (not met / met / over; e.g. 2 vs 3 sessions, 6 vs 7 photo days,
+      re-sign 3 vs 2 days left incl. a DST change), on `web` and `native` facts;
+    - topic progress: auto + ask → done; skipped; recurring; native-only topics left out of the PWA count;
+      the Today card count ("6 of 12") and hidden when all done;
+    - tour selection: unseen release → its pages; seen → none; fresh install → marked seen, none; two unseen
+      releases → both, newest first; a release with no pages → none; replay → all pages of the current one;
+    - decision steps write exactly the mapped setting and nothing else;
+    - report builder: only answers/ticks since the last copy; grouped by topic with checkpoint, date,
+      release, platform; skipped topics listed; "Copy all again" includes sent ones; **never contains**
+      Health values, photo data, key-like strings (a note with `sk-ant-…` → "[key removed]"), chat message
+      text or food/body numbers, even when the facts and stores hold them (test seeds them and searches the
+      output);
+    - topic and page data: unique ids, every detector id known, every Try it a valid route, every string
+      passes `checkCopy`, the 12 initial topics map to the checkpoints in the table;
+    - storage: Dexie v8 → v9 keeps every row; answers round trip; mark sent; `todoAnswers` in backups and
+      never in the dev log; build first-seen recorded once per build id.
+  - E2E (390×844, no off-device request in any of them): a profile with a session and an older
+    `seenRelease` → the tour on open → Next / Back → Try it lands on the feature → reload shows no tour;
+    Skip ends it and it doesn't come back; Settings → What's new replays it; a fresh profile shows no tour;
+    with `reducedMotion: 'reduce'` pages swap without animation; Today card → list → a topic → an auto step
+    ticks after the seeded data appears (e.g. a chat question) → ask steps with a note → reload keeps them →
+    a decision step changes its setting (seen in Settings); Copy report → preview → copy (clipboard read back
+    in Chromium) → answers marked sent → the next report has only newer answers; native-only topics labelled
+    in the PWA; the card hides when all done; nothing from the tour or to-dos appears during a set.
+  - Version + credit: a unit test that the displayed string is "Version <package.json version> (build
+    <short sha>)" and that the tour key equals the package.json version; e2e: Settings → About shows the
+    version and "© 2026 Wongsaton Kampusan", the tour's first page shows the same version, the copied report
+    header has the version and not the name; `npm run build` output contains the version.
+  - 390×844 screenshots: a tour page (the first, with the version), the "Added to your to-dos" page, the Today
+    card, the to-do list, an auto step (ticked and not), an ask step with a note, a decision step, the report
+    preview, Settings → About.
+  - Existing e2e stays green (helpers mark the tour seen by default).
+  - No 🧍 checkpoint of its own: the to-dos are his open checkpoints; his first pasted report is handled with
+    `/feedback`.
 - **Slice 1b (trainer kit items 1–5, 7–12):**
   - Unit tests, written first (made-up data):
     - (1) effort stored on the set; the M5b recommendation changes with Easy / Good / Hard and is unchanged
