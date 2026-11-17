@@ -1990,6 +1990,25 @@ will decide the pay in the future" → build with the free Personal Team; if the
 app, the watch-only work pauses and he is asked again. **His devices** ("I got series 9 and pro 2"): **Apple Watch
 Series 9** (current watchOS, workout-session heart rate) and **AirPods Pro 2** (head tracking supported).
 
+**Second user:** his partner may use the app (M13), so every new string (phone, watch, Info.plist, What's New)
+is gender-neutral and says "you", and passes M13's gendered/owner-wording scan.
+
+**Platform facts (M14 task 1, 2026-11-17; Decision "M14 task 1 findings" wins where more specific):**
+- Watch target: Xcode template **"Watch app for Existing iOS App"** (single target, embedded, not standalone,
+  `WKCompanionAppBundleIdentifier` = the iOS bundle id), deployment target **watchOS 26.0**, HealthKit
+  capability, `UIBackgroundModes` **workout-processing** (plus Audio only if task 2 shows haptics need it),
+  Info.plist `NSHealthShareUsageDescription` **and** `NSHealthUpdateUsageDescription` (texts under Privacy).
+- iPhone: `NSMotionUsageDescription` must be added before any motion code (without it the app crashes); the
+  `WCSession` delegate implements `activationDidComplete`, `sessionDidBecomeInactive` and
+  `sessionDidDeactivate` (re-activating), or iOS ends the app in the background after a watch switch.
+- Free Personal Team: should work on paper; limits 10 App IDs per 7 days, 3 devices, 3 apps per device,
+  7-day profiles (the watch app expires with the iPhone app). Task 2 proves it on his devices; its scratch apps
+  are deleted afterwards and never use Gym Clean's bundle id.
+- `transferUserInfo` does not deliver in the Simulator: the queued path is tested on his devices; simulator
+  tests use `sendMessage` / `updateApplicationContext`.
+- Headphone-motion update rate is not documented: measured in task 2; core logic works from frame timestamps,
+  never an assumed rate.
+
 #### Goals — Apple Watch app
 1. **A remote on the wrist; the phone stays the brain.** A watchOS companion (SwiftUI, single-target watch
    app, WatchConnectivity) for the Capacitor iPhone app. The session reducer (`src/core/session.ts`) stays the
@@ -2021,9 +2040,10 @@ Series 9** (current watchOS, workout-session heart rate) and **AirPods Pro 2** (
    (`rest.endsAt`), shows the one-step lookahead after an offline Set done, and **queues events** in its own
    storage until the phone acknowledges them; on reconnect the phone applies them in order and the next
    snapshot wins. A small "Not connected" line shows on the watch while offline (text, not only a colour).
-   Whether the iPhone app keeps handling events with its **screen locked** (via a mirrored workout session)
-   is checked in the facts task; until proven, the supported setup is the phone unlocked with the screen kept
-   on (M9), face down or in a pocket, and a locked phone catches up on unlock.
+   **The only supported setup is the phone unlocked with the screen kept on (M9)**, face down or in a pocket;
+   a locked phone catches up on unlock. Task 1 found that a mirrored workout session only wakes the iPhone app
+   now and then (minutes apart) and no Apple doc supports WKWebView JS running while locked, so M14 does not
+   use session mirroring.
 4. **Live heart rate** from an `HKWorkoutSession` (traditional strength training) on the watch, running from
    the first snapshot of a started session to Finish, paused with the app's Pause.
    - **Heart rate in the app** (switch, default **on**): the watch sends heart-rate samples to the phone;
@@ -2034,14 +2054,26 @@ Series 9** (current watchOS, workout-session heart rate) and **AirPods Pro 2** (
      come back down (rule below), the watch and the Rest screen show **"Heart rate back down. Ready when you
      are."** Coaching only: no zones, no age-based maximum, no "safe/unsafe", no warning about a high value,
      never spoken as a number.
-   - **Save to Apple Health** (switch, **default off**; writing to Health is new): when he turns it on, the
-     app explains what is written ("Saves each gym session as a Strength Training workout with its heart rate
-     and calories. Nothing else.") and iOS asks for permission then, not before. With it off the watch's
-     workout is **discarded** at Finish. M11's reads skip workouts written by this app (by source), so they
-     are never counted twice in the weekly load.
+   - **Health access (first watch workout):** a workout session needs permission to **write workouts**, so the
+     **first time a session starts on the watch**, the watch shows one short explain screen and then the
+     Health sheet (read heart rate + active energy, write workouts + the samples the session records). This
+     happens **whether or not Save to Apple Health is on** (Decision "M14 task 1 findings"). Explain screen:
+     "To show your heart rate, Gym Clean runs a workout on your watch. Health will ask for access. The workout
+     is saved to Health only if you turn on Save to Apple Health." If access is denied, the watch still works
+     as a remote without heart rate (task 2 checks whether a session can start at all), and Settings → Apple
+     Watch says so.
+   - **Save to Apple Health** (switch, **default off**; saving a workout record is new): it decides only what
+     happens at Finish: on → `finishWorkout` (a Strength Training workout appears in Health); off →
+     `discardWorkout` (**no workout record**). Turning it on shows what it does, no permission sheet (access was
+     already asked at the first watch workout): "Saves each gym session as a Strength Training workout in
+     Apple Health." Both states show the line: **"Either way, the heart rate and calories your watch measures
+     during the session stay in Health, like your other Apple Watch readings."** (`discardWorkout` keeps
+     samples already added; M11 reads them like any Apple Watch data.) M11's reads skip workouts written by
+     this app (by source), so a saved one is never counted twice in the weekly load.
 
 #### Goals — AirPods head motion (iPhone app, AirPods models with head tracking)
-5. **Head frames from `CMHeadphoneMotionManager`**, about 25 per second, only **during a set** of an
+5. **Head frames from `CMHeadphoneMotionManager`** at the rate the AirPods deliver (not documented; measured
+   in task 2; logic uses each frame's timestamp, never an assumed rate), only **during a set** of an
    exercise that has a head rule and only while the matching switch is on. Pure logic in
    `src/core/headmotion/` takes `HeadFrame`s and returns events, tested from recorded JSON like the pose rep
    counter. Rules and thresholds are **data** (`src/core/exercises/headRules.ts` plus a `head` field per rule).
@@ -2084,14 +2116,16 @@ Series 9** (current watchOS, workout-session heart rate) and **AirPods Pro 2** (
 - **M11** ("What stays out": writing to Health, Apple Watch app, live HR during sets): all three are now in
   M14, writing only as the off-by-default switch above. M11's reads, types and rules are unchanged; its
   workout de-duplication by source now matters (tested).
-- **M13 first launch:** no new pages. The motion and Health-write permissions are asked from Settings on
-  first use, not in the first-launch flow. `OwnerSurface` gains the clip recorder.
+- **M13 first launch:** no new pages. The motion permission is asked from Settings on first use; the watch's
+  Health access is asked on the watch at its first workout session; neither is in the first-launch flow.
+  `OwnerSurface` gains the clip recorder.
 
 #### Non-goals
 Starting or editing a workout on the watch; a watch complication or Smart Stack widget; the watch working
 without the iPhone app installed; standalone watch use; Wi-Fi/cellular watch features; heart-rate zones,
 calorie targets from heart rate or any health score; writing anything to Health other than the gym-session
-workout; reading new Health types; head motion in the PWA; Android, Wear OS or other earbuds; spatial audio;
+workout (opt-in) and the heart-rate/energy samples a watch workout session records; mirrored workout sessions
+or any locked-phone mode; reading new Health types; head motion in the PWA; Android, Wear OS or other earbuds; spatial audio;
 using head motion during rest; the paid Apple Developer account unless M14-q1 needs it and he says yes.
 
 #### Privacy
@@ -2101,10 +2135,16 @@ using head motion during rest; the paid Apple Developer account unless M14-q1 ne
   out of **every coach/brain context** (rules, Apple, Claude), the dev log, the copy report and share images.
 - Head motion: frames in memory only; per-set numbers on `SetLog.head` (local, backed up like sets; the dev log
   may hold the per-set numbers, never frames); out of every brain context and Claude.
-- Health writing only with the switch on, after iOS's permission sheet. Info.plist strings: motion (the why
-  text above), `NSHealthUpdateUsageDescription` ("Saves your gym sessions as Strength Training workouts when
-  you turn this on."), the watch's Health read string ("Shows your heart rate during your workout. Stays on
-  your watch and iPhone."). Signing data stays in the gitignored local config; the repo stays public.
+- Health: a **workout record** is saved only with Save to Apple Health on. The heart-rate and energy samples
+  the watch records during any watch session stay in Health even with it off (normal Apple Watch data, never
+  sent anywhere by Gym Clean); the copy says so plainly and never says "nothing is saved". Info.plist strings:
+  - iPhone `NSMotionUsageDescription`: the why text above.
+  - Watch `NSHealthShareUsageDescription`: "Shows your heart rate during your gym session. Gym Clean doesn't
+    send it anywhere."
+  - Watch `NSHealthUpdateUsageDescription` (true with Save off): "Runs a workout on your watch so it can read
+    your heart rate. Heart rate and calories from the session are added to Health. The workout itself is saved
+    only if you turn on Save to Apple Health." The iPhone target carries the same update string if Xcode needs it.
+- Signing data stays in the gitignored local config; the repo stays public.
 
 #### Data model (adds to §4; final shape in `src/core/types.ts`)
 ```ts
@@ -2124,7 +2164,9 @@ type WatchEventType = 'SET_DONE' | 'START_SET' | 'EXTEND_REST' | 'PAUSE' | 'RESU
 type WatchEvent = { id: string; type: WatchEventType; basedOnRev: number; watchT: number };
 type HrSample = { t: number; bpm: number };                    // watch clock, mapped on the phone
 type WatchMessage = { kind: 'event'; event: WatchEvent } | { kind: 'hr'; samples: HrSample[] }
-  | { kind: 'hello'; watchNow: number; appVersion: string } | { kind: 'ack'; ids: string[] };
+  | { kind: 'hello'; watchNow: number; appVersion: string;
+      healthAccess?: 'notAsked' | 'granted' | 'denied' }        // workout-write status on the watch
+  | { kind: 'ack'; ids: string[] };
 type WatchSettings = { hrInApp: boolean; recoveryHint: boolean; sayRecovery: boolean;
   saveToHealth: boolean };                                     // settings 'watch'
 type HeadFrame = { t: number; q: [number, number, number, number];   // attitude quaternion x,y,z,w
@@ -2143,8 +2185,11 @@ Recovery rule (data, `src/core/watch/hrRules.ts`, tuned at Checkpoint L): after 
 5 s median in the minute before the session's first working set, else the set's max − 25 bpm. Once per rest.
 
 #### Accept
-- Facts task done first: free-account verdict with Apple doc links or an on-device result (M14-q1), mirrored
-  session / locked-phone behaviour, HealthKit-on-watch authorisation needs, AirPods model support.
+- Facts task done first (done 2026-11-17, Decision "M14 task 1 findings"): free-account verdict, mirrored
+  session / locked-phone behaviour (not used), HealthKit-on-watch authorisation needs, AirPods model support.
+  Task 2 spike on his devices records the checklist in that Decision (firmware, Developer Mode, first Health
+  sheet contents, session with write denied, wrist-down HR, haptics, Health afterwards with Save off, measured
+  AirPods rate).
 - Unit tests, written first (made-up data):
   - watch protocol: snapshot from every session phase (warm-up, last set of an exercise, last set of the day,
     paused, summary), lookahead correct, each event → its reducer event, dedupe by id, stale rev dropped, a
@@ -2161,19 +2206,26 @@ Recovery rule (data, `src/core/watch/hrRules.ts`, tuned at Checkpoint L): after 
   unavailable / denied / disconnected states).
 - E2E (390×844, fake `GymWatch` and `GymHeadMotion` bridges, no off-device request): Start → a snapshot is
   sent; watch Set done → Rest; duplicate and stale events ignored; offline queue replays; the Rest screen shows
-  heart rate and the recovery line; the stored set has `hr`; Save to Health off → no write call, on → the
-  explain step then the permission call; AirPods why page before the permission call; a drift clip → "Keep your
+  heart rate and the recovery line; the stored set has `hr`; Save to Health on → the explain step, then
+  `saveToHealth: true` in the next snapshot (no permission call from the phone), off → `false`; the "Either way…"
+  line shows in both states; Health access denied (from `hello`) → the Settings line; AirPods why page before the permission call; a drift clip → "Keep your
   head still." spoken between reps; a calf-raise clip counted; AirPods disconnect → no error; the PWA shows the
   "iPhone app" line and calls neither bridge.
+- Swift: watch `GymWatchCore` XCTest that Finish with Save off calls discard (no workout saved) and with Save on
+  calls finish; iPhone `WCSession` delegate implements the three lifecycle methods.
 - Simulator: iPhone + paired watch simulators build; a round trip (Start on the phone, Set done on the watch,
-  rest on both, link off → queue → link on → replay); watch screenshots of exercise, rest, controls, summary,
+  rest on both, link off → queue → link on → replay over `sendMessage` / `updateApplicationContext`;
+  `transferUserInfo` is device-only and checked at Checkpoint L); watch screenshots of exercise, rest, controls, summary,
   not-connected on a 41 mm and a 46 mm (or Ultra) watch.
 - 390×844 screenshots: Rest with heart rate + recovery line, Settings → Apple Watch, Settings → AirPods, the why
   page, the clip recorder (owner mode on). Version 1.16.0 with What's New pages.
 - 🧍 **Checkpoint L** (gym, watch + AirPods on, a few sessions): phone in the pocket for one session and on the
   floor for another; Set done / Start now / Pause from the watch; haptics at 10 s and rest end; behaviour when
   he walks away from the phone and back; heart rate on the Rest screen and the recovery line (too early? too
-  late?); Save to Health on once and the workout in Health (and whether WHOOP double-counts it); head hints fire
+  late?); the Health sheet at the first watch workout; one session with Save off (Health shows no workout, the
+  session's heart-rate samples are there) and one with Save on (the workout in Health, and whether WHOOP
+  double-counts it); taps made with the watch out of reach arrive once the phone is back (queued
+  `transferUserInfo` path, device only); head hints fire
   when he looks around and stay quiet when still; calf raise / shrug counts; head-motion clips recorded per the
   guide. He reports through the "Wrist and ears" to-do or `/feedback`.
 
