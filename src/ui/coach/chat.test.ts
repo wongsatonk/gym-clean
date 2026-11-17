@@ -18,6 +18,7 @@ import {
   chat,
   coachTabScreen,
   recapRange,
+  newestScrollTop,
   redFlagUp,
   splitReplyChips,
   textToSend,
@@ -798,5 +799,32 @@ describe('chat: check-in card (slice 2 task 17)', () => {
   it('pending without the callbacks → nothing to tap', () => {
     const { el } = mount({ messages: [card('pending')], checkInQuestions: QS });
     expect(attr(el, 'data-checkin-pick')).toHaveLength(0);
+  });
+});
+
+describe('newestScrollTop (the thread opens on the newest message)', () => {
+  it('a short newest message: the thread scrolls to the bottom', () => {
+    expect(
+      newestScrollTop({ scrollHeight: 1200, clientHeight: 400, itemTop: 1100, itemHeight: 100 }),
+    ).toBe(800);
+  });
+
+  it('a newest card taller than the thread: its top shows (with a small gap), not its end', () => {
+    expect(
+      newestScrollTop({ scrollHeight: 1600, clientHeight: 400, itemTop: 900, itemHeight: 700 }),
+    ).toBe(892);
+  });
+
+  it('a thread that fits: no scrolling', () => {
+    expect(
+      newestScrollTop({ scrollHeight: 300, clientHeight: 400, itemTop: 200, itemHeight: 100 }),
+    ).toBe(0);
+    expect(
+      newestScrollTop({ scrollHeight: 300, clientHeight: 400, itemTop: 0, itemHeight: 900 }),
+    ).toBe(0);
+  });
+
+  it('nothing in the thread: the bottom', () => {
+    expect(newestScrollTop({ scrollHeight: 500, clientHeight: 400 })).toBe(100);
   });
 });

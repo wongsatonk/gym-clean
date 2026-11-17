@@ -233,8 +233,10 @@
   min-width: 0;
 }
 
-/* One row that scrolls sideways inside itself (the page never scrolls sideways). */
-.chat-row {
+/* One row that scrolls sideways inside itself (the page never scrolls sideways). Doubled class:
+   the app's bundle can load coach.css after this file, and `.cs-chips` (wrap) would then win,
+   stacking the chips six rows deep over the thread (seen on the iPhone). */
+.cs-chips.chat-row {
   flex-wrap: nowrap;
   overflow-x: auto;
   margin: 0 -16px;
@@ -242,7 +244,7 @@
   scrollbar-width: none;
 }
 
-.chat-row > .cs-chip {
+.cs-chips.chat-row > .cs-chip {
   flex: 0 0 auto;
   white-space: nowrap;
 }

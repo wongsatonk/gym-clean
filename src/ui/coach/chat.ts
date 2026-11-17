@@ -268,6 +268,26 @@ export function splitReplyChips(chips: readonly ChatChip[]): {
   };
 }
 
+/** Gap kept above a tall newest card whose top is scrolled to. */
+const NEWEST_TOP_GAP = 8;
+
+/**
+ * Where the thread scrolls on render: the bottom, unless the newest item (its offset in the
+ * thread and its height) is taller than the thread's box; then its top shows, so a long card is
+ * read from its start (its buttons are a short scroll away), never from its end.
+ */
+export function newestScrollTop(o: {
+  scrollHeight: number;
+  clientHeight: number;
+  itemTop?: number | undefined;
+  itemHeight?: number | undefined;
+}): number {
+  const bottom = Math.max(0, o.scrollHeight - o.clientHeight);
+  if (o.itemTop === undefined || o.itemHeight === undefined) return bottom;
+  if (o.itemHeight + NEWEST_TOP_GAP <= o.clientHeight) return bottom;
+  return Math.min(bottom, Math.max(0, o.itemTop - NEWEST_TOP_GAP));
+}
+
 /** "Mon 9 Nov to Sun 15 Nov". */
 export function recapRange(from: string, to: string): string {
   return `${dateText(from)} to ${dateText(to)}`;
@@ -654,10 +674,19 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   }
 
   const scroll = h('div', { class: 'cs-scroll chat-scroll' }, starters, list);
-  // Newest message in view once the caller has mounted the chat (chat convention).
+  // Newest message in view once the caller has mounted the chat (chat convention); a card
+  // taller than the thread shows from its top.
   if (typeof requestAnimationFrame === 'function') {
     requestAnimationFrame(() => {
-      scroll.scrollTop = scroll.scrollHeight;
+      const newest = list.lastElementChild as HTMLElement | null;
+      const sr = scroll.getBoundingClientRect?.();
+      const nr = newest?.getBoundingClientRect?.();
+      scroll.scrollTop = newestScrollTop({
+        scrollHeight: scroll.scrollHeight,
+        clientHeight: scroll.clientHeight,
+        itemTop: sr && nr ? nr.top - sr.top + scroll.scrollTop : undefined,
+        itemHeight: nr?.height,
+      });
     });
   }
 
