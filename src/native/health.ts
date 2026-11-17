@@ -294,6 +294,25 @@ function looksLikeBridge(p: unknown): p is HealthBridge {
   );
 }
 
+/** How long the direct isAvailable() call may take before Health counts as unavailable. */
+export const DIRECT_AVAILABLE_TIMEOUT_MS = 4000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('GymHealth did not answer')), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(t);
+        reject(e instanceof Error ? e : new Error(String(e)));
+      },
+    );
+  });
+}
+
 /**
  * Resolves the Health API for this runtime. Web → `createHealth(null)` without importing
  * `@capacitor/core`. Native → the `GymHealth` plugin if the Swift side registered it.
@@ -309,13 +328,18 @@ export async function loadHealth(env: LoadHealthEnv = {}): Promise<Health> {
   if (!hasHeader) {
     // GymHealth is an in-app plugin registered in `capacitorDidLoad`; its header script can land
     // after the page has started (seen on the iPhone, 2026-11-16), and Capacitor's registerPlugin
-    // then treats it as unimplemented. Call the native side directly instead: if the plugin really
-    // isn't there, isAvailable() rejects and createHealth turns that into "unavailable".
+    // then treats it as unimplemented. Call the native side directly instead. If the plugin really
+    // isn't there, Capacitor iOS only logs and never settles the call, so isAvailable() gives up
+    // after DIRECT_AVAILABLE_TIMEOUT_MS; createHealth turns that into "unavailable" and never calls
+    // requestRead/read.
     const call = cap?.nativePromise;
     if (typeof call !== 'function') return createHealth(null);
     const direct: HealthBridge = {
       isAvailable: () =>
-        call.call(cap, GYM_HEALTH_PLUGIN, 'isAvailable', {}) as Promise<{ available: boolean }>,
+        withTimeout(
+          call.call(cap, GYM_HEALTH_PLUGIN, 'isAvailable', {}) as Promise<{ available: boolean }>,
+          DIRECT_AVAILABLE_TIMEOUT_MS,
+        ),
       requestRead: (o) =>
         call.call(cap, GYM_HEALTH_PLUGIN, 'requestRead', o) as Promise<{ requested: boolean }>,
       read: (o) => call.call(cap, GYM_HEALTH_PLUGIN, 'read', o),

@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createHealth, loadHealth, type HealthBridge, type HealthReadResult } from './health';
+import {
+  DIRECT_AVAILABLE_TIMEOUT_MS,
+  createHealth,
+  loadHealth,
+  type HealthBridge,
+  type HealthReadResult,
+} from './health';
 
 // Made-up numbers only. The bridge is a fake of the GymHealth Swift plugin's raw replies.
 
@@ -307,6 +313,20 @@ describe('loadHealth', () => {
     const h = await loadHealth({ cap });
     expect(await h.isAvailable()).toBe(false);
     expect((await h.read({ types: ['sleep'], since: 0 })).status).toBe('unavailable');
+  });
+
+  it('native without the header: a call that never settles (plugin missing on iOS) → unavailable after a timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const nativePromise = vi.fn(() => new Promise<unknown>(() => {}));
+      const cap = { isNativePlatform: () => true, PluginHeaders: [], nativePromise };
+      const h = await loadHealth({ cap });
+      const avail = h.isAvailable();
+      await vi.advanceTimersByTimeAsync(DIRECT_AVAILABLE_TIMEOUT_MS + 1);
+      expect(await avail).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('native without the header and no nativePromise → unavailable', async () => {
