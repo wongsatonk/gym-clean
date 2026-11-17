@@ -215,12 +215,26 @@ xcodebuild -scheme GymSpeechCore -destination 'platform=iOS Simulator,name=iPhon
 # or on the Mac itself: swift test
 ```
 
+Brain plugin unit tests (availability and error mapping, the generated tools, parallel tool-call
+recording, read-only results, timeout and prewarm, all with a fake session; no model needed). The
+iOS 27 error family is only tested on an iOS 27 simulator (on a macOS 26 Mac `swift test` skips it):
+
+```
+cd ios/App/App/Plugins/GymBrain/GymBrainCore
+xcodebuild -scheme GymBrainCore -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+```
+
+The brain's tools are generated: after `src/core/trainer/tools.contract.json` changes, run
+`node scripts/gen-trainer-tools.mjs` (`npm run check` fails while the Swift file is stale).
+
 Notes:
 - Local plugins: `ios/App/App/AppViewController.swift` (a `CAPBridgeViewController` subclass) registers
   them in `capacitorDidLoad()` with `bridge?.registerPluginInstance(...)`. `GymHealthPlugin` (jsName
   `GymHealth`) lives in `ios/App/App/Plugins/GymHealth/`; its pure part is the local Swift package
   `GymHealthCore` next to it, linked to the App target. `GymSpeechPlugin` (jsName `GymSpeech`,
   M12 slice 2) follows the same pattern in `ios/App/App/Plugins/GymSpeech/` with `GymSpeechCore`.
+  `GymBrainPlugin` (jsName `GymBrain`, M12 slice 2) likewise in `ios/App/App/Plugins/GymBrain/` with
+  `GymBrainCore` (which also holds the generated `TrainerTools.generated.swift`).
 - GymHealth also reads body fat percentage and lean body mass (M12 slice 1b), each only after its
   own switch is turned on; the Health sheet lists them only then.
 - Deployment target is **iOS 26.0** (M9-q3), iPhone only, portrait only.
@@ -340,6 +354,28 @@ or the mic button goes down, not on every Coach-tab open.
    plan: results computed before `respond` and passed in.
 5. Supported devices: Apple Intelligence phones only (iPhone 15 Pro and later). The simulator reports
    whatever the Mac supports; the real check is on the iPhone.
+
+**GymBrain plugin (tasks 6-7), as built.** jsName `GymBrain`; TypeScript in `src/native/gymBrain.ts`.
+
+| Method | Shape |
+|---|---|
+| `availability()` | `{ available: true }` or `{ available: false, reason }` (`deviceNotEligible`, `appleIntelligenceNotEnabled`, `modelNotReady`, `unsupported`). Never prompts. |
+| `respond(GymBrainRequest)` | `{ text, toolCalls: [{ name, args }], latencyMs }`; rejects with code `guardrail`, `contextTooLong`, `unsupportedLanguage`, `timeout` (15 s) or `other` (`invalidRequest` without instructions or a user message), data `{ code, latencyMs }`. |
+| `prewarm({ instructions })` | Builds the session the next `respond` with the same instructions uses (once, within 120 s). Only when available. |
+| `measure(GymBrainRequest)` | iOS 26.4+: `{ instructions, tools, prompt, contextSize }` tokens; `{}` before 26.4 or when unavailable. |
+
+- One `LanguageModelSession(model: SystemLanguageModel.default, tools: 14 tools, instructions:)` per
+  `respond`; the prompt is `context + "\n\nUser: " + the last user message`. Reply capped at 600 tokens.
+- Generated tools: string enums use `.anyOf`, integers `.range` / `.minimum` / `.maximum`, arrays
+  `.minimumCount` / `.maximumCount` / `.element(...)`. Patterned strings (dates, exercise ids) get
+  their description only, no regex guide (TypeScript validates every argument; an unsatisfiable
+  guide would fail the whole reply). `uniqueItems` is checked in TypeScript too.
+- Propose tools record `{ name, args }` (thread-safe; absent optional arguments are left out) and
+  return "Proposed; the app will ask the user to confirm." Read-only tools return `toolResults[name]`
+  (`exerciseInfo`: `exerciseInfo:<id>`, then `exerciseInfo`, then "Not in your plan this week.";
+  others without a result: "No data right now.") and are not in `toolCalls`.
+- Token budget check (Checkpoint J): the dev eval calls `measure` once and logs the counts; at
+  3 chars/token the planned split was instructions ~300, tools ~1,580, context ≤ 1,070 tokens.
 
 ### 2. Speech to text: SpeechAnalyzer + SpeechTranscriber (Speech framework, iOS 26.0)
 

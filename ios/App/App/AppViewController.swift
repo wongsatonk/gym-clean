@@ -8,5 +8,6 @@ class AppViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(GymHealthPlugin()) // M11: read-only Apple Health
         bridge?.registerPluginInstance(GymSpeechPlugin()) // M12 slice 2: on-device speech to text
+        bridge?.registerPluginInstance(GymBrainPlugin()) // M12 slice 2: Apple's on-device model
     }
 }
