@@ -120,6 +120,58 @@ describe('buildFocusBlock', () => {
     }
   }
 
+  it('never trims his own rows: a week already over the band keeps his plan’s sets', () => {
+    // Made-up plan: A = 11 chest sets, B–D no chest; 5 days from A → week 1 has A twice
+    // (22 chest sets, over the band's top of 20).
+    const row = (exerciseId: string, sets: number) => ({
+      exerciseId,
+      sets,
+      targetReps: [8, 12] as [number, number],
+      restSec: 90,
+      tracking: 'manual' as const,
+    });
+    const days = [
+      {
+        id: 'A',
+        name: 'A',
+        exercises: [
+          row('Dumbbell_Bench_Press', 4),
+          row('Incline_Dumbbell_Press', 4),
+          row('Dumbbell_Flyes', 3),
+        ],
+      },
+      { id: 'B', name: 'B', exercises: [row('One-Arm_Dumbbell_Row', 4)] },
+      { id: 'C', name: 'C', exercises: [row('Goblet_Squat', 4)] },
+      { id: 'D', name: 'D', exercises: [row('Hammer_Curls', 3)] },
+    ];
+    const s = seedPlan({ name: 'Made-up', weightUnit: 'kg', days } as Program);
+    const b = buildFocusBlock(s, CATALOG, params({ weekdays: [1, 2, 3, 4, 5] }));
+    const [week1] = weeksOf(b);
+    const aDays = trainingDays(week1 ?? []).filter((d) => d.id === 'A');
+    expect(aDays).toHaveLength(2);
+    for (const d of aDays) expect(d.exercises).toEqual(days[0]?.exercises);
+    expect(focusOfWeek(b, week1 ?? [])).toBe(22);
+  });
+
+  it('every block day keeps at least his own sets on his own rows (all groups, 3–6 days)', () => {
+    for (const group of GROUPS)
+      for (const n of [3, 4, 5, 6]) {
+        const b = buildFocusBlock(state(), CATALOG, params({ group, weekdays: weekdaysFor(n) }));
+        const bases = baseWeeks(b);
+        weeksOf(b).forEach((week, w) => {
+          if (w === b.weeks - 1) return; // the lighter week
+          trainingDays(week).forEach((d, i) => {
+            for (const p of bases[w]?.[i]?.exercises ?? []) {
+              const got = d.exercises.find((x) => x.exerciseId === p.exerciseId)?.sets ?? 0;
+              expect(got, `${group} ${n}d w${w + 1} ${p.exerciseId}`).toBeGreaterThanOrEqual(
+                p.sets,
+              );
+            }
+          });
+        });
+      }
+  });
+
   it('respects the per-exercise and per-session caps on added work', () => {
     for (const group of GROUPS) {
       const b = buildFocusBlock(state(), CATALOG, params({ group }));

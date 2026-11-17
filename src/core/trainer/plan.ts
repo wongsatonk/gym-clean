@@ -134,7 +134,18 @@ export function seedPlan(program: Program): TrainerState {
 
 type Projected = CalendarEntry & { pending: string | null; base?: ProgramDay | null };
 
-const blockLast = (b: FocusBlock) => addDate(b.startDate, b.weeks * 7 - 1);
+/**
+ * A block's last date: start + 7 × weeks − 1, or its last listed date when a newer block cut it
+ * short (focusBlock.ts `cutBlock`).
+ */
+export function blockLastDate(
+  b: Pick<FocusBlock, 'startDate' | 'weeks'> & { days?: FocusBlock['days'] },
+): string {
+  const full = addDate(b.startDate, b.weeks * 7 - 1);
+  const last = b.days?.at(-1)?.date;
+  return last !== undefined && last < full ? last : full;
+}
+const blockLast = blockLastDate;
 
 /** The newest focus block holding `date`, and its day there (null = a block rest date). */
 export function blockAt(

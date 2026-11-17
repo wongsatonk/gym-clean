@@ -994,6 +994,23 @@ describe('M12 week and progress answers (gym sessions only)', () => {
     expect(w).toMatchObject({ sessionsDone: 2, sessionsPlanned: 6 });
   });
 
+  it('no fixed rest weekdays: a day off is rest and the week reads "of 6" (weekly target)', () => {
+    const c = ctx();
+    const noRest = { ...c.state, schedule: { ...c.state.schedule, restWeekdays: [] } };
+    // Monday off: only Tuesday's partial session so far.
+    const keep = c.sessions.filter((s) => s.dayId !== 'push-a');
+    const ids = new Set(keep.map((s) => s.sessionId));
+    const off = {
+      ...c,
+      state: noRest,
+      sessions: keep,
+      sets: (c.sets ?? []).filter((x) => ids.has(x.sessionId)),
+    };
+    expect(weekScore(input(off), TODAY)).toMatchObject({ sessionsDone: 1, sessionsPlanned: 6 });
+    expect(handle(text("How's my week?"), off).reply).toContain('This week: 1 of 6 sessions done');
+    expect(handle(text('How am I doing?'), off).reply).toContain('This week: 1 of 6 sessions');
+  });
+
   it('How am I doing? → week + month scores, streak; numbers equal the scores', () => {
     const c = ctx();
     const w = weekScore(input(c), TODAY);

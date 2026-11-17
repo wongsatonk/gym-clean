@@ -133,9 +133,47 @@ describe('proposeFocusBlock', () => {
       startDate: '2026-10-01',
       weeks: 2,
     });
-    const s = { ...ctx.state, blocks: [past, old] };
+    const later = buildFocusBlock(ctx.state, CATALOG, {
+      ...PARAMS,
+      startDate: '2026-11-23',
+      group: 'legs',
+    });
+    const s = { ...ctx.state, blocks: [past, old, later] };
     const p = ok(proposeFocusBlock({ ...ctx, state: s }, PARAMS, CATALOG));
-    expect(p.next.blocks?.map((b) => b.id)).toEqual([past.id, blockOf(p).id]);
+    // The running block (started before the new one) is cut, not erased; one starting inside
+    // the new block is replaced; the others stay.
+    expect(p.next.blocks?.map((b) => b.id)).toEqual([past.id, old.id, blockOf(p).id]);
+  });
+
+  it('a running block is cut to end the day before the new start: its past stays', () => {
+    const ctx = ctxFor();
+    const old = buildFocusBlock(ctx.state, CATALOG, {
+      ...PARAMS,
+      startDate: '2026-11-09',
+      group: 'back',
+    });
+    const s = { ...ctx.state, blocks: [old] };
+    const p = ok(proposeFocusBlock({ ...ctx, state: s }, PARAMS, CATALOG));
+    const cut = p.next.blocks?.[0];
+    if (!cut) throw new Error('old block gone');
+    expect(cut.id).toBe(old.id);
+    expect(blockEnd(cut)).toBe('2026-11-15');
+    expect(cut.days).toEqual(old.days.filter((d) => d.date < TODAY));
+    expect([cut.group, cut.startDate, cut.targetSetsPerWeek]).toEqual([
+      old.group,
+      old.startDate,
+      old.targetSetsPerWeek,
+    ]);
+    // Its past dates still read as its block days; the new block runs from today.
+    expect(effectiveDay(p.next, ctx.sessions, '2026-11-12').blockId).toBe(old.id);
+    expect(effectiveDay(p.next, ctx.sessions, '2026-11-15').blockId).toBe(old.id);
+    expect(effectiveDay(p.next, ctx.sessions, TODAY).blockId).toBe(blockOf(p).id);
+    // A block starting the same day is replaced (it has no past).
+    const same = buildFocusBlock(ctx.state, CATALOG, { ...PARAMS, group: 'back' });
+    const q = ok(
+      proposeFocusBlock({ ...ctx, state: { ...ctx.state, blocks: [same] } }, PARAMS, CATALOG),
+    );
+    expect(q.next.blocks?.map((b) => b.id)).toEqual([blockOf(q).id]);
   });
 
   it('drops old day changes on block dates but keeps rest days he asked for', () => {

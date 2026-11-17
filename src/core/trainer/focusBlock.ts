@@ -13,7 +13,8 @@
  *   1. the group trains on ≥ 2 days (a focus exercise added to the lightest days without it);
  *   2. focus rows +1 set each, spread over the days (per-row and per-session caps);
  *   3. more focus exercises on the lightest days while short;
- *   4. trimmed back to the band's top when his own days already exceed it.
+ *   4. trimmed back toward the band's top, only on rows it added or bumped and never below his
+ *      own sets, so a week his own days already put over the band keeps his plan as is.
  *   Added exercises come from the catalog (group only, `canDo`, not already in the day), his
  *   plan's exercises first, ones not yet used that week first; sets / reps / rest are copied from
  *   that exercise's plan row, else the most similar focus row in his plan.
@@ -22,7 +23,7 @@
  */
 import { LIGHTER } from './actions/lighter';
 import { FOCUS_RULES } from './focusRules';
-import { addDate, localDate, pendingAt, weekdayOf, type PlanSession } from './plan';
+import { addDate, blockLastDate, localDate, pendingAt, weekdayOf, type PlanSession } from './plan';
 import {
   muscleOverlap,
   swapCandidates,
@@ -162,9 +163,24 @@ export function keepMyWeekdays(
   return ranked.slice(0, n).sort((a, b) => a - b);
 }
 
-/** The block's last date. */
-export function blockEnd(b: Pick<FocusBlock, 'startDate' | 'weeks'>): string {
-  return addDate(b.startDate, b.weeks * 7 - 1);
+/**
+ * The block's last date: start + 7 × weeks − 1, or earlier when a newer block cut it short (its
+ * `days` then end the day before the newer block; see `cutBlock`).
+ */
+export function blockEnd(
+  b: Pick<FocusBlock, 'startDate' | 'weeks'> & { days?: FocusBlock['days'] },
+): string {
+  return blockLastDate(b);
+}
+
+/**
+ * The block ending the day before `date` (id, params and past days kept, so its focus marks and
+ * scores stay); null when it has no date before `date`.
+ */
+export function cutBlock(b: FocusBlock, date: string): FocusBlock | null {
+  if (b.startDate >= date) return null;
+  if (blockEnd(b) < date) return b;
+  return { ...b, days: b.days.filter((d) => d.date < date) };
 }
 
 /** Blocks that don't overlap `from`…`to` (inclusive). */
@@ -207,6 +223,8 @@ type Work = {
   baseFocus: number;
   baseTotal: number;
   bumped: Set<number>;
+  /** Rows the builder added or bumped → the fewest sets a trim may leave them. */
+  floor: Map<number, number>;
 };
 
 export function buildFocusBlock(
@@ -319,6 +337,7 @@ export function buildFocusBlock(
         baseFocus: focusSetsOf(day.exercises, group, catalog),
         baseTotal: totalSets(day.exercises),
         bumped: new Set(),
+        floor: new Map(),
       });
       weekDays.push({ date, day });
     }
@@ -361,6 +380,7 @@ export function buildFocusBlock(
       row.sets = Math.max(R.minAddedSets, Math.min(max, need));
       x.day.exercises.push(row);
       x.bumped.add(x.day.exercises.length - 1);
+      x.floor.set(x.day.exercises.length - 1, R.minAddedSets);
       used.add(e.id);
       s += row.sets;
     };
@@ -387,6 +407,7 @@ export function buildFocusBlock(
         if (i < 0 || room(x) < 1) continue;
         const row = x.day.exercises[i];
         if (!row) continue;
+        x.floor.set(i, row.sets);
         row.sets += 1;
         x.bumped.add(i);
         s += 1;
@@ -399,17 +420,15 @@ export function buildFocusBlock(
       if (!x) break;
       add(x, target - s);
     }
-    // 4. Over the band's top: −1 set from the biggest focus row (≥ minAddedSets kept).
+    // 4. Over the band's top: −1 set from the biggest row the builder added or bumped, never
+    //    below his own sets (a bumped row) or minAddedSets (an added one). His own rows stay.
     while (s > hi) {
       let best: PlannedExercise | undefined;
       for (const x of work)
-        for (const p of x.day.exercises)
-          if (
-            isFocusExercise(p.exerciseId, group, catalog) &&
-            p.sets > R.minAddedSets &&
-            (!best || p.sets > best.sets)
-          )
-            best = p;
+        for (const [i, floor] of x.floor) {
+          const p = x.day.exercises[i];
+          if (p && p.sets > floor && (!best || p.sets > best.sets)) best = p;
+        }
       if (!best) break;
       best.sets -= 1;
       s -= 1;

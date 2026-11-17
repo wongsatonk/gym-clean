@@ -3,7 +3,9 @@
  * block, applied and undone through changes.ts like every other proposal.
  *
  * - Input: params (built here with focusBlock.ts) or an already built / revised block.
- * - A block overlapping the new one is replaced; the others stay. Overrides on the new block's
+ * - A block running into the new one is cut to end the day before the new start (its past days,
+ *   focus marks and scores stay); one starting inside the new block's dates is replaced; the
+ *   others stay. Overrides on the new block's
  *   dates are dropped except rest days he asked for (they were built for the old days); later
  *   overrides (Lighter, Not today, swaps) apply on block days as usual.
  * - Lines: one per block week, "Week 1: 7 days, chest 14 sets" → "5 days, chest 20 sets"
@@ -14,6 +16,7 @@ import {
   blocksOutside,
   blockEnd,
   buildFocusBlock,
+  cutBlock,
   focusSetsOf,
   validDaysPerWeek,
   validWeeks,
@@ -34,6 +37,16 @@ const GROUP_LABEL: Record<FocusGroup, string> = {
 };
 
 export const groupLabel = (g: FocusGroup): string => GROUP_LABEL[g];
+
+/** The existing blocks once the new one (`start`…`end`) is in: overlapping ones cut or dropped. */
+function keptBlocks(blocks: readonly FocusBlock[], start: string, end: string): FocusBlock[] {
+  const outside = new Set(blocksOutside(blocks, start, end));
+  return blocks.flatMap((b) => {
+    if (outside.has(b)) return [b];
+    const cut = cutBlock(b, start);
+    return cut ? [cut] : [];
+  });
+}
 
 const isBlock = (x: FocusBlockParams | FocusBlock): x is FocusBlock => 'days' in x;
 
@@ -91,7 +104,7 @@ export function proposeFocusBlock(
     overrides: structuredClone(ctx.state.overrides).filter(
       (o) => o.rest === true || o.date < block.startDate || o.date > end,
     ),
-    blocks: [...blocksOutside(structuredClone(ctx.state.blocks), block.startDate, end), block],
+    blocks: [...keptBlocks(structuredClone(ctx.state.blocks) ?? [], block.startDate, end), block],
   };
   return {
     ok: true,

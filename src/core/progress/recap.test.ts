@@ -68,6 +68,25 @@ describe('week recap', () => {
   });
 });
 
+describe('week recap without fixed rest weekdays', () => {
+  it('a 3-day rotation trained 3 times reads "3 of 3", the other days are rest', () => {
+    // Made-up: the fixture's plan with no rest weekdays; trained Mon, Wed, Sat last week.
+    const base = state();
+    const s = { ...base, schedule: { ...base.schedule, restWeekdays: [] } };
+    const keep = new Set(['s1', 's2', 's4']);
+    const i = input({
+      state: s,
+      sessions: SESSIONS.filter((x) => keep.has(x.sessionId)),
+      sets: SETS.filter((x) => keep.has(x.sessionId)),
+    });
+    const [r] = recapDue(i, {});
+    expect(r?.score).toMatchObject({ sessionsPlanned: 3, sessionsDone: 3, extra: 0 });
+    expect(r?.say).toBe('Last week: 3 of 3 sessions.');
+    expect(r?.text).toMatch(/^Last week: 3 of 3 sessions, 89% of planned sets\./);
+    expectClean(r?.text ?? '', r?.say ?? '');
+  });
+});
+
 describe('block recap', () => {
   const block: FocusBlock = {
     id: 'focus-done',

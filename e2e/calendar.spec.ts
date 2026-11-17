@@ -180,7 +180,7 @@ test('month rings by status → a day per exercise → exercise history (‹ Cal
     'aria-label',
     `Tue 10: partly done, 1 of ${total(PULL_A)} sets`,
   );
-  await expect(cell(page, '2026-11-11')).toHaveAttribute('data-status', 'missed');
+  await expect(cell(page, '2026-11-11')).toHaveAttribute('data-status', 'rest'); // the week's day off (no fixed rest days)
   await expect(cell(page, '2026-11-12')).toHaveAttribute('data-status', 'missed');
   await expect(cell(page, '2026-11-13')).toHaveAttribute('data-status', 'planned');
   await expect(cell(page, '2026-11-13')).toHaveAttribute('aria-current', 'date');
@@ -188,9 +188,9 @@ test('month rings by status → a day per exercise → exercise history (‹ Cal
   for (const s of ['done', 'partial', 'missed', 'planned'])
     await expect(page.locator(`[data-legend="${s}"]`)).toBeVisible();
 
-  // Week score: Mon 9 and Tue 10 trained of the 7 planned; the big number is the line's %.
+  // Week score: Mon 9 and Tue 10 trained of the weekly target of 6; the big number is the line's %.
   const line = page.locator('[data-score="week"] [data-score-line]');
-  await expect(line).toHaveText(/^2 of 7 sessions, \d+% of planned sets$/);
+  await expect(line).toHaveText(/^2 of 6 sessions, \d+% of planned sets$/);
   const pct = /(\d+)%/.exec((await line.textContent()) ?? '')?.[1];
   await expect(page.locator('[data-score="week"] .cal-score-num')).toHaveText(`${pct}%`);
   await expect(page.locator('[data-streak]')).toBeVisible();

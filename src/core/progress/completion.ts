@@ -14,9 +14,18 @@
  * - Dates before his first finished session plan nothing (rest), so a new install has no misses.
  * - Past dates are projected on their own (a missed day doesn't use up a rotation day); later
  *   dates walk forward from today, so they match the Calendar and Today.
- * - Scores: sessions planned = every training date in the period (future too); sessions done =
- *   done + partial days; sets planned / done = only days already due (done, partial, missed), so
- *   "% of planned sets" is about what was due.  An exercise's `setsDone` is what was logged; the day's
+ * - No fixed rest weekdays (his setting, M10-q1): the projection trains every date, so outside
+ *   focus blocks each Mon–Sun week has a target = rotation length capped at 6
+ *   (`WEEKLY_TARGET_MAX`) and 7 − target days off. Walking the week's non-block dates from his
+ *   first session on, a rest date he asked for uses a day off, and an untrained past date is
+ *   `rest` while days off are left (earliest first), else `missed`. Days off left over make the
+ *   week's latest untrained future dates not count (they still read `planned`), so the week plans
+ *   the target, not 7. A past date's status never changes later in the week. With fixed rest
+ *   weekdays (or an empty rotation) nothing of this applies; focus-block dates use the block's
+ *   own rest days. Main's Decision, 2026-11-16 (Checkpoint I may correct it).
+ * - Scores: sessions planned = every counted training date in the period (future too); sessions
+ *   done = done + partial days; sets planned / done = only days already due (done, partial,
+ *   missed), so "% of planned sets" is about what was due.  An exercise's `setsDone` is what was logged; the day's
  *   `setsDone` counts each exercise up to its plan.
  * - Focus (with a catalog, while a block overlaps the period): focus-group sets logged on the
  *   block's dates in the period vs the block's weekly target × overlapping dates / 7.
@@ -26,6 +35,7 @@ import { blockEnd, isFocusExercise } from '../trainer/focusBlock';
 import {
   addDate,
   baseDay,
+  blockAt,
   effectiveDay,
   effectiveDays,
   localDate,
@@ -50,12 +60,26 @@ export type CompletionInput = {
   catalog?: Pick<TrainerCatalog, 'exercises' | 'areaOf'>;
 };
 
+/** Most sessions a week plans when he has no fixed rest weekdays. */
+export const WEEKLY_TARGET_MAX = 6;
+
+type Week = {
+  /** Untrained past dates that are days off. */
+  off: Set<string>;
+  /** Untrained future dates beyond the week's target. */
+  uncounted: Set<string>;
+};
+
 type Prepared = {
   input: CompletionInput;
   finished: CompletionSession[];
   byDate: Map<string, CompletionSession[]>;
   setsBySession: Map<string, CompletionSet[]>;
   since: string | null;
+  /** Weekly target (no fixed rest weekdays), else null. */
+  target: number | null;
+  raw: Map<string, DayCompletion>;
+  weeks: Map<string, Week>;
 };
 
 const prepared = new WeakMap<CompletionInput, Prepared>();
@@ -75,12 +99,19 @@ function prepare(input: CompletionInput): Prepared {
   for (const x of input.sets)
     setsBySession.set(x.sessionId, [...(setsBySession.get(x.sessionId) ?? []), x]);
   const first = finished[0];
+  const { rotation, restWeekdays } = input.state.schedule;
   const p: Prepared = {
     input,
     finished,
     byDate,
     setsBySession,
     since: first ? localDate(first.startedAt) : null,
+    target:
+      restWeekdays.length === 0 && rotation.length > 0
+        ? Math.min(rotation.length, WEEKLY_TARGET_MAX)
+        : null,
+    raw: new Map(),
+    weeks: new Map(),
   };
   prepared.set(input, p);
   return p;
@@ -116,13 +147,62 @@ function rowsDone(rows: readonly PlannedExercise[], logged: readonly CompletionS
   });
 }
 
+const beforeHistory = (p: Prepared, date: string) =>
+  p.since === null ? date < p.input.today : date < p.since;
+
+/** The week's days off and uncounted future dates (no fixed rest weekdays only). */
+function weekOf(p: Prepared, monday: string, target: number): Week {
+  const hit = p.weeks.get(monday);
+  if (hit) return hit;
+  const week: Week = { off: new Set(), uncounted: new Set() };
+  let left = 7 - target;
+  const future: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const date = addDate(monday, i);
+    if (beforeHistory(p, date) || blockAt(p.input.state, date)) continue;
+    if (p.byDate.has(date)) continue;
+    const c = rawOf(p, date);
+    if (c.status === 'rest') left--;
+    else if (c.status === 'missed' && left > 0) {
+      week.off.add(date);
+      left--;
+    } else if (c.status === 'planned') future.push(date);
+  }
+  for (const d of future.slice(future.length - Math.max(0, Math.min(left, future.length))))
+    week.uncounted.add(d);
+  p.weeks.set(monday, week);
+  return week;
+}
+
 function completionOf(p: Prepared, date: string): DayCompletion {
+  const c = rawOf(p, date);
+  if (p.target === null || c.status !== 'missed') return c;
+  if (!weekOf(p, weekStart(date), p.target).off.has(date)) return c;
+  return { date, status: 'rest', dayId: null, setsPlanned: 0, setsDone: 0, exercises: [] };
+}
+
+/** Whether a date counts toward the period's sessions planned. */
+function counts(p: Prepared, c: DayCompletion): boolean {
+  if (c.status === 'rest' || c.status === 'extra') return false;
+  if (p.target === null || c.status !== 'planned') return true;
+  return !weekOf(p, weekStart(c.date), p.target).uncounted.has(c.date);
+}
+
+function rawOf(p: Prepared, date: string): DayCompletion {
+  const hit = p.raw.get(date);
+  if (hit) return hit;
+  const c = projectedOf(p, date);
+  p.raw.set(date, c);
+  return c;
+}
+
+function projectedOf(p: Prepared, date: string): DayCompletion {
   const { state, today } = p.input;
   const daySessions = p.byDate.get(date) ?? [];
   const logged = daySessions.flatMap((s) => p.setsBySession.get(s.sessionId) ?? []);
   const sum = (ns: number[]) => ns.reduce((a, b) => a + b, 0);
 
-  if (daySessions.length === 0 && (p.since === null ? date < today : date < p.since))
+  if (daySessions.length === 0 && beforeHistory(p, date))
     return { date, status: 'rest', dayId: null, setsPlanned: 0, setsDone: 0, exercises: [] };
 
   // What the date planned, without its own sessions. Past dates stand alone (a missed day
@@ -234,7 +314,7 @@ export function periodScore(input: CompletionInput, from: string, to: string): P
     const c = completionOf(p, d);
     if (c.status === 'extra') score.extra++;
     if (c.status === 'rest' || c.status === 'extra') continue;
-    score.sessionsPlanned++;
+    if (counts(p, c)) score.sessionsPlanned++;
     if (c.status === 'done' || c.status === 'partial') score.sessionsDone++;
     if (c.status !== 'planned') {
       score.setsPlanned += c.setsPlanned;
