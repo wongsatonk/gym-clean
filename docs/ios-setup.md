@@ -132,6 +132,32 @@ The iPhone app's version follows `package.json`: `node scripts/sync-ios-version.
 - The paid Apple Developer Program (US$99/year) removes the 7-day re-install and allows TestFlight.
   Whether that's worth it is your call at Checkpoint G; nothing in M9 needs it.
 
+## Her phone
+
+Two ways to put Gym Clean on a second iPhone. Either way, each phone keeps its own data: no
+accounts, no sync, nothing leaves that phone.
+
+**iPhone app** (installed from your Mac, steps 5–6 with her iPhone plugged in)
+
+- Uses your free Apple ID: her iPhone is one of your **3 devices**, and the app counts toward that
+  phone's **3 apps**.
+- Stops opening after **7 days**; re-install it from your Mac (step 6) with her phone plugged in.
+- Gets everything: Apple Health (read-only, step 7), the coach's mic, reminders, and Apple's
+  on-device coach (only on Apple Intelligence phones: iPhone 15 Pro and later, with Apple
+  Intelligence turned on).
+
+**PWA** (the GitHub Pages app)
+
+- Open it in Safari → Share → **Add to Home Screen**. No Mac, no Apple ID, no re-install.
+- No Apple Health, no mic, no reminders and no Apple on-device coach (quick replies still work).
+
+**Which to pick:** the PWA if re-installing every 7 days from your Mac is a chore; the iPhone app if
+the person wants Health, the mic, reminders or the Apple coach and you can plug the phone in weekly.
+
+**Same gym:** on your phone, My gym → **Share my gym** sends a small file with the equipment list
+only (no workouts, no personal data). On her phone, My gym → **Import a gym file** → check the
+preview → Apply. Or tick the kit by hand.
+
 ## Privacy, in the app
 
 - The web app is bundled in the app: no `server.url`, no remote config, no analytics, no crash
