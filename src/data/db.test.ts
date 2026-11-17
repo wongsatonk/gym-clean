@@ -784,7 +784,7 @@ describe('GymDb v7 (M11 health)', () => {
     const up = new GymDb(name);
     await up.open();
     try {
-      expect(up.verno).toBe(7);
+      expect(up.verno).toBeGreaterThanOrEqual(7);
       expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
       expect(await setsForSession(up, 's1')).toHaveLength(1);
       expect(await up.exerciseNotes.get('e1')).toMatchObject({ machineSetting: 'seat 4' });
@@ -818,5 +818,114 @@ describe('GymDb v7 (M11 health)', () => {
     await db.healthDays.put({ date: '2030-01-07', sleepMin: 400 });
     await db.healthDays.put({ date: '2030-01-07', sleepMin: 410 });
     expect(await db.healthDays.toArray()).toEqual([{ date: '2030-01-07', sleepMin: 410 }]);
+  });
+});
+
+describe('GymDb v8 (M12 chat)', () => {
+  it('upgrades a v7 database keeping every existing row and adds an empty chatMessages table', async () => {
+    const name = `upgrade-${n++}`;
+    // The schema exactly as shipped before M12 (versions 1–7).
+    const old = new Dexie(name);
+    old.version(1).stores({
+      sessions: 'sessionId, dayId, startedAt',
+      sets: '++id, sessionId, exerciseId, startedAt, [exerciseId+startedAt]',
+    });
+    old.version(2).stores({
+      exerciseNotes: 'exerciseId',
+      sessionNotes: '[sessionId+exerciseId], sessionId',
+      settings: 'key',
+    });
+    old.version(3).stores({
+      devlogSessions: 'id, startedAt',
+      devlogSets: 'key, sessionId, [sessionId+seq]',
+      devlogChunks: '++id, sessionId, setKey',
+    });
+    old.version(4).stores({
+      trainer: 'key',
+      planChanges: '++id, createdAt',
+    });
+    old.version(5).stores({
+      foods: 'id, name, barcode',
+      recipes: 'id',
+      foodEntries: 'id, date, time',
+      weighIns: 'date',
+      favorites: 'id, createdAt',
+      weeklyChecks: 'weekStart',
+    });
+    old.version(6).stores({
+      foodModels: 'id',
+      foodPhotos: 'id, createdAt, dishId',
+    });
+    old.version(7).stores({
+      healthDays: 'date',
+    });
+    await old.open();
+    await old.table('sessions').put({ sessionId: 's1', dayId: 'push-a', startedAt: 1000 });
+    await old.table('sets').add(log());
+    await old.table('exerciseNotes').put({ exerciseId: 'e1', machineSetting: 'seat 4', note: '' });
+    await old
+      .table('sessionNotes')
+      .put({ sessionId: 's1', exerciseId: 'e1', note: 'n', updatedAt: 1 });
+    await old.table('settings').bulkPut([
+      { key: 'unit', value: 'lb' },
+      { key: 'nutrition', value: { mode: 'quick' } },
+      { key: 'health', value: { enabled: { sleep: true } } },
+    ]);
+    await old.table('devlogSessions').put({ id: 'd1', startedAt: 1000 });
+    await old.table('devlogSets').put({ key: 'k1', sessionId: 'd1', seq: 0 });
+    await old.table('devlogChunks').add({ sessionId: 'd1', setKey: 'k1', bytes: 3 });
+    await old.table('trainer').put({ key: 'current', state: { made: 'up' } });
+    await old.table('planChanges').add({ createdAt: 5, kind: 'made-up' });
+    await old.table('foods').put({ id: 'f1', name: 'Made-up food', barcode: '123' });
+    await old.table('recipes').put({ id: 'r1' });
+    await old.table('foodEntries').put({ id: 'fe1', date: '2026-11-15', time: 7 });
+    await old.table('weighIns').put({ date: '2026-11-15', kg: 70, source: 'health' });
+    await old.table('favorites').put({ id: 'fav1', createdAt: 8 });
+    await old.table('weeklyChecks').put({ weekStart: '2026-11-09' });
+    await old.table('foodModels').put({ id: 'food', name: 'm', sizeBytes: 1 });
+    await old.table('foodPhotos').put({ id: 'p1', createdAt: 9, dishId: 'thai:x' });
+    await old.table('healthDays').put({ date: '2026-11-15', sleepMin: 400 });
+    old.close();
+
+    const up = new GymDb(name);
+    await up.open();
+    try {
+      expect(up.verno).toBe(8);
+      expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
+      expect(await setsForSession(up, 's1')).toHaveLength(1);
+      expect(await up.exerciseNotes.get('e1')).toMatchObject({ machineSetting: 'seat 4' });
+      expect(await up.sessionNotes.count()).toBe(1);
+      expect(await getUnit(up)).toBe('lb');
+      expect(await up.settings.count()).toBe(3);
+      expect(await up.devlogSessions.count()).toBe(1);
+      expect(await up.devlogSets.count()).toBe(1);
+      expect(await up.devlogChunks.count()).toBe(1);
+      expect(await up.trainer.get('current')).toMatchObject({ state: { made: 'up' } });
+      expect(await up.planChanges.count()).toBe(1);
+      expect(await up.foods.get('f1')).toMatchObject({ name: 'Made-up food' });
+      expect(await up.recipes.count()).toBe(1);
+      expect(await up.foodEntries.count()).toBe(1);
+      expect(await up.weighIns.get('2026-11-15')).toEqual({
+        date: '2026-11-15',
+        kg: 70,
+        source: 'health',
+      });
+      expect(await up.favorites.count()).toBe(1);
+      expect(await up.weeklyChecks.count()).toBe(1);
+      expect(await up.foodModels.count()).toBe(1);
+      expect(await up.foodPhotos.count()).toBe(1);
+      expect(await up.healthDays.get('2026-11-15')).toEqual({ date: '2026-11-15', sleepMin: 400 });
+      expect(await up.chatMessages.count()).toBe(0);
+    } finally {
+      up.close();
+      await up.delete();
+    }
+  });
+
+  it('keys chatMessages by an auto id with a createdAt index', async () => {
+    const s = db.table('chatMessages').schema;
+    expect(s.primKey.name).toBe('id');
+    expect(s.primKey.auto).toBe(true);
+    expect(s.indexes.map((i) => i.name)).toEqual(['createdAt']);
   });
 });

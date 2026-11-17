@@ -231,7 +231,7 @@ describe('exportAll', () => {
     expect(file.format).toBe('gym-clean-backup');
     expect(file.version).toBe(BACKUP_VERSION);
     expect(file.dexieVersion).toBe(a.verno);
-    expect(file.dexieVersion).toBe(7);
+    expect(file.dexieVersion).toBe(8);
     expect(file.appVersion).toBe('abc123');
     expect(file.createdAt).toBe(T0 + 5);
     expect(Object.keys(file.tables).sort()).toEqual(
@@ -259,6 +259,7 @@ describe('exportAll', () => {
   it('covers every Dexie table: each one is either backed up or deliberately left out', async () => {
     const all = a.tables.map((t) => t.name).sort();
     const left = [
+      'chatMessages',
       'devlogChunks',
       'devlogSessions',
       'devlogSets',
@@ -294,6 +295,29 @@ describe('exportAll', () => {
     expect(Object.keys(file.tables)).not.toContain('foodPhotos');
     expect(Object.keys(file.tables)).not.toContain('foodModels');
     expect(JSON.stringify(file)).not.toMatch(/ph1|made-up\.tflite/);
+  });
+
+  it('leaves the chat thread out of the file and a restore leaves this phone’s thread alone (M12)', async () => {
+    await seed(a);
+    await a.chatMessages.add({
+      createdAt: T0,
+      role: 'user',
+      text: 'made-up chat line',
+      source: 'chip',
+      phase: 'today',
+    });
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(Object.keys(file.tables)).not.toContain('chatMessages');
+    expect(JSON.stringify(file)).not.toMatch(/made-up chat line/);
+    await b.chatMessages.add({
+      createdAt: T0,
+      role: 'coach',
+      text: 'kept on b',
+      source: 'rules',
+      phase: 'today',
+    });
+    await importAll(b, viaFile(file));
+    expect((await b.chatMessages.toArray()).map((m) => m.text)).toEqual(['kept on b']);
   });
 
   it('a restore leaves the photos and model already on this phone alone (M7b)', async () => {

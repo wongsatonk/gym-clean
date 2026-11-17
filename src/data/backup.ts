@@ -58,8 +58,10 @@ export const DEVLOG_TABLES = ['devlogSessions', 'devlogSets', 'devlogChunks'] as
  *   (src/core/nutrition/photoExport.ts); the model is imported again in Settings.
  * - M11 (M11-q7): `healthDays`, the per-day Health summaries. They are read from Health again on
  *   the restored phone. Imported weigh-ins are in `weighIns` and are backed up.
+ * - M12: `chatMessages`, the coach chat thread (private text, kept 30 days). The coach UI state
+ *   in `settings` key 'coach' holds no message text and is backed up.
  */
-export const LOCAL_ONLY_TABLES = ['foodPhotos', 'foodModels', 'healthDays'] as const;
+export const LOCAL_ONLY_TABLES = ['foodPhotos', 'foodModels', 'healthDays', 'chatMessages'] as const;
 
 /** Every table a backup never carries (a restore leaves them alone). */
 export const NOT_BACKED_UP_TABLES = [...DEVLOG_TABLES, ...LOCAL_ONLY_TABLES] as const;

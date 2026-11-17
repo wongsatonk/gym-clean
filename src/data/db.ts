@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Accent,
+  ChatMessage,
   Favorite,
   Food,
   FoodEntry,
@@ -153,6 +154,9 @@ export class GymDb extends Dexie {
   // M11 Health (on device only; see src/data/health/store.ts). Not in backups, never in the dev log.
   /** One derived summary per local date (never raw samples). */
   healthDays!: Table<HealthDay, string>;
+  // M12 chat (on device only; see src/data/chat/store.ts). Not in backups, never in the dev log.
+  /** The coach thread, last 30 days (pruned by `pruneChat`). */
+  chatMessages!: Table<ChatMessage, number>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -197,6 +201,11 @@ export class GymDb extends Dexie {
     // settings live in the existing `settings` table under key 'health'.
     this.version(7).stores({
       healthDays: 'date',
+    });
+    // M12 chat. New table only, no upgrade function; existing data is untouched. Coach UI state
+    // (missed-day answers, last recaps) lives in the existing `settings` table under key 'coach'.
+    this.version(8).stores({
+      chatMessages: '++id, createdAt',
     });
   }
 }

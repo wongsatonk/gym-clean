@@ -166,6 +166,36 @@ describe('developer log recorder', () => {
     await r.finish();
   });
 
+  it('never stores chat text in the session settings snapshot or the export (M12)', async () => {
+    await db.chatMessages.add({
+      createdAt: clock,
+      role: 'user',
+      text: 'made-up private chat line',
+      source: 'rules',
+      phase: 'workout',
+    });
+    const r = await startDevLogSession(
+      db,
+      {
+        id: 'chat1',
+        dayId: 'push-a',
+        startedAt: clock,
+        settings: {
+          unit: 'kg',
+          chat: [{ text: 'made-up private chat line' }],
+          chatMessages: 1,
+          coach: { missedAnswered: ['2030-01-01'] },
+        },
+      },
+      { now },
+    );
+    await cameraSet(r, 3);
+    await r.finish();
+    expect((await db.devlogSessions.get('chat1'))?.settings).toEqual({ unit: 'kg' });
+    const text = JSON.stringify(await exportAll(db));
+    expect(text).not.toMatch(/made-up private chat line|chatMessages|missedAnswered/);
+  });
+
   it('exports a camera set in the SPEC §4 shape with frames decoded', async () => {
     const r = await start({ id: 'w1' });
     r.logEvent('START_SET', { exIndex: 0 }, clock);

@@ -88,13 +88,14 @@ export async function setDevLogEnabled(db: GymDb, on: boolean): Promise<void> {
 // ---------- recorder ----------
 
 /**
- * M11: Health data never enters the developer log. Settings keys that carry it (`health*`,
- * `readiness*`) are dropped from the session's settings snapshot.
+ * M11: Health data never enters the developer log. M12: nor does the coach chat. Settings keys
+ * that could carry either (`health*`, `readiness*`, `chat*`, `coach`) are dropped from the
+ * session's settings snapshot. (The chat itself lives in `chatMessages`, which no export reads.)
  */
-const HEALTH_KEY_RE = /^(health|readiness)/i;
+const PRIVATE_KEY_RE = /^(health|readiness|chat|coach$)/i;
 
-function withoutHealth(settings: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(settings).filter(([k]) => !HEALTH_KEY_RE.test(k)));
+function withoutPrivate(settings: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(settings).filter(([k]) => !PRIVATE_KEY_RE.test(k)));
 }
 
 export type DevLogSessionMeta = {
@@ -555,7 +556,7 @@ async function openSession(
       startedAt,
       appVersion: opts.appVersion ?? __APP_VERSION__,
       userAgent: opts.userAgent ?? (typeof navigator !== 'undefined' ? navigator.userAgent : ''),
-      settings: withoutHealth(meta.settings),
+      settings: withoutPrivate(meta.settings),
       dayId: meta.dayId,
       bytes: 0,
     });
