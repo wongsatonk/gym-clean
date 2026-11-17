@@ -2614,7 +2614,11 @@ export function mountApp(root: HTMLElement): void {
     if (!sp || micInstalling) return;
     micInstalling = true;
     renderCoachViews();
-    const ok = await sp.installModel().catch(() => false);
+    // iOS's download can stall; after 3 minutes show "didn't finish" (Try again) instead of hanging.
+    const ok = await Promise.race([
+      sp.installModel().catch(() => false),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 180_000)),
+    ]);
     micInstalling = false;
     if (ok) await refreshMic();
     else {
@@ -3036,7 +3040,8 @@ export function mountApp(root: HTMLElement): void {
   function welcomeView(): HTMLElement {
     const run = onboarding;
     if (!run) {
-      // Not in a flow (e.g. a stale render): Today.
+      // Not in a flow (e.g. a stale render): Today, and the route says so (tab state follows).
+      view = { screen: 'today', upNextDayId: null, stats: null };
       return todayScreen(null, null);
     }
     onboardingEl?.dispose();
@@ -3111,7 +3116,12 @@ export function mountApp(root: HTMLElement): void {
     selfCheckEl ??= selfCheckScreen(
       {
         checks: selfCheckRuns(
-          defaultSelfCheckDeps(db, { release: APP_RELEASE, build: APP_BUILD, native }),
+          defaultSelfCheckDeps(db, {
+            release: APP_RELEASE,
+            // The build hash is an owner surface: owner off → no build in the row or the copy.
+            build: isVisible('buildHash', ownerOn()) ? APP_BUILD : '',
+            native,
+          }),
         ),
         // The build hash is an owner surface (M13); the version line follows owner mode.
         version: versionLine(ownerOn()),
