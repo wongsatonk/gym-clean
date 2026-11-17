@@ -3,7 +3,9 @@
 // Run: node scripts/icons.mjs  ->  public/icons/*.png + favicon.svg (committed; rerun only if the
 // logo changes).
 // M13: `node scripts/icons.mjs --splash <dir>` also renders the iOS launch image (the mark centred on
-// the app background, 2732x2732) as splash-2732x2732{,-1,-2}.png into <dir>.
+// the app background) as splash@1x/@2x/@3x.png (455/910/1365 px) into <dir>. Keep them this small:
+// iOS refuses a launch image that decodes past ~25 MB (a 2732 px RGBA square is ~30 MB) and shows
+// black instead.
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,9 +42,13 @@ function svg(size, shape, glyph) {
 </svg>`;
 }
 
-/** iOS launch image: the mark small and centred (aspect-fit on a phone ≈ 70 pt wide). */
-const SPLASH = { size: 2732, glyph: 0.18 };
-const SPLASH_FILES = ['splash-2732x2732.png', 'splash-2732x2732-1.png', 'splash-2732x2732-2.png'];
+/** iOS launch image: 455 pt square, the mark small and centred (aspect-fit ≈ 70 pt wide on a phone). */
+const SPLASH = { pt: 455, glyph: 0.18 };
+const SPLASH_FILES = [
+  { file: 'splash@1x.png', scale: 1 },
+  { file: 'splash@2x.png', scale: 2 },
+  { file: 'splash@3x.png', scale: 3 },
+];
 
 const targets = [
   { file: 'favicon-32.png', size: 32, shape: 'any', glyph: 0.74 },
@@ -64,15 +70,16 @@ const browser = await chromium.launch();
 try {
   if (splashDir) {
     mkdirSync(splashDir, { recursive: true });
-    const page = await browser.newPage({ viewport: { width: SPLASH.size, height: SPLASH.size } });
-    await page.setContent(
-      `<html><body style="margin:0">${svg(SPLASH.size, 'full', SPLASH.glyph)}</body></html>`,
-    );
-    for (const f of SPLASH_FILES) {
-      await page.screenshot({ path: join(splashDir, f) });
-      console.log(`${splashDir}/${f} (${SPLASH.size}x${SPLASH.size})`);
+    for (const { file, scale } of SPLASH_FILES) {
+      const size = SPLASH.pt * scale;
+      const page = await browser.newPage({ viewport: { width: size, height: size } });
+      await page.setContent(
+        `<html><body style="margin:0">${svg(size, 'full', SPLASH.glyph)}</body></html>`,
+      );
+      await page.screenshot({ path: join(splashDir, file) });
+      await page.close();
+      console.log(`${splashDir}/${file} (${size}x${size})`);
     }
-    await page.close();
   }
   for (const t of targets) {
     const page = await browser.newPage({ viewport: { width: t.size, height: t.size } });
