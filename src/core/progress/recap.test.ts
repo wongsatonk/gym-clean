@@ -73,6 +73,40 @@ describe('week recap', () => {
   });
 });
 
+describe('week recap with the weekly check-in (M12 slice 2)', () => {
+  const BASE =
+    'Last week: 3 of 4 sessions, 67% of planned sets. Plus 1 extra session. New week, fresh start.';
+
+  it("appends that week's check-in line; the spoken line is unchanged", () => {
+    const [r] = recapDue(input(), {}, [
+      { weekStart: '2026-11-02', energy: 1, at: 1 },
+      { weekStart: '2026-11-09', energy: 4, sleep: 3, soreness: 2, at: 2 },
+    ]);
+    expect(r?.text).toBe(`${BASE} You rated energy 4, sleep 3, soreness 2.`);
+    expect(r?.say).toBe('Last week: 3 of 4 sessions.');
+    expectClean(r?.text ?? '', r?.say ?? '');
+  });
+
+  it('no line without a check-in for that week, or when it was skipped', () => {
+    expect(recapDue(input(), {})[0]?.text).toBe(BASE);
+    expect(recapDue(input(), {}, [])[0]?.text).toBe(BASE);
+    expect(recapDue(input(), {}, [{ weekStart: '2026-11-16', energy: 5, at: 1 }])[0]?.text).toBe(
+      BASE,
+    );
+    expect(
+      recapDue(input(), {}, [{ weekStart: '2026-11-09', skipped: true, at: 1 }])[0]?.text,
+    ).toBe(BASE);
+  });
+
+  it('a check-in alone never makes a recap for an empty week', () => {
+    expect(
+      recapDue(input({ sessions: [], sets: [] }), {}, [
+        { weekStart: '2026-11-09', energy: 4, at: 1 },
+      ]),
+    ).toEqual([]);
+  });
+});
+
 describe('week recap without fixed rest weekdays', () => {
   it('a 3-day rotation trained 3 times reads "3 of 3", the other days are rest', () => {
     // Made-up: the fixture's plan with no rest weekdays; trained Mon, Wed, Sat last week.

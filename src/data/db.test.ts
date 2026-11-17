@@ -1104,7 +1104,7 @@ describe('GymDb v10 (M12 slice 1b trainer kit)', () => {
     const up = new GymDb(name);
     await up.open();
     try {
-      expect(up.verno).toBe(10);
+      expect(up.verno).toBeGreaterThanOrEqual(10);
       expect(await up.sessions.get('s1')).toMatchObject({ dayId: 'push-a' });
       expect(await setsForSession(up, 's1')).toHaveLength(1);
       expect(await up.exerciseNotes.get('e1')).toMatchObject({ machineSetting: 'seat 4' });
@@ -1202,5 +1202,111 @@ describe('GymDb v10 (M12 slice 1b trainer kit)', () => {
       ['easy', undefined],
       [undefined, true],
     ]);
+  });
+});
+
+describe('GymDb v11 (M12 slice 2 weekly check-in)', () => {
+  it('upgrades a v10 database keeping every existing row and adds an empty checkIns table', async () => {
+    const name = `upgrade-${n++}`;
+    // The schema exactly as shipped before slice 2 (versions 1–10).
+    const old = new Dexie(name);
+    old.version(1).stores({
+      sessions: 'sessionId, dayId, startedAt',
+      sets: '++id, sessionId, exerciseId, startedAt, [exerciseId+startedAt]',
+    });
+    old.version(2).stores({
+      exerciseNotes: 'exerciseId',
+      sessionNotes: '[sessionId+exerciseId], sessionId',
+      settings: 'key',
+    });
+    old.version(3).stores({
+      devlogSessions: 'id, startedAt',
+      devlogSets: 'key, sessionId, [sessionId+seq]',
+      devlogChunks: '++id, sessionId, setKey',
+    });
+    old.version(4).stores({ trainer: 'key', planChanges: '++id, createdAt' });
+    old.version(5).stores({
+      foods: 'id, name, barcode',
+      recipes: 'id',
+      foodEntries: 'id, date, time',
+      weighIns: 'date',
+      favorites: 'id, createdAt',
+      weeklyChecks: 'weekStart',
+    });
+    old.version(6).stores({ foodModels: 'id', foodPhotos: 'id, createdAt, dishId' });
+    old.version(7).stores({ healthDays: 'date' });
+    old.version(8).stores({ chatMessages: '++id, createdAt' });
+    old.version(9).stores({ todoAnswers: 'id, topicId, at, sentAt' });
+    old.version(10).stores({
+      measurements: '[date+site], date',
+      goals: 'id, createdAt',
+      dayFeels: 'date',
+      progressPhotos: 'id, date, createdAt',
+    });
+    await old.open();
+    // One made-up row in every v10 table.
+    const rows: [string, unknown][] = [
+      ['sessions', { sessionId: 's1', dayId: 'push-a', startedAt: 1000 }],
+      ['exerciseNotes', { exerciseId: 'e1', machineSetting: 'seat 4', note: '' }],
+      ['sessionNotes', { sessionId: 's1', exerciseId: 'e1', note: 'n', updatedAt: 1 }],
+      ['settings', { key: 'reminders', value: { session: { on: true, time: '07:00' } } }],
+      ['devlogSessions', { id: 'd1', startedAt: 1000 }],
+      ['devlogSets', { key: 'k1', sessionId: 'd1', seq: 0 }],
+      ['devlogChunks', { sessionId: 'd1', setKey: 'k1', bytes: 3 }],
+      ['trainer', { key: 'current', state: { made: 'up' } }],
+      ['planChanges', { createdAt: 5, kind: 'made-up' }],
+      ['foods', { id: 'f1', name: 'Made-up food', barcode: '123' }],
+      ['recipes', { id: 'r1' }],
+      ['foodEntries', { id: 'fe1', date: '2026-11-15', time: 7 }],
+      ['weighIns', { date: '2026-11-15', kg: 70, source: 'health' }],
+      ['favorites', { id: 'fav1', createdAt: 8 }],
+      ['weeklyChecks', { weekStart: '2026-11-09' }],
+      ['foodModels', { id: 'food', name: 'm', sizeBytes: 1 }],
+      ['foodPhotos', { id: 'p1', createdAt: 9, dishId: 'thai:x' }],
+      ['healthDays', { date: '2026-11-15', sleepMin: 400 }],
+      [
+        'chatMessages',
+        { createdAt: 10, role: 'user', text: 'made-up', source: 'chip', phase: 'today' },
+      ],
+      [
+        'todoAnswers',
+        { id: 'ask:t:s:1', topicId: 't', stepId: 's', kind: 'ask', at: 12, release: '1.13.0' },
+      ],
+      ['measurements', { date: '2026-11-17', site: 'waist', cm: 80 }],
+      ['goals', { id: 'g1', text: 'Made-up goal', createdAt: 5 }],
+      ['dayFeels', { date: '2026-11-17', energy: 2 }],
+      ['progressPhotos', { id: 'pp1', date: '2026-11-17', createdAt: 6, pose: 'front' }],
+    ];
+    for (const [table, value] of rows) await old.table(table).add(value);
+    await old.table('sets').add(log());
+    const before: Record<string, unknown[]> = {};
+    for (const t of old.tables) before[t.name] = await t.toArray();
+    old.close();
+
+    const up = new GymDb(name);
+    await up.open();
+    try {
+      expect(up.verno).toBeGreaterThanOrEqual(11);
+      for (const [table, want] of Object.entries(before))
+        expect(await up.table(table).toArray(), table).toEqual(want);
+      expect(Object.values(before).every((r) => r.length === 1)).toBe(true);
+      expect(await up.checkIns.count()).toBe(0);
+    } finally {
+      up.close();
+      await up.delete();
+    }
+  });
+
+  it('keys checkIns by weekStart, no other index', () => {
+    const c = db.table('checkIns').schema;
+    expect(c.primKey.name).toBe('weekStart');
+    expect(c.primKey.auto).toBe(false);
+    expect(c.indexes).toEqual([]);
+  });
+
+  it('round-trips a check-in row', async () => {
+    const row = { weekStart: '2026-11-16', energy: 4 as const, sleep: 3 as const, at: 7 };
+    await db.checkIns.put(row);
+    expect(await db.checkIns.get('2026-11-16')).toEqual(row);
   });
 });

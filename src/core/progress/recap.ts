@@ -11,6 +11,9 @@
  *   trainer/nextBlock.ts `NextBlockArgs`; `proposeNextBlock` turns them into a Proposal). No
  *   extra lighter week: the block's own last week was lighter. "Keep going" (chip `focusBlock`
  *   with the same params) stays.
+ * - M12 slice 2: the week recap's text gains that week's check-in line ("You rated energy 4, …",
+ *   checkIn.ts `checkInLine`) when one was answered; skipped or missing adds nothing, the spoken
+ *   line is unchanged, and a check-in alone never makes a recap.
  * - Numbers come from completion.ts `periodScore`; every text passes `checkCopy`, `say` ≤ 12 words.
  */
 import { addDate } from '../trainer/plan';
@@ -18,7 +21,8 @@ import { blockEnd } from '../trainer/focusBlock';
 import { groupLabel } from '../trainer/actions/focusBlock';
 import { nextBlockOffers } from '../trainer/nextBlock';
 import { periodScore, weekStart, type CompletionInput } from './completion';
-import type { PeriodScore } from '../types';
+import { checkInLine } from '../checkIn/checkIn';
+import type { CheckIn, PeriodScore } from '../types';
 
 export type RecapMemory = {
   /** Monday (YYYY-MM-DD) of the last week recapped. */
@@ -91,14 +95,28 @@ function blockRecapText(label: string, s: PeriodScore): { text: string; say: str
 }
 
 /** The recaps to post now (week first), each once. */
-export function recapDue(input: CompletionInput, last: RecapMemory): Recap[] {
+export function recapDue(
+  input: CompletionInput,
+  last: RecapMemory,
+  checkIns: readonly CheckIn[] = [],
+): Recap[] {
   const out: Recap[] = [];
   const from = addDate(weekStart(input.today), -7);
   if ((last.week ?? '') < from) {
     const to = addDate(from, 6);
     const score = periodScore(input, from, to);
     if (score.sessionsPlanned + score.extra > 0) {
-      out.push({ period: 'week', from, to, score, ...weekRecapText(score), chips: [] });
+      const { text, say } = weekRecapText(score);
+      const line = checkInLine(checkIns.find((c) => c.weekStart === from));
+      out.push({
+        period: 'week',
+        from,
+        to,
+        score,
+        text: line === null ? text : `${text} ${line}`,
+        say,
+        chips: [],
+      });
     }
   }
   const oldest = addDate(input.today, -BLOCK_RECAP_DAYS);

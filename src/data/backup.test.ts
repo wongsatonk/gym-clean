@@ -213,6 +213,10 @@ async function seed(db: GymDb): Promise<void> {
     { date: '2026-01-05', site: 'chest', cm: 95 },
     { date: '2026-02-05', site: 'waist', cm: 80 },
   ]);
+  await db.checkIns.bulkPut([
+    { weekStart: '2026-01-05', energy: 4, sleep: 3, soreness: 2, at: T0 },
+    { weekStart: '2026-01-12', skipped: true, at: T0 + 1 },
+  ]);
   await db.dayFeels.bulkPut([
     { date: '2026-01-05', energy: 2, sore: ['legs'] },
     { date: '2026-01-06', energy: 4 },
@@ -296,7 +300,7 @@ describe('exportAll', () => {
     expect(file.format).toBe('gym-clean-backup');
     expect(file.version).toBe(BACKUP_VERSION);
     expect(file.dexieVersion).toBe(a.verno);
-    expect(file.dexieVersion).toBe(10);
+    expect(file.dexieVersion).toBe(11);
     expect(file.appVersion).toBe('abc123');
     expect(file.createdAt).toBe(T0 + 5);
     expect(Object.keys(file.tables).sort()).toEqual(
@@ -318,6 +322,7 @@ describe('exportAll', () => {
         'measurements',
         'goals',
         'dayFeels',
+        'checkIns',
       ].sort(),
     );
     expect(file.tables.sets).toHaveLength(2);
@@ -1031,6 +1036,65 @@ describe('M12 slice 1b trainer-kit data in backups', () => {
       const g = await exportAll(a, { appVersion: 't', now: T0 });
       g.tables.sets = [{ ...SET_ROW, id: 1, ...over }];
       expect(() => validateBackup(b, viaFile(g))).toThrow(BackupError);
+    }
+  });
+});
+
+describe('M12 slice 2 weekly check-ins in backups', () => {
+  it('carries the check-ins and restores them, replacing this phone’s', async () => {
+    await seed(a);
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    expect(file.tables.checkIns).toEqual([
+      { weekStart: '2026-01-05', energy: 4, sleep: 3, soreness: 2, at: T0 },
+      { weekStart: '2026-01-12', skipped: true, at: T0 + 1 },
+    ]);
+    await b.checkIns.put({ weekStart: '2025-12-01', energy: 1, at: T0 });
+    const res = await importAll(b, viaFile(file));
+    expect(res.counts).toMatchObject({ checkIns: 2 });
+    expect(await b.checkIns.toArray()).toEqual(await a.checkIns.toArray());
+    expect(await b.checkIns.get('2025-12-01')).toBeUndefined();
+    await importAll(b, res.undo);
+    expect(await b.checkIns.get('2025-12-01')).toBeDefined();
+  });
+
+  it('accepts a v10 file (before slice 2): check-ins end up empty', async () => {
+    await seed(a);
+    const file = await exportAll(a, { appVersion: 'old', now: T0 });
+    const tables = { ...file.tables };
+    delete tables.checkIns;
+    await seed(b);
+    await importAll(b, JSON.stringify({ ...file, dexieVersion: 10, tables }));
+    expect(await b.sets.count()).toBe(2);
+    expect(await b.dayFeels.count()).toBe(3);
+    expect(await b.checkIns.count()).toBe(0);
+  });
+
+  it('refuses damaged check-in rows', async () => {
+    await seed(a);
+    const bad: unknown[][] = [
+      [{ weekStart: '2026-01-05', energy: 'high', at: T0 }],
+      [{ weekStart: '2026-01-05', energy: 6, at: T0 }],
+      [{ weekStart: '2026-01-05', sleep: 2.5, at: T0 }],
+      [{ weekStart: '2026-01-05', soreness: 0, at: T0 }],
+      [{ weekStart: '2026-01-05', skipped: 'yes', at: T0 }],
+      [{ weekStart: '2026-01-05', energy: 3 }],
+      [{ energy: 3, at: T0 }],
+      [
+        { weekStart: '2026-01-05', energy: 3, at: T0 },
+        { weekStart: '2026-01-05', energy: 4, at: T0 },
+      ],
+    ];
+    for (const rows of bad) {
+      const f = await exportAll(a, { appVersion: 't', now: T0 });
+      let err: unknown = null;
+      try {
+        validateBackup(b, JSON.stringify({ ...f, tables: { ...f.tables, checkIns: rows } }));
+      } catch (e) {
+        err = e;
+      }
+      expect(err, JSON.stringify(rows)).toBeInstanceOf(BackupError);
+      expect((err as BackupError).code).toBe('corrupt');
+      expect((err as BackupError).message).toContain('checkIns');
     }
   });
 });

@@ -26,6 +26,9 @@
  * Trainer kit (M12 slice 1b): goals, tape measurements and day feels are backed up, and so are the
  * settings rows 'trainerKit' and 'intake'. Progress photos never are (LOCAL_ONLY_TABLES): a file
  * can't carry them and a restore leaves this phone's alone.
+ *
+ * Weekly check-in (M12 slice 2): `checkIns` is backed up (ratings 1–5 checked); the settings row
+ * 'reminders' rides along with `settings`. A v10 file has no `checkIns`: the restore empties it.
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';
@@ -61,6 +64,8 @@ export const BACKUP_TABLES = [
   'measurements',
   'goals',
   'dayFeels',
+  // M12 slice 2: weekly check-in answers (his own 1–5 ratings; never in a brain context).
+  'checkIns',
 ] as const;
 
 export type BackupTable = (typeof BACKUP_TABLES)[number];
@@ -309,6 +314,7 @@ const any: Check = () => true;
 const numOrNull: Check = (v) => v === null || num(v);
 const trainerState: Check = (v) =>
   isObj(v) && num(v.version) && isObj(v.plan) && isObj(v.schedule) && Array.isArray(v.overrides);
+const rating: Check = (v) => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 5;
 const goalTarget: Check = (v) => isObj(v) && str(v.kind) && num(v.value);
 
 const MACROS = { kcal: num, proteinG: num, 'carbsG?': num, 'fatG?': num };
@@ -402,6 +408,14 @@ const ROW_SHAPES: Record<BackupTable, Record<string, Check>> = {
   measurements: { date: str, site: str, cm: num },
   goals: { id: str, text: str, target: goalTarget, due: str, createdAt: num, 'doneAt?': num },
   dayFeels: { date: str, 'energy?': num, 'sore?': arr },
+  checkIns: {
+    weekStart: str,
+    'energy?': rating,
+    'sleep?': rating,
+    'soreness?': rating,
+    'skipped?': bool,
+    at: num,
+  },
   favorites: { id: str, ref: obj, amount: obj, createdAt: num },
   weeklyChecks: {
     weekStart: str,

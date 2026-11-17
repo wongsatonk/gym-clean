@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import type {
   Accent,
   ChatMessage,
+  CheckIn,
   DayFeel,
   Favorite,
   Food,
@@ -177,6 +178,10 @@ export class GymDb extends Dexie {
   // M12 slice 1b progress photos (see src/data/progressPhotos/store.ts). This phone only: not in
   // backups, never in the dev log, never sent or shown to a coach.
   progressPhotos!: Table<ProgressPhoto, string>;
+  // M12 slice 2 weekly check-in (see src/data/checkIn/store.ts), one row per Mon–Sun week. Backed
+  // up; never in the dev log or any brain context. Reminder settings live in `settings`
+  // key 'reminders'.
+  checkIns!: Table<CheckIn, string>;
 
   constructor(name = 'gym-clean') {
     super(name);
@@ -238,6 +243,10 @@ export class GymDb extends Dexie {
       goals: 'id, createdAt',
       dayFeels: 'date',
       progressPhotos: 'id, date, createdAt',
+    });
+    // M12 slice 2 weekly check-in. New table only, no upgrade function; existing data is untouched.
+    this.version(11).stores({
+      checkIns: 'weekStart',
     });
   }
 }
