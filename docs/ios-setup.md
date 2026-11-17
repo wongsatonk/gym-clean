@@ -264,6 +264,15 @@ phone plugged into the Mac and the app started from Xcode ▶ so the Xcode conso
     the time, filter the console for `GymBrain`: any `respond failed: concurrentRequests` or
     `rateLimited` line = tell me (copy the line).
 
+**Retest on 1.15.0** (Settings → About shows 1.15.0)
+21. Ask "Adjust plan to be push for today" (type or mic). Expect a card with **Apply** that puts
+    your Push day on today. Nothing changes until you tap Apply; Undo puts it back. A plain text
+    reply that promises a change, or a quick-replies fallback, = fail (tell me which).
+22. Run the Coach eval again (as in 11–12) and copy the token line. Add up instructions + tools +
+    prompt and compare with **4,096** (the last number on the line). The app now keeps 350 tokens
+    for the reply (was 600), so the sum should be at most about 3,750. Tell me the sum; anything
+    above 3,746 = tell me even if the eval passed.
+
 ## On-device checklist (task 3)
 
 Report each line as pass / fail plus anything odd:
@@ -473,7 +482,7 @@ or the mic button goes down, not on every Coach-tab open.
 | `measure(GymBrainRequest)` | iOS 26.4+: `{ instructions, tools, prompt, contextSize }` tokens; `{}` before 26.4 or when unavailable. |
 
 - One `LanguageModelSession(model: SystemLanguageModel.default, tools: 14 tools, instructions:)` per
-  `respond`; the prompt is `context + "\n\nUser: " + the last user message`. Reply capped at 600 tokens.
+  `respond`; the prompt is `context + "\n\nUser: " + the last user message`. Reply capped at 350 tokens (600 before 1.15.0).
 - Generated tools: string enums use `.anyOf`, integers `.range` / `.minimum` / `.maximum`, arrays
   `.minimumCount` / `.maximumCount` / `.element(...)`. Patterned strings (dates, exercise ids) get
   their description only, no regex guide (TypeScript validates every argument; an unsatisfiable

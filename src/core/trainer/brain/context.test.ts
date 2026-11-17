@@ -149,8 +149,13 @@ function input(over: Partial<BrainInput> = {}): BrainInput {
   };
 }
 
+/** The reply cap: GymBrainCore `SystemBrainModel.maximumResponseTokens` (350 since 1.15.0; replies
+ * are ≤ 4 short sentences, `say` ≤ 12 words). Lowered from 600 to leave headroom for Apple's real
+ * tokenizer. Must equal BUDGET.replyTokens. */
+const REPLY_TOKENS = BUDGET.replyTokens;
+
 describe('budget', () => {
-  it('fits instructions + all tool schemas + context + a message + tool outputs + a 600-token reply into 4,096 tokens', () => {
+  it('fits instructions + all tool schemas + context + a message + tool outputs + a 350-token reply into 4,096 tokens', () => {
     const toolChars = JSON.stringify(
       toolContract().tools.map(({ name, description, parameters }) => ({
         name,
@@ -166,9 +171,9 @@ describe('budget', () => {
     );
     const chars =
       instr + toolChars + CONTEXT_BUDGET_CHARS + BUDGET.messageChars + BUDGET.toolOutputChars;
-    const tokens = chars / BUDGET.charsPerToken + BUDGET.replyTokens;
+    const tokens = chars / BUDGET.charsPerToken + REPLY_TOKENS;
     expect(tokens).toBeLessThanOrEqual(BUDGET.windowTokens);
-    expect(BUDGET.replyTokens).toBeGreaterThanOrEqual(600);
+    expect(REPLY_TOKENS).toBe(350);
     expect(CONTEXT_BUDGET_CHARS).toBeLessThanOrEqual(6000);
   });
 

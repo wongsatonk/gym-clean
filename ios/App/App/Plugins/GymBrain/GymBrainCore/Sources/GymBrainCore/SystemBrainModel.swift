@@ -4,8 +4,9 @@ import FoundationModels
 /// The real model: always `SystemLanguageModel.default`, Apple's on-device model. Never
 /// the iOS 27 cloud model: nothing leaves the phone.
 public struct SystemBrainModel: BrainModel {
-    /// Data: a cap on the reply (instructions ask for ≤ 4 short sentences; the budget assumes ≤ 600).
-    public static let maximumResponseTokens = 600
+    /// Data: a cap on the reply (instructions ask for ≤ 4 short sentences, `say` ≤ 12 words; the
+    /// budget test in context.test.ts reserves 350). Lowered from 600 in 1.15.0 for headroom.
+    public static let maximumResponseTokens = 350
 
     public init() {}
 

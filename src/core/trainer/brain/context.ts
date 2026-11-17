@@ -37,7 +37,7 @@ import { goalProgress, goalProgressText } from '../../trainerKit/goals';
 export const BUDGET = {
   windowTokens: 4096,
   charsPerToken: 3,
-  replyTokens: 600,
+  replyTokens: 350, // = GymBrainCore SystemBrainModel.maximumResponseTokens (600 before 1.15.0)
   /** The new user message (the app caps what it sends). */
   messageChars: 400,
   /** Read-tool outputs in one session: two results of ≤ 600 chars (readTools.ts). */

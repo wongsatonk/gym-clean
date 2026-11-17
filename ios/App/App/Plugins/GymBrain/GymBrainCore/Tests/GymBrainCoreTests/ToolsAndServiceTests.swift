@@ -8,10 +8,11 @@ private func args(_ call: RecordedToolCall) -> [String: Any] {
 }
 
 final class GeneratedToolsTests: XCTestCase {
-    func testFourteenToolsFourReadOnly() {
+    func testFifteenToolsFourReadOnly() {
         let tools = TrainerTools.make(recorder: ToolCallRecorder(), results: ReadToolResults())
         XCTAssertEqual(tools.map(\.name), TrainerTools.names)
-        XCTAssertEqual(tools.count, 14)
+        XCTAssertEqual(tools.count, 15)
+        XCTAssertTrue(TrainerTools.names.contains("doDayToday"))
         XCTAssertEqual(TrainerTools.readOnlyNames, ["weekSummary", "progressSummary", "exerciseInfo", "foodIdeas"])
         for tool in tools { XCTAssertFalse(tool.description.isEmpty, tool.name) }
     }
@@ -43,8 +44,11 @@ final class GeneratedToolsTests: XCTestCase {
         _ = try await callTool(tools, "lighterToday")
         // integer
         _ = try await callTool(tools, "shortOnTime", #"{"minutes":30}"#)
+        // free string (doDayToday, 1.15.0)
+        _ = try await callTool(tools, "doDayToday", #"{"day":"Push"}"#)
         let calls = recorder.recorded
-        XCTAssertEqual(calls.map(\.name), ["proposeFocusBlock", "setEasyOn", "swapExercise", "lighterToday", "shortOnTime"])
+        XCTAssertEqual(
+            calls.map(\.name), ["proposeFocusBlock", "setEasyOn", "swapExercise", "lighterToday", "shortOnTime", "doDayToday"])
         XCTAssertEqual(args(calls[0])["weeks"] as? Int, 4)
         XCTAssertEqual(args(calls[0])["weekdays"] as? [Int], [1, 3, 5])
         XCTAssertEqual(args(calls[1])["remove"] as? [String], ["arms", "core"])
@@ -52,6 +56,7 @@ final class GeneratedToolsTests: XCTestCase {
         XCTAssertNil(args(calls[2])["toId"])
         XCTAssertTrue(args(calls[3]).isEmpty)
         XCTAssertEqual(args(calls[4])["minutes"] as? Int, 30)
+        XCTAssertEqual(args(calls[5])["day"] as? String, "Push")
     }
 
     func testParallelCallsAreAllRecorded() async throws {
@@ -118,7 +123,7 @@ final class GymBrainServiceTests: XCTestCase {
         let sessions = model.sessions.get()
         XCTAssertEqual(sessions.count, 2)
         XCTAssertEqual(sessions[0].instructions, "Coach rules.")
-        XCTAssertEqual(sessions[0].tools.count, 14)
+        XCTAssertEqual(sessions[0].tools.count, 15)
         XCTAssertEqual(model.prompts.get(), ["Ctx line.\n\nUser: Why legs?", "User: Again"])
     }
 
