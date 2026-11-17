@@ -25,6 +25,7 @@ import type {
 import type { RuleStatus } from '../core/exercises/types';
 import type { Rudeness } from '../core/personas';
 import type { Unit } from '../core/units';
+import { workingSets } from '../core/warmup';
 
 export type SessionRow = {
   sessionId: string;
@@ -258,38 +259,6 @@ export async function saveSet(db: GymDb, log: SetLog): Promise<number> {
   return db.sets.add({ ...log });
 }
 
-/** Identifies one logged set (a session logs each exercise's set index once). */
-export type SetRef = Pick<SetLog, 'sessionId' | 'exerciseId' | 'setIndex'>;
-
-/**
- * M4c last-set correction: writes the corrected reps/partials to the logged row (partials 0 →
- * field removed, like a fresh log). M5: `focusScore` (the reducer's recomputed value, see
- * CORRECT_LAST_SET) is written when given, clamped to 0–100; `null` removes it; omitted or
- * non-finite leaves the stored score alone. `cues` are never changed here.
- * Returns the number of rows changed (0 if none matched).
- */
-export async function updateSet(
-  db: GymDb,
-  ref: SetRef,
-  counts: { reps: number; partials: number; focusScore?: number | null },
-): Promise<number> {
-  const reps = Math.max(0, Math.round(counts.reps));
-  const partials = Math.max(0, Math.round(counts.partials));
-  const score = counts.focusScore;
-  return db.sets
-    .where('sessionId')
-    .equals(ref.sessionId)
-    .filter((r) => r.exerciseId === ref.exerciseId && r.setIndex === ref.setIndex)
-    .modify((r) => {
-      r.reps = reps;
-      if (partials > 0) r.partials = partials;
-      else delete r.partials;
-      if (score === null) delete r.focusScore;
-      else if (score !== undefined && Number.isFinite(score))
-        r.focusScore = Math.min(100, Math.max(0, Math.round(score)));
-    });
-}
-
 export async function setsForSession(db: GymDb, sessionId: string): Promise<SetRow[]> {
   return db.sets.where('sessionId').equals(sessionId).sortBy('startedAt');
 }
@@ -406,7 +375,11 @@ export async function setCoachVoice(db: GymDb, v: CoachVoice): Promise<void> {
   await db.settings.put({ key: 'coachVoice', value });
 }
 
-/** For each exercise, the sets from the most recent session other than `excludeSessionId`. */
+/**
+ * For each exercise, the working sets from the most recent session other than `excludeSessionId`
+ * that has any. Warm-ups (`warmup: true`, M12 1b) are ignored both when choosing the session and
+ * in the result, so a warm-up-only session never hides the real last time.
+ */
 export async function lastSessionSets(
   db: GymDb,
   exerciseIds: string[],
@@ -419,9 +392,10 @@ export async function lastSessionSets(
       .between([id, Dexie.minKey], [id, Dexie.maxKey])
       .reverse()
       .toArray();
-    const latest = rows.find((r) => r.sessionId !== excludeSessionId);
+    const working = workingSets(rows);
+    const latest = working.find((r) => r.sessionId !== excludeSessionId);
     if (!latest) continue;
-    out[id] = rows.filter((r) => r.sessionId === latest.sessionId).reverse();
+    out[id] = working.filter((r) => r.sessionId === latest.sessionId).reverse();
   }
   return out;
 }

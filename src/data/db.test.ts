@@ -30,7 +30,6 @@ import {
   setsForSession,
   setsForSessions,
   startSessionRow,
-  updateSet,
 } from './db';
 
 let db: GymDb;
@@ -132,6 +131,61 @@ describe('GymDb v2 (M1b)', () => {
     expect(last['Never']).toBeUndefined();
     expect(lastWeights(last)).toEqual({ Dumbbell_Bench_Press: 22.5, Other: 20 });
   });
+
+  it('skips warm-ups: a session with only warm-ups never hides the last working sets', async () => {
+    await saveSet(
+      db,
+      log({ sessionId: 'work', startedAt: 100, endedAt: 101, weightKg: 20, reps: 8 }),
+    );
+    await saveSet(
+      db,
+      log({ sessionId: 'warm', startedAt: 200, endedAt: 201, weightKg: 10, reps: 8, warmup: true }),
+    );
+    const last = await lastSessionSets(db, ['Dumbbell_Bench_Press']);
+    expect(last['Dumbbell_Bench_Press']?.map((r) => r.sessionId)).toEqual(['work']);
+    expect(lastWeights(last)).toEqual({ Dumbbell_Bench_Press: 20 });
+  });
+
+  it('returns only the working sets of the last session (warm-ups reuse set indexes)', async () => {
+    await saveSet(
+      db,
+      log({
+        sessionId: 's',
+        setIndex: 0,
+        startedAt: 100,
+        endedAt: 101,
+        weightKg: 10,
+        warmup: true,
+      }),
+    );
+    await saveSet(
+      db,
+      log({
+        sessionId: 's',
+        setIndex: 1,
+        startedAt: 200,
+        endedAt: 201,
+        weightKg: 14,
+        warmup: true,
+      }),
+    );
+    await saveSet(
+      db,
+      log({ sessionId: 's', setIndex: 0, startedAt: 300, endedAt: 301, weightKg: 20 }),
+    );
+    await saveSet(
+      db,
+      log({ sessionId: 's', setIndex: 1, startedAt: 400, endedAt: 401, weightKg: 20 }),
+    );
+    // A warm-up logged after the last working set (rare) doesn't become the last weight either.
+    await saveSet(
+      db,
+      log({ sessionId: 's', setIndex: 2, startedAt: 500, endedAt: 501, weightKg: 8, warmup: true }),
+    );
+    const last = await lastSessionSets(db, ['Dumbbell_Bench_Press']);
+    expect(last['Dumbbell_Bench_Press']?.map((r) => r.weightKg)).toEqual([20, 20]);
+    expect(lastWeights(last)).toEqual({ Dumbbell_Bench_Press: 20 });
+  });
 });
 
 describe('GymDb settings (M4)', () => {
@@ -196,96 +250,6 @@ describe('GymDb v3 (M4c developer log)', () => {
       up.close();
       await up.delete();
     }
-  });
-});
-
-describe('updateSet (M4c last-set correction)', () => {
-  it('writes the corrected reps/partials to the logged row only', async () => {
-    await saveSet(db, log({ setIndex: 0, reps: 10, partials: 1 }));
-    await saveSet(db, log({ setIndex: 1, startedAt: 3000, endedAt: 4000 }));
-    await saveSet(db, log({ sessionId: 'other', setIndex: 0 }));
-
-    expect(
-      await updateSet(
-        db,
-        { sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0 },
-        { reps: 12, partials: 0 },
-      ),
-    ).toBe(1);
-    const rows = await setsForSession(db, 's1');
-    expect(rows[0]).toMatchObject({ setIndex: 0, reps: 12, weightKg: 20, startedAt: 1000 });
-    expect(rows[0]).not.toHaveProperty('partials');
-    expect(rows[1]).toMatchObject({ setIndex: 1, reps: 10 });
-    expect((await setsForSession(db, 'other'))[0]).toMatchObject({ reps: 10 });
-
-    await updateSet(
-      db,
-      { sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 1 },
-      { reps: 8, partials: 2 },
-    );
-    expect((await setsForSession(db, 's1'))[1]).toMatchObject({ reps: 8, partials: 2 });
-  });
-
-  it('returns 0 and changes nothing when the row is missing', async () => {
-    await saveSet(db, log());
-    expect(
-      await updateSet(
-        db,
-        { sessionId: 's1', exerciseId: 'Nope', setIndex: 0 },
-        { reps: 1, partials: 0 },
-      ),
-    ).toBe(0);
-    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ reps: 10 });
-  });
-});
-
-describe('updateSet with a focus score (M5)', () => {
-  const ref = { sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0 };
-
-  it('stores cue ids and a focus score with the set', async () => {
-    await saveSet(db, log({ cues: ['rushedLowering', 'stalled'], focusScore: 85 }));
-    expect((await setsForSession(db, 's1'))[0]).toMatchObject({
-      cues: ['rushedLowering', 'stalled'],
-      focusScore: 85,
-    });
-  });
-
-  it('writes the recomputed score with the corrected counts, leaving the cues alone', async () => {
-    await saveSet(db, log({ partials: 1, cues: ['shrinkingRange'], focusScore: 85 }));
-    expect(await updateSet(db, ref, { reps: 10, partials: 3, focusScore: 75 })).toBe(1);
-    expect((await setsForSession(db, 's1'))[0]).toMatchObject({
-      reps: 10,
-      partials: 3,
-      cues: ['shrinkingRange'],
-      focusScore: 75,
-    });
-  });
-
-  it('removes the score when given null (a camera set corrected to 0 reps)', async () => {
-    await saveSet(db, log({ cues: [], focusScore: 100 }));
-    await updateSet(db, ref, { reps: 0, partials: 1, focusScore: null });
-    const row = (await setsForSession(db, 's1'))[0];
-    expect(row).not.toHaveProperty('focusScore');
-    expect(row).toMatchObject({ reps: 0, partials: 1, cues: [] });
-  });
-
-  it('keeps the stored score when none is given (old callers, manual sets)', async () => {
-    await saveSet(db, log({ focusScore: 90 }));
-    await updateSet(db, ref, { reps: 8, partials: 0 });
-    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ reps: 8, focusScore: 90 });
-    await saveSet(db, log({ setIndex: 1, startedAt: 3000 }));
-    await updateSet(db, { ...ref, setIndex: 1 }, { reps: 7, partials: 0 });
-    expect((await setsForSession(db, 's1'))[1]).not.toHaveProperty('focusScore');
-  });
-
-  it('ignores a non-finite score and clamps to 0–100', async () => {
-    await saveSet(db, log({ focusScore: 90 }));
-    await updateSet(db, ref, { reps: 8, partials: 0, focusScore: Number.NaN });
-    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ focusScore: 90 });
-    await updateSet(db, ref, { reps: 8, partials: 0, focusScore: 140 });
-    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ focusScore: 100 });
-    await updateSet(db, ref, { reps: 8, partials: 0, focusScore: -5 });
-    expect((await setsForSession(db, 's1'))[0]).toMatchObject({ focusScore: 0 });
   });
 });
 

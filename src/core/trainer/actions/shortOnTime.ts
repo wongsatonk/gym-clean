@@ -18,16 +18,30 @@
  *   block's version on a block date), so more time gives a longer day and less time a shorter
  *   one; the same length again → "Today is already set for N min."; a length the whole planned
  *   day fits in → "Back to the full day" (the override is removed, or reduced to its day pin
- *   when it pinned another day than the rotation's). A shorter version stacked on another
- *   change (e.g. go easy on arms) loses that change when rebuilt: there is no record of it.
+ *   when it pinned another day than the rotation's).
+ * - Over an earlier change today (e.g. go easy on shoulders from feel-today), that change is kept
+ *   as `adjust.base`: the shorter day is built from it, asking again rebuilds from it, and "Back
+ *   to the full day" makes it today's override again. Lines compare with what runs today.
  */
-import type { PlannedExercise, Proposal } from '../../types';
+import type { DayAdjust, DayOverride, PlannedExercise, Proposal } from '../../types';
+
+/** The change a shorter day was made over (kept so asking again rebuilds from it). */
+type Base = NonNullable<DayAdjust['base']>;
+
+/** `adjust` as a base: its kind, area, rows and row map (nothing else). */
+function baseOf(adjust: Base): Base {
+  return structuredClone({
+    kind: adjust.kind,
+    ...(adjust.area ? { area: adjust.area } : {}),
+    exercises: adjust.exercises,
+    ...(adjust.replaced ? { replaced: adjust.replaced } : {}),
+  });
+}
 import { estimateMinutes, fitToMinutes } from '../estimate';
 import { effectiveDay } from '../plan';
 import type { TrainerCatalog } from '../swapCandidates';
 import { SHORT_ON_TIME, TIME_RULES } from '../timeRules';
 import {
-  baseReplaced,
   baseRows,
   composeReplaced,
   nameOf,
@@ -79,14 +93,24 @@ export function proposeShortOnTime(
     exerciseName: (id) => names.get(id) ?? nameOf(ctx, id),
   };
   const current = baseRows(ctx.state, today.day.id, today.override, [], ctx.today);
-  const shorter = today.override?.adjust?.kind === 'shortOnTime';
-  const rows = shorter
-    ? baseRows(ctx.state, today.day.id, today.override, ['shortOnTime'], ctx.today)
-    : current;
+  const adjust = today.override?.adjust;
+  const shorter = adjust?.kind === 'shortOnTime';
+  // The change under the shorter day: the earlier one kept as `base`, or today's other change.
+  const base: Base | undefined =
+    adjust?.kind === 'shortOnTime'
+      ? adjust.base
+      : adjust
+        ? baseOf({ ...adjust, kind: adjust.kind })
+        : undefined;
+  const rows = base
+    ? structuredClone(base.exercises)
+    : shorter
+      ? baseRows(ctx.state, today.day.id, today.override, ['shortOnTime'], ctx.today)
+      : current;
   const now = estimateMinutes({ exercises: rows });
   if (now <= minutes) {
     if (!shorter) return refuse('nothingToChange', ALREADY_FITS);
-    return fullDayBack(ctx, today.day.id, current, now);
+    return fullDayBack(ctx, today.day.id, current, now, base);
   }
 
   const limit = shortOptionFor(minutes);
@@ -121,7 +145,10 @@ export function proposeShortOnTime(
   const pairs: Proposal['lines'] = [];
   const trims: Proposal['lines'] = [];
   const drops: Proposal['lines'] = [];
-  for (const p of rows) {
+  const backs: Proposal['lines'] = [];
+  // Lines compare with what runs today (an earlier shorter version included).
+  const running = new Map(current.map((p) => [p.exerciseId, p]));
+  for (const p of current) {
     const q = after.get(p.exerciseId);
     if (!q) {
       drops.push({
@@ -131,9 +158,18 @@ export function proposeShortOnTime(
       continue;
     }
     if (q.sets !== p.sets) trims.push(rowLine(p, q, named));
+  }
+  for (const q of out) {
+    const p = running.get(q.exerciseId);
+    if (!p) {
+      backs.push({
+        before: nameOf(named, q.exerciseId),
+        after: `Back today · ${rowText(q, ctx)}`,
+      });
+    }
     // A new pair, named once (at its first row).
     const partner = q.pairWith === undefined ? undefined : after.get(q.pairWith);
-    if (partner && p.pairWith === undefined && out.indexOf(q) < out.indexOf(partner)) {
+    if (partner && p?.pairWith !== q.pairWith && out.indexOf(q) < out.indexOf(partner)) {
       pairs.push({
         before: `${nameOf(named, q.exerciseId)} + ${nameOf(named, partner.exerciseId)}`,
         after: `Back to back, ${TIME_RULES.pairRestSec} s rest`,
@@ -147,7 +183,7 @@ export function proposeShortOnTime(
       action: 'shortOnTime',
       scope: 'today',
       title: `Short on time: ${limit} min`,
-      lines: [...pairs, ...trims, ...drops],
+      lines: [...pairs, ...trims, ...drops, ...backs],
       why:
         `Your main lifts stay. The smaller moves are paired, trimmed or left out, ` +
         `so today takes about ${fit.minutes} min instead of ${now}. Just for today.`,
@@ -156,9 +192,10 @@ export function proposeShortOnTime(
         kind: 'shortOnTime',
         exercises: out,
         replaced: composeReplaced(
-          baseReplaced(today.override, ['shortOnTime']),
+          base?.replaced ?? [],
           fit.dropped.map((fromId) => ({ fromId, toId: null })),
         ),
+        ...(base ? { base } : {}),
       }),
       baseVersion: ctx.state.version,
     },
@@ -171,11 +208,16 @@ function fullDayBack(
   dayId: string,
   current: readonly PlannedExercise[],
   full: number,
+  base: Base | undefined,
 ): ActionResult {
   const others = ctx.state.overrides.filter((o) => o.date !== ctx.today);
   const without = { ...ctx.state, overrides: others };
   const rotationDay = effectiveDay(without, ctx.sessions, ctx.today).day?.id;
-  const overrides = rotationDay === dayId ? others : [...others, { date: ctx.today, dayId }];
+  const overrides: DayOverride[] = base
+    ? [...others, { date: ctx.today, dayId, adjust: structuredClone(base) }]
+    : rotationDay === dayId
+      ? others
+      : [...others, { date: ctx.today, dayId }];
   return {
     ok: true,
     proposal: {

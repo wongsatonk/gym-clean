@@ -336,6 +336,73 @@ describe('proposeShortOnTime', () => {
       expect(p.next.overrides[0]?.adjust?.replaced?.some((x) => x.fromId === e.fromId)).toBe(true);
   });
 
+  it('over an earlier change: kept as `base`, rebuilt from it, and restored by the full day', () => {
+    const ctx = ctxFor('push-a');
+    const easy = proposeAvoidArea(ctx, 'shoulders', CATALOG);
+    if (!easy.ok) throw new Error(easy.reason);
+    const eased = applyProposal(ctx.state, easy.proposal, NOW, 'chip');
+    if (!eased.ok) throw new Error(eased.reason);
+    const easedOverride = eased.state.overrides[0];
+    const easedRows = effectiveDay(eased.state, ctx.sessions, TODAY).day?.exercises ?? [];
+    const full = estimateMinutes({ exercises: easedRows });
+    expect(full).toBeGreaterThan(20);
+    const apply = (state: TrainerState, minutes: number) => {
+      const r = applyProposal(
+        state,
+        proposal(proposeShortOnTime({ ...ctx, state }, minutes, CATALOG)),
+        NOW,
+        'chip',
+      );
+      if (!r.ok) throw new Error(r.reason);
+      return r.state;
+    };
+    const keepsShoulders = (rows: readonly PlannedExercise[]) => {
+      for (const r of rows) {
+        const e = easedRows.find((x) => x.exerciseId === r.exerciseId);
+        expect(e, r.exerciseId).toBeDefined();
+        expect(r.weightKgToday).toBe(e?.weightKgToday);
+      }
+    };
+    // Short 20: built from the eased day, which is stored as the base.
+    const at20 = apply(eased.state, 20);
+    const adjust20 = at20.overrides[0]?.adjust;
+    expect(adjust20?.kind).toBe('shortOnTime');
+    expect(adjust20?.base).toEqual({
+      kind: 'avoidArea',
+      area: 'shoulders',
+      exercises: easedOverride?.adjust?.exercises,
+      replaced: easedOverride?.adjust?.replaced,
+    });
+    const rows20 = effectiveDay(at20, ctx.sessions, TODAY).day?.exercises ?? [];
+    keepsShoulders(rows20);
+    // The row map still says what the shoulder change took out.
+    for (const e of easedOverride?.adjust?.replaced ?? [])
+      expect(adjust20?.replaced?.some((x) => x.fromId === e.fromId)).toBe(true);
+    // More time: rebuilt from the base, not the plan; the base is carried along.
+    const more = proposal(proposeShortOnTime({ ...ctx, state: at20 }, full - 1, CATALOG));
+    const moreRows = effectiveDay(more.next, ctx.sessions, TODAY).day?.exercises ?? [];
+    keepsShoulders(moreRows);
+    expect(estimateMinutes({ exercises: moreRows })).toBeGreaterThan(
+      estimateMinutes({ exercises: rows20 }),
+    );
+    expect(more.next.overrides[0]?.adjust?.base).toEqual(adjust20?.base);
+    // Lines compare with what runs today (the 20-minute day): rows coming back say so.
+    expect(more.lines.some((l) => l.after.startsWith('Back today'))).toBe(true);
+    for (const l of more.lines) expect(checkCopy(l.before).ok && checkCopy(l.after).ok).toBe(true);
+    // Full day back: the shoulder change is today's override again.
+    const back = proposal(proposeShortOnTime({ ...ctx, state: at20 }, full + 5, CATALOG));
+    expect(back.title).toBe('Back to the full day');
+    expect(back.next.overrides).toEqual([easedOverride]);
+    expect(effectiveDay(back.next, ctx.sessions, TODAY).day?.exercises).toEqual(easedRows);
+  });
+
+  it('with no earlier change there is no base', () => {
+    const ctx = ctxFor('push-a');
+    const p = proposal(proposeShortOnTime(ctx, 30, CATALOG));
+    expect(p.next.overrides[0]?.adjust?.base).toBeUndefined();
+    expect('base' in (p.next.overrides[0]?.adjust ?? {})).toBe(false);
+  });
+
   it('leaves exercises with logged sets alone', () => {
     const started = ['Pushups'];
     const ctx = ctxFor('push-a', { started });
