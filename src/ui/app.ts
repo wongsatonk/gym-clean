@@ -155,7 +155,13 @@ import { recapDue } from '../core/progress/recap';
 import { createRouter, type CoachRouter } from '../data/brain/router';
 import { rulesBrain } from '../data/brain/rules';
 // M12 slice 2: Apple's on-device brain, the mic, reminders, the weekly check-in.
-import { appleBrain, askApple, type AppleDeps, type AppleTrace } from '../data/brain/apple';
+import {
+  appleBrain,
+  askApple,
+  buildAppleRequest,
+  type AppleDeps,
+  type AppleTrace,
+} from '../data/brain/apple';
 import { coachNoteStore } from '../data/brain/notes';
 import { runBrainEval } from '../data/brain/evalRunner';
 import { brainInstructions } from '../core/trainer/brain/instructions';
@@ -172,7 +178,7 @@ import { updateChatMic } from './coach/chat';
 import type { CheckInAnswers, CheckInQuestionView } from './coach/checkInCard';
 import { coachSettingsScreen, type BrainStatusView } from './screens/coachSettings';
 import { remindersScreen, type NotificationPermission } from './screens/reminders';
-import { brainEvalScreen, type BrainEvalProps } from './screens/brainEval';
+import { brainEvalScreen, type BrainEvalProps, type BrainEvalTokens } from './screens/brainEval';
 import {
   addMessage,
   clearChat,
@@ -1774,6 +1780,7 @@ export function mountApp(root: HTMLElement): void {
     chatSeen = undefined;
     chatSheet = { el: null, opener };
     renderChatSheet();
+    void refreshMic(); // the Pause sheet may open before the Coach tab ever did
   }
 
   function closeChatSheet(): void {
@@ -2312,6 +2319,13 @@ export function mountApp(root: HTMLElement): void {
         dispatch({ type: 'FINISH', now: now() });
       },
       micDown: () => micDown(),
+      onInputFocus: () => {
+        // Text-box focus is a strong signal a question follows (same instructions as the ask).
+        if (gymBrain)
+          void gymBrain.prewarm(
+            brainInstructions({ phase: phaseNow(), voice: coachVoice.persona }),
+          );
+      },
       micUp: () => void micUp(),
       micCancel: () => void micCancel(),
     };
@@ -2467,6 +2481,7 @@ export function mountApp(root: HTMLElement): void {
     ]);
     gymBrain = gb;
     speech = sp;
+
     reminders = rm;
     const apple = appleBrain(gb, appleDeps);
     router = createRouter(
@@ -2528,7 +2543,10 @@ export function mountApp(root: HTMLElement): void {
   async function refreshMic(): Promise<void> {
     if (!speech) return;
     try {
-      micAvail = await speech.availability();
+      const a = await speech.availability();
+      // Inside the iPhone app a missing plugin reads "unsupported", never "works in the iPhone app".
+      micAvail =
+        !a.available && a.reason === 'notNative' ? { available: false, reason: 'unsupported' } : a;
     } catch {
       micAvail = { available: false, reason: 'unsupported' };
     }
@@ -2831,14 +2849,38 @@ export function mountApp(root: HTMLElement): void {
     view = { screen: 'brainEval' };
     render();
     window.scrollTo(0, 0);
+    void measureEvalTokens();
+  }
+
+  /** Token counts for one real request (iOS 26.4+; null elsewhere), for the Checkpoint J budget check. */
+  let evalTokens: BrainEvalTokens | null = null;
+  async function measureEvalTokens(): Promise<void> {
+    const gb = gymBrain;
+    if (!gb) return;
+    try {
+      const phase = phaseNow();
+      const { request } = await buildAppleRequest(
+        "How's my week?",
+        { coach: coachContext(phase), turns: thread },
+        appleDeps,
+      );
+      evalTokens = await gb.measure(request);
+    } catch (err) {
+      logDbError(err);
+      evalTokens = null;
+    }
+    if (view.screen === 'brainEval') render();
   }
 
   function brainEvalView(): HTMLElement {
-    return brainEvalScreen(evalState, {
-      onBack: backToSettings,
-      onRun: () => void runEval(),
-      onExport: () => exportEval(),
-    });
+    return brainEvalScreen(
+      { ...evalState, tokens: evalTokens },
+      {
+        onBack: backToSettings,
+        onRun: () => void runEval(),
+        onExport: () => exportEval(),
+      },
+    );
   }
 
   async function runEval(): Promise<void> {
