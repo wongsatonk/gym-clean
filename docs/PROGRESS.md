@@ -7,7 +7,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **Live:** b2c532e on main, deployed 2026-11-15 (CI: 2582 unit, 135 e2e passed): everything above plus the polish batch and **M7 Fuel** (Fuel tab, targets + weekly check, weigh-ins, 47 Thai dishes, offline USDA search, recipes, coach food ideas, opt-in barcode scan). First CI run (e01600c) failed on the short-phone set-up card under Linux text rendering; fixed in b2c532e (reproduced in the Playwright Linux container).
 - **In progress:** cloud sessions during Wongsaton's flight (2026-11-15), per `docs/cloud-briefs.md`. Open follow-up: the 10 s Undo toast covers a Fuel sheet's main button until you scroll (verifier note; in cloud session 2).
 - **Now (2026-11-17, resumed in ~/Develop/gym-clean):** slice 1b verified (PASS). **Slice 2 builds on branch `m12-slice2`** in worktree `.claude/worktrees/resume-4f67e1` (cut from `m12-coach-tab` at 69fb2a1; that session cannot write into the agents-75bc3a worktree). Tasks 1–19 done (G1 reviewer PASS after one fix; G2 reviewer PASS, commits 90c30b4…ea9f8fc; GymBrainCore 30/30, GymHealthCore 21/21, GymSpeechCore 29/29 XCTests and the simulator build passed for ios-engineer, re-run in task 22). Version 1.14.0, iOS build 267. Tasks 1–22 done. Task 21: 4 new e2e specs (coach-apple, mic, reminders, check-in), each 3× green; full e2e 220 passed / 1 skipped / 1 failed (focus-cues.spec.ts:364, passes alone); two chat bugs fixed (mic button moved from under the finger while listening; unsent words lost on re-render). Task 22: simulator build + 80 XCTests; the simulator can't run Apple's model or on-device speech. Follow-ups committed: eval error count, GymBrain error-kind log, Settings Back keeps scroll, prewarm on focus, eval token line, mic in the Pause sheet. Coach tab layout fixed (thread 61% at 390×844). Task 23 reviewer: one blocking (stuck "Checking…" on a failed Apple check) fixed + 4 non-blocking fixed. Task 24 verifier **PASS** (check 5228; full e2e 224 passed/1 skipped on run 2, run 1 had one new load flake motion.spec.ts:39 that passes alone; slice 2 specs 105/105 at repeat-each 5; build contains 1.14.0; simulator build + XCTests 21/29/35; 19 verify screenshots `docs/screenshots/m12s2-verify-*.png`). On-device eval numbers, real Apple answers, token counts, mic and notifications are 🧍 Checkpoint J. Small polish follow-ups (not blocking): text box narrows to ~135px while listening; reminder time picker is 12-hour in Chromium next to 24-hour copy; after the "Apple Intelligence is off" note the rules reply reads "I can help with:" with chips only in the bottom row. **Next:** 25 merge (his call) + install on his iPhone → → 25 merge + ask → 26 🧍 Checkpoint J.
-- **M13 started 2026-11-18** (his go: "Go with 1, 2 then M13") on branch **`m13-published-look`**, cut from `m12-slice2` at 3b69419. **Wave 1 done + reviewer PASS** (tasks 1–9, 13, 16–20, 23, 24, 26–28, 34; commits 59ca523…4554931; check 5407 passed; full e2e not yet run on M13). **Wave 2 running:** 10 → 12 [ui], 22 + 21 + 11 + review follow-ups [ui], core follow-ups (Apache licence texts, scan gate, generic demo numbers). Then 14 → 15, 25 [ui] after 10; 29–31 [main]; 32–33 e2e; 35–37; 38 review; 39 verify. Task 29 needs his OK to add the gen-licenses ownership row to CLAUDE.md.
+- **M13 started 2026-11-18** (his go: "Go with 1, 2 then M13") on branch **`m13-published-look`**, cut from `m12-slice2` at 3b69419. **Waves 1 + 2 done, reviewer PASS each** (tasks 1–29 except 30–31 wiring; 34). Version 1.15.0 (iOS build 305). CLAUDE.md row for gen-licenses added (his OK). **Now:** Checkpoint J fixes for 1.15.0 (mic: offer Apple's speech-model download; compact check-in card) + wave-2 review notes [ui]; then 30–31 wiring [main], 32–33 e2e, 35 store shots, 36 landing, 37 Story pack, 38 review, 39 verify.
 - **Task 20 wiring notes (from G1):** run stored `'reminders'` through core `mergeReminders` before the screen/plan; re-run `reminderPlan` on app open/foreground **and after a session finishes**; `pending` → string ids via `reminderIdFromNumber`; `answeredMissed` from coach UI state `missedAnswered`; `request()` only from a switch-on. Start GymSpeech only after `micDown`; a cancel from blur (iOS permission alert) is not an error. Post the check-in card on the Coach tab only (omit check-in callbacks in the Pause sheet). Use `updateChatMic` for the ~10/s partial/level events. `showSource` only in the native build. Brain request: turns live in the context text (last 8, 140 chars each), so `GymBrainRequest.messages` carries only the new message (≤ ~400 chars); red flags go to the rules brain. Pass `listCheckIns` to `recapDue`. (G2) Notes store: `coachNoteStore(db)`; GymBrain `prewarm(instructions)` on text-box focus / mic down with the same instructions string; eval UI shows `report.p50Ms`. Generated Swift lives at `ios/App/App/Plugins/GymBrain/GymBrainCore/Sources/GymBrainCore/TrainerTools.generated.swift` (inside the Core package so XCTests compile it).
 - **Earlier next step:** build **M12 slice 1b "Trainer kit"** on `m12-coach-tab` (plan under "Current milestone plan → M12 — slice 1b"; first parallel group: 1b tasks 1 [main] ∥ 2 [core] ∥ 3 [ios] ∥ 4 [main], plus slice 2 tasks 1 and 10 [ios] early), then **slice 2** (Apple brain + mic + reminders + check-in; plan under "→ M12 — slice 2") → 🧍 Checkpoint J. His go-ahead 2026-11-17: "Go ahead slice 2 and 1b". Slices 1 + 1c are verified (745a143) and on his iPhone, not merged; merge/push stays his call. Older gym checkpoints (E, F1, …) are his to-dos in the app.
 - **M12 slices 1b + 2: planned 2026-11-17** (Decision "M12 slices 1b + 2"). Defaults taken for M12-q1 and M12-q4 (planner calls he can correct in the to-do decision steps). Apple Intelligence is on and downloaded on his iPhone (his words 2026-11-17: "It finished"). Nothing blocks on him until Checkpoint J.
@@ -483,16 +483,16 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Shown text only ("Plateau: let's change something" style, `checkCopy`); ids, types and the rule stay `stall`.
   - Done when: copy tests assert no "STALLED" / "fell short" in any built line; eval set still 100% on stall items.
   - Deps: 1.
-- [ ] 10. [ui-engineer] Name constant in ui + brand lockup.
+- [x] 10. [ui-engineer] Name constant in ui + brand lockup.
   - Files: src/ui/brand.ts(+test, + brand.css) (mark + name + optional tagline, sizes sm/lg), src/ui/screens/{today,settings,weekLoad,healthSettings,backupPanel}.ts, src/ui/healthHost.ts, src/ui/shareMonth.ts, src/ui/todo/todoFixture.ts.
   - Done when: render test for the lockup; task 7's scan allow-list has no ui file left; `npm run check`.
   - Deps: 1, 7.
-- [ ] 11. [ui-engineer] Web launch mark, favicon, title and description.
+- [x] 11. [ui-engineer] Web launch mark, favicon, title and description.
   - Files: index.html.
   - Favicon links to `icons/favicon.svg` + 32px PNG from task 26 (the real icon); a static pre-boot mark inside `#app` (inline SVG of the logo path on `#0d0f12`, no script, removed when the app mounts); `<meta name="description">` = the tagline. The CSP line is untouched.
   - Done when: screenshot of the page with the app script blocked shows the mark (not a blank page); the m4e-theme e2e still passes.
   - Deps: 26.
-- [ ] 12. [ui-engineer] Welcome + permission pages.
+- [x] 12. [ui-engineer] Welcome + permission pages.
   - Files: src/ui/onboarding/welcome.ts(+test), src/ui/onboarding/permissionPage.ts(+test), src/ui/onboarding/onboarding.css.
   - Props: the steps from task 4; callbacks `onNext`, `onBack`, `onSkipAll`, `onAllow(permission)`, `onNotNow`. Page 1 = the lockup + tagline. Skip always visible; Back/Next ≥ 56px; page indicator not colour alone; reduced motion → instant. The mic page has no Allow button (explains only).
   - Done when: render tests (each page kind, skip, PWA shows camera only); 390×844 harness screenshots.
@@ -502,12 +502,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `listEnglishVoices` replaces `listMaleVoices` (known names keep their accent label and the default order first; others labelled by region); hint reworded (no "male"). `pickDrillVoice` unchanged.
   - Done when: tests with a fixture holding female and male names: all offered; saved voice wins; default order kept.
   - Deps: 1.
-- [ ] 14. [ui-engineer] About screen + Licenses screen.
+- [x] 14. [ui-engineer] About screen + Licenses screen.
   - Files: src/ui/screens/about.ts(+test), src/ui/screens/licenses.ts(+test), src/ui/screens/about.css.
   - About: lockup, tagline, version line (prop), privacy promise, "Coaching, not medical advice.", "Open-source credits" row, `CREDIT`. Licenses: list from task 6 (name, version, licence; tap → full text when present). No external links.
   - Done when: render tests; 390×844 screenshots; text ≥ 20px.
   - Deps: 1, 6, 10.
-- [ ] 15. [ui-engineer] Owner tools switch (option A, his pick 2026-11-17).
+- [x] 15. [ui-engineer] Owner tools switch (option A, his pick 2026-11-17).
   - Files: src/ui/ownerUnlock.ts(+test).
   - Pure `tapUnlock(state, now)` (7 taps, each within 3 s of the last, else reset) + a small controller that makes the About version line tappable and shows the "Owner tools" switch (≥ 56px) once unlocked or while owner mode is on. A short status line after the 7th tap ("Owner tools unlocked"), not colour alone. This file is the whole mechanism.
   - Done when: tests: 6 taps → nothing, 7 → switch, slow taps reset, switch stays visible while on; render test inside the About screen.
@@ -536,12 +536,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: src/ui/backButton.ts(+test), src/ui/icons.ts(+test) (original chevron-left, check, arrow-right paths), src/ui/screens/{healthSettings,myGym,preview,planChanges}.ts, src/ui/todo/todoGuide.ts, src/ui/coach/proposalCard.ts.
   - Done when: no typed "‹", "✓ done" or "→" used as a control in src/ui (a scan test, app.ts excluded until task 30); each back button ≥ 56px with an accessible name.
   - Deps: 1 (icons.ts is also edited by 22; run 20 then 22).
-- [ ] 21. [ui-engineer] Polish: wording + one score per Calendar card (S).
+- [x] 21. [ui-engineer] Polish: wording + one score per Calendar card (S).
   - Files: src/ui/coachSummary.ts(+test), src/ui/coach.css, src/ui/screens/calendar.ts(+test) (after 18).
   - "Plateau" label, sentence case; each week/month card shows one headline score with its label (sessions "2 of 6"), the sets % as a quiet second line or dropped; fix ui hits from task 8.
   - Done when: render tests; no all-caps status words; task 8's ui list is empty.
   - Deps: 8, 9, 18.
-- [ ] 22. [ui-engineer] Polish: empty states (M).
+- [x] 22. [ui-engineer] Polish: empty states (M).
   - Files: src/ui/emptyState.ts(+test, + css), src/ui/icons.ts (2–3 original glyphs), src/ui/screens/fuel.ts, src/ui/coach/chat.ts (+tests), others found by a grep for bare "Nothing"/"No … yet" lines.
   - One icon + one line + one action each; Fuel shows "Set up targets" as the primary action until targets exist.
   - Done when: render tests per state; screenshots of an empty Fuel day and an empty Coach thread.
@@ -556,7 +556,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Re-check the current screen at 390×844. If a large Delete block is still always visible: tap the row → the sheet with Edit / Delete; Undo toast unchanged. If already so: tick with a screenshot, no code.
   - Done when: screenshot; render tests if changed.
   - Deps: 1.
-- [ ] 25. [ui-engineer] Share month, Story size.
+- [x] 25. [ui-engineer] Share month, Story size.
   - Files: src/ui/shareMonth.ts(+test).
   - `shareStoryLayout(month, stats, lead)` 1080×1920: lockup on top, the lead number large with its label, the month grid with missed days as grey rings (no red, no "missed" text), a quiet footer. Preview offers Post size / Story size and the lead picker (sessions default; total lifted; streak). File name `gym-clean-<month>-story.png`.
   - Done when: layout tests (size, lead first, no body/Health/per-lift data, grey missed rings); a rendered sample PNG screenshot.
@@ -575,7 +575,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Two short lists: iPhone app on her phone (free Apple ID: one of 3 devices, re-sign every 7 days from his Mac, gets Health / mic / reminders) vs PWA (Add to Home Screen, no re-sign, no Health / mic / reminders); which to pick; her data stays on her phone; "Share my gym" to copy the kit.
   - Done when: the section exists and matches the facts already in the file (3 devices, 7 days).
   - Deps: none.
-- [ ] 29. [main] Version 1.15.0 + configs.
+- [x] 29. [main] Version 1.15.0 + configs.
   - Files: package.json (`version`, `licenses` script), vite.config.ts (manifest `name`/`short_name`/`description` from `brand.ts`; `navigateFallbackDenylist: [/\/welcome\//]`; optional: leave `welcome/` out of the native build), CLAUDE.md ownership row for `scripts/gen-licenses.mjs` (ask him first: CLAUDE.md is his file).
   - Done when: `npm run build` output has `1.15.0`, the new description and `welcome/index.html`; `scripts/sync-ios-version.mjs` reports 1.15.0.
   - Deps: 6, 26.
