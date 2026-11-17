@@ -44,7 +44,7 @@ push or switch branches.**
 | Agent | Owns |
 |---|---|
 | `planner` | Task plans + Decisions in `docs/PROGRESS.md`, scope edits in `docs/SPEC.md` (no code) |
-| `core-engineer` | `src/core/**` (incl. `src/core/nutrition/**`), `src/data/**` (pure logic, exercises/thresholds, nutrition math, food data, Dexie, JSON data), `scripts/build-foods.mjs` |
+| `core-engineer` | `src/core/**` (incl. `src/core/nutrition/**`), `src/data/**` (pure logic, exercises/thresholds, nutrition math, food data, Dexie, JSON data), `scripts/build-foods.mjs`, `scripts/gen-licenses.mjs` |
 | `pose-engineer` | `src/pose/**`, `tools/**`, `scripts/{landmarks,synthetic,copy-mediapipe-wasm}.mjs`, `public/models/**`, `fixtures/landmarks/**`, `fixtures/synthetic/**`, `e2e/camera.spec.ts` |
 | `ui-engineer` | `src/ui/**` except 3D modules, `src/styles.css`, `index.html`, other `e2e/*.spec.ts` |
 | `anatomy-3d-engineer` | `src/ui/body3d/**`, `src/ui/bodyMap.ts`, `src/ui/skeleton3d.ts`, `src/ui/demo3d/**` |
