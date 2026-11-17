@@ -70,6 +70,12 @@ export const TOKEN_NAMES = [
   '--tap-cta',
   '--tap-hero',
   '--tab-h',
+  // motion (M12; src/ui/motion.ts mirrors the values as DUR / EASE)
+  '--dur-fast',
+  '--dur-base',
+  '--dur-slow',
+  '--ease-standard',
+  '--ease-spring',
 ] as const;
 
 export type TokenName = (typeof TOKEN_NAMES)[number];

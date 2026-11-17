@@ -318,6 +318,8 @@
   bottom: var(--toast-bottom, max(16px, env(safe-area-inset-bottom)));
   z-index: 30;
   max-width: 528px;
+  /* M12 motion: slides up into place (keyframes in styles.css). */
+  animation: motion-rise var(--dur-base) var(--ease-standard);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -370,10 +372,9 @@
   transform-origin: left center;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .undo-bar {
-    animation: undo-drain var(--undo-ms, 10000ms) linear forwards;
-  }
+/* Under reduced motion the global rule in styles.css stops this: the bar stays full. */
+.undo-bar {
+  animation: undo-drain var(--undo-ms, 10000ms) linear forwards;
 }
 
 @keyframes undo-drain {

@@ -78,6 +78,13 @@
   --tap-hero: 80px;
   --tab-h: 72px;
 
+  /* Motion (M12): short, transform/opacity only. src/ui/motion.ts mirrors these (DUR, EASE). */
+  --dur-fast: 120ms; /* press feedback, small state changes */
+  --dur-base: 220ms; /* screens, sheets, toasts, tab indicator */
+  --dur-slow: 320ms; /* ring fills, count-ups, larger moves */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* decelerate into place */
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1); /* a small overshoot: check morph, chips */
+
   color-scheme: dark;
 }
 
@@ -125,6 +132,81 @@
 .mood-track {
   background: var(--bg);
   color: var(--text);
+}
+
+/* ---------- Motion (M12 task 8, design "Motion") ----------
+   Transform/opacity only, tokens only. JS helpers: src/ui/motion.ts. Motion-off screens get none
+   of this (readability mid-set comes first): anything marked `data-motion="off"`, plus the
+   Exercise screen (`data-screen='exercise'`) and the camera sheet (`.camera-sheet`) by their
+   existing hooks. Same list as MOTION_OFF in motion.ts.
+   The ONE reduced-motion rule for the whole app is at the end of this block; don't add another. */
+
+/* Press: a 0.97 scale and a brighter fill while the finger is down. Zero specificity, so a
+   component that sets its own transform keeps it. */
+:where(button, [role='button'], .chip, .cs-chip) {
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+:where(button, [role='button'], .chip, .cs-chip):active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(1.15);
+}
+
+:where([data-motion='off'], [data-screen='exercise'], .camera-sheet)
+  :where(button, [role='button'], .chip, .cs-chip) {
+  transition: none;
+}
+
+:where([data-motion='off'], [data-screen='exercise'], .camera-sheet)
+  :where(button, [role='button'], .chip, .cs-chip):active {
+  transform: none;
+  filter: none;
+}
+
+/* Sheets: full-page sheets rise + fade in. A bottom sheet (the coach sheet) fades its veil with
+   motion-fade and slides its panel with motion-slide-up. The camera sheet is a motion-off screen. */
+.overlay.sheet:not(.camera-sheet),
+.pause-sheet,
+.fuel-sheet,
+.howto-sheet {
+  animation: motion-rise var(--dur-base) var(--ease-standard);
+}
+
+@keyframes motion-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes motion-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* Reduced motion: every duration to zero and no animation or transition anywhere, so screens,
+   sheets and toasts appear in place. Components needing a different static look go here too. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Track's short caps labels (REST, LAST SET). Never on exercise names. */
@@ -936,24 +1018,22 @@ h1 {
   color: var(--text-2);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .hero-rings {
-    animation: hero-pulse 6s ease-in-out infinite alternate;
-  }
+.hero-rings {
+  animation: hero-pulse 6s ease-in-out infinite alternate;
+}
 
-  .hero-cta {
-    transition: transform 0.15s ease-out;
-  }
+.hero-cta {
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
 
-  .hero-cta:active:not(:disabled) {
-    transform: scale(0.97);
-  }
+.hero-cta:active:not(:disabled) {
+  transform: scale(0.97);
+}
 
-  @keyframes hero-pulse {
-    to {
-      transform: scale(1.05);
-      opacity: 0.25;
-    }
+@keyframes hero-pulse {
+  to {
+    transform: scale(1.05);
+    opacity: 0.25;
   }
 }
 
@@ -1511,10 +1591,8 @@ h1 {
   font-style: normal;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .rest-ring-fg {
-    transition: stroke-dashoffset 0.25s linear;
-  }
+.rest-ring-fg {
+  transition: stroke-dashoffset var(--dur-base) linear;
 }
 
 /* ---------- Pause sheet (src/ui/screens/pauseSheet.ts) ---------- */
@@ -1575,14 +1653,12 @@ h1 {
   color: var(--on-danger);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .cta-btn {
-    transition: transform 0.15s ease-out;
-  }
+.cta-btn {
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
 
-  .cta-btn:active:not(:disabled) {
-    transform: scale(0.97);
-  }
+.cta-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 /* ---------- Session ---------- */
@@ -1981,13 +2057,6 @@ h1 {
   font-family: var(--font-display);
   font-size: var(--fs-title);
   font-weight: 700;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
-    transition: none !important;
-  }
 }
 
 /* ---------- M1b: lists, notes, settings ---------- */
@@ -2931,6 +3000,7 @@ textarea:focus-visible {
   display: none;
 }
 
+/* The rep counter keeps its pre-M12 bump (not a token: "unchanged mid-set"). */
 .rep-num.bump {
   animation: rep-bump 260ms ease-out;
 }
@@ -2941,12 +3011,6 @@ textarea:focus-visible {
   }
   to {
     transform: scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rep-num.bump {
-    animation: none;
   }
 }
 

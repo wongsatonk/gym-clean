@@ -229,6 +229,13 @@ async function takePhoto(page: Page, result: Scored[]) {
 
 /** Every visible button in `scope` is at least 56px tall (gym rule). */
 async function expectTapTargets(scope: Locator) {
+  // M12 motion: sheets rise in; measure once the finite entrance animations have settled
+  // (a box read mid-transform comes back a hair under its real size).
+  await scope.page().waitForFunction(() =>
+    document
+      .getAnimations()
+      .every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity),
+  );
   const heights = await scope
     .locator('button')
     .evaluateAll((els) =>
