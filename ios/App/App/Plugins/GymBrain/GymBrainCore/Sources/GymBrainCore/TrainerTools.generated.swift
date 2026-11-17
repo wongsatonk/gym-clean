@@ -7,7 +7,7 @@ public enum TrainerTools {
     /// What every propose tool tells the model. The app shows a card; nothing changes without a tap.
     public static let proposedReply = "Proposed; the app will ask the user to confirm."
     /// Every tool name, in contract order.
-    public static let names: [String] = ["postponeSession", "avoidBodyArea", "lighterToday", "deloadWeek", "swapExercise", "adjustStalledExercise", "suggestFood", "proposeFocusBlock", "shortOnTime", "setEasyOn", "weekSummary", "progressSummary", "exerciseInfo", "foodIdeas"]
+    public static let names: [String] = ["postponeSession", "doDayToday", "avoidBodyArea", "lighterToday", "deloadWeek", "swapExercise", "adjustStalledExercise", "suggestFood", "proposeFocusBlock", "shortOnTime", "setEasyOn", "weekSummary", "progressSummary", "exerciseInfo", "foodIdeas"]
     /// Tools that answer from `toolResults` and never record a call.
     public static let readOnlyNames: Set<String> = ["weekSummary", "progressSummary", "exerciseInfo", "foodIdeas"]
 
@@ -15,6 +15,7 @@ public enum TrainerTools {
     public static func make(recorder: ToolCallRecorder, results: ReadToolResults) -> [any Tool] {
         [
             PostponeSessionTool(recorder: recorder),
+            DoDayTodayTool(recorder: recorder),
             AvoidBodyAreaTool(recorder: recorder),
             LighterTodayTool(recorder: recorder),
             DeloadWeekTool(recorder: recorder),
@@ -49,6 +50,24 @@ public struct PostponeSessionTool: Tool {
     public let description = "Move a planned session. Default: today's, to this week's rest day."
     let recorder: ToolCallRecorder
     public func call(arguments: PostponeSessionArguments) async throws -> String {
+        recorder.record(name: name, arguments: arguments.generatedContent)
+        return TrainerTools.proposedReply
+    }
+}
+
+// MARK: doDayToday
+
+@Generable
+public struct DoDayTodayArguments {
+    @Guide(description: "Plan day name")
+    public var day: String
+}
+
+public struct DoDayTodayTool: Tool {
+    public let name = "doDayToday"
+    public let description = "Run another plan day today."
+    let recorder: ToolCallRecorder
+    public func call(arguments: DoDayTodayArguments) async throws -> String {
         recorder.record(name: name, arguments: arguments.generatedContent)
         return TrainerTools.proposedReply
     }
@@ -130,7 +149,7 @@ public struct SwapExerciseTool: Tool {
 
 @Generable
 public struct AdjustStalledExerciseArguments {
-    @Guide(description: "Stalled exercise id; omit for the first")
+    @Guide(description: "Exercise id; omit for the first")
     public var exerciseId: String?
     @Guide(description: "lighter: -10% and build up; addSet: one more set", .anyOf(["lighter", "addSet"]))
     public var option: String?
@@ -138,7 +157,7 @@ public struct AdjustStalledExerciseArguments {
 
 public struct AdjustStalledExerciseTool: Tool {
     public let name = "adjustStalledExercise"
-    public let description = "Fix a lift that stopped improving: lighter and build up, or one more set."
+    public let description = "Fix a lift on a plateau: lighter and build up, or one more set."
     let recorder: ToolCallRecorder
     public func call(arguments: AdjustStalledExerciseArguments) async throws -> String {
         recorder.record(name: name, arguments: arguments.generatedContent)
@@ -214,7 +233,7 @@ public struct SetEasyOnArguments {
 
 public struct SetEasyOnTool: Tool {
     public let name = "setEasyOn"
-    public let description = "Change the standing go-easy list: areas every plan goes lighter on."
+    public let description = "Change the go-easy list: areas every plan goes lighter on."
     let recorder: ToolCallRecorder
     public func call(arguments: SetEasyOnArguments) async throws -> String {
         recorder.record(name: name, arguments: arguments.generatedContent)

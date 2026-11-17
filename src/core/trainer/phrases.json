@@ -290,7 +290,10 @@
     "doToday": {
       "note": "A 'do' word, then (after 'the'/'my') one of the coach's plan day names ('Push A') -> doToday, only when the request is about today (no other day word). A skip word wins ('dont do push a' is a postpone).",
       "do": ["do", "train", "run", "start", "lets do", "go for", "เล่น", "ทำ"],
-      "fillers": ["the", "my", "a", "with"]
+      "fillers": ["the", "my", "a", "with"],
+      "switchNote": "Checkpoint J: a switch word ('swap to push', 'adjust plan to be push') also leads to a day name and then wins over a swap. A bare first word of day names ('push' for 'Push A' / 'Push B') counts only at the end or before a partialFollowers word ('do push today', never 'do push ups'); the coach picks the next such day.",
+      "switchTo": ["swap to", "switch to", "swap today to", "switch today to", "change to", "change it to", "change today to", "make it", "make today", "to be", "instead do"],
+      "partialFollowers": ["today", "tonight", "now", "instead", "day", "workout", "session", "for", "please"]
     },
     "moveDay": {
       "note": "A move word plus a day to move ('Thursday') and a target ('to Friday') -> postpone with date + moveTo; the coach turns it into a move of that planned day.",

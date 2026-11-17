@@ -119,7 +119,7 @@ describe('proposeDoToday', () => {
     const state = st();
     expect(ids(state, [], MON)).toEqual(['a', 'b', 'c', 'd', 'e', 'f', '-']);
     const p = ok(proposeDoToday(state, [], MON, 'c'));
-    expect(p.action).toBe('postpone');
+    expect(p.action).toBe('doToday');
     expect(p.scope).toBe('dated');
     expect(p.baseVersion).toBe(3);
     expect(p.next.overrides).toEqual([{ date: MON, dayId: 'c' }]);

@@ -59,7 +59,6 @@ import type {
 import type { Unit } from '../units';
 import {
   matchIntent,
-  normalizeText,
   type DayWord,
   type Intent,
   type IntentSlots,
@@ -102,7 +101,7 @@ import {
 import { proposeAvoidArea } from './actions/avoidArea';
 import { easyOnArea, proposeEasyOn } from './actions/easyOn';
 import { proposePostpone, type PostponeMode } from './actions/postpone';
-import { longDate, proposeDoToday, proposeMoveDay } from './actions/move';
+import { findPlanDay, longDate, proposeDoToday, proposeMoveDay } from './actions/move';
 import { proposeSwap, proposeSwapOptions, type SwapScope } from './actions/swap';
 import { proposeRemove } from './actions/remove';
 import { FULL_DAY_TITLE, proposeShortOnTime, shortOptionFor } from './actions/shortOnTime';
@@ -287,7 +286,7 @@ export const ASK_EXERCISE = 'Which exercise?';
 export const ASK_DAY = 'Which day?';
 /** How many target dates the "Move X to which day?" question offers. */
 const MOVE_CHIPS = 3;
-export const NO_STALLS = 'No plateaus right now. A deload week or a swap from now on?';
+export const NO_STALLS = 'No plateaus right now. What would you like to change?';
 export const ASK_GROUP = 'Which area should the block build?';
 export const ASK_WEEKS = 'For how many weeks?';
 export const ASK_DAYS = 'How many days a week?';
@@ -650,14 +649,36 @@ function stalls(ctx: CoachContext): Stall[] {
   return detectStalls(ctx.sets, ctx.sessions, ctx.state.plan, { since: stallSince(ctx.changes) });
 }
 
-const noStalls = (gym: CoachChip[]): Body => ({
-  reply: NO_STALLS,
-  chips: [
-    ...gym,
-    { id: 'deload', label: 'Deload week' },
-    { id: 'swap', label: 'Swap from now on', args: { scope: 'plan' } },
-  ],
-});
+/**
+ * Checkpoint J: "Adjust my plan" with no plateau is a menu of every plan change, minus the ones
+ * today can't take (a session started or done today: nothing for today; a rest day: only "do
+ * another day today").
+ */
+function noStalls(ctx: CoachContext, gym: CoachChip[]): Body {
+  const busy = ctx.sessions.some((s) => localDate(s.startedAt) === ctx.today);
+  const rest = effectiveDay(ctx.state, ctx.sessions, ctx.today).rest;
+  const todayChips: CoachChip[] = busy
+    ? []
+    : [
+        { id: 'doToday', label: 'Do another day today' },
+        ...(rest
+          ? []
+          : [
+              { id: 'notToday' as const, label: 'Not today' },
+              { id: 'lighter' as const, label: 'Lighter today' },
+              { ...SHORT_ON_TIME_CHIP },
+            ]),
+      ];
+  return {
+    reply: NO_STALLS,
+    chips: [
+      ...gym,
+      ...todayChips,
+      { id: 'deload', label: 'Deload week' },
+      { id: 'swap', label: 'Swap an exercise', args: { scope: 'plan' } },
+    ],
+  };
+}
 
 /** A stall's fixes, without one more set on a lift that loads a go-easy area (M12 1b). */
 function optionsOf(ctx: CoachContext, stall: Stall): StallOption[] {
@@ -673,7 +694,7 @@ function stallFlow(ctx: CoachContext, exerciseId?: string, option?: StallOption)
   if (!stall) {
     if (exerciseId)
       return { reply: `${nameOf(ctx, exerciseId)} is still moving. No change needed.` };
-    return noStalls(gym);
+    return noStalls(ctx, gym);
   }
   const options = optionsOf(ctx, stall);
   const pick = option && stall.options.includes(option) ? option : options[0];
@@ -1033,9 +1054,12 @@ function handleText(text: string, ctx: CoachContext): CoachResponse {
     case 'focusEdit':
       return done(focusEdit(ctx, s));
     case 'doToday': {
-      const want = s.dayName === undefined ? '' : normalizeText(s.dayName);
-      const day = ctx.state.plan.days.find((d) => normalizeText(d.name) === want);
-      return done(day ? doToday(ctx, day.id) : doToday(ctx, undefined));
+      // A full name ("Push A") or the first word(s) of names ("push": the next one coming up).
+      const day =
+        s.dayName === undefined
+          ? undefined
+          : findPlanDay(ctx.state, ctx.sessions, ctx.today, s.dayName);
+      return done(doToday(ctx, day?.id));
     }
     case 'shortOnTime':
       return done(shortOnTime(ctx, s.minutes));

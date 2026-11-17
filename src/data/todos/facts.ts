@@ -30,8 +30,16 @@ import { HEALTH_SETTINGS_KEY } from '../health/store';
 import { getIntake } from '../trainerKit/store';
 import { getTodoSignals, getWhatsNew } from './store';
 
-/** Which logged changes count as "coach changes at the gym" (Not today / Go easy / a swap). */
-const COACH_CHANGE_ACTIONS: readonly ProposalAction[] = ['postpone', 'avoidArea', 'swap'];
+/**
+ * Which logged changes count as "coach changes at the gym" (Not today / Go easy / a swap; Do it
+ * today was a 'postpone' until Checkpoint J gave it its own action).
+ */
+const COACH_CHANGE_ACTIONS: readonly ProposalAction[] = [
+  'postpone',
+  'doToday',
+  'avoidArea',
+  'swap',
+];
 /** The M10e swap check: a Legs B session logged without its leg press. */
 const LEG_SWAP = { dayId: 'legs-b', fromExerciseId: 'Leg_Press' } as const;
 /** Dev-log auto-set actions that only happen with hands-free on. */

@@ -7,8 +7,9 @@
  * - `ask()` builds one request: the guardrail instructions, the context text (the last 8 turns
  *   live inside it), **only the new message** (≤ MESSAGE_MAX_CHARS) and the read-only tool
  *   results; then `sanitizeReply` on every reply. The first valid `propose*` call becomes the
- *   Proposal (via core `runToolCall`, so Apply stays his tap); an invalid one → COULDNT_DO + the
- *   reason + quick chips; a second valid one → a chip. Read-only calls are ignored (their text
+ *   Proposal (via core `runToolCall`, so Apply stays his tap); a failed one → our own reason
+ *   (refusals) or COULDNT_DO (malformed calls), then TRY_THESE + the closest chips + quick chips;
+ *   a second valid one → a chip. Read-only calls are ignored (their text
  *   was passed in).
  * - Red flags never reach the model: the rules answer (only the red-flag line).
  * - Errors: rejects with `BrainError(code)`; the router falls back to the rules with a note.
@@ -19,7 +20,12 @@
  */
 import { handle, QUICK_CHIPS, type CoachChip } from '../../core/trainer/coach';
 import { matchIntent, type Intent, type Safety } from '../../core/trainer/intents';
-import { runToolCall, TRAINER_TOOLS, type ToolOutcome } from '../../core/trainer/tools';
+import {
+  runToolCall,
+  TRAINER_TOOLS,
+  type ToolFailKind,
+  type ToolOutcome,
+} from '../../core/trainer/tools';
 import { shortOptionFor } from '../../core/trainer/actions/shortOnTime';
 import { brainInstructions } from '../../core/trainer/brain/instructions';
 import {
@@ -94,8 +100,15 @@ export type AppleDeps = {
 
 /** The new message's cap (context.ts BUDGET counts 400 characters for it). */
 export const MESSAGE_MAX_CHARS = BUDGET.messageChars;
-/** Start of the reply when the model's tool call doesn't validate. */
-export const COULDNT_DO = "I couldn't do that.";
+/**
+ * The reply when the model's call doesn't fit the schema (or names no tool): the validation
+ * reason is never shown (Checkpoint J showed "Bad to." garbled); the trace keeps its kind + arg.
+ */
+export const COULDNT_DO = "I couldn't make that change.";
+/** Ends every failed-call reply; the chips follow. */
+export const TRY_THESE = 'Try one of these:';
+/** Shown copy per failure kind: our own reason text, or COULDNT_DO for a malformed call. */
+const SHOWS_REASON: ReadonlySet<ToolFailKind> = new Set(['refused', 'midWorkout', 'redFlag']);
 /** Most extra tool calls turned into chips. */
 const MAX_CALL_CHIPS = 2;
 
@@ -119,6 +132,7 @@ const ACTION_INTENT: Record<ProposalAction, Intent> = {
   shortOnTime: 'shortOnTime',
   starterPlan: 'help',
   easyOn: 'avoidArea',
+  doToday: 'doToday',
 };
 
 const PROPOSE_TOOLS = new Map(
@@ -129,6 +143,22 @@ const WORKOUT_CHIPS = new Set(['easyOn', 'lighter', 'swap']);
 
 function quickChips(workout: boolean): CoachChip[] {
   return QUICK_CHIPS.filter((c) => !workout || WORKOUT_CHIPS.has(c.id)).map((c) => ({ ...c }));
+}
+
+/** After a failed call to a tool: the closest options first (data), then the quick chips. */
+const CLOSEST_CHIPS: Record<string, readonly CoachChip[]> = {
+  postponeSession: [
+    { id: 'doToday', label: 'Do another day today' },
+    { id: 'notToday', label: 'Not today' },
+  ],
+  doDayToday: [{ id: 'doToday', label: 'Do another day today' }],
+};
+
+function failChips(toolName: string, workout: boolean): CoachChip[] {
+  const out: CoachChip[] = [];
+  for (const c of [...(workout ? [] : (CLOSEST_CHIPS[toolName] ?? [])), ...quickChips(workout)])
+    if (!out.some((x) => x.id === c.id)) out.push({ ...c });
+  return out;
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
@@ -190,6 +220,7 @@ const CALL_CHIP: Record<string, (a: Record<string, unknown>) => CoachChip | null
     return { id: 'shortOnTime', label: `${minutes}-minute version`, args: { minutes } };
   },
   setEasyOn: () => ({ id: 'easyOn', label: 'Go easy on…' }),
+  doDayToday: () => ({ id: 'doToday', label: 'Do another day today' }),
 };
 
 /** Dev log / eval trace: ids and numbers only, never text. */
@@ -197,8 +228,11 @@ export type AppleTrace = {
   latencyMs: number;
   /** The tool name of the proposal shown, or 'none'. */
   action: string;
-  /** Every propose call the model made, in order, and whether it validated. */
-  calls: { name: string; ok: boolean }[];
+  /**
+   * Every propose call the model made, in order, and whether it validated; a failed one has its
+   * kind and, for invalidArgs, the arg name (an id or '?'), never the reason text.
+   */
+  calls: { name: string; ok: boolean; fail?: ToolFailKind; arg?: string }[];
   /** sanitizeReply swapped the model's text. */
   replaced: boolean;
   hits: string[];
@@ -339,14 +373,17 @@ export async function askApple(
   let action = 'none';
 
   if (first && !first.out.ok) {
-    body = `${COULDNT_DO} ${first.out.reason}`;
+    const out = first.out;
+    body = `${SHOWS_REASON.has(out.kind) ? out.reason : COULDNT_DO} ${TRY_THESE}`;
     intent = 'help';
-    chips = quickChips(phase === 'workout');
+    chips = failChips(first.call.name, phase === 'workout');
   } else if (first?.out.ok) {
     const out = first.out;
     if (body === '') body = out.reply;
     const tool = PROPOSE_TOOLS.get(first.call.name);
-    if (tool && !tool.readOnly) intent = ACTION_INTENT[tool.action];
+    // The proposal's own action wins: postponeSession { to: today } proposes a doToday.
+    const act = out.proposal?.action ?? (tool && !tool.readOnly ? tool.action : undefined);
+    if (act) intent = ACTION_INTENT[act];
     if (out.proposal) extra.proposal = out.proposal;
     if (out.foods) extra.foods = out.foods;
     if (out.focusBlock) extra.focusBlock = out.focusBlock;
@@ -377,7 +414,16 @@ export async function askApple(
     trace: {
       latencyMs,
       action,
-      calls: outcomes.map((o) => ({ name: o.call.name, ok: o.out.ok })),
+      calls: outcomes.map((o) =>
+        o.out.ok
+          ? { name: o.call.name, ok: true }
+          : {
+              name: o.call.name,
+              ok: false,
+              fail: o.out.kind,
+              ...(o.out.arg !== undefined ? { arg: o.out.arg } : {}),
+            },
+      ),
       replaced: clean.replaced && first?.out.ok !== false,
       hits: clean.hits,
       usedHealth,

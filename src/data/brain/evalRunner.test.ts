@@ -121,9 +121,10 @@ describe('expected calls from requests.json slots', () => {
       name: 'shortOnTime',
       args: { minutes: 20 },
     });
+    // Checkpoint J: "do Push A today" is its own tool (postpone only ever rests today).
     expect(expectedCall(item({ intent: 'doToday', slots: { dayName: 'Push A' } }), TODAY)).toEqual({
-      name: 'postponeSession',
-      args: { to: TODAY },
+      name: 'doDayToday',
+      args: { day: 'Push A' },
     });
     expect(
       expectedCall(item({ intent: 'focusEdit', slots: { exerciseId: 'Dumbbell_Flyes' } }), TODAY)
@@ -152,6 +153,15 @@ describe('expected calls from requests.json slots', () => {
 });
 
 describe('argsMatch', () => {
+  it('a plan day matches by its leading words, in any case or as an id', () => {
+    expect(argsMatch({ day: 'Push' }, { day: 'Push B' }, TODAY)).toBe(true);
+    expect(argsMatch({ day: 'Push' }, { day: 'push-a' }, TODAY)).toBe(true);
+    expect(argsMatch({ day: 'Push A' }, { day: 'PUSH_A' }, TODAY)).toBe(true);
+    expect(argsMatch({ day: 'Push A' }, { day: 'Push B' }, TODAY)).toBe(false);
+    expect(argsMatch({ day: 'Push' }, { day: 'Pushups' }, TODAY)).toBe(false);
+    expect(argsMatch({ day: 'Push' }, {}, TODAY)).toBe(false);
+  });
+
   it('compares only the expected keys, with defaults and snapping', () => {
     expect(argsMatch({ area: 'legs' }, { area: 'legs' }, TODAY)).toBe(true);
     expect(argsMatch({ area: 'legs' }, { area: 'back' }, TODAY)).toBe(false);

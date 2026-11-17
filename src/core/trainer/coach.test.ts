@@ -530,7 +530,7 @@ describe('M12 Do it today / Move a day', () => {
   it('doToday chip → a dated override proposal for that day today', () => {
     const r = handle({ chip: 'doToday', args: { dayId: 'legs-a' } }, ctxFor('pull-a'));
     expect(r.intent).toBe('doToday');
-    expect(r.proposal?.action).toBe('postpone');
+    expect(r.proposal?.action).toBe('doToday');
     expect(r.proposal?.scope).toBe('dated');
     expect(r.proposal?.title).toBe('Do Legs A today');
     expect(r.proposal?.next.overrides).toEqual([{ date: TODAY, dayId: 'legs-a' }]);
@@ -575,6 +575,30 @@ describe('M12 Do it today / Move a day', () => {
     const r = handle(text('do legs a today'), ctxFor('pull-a'));
     expect(r.intent).toBe('doToday');
     expect(r.proposal?.title).toBe('Do Legs A today');
+  });
+
+  // Checkpoint J: "Adjust plan to be push for today" on a Pull day.
+  it('a bare day word ("push", "legs") picks the next such day coming up', () => {
+    for (const t of [
+      'do push today',
+      'Adjust plan to be push for today',
+      'swap to push',
+      'switch today to push day',
+      "let's do push instead",
+    ]) {
+      const r = handle(text(t), ctxFor('pull-a'));
+      expect(r.intent, t).toBe('doToday');
+      expect(r.proposal?.title, t).toBe('Do Push B today');
+      expect(r.proposal?.action, t).toBe('doToday');
+    }
+    expect(handle(text('train legs today instead'), ctxFor('pull-a')).proposal?.title).toBe(
+      'Do Legs A today',
+    );
+  });
+
+  it('"do push ups today" is not a day', () => {
+    expect(handle(text('do push ups today'), ctxFor('pull-a')).intent).not.toBe('doToday');
+    expect(handle(text('swap to dumbbell press'), ctxFor('pull-a')).intent).not.toBe('doToday');
   });
 
   it('moveDay chip → move proposal; onto a rest date keeps every session', () => {
@@ -720,7 +744,7 @@ describe('adjust my plan / stalls', () => {
       { ...c, state: applied.state, changes, catalog: FULL_KIT },
     );
     expect(r.proposal).toBeUndefined();
-    expect(ids(r)).toEqual(['deload', 'swap']);
+    expect(ids(r)).toEqual(['doToday', 'notToday', 'lighter', 'shortOnTime', 'deload', 'swap']);
     // An undone change doesn't count.
     const undone = [{ ...applied.change, undoneAt: at(11, 10, 21) }];
     expect(handle({ chip: 'adjustPlan' }, { ...c, changes: undone }).proposal?.action).toBe(
@@ -728,11 +752,32 @@ describe('adjust my plan / stalls', () => {
     );
   });
 
-  it('no stalls → deload or a swap from now on', () => {
+  // Checkpoint J: "Adjust my plan" is a general menu when nothing has plateaued.
+  it('no plateaus → every way to change the plan, worded "plateau"', () => {
     const r = handle({ chip: 'adjustPlan' }, ctxFor('push-a', { catalog: FULL_KIT }));
     expect(r.proposal).toBeUndefined();
-    expect(ids(r)).toEqual(['deload', 'swap']);
-    expect(r.chips[1]?.args?.scope).toBe('plan');
+    expect(r.reply).toBe('No plateaus right now. What would you like to change?');
+    expect(r.reply).not.toMatch(/stall/i);
+    expect(r.chips).toEqual([
+      { id: 'doToday', label: 'Do another day today' },
+      { id: 'notToday', label: 'Not today' },
+      { id: 'lighter', label: 'Lighter today' },
+      { id: 'shortOnTime', label: 'Short on time' },
+      { id: 'deload', label: 'Deload week' },
+      { id: 'swap', label: 'Swap an exercise', args: { scope: 'plan' } },
+    ]);
+    expectClean(r, 'adjustPlan');
+  });
+
+  it('no plateaus with today done or a rest day → only the chips that still work', () => {
+    const c = ctxFor('push-a', { catalog: FULL_KIT });
+    const h = addSession({ sessions: [...c.sessions], sets: [] }, 'push-a', at(11, 11, 8));
+    expect(ids(handle({ chip: 'adjustPlan' }, { ...c, sessions: h.sessions }))).toEqual([
+      'deload',
+      'swap',
+    ]);
+    const sunday = { ...c, today: '2026-11-15' };
+    expect(ids(handle({ chip: 'adjustPlan' }, sunday))).toEqual(['doToday', 'deload', 'swap']);
   });
 });
 
@@ -913,7 +958,14 @@ describe('missing kit (M10e)', () => {
       },
       { id: 'gymSwap', label: 'Swap Leg Press (no kit)', args: { exerciseId: 'Leg_Press' } },
     ]);
-    expect(ids(r).slice(2)).toEqual(['deload', 'swap']);
+    expect(ids(r).slice(2)).toEqual([
+      'doToday',
+      'notToday',
+      'lighter',
+      'shortOnTime',
+      'deload',
+      'swap',
+    ]);
     const kept = handle({ chip: 'adjustPlan' }, ctxFor('push-a', { gymKept: ['Leg_Press'] }));
     expect(kept.chips.filter((x) => x.id === 'gymSwap').map((x) => x.args?.exerciseId)).toEqual([
       'Standing_Calf_Raises',

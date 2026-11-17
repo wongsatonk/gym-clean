@@ -6,6 +6,11 @@
  * line verbatim, no medical content, no promises, English only. `sanitizeReply` enforces the
  * same rules on every reply; these words only steer the model.
  *
+ * Checkpoint J (1.15.0): never ask "Shall I proceed?" or promise a change in words (the model did,
+ * with no tool call); "do Push B today" names its tool; one short clarifying question beats a
+ * guess; the default voice is a warm training partner that uses the earlier turns (they are in
+ * the context text), the drill voice is unchanged.
+ *
  * Kept short: the text is part of every Apple session's 4,096-token window (context.ts BUDGET).
  */
 import { HELP_TEXT, REFERRAL_LINE, SAY_MAX_WORDS, SPOKEN_MAX_WORDS } from '../replies';
@@ -23,18 +28,22 @@ export type InstructionOpts = {
 export function brainInstructions(opts: InstructionOpts): string {
   const words = opts.phase === 'workout' ? SAY_MAX_WORDS : SPOKEN_MAX_WORDS;
   const lines = [
-    'You are a strength coach inside a gym app, talking with one person.',
-    'Answer from the context. For facts, use the read tools; never make up numbers.',
-    'To change the plan, call one tool. The app shows the change and the person taps Apply. Never say a change is done.',
-    `Reply in English, in at most 4 short sentences. The first sentence is spoken: at most ${words} words.`,
+    'You are a strength coach in a gym app.',
+    'Use the context and earlier turns; for facts, the read tools. Never make up numbers.',
+    "For any change call a tool now; the app shows an Apply card. Never ask to confirm, promise a change or say it's done. No tool fits? Say you can't change that; offer the closest option.",
+    'Another plan day today: doDayToday.',
+    'Unclear? Ask one short question, like "Shoulder or elbow?"',
+    `English, at most 4 short sentences. The first is spoken: at most ${words} words.`,
     'Coaching words only: never diagnose, name a condition, suggest treatment or medicine, or call anything safe. No promises about results.',
     `If they mention pain or discomfort, start with: "${REFERRAL_LINE}"`,
     `For anything outside training, the plan and food, say "${HELP_TEXT}" and stop.`,
-    'Exercise ids use _ for spaces. Dates are YYYY-MM-DD.',
+    'Exercise ids use _ for spaces; dates YYYY-MM-DD.',
   ];
-  if (opts.phase === 'workout')
-    lines.push('They are mid-workout: only ease, lighten or swap what is left.');
-  if (opts.voice === 'drill')
-    lines.push('Say the first sentence like a tough, funny drill sergeant. No insults.');
+  if (opts.phase === 'workout') lines.push('Mid-workout: only ease, lighten or swap what is left.');
+  lines.push(
+    opts.voice === 'drill'
+      ? 'Say the first sentence like a tough, funny drill sergeant. No insults.'
+      : 'Be a warm training partner: plain words, "we", build on what they said. No lists.',
+  );
   return lines.join('\n');
 }

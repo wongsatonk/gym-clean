@@ -129,7 +129,7 @@ export function expectedCall(item: EvalRequestItem, today: string): ExpectedCall
       return { name: 'postponeSession', args };
     }
     case 'doToday':
-      return { name: 'postponeSession', args: { to: today } };
+      return { name: 'doDayToday', args: s.dayName ? { day: s.dayName } : {} };
     case 'avoidArea':
       return { name: 'avoidBodyArea', args: pick(s, ['area']) };
     case 'lighter':
@@ -171,12 +171,25 @@ function gotValue(key: string, got: Record<string, unknown>, today: string): unk
   return got[key];
 }
 
+const dayWords = (v: unknown): string =>
+  typeof v === 'string'
+    ? v
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+    : '';
+
 export function argsMatch(
   expected: Record<string, string | number>,
   got: Record<string, unknown>,
   today: string,
 ): boolean {
-  return Object.entries(expected).every(([k, v]) => gotValue(k, got, today) === v);
+  return Object.entries(expected).every(([k, v]) => {
+    const g = gotValue(k, got, today);
+    // A plan day: "Push" matches "Push B" / "push-b" (the tool picks the next one coming up).
+    if (k === 'day') return `${dayWords(g)} `.startsWith(`${dayWords(v)} `) && dayWords(v) !== '';
+    return g === v;
+  });
 }
 
 /** Only schema-shaped tool names and values (ids, enums, dates, numbers) reach the report. */

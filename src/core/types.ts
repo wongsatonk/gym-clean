@@ -166,7 +166,9 @@ export type ProposalAction =
   | 'focusBlock'
   | 'shortOnTime'
   | 'starterPlan'
-  | 'easyOn';
+  | 'easyOn'
+  /** Checkpoint J: run another plan day today (`{ date: today, dayId }`; move.ts proposeDoToday). */
+  | 'doToday';
 
 export type Proposal = {
   action: ProposalAction;

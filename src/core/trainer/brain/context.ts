@@ -17,12 +17,13 @@
  * digit, a number word or a Health unit (bpm, HRV, %, …) is cut, so no Health number rides
  * along in chat history (tested).
  *
- * Budget: Apple's on-device model has 4,096 tokens per session for the instructions, all 14 tool
+ * Budget: Apple's on-device model has 4,096 tokens per session for the instructions, all 15 tool
  * schemas, the context, the message, tool outputs and the reply (docs/ios-setup.md "Slice 2 API
  * notes"). At a conservative 3 characters per token (Apple: 3–4 for English), with ~600 tokens
- * kept for the reply, ~880 characters of instructions, ~4,700 of tool schemas (tools.contract.json,
- * compact), a 400-character message and two read-tool outputs (2 × 600), about 3,280 characters
- * are left: CONTEXT_BUDGET_CHARS = 3,200 (context.test.ts recomputes this from the real texts).
+ * kept for the reply, ~1,000 characters of instructions, ~4,900 of tool schemas (tools.contract.json,
+ * compact), a 400-character message and two read-tool outputs (2 × 600), about 2,960 characters
+ * are left: CONTEXT_BUDGET_CHARS = 2,900 (context.test.ts recomputes this from the real texts).
+ * It was 3,200 until Checkpoint J (1.15.0) added the doDayToday tool and the partner voice.
  * Over budget, older top sets go first, then older turns, then a hard cut.
  */
 import type { ChatMessage, Goal, GoalKind, ReadinessSignal, SetLog } from '../../types';
@@ -43,7 +44,7 @@ export const BUDGET = {
   toolOutputChars: 1200,
 } as const;
 
-export const CONTEXT_BUDGET_CHARS = 3200;
+export const CONTEXT_BUDGET_CHARS = 2900;
 
 export const MAX_TURNS = 8;
 /** One chat turn in the context is cut to this many characters. */

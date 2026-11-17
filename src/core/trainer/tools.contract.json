@@ -37,6 +37,27 @@
       }
     },
     {
+      "name": "doDayToday",
+      "description": "Run another plan day today.",
+      "readOnly": false,
+      "action": "doToday",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "Plan day name",
+            "pattern": "^[^\\n]{1,40}$"
+          }
+        },
+        "required": [
+          "day"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
       "name": "avoidBodyArea",
       "description": "Go easy on a body area today: swap or remove what loads it.",
       "readOnly": false,
@@ -126,7 +147,7 @@
     },
     {
       "name": "adjustStalledExercise",
-      "description": "Fix a lift that stopped improving: lighter and build up, or one more set.",
+      "description": "Fix a lift on a plateau: lighter and build up, or one more set.",
       "readOnly": false,
       "action": "stall",
       "midWorkout": false,
@@ -135,7 +156,7 @@
         "properties": {
           "exerciseId": {
             "type": "string",
-            "description": "Stalled exercise id; omit for the first",
+            "description": "Exercise id; omit for the first",
             "pattern": "^[A-Za-z0-9_-]{1,60}$"
           },
           "option": {
@@ -237,7 +258,7 @@
     },
     {
       "name": "setEasyOn",
-      "description": "Change the standing go-easy list: areas every plan goes lighter on.",
+      "description": "Change the go-easy list: areas every plan goes lighter on.",
       "readOnly": false,
       "action": "easyOn",
       "midWorkout": false,

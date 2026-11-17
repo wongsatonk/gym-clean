@@ -158,9 +158,11 @@ describe('budget', () => {
         parameters,
       })),
     ).length;
+    // The longest variant (since Checkpoint J the calm partner line is the longer one).
     const instr = Math.max(
-      brainInstructions({ phase: 'today', voice: 'drill' }).length,
-      brainInstructions({ phase: 'workout', voice: 'drill' }).length,
+      ...(['today', 'preview', 'workout'] as const).flatMap((phase) =>
+        (['calm', 'drill'] as const).map((voice) => brainInstructions({ phase, voice }).length),
+      ),
     );
     const chars =
       instr + toolChars + CONTEXT_BUDGET_CHARS + BUDGET.messageChars + BUDGET.toolOutputChars;

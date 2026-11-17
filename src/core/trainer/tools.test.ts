@@ -83,6 +83,7 @@ describe('tool list', () => {
         'adjustStalledExercise',
         'avoidBodyArea',
         'deloadWeek',
+        'doDayToday',
         'exerciseInfo',
         'foodIdeas',
         'lighterToday',
@@ -187,7 +188,7 @@ describe('runToolCall: validation', () => {
 
   it('rejects an unknown tool and a read-only tool with a short reason', () => {
     const a = runToolCall({ name: 'deleteEverything', args: {} }, ctx);
-    expect(a).toEqual({ ok: false, reason: expect.any(String) as string });
+    expect(a).toEqual({ ok: false, kind: 'unknownTool', reason: expect.any(String) as string });
     const b = runToolCall({ name: 'weekSummary', args: {} }, ctx);
     expect(b.ok).toBe(false);
   });
@@ -309,6 +310,7 @@ describe('runToolCall: a call returns a Proposal, never a state', () => {
     { name: 'proposeFocusBlock', args: { group: 'chest', weeks: 4, weekdays: [1, 3, 5] } },
     { name: 'shortOnTime', args: { minutes: 30 } },
     { name: 'setEasyOn', args: { add: ['shoulders'] } },
+    { name: 'doDayToday', args: { day: 'Pull B' } },
   ];
 
   for (const call of calls) {
@@ -390,13 +392,17 @@ describe('runToolCall: a call returns a Proposal, never a state', () => {
   it('an action refusal comes back as a short reason', () => {
     const ctx = ctxFor('push-a');
     const r = runToolCall({ name: 'setEasyOn', args: { remove: ['legs'] } }, ctx);
-    expect(r).toEqual({ ok: false, reason: 'Your go-easy list already says that.' });
+    expect(r).toEqual({
+      ok: false,
+      kind: 'refused',
+      reason: 'Your go-easy list already says that.',
+    });
   });
 
   it('adjustStalledExercise finds no stall without history, and proposes a fix with one', () => {
     const none = runToolCall({ name: 'adjustStalledExercise', args: {} }, ctxFor('push-a'));
     // M13: shown wording is "plateau", never "stalled".
-    expect(none).toEqual({ ok: false, reason: 'No plateaus right now.' });
+    expect(none).toEqual({ ok: false, kind: 'refused', reason: 'No plateaus right now.' });
     // Three finished sessions of Push A with the same top set: a stall on the bench press.
     const sessions: StallSession[] = [];
     const sets: SetLog[] = [];
@@ -435,6 +441,120 @@ describe('runToolCall: a call returns a Proposal, never a state', () => {
 
   it('suggestFood needs Fuel; without it the reason is the rule line', () => {
     const r = runToolCall({ name: 'suggestFood', args: {} }, ctxFor('push-a'));
-    expect(r).toEqual({ ok: false, reason: 'Food tips come with Fuel.' });
+    expect(r).toEqual({ ok: false, kind: 'refused', reason: 'Food tips come with Fuel.' });
+  });
+});
+
+// Checkpoint J: "Adjust plan to be push for today" → "Yes go ahead" → "I couldn't do that. Bad to."
+// (the model sent postponeSession { to: 'today' }). The dedicated tool runs a plan day today; the
+// shapes a model plausibly sends to postponeSession for it are resolved here too.
+describe('doDayToday and "do day X today" through postponeSession', () => {
+  // Wed 2026-11-11 runs Pull A; Thu Legs A, Fri Push B, Sat Pull B, Sun rest, Mon Legs B, Tue Push A.
+  const ctx = () => ctxFor('pull-a');
+  const doesPushB = (r: ReturnType<typeof runToolCall>) => {
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.proposal).toMatchObject({ action: 'doToday', scope: 'dated', title: 'Do Push B today' });
+    expect(r.proposal?.next.overrides).toContainEqual({ date: TODAY, dayId: 'push-b' });
+    expect(r.proposal?.lines[0]).toEqual({ before: 'Wed 11: Pull A', after: 'Wed 11: Push B' });
+  };
+
+  it('takes a day id, a day name in any case, or "Push B day"', () => {
+    for (const day of ['push-b', 'Push B', 'push b', 'PUSH_B', 'Push B day'])
+      doesPushB(runToolCall({ name: 'doDayToday', args: { day } }, ctx()));
+  });
+
+  it('a bare "push" picks the next push day coming up (not today\'s own day)', () => {
+    doesPushB(runToolCall({ name: 'doDayToday', args: { day: 'push' } }, ctx()));
+    doesPushB(runToolCall({ name: 'doDayToday', args: { day: 'Push day' } }, ctx()));
+    // Today is Push A: "push" means the other one.
+    const r = runToolCall({ name: 'doDayToday', args: { day: 'push' } }, ctxFor('push-a'));
+    expect(r.ok && r.proposal?.title).toBe('Do Push B today');
+  });
+
+  it('refuses a day not in the plan, today\'s own day, and a busy today, in plain words', () => {
+    expect(runToolCall({ name: 'doDayToday', args: { day: 'Arms' } }, ctx())).toEqual({
+      ok: false,
+      kind: 'refused',
+      reason: "That day isn't in your plan.",
+    });
+    expect(runToolCall({ name: 'doDayToday', args: { day: 'Pull A' } }, ctx())).toMatchObject({
+      ok: false,
+      kind: 'refused',
+      reason: "Pull A is already today's workout.",
+    });
+    const c = ctx();
+    const done = {
+      ...c,
+      sessions: [
+        ...c.sessions,
+        { sessionId: 't', dayId: 'pull-a', startedAt: at(11, 11, 7), endedAt: at(11, 11, 8) },
+      ],
+    };
+    expect(runToolCall({ name: 'doDayToday', args: { day: 'Push B' } }, done)).toMatchObject({
+      ok: false,
+      kind: 'refused',
+      reason: "Today's workout is already done.",
+    });
+  });
+
+  it('is not offered mid-workout and needs a day', () => {
+    const c = ctx();
+    const w: CoachContext = {
+      ...c,
+      phase: 'workout',
+      sessions: [...c.sessions, { sessionId: 'now', dayId: 'pull-a', startedAt: at(11, 11) }],
+    };
+    expect(runToolCall({ name: 'doDayToday', args: { day: 'Push B' } }, w)).toMatchObject({
+      ok: false,
+      kind: 'midWorkout',
+    });
+    expect(runToolCall({ name: 'doDayToday', args: {} }, ctx())).toMatchObject({
+      ok: false,
+      kind: 'invalidArgs',
+      arg: 'day',
+    });
+  });
+
+  it('postponeSession with to = today (word or date) and a later from (date, name or id) runs that day today', () => {
+    for (const args of [
+      { from: '2026-11-13', to: 'today' },
+      { from: '2026-11-13', to: TODAY },
+      { from: 'Push B', to: 'today' },
+      { from: 'push-b', to: TODAY },
+      { from: 'push', to: 'Today' },
+    ])
+      doesPushB(runToolCall({ name: 'postponeSession', args }, ctx()));
+  });
+
+  it('postponeSession: "tomorrow" is read as a date; junk stays invalid with the arg named', () => {
+    const tomorrow = runToolCall({ name: 'postponeSession', args: { to: 'tomorrow' } }, ctx());
+    // Thursday already has Legs A: a plain refusal, not a validation error.
+    expect(tomorrow).toMatchObject({ ok: false, kind: 'refused' });
+    expect(runToolCall({ name: 'postponeSession', args: { to: 'banana' } }, ctx())).toMatchObject({
+      ok: false,
+      kind: 'invalidArgs',
+      arg: 'to',
+    });
+    // Moving today onto today is not a change.
+    expect(runToolCall({ name: 'postponeSession', args: { to: 'today' } }, ctx())).toMatchObject({
+      ok: false,
+    });
+    // A rest date has nothing to bring forward.
+    expect(
+      runToolCall({ name: 'postponeSession', args: { from: '2026-11-15', to: 'today' } }, ctx()),
+    ).toMatchObject({ ok: false, kind: 'refused' });
+  });
+
+  it('every failure has a kind', () => {
+    const c = ctx();
+    expect(runToolCall({ name: 'weekSummary', args: {} }, c)).toMatchObject({ kind: 'readOnly' });
+    expect(runToolCall({ name: 'lighterToday', args: {} }, c, { safety: 'redFlag' })).toMatchObject(
+      { kind: 'redFlag' },
+    );
+    expect(runToolCall({ name: 'lighterToday', args: { sets: 1 } }, c)).toMatchObject({
+      kind: 'invalidArgs',
+      arg: 'sets',
+    });
   });
 });

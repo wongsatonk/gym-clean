@@ -175,6 +175,11 @@ const FALLBACK: Record<ProposalAction, { title: string; why: string; say: string
     why: 'Every plan and change goes lighter on these areas.',
     say: 'Done. I will go easy there.',
   },
+  doToday: {
+    title: 'Another day today',
+    why: 'Your rotation carries on after it.',
+    say: 'Done. New workout today.',
+  },
 };
 
 export type ProposalText = {

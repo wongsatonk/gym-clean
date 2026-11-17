@@ -27,7 +27,7 @@ import type {
 } from '../types';
 import { stallSince, type CoachContext } from './coach';
 import type { Safety } from './intents';
-import { addDate, localDate } from './plan';
+import { addDate, calendar, localDate } from './plan';
 import { FOCUS_RULES } from './focusRules';
 import { SHORT_ON_TIME } from './timeRules';
 import {
@@ -47,7 +47,13 @@ import {
 import { proposeAvoidArea } from './actions/avoidArea';
 import { easyOnArea, proposeEasyOn } from './actions/easyOn';
 import { proposePostpone, type PostponeMode } from './actions/postpone';
-import { proposeMoveDay } from './actions/move';
+import {
+  findPlanDay,
+  longDate,
+  MOVE_HORIZON_DAYS,
+  proposeDoToday,
+  proposeMoveDay,
+} from './actions/move';
 import { proposeSwap, proposeSwapOptions, type SwapScope } from './actions/swap';
 import { proposeFocusBlock } from './actions/focusBlock';
 import { proposeShortOnTime, shortOptionFor } from './actions/shortOnTime';
@@ -70,6 +76,7 @@ export const PROPOSAL_ACTIONS = [
   'shortOnTime',
   'starterPlan',
   'easyOn',
+  'doToday',
 ] as const satisfies readonly ProposalAction[];
 type MissingAction = Exclude<ProposalAction, (typeof PROPOSAL_ACTIONS)[number]>;
 const allActionsListed: [MissingAction] extends [never] ? true : MissingAction = true;
@@ -110,6 +117,14 @@ export type ToolParams = {
   additionalProperties: false;
 };
 
+/**
+ * Why a call gave no proposal. `refused` / `midWorkout` / `redFlag` reasons are plain coach copy
+ * (safe to show); `unknownTool` / `readOnly` / `invalidArgs` reasons are for tests only: the chat
+ * shows its own copy for those and the trace keeps the kind (+ the arg name), never the text.
+ */
+export type ToolFailKind =
+  'unknownTool' | 'readOnly' | 'invalidArgs' | 'redFlag' | 'midWorkout' | 'refused';
+
 /** What a propose tool gives the app: a Proposal (or food ideas), never a state. */
 export type ToolOutcome =
   | {
@@ -119,7 +134,7 @@ export type ToolOutcome =
       focusBlock?: FocusBlock;
       foods?: FoodSuggestion[];
     }
-  | { ok: false; reason: string };
+  | { ok: false; kind: ToolFailKind; reason: string; arg?: string };
 
 type Args = Record<string, unknown>;
 
@@ -129,6 +144,8 @@ export type ProposeTool = Base & {
   action: ProposalAction;
   /** Allowed from the Pause sheet mid-workout. */
   midWorkout: boolean;
+  /** Reads plausible model shapes ("today", a day name) into schema values before the check. */
+  normalize?(args: Args, ctx: CoachContext): Args;
   /** Args are already schema-checked. */
   toProposal(args: Args, ctx: CoachContext): ToolOutcome;
 };
@@ -137,6 +154,9 @@ export type TrainerTool = ProposeTool | ReadTool;
 
 const AREAS: readonly BodyArea[] = ['arms', 'shoulders', 'chest', 'back', 'legs', 'core'];
 const DATE_PATTERN = '^\\d{4}-\\d{2}-\\d{2}$';
+const DATE_RE = new RegExp(DATE_PATTERN);
+/** A plan day as written: its name or id (resolved by move.ts `findPlanDay`). */
+const DAY_PATTERN = '^[^\\n]{1,40}$';
 const ID_PATTERN = '^[A-Za-z0-9_-]{1,60}$';
 
 const area = (description: string): StringSchema => ({ type: 'string', description, enum: AREAS });
@@ -166,7 +186,12 @@ export const PROPOSAL_TOOL_REPLY = "Here's what I'd change.";
 export const MID_WORKOUT_REASON = "Mid-workout I can only swap, ease or lighten what's left.";
 export const RED_FLAG_REASON = 'No training changes after that. Please get checked first.';
 
-const fail = (reason: string): ToolOutcome => ({ ok: false, reason });
+const fail = (reason: string, kind: ToolFailKind = 'refused', arg?: string): ToolOutcome => ({
+  ok: false,
+  kind,
+  reason,
+  ...(arg !== undefined ? { arg } : {}),
+});
 
 function nameOf(ctx: CoachContext, id: string): string {
   return ctx.catalog.exercises.find((e) => e.id === id)?.name ?? id.replace(/_/g, ' ');
@@ -203,6 +228,13 @@ function blockStart(ctx: CoachContext): string {
   return busy ? addDate(ctx.today, 1) : ctx.today;
 }
 
+/** The next date (today on) that runs `dayId`, within the move horizon. */
+function nextDateOf(ctx: CoachContext, dayId: string): string | undefined {
+  return calendar(ctx.state, ctx.sessions, ctx.today, MOVE_HORIZON_DAYS + 1).find(
+    (e) => !e.rest && !e.done && e.dayId === dayId,
+  )?.date;
+}
+
 // ---------- the tools ----------
 
 const postponeSession: ProposeTool = {
@@ -220,10 +252,38 @@ const postponeSession: ProposeTool = {
   readOnly: false,
   action: 'postpone',
   midWorkout: false,
+  // Checkpoint J: the model sent `to: 'today'` for "do Push B today". "today" / "tomorrow" become
+  // dates and a `from` day name or id becomes that day's next date; `to` = today then runs that
+  // day today (proposeDoToday), since postpone itself only ever rests today.
+  normalize(args, ctx) {
+    const out = { ...args };
+    for (const key of ['from', 'to'] as const) {
+      const v = out[key];
+      if (typeof v !== 'string' || DATE_RE.test(v)) continue;
+      const word = v.trim().toLowerCase();
+      if (word === 'today') out[key] = ctx.today;
+      else if (word === 'tomorrow') out[key] = addDate(ctx.today, 1);
+      else if (key === 'from') {
+        const day = findPlanDay(ctx.state, ctx.sessions, ctx.today, v);
+        const date = day ? nextDateOf(ctx, day.id) : undefined;
+        if (date !== undefined) out[key] = date;
+      }
+    }
+    return out;
+  },
   toProposal(args, ctx) {
     const mode = (args.mode as PostponeMode | undefined) ?? 'useRestDay';
     const from = (args.from as string | undefined) ?? ctx.today;
     const to = args.to as string | undefined;
+    if (to === ctx.today) {
+      if (from === ctx.today) return fail("That's the same day. Pick another one.");
+      const entry = calendar(ctx.state, ctx.sessions, ctx.today, MOVE_HORIZON_DAYS + 1).find(
+        (e) => e.date === from,
+      );
+      if (!entry || entry.rest || entry.done || entry.dayId === null)
+        return fail(`Nothing is planned on ${longDate(from)}.`);
+      return fromResult(proposeDoToday(ctx.state, ctx.sessions, ctx.today, entry.dayId));
+    }
     if (from !== ctx.today) {
       if (to === undefined) return fail('Pick a day to move it to.');
       return fromResult(proposeMoveDay(ctx.state, ctx.sessions, ctx.today, from, to));
@@ -231,6 +291,23 @@ const postponeSession: ProposeTool = {
     return fromResult(
       proposePostpone(ctx.state, ctx.sessions, ctx.today, to ? { mode, to } : { mode }),
     );
+  },
+};
+
+const doDayToday: ProposeTool = {
+  name: 'doDayToday',
+  description: 'Run another plan day today.',
+  parameters: params(
+    { day: { type: 'string', description: 'Plan day name', pattern: DAY_PATTERN } },
+    ['day'],
+  ),
+  readOnly: false,
+  action: 'doToday',
+  midWorkout: false,
+  toProposal(args, ctx) {
+    const day = findPlanDay(ctx.state, ctx.sessions, ctx.today, args.day as string);
+    if (!day) return fail("That day isn't in your plan.");
+    return fromResult(proposeDoToday(ctx.state, ctx.sessions, ctx.today, day.id));
   },
 };
 
@@ -306,9 +383,9 @@ const swapExercise: ProposeTool = {
 
 const adjustStalledExercise: ProposeTool = {
   name: 'adjustStalledExercise',
-  description: 'Fix a lift that stopped improving: lighter and build up, or one more set.',
+  description: 'Fix a lift on a plateau: lighter and build up, or one more set.',
   parameters: params({
-    exerciseId: exerciseId('Stalled exercise id; omit for the first'),
+    exerciseId: exerciseId('Exercise id; omit for the first'),
     option: {
       type: 'string',
       description: 'lighter: -10% and build up; addSet: one more set',
@@ -441,7 +518,7 @@ const areaList = (description: string): ArraySchema => ({
 
 const setEasyOn: ProposeTool = {
   name: 'setEasyOn',
-  description: 'Change the standing go-easy list: areas every plan goes lighter on.',
+  description: 'Change the go-easy list: areas every plan goes lighter on.',
   parameters: params({ add: areaList('Areas to add'), remove: areaList('Areas to remove') }),
   readOnly: false,
   action: 'easyOn',
@@ -464,6 +541,7 @@ const read = (name: ReadToolName, description: string, p: ToolParams = params())
 /** Every tool, in contract order. */
 export const TRAINER_TOOLS: readonly TrainerTool[] = [
   postponeSession,
+  doDayToday,
   avoidBodyArea,
   lighterToday,
   deloadWeek,
@@ -525,21 +603,35 @@ function checkValue(key: string, s: ToolSchema, v: unknown, today: string): stri
   }
 }
 
-/** Schema check: unknown keys, missing required, types, enums, ranges, real future dates. */
-export function validateArgs(tool: TrainerTool, args: unknown, today: string): string | null {
-  if (typeof args !== 'object' || args === null || Array.isArray(args)) return 'Bad arguments.';
+/** The first argument that fails the schema (`key` '' = not an object), or null. */
+export function checkArgs(
+  tool: TrainerTool,
+  args: unknown,
+  today: string,
+): { key: string; reason: string } | null {
+  if (typeof args !== 'object' || args === null || Array.isArray(args))
+    return { key: '', reason: 'Bad arguments.' };
   const a = args as Args;
   const props = tool.parameters.properties;
   for (const key of Object.keys(a))
-    if (!(key in props)) return `Unknown argument ${key.slice(0, 20)}.`;
-  for (const key of tool.parameters.required) if (a[key] === undefined) return `Missing ${key}.`;
+    if (!(key in props)) return { key, reason: `Unknown argument ${key.slice(0, 20)}.` };
+  for (const key of tool.parameters.required)
+    if (a[key] === undefined) return { key, reason: `Missing ${key}.` };
   for (const [key, s] of Object.entries(props)) {
     if (a[key] === undefined) continue;
     const e = checkValue(key, s, a[key], today);
-    if (e) return e;
+    if (e) return { key, reason: e };
   }
   return null;
 }
+
+/** Schema check: unknown keys, missing required, types, enums, ranges, real future dates. */
+export function validateArgs(tool: TrainerTool, args: unknown, today: string): string | null {
+  return checkArgs(tool, args, today)?.reason ?? null;
+}
+
+/** An arg name safe for the trace (an id), else '?'. */
+const traceKey = (key: string): string => (/^[A-Za-z0-9_]{1,30}$/.test(key) ? key : '?');
 
 /**
  * Turns one recorded model call into what the chat shows: a Proposal (or food ideas) waiting for
@@ -551,13 +643,18 @@ export function runToolCall(
   opts: { safety?: Safety } = {},
 ): ToolOutcome {
   const tool = TRAINER_TOOLS.find((t) => t.name === call.name);
-  if (!tool) return fail("I can't do that.");
-  if (tool.readOnly) return fail('That tool only reads.');
-  if (opts.safety === 'redFlag') return fail(RED_FLAG_REASON);
-  if (ctx.phase === 'workout' && !tool.midWorkout) return fail(MID_WORKOUT_REASON);
-  const bad = validateArgs(tool, call.args, ctx.today);
-  if (bad) return fail(bad);
-  return tool.toProposal(call.args, ctx);
+  if (!tool) return fail("I can't do that.", 'unknownTool');
+  if (tool.readOnly) return fail('That tool only reads.', 'readOnly');
+  if (opts.safety === 'redFlag') return fail(RED_FLAG_REASON, 'redFlag');
+  if (ctx.phase === 'workout' && !tool.midWorkout) return fail(MID_WORKOUT_REASON, 'midWorkout');
+  const raw = call.args as unknown;
+  const args =
+    tool.normalize && typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? tool.normalize(raw as Args, ctx)
+      : raw;
+  const bad = checkArgs(tool, args, ctx.today);
+  if (bad) return fail(bad.reason, 'invalidArgs', traceKey(bad.key));
+  return tool.toProposal(args as Args, ctx);
 }
 
 // ---------- the contract ----------

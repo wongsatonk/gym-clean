@@ -21,10 +21,36 @@ describe('brainInstructions', () => {
     expect(calm).toMatch(/12 words/);
   });
 
+  // Checkpoint J: "I'll swap Push B for today's session. Shall I proceed?" with no tool call.
+  it('every change is a tool call now: never ask to confirm or promise one in words', () => {
+    expect(calm).toMatch(/never ask .*(confirm|proceed)/i);
+    expect(calm).toMatch(/never .*promise/i);
+    expect(calm).toMatch(/no tool fits/i);
+    expect(calm).toMatch(/can't change that/);
+    expect(calm).toMatch(/doDayToday/);
+  });
+
   it('mid-workout: the first sentence ≤ 8 words', () => {
     const w = brainInstructions({ phase: 'workout', voice: 'calm' });
     expect(w).toMatch(/8 words/);
     expect(w).not.toMatch(/12 words/);
+  });
+
+  // 1.15.0: the default voice talks like a person, not a menu; a vague request gets one question.
+  it('calm is a warm training partner that builds on earlier turns; drill keeps its line', () => {
+    expect(calm).toMatch(/warm training partner/);
+    expect(calm).toMatch(/"we"/);
+    expect(calm).toMatch(/earlier turns/);
+    expect(calm).toMatch(/what they said/);
+    expect(calm).toMatch(/No lists/);
+    const drill = brainInstructions({ phase: 'today', voice: 'drill' });
+    expect(drill).not.toMatch(/training partner/);
+    expect(drill).toContain('Say the first sentence like a tough, funny drill sergeant. No insults.');
+  });
+
+  it('allows one short clarifying question instead of a guess', () => {
+    expect(calm).toMatch(/one short question/);
+    expect(calm).toContain('"Shoulder or elbow?"');
   });
 
   it('adds a drill-sergeant line only when that voice is on', () => {

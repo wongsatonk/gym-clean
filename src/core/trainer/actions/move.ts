@@ -1,8 +1,12 @@
 /**
  * M12 "Do it today" and "Move" (SPEC M12 Calendar day actions, Today's missed-day "Move it").
  * Pure: `today` is a local `YYYY-MM-DD` passed in. Both write dated overrides only, so Apply /
- * Undo go through changes.ts like every other proposal (`action: 'postpone'`, `scope: 'dated'`).
+ * Undo go through changes.ts like every other proposal (`scope: 'dated'`; Move is `action:
+ * 'postpone'`, Do it today `action: 'doToday'` since Checkpoint J).
  *
+ * - `findPlanDay(text)`: a plan day from what a person or model wrote: its id, its name (any case,
+ *   "Push B day"), or the first word(s) of names ("push"): then the one coming up soonest after
+ *   today that isn't today's own day.
  * - `proposeDoToday(dayId)`: `{ date: today, dayId }`. On a focus-block date that runs the block's
  *   version of the day (plan.ts), replacing today's block day; elsewhere the rotation carries on
  *   after it. Refused with a session started or done today, an unknown day, or when today already
@@ -28,7 +32,7 @@ import {
   type PlanSession,
   weekdayOf,
 } from '../plan';
-import type { DayOverride, Proposal, TrainerState } from '../../types';
+import type { DayOverride, ProgramDay, Proposal, TrainerState } from '../../types';
 
 /** How far ahead (days after today) a date can be moved from or to. */
 export const MOVE_HORIZON_DAYS = 42;
@@ -124,6 +128,41 @@ function withOverrides(state: TrainerState, dates: string[], added: DayOverride[
 
 // ---------- do it today ----------
 
+const norm = (s: string): string =>
+  s
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9\u0e00-\u0e7f]+/g, ' ')
+    .trim()
+    .replace(/\s+(day|workout|session)$/, '');
+
+/** How far ahead a bare "push" looks for the next push day. */
+const FIND_DAYS = 14;
+
+export function findPlanDay(
+  state: TrainerState,
+  sessions: readonly PlanSession[],
+  today: string,
+  text: string,
+): ProgramDay | undefined {
+  const want = norm(text);
+  if (want === '') return undefined;
+  const days = state.plan.days;
+  const exact = days.find((d) => norm(d.id) === want || norm(d.name) === want);
+  if (exact) return exact;
+  const starts = (s: string) => `${norm(s)} `.startsWith(`${want} `);
+  const hits = days.filter((d) => starts(d.name) || starts(d.id));
+  if (hits.length <= 1) return hits[0];
+  const cal = calendar(state, sessions, today, FIND_DAYS);
+  const current = cal[0]?.rest ? null : cal[0]?.dayId;
+  const next = (id: string) => {
+    const i = cal.findIndex((e) => e.date > today && !e.rest && !e.done && e.dayId === id);
+    return i < 0 ? Infinity : i;
+  };
+  const others = hits.filter((d) => d.id !== current);
+  return [...(others.length > 0 ? others : hits)].sort((a, b) => next(a.id) - next(b.id))[0];
+}
+
 export function proposeDoToday(
   state: TrainerState,
   sessions: readonly PlanSession[],
@@ -154,7 +193,7 @@ export function proposeDoToday(
   return {
     ok: true,
     proposal: {
-      action: 'postpone',
+      action: 'doToday',
       scope: 'dated',
       title: `Do ${day.name} today`,
       lines: previewLines(state, next, sessions, today, today, addDate(today, PREVIEW_DAYS - 1)),

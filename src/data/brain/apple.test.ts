@@ -12,6 +12,8 @@ import { serializeContext, type BrainInput } from '../../core/trainer/brain/cont
 import { brainInstructions } from '../../core/trainer/brain/instructions';
 import { SAFE_LINE } from '../../core/trainer/brain/sanitize';
 import { RED_FLAG_LINE, REFERRAL_LINE, checkCopy } from '../../core/trainer/replies';
+import { MID_WORKOUT_REASON } from '../../core/trainer/tools';
+import { effectiveDay } from '../../core/trainer/plan';
 import { cueFor, howToFor } from '../catalog';
 import type {
   BrainContext,
@@ -25,6 +27,7 @@ import type {
 } from '../../core/types';
 import {
   COULDNT_DO,
+  TRY_THESE,
   MESSAGE_MAX_CHARS,
   appleBrain,
   askApple,
@@ -302,24 +305,71 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
     expect(r.foods?.map((f) => f.label)).toContain('Made-up shake');
   });
 
-  it('an invalid tool call → "I couldn\'t do that." + the reason + quick chips', async () => {
+  it('an action refusal → its plain reason + "Try one of these:" + quick chips', async () => {
     const r = await appleBrain(
       says('Swapped it.', [{ name: 'swapExercise', args: { exerciseId: 'Made_Up_Lift' } }]),
     ).ask('swap the made up lift', ctx());
-    expect(r.reply.startsWith(COULDNT_DO)).toBe(true);
-    expect(r.reply).toContain("I don't know that exercise.");
+    expect(r.reply).toBe(`I don't know that exercise. ${TRY_THESE}`);
     expect(r.reply).not.toContain('Swapped it');
     expect(r.proposal).toBeUndefined();
     expect(r.chips.length).toBeGreaterThan(0);
     expect(r.intent).toBe('help');
   });
 
-  it('mid-workout an invalid call offers only the workout chips', async () => {
+  // Checkpoint J: "Yes goahead" → "I couldn't do that. Bad told." (postponeSession { to: 'banana'-like }).
+  it('an invalid call never shows the validation reason; the chips lead with the closest options', async () => {
+    const out = await askApple(
+      says('On it.', [{ name: 'postponeSession', args: { to: 'next push day' } }]),
+      'yes go ahead',
+      ctx(),
+    );
+    expect(out.reply.reply).toBe(`${COULDNT_DO} ${TRY_THESE}`);
+    expect(out.reply.reply).not.toMatch(/bad|argument|\bto\b\./i);
+    expect(out.reply.chips.slice(0, 2).map((c) => c.id)).toEqual(['doToday', 'notToday']);
+    expect(new Set(out.reply.chips.map((c) => c.id)).size).toBe(out.reply.chips.length);
+    expect(out.trace.calls).toEqual([
+      { name: 'postponeSession', ok: false, fail: 'invalidArgs', arg: 'to' },
+    ]);
+    const unknown = await askApple(says('', [{ name: 'deleteEverything', args: {} }]), 'x', ctx());
+    expect(unknown.reply.reply).toBe(`${COULDNT_DO} ${TRY_THESE}`);
+    expect(unknown.trace.calls).toEqual([
+      { name: 'deleteEverything', ok: false, fail: 'unknownTool' },
+    ]);
+  });
+
+  it('the trace keeps only an id-shaped arg name', async () => {
+    const out = await askApple(
+      says('', [{ name: 'lighterToday', args: { 'how many sets?': 1 } }]),
+      'x',
+      ctx(),
+    );
+    expect(out.trace.calls).toEqual([
+      { name: 'lighterToday', ok: false, fail: 'invalidArgs', arg: '?' },
+    ]);
+  });
+
+  it('"do push today" through doDayToday or postponeSession { to: today } → a doToday card', async () => {
+    const today = coach.today;
+    const current = effectiveDay(coach.state, coach.sessions, today).day?.id;
+    const other = coach.state.plan.days.find((d) => d.id !== current);
+    if (!other) throw new Error('no other day');
+    for (const call of [
+      { name: 'doDayToday', args: { day: other.name } },
+      { name: 'postponeSession', args: { from: other.id, to: 'today' } },
+    ]) {
+      const r = await appleBrain(says('', [call])).ask(`do ${other.name} today`, ctx());
+      expect(r.proposal?.action, call.name).toBe('doToday');
+      expect(r.proposal?.title).toBe(`Do ${other.name} today`);
+      expect(r.intent).toBe('doToday');
+    }
+  });
+
+  it('mid-workout a call that is not allowed says so, with only the workout chips', async () => {
     const r = await appleBrain(says('', [{ name: 'deloadWeek', args: {} }])).ask(
       'deload',
       ctx([], { phase: 'workout' }),
     );
-    expect(r.reply.startsWith(COULDNT_DO)).toBe(true);
+    expect(r.reply).toBe(`${MID_WORKOUT_REASON} ${TRY_THESE}`);
     expect(r.chips.map((c) => c.id)).toEqual(['easyOn', 'lighter', 'swap']);
   });
 
@@ -441,7 +491,7 @@ describe('trace (dev log / eval: ids and numbers only)', () => {
       action: 'lighterToday',
       calls: [
         { name: 'lighterToday', ok: true },
-        { name: 'nope', ok: false },
+        { name: 'nope', ok: false, fail: 'unknownTool' },
       ],
       replaced: false,
       hits: [],

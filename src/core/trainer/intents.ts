@@ -168,6 +168,8 @@ const M12 = {
   month: compileList(P.m12.month),
 };
 const DO_WORDS = compileList(P.m12.doToday.do);
+const SWITCH_WORDS = compileList(P.m12.doToday.switchTo);
+const PARTIAL_FOLLOWERS = P.m12.doToday.partialFollowers.map((w) => normalizeText(w));
 const DO_FILLERS = P.m12.doToday.fillers.map((w) => normalizeText(w));
 const MOVE_WORDS = compileList(P.m12.moveDay.move);
 const NUMBER_WORDS: Record<string, number> = P.m12.numbers;
@@ -340,19 +342,57 @@ function skipsDay(text: string, ctx: MatchContext): boolean {
   });
 }
 
-/** M12: "do <plan day name>" → that name as passed in (longest name first). */
-function doDayOf(text: string, ctx: MatchContext): string | undefined {
-  const names = (ctx.dayNames ?? [])
-    .map((raw) => ({ raw, norm: normalizeText(raw) }))
-    .filter((n) => n.norm !== '')
-    .sort((a, b) => b.norm.length - a.norm.length);
-  if (names.length === 0) return undefined;
-  for (const s of DO_WORDS(text)) {
-    const rest = stripLeading(text.slice(s.end), DO_FILLERS);
-    const hit = names.find((n) => startsWithWord(rest, n.norm));
-    if (hit) return hit.raw;
+/**
+ * The leading word(s) shared by day names, as written in the first such name: "Push A", "Push B"
+ * → "Push" (one entry per distinct prefix, never a whole name).
+ */
+function namePrefixes(names: readonly string[]): { raw: string; norm: string }[] {
+  const out = new Map<string, string>();
+  for (const name of names) {
+    const words = name.trim().split(/\s+/);
+    for (let k = 1; k < words.length; k++) {
+      const raw = words.slice(0, k).join(' ');
+      const norm = normalizeText(raw);
+      if (norm !== '' && !out.has(norm)) out.set(norm, raw);
+    }
   }
-  return undefined;
+  return [...out].map(([norm, raw]) => ({ raw, norm }));
+}
+
+/**
+ * M12: "do <plan day name>" → that name as passed in (longest name first). Checkpoint J: also
+ * after a switch word ("swap to push"), and a bare first word of names ("push") when the text
+ * ends there or a follower word comes next ("do push today", never "do push ups"); then the slot
+ * is that word as written in the names ("Push"). `viaSwitch` marks a switch-word hit.
+ */
+function doDayOf(
+  text: string,
+  ctx: MatchContext,
+): { name: string; viaSwitch: boolean } | undefined {
+  const all = (ctx.dayNames ?? []).filter((n) => normalizeText(n) !== '');
+  if (all.length === 0) return undefined;
+  const names = all
+    .map((raw) => ({ raw, norm: normalizeText(raw) }))
+    .sort((a, b) => b.norm.length - a.norm.length);
+  const fullNames = new Set(names.map((n) => n.norm));
+  const prefixes = namePrefixes(all)
+    .filter((p) => !fullNames.has(p.norm))
+    .sort((a, b) => b.norm.length - a.norm.length);
+  const find = (spans: Span[], viaSwitch: boolean) => {
+    for (const s of spans) {
+      const rest = stripLeading(text.slice(s.end), DO_FILLERS);
+      const hit = names.find((n) => startsWithWord(rest, n.norm));
+      if (hit) return { name: hit.raw, viaSwitch };
+      const part = prefixes.find((p) => {
+        if (!startsWithWord(rest, p.norm)) return false;
+        const after = rest.slice(p.norm.length).trimStart();
+        return after === '' || PARTIAL_FOLLOWERS.some((f) => startsWithWord(after, f));
+      });
+      if (part) return { name: part.raw, viaSwitch };
+    }
+    return undefined;
+  };
+  return find(SWITCH_WORDS(text), true) ?? find(DO_WORDS(text), false);
 }
 
 const numberOf = (w: string): number => NUMBER_WORDS[w] ?? Number(w);
@@ -467,10 +507,12 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   const counts = countsOf(t);
   const { date, moveTo } = daysOf(t);
   const onlyToday = (date ?? 'today') === 'today' && (moveTo ?? 'today') === 'today';
-  const dayName = onlyToday && !skipsDay(t, ctx) ? doDayOf(t, ctx) : undefined;
+  const doDay = onlyToday && !skipsDay(t, ctx) ? doDayOf(t, ctx) : undefined;
+  const dayName = doDay?.name;
   const minutes = minutesOf(t);
   let intent: Intent;
   if (has(INTENTS.deload, t)) intent = 'deload';
+  else if (doDay?.viaSwitch) intent = 'doToday';
   else if (has(INTENTS.swap, t)) intent = 'swap';
   else if (dayName !== undefined) intent = 'doToday';
   else if (
