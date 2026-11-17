@@ -3172,6 +3172,12 @@ textarea:focus-visible {
   font-size: var(--fs-body);
 }
 
+/* M12 slice 1c Settings → About (last section): the app name, version line, credit. */
+.settings .about-name {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
 /* Neutral actions (Camera test, Speaker check): surface-2, never the action colour. */
 .settings .set-action,
 .settings .voice-test .ghost-btn {

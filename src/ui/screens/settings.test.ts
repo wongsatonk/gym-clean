@@ -4,6 +4,7 @@ import type { Unit } from '../../core/units';
 import { ACCENT_OPTIONS, accentPicker } from '../accentPicker';
 import { ACCENTS } from '../tokens';
 import type { TabId } from '../tabBar';
+import { CREDIT, versionLabel } from '../../core/version';
 import { settingsScreen, unitNote, type SettingsProps } from './settings';
 import { FakeEl, asFake, useFakeDom } from './testDom';
 
@@ -122,6 +123,7 @@ describe('settings screen', () => {
       'camera',
       'unit',
       'devlog',
+      'about',
     ]);
     // Every section is named by its heading (icon + words).
     for (const s of el.byClass('set-section')) {
@@ -266,7 +268,17 @@ describe('settingsScreen M10e Gym and M9 Backup sections', () => {
       }),
     );
     const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
-    expect(keys).toEqual(['accent', 'voice', 'camera', 'unit', 'gym', 'plan', 'backup', 'devlog']);
+    expect(keys).toEqual([
+      'accent',
+      'voice',
+      'camera',
+      'unit',
+      'gym',
+      'plan',
+      'backup',
+      'devlog',
+      'about',
+    ]);
     const btn = one(el, (e) => e.hasAttribute('data-my-gym-open'), 'my gym');
     expect(btn.textContent).toBe('My gym');
     expect(btn.classes).toContain('set-action');
@@ -281,7 +293,7 @@ describe('settingsScreen M7b Food photos slot', () => {
   it('no foodPhotos prop → no Food photos section (unchanged)', () => {
     const { el } = render();
     const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
-    expect(keys).toEqual(['accent', 'voice', 'camera', 'unit', 'devlog']);
+    expect(keys).toEqual(['accent', 'voice', 'camera', 'unit', 'devlog', 'about']);
   });
 
   it('places the food photos block in a "Food photos" section right after Nutrition', () => {
@@ -295,5 +307,31 @@ describe('settingsScreen M7b Food photos slot', () => {
     expect(sec.textContent).toContain('Food photos');
     expect(sec.getAttribute('aria-labelledby')).toBe('set-food-photos');
     expect(sec.find((e) => e.hasAttribute('data-food-photos'))).toHaveLength(1);
+  });
+});
+
+describe('settingsScreen M12 slice 1c About', () => {
+  it('is the last section: "Gym Clean", the version label and the credit, no links', () => {
+    const { el } = render({ version: 'Version 9.9.0 (build abc1234)' });
+    const sections = el.byClass('set-section');
+    const about = sections.at(-1);
+    expect(about?.getAttribute('data-section')).toBe('about');
+    expect(about?.byTag('h2')[0]?.textContent).toBe('About');
+    const by = (k: string) =>
+      one(about as FakeEl, (e) => e.getAttribute('data-about') === k, `[data-about=${k}]`);
+    expect(by('name').textContent).toBe('Gym Clean');
+    expect(by('version').textContent).toBe('Version 9.9.0 (build abc1234)');
+    expect(by('credit').textContent).toBe('© 2026 Wongsaton Kampusan');
+    expect(CREDIT).toBe('© 2026 Wongsaton Kampusan');
+    expect(about?.byTag('a')).toHaveLength(0);
+    expect(about?.byTag('button')).toHaveLength(0);
+    // The tab bar still closes the screen, right after About.
+    expect(el.children.at(-2)).toBe(about);
+  });
+
+  it('defaults the version line to versionLabel()', () => {
+    const { el } = render();
+    const v = one(el, (e) => e.getAttribute('data-about') === 'version', 'version');
+    expect(v.textContent).toBe(versionLabel());
   });
 });

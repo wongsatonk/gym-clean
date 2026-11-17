@@ -32,6 +32,7 @@ import { nudgeBanner } from '../fuel/links';
 import { dayMuscles, estimateMinutes, muscleLabel, type DayMuscles } from '../../core/dayInfo';
 import { gymPrompt, type MissingKit } from './gymPrompt';
 import { readinessCard, type ReadinessActions } from './readinessCard';
+import { todoCard, type TodoCardProps } from '../todo/todoCard';
 import { weekLoadLine, type WeekLoad } from './weekLoad';
 
 /** The last finished session, as the Last time tile shows it. */
@@ -101,6 +102,12 @@ export type TodayProps = {
   missedAction?: 'move' | 'start' | undefined;
   /** First-load motion state from `createTodayMotion()`, kept by app.ts across re-renders. */
   motion?: TodayMotion | undefined;
+  // ---- M12 slice 1c (optional) ----
+  /**
+   * The to-do card ("To-dos: 6 of 12 done"), below the hero so it never pushes Start down.
+   * Shown when `visible` and `onOpenTodos` is set.
+   */
+  todo?: TodoCardProps | null | undefined;
 };
 
 /**
@@ -156,6 +163,8 @@ export type TodayActions = ReadinessActions & {
   onStartMissed?: ((missed: MissedDay) => void) | undefined;
   /** M12: Skip it on the missed-day card (stored as answered; the card goes away). */
   onSkipMissed?: ((missed: MissedDay) => void) | undefined;
+  /** M12 slice 1c: the to-do card was tapped (opens the To-do list). */
+  onOpenTodos?: (() => void) | undefined;
 };
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -700,6 +709,7 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       ? nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel)
       : null,
     hero(props, actions),
+    actions.onOpenTodos ? todoCard(props.todo, { onOpen: actions.onOpenTodos }) : null,
     h('div', { class: 'pair' }, streak.el, lastTile(props)),
     h(
       'div',

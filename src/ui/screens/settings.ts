@@ -14,6 +14,7 @@
 // order. Changed: the "‹ Back" button is gone; the Today tab (`[data-tab="today"]`) leaves.
 import type { Accent } from '../../core/types';
 import type { Unit } from '../../core/units';
+import { CREDIT, versionLabel } from '../../core/version';
 import { accentPicker } from '../accentPicker';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
@@ -40,6 +41,8 @@ export type SettingsProps = {
   foodPhotos?: HTMLElement | null | undefined;
   /** M9 B2: `backupPanel(...)`. Omitted → no Backup section. */
   backup?: HTMLElement | null | undefined;
+  /** M12 slice 1c: the About version line. Default `versionLabel()`. */
+  version?: string | undefined;
 };
 
 export type SettingsActions = {
@@ -58,6 +61,10 @@ export type SettingsActions = {
   onMyGym?: (() => void) | undefined;
   /** M11: opens Settings → Health. Omitted → no Health section. */
   onHealth?: (() => void) | undefined;
+  /** M12 slice 1c: opens the To-do list. With onWhatsNew: the To-dos section. */
+  onTodos?: (() => void) | undefined;
+  /** M12 slice 1c: replays this release's What's New tour. */
+  onWhatsNew?: (() => void) | undefined;
 };
 
 /** The unit help line under the kg / lb choice. */
@@ -95,6 +102,39 @@ export function switchRow(
     },
     h('span', { class: 'switch-label' }, label),
     h('span', { class: 'switch-state', 'aria-hidden': 'true' }, on ? 'On' : 'Off'),
+  );
+}
+
+/** M12 slice 1c: "To-dos" + "What's new" rows (each only when its callback is set). */
+function todosSection(
+  actions: SettingsActions,
+  section: (
+    key: string,
+    iconName: IconName,
+    title: string,
+    ...c: (HTMLElement | null)[]
+  ) => HTMLElement,
+): HTMLElement | null {
+  if (!actions.onTodos && !actions.onWhatsNew) return null;
+  const row = (hook: string, label: string, onTap: (() => void) | undefined) =>
+    onTap
+      ? h(
+          'button',
+          { type: 'button', class: 'set-action', [hook]: true, onclick: () => onTap() },
+          label,
+        )
+      : null;
+  return section(
+    'todos',
+    'list',
+    'To-dos',
+    row('data-todos-open', 'To-dos', actions.onTodos),
+    row('data-whats-new-open', "What's new", actions.onWhatsNew),
+    h(
+      'p',
+      { class: 'muted set-note' },
+      'Things to try and answer, and what changed in this version.',
+    ),
   );
 }
 
@@ -223,8 +263,18 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           ),
         )
       : null,
+    todosSection(actions, section),
     props.backup ? section('backup', 'lock', 'Backup', props.backup) : null,
     section('devlog', 'bars', 'Developer log', props.devLog),
+    // M12 slice 1c: always the last section. Plain text, no links, nothing sent.
+    section(
+      'about',
+      'logo',
+      'About',
+      h('p', { class: 'about-name', 'data-about': 'name' }, 'Gym Clean'),
+      h('p', { class: 'set-note', 'data-about': 'version' }, props.version ?? versionLabel()),
+      h('p', { class: 'muted set-note', 'data-about': 'credit' }, CREDIT),
+    ),
     tabBar('settings', actions.onTab),
   );
 }
