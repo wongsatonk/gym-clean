@@ -9,6 +9,9 @@
 //   - then the hand list in src/data/licenses.extra.json (vendored data, the pose model, fonts, and
 //     code compiled into an npm dependency, e.g. zxing-cpp inside zxing-wasm, as source 'npm').
 //     An extra may give `text`, `textFile` (a path from the repo root) or both (text first).
+//   - `npmTexts` in the same file: { "<runtime dep>": { text?, textFile? } } fills the text of a
+//     package that ships no licence file (e.g. @mediapipe/tasks-vision, Apache-2.0 without a
+//     LICENSE in its npm tarball). A package's own licence file always wins.
 //
 // Writes src/data/licenses.generated.json (not licenses.json: Vite would resolve './licenses' to
 // the JSON before licenses.ts). --check writes nothing and exits 1 when the committed file differs
@@ -65,6 +68,19 @@ export function packageEntry(root, name) {
   return entry;
 }
 
+/** `text` then the `textFile` contents, cleaned; [] when neither is given. Throws via `fail`. */
+function textParts(root, raw, fail) {
+  const str = (v) => typeof v === 'string' && v.trim() !== '';
+  const parts = [];
+  if (str(raw.text)) parts.push(clean(raw.text));
+  if (raw.textFile !== undefined) {
+    const path = join(root, raw.textFile);
+    if (!str(raw.textFile) || !existsSync(path)) fail(`textFile not found: ${raw.textFile}`);
+    parts.push(clean(readFileSync(path, 'utf8')));
+  }
+  return parts;
+}
+
 function extraEntry(root, raw, i) {
   const where = `${EXTRA} entry ${i + 1}`;
   const str = (v) => typeof v === 'string' && v.trim() !== '';
@@ -73,14 +89,9 @@ function extraEntry(root, raw, i) {
   if (!str(raw.license)) throw new Error(`${where} (${raw.name}): extra needs a licence`);
   if (!EXTRA_SOURCES.has(raw.source))
     throw new Error(`${where} (${raw.name}): extra source must be npm, data, model or font`);
-  const parts = [];
-  if (str(raw.text)) parts.push(clean(raw.text));
-  if (raw.textFile !== undefined) {
-    const path = join(root, raw.textFile);
-    if (!str(raw.textFile) || !existsSync(path))
-      throw new Error(`${where} (${raw.name}): extra textFile not found: ${raw.textFile}`);
-    parts.push(clean(readFileSync(path, 'utf8')));
-  }
+  const parts = textParts(root, raw, (msg) => {
+    throw new Error(`${where} (${raw.name}): extra ${msg}`);
+  });
   const entry = { name: raw.name.trim() };
   if (str(raw.version)) entry.version = raw.version.trim();
   entry.license = raw.license.trim();
@@ -93,10 +104,28 @@ function extraEntry(root, raw, i) {
 export function generateLicenses(root) {
   const pkg = readJson(join(root, 'package.json'));
   const deps = Object.keys(pkg.dependencies ?? {}).sort();
-  const npm = deps.map((name) => packageEntry(root, name));
   const extraPath = join(root, EXTRA);
-  const extras = existsSync(extraPath) ? (readJson(extraPath).entries ?? []) : [];
+  const extraFile = existsSync(extraPath) ? readJson(extraPath) : {};
+  const extras = extraFile.entries ?? [];
   if (!Array.isArray(extras)) throw new Error(`${EXTRA}: entries must be a list (extra)`);
+  const npmTexts = extraFile.npmTexts ?? {};
+  if (!npmTexts || typeof npmTexts !== 'object' || Array.isArray(npmTexts))
+    throw new Error(`${EXTRA}: npmTexts must be an object`);
+  for (const [name, raw] of Object.entries(npmTexts)) {
+    const fail = (msg) => {
+      throw new Error(`${EXTRA} npmTexts ${name}: ${msg}`);
+    };
+    if (!deps.includes(name)) fail('not a runtime dependency');
+    if (!raw || typeof raw !== 'object') fail('not an object');
+    if (textParts(root, raw, fail).length === 0) fail('needs text or textFile');
+  }
+  const npm = deps.map((name) => {
+    const entry = packageEntry(root, name);
+    const fallback = npmTexts[name];
+    if (entry.text === undefined && fallback)
+      entry.text = textParts(root, fallback, () => {}).join('\n\n');
+    return entry;
+  });
   return [...npm, ...extras.map((e, i) => extraEntry(root, e, i))];
 }
 

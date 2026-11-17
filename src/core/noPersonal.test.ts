@@ -390,12 +390,10 @@ describe('no gendered wording in shown copy and data', () => {
     expect(genderedHits([...SOURCES, ...DATA_JSON])).toEqual([]);
   });
 
-  it('lists the src/ui hits for main (tasks 13 and 21 empty it)', () => {
+  it('src/ui is clean too (each hit as file:line)', () => {
     const ui = walk(join(SRC, 'ui')).filter((p) => p.endsWith('.ts') && !isTestOnly(p));
     expect(ui.length).toBeGreaterThan(20);
-    const hits = genderedHits(ui);
-    // Not a gate yet: printed so main can hand the list on.
-    console.info(`M13 task 8, gendered wording in src/ui (${hits.length}):\n${hits.join('\n')}`);
+    expect(genderedHits(ui)).toEqual([]);
   });
 });
 

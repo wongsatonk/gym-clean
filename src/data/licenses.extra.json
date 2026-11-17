@@ -1,5 +1,11 @@
 {
-  "note": "Hand list for the Licenses screen: vendored data, the bundled pose model, fonts, and code compiled into an npm dependency (M13 task 6). scripts/gen-licenses.mjs adds these after the npm runtime dependencies. `textFile` is read from the repo root at generation time (the Apache-2.0 text comes from dexie's LICENSE, which is the plain licence). Keep in sync with what ships in public/ and src/data/.",
+  "note": "Hand list for the Licenses screen: vendored data, the bundled pose model, fonts, and code compiled into an npm dependency (M13 task 6). scripts/gen-licenses.mjs adds these after the npm runtime dependencies. `textFile` is read from the repo root at generation time (the Apache-2.0 text comes from dexie's LICENSE, which is the plain licence). `npmTexts` gives the licence text for a runtime dependency whose npm package ships no LICENSE file (its own file always wins). Keep in sync with what ships in public/ and src/data/.",
+  "npmTexts": {
+    "@mediapipe/tasks-vision": {
+      "text": "@mediapipe/tasks-vision is published under Apache-2.0 (its package.json) but its npm package ships no LICENSE file; this is the Apache License 2.0 text.",
+      "textFile": "node_modules/dexie/LICENSE"
+    }
+  },
   "entries": [
     {
       "name": "free-exercise-db (exercise names, steps, muscles)",

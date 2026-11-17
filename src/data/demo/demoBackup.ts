@@ -77,15 +77,18 @@ const INTAKE: Omit<Intake, 'at'> = {
   easyOn: [],
 };
 
-/** Made-up body numbers for Fuel targets (a fictional profile, not anyone's). */
+/**
+ * Made-up body numbers for Fuel targets: deliberately round placeholder values (170 cm, born 1990,
+ * 70 kg) so they read as demo data and match no one, not a profile of anyone close to home.
+ */
 const BODY: Pick<NutritionSettings, 'heightCm' | 'birthYear' | 'sex' | 'activity'> = {
-  heightCm: 166,
-  birthYear: 1995,
-  sex: 'female',
+  heightCm: 170,
+  birthYear: 1990,
+  sex: 'male',
   activity: 'moderate',
 };
 /** Weigh-ins drift up slowly from here over the 6 weeks (kg). */
-const START_KG = 59.2;
+const START_KG = 70;
 
 /** First-week working weight by equipment (kg; per dumbbell for dumbbells), and its step. */
 const LOAD: Record<string, { kg: number; step: number }> = {
@@ -309,7 +312,7 @@ export function buildDemoBackup(now: number, opts: DemoOptions = {}): BackupFile
   const measurements: Measurement[] = [];
   for (let wk = 0; wk < WEEKS; wk += 2) {
     const date = addDate(first, wk * 7);
-    measurements.push({ date, site: 'waist', cm: 71 - wk * 0.1 });
+    measurements.push({ date, site: 'waist', cm: 80 - wk * 0.1 });
     measurements.push({ date, site: 'hips', cm: 95 + wk * 0.2 });
   }
   const checkIns: CheckIn[] = [1, 2, 3].map((n) => {

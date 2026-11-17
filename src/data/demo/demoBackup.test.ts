@@ -109,6 +109,19 @@ describe('buildDemoBackup(now): a made-up person for the store screenshots (M13 
     expect(setting(b, ONBOARDING_KEY)).toMatchObject({ doneAt: expect.any(Number) });
   });
 
+  it('its body numbers are round, obviously made-up demo values (no real person near home)', async () => {
+    await importAll(db, buildDemoBackup(NOW));
+    const fuel = await getNutritionSettings(db);
+    expect(fuel?.heightCm).toBe(170);
+    expect(fuel?.birthYear).toBe(1990);
+    const weighIns = await listWeighIns(db);
+    const first = [...weighIns].sort((a, b) => a.date.localeCompare(b.date))[0];
+    expect(first?.kg).toBe(70);
+    const sites = rows<{ date: string; cm: number }>(buildDemoBackup(NOW), 'measurements');
+    const firstDate = sites.map((m) => m.date).sort()[0];
+    for (const m of sites.filter((x) => x.date === firstDate)) expect(m.cm % 5).toBe(0);
+  });
+
   it('no session falls on a rest weekday of the restored schedule', () => {
     const b = buildDemoBackup(NOW);
     const state = rows<{ state: TrainerState }>(b, 'trainer')[0]?.state;

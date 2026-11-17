@@ -89,6 +89,20 @@ describe('the bundled list (src/data/licenses.generated.json)', () => {
     expect(list[0]?.source).toBe('data');
   });
 
+  it('carries the full text for every Apache-2.0, MIT and Unlicense entry', async () => {
+    const list = await loadLicenses();
+    const needsText = list.filter((x) => /\b(Apache-2\.0|MIT|Unlicense)\b/.test(x.license));
+    expect(needsText.length).toBeGreaterThan(5);
+    const missing = needsText.filter((x) => !x.text?.trim()).map((x) => x.name);
+    expect(missing).toEqual([]);
+    for (const x of needsText.filter((y) => /Apache-2\.0/.test(y.license))) {
+      expect(x.text, x.name).toMatch(/Apache License[\s\S]*Version 2\.0/);
+      expect(x.text, x.name).toMatch(
+        /TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION/,
+      );
+    }
+  });
+
   it('has no personal data and no duplicate names', async () => {
     const list = await loadLicenses();
     expect(new Set(list.map((x) => x.name)).size).toBe(list.length);

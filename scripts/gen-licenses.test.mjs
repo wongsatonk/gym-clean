@@ -147,6 +147,38 @@ describe('generateLicenses', () => {
     bad({ name: '', license: 'MIT', source: 'data' });
     bad({ name: 'X', license: 'MIT', source: 'model', textFile: 'nope.txt' });
   });
+  it('fills a runtime dependency without a licence file from npmTexts (note first)', () => {
+    const root = project('fallback', {
+      extras: {
+        npmTexts: {
+          'pkg-c': { text: 'pkg-c ships no LICENSE file.', textFile: 'third_party/OFL.txt' },
+        },
+        entries: [],
+      },
+    });
+    const c = generateLicenses(root).find((e) => e.name === 'pkg-c');
+    assert.equal(c.text, 'pkg-c ships no LICENSE file.\n\nSIL Open Font License');
+  });
+  it("keeps a package's own licence file over npmTexts", () => {
+    const root = project('own', {
+      extras: { npmTexts: { 'pkg-a': { textFile: 'third_party/OFL.txt' } }, entries: [] },
+    });
+    const a = generateLicenses(root).find((e) => e.name === 'pkg-a');
+    assert.equal(a.text, 'MIT License\n\nCopyright (c) Demo A');
+  });
+  it('fails on an npmTexts entry for an unknown package or a missing file', () => {
+    const bad = (npmTexts) =>
+      assert.throws(
+        () =>
+          generateLicenses(
+            project(`badnpm-${Math.random()}`, { extras: { npmTexts, entries: [] } }),
+          ),
+        /npmTexts/,
+      );
+    bad({ 'not-a-dep': { textFile: 'third_party/OFL.txt' } });
+    bad({ 'pkg-c': { textFile: 'nope.txt' } });
+    bad({ 'pkg-c': {} });
+  });
   it('formats as stable JSON with a trailing newline', () => {
     const root = project('fmt');
     const text = formatLicenses(generateLicenses(root));
