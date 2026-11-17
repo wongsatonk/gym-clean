@@ -252,12 +252,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Rule (M12-q4 default, `trainerKit.warmups`): only before the day's **first** barbell / smith / heavy-dumbbell lift (heavy = working weight ≥ 12 kg per dumbbell, data); ramp 50% × 8 then 70% × 4, snapped **down** to his kit step (gym profile dumbbell steps; barbell plate pairs; kg and lb); a step at or below the empty bar → bar × 8 once; none for bodyweight. `'off'` → none. Session: warm-up sets run before set 1 with `SKIP_WARMUPS`; logged with `warmup: true`; a voice line for each (text from core, e.g. "Warm-up: 20 kilos for 8.", ≤ 8 words). Excluded from volume, bests, stall detection, e1RM (task 10 uses the flag) and completion %.
   - Done when tests cover: kg + lb snapping, light and bodyweight first lifts → none, only the first heavy lift, skip, exclusions in each module, setting off.
   - Deps: 6 (both edit session.ts).
-- [ ] 8. [core-engineer] Time estimate + "short on time", **tests first** (item 5).
+- [x] 8. [core-engineer] Time estimate + "short on time", **tests first** (item 5).
   - Files: src/core/trainer/timeRules.ts (data: seconds per rep, set-up per exercise, rest from the plan, pair rest 45 s), src/core/trainer/estimate.ts(+test) (`estimateMinutes(day)`), src/core/trainer/actions/shortOnTime.ts(+test), src/core/trainer/intents.ts(+test), src/core/trainer/phrases.json, src/core/trainer/coach.ts(+test), src/core/trainer/evals/requests.json.
   - `proposeShortOnTime(ctx, minutes)` (20 / 30 / 45; free text "I have 25 min" → nearest lower option): keeps the main lifts (first 1–2 compound exercises, data), **pairs accessories** (`pairWith`, back-to-back with the pair rest; planner call: true alternating supersets wait, see Decision), then trims accessory sets (min 2), then drops the last accessories until `estimateMinutes ≤ minutes`; today only, Apply / Undo. Intent `shortOnTime` + chip "Short on time".
   - Done when tests cover 20/30/45 on each program day (estimate ≤ limit, main lifts kept), a day already short enough → "Your day already fits.", Apply/Undo round trip, eval items ≥ 5 new, `checkCopy`.
   - Deps: 1.
-- [ ] 9. [core-engineer] Starter plan from templates (item 3, second user), **tests first**.
+- [x] 9. [core-engineer] Starter plan from templates (item 3, second user), **tests first**.
   - Files: src/data/templates/starterTemplates.json (as data: full body 2–3 days, upper/lower 4 days, push/pull/legs 5–6 days; slots by movement pattern and muscle; sets/reps/rest per `GoalKind` × experience), src/core/trainer/starterPlan.ts(+test), src/core/trainer/actions/starterPlan.ts(+test).
   - `buildStarterPlan(intake, catalog, gym)` → `UserPlan` + `Schedule`, deterministic: template by `days`, picks from the catalog doable with the gym profile (`canDo`), easy-on areas lightened like the avoid-area action, sets trimmed so `estimateMinutes ≤ sessionMin`. `proposeStarterPlan(ctx, intake)` → Proposal `starterPlan`, scope `plan`, Apply / Undo (his current plan is never replaced without Apply).
   - Done when tests cover: each goal × days 2–6 × 30/75 min fits the time; every pick doable with the default and a minimal gym profile; same input → same plan; easy-on honoured; Apply/Undo; no exercise name or text hard-coded to one person (copy from data).
@@ -282,7 +282,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Planner call: no goal set = today's behaviour (muscle); changing the goal shows "Fuel targets: 2,650 → 2,250 kcal" and changes nothing until he taps Apply.
   - Done when tests cover each goal × male/female (Mifflin) × made-up bodies, the BMR floor, the weekly check moving the delta in the right direction for loss and gain, no-goal = old snapshot.
   - Deps: 1.
-- [ ] 14. [core-engineer] "Share my gym" file + nothing hard-coded to him, **tests first**.
+- [x] 14. [core-engineer] "Share my gym" file + nothing hard-coded to him, **tests first**.
   - Files: src/data/gymFile.ts(+test) (`exportGymFile(profile)` → JSON with equipment ids only — no `kept`, no name, no dates; `parseGymFile(text)` validates format/version/known ids → `{ ok, equipment, unknown[] } | { ok: false, reason }`), src/core/noPersonal.test.ts (scans src/data/**/*.json and core copy for his name outside `CREDIT`, fixed personal goals or body numbers; voice default Calm; Health/WHOOP optional).
   - Done when tests cover round trip, unknown ids reported, junk rejected, file has no personal fields, the scan passes.
   - Deps: 1.
@@ -296,22 +296,22 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `HKQuantityTypeIdentifier.bodyFatPercentage` (as %), `.leanBodyMass` (kg); read-only; requested **only when he turns that switch on** (the Health sheet then lists 8 types); source names kept for the per-day pick.
   - Done when: XCTests for the mapping (units, empty), TS bridge tests, simulator build.
   - Deps: 1.
-- [ ] 17. [core-engineer] Feel today → readiness, **tests first** (item 9).
+- [x] 17. [core-engineer] Feel today → readiness, **tests first** (item 9).
   - Files: src/core/health/readiness.ts(+test), src/core/health/rules.ts (data), src/core/health/copy.ts(+test).
   - Signals `feltLow` (energy ≤ 2) and `sore` (any area) from `DayFeel`; the two-signal rule unchanged, so both together show the card without Health; one alone + one Health signal shows it. Reasons "You said your energy is low today." / "You said your shoulders are sore."; a sore area adds an offer "Go easy on shoulders today?" (today's avoid-area proposal), never medical wording.
   - Done when tests cover each combination with/without Health, reasons pass `checkCopy` + the M11 banned list.
   - Deps: 1.
-- [ ] 18. [core-engineer] Setup cues (item 10), **tests first**.
+- [x] 18. [core-engineer] Setup cues (item 10), **tests first**.
   - Files: src/data/setupCues.json, src/core/setupCues.ts(+test).
   - 2–3 cues per program exercise (and catalog swap pool) the camera can't judge, ≤ 8 words each; `setupCuesFor(exerciseId, session)` → lines once before the first working set (after warm-ups), none if already said this session.
   - Done when tests cover: every such exercise has 2–3 cues ≤ 8 words passing `checkCopy`; said once.
   - Deps: 1.
-- [ ] 19. [core-engineer] Cardio minutes (item 11), **tests first**.
+- [x] 19. [core-engineer] Cardio minutes (item 11), **tests first**.
   - Files: src/core/health/cardio.ts(+test).
   - `weeklyCardioMinutes(healthDays, sessions, weekStart)`: Health workouts outside gym sessions (reuse `overlapsGymSession`), activity kinds as data, Mon–Sun week (`weekStartOf`); null without Health.
   - Done when tests cover overlap (no double count), week edges, DST, no Health → null.
   - Deps: 1.
-- [ ] 20. [core-engineer] Next block + deload suggestion (item 7), **tests first**.
+- [x] 20. [core-engineer] Next block + deload suggestion (item 7), **tests first**.
   - Files: src/core/trainer/nextBlock.ts(+test), src/core/progress/recap.ts(+test).
   - At a block's end: the recap offers a lighter week (7 days, the deload rule) then a next block (same group or the next in an order as data). `deloadSuggested(sessions, state, today, lastOfferAt)`: after 6 hard weeks in a row (all planned sessions done, no lighter/deload days) or ≥ 2 exercises stalled at once (M10 stall rule) → once, then not again for 4 weeks (data). Proposals only.
   - Done when tests cover both triggers, once, the recap offer, Apply/Undo.
@@ -343,16 +343,16 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: src/ui/screens/settings.ts(+test) (Your goal & intake → re-run; Go easy on list with Remove (each removal is a proposal via callback); Progress photos switch row, off by default), src/ui/screens/myGym.ts(+test) (Share my gym → file via share sheet / download; Import a gym file → preview "Adds 12 items, 1 unknown" → Apply).
   - Done when: render tests + 390×844 screenshots (Settings rows, My gym import preview).
   - Deps: 25 (intake props reused), 1.
-- [ ] 27. [ui-engineer] Measurements + body composition in Fuel; Health switches (item 4).
+- [x] 27. [ui-engineer] Measurements + body composition in Fuel; Health switches (item 4).
   - Files: src/ui/fuel/measurements.ts(+test) (log sheet: sites from settings, cm/in by unit, "Measure again" after 28 days), src/ui/fuel/weighIn.ts(+test) (body fat % + lean mass trends next to weight when present), src/ui/screens/fuel.ts(+test) (entry row), src/ui/screens/healthSettings.ts(+test) (two new switches, off, "iPhone app only").
   - Done when: render tests + 390×844 screenshots (measurements sheet, trends with body comp, Health settings with 8 switches).
   - Deps: 1.
-- [ ] 28. [ui-engineer] e1RM chart in exercise history (item 4).
+- [x] 28. [ui-engineer] e1RM chart in exercise history (item 4).
   - Files: src/ui/screens/history.ts(+test), src/ui/charts/e1rmChart.ts(+test).
   - Simple SVG line (original art), points labelled, a text summary for screen readers ("Best estimate 72 kg on 12 Nov"), lighter sessions marked.
   - Done when: render tests (empty, one point, many) + 390×844 screenshot.
   - Deps: 1.
-- [ ] 29. [ui-engineer] Short-on-time chip + pair lines (item 5).
+- [x] 29. [ui-engineer] Short-on-time chip + pair lines (item 5).
   - Files: src/ui/coach/proposalCard.ts(+test) (paired lines "Curl + Triceps: back to back, 45 s rest"), src/ui/screens/preview.ts(+test) (pair label on the day preview), src/ui/coach/chat.ts (chip registration only).
   - Done when: render tests + 390×844 screenshot of the proposal.
   - Deps: 1.
