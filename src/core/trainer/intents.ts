@@ -12,12 +12,19 @@
  *     bare "no" when no stall/lighter/food phrase and no "no more" / "today" word matched), no
  *     discomfort → swap that exercise;
  *  5. an area word with a discomfort or "avoid" word → avoidArea;
- *  6. stall, 7. lighter, 8. food;
+ *  6. stall;
+ *  M12: 6a. progress ("how am I doing"); 6b. focusBlock ("build my chest"); 6c. focusEdit (a
+ *     days-a-week / weeks count on its own, "only 4 days a week", or a focusEdit phrase);
+ *  7. lighter, 8. food;
+ *  8a. M12 week ("how's my week");
  *  9. discomfort with no area → avoidArea without an area (the coach asks which area);
  * 10. anything else → help.
+ * A swap with a weekday ("swap Thursday's flyes") is a focusEdit (a change to a focus block's
+ * days; the coach falls back to the swap flow when no block is being proposed).
  *
- * Slots: `area` only for avoidArea, `exerciseId` only for swap/stall, `date` / `moveTo` / `scope` for
- * any non-help intent. `date` is the day the request is about (e.g. the day to skip); `moveTo` is the
+ * Slots: `area` only for avoidArea, `exerciseId` only for swap/stall/focusEdit, `group` only for
+ * focusBlock, `weeks` / `daysPerWeek` only for focusBlock/focusEdit ("this month" = 4 weeks,
+ * "N months" = 4N), `date` / `moveTo` / `scope` for any non-help intent. `date` is the day the request is about (e.g. the day to skip); `moveTo` is the
  * target day of a move ("to Friday", "Saturday instead"). Both are day words; the coach resolves them
  * against its own `today`.
  */
@@ -26,7 +33,18 @@ import exercisesJson from '../../data/exercises.json';
 import type { BodyArea } from '../types';
 
 export type Intent =
-  'postpone' | 'avoidArea' | 'lighter' | 'deload' | 'swap' | 'stall' | 'food' | 'help';
+  | 'postpone'
+  | 'avoidArea'
+  | 'lighter'
+  | 'deload'
+  | 'swap'
+  | 'stall'
+  | 'food'
+  | 'help'
+  | 'week'
+  | 'progress'
+  | 'focusBlock'
+  | 'focusEdit';
 export type DayWord = 'today' | 'tomorrow' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type Safety = 'none' | 'discomfort' | 'redFlag';
 
@@ -36,6 +54,12 @@ export type IntentSlots = {
   moveTo?: DayWord;
   exerciseId?: string;
   scope?: 'today' | 'plan';
+  /** M12 focusBlock: the area to build. */
+  group?: BodyArea;
+  /** M12 focusBlock / focusEdit: block length. */
+  weeks?: number;
+  /** M12 focusBlock / focusEdit: training days a week. */
+  daysPerWeek?: number;
 };
 
 export type IntentMatch = { intent: Intent; slots: IntentSlots; safety: Safety };
@@ -120,6 +144,18 @@ const INTENTS = {
   lighter: compileList(P.intents.lighter),
   food: compileList(P.intents.food),
 };
+const M12 = {
+  week: compileList(P.m12.week),
+  progress: compileList(P.m12.progress),
+  focusBlock: compileList(P.m12.focusBlock),
+  focusEdit: compileList(P.m12.focusEdit),
+  month: compileList(P.m12.month),
+};
+const NUMBER_WORDS: Record<string, number> = P.m12.numbers;
+const NUM = `(\\d{1,2}|${Object.keys(NUMBER_WORDS).join('|')})`;
+const DAYS_COUNT = new RegExp(`(?<![a-z0-9])${NUM}\\s+(?:days?|times)(?![a-z0-9])`);
+const WEEKS_COUNT = new RegExp(`(?<![a-z0-9])${NUM}\\s+weeks?(?![a-z0-9])`);
+const MONTHS_COUNT = new RegExp(`(?<![a-z0-9])${NUM}\\s+months?(?![a-z0-9])`);
 const AVOID_ANYWHERE = compileList(P.avoidArea.anywhere);
 const AVOID_BEFORE = P.avoidArea.before.map((w) => normalizeText(w));
 const AREA_FILLERS = ['on my', 'on the', 'for my', 'my', 'the', 'on'];
@@ -265,6 +301,21 @@ function skipsDay(text: string, ctx: MatchContext): boolean {
   });
 }
 
+const numberOf = (w: string): number => NUMBER_WORDS[w] ?? Number(w);
+
+/** M12: "4 days a week" / "3 times a week", "6 weeks", "this month" (= 4), "2 months" (= 8). */
+function countsOf(text: string): { weeks?: number; daysPerWeek?: number } {
+  const out: { weeks?: number; daysPerWeek?: number } = {};
+  const d = DAYS_COUNT.exec(text);
+  if (d?.[1]) out.daysPerWeek = numberOf(d[1]);
+  const w = WEEKS_COUNT.exec(text);
+  const mo = MONTHS_COUNT.exec(text);
+  if (w?.[1]) out.weeks = numberOf(w[1]);
+  else if (mo?.[1]) out.weeks = numberOf(mo[1]) * 4;
+  else if (has(M12.month, text)) out.weeks = 4;
+  return out;
+}
+
 function scopeOf(text: string): 'today' | 'plan' | undefined {
   if (has(SCOPE_PLAN, text)) return 'plan';
   if (has(SCOPE_TODAY, text)) return 'today';
@@ -342,6 +393,7 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   if (t === '' || safety === 'redFlag') return { intent: 'help', slots: {}, safety };
 
   const area = areaOf(t);
+  const counts = countsOf(t);
   let intent: Intent;
   if (has(INTENTS.deload, t)) intent = 'deload';
   else if (has(INTENTS.swap, t)) intent = 'swap';
@@ -350,18 +402,28 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   else if (area && (safety === 'discomfort' || area.viaAvoidBefore || has(AVOID_ANYWHERE, t)))
     intent = 'avoidArea';
   else if (has(INTENTS.stall, t)) intent = 'stall';
+  else if (has(M12.progress, t)) intent = 'progress';
+  else if (has(M12.focusBlock, t)) intent = 'focusBlock';
+  else if (Object.keys(counts).length > 0 || has(M12.focusEdit, t)) intent = 'focusEdit';
   else if (has(INTENTS.lighter, t)) intent = 'lighter';
   else if (has(INTENTS.food, t)) intent = 'food';
+  else if (has(M12.week, t)) intent = 'week';
   else if (safety === 'discomfort') intent = 'avoidArea';
   else return { intent: 'help', slots: {}, safety };
 
+  const { date, moveTo } = daysOf(t);
+  // "swap Thursday's flyes": a change to a focus block's weekday.
+  const weekday = date !== undefined && date !== 'today' && date !== 'tomorrow';
+  if (intent === 'swap' && weekday && moveTo === undefined) intent = 'focusEdit';
+
   const slots: IntentSlots = {};
   if (intent === 'avoidArea' && area) slots.area = area.area;
-  if (intent === 'swap' || intent === 'stall') {
+  if (intent === 'swap' || intent === 'stall' || intent === 'focusEdit') {
     const exerciseId = exerciseOf(t, ctx);
     if (exerciseId !== undefined) slots.exerciseId = exerciseId;
   }
-  const { date, moveTo } = daysOf(t);
+  if (intent === 'focusBlock' && area) slots.group = area.area;
+  if (intent === 'focusBlock' || intent === 'focusEdit') Object.assign(slots, counts);
   if (date) slots.date = date;
   if (moveTo) slots.moveTo = moveTo;
   const scope = scopeOf(t);

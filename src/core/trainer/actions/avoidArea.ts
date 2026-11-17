@@ -47,7 +47,7 @@ export function proposeAvoidArea(
     ...ctx,
     exerciseName: (id) => byId.get(id)?.name ?? nameOf(ctx, id),
   };
-  const rows = baseRows(ctx.state, today.day.id, today.override, ['avoidArea']);
+  const rows = baseRows(ctx.state, today.day.id, today.override, ['avoidArea'], ctx.today);
   const worksArea = (p: PlannedExercise) => {
     const e = byId.get(p.exerciseId);
     return e !== undefined && primaryInArea(e, area, catalog.areaOf);

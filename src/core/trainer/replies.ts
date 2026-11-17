@@ -134,10 +134,10 @@ const FALLBACK: Record<ProposalAction, { title: string; why: string; say: string
     why: 'Ideas that fit what you have left today.',
     say: 'Done. Food logged.',
   },
-  // M12 task 1 placeholder; task 3 (core-engineer) owns the final focus-block copy.
+  // M12 focus block (actions/focusBlock.ts writes the full title / why / say).
   focusBlock: {
     title: 'Focus block',
-    why: 'More sets for one area, the rest kept steady.',
+    why: 'More sets for one area, the rest kept as it is. The last week is lighter.',
     say: 'Done. Focus block is on.',
   },
 };

@@ -232,6 +232,72 @@
       "แคล"
     ]
   },
+  "m12": {
+    "note": "M12 rule answers (English only, SPEC M12). 'week' and 'progress' are questions about his scores; 'focusBlock' words ask for a focus block (slots: group from the area words, weeks, daysPerWeek); a days-a-week or weeks count on its own ('only 4 days a week', 'make it 3 weeks') or a 'focusEdit' phrase changes a proposed block; a swap on a weekday ('swap Thursday's flyes') is a focus edit too. 'month' phrases mean 4 weeks.",
+    "week": [
+      "hows my week",
+      "how is my week",
+      "how was my week",
+      "how did my week",
+      "how did i do this week",
+      "my week",
+      "this week",
+      "week so far",
+      "weekly summary",
+      "week summary"
+    ],
+    "progress": [
+      "how am i doing",
+      "how im doing",
+      "am i on track",
+      "on track",
+      "my progress",
+      "progress so far",
+      "how am i going",
+      "hows it going",
+      "how is it going",
+      "how is my training going",
+      "hows my training"
+    ],
+    "focusBlock": [
+      "build my",
+      "build up my",
+      "build a",
+      "build",
+      "bigger",
+      "grow my",
+      "grow",
+      "focus on",
+      "focus block",
+      "bring up",
+      "work on my",
+      "prioritize",
+      "prioritise",
+      "specialize",
+      "more volume for",
+      "more sets for"
+    ],
+    "focusEdit": [
+      "fewer days",
+      "less days",
+      "more days",
+      "fewer weeks",
+      "more weeks",
+      "shorter block",
+      "longer block"
+    ],
+    "month": ["this month", "next month", "a month", "for a month", "the month", "month"],
+    "numbers": {
+      "one": 1,
+      "two": 2,
+      "three": 3,
+      "four": 4,
+      "five": 5,
+      "six": 6,
+      "seven": 7,
+      "eight": 8
+    }
+  },
   "avoidArea": {
     "note": "'anywhere' phrases plus an area word anywhere -> avoidArea. 'before' words must sit right before the area word (optionally 'my', 'the', 'on', 'on my', 'for my').",
     "anywhere": [

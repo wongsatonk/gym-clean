@@ -7,7 +7,8 @@
  * - Undo is LIFO: only the newest change that isn't undone, and only while the state still is
  *   that change's `after` (anything else means the state moved on without a record).
  * - Overrides older than 14 days (by the local date of `now`) are pruned whenever a change is
- *   applied; Undo restores `before` as it was.
+ *   applied; Undo restores `before` as it was. Focus blocks (M12) are never pruned (the Calendar
+ *   reads past blocks) and are part of the Undo conflict check.
  */
 import { addDate, localDate, seedPlan } from './plan';
 import type { DayOverride, PlanChange, Program, Proposal, TrainerState } from '../types';
@@ -48,7 +49,10 @@ function same(a: unknown, b: unknown): boolean {
 }
 
 const sameContent = (a: TrainerState, b: TrainerState): boolean =>
-  same(a.plan, b.plan) && same(a.schedule, b.schedule) && same(a.overrides, b.overrides);
+  same(a.plan, b.plan) &&
+  same(a.schedule, b.schedule) &&
+  same(a.overrides, b.overrides) &&
+  same(a.blocks ?? [], b.blocks ?? []);
 
 /** `next` (copied) with version + 1 and old overrides pruned. */
 function commit(state: TrainerState, next: TrainerState, now: number): TrainerState {
@@ -144,6 +148,7 @@ export function resetToProgram(
     plan: seed.plan,
     schedule: { rotation: seed.schedule.rotation, restWeekdays: [...state.schedule.restWeekdays] },
     overrides: state.overrides,
+    ...(state.blocks ? { blocks: state.blocks } : {}),
   };
   const after = commit(state, next, now);
   const change: TrainerChange = {

@@ -4,14 +4,25 @@ import {
   addDate,
   calendar,
   effectiveDay,
+  effectiveDays,
+  baseDay,
+  blockAt,
   localDate,
+  pendingAt,
   programHash,
   seedPlan,
   upNext,
   weekdayOf,
   type PlanSession,
 } from './plan';
-import type { DayOverride, PlannedExercise, Program, ProgramDay, TrainerState } from '../types';
+import type {
+  DayOverride,
+  FocusBlock,
+  PlannedExercise,
+  Program,
+  ProgramDay,
+  TrainerState,
+} from '../types';
 
 // Made-up program and history (the repo is public). Dates are local; 2026-11-09 is a Monday,
 // 2026-11-15 a Sunday. Times are built with new Date(y, m, d, h, min), so tests hold in any zone.
@@ -417,5 +428,129 @@ describe('upNext', () => {
     const s = st();
     s.schedule.rotation = [];
     expect(upNext(s, [], '2026-11-09')).toBeNull();
+  });
+});
+
+// ---------- M12 focus blocks ----------
+
+/** A made-up 2-week block from Mon 2026-11-16: Mon/Wed/Fri train block days 'a', 'b', 'c', … */
+const blockDay = (id: string, tag: string): ProgramDay => ({
+  id,
+  name: id.toUpperCase(),
+  exercises: [ex(`${id}-x`, { sets: 4 }), ex(`focus-${tag}`)],
+});
+const BLOCK: FocusBlock = (() => {
+  const start = '2026-11-16';
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
+  let k = 0;
+  const days = Array.from({ length: 14 }, (_, i) => {
+    const date = addDate(start, i);
+    const train = [1, 3, 5].includes(weekdayOf(date));
+    return { date, day: train ? blockDay(ids[k++ % 6] ?? 'a', date) : null };
+  });
+  return {
+    id: 'focus-test',
+    group: 'chest',
+    startDate: start,
+    weeks: 2,
+    weekdays: [1, 3, 5],
+    days,
+    targetSetsPerWeek: 14,
+    baseSetsPerWeek: 10,
+  };
+})();
+const withBlock = (s: TrainerState, b: FocusBlock = BLOCK): TrainerState => ({ ...s, blocks: [b] });
+
+describe('focus blocks in the calendar (M12)', () => {
+  it('pendingAt is the rotation day that would run next', () => {
+    expect(pendingAt(st(), [done('b', at(11, 13))], '2026-11-16')).toBe('c');
+    expect(pendingAt(st(), [], '2026-11-16')).toBe('a');
+  });
+
+  it('block dates use the block day; non-training block dates rest', () => {
+    const s = withBlock(st());
+    expect(ids(s, [done('d', at(11, 14))], '2026-11-15', 9)).toEqual([
+      'e',
+      'a',
+      '-',
+      'b',
+      '-',
+      'c',
+      '-',
+      '-',
+      'd',
+    ]);
+    const mon = effectiveDay(s, [], '2026-11-16');
+    expect(mon.day?.exercises.map((p) => p.exerciseId)).toEqual(['a-x', 'focus-2026-11-16']);
+    expect(mon.adjusted).toBeNull();
+    expect(calendar(s, [], '2026-11-16', 1)[0]?.blockId).toBe('focus-test');
+    expect(blockAt(s, '2026-11-16')?.block.id).toBe('focus-test');
+    expect(blockAt(s, '2026-11-30')).toBeUndefined();
+  });
+
+  it('freezes the rotation during the block and resumes after it from the last non-block session', () => {
+    const s = withBlock(st());
+    // Last non-block session: 'd' on Sat 14th. Sessions inside the block don't move the pointer.
+    const sessions = [done('d', at(11, 14)), done('a', at(11, 16)), done('b', at(11, 18))];
+    expect(ids(s, sessions, '2026-11-29', 4)).toEqual(['-', 'e', 'f', 'a']);
+    expect(ids(s, sessions, '2026-11-30', 2)).toEqual(['e', 'f']);
+    expect(upNext(s, sessions, '2026-11-19')).toEqual({ date: '2026-11-20', dayId: 'c' });
+    // Train anyway on a block rest date runs the frozen rotation day.
+    expect(effectiveDay(s, sessions, '2026-11-17').day?.id).toBe('e');
+  });
+
+  it('a done session on a block date is done', () => {
+    const s = withBlock(st());
+    const e = calendar(s, [done('a', at(11, 16))], '2026-11-16', 1)[0];
+    expect(e).toMatchObject({ done: true, dayId: 'a', blockId: 'focus-test' });
+  });
+
+  it('dated overrides win on block dates: rest, adjust, and a moved day (block version)', () => {
+    const adjusted: PlannedExercise[] = [ex('a-x', { sets: 3, adjusted: 'lighter' })];
+    const s = withBlock(
+      st(
+        [],
+        [
+          { date: '2026-11-16', rest: true },
+          { date: '2026-11-18', dayId: 'b', adjust: { kind: 'lighter', exercises: adjusted } },
+          { date: '2026-11-21', dayId: 'a' },
+        ],
+      ),
+    );
+    expect(ids(s, [], '2026-11-16', 6)).toEqual(['-', '-', 'b', '-', 'c', 'a']);
+    const wed = effectiveDay(s, [], '2026-11-18');
+    expect(wed.day?.exercises).toEqual(adjusted);
+    expect(wed.adjusted).toBe('lighter');
+    // A moved day on a block date runs the block's version of it (the latest one before).
+    const sat = effectiveDay(s, [], '2026-11-21');
+    expect(sat.day?.exercises.map((p) => p.exerciseId)).toEqual(['a-x', 'focus-2026-11-16']);
+  });
+
+  it('baseDay: the block version on block dates, else the plan day', () => {
+    const s = withBlock(st());
+    expect(baseDay(s, '2026-11-18', 'b')?.exercises[1]?.exerciseId).toBe('focus-2026-11-18');
+    expect(baseDay(s, '2026-12-01', 'b')).toEqual(PROGRAM.days[1]);
+    expect(baseDay(s, '2026-11-18', 'zzz')).toBeNull();
+  });
+
+  it('effectiveDays walks forward like the calendar; each entry equals effectiveDay on day 1', () => {
+    const s = withBlock(st());
+    const days = effectiveDays(s, [], '2026-11-15', 4);
+    expect(days.map((d) => (d.rest ? '-' : d.day?.id))).toEqual(['a', 'a', '-', 'b']);
+    expect(days[0]).toEqual(effectiveDay(s, [], '2026-11-15'));
+    expect(days[1]?.blockId).toBe('focus-test');
+  });
+
+  it('the newest block wins where blocks overlap', () => {
+    const later: FocusBlock = {
+      ...BLOCK,
+      id: 'focus-later',
+      days: BLOCK.days.map((d) => ({ ...d, day: d.day ? { ...d.day, id: 'f' } : null })),
+    };
+    const s: TrainerState = { ...st(), blocks: [BLOCK, later] };
+    expect(calendar(s, [], '2026-11-16', 1)[0]).toMatchObject({
+      dayId: 'f',
+      blockId: 'focus-later',
+    });
   });
 });

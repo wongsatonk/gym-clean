@@ -98,9 +98,12 @@ export function proposePostpone(
     trainDate = before.find((e) => e.date > today && e.rest && !e.override?.rest)?.date ?? null;
   }
 
+  // M12: block dates don't slide; today's block day moves as itself (the block's version).
+  const inBlock = eff.blockId !== undefined;
+  if (inBlock && opts.to === undefined && opts.mode === 'pushWeek') trainDate = null;
   const touched = new Set([today, ...(trainDate ? [trainDate] : [])]);
   const added: DayOverride[] = [{ date: today, rest: true }];
-  if (trainDate) added.push({ date: trainDate });
+  if (trainDate) added.push(inBlock ? { date: trainDate, dayId: eff.day.id } : { date: trainDate });
   const next: TrainerState = {
     ...structuredClone(state),
     overrides: [...structuredClone(state.overrides).filter((o) => !touched.has(o.date)), ...added],
@@ -120,7 +123,9 @@ export function proposePostpone(
     ? `${moved} moves to ${longDay(lands.date)}`
     : `${moved} moves to next week`;
   let why: string;
-  if (trainDate) {
+  if (inBlock && !trainDate) {
+    why = `${moved} is skipped. The rest of your focus block stays as planned.`;
+  } else if (trainDate) {
     why = `${movedTo}. ${longDay(trainDate)} becomes a training day, so you keep every session.`;
   } else {
     const left = after.filter((e) => !e.rest && e.dayId !== null).map((e) => e.dayId);

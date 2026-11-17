@@ -20,7 +20,7 @@ import {
 export function proposeRemove(ctx: ActionContext, exerciseId: string): ActionResult {
   const today = todayDay(ctx);
   if (!today.ok) return today;
-  const rows = baseRows(ctx.state, today.day.id, today.override, []);
+  const rows = baseRows(ctx.state, today.day.id, today.override, [], ctx.today);
   const p = rows.find((r) => r.exerciseId === exerciseId);
   const name = nameOf(ctx, exerciseId);
   if (!p) return refuse('notInDay', `${name} isn't in today's workout.`);

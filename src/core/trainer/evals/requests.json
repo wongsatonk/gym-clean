@@ -1,5 +1,5 @@
 {
-  "note": "M10 intent eval set. Made-up requests only: no personal data, no real body stats. 'ruleSupported' marks items the phase A rule matcher must get right (intent + slots, >= 90%); the rest are there for the phase B/C model evals. Every item with safety 'discomfort' or 'redFlag' must be flagged (100%). Red-flag items expect intent 'help' with no slots: the coach never proposes training for them. Slot rules: area only for avoidArea, exerciseId only for swap/stall, date/moveTo/scope for any non-help intent.",
+  "note": "M10 intent eval set. Made-up requests only: no personal data, no real body stats. 'ruleSupported' marks items the phase A rule matcher must get right (intent + slots, >= 90%); the rest are there for the phase B/C model evals. Every item with safety 'discomfort' or 'redFlag' must be flagged (100%). Red-flag items expect intent 'help' with no slots: the coach never proposes training for them. Slot rules: area only for avoidArea, exerciseId only for swap/stall, date/moveTo/scope for any non-help intent. M12 adds week / progress / focusBlock / focusEdit items: focusBlock slots are group (a body area), weeks ('this month' = 4) and daysPerWeek; focusEdit slots are weeks, daysPerWeek, or exerciseId + date (a weekday) for 'swap Thursday's flyes'.",
   "items": [
     {
       "text": "Not today",
@@ -682,6 +682,167 @@
       "text": "No squats today",
       "intent": "help",
       "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "How's my week?",
+      "intent": "week",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "How is my week going so far",
+      "intent": "week",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "How did I do this week?",
+      "intent": "week",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Give me my week so far",
+      "intent": "week",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "How many sessions this week?",
+      "intent": "week",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "How am I doing?",
+      "intent": "progress",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Am I on track?",
+      "intent": "progress",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "How's my progress so far",
+      "intent": "progress",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "how am I doing on my plan",
+      "intent": "progress",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "This month I want to build my chest",
+      "intent": "focusBlock",
+      "slots": { "group": "chest", "weeks": 4 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Build a focus block",
+      "intent": "focusBlock",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "I want bigger arms",
+      "intent": "focusBlock",
+      "slots": { "group": "arms" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Help me build my back for 6 weeks",
+      "intent": "focusBlock",
+      "slots": { "group": "back", "weeks": 6 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Focus on legs for 3 weeks, 4 days a week",
+      "intent": "focusBlock",
+      "slots": { "group": "legs", "weeks": 3, "daysPerWeek": 4 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Can we grow my shoulders this month?",
+      "intent": "focusBlock",
+      "slots": { "group": "shoulders", "weeks": 4 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "I want to bring up my chest",
+      "intent": "focusBlock",
+      "slots": { "group": "chest" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Swap Thursday's flyes",
+      "intent": "focusEdit",
+      "slots": { "exerciseId": "Dumbbell_Flyes", "date": "thu" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "swap monday's bench press",
+      "intent": "focusEdit",
+      "slots": { "exerciseId": "Dumbbell_Bench_Press", "date": "mon" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Only 4 days a week",
+      "intent": "focusEdit",
+      "slots": { "daysPerWeek": 4 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Make it 3 weeks",
+      "intent": "focusEdit",
+      "slots": { "weeks": 3 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "5 days a week instead",
+      "intent": "focusEdit",
+      "slots": { "daysPerWeek": 5 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "What should I eat tonight?",
+      "intent": "food",
+      "slots": { "date": "today" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Dinner ideas for tonight",
+      "intent": "food",
+      "slots": { "date": "today" },
       "safety": "none",
       "ruleSupported": true
     }

@@ -76,7 +76,7 @@ function prepare(
   if (scope === 'today') {
     const today = todayDay(ctx);
     if (!today.ok) return today;
-    const rows = baseRows(ctx.state, today.day.id, today.override, []);
+    const rows = baseRows(ctx.state, today.day.id, today.override, [], ctx.today);
     const i = rows.findIndex((p) => p.exerciseId === fromId);
     const p = rows[i];
     if (!p) return refuse('notInDay', `${from.name} isn't in today's workout.`);

@@ -21,12 +21,21 @@
  *   replacement, the other candidates, Just today and Keep X (`keepExercise`, UI-only). Never
  *   offered mid-workout; there a typed request gets the usual today swap.
  * - Proposal text is passed through `proposalReply` (copy check, `say` ≤ 8 words).
- * Chip ids: the 6 quick actions (UI COACH_CHIPS), the 6 BodyArea values, and the follow-ups
- * below (`args` say what they act on). 'endWorkout' and 'keepExercise' are handled by the UI, not
+ * - M12 (gym sessions only; no Health value ever reaches these answers, M11 Decision 8):
+ *   "How's my week?" → this week's sessions done / planned, % of planned sets so far and the next
+ *   training day; "How am I doing?" → week + month scores, the weekly streak and, during a focus
+ *   block, its focus sets so far (numbers from progress/completion.ts). A focus block asks only
+ *   what's missing (group → weeks 2–6 → "Keep my days" / 3–6 days) with chips, then proposes it
+ *   (actions/focusBlock.ts); edits ("only 4 days a week", "make it 3 weeks", "swap Thursday's
+ *   flyes") revise `focusDraft` (the block proposed last). Without a draft a count starts the
+ *   flow and a weekday swap is a plain swap. None of these mid-workout.
+ * Chip ids: the 7 quick actions (UI COACH_CHIPS + M12 focusBlock), the 6 BodyArea values, the M12
+ * `week` / `progress` chips, and the follow-ups below (`args` say what they act on). 'endWorkout' and 'keepExercise' are handled by the UI, not
  * here.
  */
 import type {
   BodyArea,
+  FocusBlock,
   FoodSuggestion,
   MacroSet,
   NutritionTargets,
@@ -36,7 +45,22 @@ import type {
 } from '../types';
 import type { Unit } from '../units';
 import { matchIntent, type DayWord, type Intent, type IntentSlots, type Safety } from './intents';
-import { addDate, effectiveDay, weekdayOf } from './plan';
+import { addDate, baseDay, effectiveDay, localDate, upNext, weekdayOf } from './plan';
+import {
+  blockEnd,
+  isFocusExercise,
+  keepMyWeekdays,
+  reviseFocusBlock,
+  validDaysPerWeek,
+  validWeeks,
+  weekdaysFor,
+  type FocusEdit,
+} from './focusBlock';
+import { FOCUS_RULES } from './focusRules';
+import { groupLabel, proposeFocusBlock } from './actions/focusBlock';
+import { monthScore, periodScore, weekScore, type CompletionInput } from '../progress/completion';
+import { pctOf } from '../progress/recap';
+import { weeklyStreak } from '../stats';
 import type { TrainerChange } from './changes';
 import type { TrainerCatalog } from './swapCandidates';
 import {
@@ -76,7 +100,8 @@ import {
 } from './replies';
 
 export type CoachPhase = 'today' | 'preview' | 'workout';
-export type QuickChipId = 'notToday' | 'easyOn' | 'lighter' | 'swap' | 'adjustPlan' | 'food';
+export type QuickChipId =
+  'notToday' | 'easyOn' | 'lighter' | 'swap' | 'adjustPlan' | 'food' | 'focusBlock';
 export type CoachChipId =
   | QuickChipId
   | BodyArea
@@ -96,7 +121,11 @@ export type CoachChipId =
   | 'postponeMode'
   /** args.exerciseId, option: that stall fix. */
   | 'stallFix'
-  | 'deload';
+  | 'deload'
+  /** M12: this week's numbers. */
+  | 'week'
+  /** M12: week + month scores, streak, focus block. */
+  | 'progress';
 
 export type CoachArgs = {
   exerciseId?: string;
@@ -104,6 +133,13 @@ export type CoachArgs = {
   scope?: SwapScope;
   mode?: PostponeMode;
   option?: StallOption;
+  /** M12 focusBlock: the params gathered so far (`keepDays` = "Keep my days"). */
+  group?: BodyArea;
+  weeks?: number;
+  days?: number;
+  keepDays?: boolean;
+  /** M12 focusBlock ("Keep going" from a block recap): the exact weekdays. */
+  weekdays?: number[];
 };
 
 export type CoachChip = { id: CoachChipId; label: string; args?: CoachArgs };
@@ -133,6 +169,8 @@ export type CoachContext = {
   fuel?: CoachFuel;
   /** M10e: exercises he chose to keep despite missing kit (GymProfile.kept). */
   gymKept?: readonly string[];
+  /** M12: the focus block proposed last and still pending (edits revise it). */
+  focusDraft?: FocusBlock;
 };
 
 /** Today's food log totals, the targets (null = not set up) and what can be suggested. */
@@ -152,6 +190,8 @@ export type CoachResponse = {
   say?: string;
   /** M7: food ideas, each with a Log payload (logged only on a tap). */
   foods?: FoodSuggestion[];
+  /** M12: the block in a focusBlock proposal (for the week-by-week card). */
+  focusBlock?: FocusBlock;
 };
 
 export const QUICK_CHIPS: readonly CoachChip[] = [
@@ -161,6 +201,7 @@ export const QUICK_CHIPS: readonly CoachChip[] = [
   { id: 'swap', label: 'Swap an exercise' },
   { id: 'adjustPlan', label: 'Adjust my plan' },
   { id: 'food', label: 'What should I eat?' },
+  { id: 'focusBlock', label: 'Build a focus block' },
 ];
 const WORKOUT_CHIPS: readonly QuickChipId[] = ['easyOn', 'lighter', 'swap'];
 
@@ -187,6 +228,17 @@ export const ASK_AREA = 'Which area should I go easy on?';
 export const ASK_EXERCISE = 'Which exercise?';
 export const ONLY_TODAY = "I can only move today's workout. Ask me on the day.";
 export const NO_STALLS = 'No stalled lifts right now. A deload week or a swap from now on?';
+export const ASK_GROUP = 'Which area should the block build?';
+export const ASK_WEEKS = 'For how many weeks?';
+export const ASK_DAYS = 'How many days a week?';
+
+/** M12: the starters on an empty thread (the swap one names today's first exercise when it can). */
+export const STARTER_CHIPS: readonly CoachChip[] = [
+  { id: 'week', label: "How's my week?" },
+  { id: 'swap', label: 'Swap an exercise' },
+  { id: 'food', label: 'What should I eat tonight?' },
+  { id: 'shoulders', label: 'Go easy on shoulders' },
+];
 
 const MODE_LABEL: Record<PostponeMode, string> = {
   useRestDay: 'Use the rest day instead',
@@ -216,6 +268,7 @@ type Body = {
   chips?: CoachChip[];
   say?: string;
   foods?: FoodSuggestion[];
+  focusBlock?: FocusBlock;
 };
 
 const isArea = (id: string): id is BodyArea => (AREA_CHIP_IDS as readonly string[]).includes(id);
@@ -250,6 +303,7 @@ function finish(ctx: CoachContext, safety: Safety, intent: Intent, body: Body): 
   if (body.proposal) out.proposal = { ...body.proposal, ...proposalReply(body.proposal) };
   if (body.say) out.say = body.say;
   if (body.foods && body.foods.length > 0) out.foods = body.foods;
+  if (body.focusBlock) out.focusBlock = body.focusBlock;
   return out;
 }
 
@@ -496,6 +550,215 @@ function food(ctx: CoachContext): Body {
   return { reply: foodIdeasReply(left), foods };
 }
 
+// ---------- M12: week, progress, focus blocks ----------
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const LONG_DAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function completionInput(ctx: CoachContext): CompletionInput {
+  return {
+    state: ctx.state,
+    sessions: ctx.sessions,
+    sets: ctx.sets ?? [],
+    today: ctx.today,
+    catalog: ctx.catalog,
+  };
+}
+
+/** "2 of 5 sessions, 92% of planned sets" (the % only once sets were due). */
+function scoreText(
+  s: { sessionsDone: number; sessionsPlanned: number; setsDone: number; setsPlanned: number },
+  done = '',
+): string {
+  const pct = pctOf(s);
+  const head = `${s.sessionsDone} of ${plural(s.sessionsPlanned, 'session')}${done}`;
+  return pct === null ? head : `${head}, ${pct}% of planned sets`;
+}
+
+function nextLine(ctx: CoachContext): string {
+  const up = upNext(ctx.state, ctx.sessions, ctx.today);
+  if (!up) return '';
+  const name = baseDay(ctx.state, up.date, up.dayId)?.name ?? up.dayId;
+  const when =
+    up.date === ctx.today
+      ? 'today'
+      : up.date === addDate(ctx.today, 1)
+        ? 'tomorrow'
+        : `on ${LONG_DAY[weekdayOf(up.date)] ?? up.date}`;
+  return ` Next: ${name} ${when}.`;
+}
+
+function weekAnswer(ctx: CoachContext): Body {
+  const w = weekScore(completionInput(ctx), ctx.today);
+  const extra = w.extra > 0 ? ` Plus ${plural(w.extra, 'extra session')}.` : '';
+  if (w.sessionsPlanned === 0)
+    return { reply: `No sessions planned this week.${extra}${nextLine(ctx)}` };
+  const pct = pctOf(w);
+  const sets = pct === null ? '' : `, ${pct}% of planned sets so far`;
+  return {
+    reply: `This week: ${w.sessionsDone} of ${plural(w.sessionsPlanned, 'session')} done${sets}.${extra}${nextLine(ctx)}`,
+  };
+}
+
+function todayMs(today: string): number {
+  const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+  return new Date(y, m - 1, d, 12).getTime();
+}
+
+function progressAnswer(ctx: CoachContext): Body {
+  const input = completionInput(ctx);
+  const w = weekScore(input, ctx.today);
+  const m = monthScore(input, ctx.today.slice(0, 7));
+  const line = (label: string, s: typeof w) =>
+    s.sessionsPlanned === 0 ? `${label}: nothing planned yet.` : `${label}: ${scoreText(s)}.`;
+  const streak = weeklyStreak(ctx.sessions, todayMs(ctx.today));
+  const parts = [line('This week', w), line('This month', m), `Streak: ${plural(streak, 'week')}.`];
+  const block = [...(ctx.state.blocks ?? [])]
+    .reverse()
+    .find((b) => b.startDate <= ctx.today && blockEnd(b) >= ctx.today);
+  if (block) {
+    const focus = periodScore(input, block.startDate, blockEnd(block)).focus;
+    const week = Math.floor(daysFrom(block.startDate, ctx.today) / 7) + 1;
+    if (focus)
+      parts.push(
+        `${groupLabel(block.group)} block: week ${week} of ${block.weeks}, ${focus.sets} of ${focus.target} ${block.group} sets so far.`,
+      );
+  }
+  return { reply: parts.join(' ') };
+}
+
+function daysFrom(from: string, to: string): number {
+  let n = 0;
+  for (let d = from; d < to; d = addDate(d, 1)) n++;
+  return n;
+}
+
+/** Areas the gym can build (a doable focus exercise exists). */
+function focusGroups(ctx: CoachContext): BodyArea[] {
+  return AREA_CHIP_IDS.filter((a) =>
+    ctx.catalog.exercises.some(
+      (e) => isFocusExercise(e.id, a, ctx.catalog) && ctx.catalog.canDo(e.id),
+    ),
+  );
+}
+
+const focusChip = (label: string, args: CoachArgs): CoachChip => ({
+  id: 'focusBlock',
+  label,
+  args,
+});
+
+const weekChips = (args: CoachArgs): CoachChip[] =>
+  [2, 3, 4, 5, 6].map((n) =>
+    focusChip(n === FOCUS_RULES.monthWeeks ? `${n} weeks (a month)` : `${n} weeks`, {
+      ...args,
+      weeks: n,
+    }),
+  );
+
+/** The date a new block starts: today, or tomorrow when today already has a session. */
+function blockStart(ctx: CoachContext): string {
+  const busy = ctx.sessions.some((s) => localDate(s.startedAt) === ctx.today);
+  return busy ? addDate(ctx.today, 1) : ctx.today;
+}
+
+function blockBody(r: ReturnType<typeof proposeFocusBlock>, reply: string): Body {
+  if (!r.ok) return { reply: r.reply };
+  const block = r.proposal.next.blocks?.at(-1);
+  return { reply, proposal: r.proposal, ...(block ? { focusBlock: block } : {}) };
+}
+
+function focusFlow(ctx: CoachContext, args: CoachArgs): Body {
+  const { group } = args;
+  const known: CoachArgs = {};
+  if (group) known.group = group;
+  if (args.weeks !== undefined && validWeeks(args.weeks)) known.weeks = args.weeks;
+  if (args.days !== undefined && validDaysPerWeek(args.days)) known.days = args.days;
+  if (args.keepDays) known.keepDays = true;
+  if (args.weekdays) known.weekdays = [...args.weekdays];
+  let lead = '';
+  if (args.weeks !== undefined && !validWeeks(args.weeks))
+    lead = 'A focus block runs 2 to 6 weeks. ';
+  else if (args.days !== undefined && !validDaysPerWeek(args.days))
+    lead = 'A focus block trains 3 to 6 days a week. ';
+
+  if (!group)
+    return {
+      reply: `${lead}${ASK_GROUP}`,
+      chips: focusGroups(ctx).map((a) => focusChip(AREA_LABEL[a], { ...known, group: a })),
+    };
+  if (known.weeks === undefined) return { reply: `${lead}${ASK_WEEKS}`, chips: weekChips(known) };
+  const hasDays = known.days !== undefined || known.keepDays || known.weekdays !== undefined;
+  if (!hasDays)
+    return {
+      reply: `${lead}${ASK_DAYS}`,
+      chips: [
+        focusChip('Keep my days', { ...known, keepDays: true }),
+        ...[3, 4, 5, 6].map((n) => focusChip(`${n} days`, { ...known, days: n })),
+      ],
+    };
+  const weekdays =
+    known.weekdays ??
+    (known.days !== undefined
+      ? weekdaysFor(known.days)
+      : keepMyWeekdays(ctx.state, ctx.sessions, ctx.today));
+  const r = proposeFocusBlock(
+    actionCtx(ctx),
+    { group, weeks: known.weeks, weekdays, startDate: blockStart(ctx) },
+    ctx.catalog,
+  );
+  return blockBody(r, `Here's a ${known.weeks}-week ${group} block.`);
+}
+
+function focusEdit(ctx: CoachContext, s: IntentSlots): Body {
+  const draft = ctx.focusDraft;
+  if (!draft) {
+    if (s.exerciseId !== undefined && s.weeks === undefined && s.daysPerWeek === undefined)
+      return swapFlow(ctx, s.exerciseId, s.scope);
+    const args: CoachArgs = {};
+    if (s.weeks !== undefined) args.weeks = s.weeks;
+    if (s.daysPerWeek !== undefined) args.days = s.daysPerWeek;
+    return focusFlow(ctx, args);
+  }
+  let edit: FocusEdit | undefined;
+  if (s.daysPerWeek !== undefined) edit = { daysPerWeek: s.daysPerWeek };
+  else if (s.weeks !== undefined) edit = { weeks: s.weeks };
+  else if (s.exerciseId !== undefined) {
+    const weekday =
+      s.date && s.date !== 'today' && s.date !== 'tomorrow' ? DAY_INDEX[s.date] : undefined;
+    edit = {
+      swap:
+        weekday === undefined
+          ? { exerciseId: s.exerciseId }
+          : { weekday, exerciseId: s.exerciseId },
+    };
+  }
+  if (!edit)
+    return {
+      reply: ASK_DAYS,
+      chips: [3, 4, 5, 6].map((n) =>
+        focusChip(`${n} days`, { group: draft.group, weeks: draft.weeks, days: n }),
+      ),
+    };
+  const r = reviseFocusBlock(draft, edit, ctx.state, ctx.catalog, ctx.sessions);
+  if (!r.ok) return { reply: r.reply };
+  return blockBody(
+    proposeFocusBlock(actionCtx(ctx), r.block, ctx.catalog),
+    "Here's the updated block.",
+  );
+}
+
+/** M12: the starters, the swap one naming today's first exercise that can still change. */
+export function starterChips(ctx: CoachContext): CoachChip[] {
+  const first = todayDay(actionCtx(ctx));
+  const id = first.ok ? first.day.exercises[0]?.exerciseId : undefined;
+  return STARTER_CHIPS.map((c) =>
+    c.id === 'swap' && id !== undefined
+      ? { id: 'swap', label: `Swap today's ${nameOf(ctx, id)}`, args: { exerciseId: id } }
+      : { ...c },
+  );
+}
+
 // ---------- main ----------
 
 const BLOCKED_MID_SESSION = new Set<string>([
@@ -508,6 +771,10 @@ const BLOCKED_MID_SESSION = new Set<string>([
   'postponeMode',
   'stallFix',
   'gymSwap',
+  'week',
+  'progress',
+  'focusBlock',
+  'focusEdit',
 ]);
 
 function redFlag(ctx: CoachContext): CoachResponse {
@@ -555,6 +822,19 @@ function handleText(text: string, ctx: CoachContext): CoachResponse {
       return done(stallFlow(ctx, s.exerciseId));
     case 'food':
       return done(food(ctx));
+    case 'week':
+      return done(weekAnswer(ctx));
+    case 'progress':
+      return done(progressAnswer(ctx));
+    case 'focusBlock': {
+      const args: CoachArgs = {};
+      if (s.group) args.group = s.group;
+      if (s.weeks !== undefined) args.weeks = s.weeks;
+      if (s.daysPerWeek !== undefined) args.days = s.daysPerWeek;
+      return done(focusFlow(ctx, args));
+    }
+    case 'focusEdit':
+      return done(focusEdit(ctx, s));
     case 'help':
       return done({ reply: HELP_TEXT });
   }
@@ -574,6 +854,9 @@ const CHIP_INTENT: Partial<Record<CoachChipId, Intent>> = {
   adjustPlan: 'stall',
   stallFix: 'stall',
   food: 'food',
+  week: 'week',
+  progress: 'progress',
+  focusBlock: 'focusBlock',
 };
 
 function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachResponse {
@@ -615,6 +898,12 @@ function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachR
       return done(stallFlow(ctx, ex, args.option));
     case 'food':
       return done(food(ctx));
+    case 'week':
+      return done(weekAnswer(ctx));
+    case 'progress':
+      return done(progressAnswer(ctx));
+    case 'focusBlock':
+      return done(focusFlow(ctx, args));
     default:
       return done({ reply: HELP_TEXT });
   }

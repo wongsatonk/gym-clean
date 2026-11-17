@@ -15,8 +15,25 @@
  *   3. else a rest weekday → rest;
  *   4. else the pending rotation day.
  * - Rest days never use up a rotation day, so missed days don't skip any.
+ *
+ * M12 focus blocks (`state.blocks`, dated; the newest block wins where two overlap):
+ * - On a block date, step 4 is the block's day (its training day, or rest on its other dates).
+ *   A finished session still wins (done), and so do dated overrides: `rest` rests; an `adjust`
+ *   runs its rows; a `dayId` without adjust runs the block's version of that day (from the latest
+ *   block date at or before it that has it, else the earliest after, else the plan day); a bare
+ *   override runs the pending rotation day.
+ * - The rotation pointer is frozen during a block: nothing on a block date moves it, and sessions
+ *   on block dates don't count as "the last finished session", so after a block's last date the
+ *   rotation resumes after the last finished session outside every block.
  */
-import type { DayAdjust, DayOverride, Program, ProgramDay, TrainerState } from '../types';
+import type {
+  DayAdjust,
+  DayOverride,
+  FocusBlock,
+  Program,
+  ProgramDay,
+  TrainerState,
+} from '../types';
 
 /**
  * M10-q1 (answered 2026-11-15): no fixed rest days, so the default is empty. Rest weekdays
@@ -41,6 +58,8 @@ export type CalendarEntry = {
   done: boolean;
   /** The override that applied to this date, if any. */
   override?: DayOverride;
+  /** M12: the focus block this date belongs to. */
+  blockId?: string;
 };
 
 export type EffectiveDay = {
@@ -54,6 +73,8 @@ export type EffectiveDay = {
   day: ProgramDay | null;
   adjusted: DayAdjust['kind'] | null;
   override?: DayOverride;
+  /** M12: the focus block this date belongs to. */
+  blockId?: string;
 };
 
 // ---------- local dates ----------
@@ -111,7 +132,46 @@ export function seedPlan(program: Program): TrainerState {
 
 // ---------- calendar ----------
 
-type Projected = CalendarEntry & { pending: string | null };
+type Projected = CalendarEntry & { pending: string | null; base?: ProgramDay | null };
+
+const blockLast = (b: FocusBlock) => addDate(b.startDate, b.weeks * 7 - 1);
+
+/** The newest focus block holding `date`, and its day there (null = a block rest date). */
+export function blockAt(
+  state: TrainerState,
+  date: string,
+): { block: FocusBlock; day: ProgramDay | null } | undefined {
+  const blocks = state.blocks ?? [];
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i];
+    if (!b || date < b.startDate || date > blockLast(b)) continue;
+    const d = b.days.find((x) => x.date === date);
+    return { block: b, day: d?.day ?? null };
+  }
+  return undefined;
+}
+
+/** The block's version of `dayId` as of `date`: latest at or before it, else the earliest after. */
+function blockVersion(block: FocusBlock, dayId: string, date: string): ProgramDay | undefined {
+  let before: ProgramDay | undefined;
+  let after: ProgramDay | undefined;
+  for (const d of block.days) {
+    if (d.day?.id !== dayId) continue;
+    if (d.date <= date) before = d.day;
+    else after ??= d.day;
+  }
+  return before ?? after;
+}
+
+/**
+ * The day `dayId` as planned on `date`, before any adjust override: the block's version on a
+ * block date, else the plan day. null when the id is unknown.
+ */
+export function baseDay(state: TrainerState, date: string, dayId: string): ProgramDay | null {
+  const hit = blockAt(state, date);
+  const fromBlock = hit ? blockVersion(hit.block, dayId, date) : undefined;
+  return fromBlock ?? state.plan.days.find((d) => d.id === dayId) ?? null;
+}
 
 function project(
   state: TrainerState,
@@ -124,14 +184,17 @@ function project(
     const i = rotation.indexOf(dayId);
     return rotation.length === 0 ? 0 : (i + 1) % rotation.length;
   };
+  const inBlock = (date: string) => blockAt(state, date) !== undefined;
 
-  // The latest finished session per local date, and the latest one before fromDate.
+  // The latest finished session per local date, and the latest one before fromDate that isn't
+  // on a block date (the rotation is frozen during blocks).
   const byDate = new Map<string, PlanSession>();
   let lastBefore: PlanSession | null = null;
   for (const s of sessions) {
     if (s.endedAt === undefined) continue;
     const date = localDate(s.startedAt);
     if (date < fromDate) {
+      if (inBlock(date)) continue;
       if (!lastBefore || s.startedAt > lastBefore.startedAt) lastBefore = s;
     } else {
       const cur = byDate.get(date);
@@ -148,8 +211,42 @@ function project(
     const date = addDate(fromDate, i);
     const pending = rotation[ptr] ?? null;
     const override = overrides.get(date);
-    const base = { date, pending, ...(override ? { override } : {}) };
+    const hit = blockAt(state, date);
+    const base = {
+      date,
+      pending,
+      ...(override ? { override } : {}),
+      ...(hit ? { blockId: hit.block.id } : {}),
+    };
     const session = byDate.get(date);
+    if (hit) {
+      // Block date: nothing here moves the rotation pointer.
+      if (session) {
+        out.push({ ...base, dayId: session.dayId, rest: false, done: true });
+      } else if (override?.rest) {
+        out.push({ ...base, dayId: null, rest: true, done: false });
+      } else if (override) {
+        const dayId = override.dayId ?? (override.adjust ? (hit.day?.id ?? pending) : pending);
+        const day =
+          dayId === null
+            ? null
+            : override.dayId === undefined && !override.adjust
+              ? null
+              : (blockVersion(hit.block, dayId, date) ?? null);
+        out.push({
+          ...base,
+          dayId,
+          rest: dayId === null,
+          done: false,
+          ...(day ? { base: day } : {}),
+        });
+      } else if (hit.day) {
+        out.push({ ...base, dayId: hit.day.id, rest: false, done: false, base: hit.day });
+      } else {
+        out.push({ ...base, dayId: null, rest: true, done: false });
+      }
+      continue;
+    }
     if (session) {
       out.push({ ...base, dayId: session.dayId, rest: false, done: true });
       ptr = after(session.dayId);
@@ -183,16 +280,28 @@ export function calendar(
     rest: e.rest,
     done: e.done,
     ...(e.override ? { override: e.override } : {}),
+    ...(e.blockId ? { blockId: e.blockId } : {}),
   }));
 }
 
-/** The plan day by id, with an adjust override's exercises applied. */
+/** The rotation day that would run next on `date` (before any session that date), or null. */
+export function pendingAt(
+  state: TrainerState,
+  sessions: readonly PlanSession[],
+  date: string,
+): string | null {
+  return project(state, sessions, date, 1)[0]?.pending ?? null;
+}
+
+/** The day by id (the block's version on a block date), with an adjust's exercises applied. */
 function resolve(
   state: TrainerState,
+  e: Projected,
   dayId: string | null,
   adjust: DayAdjust | undefined,
 ): ProgramDay | null {
-  const d = dayId === null ? undefined : state.plan.days.find((x) => x.id === dayId);
+  if (dayId === null) return null;
+  const d = e.base && e.base.id === dayId ? e.base : state.plan.days.find((x) => x.id === dayId);
   if (!d) return null;
   return adjust ? { ...d, exercises: adjust.exercises } : d;
 }
@@ -203,18 +312,31 @@ export function effectiveDay(
   sessions: readonly PlanSession[],
   date: string,
 ): EffectiveDay {
-  const [e] = project(state, sessions, date, 1);
+  const [e] = effectiveDays(state, sessions, date, 1);
   if (!e) throw new Error('unreachable: one projected day');
-  const adjust = e.rest || e.done ? undefined : e.override?.adjust;
-  const day = resolve(state, e.rest ? e.pending : e.dayId, adjust);
-  return {
-    date,
-    rest: e.rest,
-    done: e.done,
-    day,
-    adjusted: adjust && day ? adjust.kind : null,
-    ...(e.override ? { override: e.override } : {}),
-  };
+  return e;
+}
+
+/** What each of `days` dates from `fromDate` runs, walking the rotation forward from there. */
+export function effectiveDays(
+  state: TrainerState,
+  sessions: readonly PlanSession[],
+  fromDate: string,
+  days: number,
+): EffectiveDay[] {
+  return project(state, sessions, fromDate, days).map((e) => {
+    const adjust = e.rest || e.done ? undefined : e.override?.adjust;
+    const day = resolve(state, e, e.rest ? e.pending : e.dayId, adjust);
+    return {
+      date: e.date,
+      rest: e.rest,
+      done: e.done,
+      day,
+      adjusted: adjust && day ? adjust.kind : null,
+      ...(e.override ? { override: e.override } : {}),
+      ...(e.blockId ? { blockId: e.blockId } : {}),
+    };
+  });
 }
 
 /** How far ahead `upNext` looks for a training date. */

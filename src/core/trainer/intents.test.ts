@@ -237,6 +237,62 @@ describe('missing kit (M10e)', () => {
   });
 });
 
+describe('M12 intents: week, progress, focus block, focus edits', () => {
+  const m = (text: string) => matchIntent(text, ctx);
+
+  it('week and progress questions', () => {
+    for (const t of ["How's my week?", 'this week?', 'week so far', 'how was my week'])
+      expect(m(t), t).toEqual({ intent: 'week', slots: {}, safety: 'none' });
+    for (const t of ['How am I doing?', 'am I on track', 'my progress so far'])
+      expect(m(t), t).toEqual({ intent: 'progress', slots: {}, safety: 'none' });
+  });
+
+  it('a focus block with its slots: group, weeks ("this month" = 4) and days a week', () => {
+    expect(m('This month I want to build my chest')).toEqual({
+      intent: 'focusBlock',
+      slots: { group: 'chest', weeks: 4 },
+      safety: 'none',
+    });
+    expect(m('focus on my back for two weeks, five days a week').slots).toEqual({
+      group: 'back',
+      weeks: 2,
+      daysPerWeek: 5,
+    });
+    expect(m('build a focus block')).toEqual({ intent: 'focusBlock', slots: {}, safety: 'none' });
+    expect(m('bigger arms in 8 weeks').slots).toEqual({ group: 'arms', weeks: 8 });
+  });
+
+  it('focus edits: a count alone, or a swap on a weekday', () => {
+    expect(m('only 4 days a week')).toEqual({
+      intent: 'focusEdit',
+      slots: { daysPerWeek: 4 },
+      safety: 'none',
+    });
+    expect(m('make it three weeks').slots).toEqual({ weeks: 3 });
+    expect(m("swap Thursday's flyes")).toEqual({
+      intent: 'focusEdit',
+      slots: { exerciseId: 'Dumbbell_Flyes', date: 'thu' },
+      safety: 'none',
+    });
+    // Today / tomorrow swaps stay swaps.
+    expect(m('swap the flyes today').intent).toBe('swap');
+  });
+
+  it('older intents keep their meaning', () => {
+    expect(m('can we make this week an easy week').intent).toBe('deload');
+    expect(m('I cant train this week').intent).toBe('postpone');
+    expect(m('no progress on hammer curls').intent).toBe('stall');
+    expect(m('what should I eat this week').intent).toBe('food');
+    expect(m('go easy on my chest').intent).toBe('avoidArea');
+    // Discomfort still flags; chest + pain is a red flag even with focus words.
+    expect(m('build my chest, my chest hurts').safety).toBe('redFlag');
+    expect(m('build my legs, my knee is sore')).toMatchObject({
+      intent: 'avoidArea',
+      safety: 'discomfort',
+    });
+  });
+});
+
 describe('eval set (SPEC M10 Accept)', () => {
   it('has at least 60 items and no personal data', () => {
     expect(ITEMS.length).toBeGreaterThanOrEqual(60);

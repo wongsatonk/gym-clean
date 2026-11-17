@@ -8,7 +8,14 @@ import {
   type TrainerChange,
 } from './changes';
 import { seedPlan } from './plan';
-import type { DayOverride, PlannedExercise, Program, Proposal, TrainerState } from '../types';
+import type {
+  DayOverride,
+  FocusBlock,
+  PlannedExercise,
+  Program,
+  Proposal,
+  TrainerState,
+} from '../types';
 
 // Made-up program (the repo is public). 2026-11-14 is a Saturday.
 const ex = (exerciseId: string, sets = 3): PlannedExercise => ({
@@ -281,5 +288,45 @@ describe('resetToProgram', () => {
       overrides: [{ date: '2026-10-01', rest: true }],
     };
     expect(ok(resetToProgram(s0, PROGRAM, NOW)).state.overrides).toEqual([]);
+  });
+});
+
+describe('focus blocks (M12)', () => {
+  const block: FocusBlock = {
+    id: 'focus-x',
+    group: 'chest',
+    startDate: '2026-10-01',
+    weeks: 2,
+    weekdays: [1, 3, 5],
+    days: [],
+    targetSetsPerWeek: 10,
+    baseSetsPerWeek: 7,
+  };
+  const addBlock = (s: TrainerState) => {
+    s.blocks = [structuredClone(block)];
+  };
+
+  it('Apply keeps old blocks (never pruned), Undo restores none', () => {
+    const s0 = seedPlan(PROGRAM);
+    const r = ok(applyProposal(s0, propose(s0, addBlock, { action: 'focusBlock' }), NOW, 'rules'));
+    expect(r.state.blocks).toEqual([block]);
+    expect(r.change.action).toBe('focusBlock');
+    const u = ok(undoLast(r.state, [{ ...r.change, id: 1 }], LATER));
+    expect(u.state.blocks).toBeUndefined();
+  });
+
+  it('Undo is a conflict when the blocks changed without a record', () => {
+    const s0 = seedPlan(PROGRAM);
+    const r = ok(applyProposal(s0, propose(s0, addBlock, { action: 'focusBlock' }), NOW, 'rules'));
+    const moved = { ...r.state, blocks: [] };
+    expect(undoLast(moved, [{ ...r.change, id: 1 }], LATER)).toEqual({
+      ok: false,
+      reason: 'conflict',
+    });
+  });
+
+  it('Reset to the default program keeps dated blocks, like dated overrides', () => {
+    const s0: TrainerState = { ...seedPlan(PROGRAM), blocks: [block] };
+    expect(ok(resetToProgram(s0, PROGRAM, NOW)).state.blocks).toEqual([block]);
   });
 });

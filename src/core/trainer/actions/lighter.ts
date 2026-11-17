@@ -18,7 +18,7 @@
  * - Mid-workout, rows in `started` (exercises with logged sets) are left as they are.
  */
 import { formatWeight, fromUnit, snapToStep, stepFor, toUnit, type Unit } from '../../units';
-import { calendar, effectiveDay, type PlanSession } from '../plan';
+import { baseDay, calendar, effectiveDay, type PlanSession } from '../plan';
 import type { RowReplacement } from '../rows';
 import type {
   DayAdjust,
@@ -208,18 +208,22 @@ export function todayDay(ctx: ActionContext): TodayDay | Extract<ActionResult, {
 }
 
 /**
- * The rows to change: the day as it will run, or the plan day when the date's adjust is one of
- * `rebuild` (so the same action twice doesn't compound).
+ * The rows to change: the day as it will run, or the planned day when the date's adjust is one
+ * of `rebuild` (so the same action twice doesn't compound). With `date`, the planned day is the
+ * focus block's version on a block date (M12); without it, the plan day.
  */
 export function baseRows(
   state: TrainerState,
   dayId: string,
   override: DayOverride | undefined,
   rebuild: readonly DayAdjust['kind'][],
+  date?: string,
 ): PlannedExercise[] {
   const adjust = override?.adjust;
   if (adjust && !rebuild.includes(adjust.kind)) return structuredClone(adjust.exercises);
-  return structuredClone(state.plan.days.find((d) => d.id === dayId)?.exercises ?? []);
+  const day =
+    date === undefined ? state.plan.days.find((d) => d.id === dayId) : baseDay(state, date, dayId);
+  return structuredClone(day?.exercises ?? []);
 }
 
 /**
@@ -281,7 +285,7 @@ const isStarted = (ctx: ActionContext, p: PlannedExercise) =>
 export function proposeLighter(ctx: ActionContext): ActionResult {
   const today = todayDay(ctx);
   if (!today.ok) return today;
-  const rows = baseRows(ctx.state, today.day.id, today.override, ['lighter']);
+  const rows = baseRows(ctx.state, today.day.id, today.override, ['lighter'], ctx.today);
   const lines: Proposal['lines'] = [];
   const out = rows.map((p) => {
     if (isStarted(ctx, p)) return p;
@@ -316,9 +320,9 @@ export function proposeDeload(ctx: ActionContext): ActionResult {
   const lines: Proposal['lines'] = [];
   for (const e of calendar(ctx.state, ctx.sessions, ctx.today, DELOAD.days)) {
     if (e.rest || e.done || e.dayId === null) continue;
-    const day = ctx.state.plan.days.find((d) => d.id === e.dayId);
+    const day = baseDay(ctx.state, e.date, e.dayId);
     if (!day) continue;
-    const rows = baseRows(ctx.state, e.dayId, e.override, ['lighter', 'deload']);
+    const rows = baseRows(ctx.state, e.dayId, e.override, ['lighter', 'deload'], e.date);
     const isToday = e.date === ctx.today;
     const out = rows.map((p) =>
       isToday && isStarted(ctx, p)

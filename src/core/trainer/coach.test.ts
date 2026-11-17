@@ -10,7 +10,12 @@ import type { StallSession } from './actions/stall';
 import type { TrainerCatalog } from './swapCandidates';
 import {
   AREA_CHIP_IDS,
+  ASK_DAYS,
+  ASK_GROUP,
+  ASK_WEEKS,
   MID_SESSION_REPLY,
+  STARTER_CHIPS,
+  starterChips,
   PROPOSAL_REPLY,
   QUICK_CHIPS,
   handle,
@@ -28,6 +33,7 @@ import {
   SPOKEN_MAX_WORDS,
 } from './replies';
 import source from './coach.ts?raw';
+import { monthScore, weekScore } from '../progress/completion';
 import type { Food, NutritionTargets, Program, Recipe, SetLog, TrainerState } from '../types';
 import type { CoachFuel } from './coach';
 import { FOOD_DONE, FOOD_NONE, FOOD_SETUP } from './replies';
@@ -207,7 +213,15 @@ describe('help', () => {
     expect(r.reply).toBe(HELP_TEXT);
     expect(r.proposal).toBeUndefined();
     expect(ids(r)).toEqual(QUICK_CHIPS.map((c) => c.id));
-    expect(ids(r)).toEqual(['notToday', 'easyOn', 'lighter', 'swap', 'adjustPlan', 'food']);
+    expect(ids(r)).toEqual([
+      'notToday',
+      'easyOn',
+      'lighter',
+      'swap',
+      'adjustPlan',
+      'food',
+      'focusBlock',
+    ]);
   });
 
   it('mid-workout help offers only the chips that apply', () => {
@@ -793,5 +807,250 @@ describe('purity', () => {
     expect(source).not.toMatch(
       /\b(fetch|XMLHttpRequest|WebSocket|navigator|window|document|localStorage|Date\.now)\b/,
     );
+  });
+});
+
+// ---------- M12: week, progress, focus blocks ----------
+
+describe('M12 week and progress answers (gym sessions only)', () => {
+  /** A made-up week: Mon push-a all sets, Tue pull-a 2 of 15 sets; today Wed. */
+  const hist = (): Hist => {
+    let h: Hist = { sessions: [], sets: [] };
+    h = addSession(h, 'legs-b', at(11, 7));
+    const push = program.days[0]?.exercises ?? [];
+    h = addSession(
+      h,
+      'push-a',
+      at(11, 9),
+      push.map((p) => ({
+        exerciseId: p.exerciseId,
+        sets: Array.from({ length: p.sets }, () => [10, 8] as [number, number]),
+      })),
+    );
+    h = addSession(h, 'pull-a', at(11, 10), [
+      {
+        exerciseId: 'One-Arm_Dumbbell_Row',
+        sets: [
+          [20, 10],
+          [20, 9],
+        ],
+      },
+    ]);
+    return h;
+  };
+  const ctx = (): CoachContext => {
+    const h = hist();
+    return { ...ctxFor('legs-a'), sessions: h.sessions, sets: h.sets };
+  };
+  const input = (c: CoachContext) => ({
+    state: c.state,
+    sessions: c.sessions,
+    sets: c.sets ?? [],
+    today: c.today,
+    catalog: c.catalog,
+  });
+
+  it("How's my week? → this week's numbers from weekScore, and the next training day", () => {
+    const c = ctx();
+    const w = weekScore(input(c), TODAY);
+    const pct = Math.round((w.setsDone / w.setsPlanned) * 100);
+    for (const r of [handle(text("How's my week?"), c), handle({ chip: 'week' }, c)]) {
+      expect(r.intent).toBe('week');
+      expect(r.reply).toContain(
+        `This week: ${w.sessionsDone} of ${w.sessionsPlanned} sessions done`,
+      );
+      expect(r.reply).toContain(`${pct}% of planned sets so far`);
+      expect(r.reply).toContain('Next: Legs A today.');
+      expect(r.proposal).toBeUndefined();
+      expectClean(r, 'week');
+    }
+    expect(w).toMatchObject({ sessionsDone: 2, sessionsPlanned: 6 });
+  });
+
+  it('How am I doing? → week + month scores, streak; numbers equal the scores', () => {
+    const c = ctx();
+    const w = weekScore(input(c), TODAY);
+    const m = monthScore(input(c), '2026-11');
+    const r = handle(text('How am I doing?'), c);
+    expect(r.intent).toBe('progress');
+    expect(r.reply).toContain(`This week: ${w.sessionsDone} of ${w.sessionsPlanned} sessions`);
+    expect(r.reply).toContain(`This month: ${m.sessionsDone} of ${m.sessionsPlanned} sessions`);
+    expect(r.reply).toMatch(/Streak: \d+ weeks?\./);
+    expectClean(r, 'progress');
+  });
+
+  it('progress during a focus block adds its focus sets', () => {
+    const c = ctx();
+    const p = handle(
+      { chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5 } },
+      ctxFor('legs-a'),
+    );
+    if (!p.proposal) throw new Error('no proposal');
+    const withBlock = { ...c, state: { ...p.proposal.next, version: c.state.version } };
+    const r = handle({ chip: 'progress' }, withBlock);
+    expect(r.reply).toMatch(/Chest block: week 1 of 4, \d+ of \d+ chest sets so far\./);
+    expectClean(r, 'progress block');
+  });
+
+  it('no sessions planned → says so; never mentions Health data', () => {
+    const c = ctxFor('legs-a');
+    const s = {
+      ...c.state,
+      schedule: { ...c.state.schedule, restWeekdays: [0, 1, 2, 3, 4, 5, 6] },
+    };
+    const r = handle(text("How's my week?"), { ...c, state: s });
+    expect(r.reply).toMatch(/^No sessions planned this week\./);
+    for (const w of ['sleep', 'heart', 'hrv', 'steps', 'kcal', 'health'])
+      expect(r.reply.toLowerCase()).not.toContain(w);
+  });
+
+  it('mid-workout: not offered', () => {
+    for (const input of [
+      text("How's my week?"),
+      text('build my chest'),
+      { chip: 'focusBlock' as const },
+    ])
+      expect(handle(input, workoutCtx('pull-a', [])).reply).toBe(MID_SESSION_REPLY);
+  });
+});
+
+describe('M12 focus block flow', () => {
+  const c = () => ctxFor('legs-a');
+
+  it('asks only what is missing: group → weeks → days, then the proposal', () => {
+    const r1 = handle({ chip: 'focusBlock' }, c());
+    expect(r1.reply).toBe(ASK_GROUP);
+    // Core has no exercises the gym can do: not offered.
+    expect(r1.chips.map((x) => x.args?.group)).toEqual([
+      'arms',
+      'shoulders',
+      'chest',
+      'back',
+      'legs',
+    ]);
+    const r2 = handle({ chip: 'focusBlock', args: { group: 'chest' } }, c());
+    expect(r2.reply).toBe(ASK_WEEKS);
+    expect(r2.chips.map((x) => x.args?.weeks)).toEqual([2, 3, 4, 5, 6]);
+    expect(r2.chips[2]?.label).toBe('4 weeks (a month)');
+    const r3 = handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 4 } }, c());
+    expect(r3.reply).toBe(ASK_DAYS);
+    expect(r3.chips.map((x) => x.label)).toEqual([
+      'Keep my days',
+      '3 days',
+      '4 days',
+      '5 days',
+      '6 days',
+    ]);
+    const r4 = handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5 } }, c());
+    expect(r4.proposal?.action).toBe('focusBlock');
+    expect(r4.focusBlock?.weekdays).toEqual([1, 2, 3, 4, 5]);
+    expect(r4.focusBlock?.startDate).toBe(TODAY);
+    expect(r4.proposal?.next.blocks?.at(-1)).toEqual(r4.focusBlock);
+    for (const r of [r1, r2, r3, r4]) expectClean(r, 'focus flow');
+  });
+
+  it('"This month I want to build my chest" → asks the days only', () => {
+    const r = handle(text('This month I want to build my chest'), c());
+    expect(r.intent).toBe('focusBlock');
+    expect(r.reply).toBe(ASK_DAYS);
+    expect(r.chips[0]).toEqual({
+      id: 'focusBlock',
+      label: 'Keep my days',
+      args: { group: 'chest', weeks: 4, keepDays: true },
+    });
+    const chip = r.chips[0];
+    if (!chip) throw new Error('no chip');
+    const keep = handle({ chip: chip.id, ...(chip.args ? { args: chip.args } : {}) }, c());
+    expect(keep.proposal?.action).toBe('focusBlock');
+  });
+
+  it('everything typed at once → the proposal straight away', () => {
+    const r = handle(text('Focus on legs for 3 weeks, 4 days a week'), c());
+    expect(r.proposal?.title).toBe('Legs focus: 3 weeks');
+    expect(r.focusBlock?.weekdays).toEqual([1, 2, 4, 5]);
+  });
+
+  it('out-of-range weeks or days → says the range and asks again', () => {
+    const r = handle(text('bigger arms in 8 weeks'), c());
+    expect(r.reply).toMatch(/^A focus block runs 2 to 6 weeks\. /);
+    expect(r.chips.map((x) => x.args?.weeks)).toEqual([2, 3, 4, 5, 6]);
+    expectClean(r, 'weeks range');
+  });
+
+  it('starts tomorrow when today already has a session', () => {
+    const base = c();
+    const t = at(11, 11, 7);
+    const sessions = [
+      ...base.sessions,
+      { sessionId: 'today', dayId: 'legs-a', startedAt: t, endedAt: t + 3_600_000 },
+    ];
+    const r = handle(
+      { chip: 'focusBlock', args: { group: 'back', weeks: 2, days: 4 } },
+      { ...base, sessions },
+    );
+    expect(r.focusBlock?.startDate).toBe('2026-11-12');
+  });
+
+  it('Keep going (recap chip args) → a new block with the same params', () => {
+    const r = handle(
+      { chip: 'focusBlock', args: { group: 'chest', weeks: 3, weekdays: [1, 3, 5] } },
+      c(),
+    );
+    expect(r.focusBlock?.weekdays).toEqual([1, 3, 5]);
+    expect(r.focusBlock?.weeks).toBe(3);
+  });
+
+  it('edits with a block on the table: fewer days, weeks, a weekday swap', () => {
+    const first = handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5 } }, c());
+    const draft = first.focusBlock;
+    if (!draft) throw new Error('no block');
+    const ctx = { ...c(), focusDraft: draft };
+    const days = handle(text('only 4 days a week'), ctx);
+    expect(days.intent).toBe('focusEdit');
+    expect(days.focusBlock?.weekdays).toEqual([1, 2, 4, 5]);
+    expect(days.proposal?.action).toBe('focusBlock');
+    expect(handle(text('make it 3 weeks'), ctx).focusBlock?.weeks).toBe(3);
+    const swap = handle(text("swap Thursday's flyes"), ctx);
+    expect(swap.focusBlock?.id).not.toBe(draft.id);
+    const thursdays =
+      swap.focusBlock?.days.filter((d) => new Date(d.date + 'T12:00:00Z').getUTCDay() === 4) ?? [];
+    for (const d of thursdays)
+      expect(d.day?.exercises.some((p) => p.exerciseId === 'Dumbbell_Flyes')).toBe(false);
+    for (const r of [days, swap]) expectClean(r, 'focus edit');
+  });
+
+  it('edits without a block: counts start a focus block, a weekday swap is a plain swap', () => {
+    const r = handle(text('only 4 days a week'), c());
+    expect(r.reply).toBe(ASK_GROUP);
+    expect(r.chips[0]?.args).toEqual({ group: 'arms', days: 4 });
+    const swap = handle(text("swap Thursday's flyes"), c());
+    expect(swap.focusBlock).toBeUndefined();
+    expect(swap.proposal?.action ?? 'none').not.toBe('focusBlock');
+  });
+
+  it('food in free text, "tonight" included', () => {
+    expect(handle(text('What should I eat tonight?'), c()).reply).toBe(FOOD_LATER);
+    const r = handle(text('What should I eat tonight?'), { ...c(), m7Available: true, fuel: FUEL });
+    expect(r.intent).toBe('food');
+    expect(r.foods?.length).toBeGreaterThan(0);
+  });
+});
+
+describe('M12 starters', () => {
+  it("four starters; the swap one names today's first exercise", () => {
+    expect(STARTER_CHIPS.map((c) => c.id)).toEqual(['week', 'swap', 'food', 'shoulders']);
+    const chips = starterChips(ctxFor('legs-a'));
+    expect(chips.map((c) => c.label)).toEqual([
+      "How's my week?",
+      "Swap today's Goblet Squat",
+      'What should I eat tonight?',
+      'Go easy on shoulders',
+    ]);
+    expect(chips[1]?.args).toEqual({ exerciseId: 'Goblet_Squat' });
+    // A rest day: the generic swap label.
+    const rest = ctxFor('legs-a');
+    rest.state.schedule.restWeekdays = [3];
+    expect(starterChips(rest)[1]).toEqual({ id: 'swap', label: 'Swap an exercise' });
+    for (const ch of chips) expect(checkCopy(ch.label).ok).toBe(true);
   });
 });
