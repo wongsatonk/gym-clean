@@ -32,6 +32,7 @@
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';
+import { APP_NAME } from '../core/brand';
 import { HEALTH_SETTINGS_KEY, clearDisabledHealthTypes } from './health/store';
 import { compareReleases } from '../core/todo/whatsNew';
 import { WHATS_NEW_KEY } from './todos/store';
@@ -447,7 +448,7 @@ function badField(name: BackupTable, row: Record<string, unknown>): string | nul
 export function validateBackup(db: GymDb, input: unknown): BackupFile {
   const f = parse(input);
   if (!isObj(f)) return corrupt('The file is not a backup object.');
-  if (f.format !== BACKUP_FORMAT) throw new BackupError('format', 'Not a Gym Clean backup.');
+  if (f.format !== BACKUP_FORMAT) throw new BackupError('format', `Not a ${APP_NAME} backup.`);
   if (!isPosInt(f.version)) return corrupt('The backup version is missing.');
   if (f.version > BACKUP_VERSION)
     throw new BackupError('newer', 'This backup comes from a newer app. Update the app first.');

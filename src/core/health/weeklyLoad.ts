@@ -10,6 +10,7 @@
  *   by source name;
  * - the same workout stored twice (same start, kind and source) counts once.
  */
+import { APP_NAME } from '../brand';
 import { addDays, isFinished, weekStartOf, type StatsSession } from '../stats';
 import type { HealthDay, HealthWorkout } from '../types';
 
@@ -21,7 +22,7 @@ export type LoadSession = StatsSession;
  * `HealthWorkout.source`, which is the app name). Bundle ids don't belong here: the plugin
  * already drops our own bundle id before a workout reaches core.
  */
-export const GYM_CLEAN_SOURCES: readonly string[] = ['Gym Clean'];
+export const GYM_CLEAN_SOURCES: readonly string[] = [APP_NAME];
 
 /** A Health workout this close to a gym session (before its start / after its end) is that session. */
 export const OVERLAP_SLACK_MS = 10 * 60_000;

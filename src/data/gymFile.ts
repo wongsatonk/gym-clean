@@ -8,6 +8,7 @@
  * are reported (`unknown`) and left out. A parsed file is only a preview; nothing is saved
  * until the screen calls `saveGymProfile` with `equipment`.
  */
+import { APP_NAME } from '../core/brand';
 import type { GymFile, GymProfile } from '../core/types';
 import { equipmentItems } from './catalog';
 
@@ -49,11 +50,11 @@ export type GymFileReason = 'notJson' | 'notGymFile' | 'version' | 'empty' | 'to
 
 /** One plain line per reason, for the import screen. */
 export const GYM_FILE_REASON_TEXT: Readonly<Record<GymFileReason, string>> = {
-  notJson: "This file can't be read. Pick a gym file shared from Gym Clean.",
-  notGymFile: "This isn't a gym file. Pick a gym file shared from Gym Clean.",
+  notJson: `This file can't be read. Pick a gym file shared from ${APP_NAME}.`,
+  notGymFile: `This isn't a gym file. Pick a gym file shared from ${APP_NAME}.`,
   version: 'This gym file is from a newer app version. Update the app, then try again.',
   empty: 'This gym file has no equipment this app knows.',
-  tooBig: 'This file is too big to be a gym file. Pick a gym file shared from Gym Clean.',
+  tooBig: `This file is too big to be a gym file. Pick a gym file shared from ${APP_NAME}.`,
 };
 
 export type GymFileResult =

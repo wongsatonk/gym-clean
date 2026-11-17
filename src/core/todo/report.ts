@@ -11,6 +11,7 @@
  * text, food or body numbers, his name. The report reads only topic data (labels), answers (ids,
  * dates, notes) and detector counts; it never prints a facts field or an unknown option id.
  */
+import { APP_NAME } from '../brand';
 import { versionLabel } from '../version';
 import type { TodoAnswer, TodoFacts, TodoTopic } from '../types';
 import { runDetector } from './detectors';
@@ -126,7 +127,7 @@ export function buildReport(input: ReportInput): Report {
   }
 
   const header = [
-    'Gym Clean to-do report',
+    `${APP_NAME} to-do report`,
     versionLabel(release, build),
     `App: ${platform === 'native' ? 'iPhone app' : 'PWA'}`,
     `Copied: ${localDate(now)}`,

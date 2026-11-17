@@ -3,10 +3,11 @@
  * food (a test checks every template for digits and unit words). `{day}` is the plan day's name;
  * without a usable name the generic line is used.
  */
+import { APP_NAME } from '../brand';
 import { checkCopy } from '../trainer/replies';
 import type { ReminderKind } from '../types';
 
-export const REMINDER_TITLE = 'Gym Clean';
+export const REMINDER_TITLE = APP_NAME;
 
 export const REMINDER_COPY = {
   session: '{day} today. Ready when you are.',
