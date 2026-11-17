@@ -251,3 +251,30 @@ describe('calendarScreen', () => {
     expect(text).not.toMatch(/\bkg\b|\blb\b|weight|body fat|kcal/i);
   });
 });
+
+describe('cardio line on the week score (M12 1b task 32)', () => {
+  const score = (root: FakeEl, key: string) =>
+    must(root.find((e) => e.getAttribute('data-score') === key)[0]);
+
+  it('"Cardio this week: 95 min" on the week card only, also in its label', () => {
+    const root = render(props({ cardioMinutes: 95 }));
+    const week = score(root, 'week');
+    const line = week.find((e) => e.hasAttribute('data-cardio'));
+    expect(line.map((l) => l.textContent)).toEqual(['Cardio this week: 95 min']);
+    expect(line[0]?.classes).toContain('cal-score-sub');
+    expect(week.getAttribute('aria-label')).toMatch(/\. Cardio this week: 95 min$/);
+    expect(score(root, 'month').find((e) => e.hasAttribute('data-cardio'))).toEqual([]);
+  });
+
+  it('0 min shows; null or absent hides the line', () => {
+    const zero = render(props({ cardioMinutes: 0 }));
+    expect(zero.find((e) => e.hasAttribute('data-cardio'))[0]?.textContent).toBe(
+      'Cardio this week: 0 min',
+    );
+    for (const p of [props({ cardioMinutes: null }), props()]) {
+      const root = render(p);
+      expect(root.find((e) => e.hasAttribute('data-cardio'))).toEqual([]);
+      expect(score(root, 'week').getAttribute('aria-label')).not.toMatch(/Cardio/);
+    }
+  });
+});

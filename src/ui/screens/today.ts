@@ -17,9 +17,15 @@
 // `[data-missed-skip]`; shown, not spoken) and first-load motion through a `TodayMotion` that
 // app.ts keeps for the app's life (cards stagger in once, the streak counts up once, the
 // readiness card slides in when it first appears). Without `motion` nothing moves.
+// M12 1b (optional): "How do you feel today?" below Start (`[data-feel-today]`, ./feelToday.ts,
+// shown when `onSaveFeel` is set) with "Go easy on … today?" offers (`[data-easy-on]`; on the
+// readiness card when a sore area is one of its reasons, else on the feel row; never on a rest
+// day), and the cardio line under "Your week" (`[data-cardio]`, hidden when null).
 import type { WeekDot } from '../../core/stats';
 import type { MissedDay } from '../../core/progress/completion';
-import type { DayOverride, ProgramDay, ReadinessCard } from '../../core/types';
+import type { DayFeel, DayOverride, ProgramDay, ReadinessCard } from '../../core/types';
+import { cardioLine } from '../../core/health/cardio';
+import type { FeelOffer } from '../../core/health/readiness';
 import { formatWeight, type Unit } from '../../core/units';
 import { exerciseById } from '../../data/catalog';
 import { bodyMapSvg, pickView } from '../bodyMap';
@@ -31,7 +37,8 @@ import { moodClass } from '../tokens';
 import { nudgeBanner } from '../fuel/links';
 import { dayMuscles, estimateMinutes, muscleLabel, type DayMuscles } from '../../core/dayInfo';
 import { gymPrompt, type MissingKit } from './gymPrompt';
-import { readinessCard, type ReadinessActions } from './readinessCard';
+import { cardShowsEasyOn, readinessCard, type ReadinessActions } from './readinessCard';
+import { feelToday } from './feelToday';
 import { todoCard, type TodoCardProps } from '../todo/todoCard';
 import { weekLoadLine, type WeekLoad } from './weekLoad';
 
@@ -108,6 +115,15 @@ export type TodayProps = {
    * Shown when `visible` and `onOpenTodos` is set.
    */
   todo?: TodoCardProps | null | undefined;
+  // ---- M12 slice 1b (optional) ----
+  /** Today's "How do you feel today?" answer (`getDayFeel(today)`); null = not answered. */
+  feel?: DayFeel | null | undefined;
+  /** Core's `todaysFeelOffers(feels, today)`: "Go easy on shoulders today?" per sore area. */
+  feelOffers?: readonly FeelOffer[] | undefined;
+  /** Keep the feel row open (app.ts, across a re-render while he is answering). */
+  feelOpen?: boolean | undefined;
+  /** Core's `weeklyCardioMinutes(...)`: "Cardio this week: 95 min" under "Your week"; null hides it. */
+  cardioMinutes?: number | null | undefined;
 };
 
 /**
@@ -165,6 +181,12 @@ export type TodayActions = ReadinessActions & {
   onSkipMissed?: ((missed: MissedDay) => void) | undefined;
   /** M12 slice 1c: the to-do card was tapped (opens the To-do list). */
   onOpenTodos?: (() => void) | undefined;
+  /**
+   * M12 1b: Save on "How do you feel today?" (shows the row when set). app.ts calls
+   * `saveDayFeel(feel)` (no energy + no sore deletes the row) and re-renders Today.
+   * The "Go easy on … today?" buttons call `onEasyOn` (ReadinessActions).
+   */
+  onSaveFeel?: ((feel: DayFeel) => void) | undefined;
 };
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -649,6 +671,34 @@ export function missedDayCard(
   );
 }
 
+/** M12 1b: "Cardio this week: 95 min" (core's `cardioLine`), or null when there's no Health. */
+export function cardioLineEl(minutes: number | null | undefined): HTMLElement | null {
+  const text = cardioLine(minutes ?? null);
+  if (text === null) return null;
+  return h(
+    'p',
+    { class: 'week-load cardio-line', 'data-cardio': Math.max(0, Math.round(minutes ?? 0)) },
+    icon('timer', 'sm'),
+    h('span', {}, text),
+  );
+}
+
+/** M12 1b: the feel-today row, or null without `onSaveFeel`. Offers go to the card when it has them. */
+function feelRow(props: TodayProps, actions: TodayActions, rest: boolean): HTMLElement | null {
+  const onSaveFeel = actions.onSaveFeel;
+  if (!onSaveFeel) return null;
+  const inCard = !rest && cardShowsEasyOn(props.readiness, props.feelOffers, actions.onEasyOn);
+  return feelToday(
+    {
+      date: ymd(props.now),
+      feel: props.feel,
+      offers: rest || inCard ? undefined : props.feelOffers,
+      open: props.feelOpen,
+    },
+    { onSaveFeel, onEasyOn: actions.onEasyOn },
+  );
+}
+
 const readinessKey = (c: ReadinessCard): string => `${c.offer}|${c.reasons.join('|')}`;
 
 /**
@@ -693,7 +743,8 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       }
     });
   }
-  const readiness = todayEntry(props)?.rest ? null : readinessCard(props.readiness, actions);
+  const rest = todayEntry(props)?.rest === true;
+  const readiness = rest ? null : readinessCard(props.readiness, actions, props.feelOffers);
   const streak = streakTile(props);
   // The cards that rise in on first load, in reading order (the readiness card slides instead).
   const cards = [
@@ -709,6 +760,7 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       ? nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel)
       : null,
     hero(props, actions),
+    feelRow(props, actions, rest),
     actions.onOpenTodos ? todoCard(props.todo, { onOpen: actions.onOpenTodos }) : null,
     h('div', { class: 'pair' }, streak.el, lastTile(props)),
     h(
@@ -718,6 +770,7 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       h('span', {}, `${props.days.length}-day split`),
     ),
     weekLoadLine(props.weekLoad),
+    cardioLineEl(props.cardioMinutes),
     strip,
   ];
   const el = h(

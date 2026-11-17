@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { ReadinessCard } from '../../core/types';
 import { program } from '../../data/catalog';
 import { checkHealthCopy, deloadReason } from '../../core/health/copy';
+import { todaysFeelOffers } from '../../core/health/readiness';
 import { READINESS_COPY, readinessCard, readinessFixedCopy } from './readinessCard';
 import { asFake, useFakeDom, type FakeEl } from './testDom';
 import { todayScreen, ymd, type CalendarEntry, type TodayActions, type TodayProps } from './today';
@@ -267,5 +268,69 @@ describe('weekly load line', () => {
     const css = readFileSync(new URL('./weekLoad.css', import.meta.url), 'utf8');
     expect(css).toMatch(/\.week-load \{[^}]*font-size: var\(--fs-body\)/);
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+  });
+});
+
+describe('readiness card: "Go easy on … today?" (M12 1b task 31)', () => {
+  // Made-up "feel today" answer: low energy + sore shoulders and legs → the card shows.
+  const SORE: ReadinessCard = {
+    date: ymd(NOW),
+    signals: ['feltLow', 'sore'],
+    reasons: ['You said your energy is low today.', 'You said your shoulders and legs are sore.'],
+    offer: 'lighter',
+  };
+  const OFFERS = todaysFeelOffers(
+    [{ date: ymd(NOW), energy: 2, sore: ['legs', 'shoulders'] }],
+    ymd(NOW),
+  );
+
+  it('one offer per sore area, after the main choice; a tap passes the area out', () => {
+    const areas: string[] = [];
+    const el = asFake(
+      readinessCard(SORE, { ...wired(fresh()), onEasyOn: (a) => areas.push(a) }, OFFERS),
+    );
+    const offers = el.find((e) => e.hasAttribute('data-easy-on'));
+    expect(offers.map((o) => o.textContent)).toEqual([
+      'Go easy on shoulders today?',
+      'Go easy on legs today?',
+    ]);
+    expect(offers.every((o) => o.tag === 'button' && o.classes.includes('readiness-btn'))).toBe(
+      true,
+    );
+    const order = el
+      .find((e) => e.tag === 'button')
+      .map((b) => (b.hasAttribute('data-easy-on') ? 'easy' : b.textContent));
+    expect(order).toEqual(['Lighter today', 'easy', 'easy', 'Not today', 'Train as planned']);
+    offers[1]?.click();
+    expect(areas).toEqual(['legs']);
+  });
+
+  it('no offers when sore is not a reason, without offers, or without onEasyOn', () => {
+    const on = { ...wired(fresh()), onEasyOn: () => {} };
+    const has = (el: HTMLElement | null) =>
+      asFake(el).find((e) => e.hasAttribute('data-easy-on')).length;
+    expect(has(readinessCard(CARD, on, OFFERS))).toBe(0);
+    expect(has(readinessCard(SORE, on))).toBe(0);
+    expect(has(readinessCard(SORE, wired(fresh()), OFFERS))).toBe(0);
+  });
+
+  it('on Today the offers sit on the card, not again on the feel row', () => {
+    const el = renderToday(
+      { readiness: SORE, feelOffers: OFFERS, feel: { date: ymd(NOW), energy: 2, sore: ['legs'] } },
+      { ...wired(fresh()), onEasyOn: () => {}, onSaveFeel: () => {} },
+    );
+    const offers = el.find((e) => e.hasAttribute('data-easy-on'));
+    expect(offers).toHaveLength(2);
+    const card = cardOf(el)[0] as FakeEl;
+    expect(offers.every((o) => card.find((e) => e === o).length === 1)).toBe(true);
+  });
+
+  it('a sore area alone (no card): the offer is on the feel row instead', () => {
+    const el = renderToday(
+      { readiness: null, feelOffers: OFFERS, feel: { date: ymd(NOW), sore: ['legs'] } },
+      { ...wired(fresh()), onEasyOn: () => {}, onSaveFeel: () => {} },
+    );
+    const row = el.find((e) => e.hasAttribute('data-feel-today'))[0] as FakeEl;
+    expect(row.find((e) => e.hasAttribute('data-easy-on'))).toHaveLength(2);
   });
 });

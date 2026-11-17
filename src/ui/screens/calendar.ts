@@ -6,7 +6,11 @@
 //
 // Status is never colour alone: each status has its own ring shape (full / arc / dashed /
 // thin / none), the legend names them, and every day button has a full aria-label.
+//
+// M12 1b task 32: "Cardio this week: 95 min" (core `cardioLine`) on the week score card
+// (`[data-cardio]`), hidden when `cardioMinutes` is null (no Health). Display only.
 import './calendar.css';
+import { cardioLine } from '../../core/health/cardio';
 import { pctOf, scoreLine } from '../../core/progress/recap';
 import { weekdayOf } from '../../core/trainer/plan';
 import type { DayCompletion, DayStatus, FocusGroup, PeriodScore } from '../../core/types';
@@ -38,6 +42,11 @@ export type CalendarProps = {
   loading?: boolean | undefined;
   /** The load failed (wins over loading and data). */
   error?: boolean | undefined;
+  /**
+   * M12 1b: core's `weeklyCardioMinutes(healthDays, sessions, today)` for this week. Shown on the
+   * week score card; null / omitted hides the line.
+   */
+  cardioMinutes?: number | null | undefined;
   /** The tab bar element (app.ts: `tabBar('calendar', onTab)`). */
   tabs?: HTMLElement | null | undefined;
 };
@@ -273,6 +282,7 @@ function scoreCard(
   title: string,
   s: PeriodScore,
   animate: boolean,
+  cardio: string | null = null,
 ): HTMLElement {
   const pct = pctOf(s);
   const line = scoreLine(s);
@@ -290,7 +300,11 @@ function scoreCard(
       : 'No sessions planned');
   return h(
     'section',
-    { class: 'cal-score', 'data-score': key, 'aria-label': `${title}: ${text}` },
+    {
+      class: 'cal-score',
+      'data-score': key,
+      'aria-label': `${title}: ${text}${cardio ? `. ${cardio}` : ''}`,
+    },
     h('h2', { class: 'cal-score-title caps' }, title),
     num,
     h(
@@ -311,6 +325,7 @@ function scoreCard(
             focusLine(s.focus),
           )
         : null,
+      cardio ? h('p', { class: 'cal-score-sub', 'data-cardio': true }, cardio) : null,
     ),
   );
 }
@@ -379,7 +394,13 @@ export function calendarScreen(props: CalendarProps, actions: CalendarActions): 
         h(
           'div',
           { class: 'cal-scores' },
-          scoreCard('week', 'This week', props.week, animate),
+          scoreCard(
+            'week',
+            'This week',
+            props.week,
+            animate,
+            cardioLine(props.cardioMinutes ?? null),
+          ),
           scoreCard('month', 'This month', props.monthScore, animate),
         ),
         h(

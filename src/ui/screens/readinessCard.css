@@ -30,7 +30,6 @@
   color: var(--warn);
 }
 
-
 .readiness-reasons {
   margin: 0;
   padding: 0 0 0 22px;
@@ -62,4 +61,23 @@
   background: var(--cta);
   color: var(--on-cta);
   border-color: var(--cta);
+}
+
+/* M12 1b: "Go easy on shoulders today?" (one per sore area), between the main choice and the
+   others. Icon + words; outline like the other secondary buttons. */
+.readiness-actions .feel-offers {
+  gap: 8px;
+}
+
+.readiness-easy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.readiness-easy .ic {
+  flex: none;
+  color: var(--warn);
 }

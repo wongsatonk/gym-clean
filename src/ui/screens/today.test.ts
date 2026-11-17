@@ -793,3 +793,70 @@ describe('Today: first-load motion (M12)', () => {
     expect(streakText(el)).toBe('3');
   });
 });
+
+describe('Today: feel today + cardio line (M12 1b tasks 31, 32)', () => {
+  const TODAY = ymd(NOW);
+  const OFFERS = [{ area: 'back' as const, text: 'Go easy on back today?' }];
+  const base = { onStart: () => {}, onOpenDay: () => {}, onTab: () => {} };
+  const children = (el: FakeEl) => el.children.filter((c) => c.tag !== '#text');
+  const indexOf = (el: FakeEl, attr: string) => children(el).findIndex((c) => c.hasAttribute(attr));
+
+  it('without onSaveFeel there is no feel row (Today as before)', () => {
+    const { el } = render({ feel: { date: TODAY, energy: 3 } });
+    expect(byAttr(el, 'data-feel-today')).toEqual([]);
+  });
+
+  it('the collapsed row sits right below Start (the hero), saved answers pass out', () => {
+    const saved: unknown[] = [];
+    const el = asFake(todayScreen(props(), { ...base, onSaveFeel: (f) => saved.push(f) }));
+    expect(indexOf(el, 'data-feel-today')).toBe(indexOf(el, 'data-hero') + 1);
+    const row = byAttr(el, 'data-feel-today')[0] as FakeEl;
+    expect(row.getAttribute('data-state')).toBe('ask');
+    byAttr(row, 'data-feel-open')[0]?.click();
+    byAttr(row, 'data-feel-energy')
+      .find((e) => e.getAttribute('data-feel-energy') === '4')
+      ?.click();
+    byAttr(row, 'data-feel-save')[0]?.click();
+    expect(saved).toEqual([{ date: TODAY, energy: 4 }]);
+  });
+
+  it('answered today: shows the answer; feelOpen keeps it open across a re-render', () => {
+    const answered = asFake(
+      todayScreen(props({ feel: { date: TODAY, energy: 4 } }), { ...base, onSaveFeel: () => {} }),
+    );
+    expect(byAttr(answered, 'data-feel-today')[0]?.getAttribute('data-state')).toBe('done');
+    const open = asFake(todayScreen(props({ feelOpen: true }), { ...base, onSaveFeel: () => {} }));
+    expect(byAttr(open, 'data-feel-today')[0]?.getAttribute('data-state')).toBe('open');
+  });
+
+  it('offers show on the feel row (no card), never on a rest day', () => {
+    const easy: string[] = [];
+    const acts = { ...base, onSaveFeel: () => {}, onEasyOn: (a: string) => easy.push(a) };
+    const feel = { date: TODAY, sore: ['back' as const] };
+    const el = asFake(todayScreen(props({ feel, feelOffers: OFFERS }), acts));
+    byAttr(el, 'data-easy-on')[0]?.click();
+    expect(easy).toEqual(['back']);
+    const restCal: CalendarEntry[] = [{ date: TODAY, dayId: null, rest: true }];
+    const rest = asFake(todayScreen(props({ feel, feelOffers: OFFERS, calendar: restCal }), acts));
+    expect(byAttr(rest, 'data-feel-today')).toHaveLength(1);
+    expect(byAttr(rest, 'data-easy-on')).toEqual([]);
+  });
+
+  it('cardio line: "Cardio this week: 95 min" under Your week; hidden when null or absent', () => {
+    const { el } = render({ cardioMinutes: 95 });
+    const line = byAttr(el, 'data-cardio');
+    expect(line).toHaveLength(1);
+    expect(line[0]?.textContent).toBe('Cardio this week: 95 min');
+    expect(line[0]?.getAttribute('data-cardio')).toBe('95');
+    expect(line[0]?.classes).toContain('week-load');
+    // After the "Your week" heading, before the strip.
+    const head = children(el).findIndex((c) => c.classes.includes('days-head'));
+    expect(indexOf(el, 'data-cardio')).toBeGreaterThan(head);
+    expect(indexOf(el, 'data-cardio')).toBeLessThan(indexOf(el, 'data-day-strip'));
+    expect(byAttr(render({ cardioMinutes: 0 }).el, 'data-cardio')[0]?.textContent).toBe(
+      'Cardio this week: 0 min',
+    );
+    expect(byAttr(render({ cardioMinutes: null }).el, 'data-cardio')).toEqual([]);
+    expect(byAttr(render().el, 'data-cardio')).toEqual([]);
+  });
+});

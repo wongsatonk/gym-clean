@@ -10,13 +10,20 @@
 // The reasons are core's strings, shown as-is (core writes them, including the deload line, and
 // checks them with checkHealthCopy); the card adds only its fixed words and core's CARD_TITLE.
 //
+// M12 1b task 31: when "sore" is one of the card's signals (he said so in "How do you feel
+// today?"), the card also offers core's "Go easy on shoulders today?" per sore area (`offers`,
+// from `todaysFeelOffers`); a tap opens today's M10 avoid-area proposal through `onEasyOn`.
+// That is all soreness ever leads to.
+//
 // e2e hooks: `[data-readiness="lighter"|"deload"]`, `[data-readiness-reason]` per reason,
 // `[data-readiness-lighter]`, `[data-readiness-deload]`, `[data-readiness-postpone]`,
-// `[data-readiness-keep]`.
+// `[data-readiness-keep]`, `[data-easy-on=<area>]`.
 import { CARD_TITLE } from '../../core/health/copy';
-import type { ReadinessCard } from '../../core/types';
+import type { FeelOffer } from '../../core/health/readiness';
+import type { BodyArea, ReadinessCard } from '../../core/types';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { easyOnOffers } from './feelToday';
 import './readinessCard.css';
 
 export type ReadinessActions = {
@@ -28,7 +35,18 @@ export type ReadinessActions = {
   onNotToday?: (() => void) | undefined;
   /** Train as planned: hide the card for today. */
   onTrainAsPlanned?: (() => void) | undefined;
+  /** M12 1b: "Go easy on <area> today?": open today's M10 avoid-area proposal for that area. */
+  onEasyOn?: ((area: BodyArea) => void) | undefined;
 };
+
+/** True when the card shows the "Go easy on … today?" offers (a sore area is a reason). */
+export function cardShowsEasyOn(
+  card: ReadinessCard | null | undefined,
+  offers: readonly FeelOffer[] | undefined,
+  onEasyOn: ((area: BodyArea) => void) | undefined,
+): boolean {
+  return !!card?.signals.includes('sore') && !!offers?.length && !!onEasyOn;
+}
 
 export const READINESS_COPY = {
   lighter: { title: CARD_TITLE.lighter, cta: 'Lighter today' },
@@ -47,6 +65,7 @@ export function readinessFixedCopy(): string[] {
 export function readinessCard(
   card: ReadinessCard | null | undefined,
   actions: ReadinessActions,
+  offers?: readonly FeelOffer[] | undefined,
 ): HTMLElement | null {
   if (!card || card.reasons.length === 0) return null;
   const { onNotToday, onTrainAsPlanned } = actions;
@@ -86,6 +105,9 @@ export function readinessCard(
         },
         copy.cta,
       ),
+      cardShowsEasyOn(card, offers, actions.onEasyOn)
+        ? easyOnOffers(offers, actions.onEasyOn, 'readiness-btn readiness-easy')
+        : null,
       h(
         'button',
         {

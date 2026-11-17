@@ -1,0 +1,239 @@
+/* M12 1b "How do you feel today?" row on Today (src/ui/screens/feelToday.ts). Quiet card below
+   Start: collapsed it is one 56px row; open it shows energy 1–5 (number + word) and sore-area
+   chips (check mark + aria-checked, selected = white fill, never colour alone), Save / Not now.
+   Tokens from src/styles.css only; the open panel uses motion.ts enterScreen (reduced motion →
+   nothing moves). */
+
+.feel-today {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.feel-ask {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 8px 14px;
+  text-align: left;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.feel-ask-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.feel-ask .ic,
+.feel-title .ic {
+  flex: none;
+  color: var(--text-2);
+}
+
+.feel-done {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.feel-done-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.feel-done-title {
+  color: var(--text-2);
+}
+
+.feel-change {
+  flex: none;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 0 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.feel-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px 12px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.feel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.feel-hint {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.feel-sub {
+  margin: 6px 0 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.feel-opts {
+  display: grid;
+  gap: 8px;
+}
+
+.feel-opts.energy {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.feel-opts.sore {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.feel-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.feel-opts.energy .feel-opt {
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 96px;
+  padding: 6px 0;
+  text-align: center;
+}
+
+.feel-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 2px solid var(--text-2);
+}
+
+.feel-opt[role='radio'] .feel-mark {
+  border-radius: var(--r-pill);
+  width: 22px;
+  height: 22px;
+}
+
+.feel-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Short word under its number, still at body size. */
+.feel-word {
+  font-size: var(--fs-body);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.feel-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feel-opt.on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.feel-opt.on .feel-mark {
+  border-color: var(--on-selected);
+  background: var(--on-selected);
+  color: var(--selected);
+}
+
+.feel-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.feel-btn {
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.feel-save {
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+/* "Go easy on shoulders today?": on the feel row and on the readiness card. */
+.feel-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feel-offer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 8px 14px;
+  text-align: left;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.feel-offer .ic {
+  flex: none;
+  color: var(--warn);
+}
