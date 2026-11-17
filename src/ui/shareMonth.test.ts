@@ -11,6 +11,8 @@ import {
   shareFileName,
   shareMonth,
   shareMonthLayout,
+  leadValueSize,
+  leadValueWidth,
   shareStoryFileName,
   shareStoryLayout,
   type ShareItem,
@@ -111,6 +113,13 @@ describe('shareMonthLayout', () => {
     for (const id of Object.keys(FIX_NAMES)) expect(all).not.toContain(id);
     // `weight` is only ever the font weight.
     for (const it of l.items) if (it.kind === 'text') expect([400, 700]).toContain(it.weight);
+  });
+
+  it('more sessions done than planned: never "7 of 6"', () => {
+    const over = { ...FIX_MONTH_SCORE, sessionsPlanned: 6, sessionsDone: 7 };
+    const t = texts(shareMonthLayout(FIX_MONTH, [], { month: over }).items);
+    expect(t).toContain('7 sessions done');
+    expect(t.join(' | ')).not.toMatch(/7 of 6/);
   });
 
   it('ignores dates outside the month and handles a month with nothing planned', () => {
@@ -334,6 +343,23 @@ describe('shareStoryLayout (9:16)', () => {
       .join(' | ');
     expect(all).not.toMatch(/82\.5|body|fat|kcal|sleep|heart|steps|weigh/i);
     for (const n of Object.values(FIX_NAMES)) expect(all).not.toContain(n);
+  });
+
+  it('a long lead value (1,000,000+ lb) steps down and carries a maxWidth so it never runs off', () => {
+    const big = { ...STATS, volumeKg: 500_000 };
+    const t = textItems(story('volume', big, 'lb').items);
+    const value = must(t.find((i) => i.text === '1,102,311'));
+    const label = must(t.find((i) => i.text === 'lb lifted'));
+    const room = STORY_W - 80 - value.x;
+    expect(value.maxWidth).toBe(room);
+    expect(value.size).toBeLessThan(260);
+    expect(value.size).toBeGreaterThanOrEqual(150);
+    expect(leadValueWidth(value.text, value.size)).toBeLessThanOrEqual(room);
+    expect(label.y - value.y).toBeGreaterThanOrEqual(110);
+    // A short value keeps the full 260.
+    const short = must(textItems(story('sessions').items).find((i) => i.text === '11'));
+    expect(short.size).toBe(260);
+    expect(leadValueSize('23,457', room)).toBe(260);
   });
 
   it('a quiet footer at the bottom', () => {

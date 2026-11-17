@@ -19,6 +19,7 @@ import {
   coachTabScreen,
   recapRange,
   newestScrollTop,
+  pinNewest,
   redFlagUp,
   splitReplyChips,
   textToSend,
@@ -29,7 +30,13 @@ import {
 } from './chat';
 import { resetFocusCardMemory } from './focusBlockCard';
 import { resetCheckInMemory } from './checkInCard';
-import { MIC_HINT, MIC_UNAVAILABLE_LINES, resetMicHold } from './micButton';
+import {
+  MIC_DOWNLOADING,
+  MIC_HINT,
+  MIC_INSTALL_LABEL,
+  MIC_UNAVAILABLE_LINES,
+  resetMicHold,
+} from './micButton';
 
 useFakeDom();
 beforeEach(() => {
@@ -722,6 +729,37 @@ describe('chat: mic (slice 2)', () => {
     expect(log).toEqual(['text:how was my week']);
   });
 
+  it('modelNotInstalled → Download speech for the mic under the text box → micInstall', () => {
+    const log: string[] = [];
+    const { el } = mount(
+      { mic: { state: 'unavailable', reason: 'modelNotInstalled' } },
+      {
+        ...micLog(log),
+        micInstall: () => log.push('micInstall'),
+        onText: (t) => log.push(`text:${t}`),
+      },
+    );
+    expect(attr(el, 'data-mic-hold')).toHaveLength(0);
+    const typing = el.oneByClass('cs-typing');
+    const box = typing.find((e) => e.hasAttribute('data-mic-install'))[0];
+    expect(box?.textContent).toBe(MIC_INSTALL_LABEL);
+    box?.click();
+    expect(log).toEqual(['micInstall']);
+    // Typing still works.
+    const t = input(el) as FakeEl & { value?: string };
+    t.value = 'hi';
+    btn(el, 'Send').click();
+    expect(log).toEqual(['micInstall', 'text:hi']);
+  });
+
+  it('downloading → the status line; updateChatMic asks for a re-render to and from it', () => {
+    const { el } = mountMic({ state: 'downloading' });
+    expect(one(el, 'data-mic-downloading').textContent).toBe(MIC_DOWNLOADING);
+    expect(attr(el, 'data-mic-install')).toHaveLength(0);
+    expect(updateChatMic(el as unknown as HTMLElement, { state: 'idle' })).toBe(false);
+    expect(updateChatMic(el as unknown as HTMLElement, { state: 'downloading' })).toBe(false);
+  });
+
   it('no text box (a set, a red flag) → no mic either', () => {
     expect(attr(mountMic({ state: 'idle' }, { allowTyping: false }).el, 'data-mic')).toHaveLength(
       0,
@@ -840,6 +878,29 @@ describe('chat: check-in card (slice 2 task 17)', () => {
   it('pending without the callbacks → nothing to tap', () => {
     const { el } = mount({ messages: [card('pending')], checkInQuestions: QS });
     expect(attr(el, 'data-checkin-pick')).toHaveLength(0);
+  });
+});
+
+describe('pinNewest (Checkpoint J: a new reply is never left behind the chip row)', () => {
+  it('scrolls the box to the newest item and returns where it set it', () => {
+    const box = { scrollTop: 0, scrollHeight: 1200, clientHeight: 400 };
+    expect(pinNewest(box, { offsetTop: 1100, offsetHeight: 100 })).toBe(800);
+    expect(box.scrollTop).toBe(800);
+  });
+
+  it('the thread box shrinking (keyboard, a new chip row) re-pins to the new bottom', () => {
+    const box = { scrollTop: 800, scrollHeight: 1200, clientHeight: 400 };
+    box.clientHeight = 250;
+    pinNewest(box, { offsetTop: 1100, offsetHeight: 100 });
+    expect(box.scrollTop).toBe(950);
+  });
+
+  it('a reply taller than the box shows from its top; no items → the bottom', () => {
+    const box = { scrollTop: 0, scrollHeight: 1600, clientHeight: 300 };
+    pinNewest(box, { offsetTop: 1000, offsetHeight: 600 });
+    expect(box.scrollTop).toBe(992);
+    pinNewest(box, null);
+    expect(box.scrollTop).toBe(1300);
   });
 });
 

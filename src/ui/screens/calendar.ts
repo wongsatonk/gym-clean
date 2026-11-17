@@ -293,12 +293,21 @@ function scoreCard(
   const line = scoreLine(s);
   const planned = s.sessionsPlanned;
   const num = h('span', { class: 'cal-score-num', 'aria-hidden': 'true' });
+  const done = s.sessionsDone;
+  // More done than planned (a plan edited mid-week): never "7 of 6". The count leads with
+  // "sessions done"; the plan becomes a quiet line.
+  const over = planned > 0 && done > planned;
   let label: string;
-  if (planned > 0) {
+  if (over) {
+    if (animate) countUp(num, done);
+    else num.textContent = String(done);
+    label = done === 1 ? 'session done' : 'sessions done';
+  } else if (planned > 0) {
     const fmt = (n: number) => `${n} of ${planned}`;
-    if (animate) countUp(num, s.sessionsDone, { format: fmt });
-    else num.textContent = fmt(s.sessionsDone);
-    label = planned === 1 ? 'session done' : 'sessions done';
+    if (animate) countUp(num, done, { format: fmt });
+    else num.textContent = fmt(done);
+    // "1 of 1 session done"; "0 of 1 sessions done" (a bare "session done" under 0 reads as done).
+    label = done === 1 && planned === 1 ? 'session done' : 'sessions done';
   } else if (s.extra > 0) {
     num.textContent = String(s.extra);
     label = s.extra === 1 ? 'extra session' : 'extra sessions';
@@ -306,11 +315,12 @@ function scoreCard(
     num.textContent = '–';
     label = 'No sessions planned';
   }
-  const text =
-    line ??
-    (s.extra > 0
-      ? `No sessions planned, ${plural(s.extra, 'extra session')}`
-      : 'No sessions planned');
+  const text = over
+    ? `${plural(done, 'session')} done, ${planned} planned${pct !== null ? `, ${pct}% of planned sets` : ''}`
+    : (line ??
+      (s.extra > 0
+        ? `No sessions planned, ${plural(s.extra, 'extra session')}`
+        : 'No sessions planned'));
   return h(
     'section',
     {
@@ -325,6 +335,13 @@ function scoreCard(
       { class: 'cal-score-text' },
       // The number, its label and the sets line are in the card's accessible name already.
       h('p', { class: 'cal-score-line', 'data-score-line': true, 'aria-hidden': 'true' }, label),
+      over
+        ? h(
+            'p',
+            { class: 'cal-score-sub', 'data-score-planned': planned, 'aria-hidden': 'true' },
+            `${plural(planned, 'session')} planned`,
+          )
+        : null,
       pct !== null
         ? h(
             'p',

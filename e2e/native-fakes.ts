@@ -48,6 +48,8 @@ export type FakeSpeechState = {
   calls: string[];
   /** What `stop()` returns as the final text. */
   final: string;
+  /** Checkpoint J: `installModel()` waits until the spec calls `__gymSpeechFinishInstall`. */
+  installs: number;
 };
 
 declare global {
@@ -55,6 +57,8 @@ declare global {
     __gymBrain: FakeBrainState;
     __gymSpeech: FakeSpeechState;
     __gymSpeechEmit: (event: string, data: unknown) => void;
+    /** Ends a pending `installModel()`: ok → { installed: true } and the model is available. */
+    __gymSpeechFinishInstall: (ok: boolean) => void;
   }
 }
 
@@ -145,8 +149,11 @@ export async function installGymSpeech(
         prompts: 0,
         calls: [],
         final: '',
+        installs: 0,
       };
       window.__gymSpeech = state;
+      let finishInstall: ((ok: boolean) => void) | null = null;
+      window.__gymSpeechFinishInstall = (ok) => finishInstall?.(ok);
       const listeners = new Map<string, ((data: unknown) => void)[]>();
       window.__gymSpeechEmit = (event, data) => {
         for (const cb of listeners.get(event) ?? []) cb(data);
@@ -167,6 +174,17 @@ export async function installGymSpeech(
               Object.assign(new Error('denied'), { code: 'PERMISSION_DENIED' }),
             );
           return Promise.resolve({});
+        },
+        installModel: () => {
+          state.calls.push('installModel');
+          state.installs++;
+          return new Promise((resolve) => {
+            finishInstall = (ok) => {
+              finishInstall = null;
+              if (ok) state.availability = { available: true };
+              resolve({ installed: ok });
+            };
+          });
         },
         stop: () => {
           state.calls.push('stop');
@@ -196,6 +214,11 @@ export async function installGymSpeech(
       grant: opts.grant ?? true,
     },
   );
+}
+
+/** Ends the pending fake `installModel()` (ok → installed and available). */
+export async function speechFinishInstall(page: Page, ok: boolean): Promise<void> {
+  await page.evaluate((v) => window.__gymSpeechFinishInstall(v), ok);
 }
 
 /** Fires a GymSpeech event (`partial { text }`, `level { rms }`, `final`, `error { code }`). */

@@ -238,6 +238,25 @@ describe('calendarScreen', () => {
     const w1 = must(one.find((e) => e.getAttribute('data-score') === 'week')[0]);
     expect(w1.oneByClass('cal-score-num').textContent).toBe('1 of 1');
     expect(w1.oneByClass('cal-score-line').textContent).toBe('session done');
+    // One planned, none done: "0 of 1" + "sessions done" (never a bare "session done" under 0).
+    const zero1 = render(props({ week: { ...none, sessionsPlanned: 1 } }));
+    const z = must(zero1.find((e) => e.getAttribute('data-score') === 'week')[0]);
+    expect(z.oneByClass('cal-score-num').textContent).toBe('0 of 1');
+    expect(z.oneByClass('cal-score-line').textContent).toBe('sessions done');
+    // More done than planned: never "7 of 6". The count leads; the plan is a quiet line.
+    const over = render(
+      props({
+        week: { ...none, sessionsPlanned: 6, sessionsDone: 7, setsPlanned: 30, setsDone: 34 },
+        animate: false,
+      }),
+    );
+    const o = must(over.find((e) => e.getAttribute('data-score') === 'week')[0]);
+    expect(o.oneByClass('cal-score-num').textContent).toBe('7');
+    expect(o.oneByClass('cal-score-line').textContent).toBe('sessions done');
+    expect(must(o.find((e) => e.hasAttribute('data-score-planned'))[0]).textContent).toBe(
+      '6 sessions planned',
+    );
+    expect(o.getAttribute('aria-label')).toMatch(/^This week: 7 sessions done, 6 planned/);
     expect(root.oneByClass('cal-streak').textContent).toBe('Streak: 1 week');
   });
 

@@ -241,6 +241,9 @@ describe('history screen: list', () => {
       'No workouts yet. Finish one and your sets show up here.',
     ]);
     expect(empty.byTag('button')).toHaveLength(1);
+    // The live region is the line, not the container that holds the button.
+    expect(empty.getAttribute('role')).toBeNull();
+    expect(empty.oneByClass('empty-state-line').getAttribute('role')).toBe('status');
     el.find((e) => e.tag === 'button' && e.textContent === 'Go to Today')[0]?.click();
     expect(calls).toEqual(['tab:today']);
   });

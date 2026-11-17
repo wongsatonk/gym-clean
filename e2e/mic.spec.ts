@@ -24,6 +24,7 @@ import {
   installGymBrain,
   installGymSpeech,
   speechEmit,
+  speechFinishInstall,
   speechState,
 } from './native-fakes';
 import { openPause } from './workout.helpers';
@@ -280,6 +281,50 @@ test('permission denied → a plain line, typing still works', async ({ page }, 
   await page.screenshot({ path: testInfo.outputPath('m12s2-mic-denied.png') });
   await typeAndSend(tab, 'Typing still works');
   await expect(coachItems(tab).last().locator('.cs-msg-coach')).toContainText(DEFAULT_BRAIN_TEXT);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// Checkpoint J: on his iPhone the speech model was never offered ("isn't on this iPhone yet").
+// FIXME(main): remove `.fixme` once app.ts wires `micInstall` (set mic 'downloading', await
+// GymSpeech.installModel(), then re-check availability → idle, or unavailable 'installFailed').
+test.fixme('speech model not on the phone → Download speech for the mic → downloading → Talk', async ({
+  page,
+}, testInfo) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  await openNative(page, { availability: { available: false, reason: 'modelNotInstalled' } });
+  await goCoach(page);
+  const tab = coachTab(page);
+  const install = tab.locator('[data-mic-install]');
+  await expect(install).toHaveText('Download speech for the mic');
+  await expect(tab.locator('[data-mic-install-note]')).toContainText('No audio is sent');
+  await expect(tab.locator('[data-mic-hold]')).toHaveCount(0);
+  await expectTapTargets(page, '.cs-typing');
+  await noHorizontalOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('checkpoint-j-mic-download.png') });
+
+  // A failed download: a retry line and the button again.
+  await install.click();
+  await expect(tab.locator('[data-mic-downloading]')).toHaveText(
+    'Downloading speech… you can keep typing.',
+  );
+  await page.screenshot({ path: testInfo.outputPath('checkpoint-j-mic-downloading.png') });
+  // Typing still works while it downloads.
+  await typeAndSend(tab, 'Typing while it downloads');
+  await speechFinishInstall(page, false);
+  await expect(tab.locator('[data-mic-unavailable="installFailed"]')).toBeVisible();
+  await expect(tab.locator('[data-mic-install]')).toBeVisible();
+
+  // The second try lands: the Talk button.
+  await tab.locator('[data-mic-install]').click();
+  await expect(tab.locator('[data-mic-downloading]')).toBeVisible();
+  await speechFinishInstall(page, true);
+  await expect(tab.locator('[data-mic]')).toHaveAttribute('data-mic-state', 'idle');
+  await expect(tab.locator('[data-mic-hold]')).toBeVisible();
+  expect((await speechState(page)).installs).toBe(2);
+  // Shown, never spoken: nothing to react to mid-set (the Coach tab only).
+  expect(await spoken(page)).toEqual([]);
   expect(offsite).toEqual([]);
   expect(errors).toEqual([]);
 });

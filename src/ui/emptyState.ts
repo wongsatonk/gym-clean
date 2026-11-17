@@ -35,8 +35,11 @@ export type EmptyStateProps = {
   class?: string;
   /** Extra class(es) on the line. */
   lineClass?: string;
-  /** Extra attributes on the root (role, older e2e hooks). */
+  /** Extra attributes on the root (older e2e hooks). Keep live-region roles off the root when
+   * it holds a button: put them on the line (`lineHooks`). */
   hooks?: Hooks;
+  /** Extra attributes on the line (e.g. role="status"). */
+  lineHooks?: Hooks;
 };
 
 function actionButton(a: EmptyStateAction): HTMLElement {
@@ -68,7 +71,11 @@ export function emptyState(p: EmptyStateProps): HTMLElement {
       'data-empty-state': p.kind,
     },
     h('span', { class: 'empty-state-art', 'aria-hidden': 'true' }, icon(p.icon, 'lg')),
-    h('p', { class: ['empty-state-line', p.lineClass].filter(Boolean).join(' ') }, p.line),
+    h(
+      'p',
+      { ...p.lineHooks, class: ['empty-state-line', p.lineClass].filter(Boolean).join(' ') },
+      p.line,
+    ),
     action,
   );
 }

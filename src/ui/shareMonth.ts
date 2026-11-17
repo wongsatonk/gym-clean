@@ -67,6 +67,8 @@ export type ShareItem =
       font: 'display' | 'body';
       color: ShareColor;
       align: 'left' | 'center' | 'right';
+      /** Never wider than this (canvas fillText squeezes past it). */
+      maxWidth?: number | undefined;
     }
   /** M13: the app mark (the logo path on a 24 grid), stroked at `size` px. */
   | { kind: 'mark'; x: number; y: number; size: number; color: ShareColor };
@@ -285,9 +287,11 @@ export function shareMonthLayout(
   const right: { text: string; color: ShareColor; weight: 400 | 700 }[] = [
     {
       text:
-        s.sessionsPlanned > 0
-          ? `${s.sessionsDone} of ${plural(s.sessionsPlanned, 'session')}`
-          : 'No sessions planned',
+        s.sessionsPlanned <= 0
+          ? 'No sessions planned'
+          : s.sessionsDone > s.sessionsPlanned
+            ? `${plural(s.sessionsDone, 'session')} done`
+            : `${s.sessionsDone} of ${plural(s.sessionsPlanned, 'session')}`,
       color: '--text',
       weight: 700,
     },
@@ -357,6 +361,27 @@ const S_PAD = 80;
 const S_GRID_TOP = 900;
 const S_COL = (STORY_W - 2 * S_PAD) / 7;
 const S_ROW = 124;
+/** The Story lead number: its biggest size and its left edge (optical, 8px into the pad). */
+const S_LEAD_MAX = 260;
+const S_LEAD_X = S_PAD - 8;
+
+/**
+ * Pure estimate of a lead value's width at `size` px in the display face (Barlow Condensed bold,
+ * with a little slack for the Arial Narrow / system fallbacks): digits 0.56em, separators 0.28em,
+ * anything else 0.6em.
+ */
+export function leadValueWidth(text: string, size: number): number {
+  let em = 0;
+  for (const ch of text) em += /\d/.test(ch) ? 0.56 : /[,.\s]/.test(ch) ? 0.28 : 0.6;
+  return em * size;
+}
+
+/** The biggest size (≤ 260, whole px) at which `text` fits `room` px; the canvas maxWidth backs it up. */
+export function leadValueSize(text: string, room: number): number {
+  const at1 = leadValueWidth(text, 1);
+  if (at1 <= 0) return S_LEAD_MAX;
+  return Math.min(S_LEAD_MAX, Math.floor(room / at1));
+}
 
 /**
  * Pure: the Story image (1080×1920). The lockup on top, the lead number big with its label,
@@ -391,6 +416,8 @@ export function shareStoryLayout(
   ];
   if (lead) {
     const t = shareLeadText(lead, opts.stats, opts.unit);
+    // A long value (1,102,311 lb) steps down to fit the width instead of running off the edge.
+    const room = STORY_W - S_PAD - S_LEAD_X;
     items.push(
       {
         kind: 'text',
@@ -405,10 +432,11 @@ export function shareStoryLayout(
       },
       {
         kind: 'text',
-        x: S_PAD - 8,
+        x: S_LEAD_X,
         y: 650,
         text: t.value,
-        size: 260,
+        size: leadValueSize(t.value, room),
+        maxWidth: room,
         weight: 700,
         font: 'display',
         color: '--cta',
@@ -417,7 +445,7 @@ export function shareStoryLayout(
       {
         kind: 'text',
         x: S_PAD,
-        y: 740,
+        y: 760,
         text: t.label,
         size: 64,
         weight: 700,
@@ -519,7 +547,8 @@ export async function renderShareMonth(
       ctx.textAlign = it.align;
       ctx.textBaseline = 'alphabetic';
       ctx.font = `${it.weight} ${it.size}px ${family[it.font]}`;
-      ctx.fillText(it.text, it.x, it.y);
+      if (it.maxWidth !== undefined) ctx.fillText(it.text, it.x, it.y, it.maxWidth);
+      else ctx.fillText(it.text, it.x, it.y);
     }
   }
   return new Promise((resolve, reject) =>

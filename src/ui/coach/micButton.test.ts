@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { asFake, useFakeDom, type FakeEl } from '../screens/testDom';
 import {
   MIC_A11Y_NAME,
+  MIC_DOWNLOADING,
   MIC_HINT,
+  MIC_INSTALL_LABEL,
+  MIC_INSTALL_NOTE,
   MIC_LABEL,
   MIC_UNAVAILABLE_FALLBACK,
   MIC_UNAVAILABLE_LINES,
@@ -44,12 +47,13 @@ afterEach(() => {
 const fireWin = (t: string, ev: unknown = {}) => [...(winL.get(t) ?? [])].forEach((cb) => cb(ev));
 const live = () => [...winL.values()].reduce((n, l) => n + l.length, 0);
 
-function mount(p: MicProps) {
+function mount(p: MicProps, install = true) {
   const log: string[] = [];
   const view = micButton(p, {
     micDown: () => log.push('down'),
     micUp: () => log.push('up'),
     micCancel: () => log.push('cancel'),
+    ...(install ? { micInstall: () => log.push('install') } : {}),
   });
   return { view, log, el: view.el ? asFake(view.el) : null };
 }
@@ -76,7 +80,7 @@ describe('micButton: states', () => {
       'modelDownloading',
       'permissionDenied',
     ]) {
-      const { el, view } = mount({ state: 'unavailable', reason });
+      const { el, view } = mount({ state: 'unavailable', reason }, false);
       expect(view.button).toBeNull();
       expect(el?.byTag('button')).toHaveLength(0);
       expect(el?.getAttribute('data-mic-unavailable')).toBe(reason);
@@ -86,11 +90,60 @@ describe('micButton: states', () => {
     expect(micUnavailableLine(undefined)).toBe(MIC_UNAVAILABLE_FALLBACK);
   });
 
+  it('modelNotInstalled → "Download speech for the mic" (a button) + a one-line note → micInstall', () => {
+    const { el, view, log } = mount({ state: 'unavailable', reason: 'modelNotInstalled' });
+    const root = need(el);
+    expect(view.button).toBeNull();
+    expect(root.getAttribute('data-mic-unavailable')).toBe('modelNotInstalled');
+    const btn = root.find((e) => e.hasAttribute('data-mic-install'))[0] as FakeEl;
+    expect(btn.tag).toBe('button');
+    expect(btn.textContent).toBe(MIC_INSTALL_LABEL);
+    expect(btn.classes).toContain('mic-install');
+    const note = root.find((e) => e.hasAttribute('data-mic-install-note'))[0] as FakeEl;
+    expect(note.textContent).toBe(MIC_INSTALL_NOTE);
+    expect(MIC_INSTALL_NOTE).toMatch(/no audio is sent/i);
+    btn.click();
+    expect(log).toEqual(['install']);
+  });
+
+  it('modelNotInstalled without micInstall → the plain line (no dead button)', () => {
+    const { el } = mount({ state: 'unavailable', reason: 'modelNotInstalled' }, false);
+    expect(need(el).byTag('button')).toHaveLength(0);
+    expect(need(el).textContent).toBe(MIC_UNAVAILABLE_LINES.modelNotInstalled);
+  });
+
+  it('installFailed → a retry line and the same Download button', () => {
+    const { el, log } = mount({ state: 'unavailable', reason: 'installFailed' });
+    const root = need(el);
+    expect(root.textContent).toContain(MIC_UNAVAILABLE_LINES.installFailed);
+    (root.find((e) => e.hasAttribute('data-mic-install'))[0] as FakeEl).click();
+    expect(log).toEqual(['install']);
+  });
+
+  it('downloading → a status line, no buttons (typing still works)', () => {
+    const { el, view } = mount({ state: 'downloading' });
+    const root = need(el);
+    expect(view.button).toBeNull();
+    expect(root.byTag('button')).toHaveLength(0);
+    expect(root.getAttribute('data-mic-downloading')).toBe('');
+    expect(root.getAttribute('role')).toBe('status');
+    expect(root.textContent).toBe(MIC_DOWNLOADING);
+  });
+
+  it('modelDownloading (iOS already fetching) keeps its own line', () => {
+    const { el } = mount({ state: 'unavailable', reason: 'modelDownloading' });
+    expect(need(el).byTag('button')).toHaveLength(0);
+    expect(need(el).textContent).toBe(MIC_UNAVAILABLE_LINES.modelDownloading);
+  });
+
   it('every line is short, plain coaching copy', () => {
     for (const line of [
       ...Object.values(MIC_UNAVAILABLE_LINES),
       MIC_UNAVAILABLE_FALLBACK,
       MIC_HINT,
+      MIC_INSTALL_LABEL,
+      MIC_INSTALL_NOTE,
+      MIC_DOWNLOADING,
     ]) {
       expect(checkCopy(line).ok).toBe(true);
       expect(line.split(/\s+/).length).toBeLessThanOrEqual(14);

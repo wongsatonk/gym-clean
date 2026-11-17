@@ -293,7 +293,9 @@ function listView(props: HistoryProps, actions: HistoryActions): HTMLElement[] {
         kind: 'history',
         icon: 'dumbbell',
         line: 'No workouts yet. Finish one and your sets show up here.',
-        hooks: { role: 'status', 'data-history-empty': 'none' },
+        hooks: { 'data-history-empty': 'none' },
+        // The live region is the line, not the container holding the button.
+        lineHooks: { role: 'status' },
         action: { label: 'Go to Today', icon: 'home', onClick: () => actions.onTab('today') },
       }),
     ];

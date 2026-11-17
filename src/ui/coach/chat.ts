@@ -197,6 +197,13 @@ export type ChatActions = {
   micUp?: (() => void) | undefined;
   /** Released off the button, Escape, pointercancel or the app left: send nothing. */
   micCancel?: (() => void) | undefined;
+  /**
+   * Checkpoint J: "Download speech for the mic" (mic 'unavailable' with reason
+   * 'modelNotInstalled' / 'installFailed'). Main: set mic { state: 'downloading' }, await
+   * GymSpeech.installModel(), then re-check (idle) or { state: 'unavailable', reason:
+   * 'installFailed' }. Omit → the plain line, no button.
+   */
+  micInstall?: (() => void) | undefined;
   /** M12 slice 2: check-in card Done (answers given, ≥ 1) / Skip this week, by message id. */
   onCheckInDone?: ((messageId: number, answers: CheckInAnswers) => void) | undefined;
   onCheckInSkip?: ((messageId: number) => void) | undefined;
@@ -287,6 +294,107 @@ export function newestScrollTop(o: {
   if (o.itemTop === undefined || o.itemHeight === undefined) return bottom;
   if (o.itemHeight + NEWEST_TOP_GAP <= o.clientHeight) return bottom;
   return Math.min(bottom, Math.max(0, o.itemTop - NEWEST_TOP_GAP));
+}
+
+/** The bits of the thread box `pinNewest` reads and writes (a real element in the app). */
+export type ScrollBox = { scrollTop: number; scrollHeight: number; clientHeight: number };
+/** The newest item: its top inside the thread's content (`offsetTop`, transform-free) and height. */
+export type ThreadItem = { offsetTop: number; offsetHeight: number };
+
+/**
+ * Scrolls the thread to its newest item (`newestScrollTop`). Uses offsetTop / offsetHeight (the
+ * thread box is the items' offset parent, chat.css), so a rise-in transform mid-animation never
+ * skews it. Returns the scrollTop it set.
+ */
+export function pinNewest(scroll: ScrollBox, newest: ThreadItem | null): number {
+  const top = newestScrollTop({
+    scrollHeight: scroll.scrollHeight,
+    clientHeight: scroll.clientHeight,
+    itemTop: newest ? newest.offsetTop : undefined,
+    itemHeight: newest ? newest.offsetHeight : undefined,
+  });
+  scroll.scrollTop = top;
+  return top;
+}
+
+/** How far above the bottom he must scroll before the thread stops following new layout. */
+const FOLLOW_SLACK = 48;
+
+/**
+ * Keeps the newest item in view: once after mount (next frame), then whenever the thread box or
+ * its content changes size (keyboard, dock rows, fonts), until he scrolls up himself.
+ */
+function followNewest(scroll: HTMLElement, list: HTMLElement): void {
+  if (typeof requestAnimationFrame !== 'function') return;
+  let following = true;
+  let mine = -1; // the scrollTop we last set (scroll events at it are ours)
+  const pin = () => {
+    if (!following || !scroll.isConnected) return;
+    mine = pinNewest(scroll, list.lastElementChild as HTMLElement | null);
+  };
+  requestAnimationFrame(pin);
+  scroll.addEventListener('scroll', () => {
+    if (Math.abs(scroll.scrollTop - mine) <= 1) return;
+    const fromBottom = scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop;
+    following = fromBottom <= FOLLOW_SLACK;
+    if (following) mine = scroll.scrollTop;
+  });
+  const RO = (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+  if (typeof RO === 'function') {
+    const ro = new RO(() => {
+      if (!scroll.isConnected) {
+        ro.disconnect();
+        return;
+      }
+      pin();
+    });
+    ro.observe(scroll);
+    ro.observe(list);
+  }
+}
+
+// ---------- the page after the iOS keyboard ----------
+
+let pageY: number | null = null;
+let viewportHooked = false;
+
+const isChatInput = (el: unknown): boolean =>
+  !!el &&
+  typeof (el as Element).classList?.contains === 'function' &&
+  (el as Element).classList.contains('cs-input');
+
+/**
+ * Checkpoint J: iOS (WKWebView) scrolls the whole page up to show the text box over the keyboard
+ * and doesn't always scroll it back when the keyboard closes, leaving the Coach title above the
+ * screen and a band under the tab bar. The chat screens are one viewport tall and never need the
+ * page scrolled, so: note the page offset when a chat text box takes focus, and put it back when
+ * focus leaves every chat text box (now, and again once the keyboard has finished closing, on
+ * the visualViewport resize).
+ */
+function settlePageAfterKeyboard(root: HTMLElement): void {
+  const w = (globalThis as { window?: Window }).window;
+  if (!w || typeof w.scrollTo !== 'function') return;
+  const settle = () => {
+    if (pageY === null) return;
+    const d = (globalThis as { document?: Document }).document;
+    if (isChatInput(d?.activeElement)) return; // still typing (or refocused after a re-render)
+    const y = pageY;
+    if (w.scrollY !== y || w.scrollX !== 0) w.scrollTo(0, y);
+    if (!d?.querySelector?.('[data-chat]')) pageY = null;
+  };
+  root.addEventListener('focusin', (ev) => {
+    if (isChatInput(ev.target) && pageY === null) pageY = w.scrollY || 0;
+  });
+  root.addEventListener('focusout', () => {
+    setTimeout(settle, 0);
+    // After the keyboard's close animation, where WebKit sometimes moves the page again.
+    setTimeout(settle, 400);
+  });
+  const vv = w.visualViewport;
+  if (vv && !viewportHooked) {
+    viewportHooked = true;
+    vv.addEventListener('resize', settle);
+  }
 }
 
 /** "Mon 9 Nov to Sun 15 Nov". */
@@ -709,6 +817,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
             micDown: () => a.micDown?.(),
             micUp: () => a.micUp?.(),
             micCancel: () => a.micCancel?.(),
+            micInstall: a.micInstall,
           });
     const holdBtn = micView?.button ? micView.el : null;
     // The live words, whole and wrapping (the text box is narrow next to the held button and
@@ -736,20 +845,9 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
 
   const scroll = h('div', { class: 'cs-scroll chat-scroll' }, starters, list);
   // Newest message in view once the caller has mounted the chat (chat convention); a card
-  // taller than the thread shows from its top.
-  if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(() => {
-      const newest = list.lastElementChild as HTMLElement | null;
-      const sr = scroll.getBoundingClientRect?.();
-      const nr = newest?.getBoundingClientRect?.();
-      scroll.scrollTop = newestScrollTop({
-        scrollHeight: scroll.scrollHeight,
-        clientHeight: scroll.clientHeight,
-        itemTop: sr && nr ? nr.top - sr.top + scroll.scrollTop : undefined,
-        itemHeight: nr?.height,
-      });
-    });
-  }
+  // taller than the thread shows from its top. Checkpoint J: it also stays in view after that
+  // (keyboard opening or closing, the dock growing a chip row, late layout) until he scrolls up.
+  followNewest(scroll, list);
 
   const dock = h(
     'div',
@@ -776,6 +874,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       ...body,
     );
     micHandles.set(tab, handle);
+    settlePageAfterKeyboard(tab);
     return tab;
   }
 
@@ -816,6 +915,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     live[next]?.focus();
   });
   micHandles.set(root, handle);
+  settlePageAfterKeyboard(root);
   return root;
 }
 
@@ -868,13 +968,13 @@ function applyMicToInput(
 /**
  * Patches the mic of a chat built by `chat()` / `coachTabScreen()` (pass either root) in place:
  * the level ring, the pressed state and hint, the partial words in the text box. Use it for `partial` and
- * `level` events; re-render for a state change to or from 'hidden' / 'unavailable'. Returns
+ * `level` events; re-render for a state change to or from 'hidden' / 'unavailable' / 'downloading'. Returns
  * false when there's nothing to patch (no mic in that chat): re-render instead.
  */
 export function updateChatMic(root: HTMLElement, mic: MicProps): boolean {
   const target = micHandles.get(root);
-  if (!target?.view?.el || !target.input || !target.send) return false;
-  if (mic.state === 'hidden' || mic.state === 'unavailable') return false;
+  if (!target?.view?.button || !target.input || !target.send) return false;
+  if (mic.state !== 'idle' && mic.state !== 'listening') return false;
   target.view.update(mic);
   applyMicToInput(target.input, target.send, mic, target.live);
   return true;

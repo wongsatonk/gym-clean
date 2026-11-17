@@ -2,6 +2,11 @@
 // Three questions (energy, sleep, soreness), each a row of 1–5 chips (≥ 56px) with the ends
 // labelled ("Low" / "High"); Done and "Skip this week"; then a one-line summary.
 //
+// Checkpoint J: the open card filled the whole Coach thread and hid the chat under it, so a
+// pending card starts collapsed: one line "Weekly check-in · 3 quick taps", then Answer (opens
+// the questions in place, focus to the first chip) and Skip this week. Opened stays opened per
+// week across chat re-renders. The one Skip button stays in the bottom row in both states.
+//
 // Props in, callbacks out: the questions come in as data (core CHECK_IN_QUESTIONS, mapped by
 // main to `CheckInQuestionView`), the card status and the saved CheckIn for the summary. Picks
 // before Done are kept per week across chat re-renders (like the focus-block card's open rows).
@@ -11,7 +16,8 @@
 // arrows move and pick, as native radios). The picked chip is a white fill AND a check mark AND
 // aria-checked: never colour alone. Answers never go to a brain (task 13 / 4); the card says so.
 //
-// e2e hooks: `[data-checkin-card]` (+ `data-week`, `data-card-status`), `[data-checkin-q=<id>]`,
+// e2e hooks: `[data-checkin-card]` (+ `data-week`, `data-card-status`, `data-expanded`),
+// `[data-checkin-compact]`, `[data-checkin-answer]`, `[data-checkin-body]`, `[data-checkin-q=<id>]`,
 // `[data-checkin-pick=<id>:<n>]`, `[data-checkin-done]`, `[data-checkin-skip]`,
 // `[data-checkin-summary]`.
 import type { CheckIn } from '../../core/types';
@@ -49,6 +55,10 @@ export type CheckInCardActions = {
 };
 
 export const CHECKIN_TITLE = 'Weekly check-in';
+export const CHECKIN_COMPACT = 'Weekly check-in · 3 quick taps';
+export const CHECKIN_ANSWER = 'Answer';
+/** Skip's words while collapsed (one row with Answer); its name stays "Skip this week". */
+export const CHECKIN_SKIP_SHORT = 'Skip';
 export const CHECKIN_INTRO = 'Three quick taps about your week. Only for your recap.';
 export const CHECKIN_DONE = 'Done';
 export const CHECKIN_SKIP = 'Skip this week';
@@ -70,10 +80,13 @@ export function checkInSummary(
 
 // Picks before Done, per week, so a re-render (a new message) keeps them.
 const memory = new Map<string, CheckInAnswers>();
+// Weeks whose card he opened with Answer (kept open across re-renders).
+const opened = new Set<string>();
 
 /** Test-only. */
 export function resetCheckInMemory(): void {
   memory.clear();
+  opened.clear();
 }
 
 function questionRow(
@@ -146,11 +159,14 @@ function questionRow(
 }
 
 export function buildCheckInCard(p: CheckInCardProps, a: CheckInCardActions): Built {
+  const pending = p.status === 'pending';
   const head = h(
     'h3',
     { class: 'checkin-title' },
     icon('calendar', 'sm'),
-    h('span', {}, CHECKIN_TITLE),
+    pending
+      ? h('span', { 'data-checkin-compact': true }, CHECKIN_COMPACT)
+      : h('span', {}, CHECKIN_TITLE),
   );
   const shell = (...kids: (HTMLElement | null)[]) =>
     h(
@@ -166,8 +182,9 @@ export function buildCheckInCard(p: CheckInCardProps, a: CheckInCardActions): Bu
       ...kids,
     );
 
-  if (p.status !== 'pending') {
+  if (!pending) {
     memory.delete(p.weekStart);
+    opened.delete(p.weekStart);
     const text = p.status === 'skipped' ? CHECKIN_SKIPPED : checkInSummary(p.questions, p.saved);
     return {
       el: shell(
@@ -216,19 +233,60 @@ export function buildCheckInCard(p: CheckInCardProps, a: CheckInCardActions): Bu
   const rows = p.questions.map((q) => questionRow(q, picks, sync));
   const skip = h(
     'button',
-    { type: 'button', class: 'cs-btn checkin-skip', 'data-checkin-skip': true, onclick: a.onSkip },
+    {
+      type: 'button',
+      class: 'cs-btn checkin-skip',
+      'data-checkin-skip': true,
+      'aria-label': CHECKIN_SKIP,
+      onclick: a.onSkip,
+    },
     icon('skip', 'md'),
-    h('span', {}, CHECKIN_SKIP),
   );
+  const skipWords = h('span', {}, CHECKIN_SKIP);
+  skip.append(skipWords);
   sync();
+  const bodyId = `checkin-body-${p.weekStart}`;
+  const body = h(
+    'div',
+    { class: 'checkin-body', id: bodyId, 'data-checkin-body': true },
+    h('p', { class: 'checkin-intro' }, icon('lock', 'sm'), h('span', {}, CHECKIN_INTRO)),
+    ...rows.map((r) => r.el),
+    need,
+    done,
+  );
+  const answer = h(
+    'button',
+    {
+      type: 'button',
+      class: 'primary-btn checkin-answer',
+      'data-checkin-answer': true,
+      'aria-controls': bodyId,
+    },
+    CHECKIN_ANSWER,
+  );
+  const el = shell(body, h('div', { class: 'checkin-actions' }, answer, skip));
+  const show = (open: boolean) => {
+    el.setAttribute('data-expanded', open ? 'true' : 'false');
+    skipWords.textContent = open ? CHECKIN_SKIP : CHECKIN_SKIP_SHORT;
+    answer.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      body.removeAttribute('hidden');
+      answer.setAttribute('hidden', '');
+    } else {
+      body.setAttribute('hidden', '');
+      answer.removeAttribute('hidden');
+    }
+  };
+  answer.addEventListener('click', () => {
+    opened.add(p.weekStart);
+    show(true);
+    const first = rows[0]?.controls.find((c) => c.getAttribute('tabindex') === '0');
+    first?.focus();
+  });
+  show(opened.has(p.weekStart));
   return {
-    el: shell(
-      h('p', { class: 'checkin-intro' }, icon('lock', 'sm'), h('span', {}, CHECKIN_INTRO)),
-      ...rows.map((r) => r.el),
-      need,
-      h('div', { class: 'checkin-actions' }, done, skip),
-    ),
-    controls: [...rows.flatMap((r) => r.controls), done, skip],
+    el,
+    controls: [answer, ...rows.flatMap((r) => r.controls), done, skip],
   };
 }
 

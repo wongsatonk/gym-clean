@@ -70,6 +70,24 @@ test('due once a week after a session: answer → summary; survives a reload; th
   await expect(coachTab(page).locator('.cs-msg-coach').last()).toContainText(
     'Check-in: how did this week feel?',
   );
+  // Checkpoint J: collapsed by default, one short line + Answer / Skip, so the chat stays in view.
+  await expect(card(page)).toHaveAttribute('data-expanded', 'false');
+  await expect(card(page).locator('[data-checkin-compact]')).toHaveText(
+    'Weekly check-in · 3 quick taps',
+  );
+  await expect(card(page).locator('[data-checkin-q]').first()).toBeHidden();
+  await expect(coachTab(page).getByLabel('Ask the coach')).toBeVisible();
+  await expectTapTargets(page, '[data-checkin-card] .checkin-actions');
+  await noHorizontalOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('m12s2-check-in-compact.png') });
+  const box = await card(page).boundingBox();
+  expect(box?.height ?? 999).toBeLessThan(200);
+
+  // Answer opens the three questions in place, focus on the first chip.
+  await card(page).locator('[data-checkin-answer]').click();
+  await expect(card(page)).toHaveAttribute('data-expanded', 'true');
+  await expect(card(page).locator('[data-checkin-answer]')).toBeHidden();
+  await expect(card(page).locator('[data-checkin-pick="energy:1"]')).toBeFocused();
   await expect(card(page).locator('[data-checkin-done]')).toBeDisabled();
   await expectTapTargets(page, '[data-checkin-card]');
   await noHorizontalOverflow(page);
@@ -139,6 +157,8 @@ test('no session that week → no card; Skip stays skipped; the next week brings
   await expect(page.locator('[data-cal]').first()).toBeVisible();
   await goCoach(page);
   await expect(card(page)).toHaveAttribute('data-card-status', 'pending');
+  // Skip straight from the collapsed card.
+  await expect(card(page)).toHaveAttribute('data-expanded', 'false');
   await card(page).locator('[data-checkin-skip]').click();
   await expect(card(page)).toHaveAttribute('data-card-status', 'skipped');
   await expect(card(page).locator('[data-checkin-summary="skipped"]')).toBeVisible();

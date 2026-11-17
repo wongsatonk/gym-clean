@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { checkCopy } from '../../core/trainer/replies';
 import { asFake, useFakeDom, type FakeEl } from '../screens/testDom';
 import {
+  CHECKIN_ANSWER,
+  CHECKIN_COMPACT,
   CHECKIN_INTRO,
   CHECKIN_NEED_ONE,
   CHECKIN_SKIP,
@@ -40,6 +42,55 @@ const pick = (el: FakeEl, v: string) =>
 const by = (el: FakeEl, a: string) => el.find((e) => e.hasAttribute(a))[0] as FakeEl;
 const ev = (key: string) => ({ key, preventDefault: () => {} });
 
+describe('checkInCard: pending, collapsed (Checkpoint J: the card must not hide the chat)', () => {
+  it('collapsed by default: one short line, Answer (expands in place) and Skip; questions hidden', () => {
+    const { el } = mount();
+    expect(el.getAttribute('data-expanded')).toBe('false');
+    expect(by(el, 'data-checkin-compact').textContent).toBe(CHECKIN_COMPACT);
+    const answer = by(el, 'data-checkin-answer');
+    expect(answer.tag).toBe('button');
+    expect(answer.textContent).toBe(CHECKIN_ANSWER);
+    expect(answer.getAttribute('aria-expanded')).toBe('false');
+    const body = by(el, 'data-checkin-body');
+    expect(answer.getAttribute('aria-controls')).toBe(body.getAttribute('id'));
+    expect(body.hasAttribute('hidden')).toBe(true);
+    // Skip works without opening.
+    expect(by(el, 'data-checkin-skip').hasAttribute('hidden')).toBe(false);
+    expect(el.find((e) => e.hasAttribute('data-checkin-skip'))).toHaveLength(1);
+  });
+
+  it('Skip from the collapsed card', () => {
+    const { el, log } = mount();
+    by(el, 'data-checkin-skip').click();
+    expect(log).toEqual(['skip']);
+  });
+
+  it('Answer → the three questions open in place, focus on the first chip; Answer goes away', () => {
+    const { el } = mount();
+    by(el, 'data-checkin-answer').click();
+    expect(el.getAttribute('data-expanded')).toBe('true');
+    expect(by(el, 'data-checkin-body').hasAttribute('hidden')).toBe(false);
+    expect(by(el, 'data-checkin-answer').getAttribute('aria-expanded')).toBe('true');
+    expect(by(el, 'data-checkin-answer').hasAttribute('hidden')).toBe(true);
+    const doc = (globalThis as { document: { activeElement: unknown } }).document;
+    expect(doc.activeElement).toBe(pick(el, 'energy:1'));
+    // The one Skip stays, under Done.
+    expect(el.find((e) => e.hasAttribute('data-checkin-skip'))).toHaveLength(1);
+    expect(by(el, 'data-checkin-skip').hasAttribute('hidden')).toBe(false);
+  });
+
+  it('opened stays open across a re-render of the same week; a new week starts collapsed', () => {
+    by(mount().el, 'data-checkin-answer').click();
+    expect(mount().el.getAttribute('data-expanded')).toBe('true');
+    expect(mount({ weekStart: '2026-11-22' }).el.getAttribute('data-expanded')).toBe('false');
+  });
+
+  it('compact copy is short and plain', () => {
+    expect(CHECKIN_COMPACT).toBe('Weekly check-in · 3 quick taps');
+    expect(checkCopy(CHECKIN_COMPACT).ok).toBe(true);
+  });
+});
+
 describe('checkInCard: pending', () => {
   it('three radio groups of 1–5 with labelled ends, Done (disabled) and Skip this week', () => {
     const { el } = mount();
@@ -57,6 +108,10 @@ describe('checkInCard: pending', () => {
     }
     expect(by(el, 'data-checkin-done').hasAttribute('disabled')).toBe(true);
     expect(by(el, 'data-checkin-need').hasAttribute('hidden')).toBe(false);
+    // Collapsed: "Skip" beside Answer; its name is always "Skip this week".
+    expect(by(el, 'data-checkin-skip').textContent).toBe('Skip');
+    expect(by(el, 'data-checkin-skip').getAttribute('aria-label')).toBe(CHECKIN_SKIP);
+    by(el, 'data-checkin-answer').click();
     expect(by(el, 'data-checkin-skip').textContent).toBe(CHECKIN_SKIP);
   });
 
@@ -122,11 +177,12 @@ describe('checkInCard: pending', () => {
     ).toBe('false');
   });
 
-  it('controls in tab order: the 15 chips, Done, Skip', () => {
+  it('controls in tab order: Answer, the 15 chips, Done, Skip (hidden ones skipped by the chat)', () => {
     const { controls } = mount();
-    expect(controls).toHaveLength(17);
-    expect(controls[15]?.hasAttribute('data-checkin-done')).toBe(true);
-    expect(controls[16]?.hasAttribute('data-checkin-skip')).toBe(true);
+    expect(controls).toHaveLength(18);
+    expect(controls[0]?.hasAttribute('data-checkin-answer')).toBe(true);
+    expect(controls[16]?.hasAttribute('data-checkin-done')).toBe(true);
+    expect(controls[17]?.hasAttribute('data-checkin-skip')).toBe(true);
   });
 });
 

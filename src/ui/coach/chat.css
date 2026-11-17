@@ -46,6 +46,8 @@
 }
 
 .chat-scroll {
+  /* The items' offset parent, so chat.ts pinNewest reads their tops without transforms. */
+  position: relative;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -517,6 +519,20 @@
     opacity var(--dur-fast) linear;
 }
 
+/* Checkpoint J: the speech model isn't on the phone yet: a full-width download button and its
+   one-line note, under the text row. */
+.mic-install-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mic-install {
+  width: 100%;
+  min-height: var(--tap-min);
+  font-size: var(--fs-body);
+}
+
 .mic-hint,
 .mic-unavailable {
   margin: 0;
@@ -670,14 +686,43 @@
   display: none;
 }
 
-.checkin-actions {
+.checkin-body {
   display: flex;
   flex-direction: column;
+  gap: 14px;
+}
+
+.checkin-body[hidden] {
+  display: none;
+}
+
+/* Collapsed (Checkpoint J): Answer + Skip side by side under the one-line title; opened: Answer
+   goes, Skip fills the row under Done. Wraps to two rows if the words ever don't fit. */
+.checkin-actions {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
+.checkin-card[data-card-status='pending'] .checkin-title {
+  font-size: var(--fs-cue);
+}
+
+.checkin-card .checkin-answer {
+  flex: 2 1 0;
+  min-height: var(--tap-min);
+  margin-top: 0;
+  padding: 0 18px;
+  font-size: var(--fs-cue);
+  border-radius: var(--r-btn);
+}
+
+.checkin-card .checkin-answer[hidden] {
+  display: none;
+}
+
 .checkin-skip {
-  width: 100%;
+  flex: 1 1 0;
 }
 
 .checkin-summary {

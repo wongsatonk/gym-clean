@@ -4,7 +4,13 @@
 //
 // States:
 // - 'hidden': nothing (the PWA, during a set).
-// - 'unavailable': no button, a short plain line why (typing still works).
+// - 'unavailable': no hold button, a short plain line why (typing still works). For
+//   `modelNotInstalled` (and `installFailed`, a UI-only reason main passes when `installModel()`
+//   came back false) with a `micInstall` callback: a full-width "Download speech for the mic"
+//   button (≥ 56px) and a one-line note that the iPhone downloads Apple's English speech model
+//   once and no audio is sent. Tap → `micInstall` (main: GymSpeech.installModel()).
+// - 'downloading': the download main started is running: one status line, typing still works.
+//   (`modelDownloading` is iOS fetching on its own: it keeps its unavailable line.)
 // - 'idle': "Talk" next to Send. Press and hold (pointer) or hold Space (keyboard) → `micDown`.
 // - 'listening': the button is filled (aria-pressed) and keeps its width (the text box next to it
 //   shows the live words), a level ring grows with loudness (transform + opacity; static under
@@ -17,12 +23,13 @@
 // the hold (new partial text from main) never loses the release. Only one hold at a time.
 //
 // e2e hooks: `[data-mic]` (+ `data-mic-state`), `[data-mic-hold]` (the button, named "Hold to
-// talk"), `[data-mic-ring]`, `[data-mic-hint]`, `[data-mic-unavailable]` (+ the reason).
+// talk"), `[data-mic-ring]`, `[data-mic-hint]`, `[data-mic-unavailable]` (+ the reason),
+// `[data-mic-install]` (the download button), `[data-mic-install-note]`, `[data-mic-downloading]`.
 import { APP_NAME } from '../../core/brand';
 import { h } from '../dom';
 import { reducedMotion } from '../motion';
 
-export type MicState = 'hidden' | 'unavailable' | 'idle' | 'listening';
+export type MicState = 'hidden' | 'unavailable' | 'downloading' | 'idle' | 'listening';
 
 export type MicProps = {
   state: MicState;
@@ -30,7 +37,10 @@ export type MicProps = {
   partial?: string | undefined;
   /** Loudness 0–1 for the level ring. */
   level?: number | undefined;
-  /** Why the mic can't be used (GymSpeech `SpeechUnavailableReason`), for 'unavailable'. */
+  /**
+   * Why the mic can't be used, for 'unavailable': a GymSpeech `SpeechUnavailableReason`, or
+   * 'installFailed' (UI-only: main's `installModel()` came back false).
+   */
   reason?: string | undefined;
 };
 
@@ -38,6 +48,8 @@ export type MicActions = {
   micDown: () => void;
   micUp: () => void;
   micCancel: () => void;
+  /** "Download speech for the mic" (modelNotInstalled / installFailed). Omit → no button. */
+  micInstall?: (() => void) | undefined;
 };
 
 export const MIC_LABEL = 'Talk';
@@ -51,7 +63,14 @@ export const MIC_UNAVAILABLE_LINES: Readonly<Record<string, string>> = {
   modelDownloading: 'Speech for the mic is still downloading. Type for now.',
   permissionDenied: `The mic is off for ${APP_NAME}. Turn it on in iPhone Settings.`,
   notNative: 'The mic works in the iPhone app.',
+  installFailed: "Speech didn't finish downloading. Try again.",
 };
+/** Reasons that show the Download button (with a `micInstall` callback). */
+export const MIC_INSTALL_REASONS: readonly string[] = ['modelNotInstalled', 'installFailed'];
+export const MIC_INSTALL_LABEL = 'Download speech for the mic';
+export const MIC_INSTALL_NOTE =
+  "iPhone downloads Apple's English speech model once. No audio is sent.";
+export const MIC_DOWNLOADING = 'Downloading speech… you can keep typing.';
 export const MIC_UNAVAILABLE_FALLBACK = "The mic isn't available right now. Type instead.";
 
 export function micUnavailableLine(reason: string | undefined): string {
@@ -180,6 +199,32 @@ export type MicView = {
 
 export function micButton(p: MicProps, a: MicActions): MicView {
   if (p.state === 'hidden') return { el: null, button: null, hint: null, update: () => {} };
+  if (p.state === 'downloading') {
+    const line = h(
+      'p',
+      { class: 'mic-unavailable', 'data-mic-downloading': true, role: 'status' },
+      MIC_DOWNLOADING,
+    );
+    return { el: line, button: null, hint: null, update: () => {} };
+  }
+  if (p.state === 'unavailable' && a.micInstall && MIC_INSTALL_REASONS.includes(p.reason ?? '')) {
+    const onInstall = a.micInstall;
+    const install = h(
+      'button',
+      { type: 'button', class: 'cs-btn mic-install', 'data-mic-install': true, onclick: onInstall },
+      MIC_INSTALL_LABEL,
+    );
+    const wrap = h(
+      'div',
+      { class: 'mic-install-box', 'data-mic-unavailable': p.reason ?? 'unknown' },
+      p.reason === 'installFailed'
+        ? h('p', { class: 'mic-unavailable', role: 'status' }, micUnavailableLine(p.reason))
+        : null,
+      install,
+      h('p', { class: 'mic-unavailable', 'data-mic-install-note': true }, MIC_INSTALL_NOTE),
+    );
+    return { el: wrap, button: null, hint: null, update: () => {} };
+  }
   if (p.state === 'unavailable') {
     const line = h(
       'p',
