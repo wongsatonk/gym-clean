@@ -4,6 +4,7 @@ import basicSsl from '@vitejs/plugin-basic-ssl';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { APP_NAME, APP_TAGLINE } from './src/core/brand';
 
 // Build identity for the developer log: git short sha (+ "-dirty") and build time.
 function appVersion(): string {
@@ -57,9 +58,9 @@ const pwa = VitePWA({
   devOptions: { enabled: false },
   manifest: {
     id: webBase,
-    name: 'Gym Clean',
-    short_name: 'Gym Clean',
-    description: 'Phone-first workout focus app',
+    name: APP_NAME,
+    short_name: APP_NAME,
+    description: APP_TAGLINE,
     start_url: webBase,
     scope: webBase,
     display: 'standalone',
@@ -95,6 +96,8 @@ const pwa = VitePWA({
     maximumFileSizeToCacheInBytes: 20 * 1024 * 1024, // the wasm is 14.7 MB
     cleanupOutdatedCaches: true,
     navigateFallback: 'index.html',
+    // M13: the static landing page (public/welcome/) is its own page, never the app shell.
+    navigateFallbackDenylist: [/\/welcome\//],
   },
 });
 

@@ -76,17 +76,7 @@ const ALLOWED = new Set(['src/core/brand.ts', 'capacitor.config.ts']);
  * Still to switch to `APP_NAME` (M13 task 10: ui; task 27: native; task 29: vite.config.ts).
  * Each owner removes its files from here; the list ends empty.
  */
-const PENDING_LITERALS: readonly string[] = [
-  'src/ui/coach/micButton.ts',
-  'src/ui/screens/backupPanel.ts',
-  'src/ui/screens/healthSettings.ts',
-  'src/ui/screens/reminders.ts',
-  'src/ui/screens/settings.ts',
-  'src/ui/screens/today.ts',
-  'src/ui/shareMonth.ts',
-  'src/ui/todo/todoFixture.ts',
-  'vite.config.ts',
-];
+const PENDING_LITERALS: readonly string[] = [];
 
 const isShipped = (p: string): boolean =>
   /\.ts$/.test(p) && !/\.test\.ts$|\.d\.ts$|\/testkit\//.test(posix(p));
