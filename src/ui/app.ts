@@ -2749,9 +2749,16 @@ export function mountApp(root: HTMLElement): void {
   }
 
   // ----- Settings → Coach, Reminders, Coach eval -----
+  /** Where Settings was scrolled when a sub-screen opened from it (Back returns there). */
+  let settingsScrollY = 0;
+  function rememberSettingsScroll(): void {
+    settingsScrollY = view.screen === 'settings' ? window.scrollY : 0;
+  }
+
   function backToSettings(): void {
     view = { screen: 'settings' };
     render();
+    window.scrollTo(0, settingsScrollY);
   }
 
   async function refreshBrainStatus(): Promise<void> {
@@ -2771,6 +2778,7 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function openCoachSettings(): void {
+    rememberSettingsScroll();
     view = { screen: 'coachSettings' };
     render();
     window.scrollTo(0, 0);
@@ -2793,6 +2801,7 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function openReminders(): void {
+    rememberSettingsScroll();
     view = { screen: 'reminders' };
     render();
     window.scrollTo(0, 0);
@@ -2818,6 +2827,7 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function openBrainEval(): void {
+    rememberSettingsScroll();
     view = { screen: 'brainEval' };
     render();
     window.scrollTo(0, 0);
@@ -2840,11 +2850,8 @@ export function mountApp(root: HTMLElement): void {
       return;
     }
     const prev = evalState.report;
-    evalState = {
-      state: 'running',
-      progress: { done: 0, total: 0 },
-      ...(prev ? { report: prev } : {}),
-    };
+    // No progress line until the runner knows the item count (no "0 of 0").
+    evalState = { state: 'running', ...(prev ? { report: prev } : {}) };
     render();
     try {
       const res = await runBrainEval({
@@ -2853,6 +2860,7 @@ export function mountApp(root: HTMLElement): void {
         catalog: trainerCatalog,
         now: () => now(),
         onProgress: (done, total) => {
+          if (total <= 0) return;
           evalState = { ...evalState, progress: { done, total } };
           if (view.screen === 'brainEval') render();
         },
