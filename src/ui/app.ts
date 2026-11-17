@@ -13,6 +13,7 @@ import {
   type SessionState,
 } from '../core/session';
 import type {
+  GoalKind,
   Accent,
   ChatCard,
   ChatMessage,
@@ -2860,6 +2861,8 @@ export function mountApp(root: HTMLElement): void {
 
   /** The intake element stays while it is open (it keeps its own answers and step). */
   let intakeEl: { from: string; el: HTMLElement } | null = null;
+  /** The goal kind stored when the intake was opened (undefined on a first run). */
+  let intakeKindAtOpen: GoalKind | undefined;
   /** Proposals the intake's last screen showed, applied as shown on Apply. */
   const intakeOffers = new Map<IntakeChangeId, Proposal>();
 
@@ -2955,8 +2958,11 @@ export function mountApp(root: HTMLElement): void {
     try {
       const history = await goalHistory();
       const suggested = suggestGoals(a, history).goals;
-      if (suggested.length > 0) {
-        for (const g of await listGoals(db)) if (g.doneAt === undefined) await deleteGoal(db, g.id);
+      const open = (await listGoals(db)).filter((g) => g.doneAt === undefined);
+      // Re-running the intake keeps the goals he has unless the goal kind changed.
+      const kindChanged = intakeKindAtOpen !== undefined && intakeKindAtOpen !== a.goalKind;
+      if (suggested.length > 0 && (open.length === 0 || kindChanged)) {
+        for (const g of open) await deleteGoal(db, g.id);
         for (const g of suggested) await saveGoal(db, g);
       }
     } catch (err) {
@@ -2975,6 +2981,7 @@ export function mountApp(root: HTMLElement): void {
 
   function intakeView(v: Extract<View, { screen: 'intake' }>): HTMLElement {
     if (intakeEl?.from === v.from) return intakeEl.el;
+    intakeKindAtOpen = intake?.goalKind;
     const el = intakeScreen(
       { initial: intake, changes: (a) => intakeChanges(a), now: () => now() },
       {
@@ -3045,7 +3052,8 @@ export function mountApp(root: HTMLElement): void {
           goal: g,
           pct: p.pct ?? 0,
           status: p.status === 'noData' ? 'onTrack' : p.status,
-          now: goalProgressText(p),
+          // The card already shows % and on track / behind; words only when there's no data yet.
+          ...(p.status === 'noData' ? { now: goalProgressText(p) } : {}),
         };
       });
     } catch (err) {
@@ -3822,7 +3830,12 @@ export function mountApp(root: HTMLElement): void {
    */
   function speakBetweenSets(s: SessionState): void {
     if (s.paused || s.phase === 'summary') return;
-    const atStart = s.phase === 'exercise' && s.logs.length === 0 && s.exIndex === 0;
+    // The set-up moment of an exercise nothing has been logged for yet (workout start, or the
+    // next exercise after Skip exercise): its warm-up line or set-up checks are said as he
+    // gets into position (Decision "M12 1b review": accepted at the first set's start).
+    const exId = currentPlanned(s).exerciseId;
+    const atStart =
+      s.phase === 'exercise' && s.setIndex === 0 && !s.logs.some((l) => l.exerciseId === exId);
     if (s.phase !== 'rest' && !atStart) return;
     const w = currentWarmup(s);
     const key = `${s.sessionId}:${s.exIndex}:${s.setIndex}:${w ? w.index : 'work'}`;
@@ -3831,7 +3844,11 @@ export function mountApp(root: HTMLElement): void {
     window.setTimeout(() => {
       if (view.screen !== 'session' || view.s.sessionId !== s.sessionId) return;
       const cur = view.s;
-      if (cur.paused || (cur.phase !== 'rest' && !(atStart && cur.logs.length === 0))) return;
+      if (
+        cur.paused ||
+        (cur.phase !== 'rest' && !(atStart && !cur.logs.some((l) => l.exerciseId === exId)))
+      )
+        return;
       if (cur.exIndex !== s.exIndex || cur.setIndex !== s.setIndex) return;
       const exerciseId = currentPlanned(cur).exerciseId;
       const warm = currentWarmup(cur);
