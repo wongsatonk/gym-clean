@@ -152,6 +152,7 @@ import {
   type MissedDay,
 } from '../core/progress/completion';
 import { recapDue } from '../core/progress/recap';
+import { TRAINER_TOOLS } from '../core/trainer/tools';
 import { createRouter, type CoachRouter } from '../data/brain/router';
 import { rulesBrain } from '../data/brain/rules';
 // M12 slice 2: Apple's on-device brain, the mic, reminders, the weekly check-in.
@@ -1032,6 +1033,7 @@ export function mountApp(root: HTMLElement): void {
   /** Tab bar: every tab is handled here, so a new tab id fails to compile until it's wired. */
   function goTab(tab: TabId): void {
     navSeq++;
+    if (tab !== 'coach') void micCancel();
     setEnter(tab);
     scrollTopTab = tabOf(view) === tab ? null : tab;
     switch (tab) {
@@ -1786,6 +1788,7 @@ export function mountApp(root: HTMLElement): void {
   function closeChatSheet(): void {
     const s = chatSheet;
     if (!s) return;
+    void micCancel(); // a hold never outlives the sheet (no mic in a set)
     // Mid-workout proposals left open are set aside (they were built for this set's state).
     for (const m of thread) {
       if (m.phase !== 'workout' || m.id === undefined || !isPendingCard(m)) continue;
@@ -2397,10 +2400,9 @@ export function mountApp(root: HTMLElement): void {
   /** settings 'reminders', merged over the defaults (all off). */
   let reminderSettings: ReminderSettings = mergeReminders(undefined);
   let notifPermission: NotificationPermission = 'unknown';
-  let brainStatus: BrainStatusView = {
-    brain: 'rules',
-    reason: native ? 'unsupported' : 'notNative',
-  };
+  let brainStatus: BrainStatusView = native
+    ? { brain: 'unknown' }
+    : { brain: 'rules', reason: 'notNative' };
   let brainChecking = native;
   /** The Apple turn just answered (dev log: ids and numbers only). */
   let lastAppleTrace: AppleTrace | null = null;
@@ -2505,6 +2507,8 @@ export function mountApp(root: HTMLElement): void {
     if (view.screen === 'coach') void refreshMic();
   }
 
+  const TOOL_NAMES = new Set(TRAINER_TOOLS.map((t) => t.name));
+
   /** Dev log: which brain answered, the action, latency, mic yes/no. Never any text. */
   function brainLog(source: string, mic: boolean): void {
     const t = source === 'apple' ? lastAppleTrace : null;
@@ -2515,7 +2519,8 @@ export function mountApp(root: HTMLElement): void {
         ...(t
           ? {
               action: t.action,
-              calls: t.calls.map((c) => c.name),
+              // Only known tool names reach the log (a misbehaving bridge can't add text).
+              calls: t.calls.map((c) => (TOOL_NAMES.has(c.name) ? c.name : '?')),
               latencyMs: t.latencyMs,
               replaced: t.replaced,
             }
@@ -2698,8 +2703,13 @@ export function mountApp(root: HTMLElement): void {
     render();
     // iOS asks for permission only the first time one is turned on.
     if (on && !s.askedPermission && reminders?.available) {
-      const p = await reminders.request();
-      notifPermission = p === 'granted' ? 'granted' : p === 'denied' ? 'denied' : 'unknown';
+      try {
+        const p = await reminders.request();
+        notifPermission = p === 'granted' ? 'granted' : p === 'denied' ? 'denied' : 'unknown';
+      } catch (err) {
+        logDbError(err);
+        notifPermission = 'unknown';
+      }
       next = { ...reminderSettings, askedPermission: true };
       reminderSettings = next;
     }
@@ -2789,9 +2799,15 @@ export function mountApp(root: HTMLElement): void {
     if (!gb) return; // initSlice2 checks once the plugin is loaded
     brainChecking = true;
     if (view.screen === 'coachSettings') render();
-    const a = await gb.availability();
-    brainStatus = a.available ? { brain: 'apple' } : { brain: 'rules', reason: a.reason };
-    brainChecking = false;
+    try {
+      const a = await gb.availability();
+      brainStatus = a.available ? { brain: 'apple' } : { brain: 'rules', reason: a.reason };
+    } catch {
+      // The check itself failed (plugin error, junk, timeout): not a real reason, so say so.
+      brainStatus = { brain: 'unknown' };
+    } finally {
+      brainChecking = false;
+    }
     if (view.screen === 'coachSettings') render();
   }
 

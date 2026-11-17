@@ -6,6 +6,7 @@ import {
   APPLE_TITLE,
   BRAIN_REASON_COPY,
   RULES_TITLE,
+  UNKNOWN_LINE,
   SPEAK_OPTIONS,
   SPEAK_SET_NOTE,
   coachSettingsCopy,
@@ -92,6 +93,30 @@ describe('coachSettingsScreen', () => {
     const b = at(el, 'data-brain-recheck');
     expect(b?.hasAttribute('disabled')).toBe(true);
     expect(b?.textContent).toBe('Checking…');
+  });
+
+  it("couldn't check (plugin error / timeout): Quick replies, a plain line, Check again enabled", () => {
+    const { el, log } = render({ status: { brain: 'unknown' } });
+    const card = at(el, 'data-brain-status', 'unknown');
+    expect(card?.textContent).toContain(RULES_TITLE);
+    expect(card?.hasAttribute('data-brain-reason')).toBe(false);
+    expect(at(el, 'data-brain-why')?.textContent).toBe(UNKNOWN_LINE);
+    expect(UNKNOWN_LINE).toBe(
+      "Couldn't check Apple Intelligence just now. Quick replies answer until it can.",
+    );
+    expect(at(el, 'data-brain-howto')).toBeUndefined();
+    const b = at(el, 'data-brain-recheck');
+    expect(b?.hasAttribute('disabled')).toBe(false);
+    expect(b?.textContent).toBe('Check again');
+    b?.click();
+    expect(log).toEqual(['recheck']);
+    const busy = render({ status: { brain: 'unknown' }, checking: true });
+    expect(at(busy.el, 'data-brain-recheck')?.hasAttribute('disabled')).toBe(true);
+    expect(at(busy.el, 'data-brain-recheck')?.textContent).toBe('Checking…');
+    expect(
+      at(render({ status: { brain: 'unknown' } }, false).el, 'data-brain-recheck'),
+    ).toBeUndefined();
+    expect(coachSettingsCopy()).toContain(UNKNOWN_LINE);
   });
 
   it('no onRecheck → no Check again button', () => {

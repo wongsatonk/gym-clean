@@ -204,6 +204,11 @@
   min-width: 0;
 }
 
+/* "N of M" is wider than a percentage: the errors stat takes the whole row. */
+.eval-stat-wide {
+  grid-column: 1 / -1;
+}
+
 .eval-stat[data-ok='false'] {
   border-color: var(--warn);
 }

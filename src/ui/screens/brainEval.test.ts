@@ -145,6 +145,20 @@ describe('brainEvalScreen', () => {
     expect(log).toEqual(['export']);
   });
 
+  it('errors: "N of M" with the word Errors (not colour alone); flagged when any; absent → no stat', () => {
+    const none = render({ state: 'done', report: { at: 1, rows: ROWS, errors: 0 } });
+    const z = at(none.el, 'data-eval-stat', 'errors');
+    expect(z?.textContent).toBe(`0 of ${ROWS.length}Errors`);
+    expect(z?.getAttribute('data-ok')).toBe('true');
+    const some = render({ state: 'done', report: { at: 1, rows: ROWS, errors: 2 } });
+    const e = at(some.el, 'data-eval-stat', 'errors');
+    expect(e?.textContent).toBe(`2 of ${ROWS.length}Errors`);
+    expect(e?.getAttribute('data-ok')).toBe('false');
+    expect(
+      at(render({ state: 'done', report: { at: 1, rows: ROWS } }).el, 'data-eval-stat', 'errors'),
+    ).toBeUndefined();
+  });
+
   it('tokens: one small line "Instructions N · tools N · prompt N of contextSize tokens" (Checkpoint J budget)', () => {
     const tokens = { instructions: 1180, tools: 1420, prompt: 950, contextSize: 4096 };
     const { el } = render({ state: 'idle', tokens });

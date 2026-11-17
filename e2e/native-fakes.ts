@@ -12,7 +12,9 @@ export type FakeBrainAvailability =
   | { available: true }
   | { available: false; reason: string }
   /** The check itself fails (plugin rejection). */
-  | { reject: true };
+  | { reject: true }
+  /** The check never answers (the app's own timeout must give up). */
+  | { hang: true };
 
 /** One queued `respond` outcome. `echo` answers with the first sentence of that tool result. */
 export type FakeBrainStep =
@@ -80,6 +82,7 @@ export async function installGymBrain(
           state.availabilityCalls++;
           const a = state.availability;
           if ('reject' in a) return Promise.reject(new Error('GymBrain check failed'));
+          if ('hang' in a) return new Promise<never>(() => undefined);
           return Promise.resolve({ ...a });
         },
         respond: (req: FakeBrainRequest) => {

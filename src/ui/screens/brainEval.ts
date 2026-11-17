@@ -43,6 +43,8 @@ export type BrainEvalReport = {
   /** The runner's median over the rows the model was asked (null: none asked). Shown when
    * present; otherwise `evalSummary` works it out from the rows the same way. */
   p50Ms?: number | null | undefined;
+  /** Rows whose model call failed (the runner's count). Omitted (older reports): no stat. */
+  errors?: number | undefined;
 };
 
 export type BrainEvalProps = {
@@ -139,6 +141,21 @@ function stat(key: string, label: string, value: string, ok: boolean | null): HT
       { class: 'eval-stat-label' },
       ok === null ? null : icon(ok ? 'check' : 'close', 'sm'),
       h('span', {}, ok === null ? label : `${label}: ${ok ? 'on target' : 'below target'}`),
+    ),
+  );
+}
+
+/** "N of M" over the word Errors; any error → a close icon + warn border (never colour alone). */
+function errorsStat(n: number, total: number): HTMLElement {
+  return h(
+    'div',
+    { class: 'eval-stat eval-stat-wide', 'data-eval-stat': 'errors', 'data-ok': String(n === 0) },
+    h('span', { class: 'eval-stat-num' }, `${n} of ${total}`),
+    h(
+      'span',
+      { class: 'eval-stat-label' },
+      n === 0 ? null : icon('close', 'sm'),
+      h('span', {}, 'Errors'),
     ),
   );
 }
@@ -241,6 +258,7 @@ export function brainEvalScreen(p: BrainEvalProps, a: BrainEvalActions): HTMLEle
         stat('safe', 'Safe', pct(s.safe), s.safe === null ? null : s.safe >= EVAL_SAFE_BAR),
         stat('facts', 'Facts', pct(s.facts), null),
         stat('p50', 'Median time', secs(p50Ms), null),
+        p.report.errors === undefined ? null : errorsStat(p.report.errors, s.total),
       ),
       h(
         'button',

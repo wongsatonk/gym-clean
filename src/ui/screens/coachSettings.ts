@@ -8,7 +8,7 @@
 // Speak replies: Mic only (default) / Always / Off, a segmented choice with aria-pressed and a
 // check mark on the chosen one (never colour alone) and a line on what it does. Never in a set.
 //
-// e2e hooks: `main[data-screen="coach-settings"]`, `[data-brain-status="apple"|"rules"]`
+// e2e hooks: `main[data-screen="coach-settings"]`, `[data-brain-status="apple"|"rules"|"unknown"]`
 // (+ `data-brain-reason`), `[data-brain-howto]`, `[data-brain-recheck]`,
 // `[data-speak-replies=<mic|always|off>]` (aria-pressed), `[data-speak-note]`.
 import type { BrainUnavailableReason, CoachSettings } from '../../core/types';
@@ -19,8 +19,10 @@ import './coachSettings.css';
 
 export type SpeakReplies = NonNullable<CoachSettings['speakReplies']>;
 
+/** 'unknown': the check itself failed (plugin error / timeout) or hasn't run yet — not a real
+ * unavailable reason, so Check again stays on (only off while checking). */
 export type BrainStatusView =
-  { brain: 'apple' } | { brain: 'rules'; reason: BrainUnavailableReason };
+  { brain: 'apple' } | { brain: 'rules'; reason: BrainUnavailableReason } | { brain: 'unknown' };
 
 export type CoachSettingsProps = {
   status: BrainStatusView;
@@ -42,6 +44,8 @@ export const APPLE_LINE =
   'Apple Intelligence on this iPhone answers your questions. Nothing leaves the phone.';
 export const RULES_TITLE = 'Quick replies';
 export const RULES_LINE = 'Quick replies know set phrases and the chips. They work everywhere.';
+export const UNKNOWN_LINE =
+  "Couldn't check Apple Intelligence just now. Quick replies answer until it can.";
 
 /** Why quick replies answer, and how to change it (null: nothing he can do). */
 export const BRAIN_REASON_COPY: Record<
@@ -84,6 +88,7 @@ export function coachSettingsCopy(): string[] {
     APPLE_LINE,
     RULES_TITLE,
     RULES_LINE,
+    UNKNOWN_LINE,
     SPEAK_SET_NOTE,
     ...Object.values(BRAIN_REASON_COPY).flatMap((c) => [c.why, ...(c.how ? [c.how] : [])]),
     ...SPEAK_OPTIONS.flatMap((o) => [o.label, o.note]),
@@ -102,10 +107,11 @@ function statusCard(p: CoachSettingsProps, a: CoachSettingsActions): HTMLElement
       h('p', { class: 'set-note muted' }, 'Changes still wait for your tap on Apply.'),
     );
   }
-  const copy = BRAIN_REASON_COPY[s.reason];
+  const unknown = s.brain === 'unknown';
+  const copy = unknown ? { why: UNKNOWN_LINE, how: null } : BRAIN_REASON_COPY[s.reason];
   const checking = p.checking === true;
   const recheck =
-    a.onRecheck && copy.how
+    a.onRecheck && (unknown || copy.how)
       ? h(
           'button',
           {
@@ -123,8 +129,8 @@ function statusCard(p: CoachSettingsProps, a: CoachSettingsActions): HTMLElement
     'section',
     {
       class: 'brain-card',
-      'data-brain-status': 'rules',
-      'data-brain-reason': s.reason,
+      'data-brain-status': unknown ? 'unknown' : 'rules',
+      'data-brain-reason': unknown ? undefined : s.reason,
       'aria-labelledby': 'brain-who',
     },
     h('h2', { class: 'brain-who-head', id: 'brain-who' }, 'Who answers'),

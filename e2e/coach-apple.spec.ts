@@ -20,6 +20,7 @@ import {
 } from './app.helpers';
 import {
   DEFAULT_BRAIN_TEXT,
+  type FakeBrainAvailability,
   brainState,
   installGymBrain,
   queueBrain,
@@ -65,8 +66,14 @@ async function noteCopy(page: Page) {
       UNAVAILABLE_COPY: Record<string, { status: string; note: string }>;
       errorNote: (code: string, failed: string, answered: string) => string;
     };
+    const routerPath = '/src/data/brain/router.ts';
+    const r = (await import(/* @vite-ignore */ routerPath)) as {
+      BRAIN_LABEL: Record<string, string>;
+    };
     return {
       unavailable: m.UNAVAILABLE_COPY,
+      // The router's generic line when the check failed (no reason to name).
+      generic: `Answered by quick replies: ${r.BRAIN_LABEL.apple ?? ''} isn't available.`,
       timeout: m.errorNote('timeout', 'apple', 'rules'),
       guardrail: m.errorNote('guardrail', 'apple', 'rules'),
     };
@@ -308,3 +315,84 @@ test('appleCardReasons false → the "Lighter today?" reasons never reach the mo
   expect(offsite).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+// Task 23 review: the availability check itself failing (plugin rejection, or no answer within
+// the app's timeout) is not a reason. Settings → Coach must not stay on "Checking…": it says it
+// couldn't check, with Check again on; the chat answers with quick replies + the generic note,
+// and nothing goes into coach.brainNotes (a failed check is not a once-only reason).
+for (const [label, availability] of [
+  ['rejects', { reject: true }],
+  ['hangs past 4 s', { hang: true }],
+] as const satisfies readonly (readonly [string, FakeBrainAvailability])[]) {
+  test(`the availability check ${label} → "couldn't check" + Check again; chat on quick replies`, async ({
+    page,
+  }, testInfo) => {
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await installGymBrain(page, { availability });
+    await openApp(page, NOW);
+    await expect.poll(async () => (await brainState(page)).availabilityCalls).toBeGreaterThan(0);
+    // Past the app's 4 s status timeout (fast-forward; a rejection needs none).
+    await page.clock.runFor(5000);
+    const copy = await noteCopy(page);
+
+    // The chat still answers, with quick replies and the generic note.
+    await goCoach(page);
+    const before = await coachItems(page).count();
+    const mine = await userBubbles(page).count();
+    await expect(async () => {
+      if ((await userBubbles(page).count()) === mine) {
+        await box(page).fill('Any tips for today?');
+        await coachTab(page).getByRole('button', { name: 'Send' }).click();
+      }
+      await expect(userBubbles(page)).toHaveCount(mine + 1, { timeout: 1000 });
+    }).toPass({ timeout: 10_000 });
+    await expect(async () => {
+      await page.clock.runFor(5000);
+      await expect(coachItems(page)).toHaveCount(before + 1, { timeout: 500 });
+    }).toPass({ timeout: 15_000 });
+    const reply = coachItems(page).last();
+    await expect(reply.locator('[data-chat-source="rules"]')).toHaveText(
+      'Answered by Quick replies',
+    );
+    await expect(reply.locator('[data-chat-note]')).toHaveText(copy.generic);
+    // The model was never asked, and no once-only note was remembered.
+    expect((await brainState(page)).requests).toEqual([]);
+    const coach = (await getSetting(page, 'coach')) as
+      { brainNotes?: Record<string, number> } | undefined;
+    expect(Object.keys(coach?.brainNotes ?? {})).toEqual([]);
+
+    await page.locator('[data-tab="settings"]').click();
+    await page.locator('[data-coach-settings-open]').click();
+    const status = page.locator('main[data-screen="coach-settings"] [data-brain-status]');
+    await page.clock.runFor(5000);
+    await expect(status).toHaveAttribute('data-brain-status', 'unknown');
+    await expect(status.locator('[data-brain-why]')).toHaveText(
+      "Couldn't check Apple Intelligence just now. Quick replies answer until it can.",
+    );
+    const recheck = status.locator('[data-brain-recheck]');
+    await expect(recheck).toHaveText('Check again');
+    await expect(recheck).toBeEnabled();
+    await expectTapTargets(page, '[data-screen="coach-settings"]');
+    await noHorizontalOverflow(page);
+    await page.screenshot({
+      path: testInfo.outputPath(
+        `m12s2-brain-unknown-${'hang' in availability ? 'hang' : 'reject'}.png`,
+      ),
+    });
+
+    // Check again: asks again, then back to "couldn't check" (never stuck on Checking…).
+    const calls = (await brainState(page)).availabilityCalls;
+    await recheck.click();
+    await expect
+      .poll(async () => (await brainState(page)).availabilityCalls)
+      .toBeGreaterThan(calls);
+    await page.clock.runFor(5000);
+    await expect(recheck).toHaveText('Check again');
+    await expect(recheck).toBeEnabled();
+    await expect(status).toHaveAttribute('data-brain-status', 'unknown');
+
+    expect(offsite).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+}
