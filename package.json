@@ -1,6 +1,6 @@
 {
   "name": "gym-clean",
-  "version": "0.0.0",
+  "version": "1.12.0",
   "description": "Phone-first workout focus app",
   "scripts": {
     "dev": "vite",

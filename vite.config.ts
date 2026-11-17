@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import { VitePWA } from 'vite-plugin-pwa';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 // Build identity for the developer log: git short sha (+ "-dirty") and build time.
 function appVersion(): string {
@@ -14,6 +15,23 @@ function appVersion(): string {
     /* not a git checkout */
   }
   return `${sha} ${new Date().toISOString()}`;
+}
+
+// M12 slice 1c: release = package.json version (the What's New tour key); build = short git sha.
+function appRelease(): string {
+  return (
+    JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
+      version: string;
+    }
+  ).version;
+}
+
+function appBuild(): string {
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim() || 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
 // M9 native shell: `vite build --mode native` (npm run build:native) makes the bundle that
@@ -84,7 +102,11 @@ export default defineConfig(({ mode }) => ({
   base: mode === NATIVE_MODE ? '/' : webBase,
   // HTTPS so getUserMedia works when the phone opens the dev server over the LAN.
   plugins: mode === NATIVE_MODE ? [basicSsl()] : [basicSsl(), pwa],
-  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion()),
+    __APP_RELEASE__: JSON.stringify(appRelease()),
+    __APP_BUILD__: JSON.stringify(appBuild()),
+  },
   server: { host: true },
   // Pre-bundle lazily imported deps so the dev server never reloads the page mid-session
   // when it first sees them (this broke e2e runs once three.js became a dynamic import).

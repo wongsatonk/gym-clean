@@ -496,3 +496,119 @@ export type CoachBrain = {
   status(): Promise<{ available: boolean; reason?: string }>;
   ask(text: string, ctx: BrainContext): Promise<BrainReply>;
 };
+
+// ---- M12 slice 1c: What's New tour + To-do guides (SPEC M12 "slice 1c" data model) ----
+
+/** Deep links for "Try it" (as data). */
+export type AppRoute =
+  | 'today'
+  | 'fuel'
+  | 'coach'
+  | 'calendar'
+  | 'settings'
+  | 'settings/health'
+  | 'settings/myGym'
+  | 'settings/foodPhotos'
+  | 'settings/devlog'
+  | 'todos';
+
+/** native = iPhone app only. */
+export type TodoPlatform = 'any' | 'native';
+
+export type TodoDetectorId =
+  | 'chatAsked'
+  | 'proposalOutcome'
+  | 'calendarAfterSession'
+  | 'healthConnected'
+  | 'healthDays'
+  | 'nativeApp'
+  | 'nativeSessions'
+  | 'coachChanges'
+  | 'legSwapSession'
+  | 'handsFreeSession'
+  | 'cameraSession'
+  | 'learningCamera'
+  | 'foodModel'
+  | 'photoMealDays'
+  | 'resignDaysLeft';
+
+export type TodoOption = { id: string; label: string };
+
+export type TodoStep = { id: string; title: string; why?: string; tryIt?: AppRoute } & (
+  | { kind: 'auto'; detector: TodoDetectorId; params?: Record<string, number> }
+  | {
+      kind: 'ask';
+      options: TodoOption[];
+      multi?: boolean;
+      note?: 'optional' | 'none';
+      /** Decision steps: the chosen option sets this setting. */
+      setting?: { key: string; path: string; values: Record<string, unknown> };
+    }
+);
+
+export type TodoTopic = {
+  id: string;
+  title: string;
+  checkpoint?: string;
+  /** Release (semver) that added it. */
+  since: string;
+  platform: TodoPlatform;
+  recurring?: boolean;
+  steps: TodoStep[];
+};
+
+export type TodoAnswer = {
+  id: string;
+  topicId: string;
+  stepId: string;
+  kind: 'ask' | 'auto' | 'skip';
+  optionIds?: string[];
+  note?: string;
+  at: number;
+  release: string;
+  /** Set when included in a copied report. */
+  sentAt?: number;
+};
+
+/** Counts and flags only, never values. */
+export type TodoFacts = {
+  platform: 'web' | 'native';
+  now: number;
+  counts: Record<string, number>;
+  flags: Record<string, boolean>;
+  buildFirstSeenAt?: number;
+};
+
+export type DetectorResult = { done: boolean; have?: number; need?: number };
+
+export type WhatsNewPage = {
+  release: string;
+  id: string;
+  title: string;
+  what: string;
+  why: string;
+  tryIt?: AppRoute;
+  icon?: string;
+};
+
+/** settings 'whatsNew'. */
+export type WhatsNewState = { seenRelease?: string; builds?: Record<string, number> };
+/** settings 'todos'. */
+export type TodoSettings = { lastCopiedAt?: number };
+/** settings 'todoSignals'. */
+export type TodoSignals = { calendarAfterSessionAt?: number };
+
+/** Decision targets set by to-do decision steps (M12-q1, M12-q4, Claude, re-sign). */
+export type CoachDecisionSettings = {
+  appleCardReasons?: boolean;
+  claudeWanted?: 'yes' | 'later' | 'no';
+};
+
+export type TrainerKitSettings = {
+  measurementSites: string[];
+  e1rmFormula: 'epley';
+  warmups: 'firstHeavyLift' | 'everyCompound' | 'off';
+  reviewWeeks: number;
+};
+
+export type SigningSettings = { signing?: 'free' | 'paid' };
