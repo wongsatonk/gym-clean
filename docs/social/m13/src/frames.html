@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gym Clean Story frames (M13 drafts)</title>
+<!--
+  Story frames for M13 task 37. Rendered to 1080x1920 PNG by render.mjs (Playwright).
+  Original graphics only: the logo is ICON_PATHS.logo from src/ui/icons.ts, colours are the
+  app's tokens from src/styles.css, fonts are the app's own Barlow files (public/welcome/fonts)
+  plus the Mac's system Thai font. Screens are the made-up demo profile from the store set.
+  Safe zones: text and key UI stay between y=250 and y=1580 (Instagram overlays above/below).
+-->
+<style>
+  @font-face { font-family: 'Barlow Condensed'; font-weight: 700; src: url('../../../../public/welcome/fonts/barlow-condensed-latin-700-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Barlow'; font-weight: 400; src: url('../../../../public/welcome/fonts/barlow-latin-400-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Barlow'; font-weight: 700; src: url('../../../../public/welcome/fonts/barlow-latin-700-normal.woff2') format('woff2'); }
+  :root {
+    --bg: #0d0f12; --surface: #16191e; --surface-2: #20242b; --line: #323842;
+    --text: #f2f4f7; --text-2: #a9b1bc; --cta: #ff7a1a; --success: #3be38b;
+    --muscle: #35c8ff; --cue: #c5b3ff;
+    --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+    --body: 'Barlow', system-ui, sans-serif;
+    --thai: 'Sukhumvit Set', 'Thonburi', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #000; font-family: var(--body); color: var(--text); }
+  .frame {
+    position: relative; width: 1080px; height: 1920px; overflow: hidden;
+    background:
+      radial-gradient(900px 700px at 100% 0%, rgb(255 122 26 / 0.16), transparent 70%),
+      radial-gradient(800px 800px at 0% 100%, rgb(53 200 255 / 0.08), transparent 70%),
+      var(--bg);
+    margin-bottom: 40px;
+  }
+  .copy { position: absolute; left: 80px; right: 80px; top: 270px; }
+  .brand { display: flex; align-items: center; gap: 22px; margin-bottom: 44px; }
+  .mark { width: 88px; height: 88px; border-radius: 22px; background: var(--surface); display: grid; place-items: center; border: 2px solid var(--line); }
+  .mark svg { width: 60px; height: 60px; color: var(--cta); }
+  .brand span { font-family: var(--display); font-weight: 700; font-size: 60px; letter-spacing: 0.5px; }
+  h1 { font-family: var(--display); font-weight: 700; font-size: 136px; line-height: 0.95; letter-spacing: -0.5px; }
+  h1 em { font-style: normal; color: var(--cta); }
+  .th { font-family: var(--thai); font-weight: 600; font-size: 50px; line-height: 1.3; color: var(--text-2); margin-top: 26px; }
+  .sub { font-size: 46px; line-height: 1.25; color: var(--text); margin-top: 26px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 32px; }
+  .chip { font-weight: 700; font-size: 38px; padding: 12px 28px; border-radius: 999px; background: var(--surface-2); border: 2px solid var(--line); display: flex; align-items: center; gap: 14px; }
+  .chip i { width: 22px; height: 22px; border-radius: 50%; display: inline-block; }
+  .demo { position: absolute; font-size: 30px; font-weight: 700; color: var(--text-2); background: var(--bg); border: 2px solid var(--line); padding: 8px 20px; border-radius: 999px; z-index: 5; letter-spacing: 0.3px; }
+
+  /* Phone mockup (drawn here): black body, thin rim, rounded screen. */
+  .phone { position: absolute; background: #050607; border-radius: 9% / 4.2%; padding: 2.4%; border: 3px solid #3a424d; box-shadow: 0 40px 120px rgb(0 0 0 / 0.65); }
+  .phone img { display: block; width: 100%; border-radius: 7.4% / 3.45%; }
+
+  /* Frame 4: privacy */
+  .lock { width: 150px; height: 150px; color: var(--cta); margin-bottom: 34px; }
+  .points { list-style: none; margin-top: 46px; display: grid; gap: 30px; }
+  .points li { display: grid; grid-template-columns: 56px 1fr; gap: 22px; font-size: 46px; line-height: 1.2; font-weight: 700; }
+  .points svg { width: 52px; height: 52px; color: var(--success); margin-top: 2px; }
+  .except { margin-top: 48px; border: 3px solid var(--line); border-radius: 32px; padding: 30px 36px; background: var(--surface); }
+  .except b { display: block; font-family: var(--display); font-size: 52px; color: var(--cta); margin-bottom: 8px; }
+  .except p { font-size: 40px; line-height: 1.25; color: var(--text); }
+
+  /* Frame 5: built it */
+  .share { position: absolute; width: 470px; right: 70px; top: 900px; transform: rotate(4deg); border-radius: 36px; overflow: hidden; border: 3px solid var(--line); box-shadow: 0 40px 120px rgb(0 0 0 / 0.65); }
+  .share img { display: block; width: 100%; }
+  .ask { position: absolute; left: 80px; top: 960px; width: 440px; }
+  .ask .label { font-size: 40px; line-height: 1.25; color: var(--text-2); font-weight: 700; }
+  .ask .big { font-family: var(--display); font-weight: 700; font-size: 104px; line-height: 0.98; color: var(--cta); margin-top: 60px; }
+  .ask .bigth { font-family: var(--thai); font-weight: 600; font-size: 46px; color: var(--text); margin-top: 18px; }
+</style>
+</head>
+<body>
+
+<!-- Logo: ICON_PATHS.logo (src/ui/icons.ts), stroke 2.25, round caps/joins. -->
+<template id="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9.5v5M5.5 7v10M18.5 7v10M21.5 9.5v5M5.5 12h4l1.5-3 2 6 1.5-3h3.5"/></svg></template>
+
+<!-- 1. Hook -->
+<section class="frame" id="f1">
+  <div class="copy">
+    <div class="brand"><div class="mark" data-logo></div><span>Gym Clean</span></div>
+    <h1>I built my own<br><em>gym app.</em></h1>
+    <p class="th">แอปออกกำลังกายที่ผมสร้างเอง</p>
+    <p class="sub" style="color:var(--text-2)">Your pocket strength coach.</p>
+  </div>
+  <div class="phone" style="width:430px; left:30px; top:1010px; transform:rotate(-7deg); z-index:1"><img src="../../../screenshots/store/6-fuel.png" alt=""></div>
+  <div class="phone" style="width:430px; right:30px; top:1010px; transform:rotate(7deg); z-index:1"><img src="../../../screenshots/store/2-set.png" alt=""></div>
+  <div class="phone" style="width:500px; left:290px; top:930px; z-index:2"><img src="../../../screenshots/store/1-today.png" alt=""></div>
+  <span class="demo" style="left:50%; transform:translateX(-50%); top:1510px">Demo profile · made-up numbers</span>
+</section>
+
+<!-- 2. Guided set: 3D target muscle + spoken cue -->
+<section class="frame" id="f2">
+  <div class="copy">
+    <h1>It coaches<br><em>every set.</em></h1>
+    <p class="th">พาเล่นทีละเซ็ต บอกกล้ามที่ใช้</p>
+    <div class="chips">
+      <span class="chip"><i style="background:var(--muscle)"></i>Target muscle in 3D</span>
+      <span class="chip"><i style="background:var(--cue)"></i>Cues read out loud</span>
+    </div>
+  </div>
+  <div class="phone" style="width:700px; left:190px; top:840px"><img src="../../../screenshots/store/2-set.png" alt=""></div>
+  <span class="demo" style="left:130px; top:810px">Demo profile</span>
+</section>
+
+<!-- 3. Today's plan + food -->
+<section class="frame" id="f3">
+  <div class="copy">
+    <h1>Today's plan.<br><em>Today's food.</em></h1>
+    <p class="th">แผนซ้อมกับอาหาร อยู่ในแอปเดียว</p>
+  </div>
+  <div class="phone" style="width:480px; left:46px; top:760px; transform:rotate(-3deg)"><img src="../../../screenshots/store/1-today.png" alt=""></div>
+  <div class="phone" style="width:480px; right:46px; top:800px; transform:rotate(3deg)"><img src="../../../screenshots/store/6-fuel.png" alt=""></div>
+  <span class="demo" style="left:50%; transform:translateX(-50%); top:1510px">Demo profile · made-up numbers</span>
+</section>
+
+<!-- 4. Privacy (wording follows the About promise, src/ui/screens/about.ts) -->
+<section class="frame" id="f4">
+  <div class="copy">
+    <svg class="lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10.5" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3M12 14.5v2.5"/></svg>
+    <h1>Everything stays<br><em>on this phone.</em></h1>
+    <p class="th">ข้อมูลทั้งหมดอยู่ในมือถือเครื่องนี้</p>
+    <ul class="points">
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Camera counts reps on the phone. No video saved or sent.</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Workouts, food, body numbers: stored here only.</li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>No account, no ads, no tracking.</li>
+    </ul>
+    <div class="except">
+      <b>The one exception</b>
+      <p>Barcode lookup is off until you turn it on. Then it sends only the barcode number.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5. How I built it + close -->
+<section class="frame" id="f5">
+  <div class="copy">
+    <h1>I built it<br><em>myself.</em></h1>
+    <p class="th">ทำเองทั้งแอป ตั้งแต่วางแผนถึงเขียนโค้ด</p>
+    <p class="sub">Planned and coded with a team of AI coding agents (Claude Code).</p>
+  </div>
+  <div class="share"><img src="../../../screenshots/m13-story-sample.png" alt=""></div>
+  <div class="ask">
+    <p class="label">Share your month as a Story, right from the app.</p>
+    <p class="big">Ask me about it.</p>
+    <p class="bigth">อยากรู้อะไร ถามได้เลย</p>
+  </div>
+</section>
+
+<script>
+  const logo = document.getElementById('logo').innerHTML;
+  document.querySelectorAll('[data-logo]').forEach((el) => { el.innerHTML = logo; });
+</script>
+</body>
+</html>
