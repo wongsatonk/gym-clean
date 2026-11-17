@@ -30,6 +30,10 @@
 //                                            #   Today to-do + missed cards, Coach, focus block,
 //                                            #   Pause chat, Calendar, Share month, tour, to-dos,
 //                                            #   report, About; reduced-motion animation counts
+//   node scripts/screenshots.mjs m12b        # M12 slice 1b trainer kit (clock mocked, made-up
+//                                            #   data): warm-up, effort, learn cards, short on
+//                                            #   time, feel today, intake, Goal card, e1RM,
+//                                            #   measurements, photo compare, cardio, 1.13.0 tour
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -3347,6 +3351,401 @@ async function m12(browser) {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// M12 slice 1b "Trainer kit" (verifier, 2026-11-17): the wired app at 390×844, clock on Fri 13 Nov
+// 2026 18:00, MADE-UP data only (sessions, a canvas-drawn image, a fake GymHealth bridge). Same
+// flows and selectors as e2e/{trainer-kit,intake,body}.spec.ts. Screens: warm-up set, effort row,
+// a learn card (effort Why? + one from a coach reply), short-on-time proposal, feel-today, intake
+// (question 1 + summary), Goal card, measurements, e1RM chart, progress photo compare, cardio line
+// (Today + Calendar week score, native fake), and the 1.13.0 What's New tour page 1. Every request
+// off localhost is aborted and recorded. Writes docs/screenshots/m12b-verify-*.png.
+async function m12bPhone(browser, { time = m12At(13, 18), skipIntake = true, warmupsOff = true,
+  native = false, waitFor = '[data-cal]' } = {}) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+    ignoreHTTPSErrors: true, acceptDownloads: true,
+  });
+  const offsite = [];
+  await ctx.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'localhost') return route.continue();
+    offsite.push(url.href);
+    return route.abort();
+  });
+  // e2e/fixtures.ts freshDbDefaults: a FRESH database gets intakeSkipped / trainerKit rows.
+  await ctx.addInitScript((o) => {
+    if (!o.skipIntake && !o.warmupsOff) return;
+    const proto = IDBFactory.prototype;
+    const open = proto.open;
+    let fresh = false;
+    proto.open = function (name, version) {
+      const req = version === undefined ? open.call(this, name) : open.call(this, name, version);
+      if (name !== 'gym-clean') return req;
+      req.addEventListener('upgradeneeded', (e) => { if (e.oldVersion === 0) fresh = true; });
+      req.addEventListener('success', () => {
+        if (!fresh) return;
+        const d = req.result;
+        if (!d.objectStoreNames.contains('settings')) return;
+        fresh = false;
+        const st = d.transaction('settings', 'readwrite').objectStore('settings');
+        if (o.skipIntake) st.put({ key: 'intakeSkipped', value: Date.now() });
+        if (o.warmupsOff) st.put({ key: 'trainerKit', value: { warmups: 'off' } });
+      });
+      return req;
+    };
+  }, { skipIntake, warmupsOff });
+  const page = await ctx.newPage();
+  const log = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => log.push(`pageerror: ${e.message}`));
+  await page.addInitScript((isNative) => {
+    window.__spoken = [];
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => { if (u.text && u.volume !== 0) window.__spoken.push(u.text); },
+        cancel: () => {}, pause: () => {}, resume: () => {}, getVoices: () => [],
+        addEventListener: () => {}, speaking: false, pending: false, paused: false,
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => {}, release: async () => {} }) },
+    });
+    if (!isNative) return;
+    // Fake GymHealth (made-up): a 40 min run Wed 11 + a 55 min ride Thu 12 + a 30 min walk Mon 2.
+    const at = (day, h, m = 0) => new Date(2026, 10, day, h, m).getTime();
+    const data = {
+      sleep: [], restingHr: [], hrv: [], activeEnergy: [], bodyMass: [],
+      workouts: [
+        { start: at(11, 7), minutes: 40, kind: 'running', source: 'Band' },
+        { start: at(12, 7), minutes: 55, kind: 'cycling', source: 'Band' },
+        { start: at(2, 7), minutes: 30, kind: 'walking', source: 'Band' },
+      ],
+    };
+    const plugin = {
+      isAvailable: async () => ({ available: true }),
+      requestRead: async () => ({ requested: true }),
+      read: async ({ types, since, until }) => {
+        const out = {};
+        for (const t of types) out[t] = (data[t] ?? []).filter((r) => r.start >= since && (!until || r.start < until));
+        return out;
+      },
+    };
+    window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: { GymHealth: plugin } };
+  }, native);
+  await page.clock.install({ time });
+  await page.goto(BASE + '/');
+  await page.locator(waitFor).first().waitFor();
+  return { ctx, page, log, offsite };
+}
+
+async function m12bShot(p, name, extra = {}, opts = {}) {
+  if (!opts.noSettle) await m12Settle(p.page);
+  const metrics = await m12Metrics(p.page, opts.scope);
+  await shot(p.page, p.log, `m12b-verify-${name}`, { metrics, ...extra });
+  if (opts.fullPage) await p.page.screenshot({ path: `${OUT}/m12b-verify-${name}-full.png`, fullPage: true });
+}
+
+function m12bBench() {
+  const days = [2, 6, 11];
+  return {
+    sessions: days.map((d) => ({ sessionId: `s${d}`, dayId: 'push-a', startedAt: m12At(d, 18), endedAt: m12At(d, 18) + 45 * M12_MIN })),
+    sets: days.flatMap((d, i) => [0, 1, 2].map((k) => ({ sessionId: `s${d}`, exerciseId: 'Dumbbell_Bench_Press',
+      setIndex: k, reps: 8, weightKg: 15 + 2.5 * i, startedAt: m12At(d, 18) + (k + 1) * 3 * M12_MIN }))),
+  };
+}
+
+async function m12bAnswer(page, a) {
+  const intake = page.locator('main[data-screen="intake"]');
+  for (const [id, value] of [['goal', a.goal], ['days', a.days], ['length', a.length], ['experience', a.experience], ['easyOn', '']]) {
+    await page.locator(`main[data-screen="intake"][data-step="${id}"]`).waitFor();
+    if (value) await intake.locator(`[data-option="${value}"]`).click();
+    await intake.locator('[data-intake-next]').click();
+  }
+  await page.locator('main[data-screen="intake"][data-step="summary"]').waitFor();
+}
+
+async function m12bFinish(p, flow, extra = {}) {
+  results.push({ flow, offsite: p.offsite, spoken: await p.page.evaluate(() => window.__spoken), console: p.log, ...extra });
+  await p.ctx.close();
+}
+
+/** Scrolls into view, retrying while the screen re-renders (async Health/Dexie reads). */
+async function m12bScroll(loc) {
+  for (let i = 0; i < 20; i++) {
+    try { await loc.evaluate((el) => el.scrollIntoView({ block: 'center' }), undefined, { timeout: 2000 }); return; }
+    catch { await new Promise((r) => setTimeout(r, 250)); }
+  }
+  throw new Error('m12bScroll: element never settled');
+}
+
+// Feel today → the "Lighter today?" card (SPEC M12 item 9: low energy + a sore area are two
+// signals, "so both together work without Health"). Native fake with Health connected but no
+// sleep/HRV/resting-HR data, native not connected, and the PWA.
+async function m12bFeelCard(browser) {
+  const out = {};
+  for (const mode of ['native-connected', 'native-unconnected', 'pwa']) {
+    const p = await m12bPhone(browser, { native: mode !== 'pwa' });
+    const { page } = p;
+    if (mode === 'native-connected') {
+      await page.locator('[data-tab="settings"]').click();
+      await page.locator('[data-health-open]').click();
+      const hs = page.locator('main[data-screen="health-settings"]');
+      await hs.locator('[data-health-connect]').click();
+      await hs.locator('[data-health-last-read]').waitFor();
+      await hs.getByRole('button', { name: '‹ Back' }).click();
+      await page.locator('[data-tab="today"]').click();
+      await page.locator('[data-cal]').first().waitFor();
+    }
+    const feel = page.locator('[data-feel-today]');
+    await feel.locator('[data-feel-open]').click();
+    await feel.locator('[data-feel-energy="2"]').click();
+    await feel.locator('[data-feel-sore="chest"]').click();
+    await feel.locator('[data-feel-save]').click();
+    await page.locator('[data-easy-on="chest"]').first().waitFor();
+    await m12Settle(page);
+    await page.waitForTimeout(1500);
+    const card = page.locator('[data-readiness]');
+    out[mode] = {
+      readinessCards: await card.count(),
+      offer: await card.count() ? await card.first().getAttribute('data-readiness') : null,
+      reasons: await page.locator('[data-readiness-reason]').allTextContents(),
+      lighterText: await page.getByText('Lighter today', { exact: false }).count(),
+    };
+    if (await card.count()) {
+      await m12bScroll(card.first());
+      await m12bShot(p, `feel-card-${mode}`, out[mode]);
+    }
+    await m12bFinish(p, `m12b-feel-card-${mode}`, out[mode]);
+  }
+  return out;
+}
+
+async function m12b(browser, only) {
+  if (only === 'feel-card') return m12bFeelCard(browser);
+  const release = JSON.parse(execFileSync('cat', ['package.json'], { encoding: 'utf8' })).version;
+
+  // 1. Workout with warm-ups on (trainer-kit default): warm-up set, effort row, effort learn card.
+  {
+    const p = await m12bPhone(browser, { warmupsOff: false });
+    const { page } = p;
+    await page.clock.pauseAt(m12At(13, 18) + 5_000);
+    await page.getByRole('button', { name: /Push A/ }).first().click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.getByRole('heading', { name: 'Dumbbell Bench Press' }).waitFor();
+    await page.clock.runFor(500);
+    await page.locator('[data-warmup-label]').waitFor();
+    const during = {};
+    for (const sel of ['[data-effort]', '[data-feel-today]', '[data-goal-card]', '[data-learn-open]', '[data-readiness]', 'input', 'textarea'])
+      during[sel] = await page.locator(`[data-screen="exercise"] ${sel}, body > ${sel}`).count();
+    await m12bShot(p, 'warmup-set', { counter: await page.locator('[data-set-counter]').textContent(),
+      label: await page.locator('[data-warmup-label]').textContent(), duringSet: during });
+    const setDone = async () => {
+      await page.clock.runFor(30_000);
+      await page.getByRole('button', { name: 'Set done' }).click();
+      await page.locator('[data-screen="rest"]').waitFor();
+      await page.clock.runFor(500);
+    };
+    const startSet = async () => {
+      await page.clock.runFor(5_000);
+      await page.getByRole('button', { name: 'Start set' }).click();
+      await page.locator('[data-screen="exercise"]').waitFor();
+    };
+    await setDone();
+    await m12bShot(p, 'warmup-rest', { warmup: await page.locator('[data-warmup]').textContent() });
+    await startSet(); await setDone(); await startSet(); await setDone();
+    const effort = page.locator('[data-effort]');
+    await effort.waitFor();
+    await m12bScroll(effort);
+    await m12bShot(p, 'effort-row', { text: (await effort.textContent()).replace(/\s+/g, ' ').trim() });
+    await effort.locator('[data-effort-opt="good"]').click();
+    await effort.locator('[data-effort-why]').click();
+    await page.locator('[data-learn-sheet="effort"]').waitFor();
+    await m12bShot(p, 'learn-effort', {}, { scope: '[data-learn-sheet="effort"]' });
+    await m12bFinish(p, 'm12b-workout');
+  }
+
+  // 2. Coach → Short on time → 30 min → proposal.
+  {
+    const p = await m12bPhone(browser);
+    const { page } = p;
+    const coach = page.locator('[data-screen="coach"]');
+    await page.locator('[data-tab="coach"]').click();
+    await coach.locator('[data-coach-chip="shortOnTime"]').click();
+    await coach.locator('[data-coach-followup]', { hasText: '30 min' }).click();
+    const card = coach.locator('[data-proposal]').last();
+    await card.waitFor();
+    await m12bScroll(card);
+    await m12bShot(p, 'short-on-time', { card: (await card.textContent()).replace(/\s+/g, ' ').trim() }, { fullPage: true });
+    await m12bFinish(p, 'm12b-short-on-time');
+  }
+
+  // 3. Feel today (energy 2 + chest) → "Go easy on chest today?"; a learn card from a coach reply.
+  {
+    const p = await m12bPhone(browser);
+    const { page } = p;
+    const feel = page.locator('[data-feel-today]');
+    await feel.locator('[data-feel-open]').click();
+    await feel.locator('[data-feel-energy="2"]').click();
+    await feel.locator('[data-feel-sore="chest"]').click();
+    await m12bScroll(feel);
+    await m12bShot(p, 'feel-today', {}, { fullPage: true });
+    await feel.locator('[data-feel-save]').click();
+    const offer = page.locator('[data-easy-on="chest"]').first();
+    await offer.waitFor();
+    await m12Settle(page);
+    await page.waitForTimeout(500); // Today re-renders after the save
+    await offer.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+    await m12bShot(p, 'feel-today-saved', { offer: (await offer.textContent()).trim() });
+    await offer.click();
+    const coach = page.locator('[data-screen="coach"]');
+    await coach.locator('[data-proposal]').last().getByRole('button', { name: 'Not now' }).click();
+    await coach.getByLabel('Ask the coach').fill("How's my week?");
+    await coach.getByRole('button', { name: 'Send' }).click();
+    const why = coach.locator('[data-learn-open]').last();
+    await why.waitFor();
+    const id = await why.getAttribute('data-learn-open');
+    await why.click();
+    await page.locator(`[data-learn-sheet="${id}"]`).waitFor();
+    await m12bShot(p, 'learn-card', { id }, { scope: `[data-learn-sheet="${id}"]` });
+    await m12bFinish(p, 'm12b-feel-learn');
+  }
+
+  // 4. Fresh install → intake question 1 → summary ("What your answers change").
+  {
+    const p = await m12bPhone(browser, { skipIntake: false, waitFor: 'main[data-screen="intake"]' });
+    const { page } = p;
+    await m12bShot(p, 'intake', { count: await page.locator('[data-intake-count]').textContent() });
+    await m12bAnswer(page, { goal: 'muscle', days: '3', length: '45', experience: 'new' });
+    await m12bShot(p, 'intake-summary', {}, { fullPage: true });
+    await m12bFinish(p, 'm12b-intake');
+  }
+
+  // 5. Existing install → Set your goal → intake → Goal card.
+  {
+    const p = await m12bPhone(browser);
+    const { page } = p;
+    const h = m12bBench();
+    await m12Seed(page, h.sessions, h.sets, release);
+    const card = page.locator('[data-goal-card]');
+    await card.locator('[data-goal-set]').click();
+    await m12bAnswer(page, { goal: 'strength', days: '4', length: '60', experience: 'some' });
+    await page.locator('main[data-screen="intake"] [data-intake-done]').click();
+    await page.locator('[data-goal-card="goals"]').waitFor();
+    await m12bScroll(card);
+    await m12bShot(p, 'goal-card', { text: (await card.textContent()).replace(/\s+/g, ' ').trim() });
+    // 6. e1RM chart on the same seeded history.
+    await page.locator('[data-tab="calendar"]').click();
+    await page.locator('[data-cal-day="2026-11-11"]').click();
+    await page.locator('main[data-screen="calendar-day"] [data-cal-history="Dumbbell_Bench_Press"]').click();
+    const e1 = page.locator('[data-e1rm]');
+    await e1.locator('.e1-dot').nth(2).waitFor();
+    await m12bScroll(e1);
+    await m12bShot(p, 'e1rm-chart', { state: await e1.getAttribute('data-state'), dots: await e1.locator('.e1-dot').count(),
+      summary: await e1.locator('[data-e1rm-summary]').textContent() });
+    await m12bFinish(p, 'm12b-goal-e1rm');
+  }
+
+  // 7. Fuel → Measurements (waist 81.5).
+  {
+    const p = await m12bPhone(browser);
+    const { page } = p;
+    await page.locator('[data-tab="fuel"]').click();
+    await page.locator('[data-measurements-open]').click();
+    const m = page.locator('main[data-screen="measurements"]');
+    await m.locator('[data-site-toggle="waist"]').click();
+    const v = m.locator('[data-field="site-waist"] .nf-value');
+    await v.fill('81.5');
+    await v.dispatchEvent('change');
+    await m12bShot(p, 'measurements', {}, { fullPage: true });
+    await m12bFinish(p, 'm12b-measurements');
+  }
+
+  // 8. Progress photos: on → two made-up canvas images → compare.
+  {
+    const p = await m12bPhone(browser);
+    const { page } = p;
+    await page.locator('[data-tab="settings"]').click();
+    const section = page.locator('[data-section="progress-photos"]');
+    await m12bScroll(section);
+    const offByDefault = await section.locator('[data-setting="progress-photos"]').getAttribute('aria-checked');
+    await section.locator('[data-setting="progress-photos"]').click();
+    await section.locator('[data-progress-photos-open]').click();
+    const ph = page.locator('main[data-screen="progress-photos"]');
+    const png = async (c) => Buffer.from((await page.evaluate((c) => {
+      const cv = document.createElement('canvas'); cv.width = 120; cv.height = 160;
+      const g = cv.getContext('2d'); g.fillStyle = c; g.fillRect(0, 0, 120, 160);
+      g.fillStyle = '#ffffff'; g.fillRect(40, 20, 40, 120);
+      return cv.toDataURL('image/png');
+    }, c)).split(',')[1], 'base64');
+    for (const [pose, c, n] of [['front', '#3a6ea5', 'made-up-front.png'], ['side', '#a55a3a', 'made-up-side.png']]) {
+      await ph.locator(`[data-pose="${pose}"]`).click();
+      const before = await ph.locator('[data-photo]').count();
+      await ph.locator('[data-photo-input="pick"]').setInputFiles({ name: n, mimeType: 'image/png', buffer: await png(c) });
+      await ph.locator('[data-photo]').nth(before).waitFor();
+    }
+    const tiles = ph.locator('[data-photo]');
+    await tiles.nth(1).waitFor();
+    await tiles.nth(0).click();
+    await tiles.nth(1).click();
+    const cmp = ph.locator('[data-compare="pair"]');
+    await cmp.waitFor();
+    await m12bScroll(cmp);
+    await m12bShot(p, 'photo-compare', { offByDefault, sides: await cmp.locator('[data-compare-side]').count() }, { fullPage: true });
+    await m12bFinish(p, 'm12b-photos');
+  }
+
+  // 9. Cardio line (iPhone app, fake Health with made-up workouts): Today + Calendar week score.
+  {
+    const p = await m12bPhone(browser, { native: true });
+    const { page } = p;
+    await page.locator('[data-tab="settings"]').click();
+    await page.locator('[data-health-open]').click();
+    const hs = page.locator('main[data-screen="health-settings"]');
+    await hs.locator('[data-health-connect]').click();
+    await hs.locator('[data-health-last-read]').waitFor();
+    await hs.getByRole('button', { name: '‹ Back' }).click();
+    await page.locator('[data-tab="today"]').click();
+    const line = page.locator('[data-cardio]').first();
+    await line.waitFor();
+    await m12bScroll(line);
+    await m12bShot(p, 'cardio-today', { line: await line.textContent() });
+    await page.locator('[data-tab="calendar"]').click();
+    const cl = page.locator('[data-cardio]').first();
+    await cl.waitFor();
+    await m12bScroll(cl);
+    await m12bShot(p, 'cardio-calendar', { line: await cl.textContent() });
+    await m12bFinish(p, 'm12b-cardio');
+  }
+  // PWA: no Health → no cardio line.
+  {
+    const p = await m12bPhone(browser);
+    await m12Settle(p.page);
+    await m12bFinish(p, 'm12b-cardio-pwa', { cardioLines: await p.page.locator('[data-cardio]').count() });
+  }
+
+  // 10. What's New tour for this release: an update from 1.12.0 → page 1.
+  {
+    const p = await m12bPhone(browser, { time: m12At(16, 18) });
+    await m12Seed(p.page, [{ sessionId: 's1', dayId: 'push-a', startedAt: m12At(13, 18), endedAt: m12At(13, 18) + 40 * M12_MIN }],
+      [{ sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 10, weightKg: 20, startedAt: m12At(13, 18) + M12_MIN }], '1.12.0');
+    const tour = p.page.locator('[data-tour="whats-new"]');
+    await tour.waitFor();
+    const wn = (part) => tour.locator(`[data-wn="${part}"]`);
+    await m12bShot(p, 'tour-first', { release, count: await wn('count').textContent(), title: await wn('title').textContent(),
+      version: await wn('version').textContent() }, { scope: '[data-tour="whats-new"]' });
+    const titles = [await wn('title').textContent()];
+    for (let i = 0; i < 15 && (await wn('next').getAttribute('data-last')) !== 'true'; i++) {
+      await wn('next').click();
+      titles.push(await wn('title').textContent());
+    }
+    await m12bFinish(p, 'm12b-tour', { titles });
+  }
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -3384,6 +3783,7 @@ try {
   else if (milestone === 'cam-verify') await camVerify(browser);
   else if (milestone === 'm11') await m11(browser);
   else if (milestone === 'm12') await m12(browser);
+  else if (milestone === 'm12b') await m12b(browser, process.argv[3]);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
