@@ -13,7 +13,8 @@ import {
   weeklyAverages,
   weeklyCheck,
 } from './adjust';
-import { NUTRITION_DEFAULTS } from './targets';
+import { withGoal } from './goalTargets';
+import { NUTRITION_DEFAULTS, computeTargets } from './targets';
 
 // Made-up example person; never real body stats.
 const settings: NutritionSettings = {
@@ -349,5 +350,140 @@ describe('trend', () => {
       { date: '2026-06-10', kg: 70, avgKg: 70 },
     ]);
     expect(trend([], 0, '2026-06-10')).toEqual([]);
+  });
+});
+
+// ---- M12 1b: the weekly check follows the goal's band ----
+
+describe('weeklyCheck per goal (M12 1b)', () => {
+  // The made-up man above: maintenance 2556, BMR 1649.
+  const MAINT = 2556;
+  const BMR = 1649;
+  function goalCheck(
+    s: NutritionSettings,
+    prevKg: number,
+    lastKg: number,
+    extra: { kcalTarget?: number; maintenanceKcal?: number; bmrKcal?: number; noBmr?: true } = {},
+  ) {
+    const { noBmr, ...rest } = extra;
+    return weeklyCheck({
+      settings: s,
+      kcalTarget: MAINT + s.surplusKcal,
+      maintenanceKcal: MAINT,
+      ...(noBmr ? {} : { bmrKcal: BMR }),
+      ...rest,
+      weighIns: [...week(PREV, prevKg), ...week(LAST, lastKg)],
+      today: CHECK_DAY,
+    });
+  }
+
+  describe('lose fat (band −0.75…−0.25% a week)', () => {
+    const fat = withGoal(settings, 'fat');
+
+    it('losing inside the band → on track', () => {
+      expect(goalCheck(fat, 70, 69.65)).toMatchObject({ kind: 'onTrack', deltaKcal: 0 }); // −0.5%
+    });
+
+    it('band edges are inclusive', () => {
+      expect(goalCheck(fat, 70, 69.825)).toMatchObject({ kind: 'onTrack' }); // −0.25%
+      expect(goalCheck(fat, 70, 69.475)).toMatchObject({ kind: 'onTrack' }); // −0.75%
+    });
+
+    it('losing too slowly, flat or gaining → down 100', () => {
+      expect(goalCheck(fat, 70, 69.93)).toMatchObject({ kind: 'down', deltaKcal: DOWN_KCAL }); // −0.1%
+      expect(goalCheck(fat, 70, 70)).toMatchObject({ kind: 'down', deltaKcal: -100 });
+      expect(goalCheck(fat, 70, 70.3)).toMatchObject({ kind: 'down', deltaKcal: -100 });
+    });
+
+    it('losing faster than the band → up 150 (eat a little more)', () => {
+      const c = goalCheck(fat, 70, 69.3); // −1%
+      expect(c).toMatchObject({ kind: 'up', deltaKcal: UP_KCAL });
+      expect(c.ratePct).toBeCloseTo(-1, 6);
+    });
+
+    it('accepted checks move the deficit, and the targets follow', () => {
+      const down = decideCheck(goalCheck(fat, 70, 70), 'accepted', 1);
+      const after = applyAcceptedCheck(fat, down);
+      expect(after.surplusKcal).toBe(-500);
+      const t = computeTargets(after, [{ date: CHECK_DAY, kg: 70 }], CHECK_DAY);
+      expect(t.ok && t.targets.kcal.value).toBe(MAINT - 500);
+      const up = decideCheck(goalCheck(fat, 70, 69.3), 'accepted', 1);
+      expect(applyAcceptedCheck(fat, up).surplusKcal).toBe(-250);
+    });
+
+    it('the deficit stops at −600, and never turns into a surplus', () => {
+      expect(goalCheck({ ...fat, surplusKcal: -550 }, 70, 70)).toMatchObject({ kind: 'down', deltaKcal: -50 });
+      expect(goalCheck({ ...fat, surplusKcal: -600 }, 70, 70)).toMatchObject({ kind: 'down', deltaKcal: 0 });
+      expect(goalCheck({ ...fat, surplusKcal: -100 }, 70, 69.3)).toMatchObject({ kind: 'up', deltaKcal: 100 });
+      expect(goalCheck({ ...fat, surplusKcal: 0 }, 70, 69.3)).toMatchObject({ kind: 'up', deltaKcal: 0 });
+    });
+
+    it('never suggests a target below BMR', () => {
+      // A smaller made-up body: maintenance 1238, BMR 1032; the target already sits on the floor.
+      const small = { maintenanceKcal: 1238, bmrKcal: 1032 };
+      expect(goalCheck(fat, 48, 48, { ...small, kcalTarget: 1032 })).toMatchObject({ kind: 'down', deltaKcal: 0 });
+      expect(goalCheck(fat, 48, 48, { ...small, kcalTarget: 1100 })).toMatchObject({ kind: 'down', deltaKcal: -68 });
+      // A hand-set target under the floor: never "down", and "up" lifts at least to BMR.
+      const hand = { ...fat, overrides: { kcal: 900 } };
+      expect(goalCheck(hand, 48, 48, { ...small, kcalTarget: 900 })).toMatchObject({ kind: 'down', deltaKcal: 0 });
+      expect(goalCheck(hand, 48, 47.5, { ...small, kcalTarget: 900 })).toMatchObject({ kind: 'up', deltaKcal: 150 });
+      expect(goalCheck(hand, 48, 47.5, { ...small, kcalTarget: 800 })).toMatchObject({ kind: 'up', deltaKcal: 232 });
+    });
+
+    it('without a BMR passed in, the floor is the highest BMR that maintenance allows (maintenance ÷ 1.2)', () => {
+      const small = { maintenanceKcal: 1238, noBmr: true } as const;
+      // 1238 ÷ 1.2 = 1031.7 → 1032
+      expect(goalCheck(fat, 48, 48, { ...small, kcalTarget: 1100 })).toMatchObject({ kind: 'down', deltaKcal: -68 });
+    });
+
+    it('needs 4 weigh-ins in each week, like before', () => {
+      const c = weeklyCheck({
+        settings: fat,
+        kcalTarget: 2156,
+        maintenanceKcal: MAINT,
+        bmrKcal: BMR,
+        weighIns: [...week(PREV, 70, 3), ...week(LAST, 70, 7)],
+        today: CHECK_DAY,
+      });
+      expect(c).toMatchObject({ kind: 'needData', deltaKcal: 0 });
+    });
+  });
+
+  describe('general fitness (band −0.25…+0.25%)', () => {
+    const general = withGoal(settings, 'general');
+
+    it('steady → on track; gaining → down (may go under maintenance); losing → up', () => {
+      expect(goalCheck(general, 70, 70.07)).toMatchObject({ kind: 'onTrack' });
+      expect(goalCheck(general, 70, 70.35)).toMatchObject({ kind: 'down', deltaKcal: -100 });
+      expect(goalCheck(general, 70, 69.65)).toMatchObject({ kind: 'up', deltaKcal: 150 });
+    });
+  });
+
+  describe('get stronger (band +0.1…+0.35%)', () => {
+    const strength = withGoal(settings, 'strength');
+
+    it('below the band → up; in or a little over → on track; well over → down', () => {
+      expect(goalCheck(strength, 70, 70.035)).toMatchObject({ kind: 'up', deltaKcal: 150 }); // +0.05%
+      expect(goalCheck(strength, 70, 70.14)).toMatchObject({ kind: 'onTrack' }); // +0.2%
+      expect(goalCheck(strength, 70, 70.35)).toMatchObject({ kind: 'onTrack' }); // +0.5%, inside the slack
+      expect(goalCheck(strength, 70, 70.49)).toMatchObject({ kind: 'down', deltaKcal: -100 }); // +0.7%
+    });
+
+    it('a down never goes under maintenance', () => {
+      expect(goalCheck({ ...strength, surplusKcal: 50 }, 70, 70.49)).toMatchObject({ kind: 'down', deltaKcal: -50 });
+    });
+  });
+
+  describe('build muscle = no goal', () => {
+    it('gives the same check as before goals for every case', () => {
+      const muscle = withGoal(settings, 'muscle');
+      for (const [prev, last] of [[70, 70], [70, 70.1], [70, 70.25], [70, 70.45], [70, 70.525], [70, 70.7], [70, 69.5]] as const) {
+        for (const surplus of [0, 50, 300, 550, 600]) {
+          const a = goalCheck({ ...muscle, surplusKcal: surplus }, prev, last);
+          const b = goalCheck({ ...settings, surplusKcal: surplus }, prev, last, { noBmr: true });
+          expect(a).toEqual(b);
+        }
+      }
+    });
   });
 });

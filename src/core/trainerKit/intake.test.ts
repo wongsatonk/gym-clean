@@ -14,7 +14,7 @@ const intake = (extra: Partial<Intake> = {}): Intake => ({
 });
 
 const fresh: IntakeCurrent = { hasHistory: false, planEdited: false, easyOn: [], fuel: null };
-const existing: IntakeCurrent = { hasHistory: true, planEdited: true, easyOn: [], fuel: { goalKind: undefined } };
+const existing: IntakeCurrent = { hasHistory: true, planEdited: true, easyOn: [], fuel: {} };
 
 describe('intake options (data)', () => {
   it('goal kinds, days 2–6, session lengths and experience', () => {

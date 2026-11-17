@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { NutritionSettings, WeighIn } from '../types';
+import type { GoalKind, NutritionSettings, WeighIn } from '../types';
+import { withGoal } from './goalTargets';
 import {
   ACTIVITY_FACTORS,
   NUTRITION_DEFAULTS,
@@ -9,6 +10,7 @@ import {
   clampSurplus,
   computeTargets,
   currentWeight,
+  goalTargetChange,
   visibleMacros,
   withMode,
 } from './targets';
@@ -168,8 +170,10 @@ describe('computeTargets', () => {
   });
 
   it('carbs never go negative', () => {
-    const s: NutritionSettings = { ...base, overrides: { kcal: 900 } };
+    // Hand-set protein alone is more than the hand-set kcal (which is above the BMR floor, M12 1b).
+    const s: NutritionSettings = { ...base, overrides: { kcal: 2000, proteinG: 520 } };
     const r = ok(computeTargets(s, [{ date: TODAY, kg: 100 }], TODAY));
+    expect(r.kcalFloored).toBe(false);
     expect(r.targets.carbsG.value).toBe(0);
   });
 
@@ -232,5 +236,150 @@ describe('mode', () => {
     expect(back).toEqual(snapshot);
     expect(stored).toEqual(snapshot); // input not mutated
     expect(computeTargets(back, oneWeighIn, TODAY)).toEqual(computeTargets(stored, oneWeighIn, TODAY));
+  });
+});
+
+// ---- M12 1b: targets follow the goal and sex ----
+
+// Made-up example people; never real body stats.
+const man: NutritionSettings = { ...base }; // 175 cm, 30 y, 70 kg, moderate → BMR 1648.75, maintenance 2556
+const woman: NutritionSettings = { ...NUTRITION_DEFAULTS, heightCm: 162, birthYear: 1994, sex: 'female', activity: 'light' };
+const womanWeighIn: WeighIn[] = [{ date: TODAY, kg: 58 }]; // 32 y → BMR 1271.5, maintenance 1748
+const smaller: NutritionSettings = { ...NUTRITION_DEFAULTS, heightCm: 150, birthYear: 1981, sex: 'female', activity: 'sedentary' };
+const smallerWeighIn: WeighIn[] = [{ date: TODAY, kg: 48 }]; // 45 y → BMR 1031.5, maintenance 1238
+
+describe('goal targets (M12 1b)', () => {
+  const cases: [GoalKind, number, number, number, number][] = [
+    // goal, man kcal, man protein g, woman kcal, woman protein g
+    ['muscle', 2856, 126, 2048, 104],
+    ['strength', 2756, 126, 1948, 104],
+    ['general', 2556, 112, 1748, 93],
+    ['fat', 2156, 140, 1348, 116],
+  ];
+
+  it.each(cases)('%s: male and female (Mifflin per sex) from made-up bodies', (kind, mKcal, mProtein, fKcal, fProtein) => {
+    const m = ok(computeTargets(withGoal(man, kind), oneWeighIn, TODAY));
+    expect(m.maintenanceKcal).toBe(2556);
+    expect(m.bmrKcal).toBe(1649);
+    expect(m.targets.kcal).toEqual({ value: mKcal, estimate: true });
+    expect(m.targets.proteinG).toEqual({ value: mProtein, estimate: true });
+    const f = ok(computeTargets(withGoal(woman, kind), womanWeighIn, TODAY));
+    expect(f.maintenanceKcal).toBe(1748);
+    expect(f.bmrKcal).toBe(1272);
+    expect(f.targets.kcal).toEqual({ value: fKcal, estimate: true });
+    expect(f.targets.proteinG).toEqual({ value: fProtein, estimate: true });
+    for (const r of [m, f]) {
+      expect(r.kcalFloored).toBe(false);
+      expect(r.targets.kcal.value).toBeGreaterThanOrEqual(r.bmrKcal);
+    }
+  });
+
+  it('no goal = the old result (and the same as the muscle goal)', () => {
+    const none = ok(computeTargets(man, oneWeighIn, TODAY));
+    expect(none.targets).toEqual({
+      kcal: { value: 2856, estimate: true },
+      proteinG: { value: 126, estimate: true },
+      carbsG: { value: 410, estimate: true },
+      fatG: { value: 79, estimate: true },
+    });
+    expect(none.maintenanceKcal).toBe(2556);
+    expect(none.weightKg).toBe(70);
+    expect(ok(computeTargets(withGoal(man, 'muscle'), oneWeighIn, TODAY)).targets).toEqual(none.targets);
+    // Without a goal a stored negative surplus is still clamped to 0–600, as before.
+    expect(ok(computeTargets({ ...man, surplusKcal: -400 }, oneWeighIn, TODAY)).targets.kcal.value).toBe(2556);
+    expect(clampSurplus(-400)).toBe(0);
+    expect(clampSurplus(900)).toBe(600);
+  });
+
+  it('the signed change is clamped to the goal’s range (−600…+600 overall)', () => {
+    expect(clampSurplus(-400, 'fat')).toBe(-400);
+    expect(clampSurplus(-900, 'fat')).toBe(-600);
+    expect(clampSurplus(200, 'fat')).toBe(0);
+    expect(clampSurplus(-900, 'general')).toBe(-600);
+    expect(clampSurplus(900, 'general')).toBe(600);
+    expect(clampSurplus(-100, 'muscle')).toBe(0);
+    expect(clampSurplus(-100, 'strength')).toBe(0);
+    expect(clampSurplus(Number.NaN, 'fat')).toBe(-400);
+    expect(clampSurplus(Number.NaN, 'general')).toBe(0);
+    expect(clampSurplus(Number.NaN)).toBe(300);
+    const r = ok(computeTargets({ ...withGoal(man, 'fat'), surplusKcal: -900 }, oneWeighIn, TODAY));
+    expect(r.targets.kcal.value).toBe(2556 - 600);
+  });
+
+  it('BMR floor: a deficit never takes the kcal target below the resting estimate', () => {
+    const r = ok(computeTargets(withGoal(smaller, 'fat'), smallerWeighIn, TODAY));
+    expect(r.maintenanceKcal).toBe(1238);
+    expect(r.bmrKcal).toBe(1032); // 1031.5 rounded up, so the target is never under it
+    expect(r.targets.kcal).toEqual({ value: 1032, estimate: true }); // not 838
+    expect(r.kcalFloored).toBe(true);
+    // The biggest deficit allowed, every sex and activity: still at or above BMR.
+    for (const sex of ['male', 'female'] as const) {
+      for (const activity of ['sedentary', 'light', 'moderate', 'very'] as const) {
+        const s = { ...withGoal({ ...smaller, sex, activity }, 'fat'), surplusKcal: -600 };
+        const t = ok(computeTargets(s, smallerWeighIn, TODAY));
+        expect(t.targets.kcal.value).toBeGreaterThanOrEqual(t.bmrKcal);
+      }
+    }
+  });
+
+  it('BMR floor: a hand-set kcal under it is lifted too; the other macros follow the lifted value', () => {
+    const r = ok(computeTargets({ ...smaller, overrides: { kcal: 800 } }, smallerWeighIn, TODAY));
+    expect(r.targets.kcal).toEqual({ value: 1032, estimate: false });
+    expect(r.kcalFloored).toBe(true);
+    const at = ok(computeTargets({ ...smaller, overrides: { kcal: 1032 } }, smallerWeighIn, TODAY));
+    expect(r.targets.fatG).toEqual(at.targets.fatG);
+    expect(at.kcalFloored).toBe(false);
+  });
+});
+
+describe('goalTargetChange (before → after, nothing applied)', () => {
+  it('shows the kcal and protein change and returns the settings to save on Apply', () => {
+    const snapshot = structuredClone(man);
+    const c = goalTargetChange(man, oneWeighIn, TODAY, 'fat');
+    if (!c.ok) throw new Error('expected a change');
+    expect(c.text).toBe('Fuel targets: 2,856 → 2,156 kcal');
+    expect(c.lines).toEqual([
+      { label: 'Calories', before: '2,856 kcal', after: '2,156 kcal' },
+      { label: 'Protein', before: '126 g', after: '140 g' },
+    ]);
+    expect(c.changed).toBe(true);
+    expect(c.before.kcal.value).toBe(2856);
+    expect(c.after.kcal.value).toBe(2156);
+    expect(c.next).toEqual(withGoal(man, 'fat'));
+    expect(man).toEqual(snapshot); // nothing changes until the caller saves `next`
+  });
+
+  it('each goal, for a woman’s made-up body', () => {
+    const text = (kind: GoalKind) => {
+      const c = goalTargetChange(woman, womanWeighIn, TODAY, kind);
+      return c.ok ? c.text : c.reason;
+    };
+    expect(text('muscle')).toBe('Fuel targets stay at 2,048 kcal');
+    expect(text('strength')).toBe('Fuel targets: 2,048 → 1,948 kcal');
+    expect(text('general')).toBe('Fuel targets: 2,048 → 1,748 kcal');
+    expect(text('fat')).toBe('Fuel targets: 2,048 → 1,348 kcal');
+  });
+
+  it('same numbers (no goal → muscle) still records the goal, with nothing to show as changed', () => {
+    const c = goalTargetChange(man, oneWeighIn, TODAY, 'muscle');
+    if (!c.ok) throw new Error('expected a change');
+    expect(c.changed).toBe(false);
+    expect(c.lines).toEqual([]);
+    expect(c.next.goalKind).toBe('muscle');
+  });
+
+  it('hand-set values stay his: they are listed, and the line shows no change for them', () => {
+    const s: NutritionSettings = { ...man, overrides: { kcal: 2700 } };
+    const c = goalTargetChange(s, oneWeighIn, TODAY, 'fat');
+    if (!c.ok) throw new Error('expected a change');
+    expect(c.handSet).toEqual(['kcal']);
+    expect(c.text).toBe('Fuel targets stay at 2,700 kcal');
+    expect(c.lines).toEqual([{ label: 'Protein', before: '126 g', after: '140 g' }]);
+    expect(c.next.overrides).toEqual({ kcal: 2700 });
+  });
+
+  it('no weigh-in yet: nothing to show, but the settings for Apply are still there', () => {
+    const c = goalTargetChange(man, [], TODAY, 'fat');
+    expect(c).toEqual({ ok: false, reason: 'weighInFirst', next: withGoal(man, 'fat') });
   });
 });

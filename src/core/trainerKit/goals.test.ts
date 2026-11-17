@@ -126,11 +126,11 @@ describe('suggestGoals', () => {
   it('a lift target is always above today’s estimate, even after snapping', () => {
     const tiny: GoalHistory = {
       ...history,
-      sets: [set('s1', 'curl', 6, 10, at(2026, 6, 1))],
+      sets: [set('s1', 'curl', 5.5, 10, at(2026, 6, 1))],
       preferLifts: [],
     };
     const goal = suggestGoals(intake('general'), tiny).goals[0];
-    // 6 kg × 10 → 8 kg estimate; +5% snaps back to 5 kg × 10, so it steps up to 7.5 kg.
+    // 5.5 kg × 10; +5% is 5.8 kg, which snaps back to 5 kg × 10, so it steps up to 7.5 kg.
     expect(goal?.target).toEqual({ kind: 'lift', ref: 'curl', value: 7.5, reps: 10 });
   });
 
@@ -143,7 +143,7 @@ describe('suggestGoals', () => {
   });
 
   it('without preferred lifts, the lift done in the most sessions is used', () => {
-    const { goals } = suggestGoals(intake('general'), { ...history, preferLifts: undefined });
+    const { goals } = suggestGoals(intake('general'), { ...history, preferLifts: [] });
     expect(goals[0]?.target.ref).toBe('bench');
   });
 
@@ -211,7 +211,8 @@ describe('goalProgress', () => {
       set('b', 'squat', 100, 8, created + 5 * DAY),
       set('c', 'bench', 65, 8, created + 30 * DAY),
     ];
-    expect(goalProgress(lift, logs, [], [], '2026-06-10')).toMatchObject({ pct: 0, status: 'onTrack' });
+    // Day 7 of 84 (8%): no gain yet is still within the 10-point slack.
+    expect(goalProgress(lift, logs, [], [], '2026-06-08')).toMatchObject({ pct: 0, status: 'onTrack' });
     expect(goalProgress(lift, logs, [], [], '2026-07-13')).toMatchObject({ pct: 100, status: 'done' });
   });
 
@@ -232,7 +233,7 @@ describe('goalProgress', () => {
     expect(goalProgress(arm, [], rows, [], '2026-06-29')).toMatchObject({ pct: 40, status: 'onTrack', startValue: 33, currentValue: 33.4 });
     expect(goalProgress(waist, [], rows, [], '2026-07-13')).toMatchObject({ pct: 20, status: 'behind' });
     // A step the wrong way is 0%, never negative.
-    expect(goalProgress(arm, [], [rows[0]!, { date: '2026-06-29', site: 'leftArm', cm: 32.5 }], [], '2026-06-29').pct).toBe(0);
+    expect(goalProgress(arm, [], [{ date: '2026-06-01', site: 'leftArm', cm: 33 }, { date: '2026-06-29', site: 'leftArm', cm: 32.5 }], [], '2026-06-29').pct).toBe(0);
   });
 
   it('weight: from the weight at the start towards the target', () => {
