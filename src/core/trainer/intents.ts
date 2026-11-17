@@ -7,7 +7,11 @@
  *
  * Order of rules (first hit wins):
  *  1. red flag → `help`, no slots, `safety: 'redFlag'` (never a training proposal);
- *  2. deload, 3. swap, 4. postpone (incl. "skip leg day" / "skip <plan day name>");
+ *  2. deload, 3. swap;
+ *  3b. M12 doToday: a "do" word right before one of the coach's plan day names ("do Push A
+ *     today", "let's do pull a"), when no other day than today is named and it isn't a skip;
+ *  4. postpone (incl. "skip leg day" / "skip <plan day name>", and M12 "move Thursday to
+ *     Friday": a move word with both a day and a target day);
  *  4b. missing kit (M10e): a named exercise with "has no" / "there's no" / "ไม่มีเครื่อง" (or a
  *     bare "no" when no stall/lighter/food phrase and no "no more" / "today" word matched), no
  *     discomfort → swap that exercise;
@@ -22,7 +26,8 @@
  * A swap with a weekday ("swap Thursday's flyes") is a focusEdit (a change to a focus block's
  * days; the coach falls back to the swap flow when no block is being proposed).
  *
- * Slots: `area` only for avoidArea, `exerciseId` only for swap/stall/focusEdit, `group` only for
+ * Slots: `dayName` only for doToday (the plan day name as passed in `dayNames`; its `date` is
+ * 'today' when a today word is there, as "today" or "today instead"), `area` only for avoidArea, `exerciseId` only for swap/stall/focusEdit, `group` only for
  * focusBlock, `weeks` / `daysPerWeek` only for focusBlock/focusEdit ("this month" = 4 weeks,
  * "N months" = 4N), `date` / `moveTo` / `scope` for any non-help intent. `date` is the day the request is about (e.g. the day to skip); `moveTo` is the
  * target day of a move ("to Friday", "Saturday instead"). Both are day words; the coach resolves them
@@ -44,7 +49,8 @@ export type Intent =
   | 'week'
   | 'progress'
   | 'focusBlock'
-  | 'focusEdit';
+  | 'focusEdit'
+  | 'doToday';
 export type DayWord = 'today' | 'tomorrow' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type Safety = 'none' | 'discomfort' | 'redFlag';
 
@@ -60,6 +66,8 @@ export type IntentSlots = {
   weeks?: number;
   /** M12 focusBlock / focusEdit: training days a week. */
   daysPerWeek?: number;
+  /** M12 doToday: the plan day to run today, as written in `MatchContext.dayNames`. */
+  dayName?: string;
 };
 
 export type IntentMatch = { intent: Intent; slots: IntentSlots; safety: Safety };
@@ -69,7 +77,7 @@ export type MatchContext = {
   exercises?: readonly { id: string; name: string }[];
   /** Today's exercise ids: a generic word ("curls", "rows") prefers one of these. */
   todayExerciseIds?: readonly string[];
-  /** The plan's day names ("Push A"): "skip <day name>" is a postpone. */
+  /** The plan's day names ("Push A"): "skip <day name>" is a postpone, "do <day name>" doToday. */
   dayNames?: readonly string[];
 };
 
@@ -151,6 +159,9 @@ const M12 = {
   focusEdit: compileList(P.m12.focusEdit),
   month: compileList(P.m12.month),
 };
+const DO_WORDS = compileList(P.m12.doToday.do);
+const DO_FILLERS = P.m12.doToday.fillers.map((w) => normalizeText(w));
+const MOVE_WORDS = compileList(P.m12.moveDay.move);
 const NUMBER_WORDS: Record<string, number> = P.m12.numbers;
 const NUM = `(\\d{1,2}|${Object.keys(NUMBER_WORDS).join('|')})`;
 const DAYS_COUNT = new RegExp(`(?<![a-z0-9])${NUM}\\s+(?:days?|times)(?![a-z0-9])`);
@@ -301,6 +312,21 @@ function skipsDay(text: string, ctx: MatchContext): boolean {
   });
 }
 
+/** M12: "do <plan day name>" → that name as passed in (longest name first). */
+function doDayOf(text: string, ctx: MatchContext): string | undefined {
+  const names = (ctx.dayNames ?? [])
+    .map((raw) => ({ raw, norm: normalizeText(raw) }))
+    .filter((n) => n.norm !== '')
+    .sort((a, b) => b.norm.length - a.norm.length);
+  if (names.length === 0) return undefined;
+  for (const s of DO_WORDS(text)) {
+    const rest = stripLeading(text.slice(s.end), DO_FILLERS);
+    const hit = names.find((n) => startsWithWord(rest, n.norm));
+    if (hit) return hit.raw;
+  }
+  return undefined;
+}
+
 const numberOf = (w: string): number => NUMBER_WORDS[w] ?? Number(w);
 
 /** M12: "4 days a week" / "3 times a week", "6 weeks", "this month" (= 4), "2 months" (= 8). */
@@ -394,10 +420,19 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
 
   const area = areaOf(t);
   const counts = countsOf(t);
+  const { date, moveTo } = daysOf(t);
+  const onlyToday = (date ?? 'today') === 'today' && (moveTo ?? 'today') === 'today';
+  const dayName = onlyToday && !skipsDay(t, ctx) ? doDayOf(t, ctx) : undefined;
   let intent: Intent;
   if (has(INTENTS.deload, t)) intent = 'deload';
   else if (has(INTENTS.swap, t)) intent = 'swap';
-  else if (has(INTENTS.postpone, t) || skipsDay(t, ctx)) intent = 'postpone';
+  else if (dayName !== undefined) intent = 'doToday';
+  else if (
+    has(INTENTS.postpone, t) ||
+    skipsDay(t, ctx) ||
+    (has(MOVE_WORDS, t) && date !== undefined && moveTo !== undefined)
+  )
+    intent = 'postpone';
   else if (safety === 'none' && missingKit(t) && exerciseOf(t, ctx) !== undefined) intent = 'swap';
   else if (area && (safety === 'discomfort' || area.viaAvoidBefore || has(AVOID_ANYWHERE, t)))
     intent = 'avoidArea';
@@ -411,7 +446,13 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   else if (safety === 'discomfort') intent = 'avoidArea';
   else return { intent: 'help', slots: {}, safety };
 
-  const { date, moveTo } = daysOf(t);
+  if (intent === 'doToday') {
+    const slots: IntentSlots = { dayName: dayName ?? '' };
+    if (date ?? moveTo) slots.date = 'today';
+    const scope = scopeOf(t);
+    if (scope) slots.scope = scope;
+    return { intent, slots, safety };
+  }
   // "swap Thursday's flyes": a change to a focus block's weekday.
   const weekday = date !== undefined && date !== 'today' && date !== 'tomorrow';
   if (intent === 'swap' && weekday && moveTo === undefined) intent = 'focusEdit';

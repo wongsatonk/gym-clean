@@ -3,6 +3,7 @@ import { matchIntent, normalizeText, type IntentMatch, type MatchContext } from 
 import evals from './evals/requests.json';
 import phrases from './phrases.json';
 import exercisesJson from '../../data/exercises.json';
+import programJson from '../../data/program.json';
 import source from './intents.ts?raw';
 
 type EvalItem = {
@@ -19,6 +20,11 @@ const CATALOG = (exercisesJson as { id: string; name: string }[]).map(({ id, nam
   name,
 }));
 const ctx: MatchContext = { exercises: CATALOG };
+/** The eval set runs with the default program's day names, as the coach passes its plan's. */
+const evalCtx: MatchContext = {
+  ...ctx,
+  dayNames: (programJson as { days: { name: string }[] }).days.map((d) => d.name),
+};
 
 describe('normalizeText', () => {
   it('lowercases, drops apostrophes and turns punctuation into single spaces', () => {
@@ -142,6 +148,39 @@ describe('matchIntent basics', () => {
       intent: 'avoidArea',
       slots: { area: 'legs', date: 'today' },
       safety: 'none',
+    });
+  });
+
+  it('M12 "do <plan day> today" is doToday with the plan day name as typed in the plan', () => {
+    const named: MatchContext = { exercises: CATALOG, dayNames: ['Push A', 'Legs B'] };
+    expect(matchIntent('do push A today', named)).toEqual({
+      intent: 'doToday',
+      slots: { dayName: 'Push A', date: 'today' },
+      safety: 'none',
+    });
+    expect(matchIntent('Can I train legs b instead?', named)).toEqual({
+      intent: 'doToday',
+      slots: { dayName: 'Legs B' },
+      safety: 'none',
+    });
+    expect(matchIntent('เล่น push a วันนี้', named).intent).toBe('doToday');
+    // Not for another day, not a skip, and not without a plan day name.
+    expect(matchIntent('do push a tomorrow', named).intent).not.toBe('doToday');
+    expect(matchIntent('dont do push a today', named).intent).toBe('postpone');
+    expect(matchIntent('skip push a', named).intent).toBe('postpone');
+    expect(matchIntent('do push a today', ctx).intent).not.toBe('doToday');
+  });
+
+  it('M12 "move Thursday to Friday" is a postpone with both days', () => {
+    for (const text of ['move Thursday to Friday', "move saturday's workout to monday"]) {
+      const got = matchIntent(text, ctx);
+      expect(got.intent, text).toBe('postpone');
+      expect(got.slots.date, text).toBeDefined();
+      expect(got.slots.moveTo, text).toBeDefined();
+    }
+    expect(matchIntent('move Thursday to Friday', ctx).slots).toEqual({
+      date: 'thu',
+      moveTo: 'fri',
     });
   });
 
@@ -311,10 +350,18 @@ describe('eval set (SPEC M10 Accept)', () => {
     }
   });
 
+  it('has the M12 doToday / move-a-day items as rule-supported', () => {
+    for (const text of ['do push a today', 'move thursday to friday']) {
+      const item = ITEMS.find((i) => i.text.toLowerCase() === text);
+      expect(item, text).toBeDefined();
+      expect(item?.ruleSupported).toBe(true);
+    }
+  });
+
   it('matches intent + slots on >= 90% of rule-supported items', () => {
     const supported = ITEMS.filter((i) => i.ruleSupported);
     const misses = supported.filter((item) => {
-      const got = matchIntent(item.text, ctx);
+      const got = matchIntent(item.text, evalCtx);
       return (
         got.intent !== item.intent ||
         JSON.stringify(sortKeys(got.slots)) !== JSON.stringify(sortKeys(item.slots))
@@ -327,7 +374,7 @@ describe('eval set (SPEC M10 Accept)', () => {
         misses.map((m) => ({
           text: m.text,
           want: [m.intent, m.slots],
-          got: matchIntent(m.text, ctx),
+          got: matchIntent(m.text, evalCtx),
         })),
       );
     }

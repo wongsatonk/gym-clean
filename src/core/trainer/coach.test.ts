@@ -5,7 +5,7 @@ import programJson from '../../data/program.json';
 import evals from './evals/requests.json';
 import { wordCount } from '../advice';
 import { applyProposal, undoLast, type TrainerChange } from './changes';
-import { effectiveDay, seedPlan } from './plan';
+import { addDate, effectiveDay, seedPlan } from './plan';
 import type { StallSession } from './actions/stall';
 import type { TrainerCatalog } from './swapCandidates';
 import {
@@ -494,10 +494,16 @@ describe('postpone', () => {
     expect(r.proposal?.title).toBe('Not today: train Sunday instead');
   });
 
-  it('another day than today → only today can move', () => {
+  it('another day than today with no target → asks which day, with move chips', () => {
     const r = handle(text("postpone tomorrow's workout"), ctxFor('pull-a'));
     expect(r.proposal).toBeUndefined();
-    expect(r.reply).toContain('today');
+    expect(r.reply).toBe('Move Legs A to which day?');
+    expect(r.chips.length).toBeGreaterThan(0);
+    for (const c of r.chips) {
+      expect(c.id).toBe('moveDay');
+      expect(c.args?.from).toBe('2026-11-12');
+    }
+    expectClean(r, 'ask move');
   });
 
   it('a refusal (rest day) comes back as a reply with the chips', () => {
@@ -507,6 +513,127 @@ describe('postpone', () => {
     expect(r.proposal).toBeUndefined();
     expect(r.reply).toBe('Today is already a rest day.');
     expect(r.chips.length).toBeGreaterThan(0);
+  });
+});
+
+describe('M12 Do it today / Move a day', () => {
+  // ctxFor('pull-a'): Wed 11 Pull A, Thu 12 Legs A, Fri 13 Push B, Sat 14 Pull B, Sun 15 rest.
+  const THU = '2026-11-12';
+  const SUN = '2026-11-15';
+
+  it('doToday chip → a dated override proposal for that day today', () => {
+    const r = handle({ chip: 'doToday', args: { dayId: 'legs-a' } }, ctxFor('pull-a'));
+    expect(r.intent).toBe('doToday');
+    expect(r.proposal?.action).toBe('postpone');
+    expect(r.proposal?.scope).toBe('dated');
+    expect(r.proposal?.title).toBe('Do Legs A today');
+    expect(r.proposal?.next.overrides).toEqual([{ date: TODAY, dayId: 'legs-a' }]);
+    expect(r.reply).toBe(PROPOSAL_REPLY);
+    expectClean(r, 'doToday');
+  });
+
+  it('applies and undoes', () => {
+    const c = ctxFor('pull-a');
+    const r = handle({ chip: 'doToday', args: { dayId: 'legs-a' } }, c);
+    if (!r.proposal) throw new Error('no proposal');
+    const a = applyProposal(c.state, r.proposal, at(11, 11, 9), 'chip');
+    if (!a.ok) throw new Error(a.reason);
+    expect(effectiveDay(a.state, c.sessions, TODAY).day?.id).toBe('legs-a');
+    const u = undoLast(a.state, [{ ...a.change, id: 1 }], at(11, 11, 10));
+    if (!u.ok) throw new Error(u.reason);
+    expect(effectiveDay(u.state, c.sessions, TODAY).day?.id).toBe('pull-a');
+  });
+
+  it('doToday without a day asks which, one chip per other plan day', () => {
+    const r = handle({ chip: 'doToday' }, ctxFor('pull-a'));
+    expect(r.proposal).toBeUndefined();
+    expect(r.reply).toBe('Which day?');
+    expect(r.chips.map((c) => c.args?.dayId)).toEqual(ROTATION.filter((id) => id !== 'pull-a'));
+    expect(r.chips.every((c) => c.id === 'doToday')).toBe(true);
+  });
+
+  it('doToday refusals come back as replies', () => {
+    const same = handle({ chip: 'doToday', args: { dayId: 'pull-a' } }, ctxFor('pull-a'));
+    expect(same.proposal).toBeUndefined();
+    expect(same.reply).toBe("Pull A is already today's workout.");
+    const c = ctxFor('pull-a');
+    const h = addSession({ sessions: [...c.sessions], sets: [] }, 'pull-a', at(11, 11, 8));
+    const doneToday = handle(
+      { chip: 'doToday', args: { dayId: 'legs-a' } },
+      { ...c, sessions: h.sessions },
+    );
+    expect(doneToday.reply).toBe("Today's workout is already done.");
+  });
+
+  it('"do legs a today" (typed) → the same proposal', () => {
+    const r = handle(text('do legs a today'), ctxFor('pull-a'));
+    expect(r.intent).toBe('doToday');
+    expect(r.proposal?.title).toBe('Do Legs A today');
+  });
+
+  it('moveDay chip → move proposal; onto a rest date keeps every session', () => {
+    const r = handle({ chip: 'moveDay', args: { from: THU, to: SUN } }, ctxFor('pull-a'));
+    expect(r.intent).toBe('postpone');
+    expect(r.proposal?.action).toBe('postpone');
+    expect(r.proposal?.next.overrides).toEqual([{ date: THU, rest: true }, { date: SUN }]);
+    expect(r.proposal?.title).toBe('Move Legs A to Friday 13');
+    expectClean(r, 'moveDay');
+  });
+
+  it('moveDay refusal → reply, no proposal', () => {
+    const r = handle({ chip: 'moveDay', args: { from: THU, to: '2026-11-14' } }, ctxFor('pull-a'));
+    expect(r.proposal).toBeUndefined();
+    expect(r.reply).toBe('Saturday 14 already has Pull B. Pick a rest day.');
+  });
+
+  it('moveDay with only `from` asks where, offering dates that work', () => {
+    const r = handle({ chip: 'moveDay', args: { from: THU } }, ctxFor('pull-a'));
+    expect(r.reply).toBe('Move Legs A to which day?');
+    expect(r.chips.map((c) => c.label)).toEqual(['Friday 13', 'Sunday 15']);
+    expect(r.chips.map((c) => c.args)).toEqual([
+      { from: THU, to: '2026-11-13' },
+      { from: THU, to: SUN },
+    ]);
+    const first = r.chips[0];
+    if (!first) throw new Error('no chip');
+    expect(
+      handle({ chip: first.id, ...(first.args ? { args: first.args } : {}) }, ctxFor('pull-a'))
+        .proposal,
+    ).toBeDefined();
+  });
+
+  it('moveDay on a rest date says nothing is planned', () => {
+    const r = handle({ chip: 'moveDay', args: { from: SUN } }, ctxFor('pull-a'));
+    expect(r.proposal).toBeUndefined();
+    expect(r.reply).toBe('Nothing is planned on Sunday 15.');
+  });
+
+  it('"move Thursday to Sunday" (typed) → the move proposal', () => {
+    const r = handle(text('move Thursday to Sunday'), ctxFor('pull-a'));
+    expect(r.proposal?.next.overrides).toEqual([{ date: THU, rest: true }, { date: SUN }]);
+  });
+
+  it('not mid-workout', () => {
+    const w = workoutCtx('pull-a', []);
+    expect(handle({ chip: 'doToday', args: { dayId: 'legs-a' } }, w).reply).toBe(MID_SESSION_REPLY);
+    expect(handle({ chip: 'moveDay', args: { from: THU, to: SUN } }, w).reply).toBe(
+      MID_SESSION_REPLY,
+    );
+    expect(handle(text('do legs a today'), w).reply).toBe(MID_SESSION_REPLY);
+  });
+
+  it('every doToday / moveDay reply passes the copy check', () => {
+    const inputs: CoachInput[] = [
+      { chip: 'doToday' },
+      ...ROTATION.map((dayId) => ({ chip: 'doToday' as const, args: { dayId } })),
+      { chip: 'moveDay' },
+      ...[0, 1, 2, 3, 4, 5, 6].map((i) => ({
+        chip: 'moveDay' as const,
+        args: { from: THU, to: addDate(THU, i) },
+      })),
+    ];
+    for (const dayId of ROTATION)
+      for (const input of inputs) expectClean(handle(input, ctxFor(dayId)), JSON.stringify(input));
   });
 });
 

@@ -287,6 +287,15 @@
       "longer block"
     ],
     "month": ["this month", "next month", "a month", "for a month", "the month", "month"],
+    "doToday": {
+      "note": "A 'do' word, then (after 'the'/'my') one of the coach's plan day names ('Push A') -> doToday, only when the request is about today (no other day word). A skip word wins ('dont do push a' is a postpone).",
+      "do": ["do", "train", "run", "start", "lets do", "go for", "เล่น", "ทำ"],
+      "fillers": ["the", "my", "a", "with"]
+    },
+    "moveDay": {
+      "note": "A move word plus a day to move ('Thursday') and a target ('to Friday') -> postpone with date + moveTo; the coach turns it into a move of that planned day.",
+      "move": ["move", "shift", "ย้าย", "เลื่อน"]
+    },
     "numbers": {
       "one": 1,
       "two": 2,

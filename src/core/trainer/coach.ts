@@ -29,6 +29,13 @@
  *   (actions/focusBlock.ts); edits ("only 4 days a week", "make it 3 weeks", "swap Thursday's
  *   flyes") revise `focusDraft` (the block proposed last). Without a draft a count starts the
  *   flow and a weekday swap is a plain swap. None of these mid-workout.
+ * - M12 Do it today / Move (Calendar day, Today's missed-day "Move it"; actions/move.ts):
+ *   `doToday` {dayId} → run that plan day today (a dated override; the block's version on a block
+ *   date); without a day it asks "Which day?" with one chip per other plan day. `moveDay`
+ *   {from, to} → move that planned date; with only `from` it asks "Move X to which day?" with up
+ *   to 3 dates that work. Typed: "do Push A today" → doToday; "move Thursday to Friday" (a day
+ *   other than today plus a target) → moveDay; another day without a target → the "which day"
+ *   question. Refusals are plain replies. None of these mid-workout.
  * Chip ids: the 7 quick actions (UI COACH_CHIPS + M12 focusBlock), the 6 BodyArea values, the M12
  * `week` / `progress` chips, and the follow-ups below (`args` say what they act on). 'endWorkout' and 'keepExercise' are handled by the UI, not
  * here.
@@ -44,8 +51,23 @@ import type {
   TrainerState,
 } from '../types';
 import type { Unit } from '../units';
-import { matchIntent, type DayWord, type Intent, type IntentSlots, type Safety } from './intents';
-import { addDate, baseDay, effectiveDay, localDate, upNext, weekdayOf } from './plan';
+import {
+  matchIntent,
+  normalizeText,
+  type DayWord,
+  type Intent,
+  type IntentSlots,
+  type Safety,
+} from './intents';
+import {
+  addDate,
+  baseDay,
+  effectiveDay,
+  effectiveDays,
+  localDate,
+  upNext,
+  weekdayOf,
+} from './plan';
 import {
   blockEnd,
   isFocusExercise,
@@ -72,6 +94,7 @@ import {
 } from './actions/lighter';
 import { proposeAvoidArea } from './actions/avoidArea';
 import { proposePostpone, type PostponeMode } from './actions/postpone';
+import { longDate, proposeDoToday, proposeMoveDay } from './actions/move';
 import { proposeSwap, proposeSwapOptions, type SwapScope } from './actions/swap';
 import { proposeRemove } from './actions/remove';
 import {
@@ -125,7 +148,11 @@ export type CoachChipId =
   /** M12: this week's numbers. */
   | 'week'
   /** M12: week + month scores, streak, focus block. */
-  | 'progress';
+  | 'progress'
+  /** M12: args.dayId: run that plan day today (no dayId: asks which). */
+  | 'doToday'
+  /** M12: args.from, to (local YYYY-MM-DD): move that planned date (no `to`: asks where). */
+  | 'moveDay';
 
 export type CoachArgs = {
   exerciseId?: string;
@@ -140,6 +167,11 @@ export type CoachArgs = {
   keepDays?: boolean;
   /** M12 focusBlock ("Keep going" from a block recap): the exact weekdays. */
   weekdays?: number[];
+  /** M12 doToday: the plan day id to run today. */
+  dayId?: string;
+  /** M12 moveDay: the planned date to move and the date to move it to (local YYYY-MM-DD). */
+  from?: string;
+  to?: string;
 };
 
 export type CoachChip = { id: CoachChipId; label: string; args?: CoachArgs };
@@ -226,7 +258,9 @@ export const MID_SESSION_REPLY = "Mid-workout I can swap, remove or lighten what
 export const PROPOSAL_REPLY = "Here's what I'd change.";
 export const ASK_AREA = 'Which area should I go easy on?';
 export const ASK_EXERCISE = 'Which exercise?';
-export const ONLY_TODAY = "I can only move today's workout. Ask me on the day.";
+export const ASK_DAY = 'Which day?';
+/** How many target dates the "Move X to which day?" question offers. */
+const MOVE_CHIPS = 3;
 export const NO_STALLS = 'No stalled lifts right now. A deload week or a swap from now on?';
 export const ASK_GROUP = 'Which area should the block build?';
 export const ASK_WEEKS = 'For how many weeks?';
@@ -331,7 +365,9 @@ function resolveDay(word: DayWord, today: string): string {
 }
 
 function postpone(ctx: CoachContext, mode: PostponeMode, slots: IntentSlots = {}): Body {
-  if (slots.date && resolveDay(slots.date, ctx.today) !== ctx.today) return { reply: ONLY_TODAY };
+  const from = slots.date ? resolveDay(slots.date, ctx.today) : ctx.today;
+  if (from !== ctx.today)
+    return moveDay(ctx, from, slots.moveTo ? resolveDay(slots.moveTo, ctx.today) : undefined);
   const to = slots.moveTo ? resolveDay(slots.moveTo, ctx.today) : undefined;
   const r = proposePostpone(ctx.state, ctx.sessions, ctx.today, to ? { mode, to } : { mode });
   if (!r.ok) return { reply: r.reply };
@@ -340,6 +376,58 @@ function postpone(ctx: CoachContext, mode: PostponeMode, slots: IntentSlots = {}
     ? []
     : [{ id: 'postponeMode', label: MODE_LABEL[other], args: { mode: other } }];
   return fromResult(ctx, r, chips);
+}
+
+// ---------- M12: do it today / move a day ----------
+
+function doToday(ctx: CoachContext, dayId: string | undefined): Body {
+  if (dayId === undefined) {
+    const today = effectiveDay(ctx.state, ctx.sessions, ctx.today);
+    const current = today.rest ? undefined : today.day?.id;
+    return {
+      reply: ASK_DAY,
+      chips: ctx.state.plan.days
+        .filter((d) => d.id !== current)
+        .map((d) => ({ id: 'doToday', label: d.name, args: { dayId: d.id } })),
+    };
+  }
+  const r = proposeDoToday(ctx.state, ctx.sessions, ctx.today, dayId);
+  return r.ok ? fromResult(ctx, r) : { reply: r.reply };
+}
+
+function moveDay(ctx: CoachContext, from: string | undefined, to: string | undefined): Body {
+  if (from === undefined) return { reply: HELP_TEXT };
+  if (to !== undefined) {
+    const r = proposeMoveDay(ctx.state, ctx.sessions, ctx.today, from, to);
+    return r.ok ? fromResult(ctx, r) : { reply: r.reply };
+  }
+  // Only `from`: offer the next dates (up to a week on) that the move accepts.
+  const chips: CoachChip[] = [];
+  let first: ReturnType<typeof proposeMoveDay> | undefined;
+  for (let i = 1; i <= 6 && chips.length < MOVE_CHIPS; i++) {
+    const date = addDate(from, i);
+    const r = proposeMoveDay(ctx.state, ctx.sessions, ctx.today, from, date);
+    first ??= r;
+    if (r.ok) chips.push({ id: 'moveDay', label: longDate(date), args: { from, to: date } });
+  }
+  if (
+    first &&
+    !first.ok &&
+    ['notPlanned', 'sessionStarted', 'alreadyDone', 'badDate'].includes(first.reason) &&
+    chips.length === 0
+  )
+    return { reply: first.reply };
+  const dayId = calendarDayId(ctx, from);
+  const name = (dayId && baseDay(ctx.state, from, dayId)?.name) ?? 'it';
+  if (chips.length === 0) return { reply: `No free day for ${name} in the week after.` };
+  return { reply: `Move ${name} to which day?`, chips };
+}
+
+/** The day planned on `date` (null on a rest date). */
+function calendarDayId(ctx: CoachContext, date: string): string | null {
+  const days = effectiveDays(ctx.state, ctx.sessions, ctx.today, daysFrom(ctx.today, date) + 1);
+  const e = days.at(-1);
+  return e && !e.rest ? (e.day?.id ?? null) : null;
 }
 
 function avoid(ctx: CoachContext, area: BodyArea | undefined): Body {
@@ -775,6 +863,8 @@ const BLOCKED_MID_SESSION = new Set<string>([
   'progress',
   'focusBlock',
   'focusEdit',
+  'doToday',
+  'moveDay',
 ]);
 
 function redFlag(ctx: CoachContext): CoachResponse {
@@ -835,6 +925,11 @@ function handleText(text: string, ctx: CoachContext): CoachResponse {
     }
     case 'focusEdit':
       return done(focusEdit(ctx, s));
+    case 'doToday': {
+      const want = s.dayName === undefined ? '' : normalizeText(s.dayName);
+      const day = ctx.state.plan.days.find((d) => normalizeText(d.name) === want);
+      return done(day ? doToday(ctx, day.id) : doToday(ctx, undefined));
+    }
     case 'help':
       return done({ reply: HELP_TEXT });
   }
@@ -857,6 +952,8 @@ const CHIP_INTENT: Partial<Record<CoachChipId, Intent>> = {
   week: 'week',
   progress: 'progress',
   focusBlock: 'focusBlock',
+  doToday: 'doToday',
+  moveDay: 'postpone',
 };
 
 function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachResponse {
@@ -904,6 +1001,10 @@ function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachR
       return done(progressAnswer(ctx));
     case 'focusBlock':
       return done(focusFlow(ctx, args));
+    case 'doToday':
+      return done(doToday(ctx, args.dayId));
+    case 'moveDay':
+      return done(moveDay(ctx, args.from, args.to));
     default:
       return done({ reply: HELP_TEXT });
   }
