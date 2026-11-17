@@ -23,6 +23,11 @@ describe('todoCard', () => {
       'Next: Coach tab + Calendar',
     );
     expect(el.find((e) => e.hasAttribute('data-todo-resign'))).toHaveLength(0);
+    // M13: the "goes to" mark is the shared arrow icon (decorative), not a typed "›".
+    const go = el.find((e) => e.classes.includes('todo-card-go'))[0];
+    expect(go?.getAttribute('aria-hidden')).toBe('true');
+    expect(go?.byTag('svg').map((s) => s.getAttribute('data-icon'))).toEqual(['arrow-right']);
+    expect(el.textContent).not.toContain('›');
     el.click();
     expect(opened).toBe(1);
   });

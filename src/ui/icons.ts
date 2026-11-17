@@ -50,6 +50,11 @@ export const ICON_PATHS = {
   chat: '<path d="M4 5.5h16v10.5h-9l-4.5 3.5V16H4z"/><path d="M8 9.5h8M8 12.5h5"/>',
   /** M7 Fuel: a bowl with steam (the Fuel tab). */
   bowl: '<path d="M3.5 11.5h17a8.5 8 0 0 1-17 0z"/><path d="M8.5 20.5h7M9 3.5c-1 1.2 1 2.3 0 3.8M12.5 3.5c-1 1.2 1 2.3 0 3.8M16 3.5c-1 1.2 1 2.3 0 3.8"/>',
+  /** M13 empty states: an empty plate with a fork (nothing logged on the Fuel day). */
+  plate:
+    '<circle cx="10" cy="12" r="7.5"/><circle cx="10" cy="12" r="3.5"/><path d="M19 4v4.5M21.5 4v4.5M19 8.5h2.5M20.25 8.5V20"/>',
+  /** M13 empty states: a four-point spark (an empty Coach thread, "ask me"). */
+  spark: '<path d="M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/><path d="M19 3.5v3M17.5 5h3"/>',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICON_PATHS;

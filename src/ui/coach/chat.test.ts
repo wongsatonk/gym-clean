@@ -204,6 +204,23 @@ describe('chat: tab variant', () => {
     expect(log).toEqual(["chip:week:How's my week?", 'chip:focusBlock:Build a focus block']);
   });
 
+  it('M13: the empty thread is the shared empty state (spark icon, one line, the starters as its action)', () => {
+    const { el } = mount();
+    const empty = one(el, 'data-empty-state', 'coach-thread');
+    expect(empty.classes).toEqual(expect.arrayContaining(['empty-state', 'chat-empty']));
+    const art = empty.oneByClass('empty-state-art');
+    expect(art.getAttribute('aria-hidden')).toBe('true');
+    expect(art.byTag('svg').map((s) => s.getAttribute('data-icon'))).toEqual(['spark']);
+    expect(empty.byTag('p').map((p) => p.textContent)).toEqual([EMPTY_LINE]);
+    // The one action is the group of suggestions.
+    const group = one(empty, 'role', 'group');
+    expect(group.getAttribute('aria-label')).toBe('Suggestions');
+    expect(attr(group, 'data-coach-starter')).toHaveLength(STARTER_CHIPS.length);
+    // Gone once there is a message or the coach is typing.
+    expect(attr(mount({ messages: [msg('user', 'Hi')] }).el, 'data-empty-state')).toHaveLength(0);
+    expect(attr(mount({ typing: true }).el, 'data-empty-state')).toHaveLength(0);
+  });
+
   it('starters from main carry their args (swap names today’s exercise)', () => {
     const { el, log } = mount({
       starters: [{ id: 'swap', label: "Swap today's Bench Press", args: { exerciseId: 'Bench' } }],

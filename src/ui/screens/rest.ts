@@ -113,6 +113,8 @@ export type RestView = {
   el: HTMLElement;
   /** Cheap per-tick update: text, one attribute on the ring, the state. No re-render. */
   update: (remainingMs: number, targetMs: number) => void;
+  /** Stops the 3D watcher now. Optional for main: the next tick after Rest leaves stops it too. */
+  dispose: () => void;
 };
 
 /** Ring geometry (viewBox 0 0 280 280). */
@@ -307,22 +309,42 @@ export function fig3dState(fig: Pick<Element, 'querySelector'>): 'shown' | 'pend
   return canvas && canvas.width > 0 && canvas.height > 0 ? 'shown' : 'pending';
 }
 
-/** Keeps `data-3d` on the figure box in step with the 3D body arriving in it or leaving it. */
-function watch3d(box: HTMLElement): void {
+/**
+ * Keeps `data-3d` on the figure box in step with the 3D body arriving in it or leaving it.
+ * Returns `check()` (called on every tick: disconnects once the box was on the page and has left
+ * it, i.e. the next screen replaced Rest) and `stop()` (disconnects now; idempotent).
+ */
+function watch3d(box: HTMLElement): { check: () => void; stop: () => void } {
   box.setAttribute('data-3d', 'pending');
   const MO = (globalThis as { MutationObserver?: typeof MutationObserver }).MutationObserver;
-  if (typeof MO !== 'function' || typeof box.querySelector !== 'function') return;
+  const none = { check: () => undefined, stop: () => undefined };
+  if (typeof MO !== 'function' || typeof box.querySelector !== 'function') return none;
+  let observer: MutationObserver | null = null;
+  let seen = false;
+  const stop = () => {
+    observer?.disconnect();
+    observer = null;
+  };
+  /** True once the view has gone (it was on the page and no longer is). */
+  const gone = () => {
+    if (box.isConnected) seen = true;
+    else if (seen) stop();
+    return observer === null;
+  };
   const sync = () => {
+    if (gone()) return;
     const state = fig3dState(box);
     if (box.getAttribute('data-3d') !== state) box.setAttribute('data-3d', state);
   };
-  new MO(sync).observe(box, {
+  observer = new MO(sync);
+  observer.observe(box, {
     subtree: true,
     childList: true,
     attributes: true,
     attributeFilter: ['data-angle', 'width', 'height'],
   });
   sync();
+  return { check: () => void gone(), stop };
 }
 
 export function restScreen(p: RestProps, a: RestActions): RestView {
@@ -357,7 +379,10 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
 
   let lastOver: boolean | null = null;
   let lastTarget = -1;
+  /** The Next card's 3D watcher (set below, once the figure box exists). */
+  let watch: ReturnType<typeof watch3d> | null = null;
   function update(remainingMs: number, targetMs: number): void {
+    watch?.check();
     clock.textContent = formatRest(remainingMs);
     ringFg.setAttribute('stroke-dashoffset', ringOffset(remainingMs, targetMs).toFixed(1));
     const over = remainingMs < 0;
@@ -388,7 +413,7 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
   );
 
   const figBox = h('div', { class: 'rest-card-fig' }, restFigure2d(p.exerciseId), p.figure);
-  watch3d(figBox);
+  watch = watch3d(figBox);
 
   const card = h(
     'article',
@@ -487,5 +512,5 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
       ),
     ),
   );
-  return { el, update };
+  return { el, update, dispose: () => watch?.stop() };
 }

@@ -191,11 +191,17 @@ test('month rings by status → a day per exercise → exercise history (‹ Cal
   for (const s of ['done', 'partial', 'missed', 'planned'])
     await expect(page.locator(`[data-legend="${s}"]`)).toBeVisible();
 
-  // Week score: Mon 9 and Tue 10 trained of the weekly target of 6; the big number is the line's %.
-  const line = page.locator('[data-score="week"] [data-score-line]');
-  await expect(line).toHaveText(/^2 of 6 sessions, \d+% of planned sets$/);
-  const pct = /(\d+)%/.exec((await line.textContent()) ?? '')?.[1];
-  await expect(page.locator('[data-score="week"] .cal-score-num')).toHaveText(`${pct}%`);
+  // Week score: Mon 9 and Tue 10 trained of the weekly target of 6. M13: one headline score
+  // (sessions, with its label); the sets % is a quiet second line, also in the card's name.
+  await expect(page.locator('[data-score="week"] .cal-score-num')).toHaveText('2 of 6');
+  await expect(page.locator('[data-score="week"] [data-score-line]')).toHaveText('sessions done');
+  const sets = page.locator('[data-score="week"] [data-score-sets]');
+  await expect(sets).toHaveText(/^\d+% of planned sets$/);
+  const pct = /(\d+)%/.exec((await sets.textContent()) ?? '')?.[1];
+  await expect(page.locator('[data-score="week"]')).toHaveAttribute(
+    'aria-label',
+    `This week: 2 of 6 sessions, ${pct}% of planned sets`,
+  );
   await expect(page.locator('[data-streak]')).toBeVisible();
   await expectTapTargets(page, 'main[data-screen="calendar"]');
   await noHorizontalOverflow(page);

@@ -104,7 +104,7 @@ test.describe('reduced motion', () => {
     }
     // Calendar scores: the final numbers at once (no count-up).
     await expect(page.locator('[data-score="week"] .cal-score-num')).toHaveText(
-      /^(\d+%|\d+\/\d+|–)$/,
+      /^(\d+ of \d+|\d+|–)$/,
     );
     // Buttons have no press transition.
     const transitions = await page

@@ -56,7 +56,7 @@ describe('forwardContent / doneMark', () => {
   });
 });
 
-// ---------- scan: no typed "‹", "✓" or "→" as a control in src/ui ----------
+// ---------- scan: no typed "‹", "›", "✓" or "→" as a control in src/ui ----------
 
 const UI = __dirname;
 /** app.ts is left to M13 task 30 (main): it still has "✓ done" on the exercise list sheet. */
@@ -77,8 +77,8 @@ function glyphHits(file: string, text: string): string[] {
     if (/^\s*(\/\/|\*|\/\*)/.test(line)) return;
     for (const m of line.matchAll(/(['"`])((?:\\.|(?!\1).)*)\1/g)) {
       const s = (m[2] ?? '').trim();
-      // A back chevron or tick anywhere in a shown string; an arrow at either end ("Next →").
-      if (/[‹✓✔]/.test(s) || /^→|→$/.test(s)) hits.push(`${file}:${i + 1}: ${s}`);
+      // A chevron or tick anywhere in a shown string; an arrow at either end ("Next →").
+      if (/[‹›✓✔]/.test(s) || /^→|→$/.test(s)) hits.push(`${file}:${i + 1}: ${s}`);
     }
   });
   return hits;
@@ -89,6 +89,7 @@ describe('no typed back / done / forward glyphs as controls', () => {
     expect(glyphHits('x.ts', "h('button', {}, '‹ Back')")).toHaveLength(1);
     expect(glyphHits('x.ts', "const l = '✓ done';")).toHaveLength(1);
     expect(glyphHits('x.ts', "h('span', {}, '→')")).toHaveLength(1);
+    expect(glyphHits('x.ts', "h('span', { 'aria-hidden': 'true' }, '›')")).toHaveLength(1);
     expect(glyphHits('x.ts', 'const l = `Next →`;')).toHaveLength(1);
     expect(glyphHits('x.ts', "const t = 'Settings → Accessibility → Voices';")).toEqual([]);
     expect(glyphHits('x.ts', "// '‹ Back' in a comment")).toEqual([]);

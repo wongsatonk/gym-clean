@@ -58,6 +58,11 @@ describe('Goal card', () => {
     const buttons = el.byTag('button');
     expect(buttons).toHaveLength(1);
     expect(buttons[0]?.hasAttribute('data-goal-set')).toBe(true);
+    // M13: the forward mark is the shared arrow icon, not a typed "›".
+    expect(buttons[0]?.textContent).toBe(GOAL_PROMPT_TITLE);
+    expect(buttons[0]?.byTag('svg').map((s) => s.getAttribute('data-icon'))).toEqual([
+      'arrow-right',
+    ]);
     buttons[0]?.click();
     expect(calls).toEqual({ set: 1, open: 0 });
     expect(by(el, 'data-goal')).toHaveLength(0);

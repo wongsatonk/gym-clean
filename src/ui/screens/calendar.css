@@ -183,29 +183,36 @@
   gap: 10px;
 }
 
-/* Big number left, the words right (they say the same thing for a screen reader). */
+/* M13 task 21: one headline score. The big "2 of 6" with its label beside it on the baseline
+   (the label wraps under the number when a long month count leaves no room), quiet lines below.
+   The card's aria-label carries the full sentence for a screen reader. */
 .cal-score {
   background: var(--surface);
   border: var(--line-w) solid var(--line);
   border-radius: var(--r-card);
   padding: 12px 16px 14px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  column-gap: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
   row-gap: 4px;
   min-width: 0;
 }
 
 .cal-score-title {
-  grid-column: 1 / -1;
+  flex: 1 1 100%;
 }
 
 .cal-score-text {
+  flex: 1 1 140px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+}
+
+.cal-score-line {
+  font-weight: 700;
 }
 
 .cal-score-title {

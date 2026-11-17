@@ -182,15 +182,22 @@ describe('calendarScreen', () => {
     const root = render();
     const score = (k: string) => must(root.find((e) => e.getAttribute('data-score') === k)[0]);
     const week = score('week');
-    expect(week.oneByClass('cal-score-num').textContent).toBe('86%');
-    expect(week.oneByClass('cal-score-line').textContent).toBe(
-      '2 of 5 sessions, 86% of planned sets',
-    );
+    // M13 task 21: one headline score (sessions) with its label; sets % is a quiet second line.
+    expect(week.oneByClass('cal-score-num').textContent).toBe('2 of 5');
+    expect(week.oneByClass('cal-score-line').textContent).toBe('sessions done');
+    expect(week.oneByClass('cal-score-sets').textContent).toBe('86% of planned sets');
+    expect(week.oneByClass('cal-score-sets').classes).toContain('cal-score-sub');
     expect(week.getAttribute('aria-label')).toBe('This week: 2 of 5 sessions, 86% of planned sets');
     expect(week.oneByClass('cal-score-focus').textContent).toBe('Chest focus: 9 of 20 sets');
     const month = score('month');
     expect(month.oneByClass('cal-score-title').textContent).toBe('This month');
-    expect(month.oneByClass('cal-score-num').textContent).toBe('89%');
+    expect(month.oneByClass('cal-score-num').textContent).toBe('11 of 21');
+    expect(month.oneByClass('cal-score-sets').textContent).toBe('89% of planned sets');
+    // Exactly one big number per card, never a % next to it.
+    for (const k of ['week', 'month']) {
+      expect(score(k).byClass('cal-score-num')).toHaveLength(1);
+      expect(score(k).oneByClass('cal-score-num').textContent).not.toContain('%');
+    }
     expect(month.textContent).toContain('+ 1 extra session');
     expect(root.oneByClass('cal-streak').textContent).toBe('Streak: 6 weeks');
   });
@@ -208,10 +215,29 @@ describe('calendarScreen', () => {
     const notDue = { ...none, sessionsPlanned: 4 };
     const root = render(props({ week: notDue, monthScore: none, streakWeeks: 1 }));
     const score = (k: string) => must(root.find((e) => e.getAttribute('data-score') === k)[0]);
-    expect(score('week').oneByClass('cal-score-num').textContent).toBe('0/4');
-    expect(score('week').oneByClass('cal-score-line').textContent).toBe('0 of 4 sessions');
+    expect(score('week').oneByClass('cal-score-num').textContent).toBe('0 of 4');
+    expect(score('week').oneByClass('cal-score-line').textContent).toBe('sessions done');
+    expect(score('week').byClass('cal-score-sets')).toHaveLength(0); // no sets due yet
+    expect(score('week').getAttribute('aria-label')).toBe('This week: 0 of 4 sessions');
     expect(score('month').oneByClass('cal-score-num').textContent).toBe('–');
     expect(score('month').oneByClass('cal-score-line').textContent).toBe('No sessions planned');
+    // Extras with nothing planned: the extras are the headline.
+    const extraOnly = render(
+      props({ week: { ...none, extra: 2, sessionsDone: 2 }, monthScore: none }),
+    );
+    const w = must(extraOnly.find((e) => e.getAttribute('data-score') === 'week')[0]);
+    expect(w.oneByClass('cal-score-num').textContent).toBe('2');
+    expect(w.oneByClass('cal-score-line').textContent).toBe('extra sessions');
+    expect(w.getAttribute('aria-label')).toBe('This week: No sessions planned, 2 extra sessions');
+    // One planned session: singular label.
+    const one = render(
+      props({
+        week: { ...none, sessionsPlanned: 1, sessionsDone: 1, setsPlanned: 4, setsDone: 4 },
+      }),
+    );
+    const w1 = must(one.find((e) => e.getAttribute('data-score') === 'week')[0]);
+    expect(w1.oneByClass('cal-score-num').textContent).toBe('1 of 1');
+    expect(w1.oneByClass('cal-score-line').textContent).toBe('session done');
     expect(root.oneByClass('cal-streak').textContent).toBe('Streak: 1 week');
   });
 
@@ -219,14 +245,14 @@ describe('calendarScreen', () => {
     vi.useFakeTimers();
     const root = render(props({ animate: true }));
     const num = must(root.byClass('cal-score-num')[0]);
-    expect(num.textContent).toBe('0%');
+    expect(num.textContent).toBe('0 of 5');
     vi.advanceTimersByTime(2000);
-    expect(num.textContent).toBe('86%');
+    expect(num.textContent).toBe('2 of 5');
   });
 
   it('final numbers at once without animate (re-renders, reduced motion)', () => {
     const root = render(props({ animate: false }));
-    expect(root.byClass('cal-score-num')[0]?.textContent).toBe('86%');
+    expect(root.byClass('cal-score-num')[0]?.textContent).toBe('2 of 5');
   });
 
   it('loading and error states replace the grid; retry calls back', () => {

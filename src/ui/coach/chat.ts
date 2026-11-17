@@ -48,6 +48,7 @@ import {
 } from '../../core/trainer/coach';
 import type { BodyArea, BrainSource, ChatMessage, CheckIn, FocusBlock } from '../../core/types';
 import { h } from '../dom';
+import { emptyState } from '../emptyState';
 import { icon, type IconName } from '../icons';
 import { moodClass } from '../tokens';
 import { buildCheckInCard, type CheckInAnswers, type CheckInQuestionView } from './checkInCard';
@@ -604,7 +605,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   });
   if (p.typing) list.append(typingIndicator());
 
-  // Empty thread: a line and the starters.
+  // Empty thread: an icon, a line and the starters.
   let starters: HTMLElement | null = null;
   if (p.messages.length === 0 && !p.typing) {
     const chips = (p.starters ?? STARTER_CHIPS).map((c) =>
@@ -620,12 +621,19 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       ),
     );
     cycle.push(...chips);
-    starters = h(
-      'div',
-      { class: 'chat-empty' },
-      h('p', { class: 'chat-empty-line' }, EMPTY_LINE),
-      h('div', { class: 'chat-starters', role: 'group', 'aria-label': 'Suggestions' }, ...chips),
-    );
+    // M13 task 22: the shared empty state; the starters are its one action (a group).
+    starters = emptyState({
+      kind: 'coach-thread',
+      icon: 'spark',
+      line: EMPTY_LINE,
+      class: 'chat-empty',
+      lineClass: 'chat-empty-line',
+      action: h(
+        'div',
+        { class: 'chat-starters', role: 'group', 'aria-label': 'Suggestions' },
+        ...chips,
+      ),
+    });
   }
 
   const areas =

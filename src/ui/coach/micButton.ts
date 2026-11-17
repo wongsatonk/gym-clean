@@ -18,6 +18,7 @@
 //
 // e2e hooks: `[data-mic]` (+ `data-mic-state`), `[data-mic-hold]` (the button, named "Hold to
 // talk"), `[data-mic-ring]`, `[data-mic-hint]`, `[data-mic-unavailable]` (+ the reason).
+import { APP_NAME } from '../../core/brand';
 import { h } from '../dom';
 import { reducedMotion } from '../motion';
 
@@ -48,7 +49,7 @@ export const MIC_UNAVAILABLE_LINES: Readonly<Record<string, string>> = {
   unsupported: "This iPhone can't do speech to text on the phone. Type instead.",
   modelNotInstalled: "Speech for the mic isn't on this iPhone yet. Type for now.",
   modelDownloading: 'Speech for the mic is still downloading. Type for now.',
-  permissionDenied: 'The mic is off for Gym Clean. Turn it on in iPhone Settings.',
+  permissionDenied: `The mic is off for ${APP_NAME}. Turn it on in iPhone Settings.`,
   notNative: 'The mic works in the iPhone app.',
 };
 export const MIC_UNAVAILABLE_FALLBACK = "The mic isn't available right now. Type instead.";

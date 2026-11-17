@@ -145,6 +145,44 @@ describe('fuelScreen', () => {
     expectCleanCopy(el);
   });
 
+  it('M13: until targets exist, "Set up targets" is the one filled button; Log food is outline', () => {
+    const { el } = render({ targets: null, entries: [], totals: { kcal: 0, proteinG: 0 } });
+    const filled = el.byClass('primary-btn');
+    expect(filled).toHaveLength(1);
+    expect(filled[0]?.hasAttribute('data-setup')).toBe(true);
+    expect(filled[0]?.textContent).toBe('Set up targets');
+    const log = byAttr(el, 'data-log-open');
+    expect(log.classes).not.toContain('primary-btn');
+    expect(log.textContent).toBe('Log food');
+  });
+
+  it('M13: with targets, Log food is the one filled button', () => {
+    for (const entries of [[], ENTRIES]) {
+      const { el } = render({ entries });
+      const filled = el.byClass('primary-btn');
+      expect(filled).toHaveLength(1);
+      expect(filled[0]?.hasAttribute('data-log-open')).toBe(true);
+    }
+  });
+
+  it('M13: an empty day is the empty state (plate icon, one line, Log food as its one action)', () => {
+    const { el, calls } = render({ entries: [], totals: { kcal: 0, proteinG: 0 } });
+    const empty = byAttr(el, 'data-empty-state', 'fuel-day');
+    expect(empty.oneByClass('empty-state-art').byTag('svg')[0]?.getAttribute('data-icon')).toBe(
+      'plate',
+    );
+    expect(empty.oneByClass('empty-state-line').textContent).toBe('Nothing logged yet today.');
+    const buttons = empty.byTag('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.hasAttribute('data-log-open')).toBe(true);
+    // Not a second Log food button elsewhere on the screen.
+    expect(all(el, 'data-log-open')).toHaveLength(1);
+    buttons[0]?.click();
+    expect(calls.log).toBe(1);
+    // With entries there is no empty state and Log food sits above the list.
+    expect(all(render().el, 'data-empty-state')).toHaveLength(0);
+  });
+
   it('groups entries by slot (groups and rows in time order), with slot totals', () => {
     const { el } = render();
     const slots = all(el, 'data-slot');

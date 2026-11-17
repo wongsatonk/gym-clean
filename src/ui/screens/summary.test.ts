@@ -332,7 +332,7 @@ describe('summaryScreen stall card (M10)', () => {
     const [row, pu] = cards(el);
     expect(row?.getAttribute('data-stall')).toBe('row');
     expect(row?.oneByClass('stall-line').textContent).toBe('DB Row: same best set for 3 sessions.');
-    expect(row?.oneByClass('stall-label').textContent).toBe('Stalled');
+    expect(row?.oneByClass('stall-label').textContent).toBe('Plateau');
     const rowBtns = row?.byTag('button') ?? [];
     expect(rowBtns.map((b) => b.textContent)).toEqual(['Go lighter', 'Add a set']);
     expect(rowBtns.every((b) => b.getAttribute('type') === 'button')).toBe(true);

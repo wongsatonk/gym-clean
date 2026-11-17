@@ -277,6 +277,11 @@ function legend(props: CalendarProps): HTMLElement {
   );
 }
 
+/**
+ * M13 task 21: one headline score per card. The big number is sessions ("2 of 6") with its label
+ * ("sessions done"); the sets % is a quiet second line. The accessible name keeps core's full
+ * sentence ("2 of 6 sessions, 86% of planned sets").
+ */
 function scoreCard(
   key: 'week' | 'month',
   title: string,
@@ -286,12 +291,20 @@ function scoreCard(
 ): HTMLElement {
   const pct = pctOf(s);
   const line = scoreLine(s);
+  const planned = s.sessionsPlanned;
   const num = h('span', { class: 'cal-score-num', 'aria-hidden': 'true' });
-  if (pct !== null) {
-    if (animate) countUp(num, pct, { format: (n) => `${n}%` });
-    else num.textContent = `${pct}%`;
+  let label: string;
+  if (planned > 0) {
+    const fmt = (n: number) => `${n} of ${planned}`;
+    if (animate) countUp(num, s.sessionsDone, { format: fmt });
+    else num.textContent = fmt(s.sessionsDone);
+    label = planned === 1 ? 'session done' : 'sessions done';
+  } else if (s.extra > 0) {
+    num.textContent = String(s.extra);
+    label = s.extra === 1 ? 'extra session' : 'extra sessions';
   } else {
-    num.textContent = s.sessionsPlanned > 0 ? `${s.sessionsDone}/${s.sessionsPlanned}` : '–';
+    num.textContent = '–';
+    label = 'No sessions planned';
   }
   const text =
     line ??
@@ -310,8 +323,20 @@ function scoreCard(
     h(
       'div',
       { class: 'cal-score-text' },
-      h('p', { class: 'cal-score-line', 'data-score-line': true }, text),
-      s.extra > 0 && line
+      // The number, its label and the sets line are in the card's accessible name already.
+      h('p', { class: 'cal-score-line', 'data-score-line': true, 'aria-hidden': 'true' }, label),
+      pct !== null
+        ? h(
+            'p',
+            {
+              class: 'cal-score-sub cal-score-sets',
+              'data-score-sets': pct,
+              'aria-hidden': 'true',
+            },
+            `${pct}% of planned sets`,
+          )
+        : null,
+      s.extra > 0 && planned > 0
         ? h(
             'p',
             { class: 'cal-score-sub', 'data-score-extra': s.extra },

@@ -30,6 +30,7 @@ import type { DaySession, ExerciseHistory, ExerciseSessionEntry } from '../../co
 import { formatWeight, toUnit, type Unit } from '../../core/units';
 import { e1rmChart, type E1rmPoint } from '../charts/e1rmChart';
 import { h } from '../dom';
+import { emptyState } from '../emptyState';
 import { icon } from '../icons';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
@@ -286,21 +287,15 @@ function exerciseButton(
 function listView(props: HistoryProps, actions: HistoryActions): HTMLElement[] {
   const noHistory = props.days.length === 0 && props.exercises.length === 0;
   if (noHistory) {
+    // M13 task 22: the shared empty state (icon + one line + one action).
     return [
-      emptyCard(
-        'none',
-        'No workouts yet',
-        'Finish a workout and your sets show up here: weights, reps and focus, week by week.',
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'ghost-btn wide-btn hist-empty-btn',
-            onclick: () => actions.onTab('today'),
-          },
-          'Go to Today',
-        ),
-      ),
+      emptyState({
+        kind: 'history',
+        icon: 'dumbbell',
+        line: 'No workouts yet. Finish one and your sets show up here.',
+        hooks: { role: 'status', 'data-history-empty': 'none' },
+        action: { label: 'Go to Today', icon: 'home', onClick: () => actions.onTab('today') },
+      }),
     ];
   }
   const sessions = props.days.length;

@@ -168,11 +168,13 @@
 }
 
 /* Empty thread. */
+/* M13 task 22: the shared empty-state card (emptyState.css); the starters fill its width. */
 .chat-empty {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 8px 0 12px;
+  margin: 8px 0 12px;
+}
+
+.chat-empty .chat-starters {
+  align-self: stretch;
 }
 
 .chat-empty-line {

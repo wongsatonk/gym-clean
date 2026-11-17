@@ -9,6 +9,7 @@
 // `[data-goal-status]` = onTrack / behind / done, `[data-goal-due]`, `[data-goal-open]`,
 // `[data-goal-set]`.
 import type { Goal } from '../../core/types';
+import { forwardContent } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import '../intake/intake.css';
@@ -144,8 +145,7 @@ export function goalCard(props: GoalCardProps, actions: GoalCardActions): HTMLEl
           'data-goal-set': true,
           onclick: () => actions.onSetGoal(),
         },
-        h('span', {}, GOAL_PROMPT_TITLE),
-        h('span', { 'aria-hidden': 'true' }, '›'),
+        ...forwardContent(GOAL_PROMPT_TITLE),
       ),
     );
   return h(

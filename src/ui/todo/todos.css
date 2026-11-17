@@ -59,8 +59,7 @@
 
 .todo-card-go {
   flex: none;
-  font-size: var(--fs-head);
-  line-height: 1;
+  display: inline-flex;
   color: var(--text-2);
 }
 

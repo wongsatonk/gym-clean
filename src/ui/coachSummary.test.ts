@@ -1,5 +1,14 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { ALL_GOOD_TEXT, coachRows, nextLineText, progressChipText } from './coachSummary';
+import {
+  ALL_GOOD_TEXT,
+  coachRows,
+  createStallCards,
+  nextLineText,
+  progressChipText,
+  type StallCardData,
+} from './coachSummary';
+import { asFake, useFakeDom } from './screens/testDom';
 
 const NAMES: Record<string, string> = {
   bench: 'Dumbbell Bench Press',
@@ -79,5 +88,30 @@ describe('coachRows', () => {
   });
   it('is empty for no entries', () => {
     expect(coachRows([], name)).toEqual([]);
+  });
+});
+
+describe('createStallCards wording (M13 task 21)', () => {
+  useFakeDom();
+  const STALLS: StallCardData[] = [
+    {
+      exerciseId: 'bench',
+      line: 'Dumbbell Bench Press: same best set for 3 sessions.',
+      options: ['lighter', 'addSet'],
+    },
+  ];
+
+  it('labels the card "Plateau" in sentence case, also in its accessible name', () => {
+    const el = asFake(createStallCards(STALLS, () => undefined));
+    const card = el.find((e) => e.getAttribute('data-stall') === 'bench')[0];
+    expect(card?.oneByClass('stall-label').textContent).toBe('Plateau');
+    expect(card?.getAttribute('aria-label')).toBe(
+      'Plateau: Dumbbell Bench Press: same best set for 3 sessions.',
+    );
+    expect(el.textContent).not.toMatch(/stalled|fell short/i);
+    // No all-caps status word: the label css has no uppercase transform.
+    const css = readFileSync(new URL('./coach.css', import.meta.url), 'utf8');
+    const rule = /\.stall-label\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(rule).not.toMatch(/text-transform:\s*uppercase/);
   });
 });

@@ -187,8 +187,9 @@
   overflow-wrap: anywhere;
 }
 
-/* M10 stall card (Summary, under the Coach section). The "Stalled" label + flat-arrow icon mark
-   it, not colour alone; the two options are secondary buttons (Apply stays the only fill). */
+/* M10 stall card (Summary, under the Coach section). The "Plateau" label (M13: sentence case, not
+   an all-caps status word) + bars icon mark it, not colour alone; the two options are secondary
+   buttons (Apply stays the only fill). */
 .stall-cards {
   display: flex;
   flex-direction: column;
@@ -215,10 +216,8 @@
   gap: 8px;
   margin: 0;
   color: var(--cue);
-  font-size: var(--fs-label);
+  font-size: var(--fs-body);
   font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .stall-line {

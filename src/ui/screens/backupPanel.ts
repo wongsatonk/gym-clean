@@ -9,6 +9,7 @@
 // e2e hooks: `[data-backup-export]`, `[data-backup-restore]`, the hidden file input
 // `input[data-backup-file]`, `[data-backup-confirm]` (the question), `[data-backup-replace]`
 // (`data-armed` while armed), `[data-backup-cancel]`, `[data-backup-status]`.
+import { APP_NAME } from '../../core/brand';
 import type { BackupErrorCode } from '../../data/backup';
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -49,7 +50,7 @@ export function backupErrorText(code: BackupErrorCode): string {
       return 'This backup is from a newer version. Update the app first.';
     case 'corrupt':
     case 'format':
-      return "This file isn't a Gym Clean backup. Nothing changed.";
+      return `This file isn't a ${APP_NAME} backup. Nothing changed.`;
     case 'write':
       return "Couldn't restore. Nothing changed.";
   }

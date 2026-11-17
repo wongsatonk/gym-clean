@@ -188,13 +188,13 @@ export function createStallCards(
         {
           class: 'stall-card',
           'data-stall': s.exerciseId,
-          'aria-label': `Stalled: ${s.line}`,
+          'aria-label': `Plateau: ${s.line}`,
         },
         h(
           'p',
           { class: 'stall-label' },
           setIcon('bars', 'md', { class: 'coach-icon' }),
-          h('span', {}, 'Stalled'),
+          h('span', {}, 'Plateau'),
         ),
         h('p', { class: 'stall-line', 'data-stall-line': '' }, s.line),
         h(

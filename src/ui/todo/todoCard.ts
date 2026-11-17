@@ -78,6 +78,6 @@ export function todoCard(
           )
         : null,
     ),
-    h('span', { class: 'todo-card-go', 'aria-hidden': 'true' }, '›'),
+    h('span', { class: 'todo-card-go', 'aria-hidden': 'true' }, icon('arrow-right', 'md')),
   );
 }

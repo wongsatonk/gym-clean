@@ -233,6 +233,14 @@ describe('history screen: list', () => {
     const { el, calls } = render({ days: [], exercises: [] });
     expect(one(el, 'data-history-empty', 'none').textContent).toContain('No workouts yet');
     expect(byAttr(el, 'data-week-stat')).toHaveLength(0);
+    // M13 task 22: the shared empty state (icon + one line + one action).
+    const empty = one(el, 'data-empty-state', 'history');
+    expect(empty.getAttribute('data-history-empty')).toBe('none');
+    expect(empty.oneByClass('empty-state-art').byTag('svg')).toHaveLength(1);
+    expect(empty.byTag('p').map((p) => p.textContent)).toEqual([
+      'No workouts yet. Finish one and your sets show up here.',
+    ]);
+    expect(empty.byTag('button')).toHaveLength(1);
     el.find((e) => e.tag === 'button' && e.textContent === 'Go to Today')[0]?.click();
     expect(calls).toEqual(['tab:today']);
   });

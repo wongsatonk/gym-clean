@@ -12,6 +12,7 @@
 // e2e hooks: `main[data-screen="reminders"]`, `[data-reminders-pwa]`, `[data-setting=
 // "reminder-session"|"reminder-missed-day"|"reminder-sunday-recap"]`, `[data-reminder-time]`
 // (input type=time), `[data-reminders-ask]`, `[data-reminders-denied]`.
+import { APP_NAME } from '../../core/brand';
 import type { ReminderKind, ReminderSettings } from '../../core/types';
 import { backButton } from '../backButton';
 import { h } from '../dom';
@@ -44,9 +45,8 @@ export type RemindersActions = {
 export const REMINDERS_PWA_LINE = 'Reminders work in the iPhone app.';
 export const REMINDERS_INTRO = 'All off until you turn one on. No weights, food or body numbers.';
 export const REMINDERS_ASK = "We'll ask iPhone for permission the first time you turn one on.";
-export const REMINDERS_DENIED = 'iPhone has notifications off for Gym Clean, so none will arrive.';
-export const REMINDERS_DENIED_HOW =
-  'To allow them: iPhone Settings > Notifications > Gym Clean > Allow Notifications.';
+export const REMINDERS_DENIED = `iPhone has notifications off for ${APP_NAME}, so none will arrive.`;
+export const REMINDERS_DENIED_HOW = `To allow them: iPhone Settings > Notifications > ${APP_NAME} > Allow Notifications.`;
 
 /**
  * "HH:MM" (24 h) in the phone's own clock: "09:00 AM" on a 12-hour iPhone, "09:00" on a 24-hour

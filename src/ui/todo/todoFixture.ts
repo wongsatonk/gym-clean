@@ -1,6 +1,7 @@
 // Made-up to-do topics, answers and report text for the render tests and the dev-only harness
 // (todo.harness.html). Not the real topics (core's src/data/todos/topics.ts) and not used by the
 // app. No real data: the repo is public.
+import { APP_NAME } from '../../core/brand';
 import type { DetectorResult, TodoAnswer, TodoTopic } from '../../core/types';
 import type { TodoTopicStatus } from './todoList';
 
@@ -137,7 +138,7 @@ export const FIX_RESULTS: Record<string, DetectorResult> = {
 };
 
 export const FIX_REPORT = [
-  'Gym Clean to-do report',
+  `${APP_NAME} to-do report`,
   'Version 1.12.0 (build abc1234) · web app · Mon 16 Nov 2026',
   '',
   'Coach tab + Calendar (Checkpoint I)',

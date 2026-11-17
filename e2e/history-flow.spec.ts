@@ -219,7 +219,7 @@ test('Calendar → day → exercise history from the DB, unfinished session hidd
     'planned',
   );
   // This week (Mon 9 – Sun 15): 2 sessions done.
-  await expect(page.locator('[data-score="week"] [data-score-line]')).toContainText(/^2 of /);
+  await expect(page.locator('[data-score="week"] .cal-score-num')).toHaveText(/^2 of /);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 
   // Today: the unfinished session's 15 × 30 row isn't counted.

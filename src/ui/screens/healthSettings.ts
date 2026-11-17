@@ -20,6 +20,7 @@
 // e2e hooks: `main[data-screen="health-settings"]`, `[data-health-pwa]`, `[data-health-connect]`,
 // `[data-health-type="<type>"]` (role="switch", aria-checked), `[data-health-delete="<type>"]`,
 // `[data-health-keep="<type>"]`, `[data-health-read-now]`, `[data-health-last-read]`.
+import { APP_NAME } from '../../core/brand';
 import { HEALTH_TYPES, type HealthSettings, type HealthType } from '../../core/types';
 import { backButton } from '../backButton';
 import { h } from '../dom';
@@ -54,9 +55,8 @@ export type HealthSettingsActions = {
 export const HEALTH_PWA_LINE = 'Health data works in the iPhone app.';
 export const HEALTH_INTRO =
   'The coach reads these from Apple Health to plan your training. Read only. Stays on this phone.';
-export const HEALTH_CONNECT_NOTE =
-  'iPhone asks which of these Gym Clean may read. You can change that later in the Health app.';
-export const HEALTH_DELETE_NOTE = 'Stops reading it and deletes what Gym Clean kept of it.';
+export const HEALTH_CONNECT_NOTE = `iPhone asks which of these ${APP_NAME} may read. You can change that later in the Health app.`;
+export const HEALTH_DELETE_NOTE = `Stops reading it and deletes what ${APP_NAME} kept of it.`;
 
 /** The row label and one line on what the coach does with it. */
 export const HEALTH_TYPE_COPY: Record<HealthType, { label: string; explainer: string }> = {

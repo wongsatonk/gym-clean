@@ -350,7 +350,7 @@ function aboutSection(
     'about',
     'logo',
     'About',
-    h('p', { class: 'about-name', 'data-about': 'name' }, 'Gym Clean'),
+    h('p', { class: 'about-name', 'data-about': 'name' }, APP_NAME),
     h('p', { class: 'set-note', 'data-about': 'version' }, props.version ?? versionLabel()),
     h('p', { class: 'muted set-note', 'data-about': 'credit' }, CREDIT),
     open,

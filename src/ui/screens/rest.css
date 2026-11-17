@@ -45,10 +45,3 @@
 .rest-card-fig[data-3d='shown'] .rest-fig-2d {
   opacity: 0;
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .rest-card-fig .rest-fig-2d,
-  .rest-card-fig .body3d {
-    transition: none;
-  }
-}

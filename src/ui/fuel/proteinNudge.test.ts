@@ -93,7 +93,20 @@ describe('Fuel screen slot', () => {
     mode: 'quick',
     targets: TARGETS,
     totals: { kcal: 700, proteinG: 18, carbsG: 90, fatG: 20 },
-    entries: [],
+    // The light meal the nudge is about (an empty day shows the empty state instead, M13).
+    entries: [
+      {
+        id: 'm1',
+        date: '2026-11-17',
+        time: new Date(2026, 10, 17, 12, 30).getTime(),
+        slot: 'lunch',
+        label: 'Rice noodle soup',
+        amount: { servings: 1 },
+        estimate: true,
+        kcal: 700,
+        proteinG: 18,
+      },
+    ],
     unit: 'kg',
     ...over,
   });

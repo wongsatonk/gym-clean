@@ -507,14 +507,24 @@ describe('Rest "Next" card: 2D at once, 3D fades in over it (M13)', () => {
     let saved: unknown;
     let fire: (() => void)[] = [];
     let canvas: { width: number; height: number } | null = null;
+    let disconnected = 0;
     beforeEach(() => {
       saved = g.MutationObserver;
       fire = [];
       canvas = null;
+      disconnected = 0;
       g.MutationObserver = class {
+        private on = false;
         constructor(private cb: () => void) {}
         observe() {
-          fire.push(() => this.cb());
+          this.on = true;
+          fire.push(() => {
+            if (this.on) this.cb();
+          });
+        }
+        disconnect() {
+          if (this.on) disconnected++;
+          this.on = false;
         }
       };
       (FakeEl.prototype as unknown as { querySelector: unknown }).querySelector = () => canvas;
@@ -536,6 +546,32 @@ describe('Rest "Next" card: 2D at once, 3D fades in over it (M13)', () => {
       expect(box.getAttribute('data-3d')).toBe('pending');
     });
 
+    it('the watcher disconnects once the view has gone (shown, then taken off the page)', () => {
+      const { view, el } = render(); // FakeEl starts on the page (isConnected)
+      const box = figBox(el);
+      view.update(1000, 90_000);
+      expect(disconnected).toBe(0);
+      canvas = { width: 360, height: 460 };
+      mutate();
+      expect(box.getAttribute('data-3d')).toBe('shown');
+      expect(disconnected).toBe(0);
+      // The next screen replaced it: the next tick (or mutation) stops the observer.
+      box.isConnected = false;
+      view.update(0, 90_000);
+      expect(disconnected).toBe(1);
+      canvas = null;
+      mutate();
+      expect(box.getAttribute('data-3d')).toBe('shown'); // no longer synced
+    });
+
+    it('dispose() stops the watcher at once (main can call it when Rest goes)', () => {
+      const { view } = render();
+      view.dispose();
+      expect(disconnected).toBe(1);
+      view.dispose();
+      expect(disconnected).toBe(1);
+    });
+
     it('3D never arrives or fails: the card keeps its 2D map', () => {
       const box = figBox(render().el);
       mutate();
@@ -544,12 +580,13 @@ describe('Rest "Next" card: 2D at once, 3D fades in over it (M13)', () => {
     });
   });
 
-  it('rest.css: 3D hidden until shown, the 2D fades out then; slot above; reduced motion instant', () => {
+  it('rest.css: 3D hidden until shown, the 2D fades out then; slot above; motion from the tokens', () => {
     const css = readFileSync(join(__dirname, 'rest.css'), 'utf8');
     expect(css).toMatch(/\.rest-card-fig \.body3d \{[^}]*opacity: 0;/);
     expect(css).toMatch(/\.rest-card-fig\[data-3d='shown'\] \.body3d \{[^}]*opacity: 1;/);
     expect(css).toMatch(/\.rest-card-fig\[data-3d='shown'\] \.rest-fig-2d \{[^}]*opacity: 0;/);
     expect(css).toMatch(/transition: opacity var\(--dur-slow\)/);
-    expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*transition: none/);
+    // Reduced motion: the one global rule in styles.css (the tokens are 0ms), no second block here.
+    expect(css).not.toMatch(/@media \(prefers-reduced-motion/);
   });
 });

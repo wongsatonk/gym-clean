@@ -3,10 +3,12 @@
 // passes the results here.
 //
 // Layout: title + date + Weigh-in, the nudge banner slot, the rings with the big "to go" numbers
-// (or the "Set up your targets" card), Log food (the one orange action), today's entries grouped
+// (or the "Set up your targets" card, whose button is the one orange action until targets exist),
+// Log food (the one orange action after that), today's entries grouped
 // by meal slot (each row opens the entry sheet, which has Edit and Delete; M13 task 24: no Delete
 // block on the row, a delete in the sheet is still undone by the app's Undo toast),
-// then the 4-tab bar (Today / Fuel / History / Settings).
+// then the 4-tab bar (Today / Fuel / History / Settings). M13 task 22: an empty day is the shared
+// empty state (plate icon, "Nothing logged yet today.", Log food as its one action).
 //
 // e2e hooks: `main.screen.fuel[data-screen=fuel]`, `[data-ring=kcal|proteinG|carbsG|fatG]`,
 // `[data-left=…]`, `[data-log-open]`, `[data-weigh-in]`, `[data-setup]`, `[data-fuel-nudge]` (links.ts, shared with Today),
@@ -35,6 +37,7 @@ import { fuelRings } from '../fuel/rings';
 import { icon } from '../icons';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
+import { emptyState } from '../emptyState';
 import { dateLabel } from './today';
 
 export type FuelProps = {
@@ -130,12 +133,33 @@ function setupCard(onSetup: () => void): HTMLElement {
       { class: 'muted' },
       'Daily calories and protein come from your height, age, activity and today’s weight.',
     ),
+    // M13 task 22: until targets exist this is the screen's one filled button.
     h(
       'button',
-      { type: 'button', class: 'fuel-secondary', 'data-setup': true, onclick: () => onSetup() },
-      icon('sliders', 'md'),
+      {
+        type: 'button',
+        class: 'primary-btn cta-btn fuel-setup-btn',
+        'data-setup': true,
+        onclick: () => onSetup(),
+      },
+      icon('sliders', 'lg'),
       h('span', {}, 'Set up targets'),
     ),
+  );
+}
+
+/** Log food: the filled CTA once targets exist, the outline second action before. */
+function logButton(primary: boolean, onLog: () => void): HTMLElement {
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: primary ? 'primary-btn cta-btn fuel-log-btn' : 'fuel-secondary fuel-log-btn',
+      'data-log-open': true,
+      onclick: () => onLog(),
+    },
+    icon('plus', primary ? 'lg' : 'md'),
+    h('span', {}, 'Log food'),
   );
 }
 
@@ -177,7 +201,19 @@ function entriesSection(props: FuelProps, actions: FuelActions): HTMLElement {
       'section',
       { class: 'fuel-entries', 'data-entries': 'none' },
       h('h2', { class: 'fuel-h2' }, 'Today'),
-      h('p', { class: 'muted fuel-empty' }, 'Nothing logged yet today.'),
+      // M13 task 22: icon + one line + one action; Log food moves in here (no second button).
+      emptyState({
+        kind: 'fuel-day',
+        icon: 'plate',
+        line: 'Nothing logged yet today.',
+        action: {
+          label: 'Log food',
+          icon: 'plus',
+          primary: props.targets !== null,
+          onClick: () => actions.onLog(),
+          hooks: { 'data-log-open': true },
+        },
+      }),
     );
   }
   return h(
@@ -223,17 +259,7 @@ export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement 
     props.nudge ? nudgeBanner(props.nudge, actions.onDismissNudge ?? (() => undefined)) : null,
     measureDue ? measure : null,
     props.targets ? fuelRings(props.mode, props.totals, props.targets) : setupCard(actions.onSetup),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'primary-btn cta-btn fuel-log-btn',
-        'data-log-open': true,
-        onclick: () => actions.onLog(),
-      },
-      icon('plus', 'lg'),
-      'Log food',
-    ),
+    props.entries.length > 0 ? logButton(props.targets !== null, actions.onLog) : null,
     mealNudge,
     entriesSection(props, actions),
     measureDue ? null : measure,
