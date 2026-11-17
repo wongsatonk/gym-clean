@@ -39,7 +39,7 @@ npx cap telemetry off
 
 ```
 npm ci
-npm run ios:sync      # web build for the app (--mode native) + copy into ios/ + plugins
+npm run ios:sync      # web build for the app (--mode native) + copy into ios/ + plugins + ios:check
 ```
 
 ## 4. Your bundle id and team
@@ -72,19 +72,60 @@ These two values are personal, and the repo is public, so they live in a file th
    restart, tap **Turn On** and enter your passcode. (The Developer Mode switch only shows up after the
    iPhone has been connected to Xcode once.)
 
-## 6. First install (from Xcode)
+## 6. Install (one command)
 
-The first install, and each one after the 7 days run out, goes through Xcode, because that is where
-Xcode creates the free provisioning profile for your bundle id.
+With the iPhone plugged in and unlocked, from a committed checkout:
 
-1. `npm run ios:open` (opens `ios/App/App.xcodeproj`).
-2. At the top, pick the **App** scheme and your **iPhone** as the run destination.
-3. Press **Run ▶**. The first build fetches the Capacitor Swift package from GitHub (build time only;
+```
+npm run ios:install
+```
+
+It does every step, and stops before anything reaches the phone if one fails:
+
+1. Refuses if git has uncommitted changes, so the installed build is always a commit you can find
+   again (`--allow-dirty` overrides; don't use it for a build you'll train with).
+2. `npm run ios:sync`: version, native web build, copy into `ios/`, plugins, then
+   `npm run ios:check` (below).
+3. Builds the app for your iPhone with Xcode's command line (`xcodebuild -allowProvisioningUpdates`),
+   signed with `ios/App/Signing.local.xcconfig` (step 4). If this checkout has no signing file, it
+   copies yours from another checkout of the repo (it stays gitignored).
+4. Runs the same check again on the built app (its Info.plist and the files inside it).
+5. Installs it with `xcrun devicectl device install app` and prints what it installed, e.g.
+   `Installed Gym Clean 1.15.0 (build 305), git abc1234, Debug on (your iPhone).`
+
+Options (after `--`): `--device <name or id>` picks the iPhone (default: the first paired iPhone,
+preferring one that is plugged in), `--dry-run` does everything except the install (it builds
+unsigned, so it needs no signing file), `--release` builds Release instead of Debug.
+
+**What `npm run ios:check` checks** (`scripts/check-native-bundle.mjs`; it lists every problem in
+plain words and exits 1): the native build (no service worker / PWA files), the MediaPipe wasm runtime
+and the pose model are in the bundle and the right size (1.14.0 shipped without the wasm and the
+camera couldn't load its pose model), the bundled JavaScript and the Xcode version both say the
+package.json version, Info.plist has a usage string for every permission the code asks for, the appId
+is right and nothing loads from the network, and every plugin (GymBrain, GymSpeech, GymHealth,
+Haptics, Local Notifications) is registered.
+
+**After every install:** open Gym Clean → **Settings → Self-check** (1.15.0 and later) and expect every
+line ✓. Anything else: don't train with that build; tell Claude what the line says.
+
+The first time only:
+
+- The first launch on the iPhone says the developer isn't trusted: **Settings → General → VPN & Device
+  Management → Apple Development: (your Apple ID) → Trust**. Then open Gym Clean again.
+- The first time you open the camera page, iOS asks for the camera ("Counts your reps on this phone.
+  Video never leaves it."). Allow it.
+
+### Fallback: Run ▶ in Xcode
+
+If `ios:install` stops at the build with a signing or "No profiles" error (the first install, or after
+the 7 days run out, Xcode may need to make the free provisioning profile itself):
+
+1. `npm run ios:sync` (it ends with `npm run ios:check`; don't go on if it fails).
+2. `npm run ios:open` (opens `ios/App/App.xcodeproj`).
+3. At the top, pick the **App** scheme and your **iPhone** as the run destination.
+4. Press **Run ▶**. The first build fetches the Capacitor Swift package from GitHub (build time only;
    the app itself never goes online).
-4. The first launch on the iPhone says the developer isn't trusted: **Settings → General → VPN & Device
-   Management → Apple Development: (your Apple ID) → Trust**. Then open Gym Clean again.
-5. The first time you open the camera page, iOS asks for the camera ("Counts your reps on this phone.
-   Video never leaves it."). Allow it.
+5. Next time, `npm run ios:install` works again. After a Run ▶ install, do the Self-check too.
 
 ## 7. Apple Health (M11, read-only)
 
@@ -111,22 +152,22 @@ no background delivery, no clinical records, no team id). It works with the free
 
 ## 8. Updates
 
-After you pull new code, while your 7 days are still running:
+After you pull new code (and commit anything you changed), while your 7 days are still running:
 
 ```
-npm run ios:run
+npm run ios:install
 ```
 
-It rebuilds the web app, syncs it, builds the iOS app and asks which device to install on (pick your
-iPhone). If it fails with a signing or "No profiles" error, the profile has expired or doesn't exist
-yet: do step 6 again (`npm run ios:sync`, then Run ▶ in Xcode).
+Then **Settings → Self-check**, every line ✓. If it fails with a signing or "No profiles" error, the
+profile has expired or doesn't exist yet: use the Xcode fallback in step 6 once.
 
 The iPhone app's version follows `package.json`: `node scripts/sync-ios-version.mjs` writes it into the Xcode project (`MARKETING_VERSION`, plus a build number that only goes up), and `npm run check` fails if they differ.
 
 ## Free Apple ID limits (checked 2026-11-15)
 
-- **7 days:** an app signed with a free Personal Team stops opening after 7 days. Re-install it from
-  Xcode (step 6). Your workout data stays on the phone as long as you don't delete the app.
+- **7 days:** an app signed with a free Personal Team stops opening after 7 days. Re-install it with
+  `npm run ios:install` (step 6). Your workout data stays on the phone as long as you don't delete
+  the app.
 - **3 devices:** a free team can have up to 3 registered devices (they also expire after 7 days).
 - **3 apps per device** and **10 App IDs per 7 days.** Keep one bundle id and you won't get close.
 - The paid Apple Developer Program (US$99/year) removes the 7-day re-install and allows TestFlight.
@@ -141,7 +182,8 @@ accounts, no sync, nothing leaves that phone.
 
 - Uses your free Apple ID: her iPhone is one of your **3 devices**, and the app counts toward that
   phone's **3 apps**.
-- Stops opening after **7 days**; re-install it from your Mac (step 6) with her phone plugged in.
+- Stops opening after **7 days**; re-install it from your Mac (step 6) with her phone plugged in:
+  `npm run ios:install -- --device "<her iPhone's name>"`.
 - Gets everything: Apple Health (read-only, step 7), the coach's mic, reminders, and Apple's
   on-device coach (only on Apple Intelligence phones: iPhone 15 Pro and later, with Apple
   Intelligence turned on).
@@ -169,7 +211,7 @@ preview → Apply. Or tick the kit by hand.
   to the app's own storage on the phone as per-day summaries; the plugin itself keeps nothing and
   makes no network request.
 - **Web Inspector** (Safari → Develop → your iPhone) works only for Debug builds, which is what Xcode's
-  Run and `npm run ios:run` make. Use it to check that a session makes no network requests.
+  Run, `npm run ios:install` and `npm run ios:run` make. Use it to check that a session makes no network requests.
 - What git never sees: `ios/App/Signing.local.xcconfig`, `ios/App/App/public/` (the copied web build),
   `ios/DerivedData/`, `xcuserdata/`, and backup files (`*.gymclean-backup.json`).
 
