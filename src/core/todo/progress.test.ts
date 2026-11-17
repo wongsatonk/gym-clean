@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TodoAnswer, TodoFacts, TodoTopic } from '../types';
 import {
   currentAnswer,
+  isBlankAnswer,
   pendingAutoTicks,
   resignReminder,
   topicApplies,
@@ -126,7 +127,11 @@ describe('topicStatus', () => {
   });
 
   it('a topic finished after being skipped counts as done, not skipped', () => {
-    const a = [ans('ask', '', 'skip'), ans('ask', 'x', 'ask'), ans('ask', 'z', 'ask')];
+    const a = [
+      ans('ask', '', 'skip'),
+      ans('ask', 'x', 'ask', { optionIds: ['y'] }),
+      ans('ask', 'z', 'ask', { optionIds: ['y'] }),
+    ];
     expect(topicStatus(ASK_ONLY, a, facts('web'))).toMatchObject({ done: true, skipped: false });
   });
 
@@ -137,6 +142,53 @@ describe('topicStatus', () => {
     const late = facts('native', {}, {}, { buildFirstSeenAt: first(5) });
     expect(topicStatus(RESIGN, tick, ok).done).toBe(true);
     expect(topicStatus(RESIGN, tick, late)).toMatchObject({ done: false, nextStepId: 'days' });
+  });
+});
+
+describe('blank ask answers (no options, no note)', () => {
+  it('isBlankAnswer: no options and no or blank note; never for auto or skip rows', () => {
+    expect(isBlankAnswer(ans('ask', 'x', 'ask'))).toBe(true);
+    expect(isBlankAnswer(ans('ask', 'x', 'ask', { optionIds: [] }))).toBe(true);
+    expect(isBlankAnswer(ans('ask', 'x', 'ask', { optionIds: [], note: '  \n ' }))).toBe(true);
+    expect(isBlankAnswer(ans('ask', 'x', 'ask', { optionIds: ['y'] }))).toBe(false);
+    expect(isBlankAnswer(ans('ask', 'x', 'ask', { optionIds: [], note: 'n' }))).toBe(false);
+    expect(isBlankAnswer(ans('ask', 'x', 'auto'))).toBe(false);
+    expect(isBlankAnswer(ans('ask', '', 'skip'))).toBe(false);
+  });
+
+  it('a blank answer does not make its step done', () => {
+    const a = [
+      ans('ask', 'x', 'ask', { optionIds: [] }),
+      ans('ask', 'z', 'ask', { optionIds: [], note: '   ' }),
+    ];
+    expect(topicStatus(ASK_ONLY, a, facts('web'))).toEqual({
+      done: false,
+      skipped: false,
+      stepsDone: 0,
+      steps: 2,
+      nextStepId: 'x',
+    });
+  });
+
+  it('a note alone (no option) counts as answered', () => {
+    const a = [ans('ask', 'x', 'ask', { note: 'n' }), ans('ask', 'z', 'ask', { optionIds: ['y'] })];
+    expect(topicStatus(ASK_ONLY, a, facts('web')).done).toBe(true);
+  });
+
+  it('a blank row next to a real one keeps the step done', () => {
+    const a = [
+      ans('ask', 'x', 'ask', { optionIds: ['y'] }),
+      ans('ask', 'x', 'ask', { optionIds: [] }),
+      ans('ask', 'z', 'ask', { optionIds: ['y'] }),
+    ];
+    expect(topicStatus(ASK_ONLY, a, facts('web')).done).toBe(true);
+  });
+
+  it('currentAnswer skips blank rows', () => {
+    const real = ans('ask', 'x', 'ask', { optionIds: ['y'] });
+    const blank = ans('ask', 'x', 'ask', { optionIds: [] });
+    expect(currentAnswer([real, blank], 'ask', 'x')).toBe(real);
+    expect(currentAnswer([blank], 'ask', 'x')).toBeUndefined();
   });
 });
 
@@ -176,7 +228,7 @@ describe('todoSummary', () => {
     const a = [
       ans('mixed', 'a1', 'auto'),
       ans('mixed', 'a2', 'auto'),
-      ans('mixed', 'q1', 'ask'),
+      ans('mixed', 'q1', 'ask', { optionIds: ['ok'] }),
       ans('ask', '', 'skip'),
     ];
     // Web: NATIVE and RESIGN don't count, so 2 of 2.

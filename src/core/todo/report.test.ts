@@ -158,7 +158,11 @@ describe('buildReport', () => {
 
   it('`all` reports everything again, the latest answer per step', () => {
     const old = ans('coach', 'motion', 'ask', { optionIds: ['right'], at: at(10), sentAt: at(11) });
-    const newer = ans('coach', 'motion', 'ask', { optionIds: ['little'], at: at(12), sentAt: at(13) });
+    const newer = ans('coach', 'motion', 'ask', {
+      optionIds: ['little'],
+      at: at(12),
+      sentAt: at(13),
+    });
     const tick = ans('coach', 'asked', 'auto', { at: at(9), sentAt: at(11) });
     const { text, answerIds } = buildReport({ ...BASE, answers: [old, newer, tick], all: true });
     expect(text).toContain('- How did the motion feel? Too little (2026-11-12)');
@@ -189,6 +193,28 @@ describe('buildReport', () => {
     const { text } = buildReport({ ...BASE, answers: [ans('coach', '', 'skip')] });
     expect(text).toContain('Coach tab + Calendar (Checkpoint I)\n- Skipped (2026-11-16)\n');
     expect(text).not.toContain('Ask the coach a question');
+  });
+
+  it('still prints Skipped when a skipped topic also has answers', () => {
+    const { text } = buildReport({
+      ...BASE,
+      answers: [
+        ans('food', 'q', 'ask', { optionIds: ['y'], at: at(15) }),
+        ans('food', '', 'skip', { at: at(16) }),
+      ],
+    });
+    expect(text).toContain(
+      'Food photos (Checkpoint D)\n- Fast enough? Yes (2026-11-15)\n- Skipped (2026-11-16)',
+    );
+  });
+
+  it('leaves blank ask rows (no option, no note) out of the report', () => {
+    const { text } = buildReport({
+      ...BASE,
+      answers: [ans('food', 'q', 'ask', { optionIds: [] })],
+    });
+    expect(text).not.toContain('Food photos');
+    expect(text).not.toContain('no choice');
   });
 
   it('drops answers for unknown topics and steps, and unknown option ids', () => {

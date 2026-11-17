@@ -3,7 +3,8 @@
  *
  * - An auto step is done once its tick is stored (ticks stick) or while its detector holds.
  *   Recurring topics (the 7-day re-sign) ignore stored ticks and follow the detector.
- * - An ask step is done once answered (any `ask` answer for it).
+ * - An ask step is done once answered: an `ask` answer with an option or a non-blank note. A blank
+ *   one (no options, no/blank note: he cleared his answer) doesn't count anywhere.
  * - A topic is done when every step is; skipped when a `skip` answer exists and it isn't done.
  * - Native-only topics don't apply (and don't count) in the PWA.
  */
@@ -34,12 +35,24 @@ export function topicApplies(topic: TodoTopic, platform: TodoFacts['platform']):
   return topic.platform === 'any' || platform === 'native';
 }
 
+/** An `ask` answer with no options and no (or a blank) note: he cleared it. Counts as no answer. */
+export function isBlankAnswer(a: TodoAnswer): boolean {
+  return (
+    a.kind === 'ask' &&
+    (a.optionIds?.length ?? 0) === 0 &&
+    (a.note === undefined || a.note.trim() === '')
+  );
+}
+
 const has = (
   answers: readonly TodoAnswer[],
   topicId: string,
   stepId: string,
   kind: TodoAnswer['kind'],
-): boolean => answers.some((a) => a.topicId === topicId && a.stepId === stepId && a.kind === kind);
+): boolean =>
+  answers.some(
+    (a) => a.topicId === topicId && a.stepId === stepId && a.kind === kind && !isBlankAnswer(a),
+  );
 
 /** Whether one step of a topic is done now. */
 export function stepDone(
@@ -106,7 +119,7 @@ export function pendingAutoTicks(
   return out;
 }
 
-/** The answer an ask step shows now: its latest `ask` answer. */
+/** The answer an ask step shows now: its latest non-blank `ask` answer. */
 export function currentAnswer(
   answers: readonly TodoAnswer[],
   topicId: string,
@@ -114,7 +127,13 @@ export function currentAnswer(
 ): TodoAnswer | undefined {
   let best: TodoAnswer | undefined;
   for (const a of answers)
-    if (a.topicId === topicId && a.stepId === stepId && a.kind === 'ask' && (!best || a.at >= best.at))
+    if (
+      a.topicId === topicId &&
+      a.stepId === stepId &&
+      a.kind === 'ask' &&
+      !isBlankAnswer(a) &&
+      (!best || a.at >= best.at)
+    )
       best = a;
   return best;
 }

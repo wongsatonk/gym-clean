@@ -19,12 +19,14 @@
  * A file without that row keeps this phone's.
  *
  * What's New (M12 slice 1c): the settings row 'whatsNew' is backed up without `builds` (build id →
- * first seen on this phone, the 7-day re-sign clock); a restore keeps this phone's `builds`, and a
+ * first seen on this phone, the 7-day re-sign clock); a restore keeps this phone's `builds` and the
+ * later of this phone's and the file's `seenRelease` (an old backup doesn't replay the tour), and a
  * file without the row keeps this phone's row.
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';
 import { HEALTH_SETTINGS_KEY, clearDisabledHealthTypes } from './health/store';
+import { compareReleases } from '../core/todo/whatsNew';
 import { WHATS_NEW_KEY } from './todos/store';
 
 export const BACKUP_FORMAT = 'gym-clean-backup';
@@ -68,7 +70,12 @@ export const DEVLOG_TABLES = ['devlogSessions', 'devlogSets', 'devlogChunks'] as
  * - M12: `chatMessages`, the coach chat thread (private text, kept 30 days). The coach UI state
  *   in `settings` key 'coach' holds no message text and is backed up.
  */
-export const LOCAL_ONLY_TABLES = ['foodPhotos', 'foodModels', 'healthDays', 'chatMessages'] as const;
+export const LOCAL_ONLY_TABLES = [
+  'foodPhotos',
+  'foodModels',
+  'healthDays',
+  'chatMessages',
+] as const;
 
 /** Every table a backup never carries (a restore leaves them alone). */
 export const NOT_BACKED_UP_TABLES = [...DEVLOG_TABLES, ...LOCAL_ONLY_TABLES] as const;
@@ -185,6 +192,14 @@ const isWhatsNewSetting = (row: unknown): row is { key: string; value: unknown }
   isObj(row) && row.key === WHATS_NEW_KEY;
 
 /** The 'whatsNew' row without `builds` (the re-sign clock belongs to the phone that ran them). */
+/** The later of two seen releases (either may be missing or damaged). */
+function laterRelease(a: unknown, b: unknown): string | undefined {
+  const ok = (v: unknown): v is string => typeof v === 'string' && v !== '';
+  if (!ok(a)) return ok(b) ? b : undefined;
+  if (!ok(b)) return a;
+  return compareReleases(a, b) >= 0 ? a : b;
+}
+
 function stripWhatsNewLocal(row: unknown): unknown {
   if (!isWhatsNewSetting(row) || !isObj(row.value)) return row;
   const value = Object.fromEntries(Object.entries(row.value).filter(([k]) => k !== 'builds'));
@@ -496,11 +511,14 @@ export async function importAll(
       if (localWhatsNew) {
         const restored = await db.settings.get(WHATS_NEW_KEY);
         if (!fileHasWhatsNew || !restored) await db.settings.put(localWhatsNew);
-        else if (isObj(localWhatsNew.value) && localWhatsNew.value.builds !== undefined)
-          await db.settings.put({
-            key: WHATS_NEW_KEY,
-            value: { ...(isObj(restored.value) ? restored.value : {}), builds: localWhatsNew.value.builds },
-          });
+        else {
+          const local = isObj(localWhatsNew.value) ? localWhatsNew.value : {};
+          const value: Record<string, unknown> = isObj(restored.value) ? { ...restored.value } : {};
+          if (local.builds !== undefined) value.builds = local.builds;
+          const seen = laterRelease(local.seenRelease, value.seenRelease);
+          if (seen !== undefined) value.seenRelease = seen;
+          await db.settings.put({ key: WHATS_NEW_KEY, value });
+        }
       }
       await clearDisabledHealthTypes(db);
       return { counts, undo };

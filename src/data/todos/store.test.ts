@@ -46,9 +46,16 @@ const decision = (topicId: string): AskStep => {
   return s;
 };
 
+/** saveAnswer for a non-blank answer (always returns the row). */
+const saveOk = async (...args: Parameters<typeof saveAnswer>) => {
+  const r = await saveAnswer(...args);
+  if (!r) throw new Error('expected a saved answer');
+  return r;
+};
+
 describe('answers', () => {
   it('saves an ask answer and lists it (round trip)', async () => {
-    const a = await saveAnswer(
+    const a = await saveOk(
       db,
       { topicId: 'camera', stepId: 'cues', optionIds: ['yes'], note: 'Made-up note' },
       T0,
@@ -68,8 +75,8 @@ describe('answers', () => {
   });
 
   it('changes an unsent answer in place', async () => {
-    const a = await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: ['x'] }, T0, R);
-    const b = await saveAnswer(
+    const a = await saveOk(db, { topicId: 't', stepId: 's', optionIds: ['x'] }, T0, R);
+    const b = await saveOk(
       db,
       { topicId: 't', stepId: 's', optionIds: ['y'], note: 'n' },
       T0 + 5,
@@ -79,15 +86,41 @@ describe('answers', () => {
     expect(await listAnswers(db)).toEqual([
       expect.objectContaining({ id: a.id, optionIds: ['y'], note: 'n', at: T0 + 5 }),
     ]);
-    const c = await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: ['x'] }, T0 + 6, R);
+    const c = await saveOk(db, { topicId: 't', stepId: 's', optionIds: ['x'] }, T0 + 6, R);
     expect(c.note).toBeUndefined();
     expect((await listAnswers(db))[0]?.note).toBeUndefined();
   });
 
-  it('after a copy, a change is a new answer', async () => {
-    const a = await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: ['x'] }, T0, R);
+  it('a blank answer (no options, no or blank note) deletes the unsent row and stores nothing', async () => {
+    await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: ['x'] }, T0, R);
+    await saveAnswer(db, { topicId: 't', stepId: 'other', optionIds: ['x'] }, T0, R);
+    expect(
+      await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: [], note: '  ' }, T0 + 1, R),
+    ).toBeNull();
+    expect((await listAnswers(db)).map((a) => a.stepId)).toEqual(['other']);
+    expect(
+      await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: [] }, T0 + 2, R),
+    ).toBeNull();
+    expect(await listAnswers(db)).toHaveLength(1);
+  });
+
+  it('a blank answer keeps sent rows (they were reported)', async () => {
+    const a = await saveOk(db, { topicId: 't', stepId: 's', optionIds: ['x'] }, T0, R);
     await markSent(db, [a.id], T0 + 1);
-    const b = await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: ['y'] }, T0 + 2, R);
+    await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: ['y'] }, T0 + 2, R);
+    await saveAnswer(db, { topicId: 't', stepId: 's', optionIds: [] }, T0 + 3, R);
+    expect(await listAnswers(db)).toEqual([expect.objectContaining({ id: a.id, sentAt: T0 + 1 })]);
+  });
+
+  it('a note alone (no option) is saved', async () => {
+    const a = await saveOk(db, { topicId: 't', stepId: 's', optionIds: [], note: 'n' }, T0, R);
+    expect(a).toMatchObject({ optionIds: [], note: 'n' });
+  });
+
+  it('after a copy, a change is a new answer', async () => {
+    const a = await saveOk(db, { topicId: 't', stepId: 's', optionIds: ['x'] }, T0, R);
+    await markSent(db, [a.id], T0 + 1);
+    const b = await saveOk(db, { topicId: 't', stepId: 's', optionIds: ['y'] }, T0 + 2, R);
     expect(b.id).not.toBe(a.id);
     const all = await listAnswers(db);
     expect(all.map((x) => [x.optionIds, x.sentAt])).toEqual([
@@ -97,9 +130,14 @@ describe('answers', () => {
   });
 
   it('removes key-like strings from a note and caps it at 500 characters', async () => {
-    const a = await saveAnswer(
+    const a = await saveOk(
       db,
-      { topicId: 't', stepId: 's', optionIds: [], note: `x sk-ant-api03-madeupMADEUP0123456789 ${'y'.repeat(600)}` },
+      {
+        topicId: 't',
+        stepId: 's',
+        optionIds: [],
+        note: `x sk-ant-api03-madeupMADEUP0123456789 ${'y'.repeat(600)}`,
+      },
       T0,
       R,
     );
@@ -127,8 +165,8 @@ describe('answers', () => {
   });
 
   it('marks answers sent and remembers the last copy', async () => {
-    const a = await saveAnswer(db, { topicId: 't', stepId: 'a', optionIds: ['x'] }, T0, R);
-    const b = await saveAnswer(db, { topicId: 't', stepId: 'b', optionIds: ['x'] }, T0, R);
+    const a = await saveOk(db, { topicId: 't', stepId: 'a', optionIds: ['x'] }, T0, R);
+    const b = await saveOk(db, { topicId: 't', stepId: 'b', optionIds: ['x'] }, T0, R);
     await markSent(db, [a.id, 'missing'], T0 + 3);
     const rows = await listAnswers(db);
     expect(rows.find((r) => r.id === a.id)?.sentAt).toBe(T0 + 3);
@@ -138,8 +176,8 @@ describe('answers', () => {
   });
 
   it('lists answers oldest first', async () => {
-    await saveAnswer(db, { topicId: 't', stepId: 'b', optionIds: [] }, T0 + 2, R);
-    await saveAnswer(db, { topicId: 't', stepId: 'a', optionIds: [] }, T0 + 1, R);
+    await saveAnswer(db, { topicId: 't', stepId: 'b', optionIds: ['x'] }, T0 + 2, R);
+    await saveAnswer(db, { topicId: 't', stepId: 'a', optionIds: ['x'] }, T0 + 1, R);
     expect((await listAnswers(db)).map((a) => a.stepId)).toEqual(['a', 'b']);
   });
 
@@ -201,7 +239,12 @@ describe('applyDecision', () => {
 
   it('does nothing for an unknown option or a step without a setting', async () => {
     expect(await applyDecision(db, decision('apple-card'), 'maybe')).toBe(false);
-    const plain: AskStep = { id: 'q', title: 'Q?', kind: 'ask', options: [{ id: 'a', label: 'A' }] };
+    const plain: AskStep = {
+      id: 'q',
+      title: 'Q?',
+      kind: 'ask',
+      options: [{ id: 'a', label: 'A' }],
+    };
     expect(await applyDecision(db, plain, 'a')).toBe(false);
     expect(await db.settings.count()).toBe(0);
   });
@@ -247,7 +290,10 @@ describe("What's New state", () => {
   });
 
   it('reads a damaged row as empty', async () => {
-    await db.settings.put({ key: WHATS_NEW_KEY, value: { seenRelease: 5, builds: { x: 'y', z: 3 } } });
+    await db.settings.put({
+      key: WHATS_NEW_KEY,
+      value: { seenRelease: 5, builds: { x: 'y', z: 3 } },
+    });
     expect(await getWhatsNew(db)).toEqual({ builds: { z: 3 } });
   });
 });
@@ -257,7 +303,12 @@ describe('noteSignal', () => {
 
   it('records Calendar opened only when a finished session exists that day', async () => {
     expect(await noteSignal(db, 'calendarAfterSession', day(16, 20))).toBe(false);
-    await db.sessions.put({ sessionId: 's0', dayId: 'push-a', startedAt: day(15, 18), endedAt: day(15, 19) });
+    await db.sessions.put({
+      sessionId: 's0',
+      dayId: 'push-a',
+      startedAt: day(15, 18),
+      endedAt: day(15, 19),
+    });
     await db.sessions.put({ sessionId: 's1', dayId: 'push-a', startedAt: day(16, 8) }); // not finished
     expect(await noteSignal(db, 'calendarAfterSession', day(16, 20))).toBe(false);
     expect(await getTodoSignals(db)).toEqual({});
@@ -270,7 +321,12 @@ describe('noteSignal', () => {
   });
 
   it('keeps the first time', async () => {
-    await db.sessions.put({ sessionId: 's1', dayId: 'x', startedAt: day(16, 8), endedAt: day(16, 9) });
+    await db.sessions.put({
+      sessionId: 's1',
+      dayId: 'x',
+      startedAt: day(16, 8),
+      endedAt: day(16, 9),
+    });
     await noteSignal(db, 'calendarAfterSession', day(16, 10));
     await noteSignal(db, 'calendarAfterSession', day(16, 11));
     expect(await getTodoSignals(db)).toEqual({ calendarAfterSessionAt: day(16, 10) });

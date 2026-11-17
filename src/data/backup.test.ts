@@ -180,7 +180,14 @@ async function seed(db: GymDb): Promise<void> {
       release: '1.12.0',
       sentAt: T0 + 5,
     },
-    { id: 'skip:vesync::2', topicId: 'vesync', stepId: '', kind: 'skip', at: T0, release: '1.12.0' },
+    {
+      id: 'skip:vesync::2',
+      topicId: 'vesync',
+      stepId: '',
+      kind: 'skip',
+      at: T0,
+      release: '1.12.0',
+    },
   ]);
   // Developer log: never in a backup.
   await db.devlogSessions.put({
@@ -392,7 +399,10 @@ describe("What's New builds (M12 slice 1c)", () => {
     await seed(a);
     await a.settings.put({ key: 'whatsNew', value: { seenRelease: '1.13.0', builds: { x: 1 } } });
     const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
-    await b.settings.put({ key: 'whatsNew', value: { seenRelease: '1.12.0', builds: { mine: 7 } } });
+    await b.settings.put({
+      key: 'whatsNew',
+      value: { seenRelease: '1.12.0', builds: { mine: 7 } },
+    });
     await importAll(b, file);
     expect((await b.settings.get('whatsNew'))?.value).toEqual({
       seenRelease: '1.13.0',
@@ -400,10 +410,40 @@ describe("What's New builds (M12 slice 1c)", () => {
     });
   });
 
+  it("restoring an older backup keeps this phone's newer seen release (no tour replay)", async () => {
+    await seed(a);
+    await a.settings.put({ key: 'whatsNew', value: { seenRelease: '1.9.0' } });
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.settings.put({
+      key: 'whatsNew',
+      value: { seenRelease: '1.12.0', builds: { mine: 7 } },
+    });
+    await importAll(b, file);
+    expect((await b.settings.get('whatsNew'))?.value).toEqual({
+      seenRelease: '1.12.0',
+      builds: { mine: 7 },
+    });
+  });
+
+  it("a restore onto a phone with no seen release takes the file's", async () => {
+    await seed(a);
+    await a.settings.put({ key: 'whatsNew', value: { seenRelease: '1.12.0' } });
+    const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
+    await b.settings.put({ key: 'whatsNew', value: { builds: { mine: 7 } } });
+    await importAll(b, file);
+    expect((await b.settings.get('whatsNew'))?.value).toEqual({
+      seenRelease: '1.12.0',
+      builds: { mine: 7 },
+    });
+  });
+
   it("a restore from a file without the row keeps this phone's row", async () => {
     await seed(a);
     const file = viaFile(await exportAll(a, { appVersion: 't', now: T0 }));
-    await b.settings.put({ key: 'whatsNew', value: { seenRelease: '1.12.0', builds: { mine: 7 } } });
+    await b.settings.put({
+      key: 'whatsNew',
+      value: { seenRelease: '1.12.0', builds: { mine: 7 } },
+    });
     await importAll(b, file);
     expect((await b.settings.get('whatsNew'))?.value).toEqual({
       seenRelease: '1.12.0',
@@ -770,7 +810,9 @@ describe('M11 health data in backups', () => {
     if (hrow) hrow.value.readiness = readiness;
     await b.settings.delete('health');
     await importAll(b, viaFile(edited));
-    expect(((await b.settings.get('health'))?.value as Record<string, unknown>).readiness).toBeUndefined();
+    expect(
+      ((await b.settings.get('health'))?.value as Record<string, unknown>).readiness,
+    ).toBeUndefined();
   });
 
   it('a restore leaves this phone’s healthDays alone, except types the restored switches turn off', async () => {

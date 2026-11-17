@@ -4,7 +4,8 @@
  * What goes in: the app name, the version label (release + build), PWA or iPhone app, the date,
  * then one block per topic with something new: ask answers as their option labels + his note
  * (as typed, key-like strings and photo data removed), auto ticks as "done (date)", unticked
- * auto steps as counts ("not yet (2 of 3)"), skipped topics as "Skipped".
+ * auto steps as counts ("not yet (2 of 3)"), skipped topics as "Skipped" (after any answers).
+ * Blank ask rows (no option, no note) are left out.
  *
  * What never goes in: Health values, photos or photo data, API keys or key-like strings, chat
  * text, food or body numbers, his name. The report reads only topic data (labels), answers (ids,
@@ -13,6 +14,7 @@
 import { versionLabel } from '../version';
 import type { TodoAnswer, TodoFacts, TodoTopic } from '../types';
 import { runDetector } from './detectors';
+import { isBlankAnswer } from './progress';
 
 export const NOTE_MAX_CHARS = 500;
 
@@ -81,7 +83,7 @@ export function buildReport(input: ReportInput): Report {
 
   const blocks: string[] = [];
   for (const topic of topics) {
-    const mine = latestPerStep(picked.filter((a) => a.topicId === topic.id));
+    const mine = latestPerStep(picked.filter((a) => a.topicId === topic.id && !isBlankAnswer(a)));
     if (mine.length === 0) continue;
     const head = topic.checkpoint ? `${topic.title} (${topic.checkpoint})` : topic.title;
     const lines = [head];
@@ -110,14 +112,16 @@ export function buildReport(input: ReportInput): Report {
       const labels = (a.optionIds ?? [])
         .map((id) => step.options.find((o) => o.id === id)?.label)
         .filter((l): l is string => l !== undefined);
-      stepLines.push(`- ${step.title}${sep}${labels.length ? labels.join(', ') : 'no choice'} ${when(a)}`);
+      stepLines.push(
+        `- ${step.title}${sep}${labels.length ? labels.join(', ') : 'no choice'} ${when(a)}`,
+      );
       reported++;
       const note = a.note === undefined ? '' : redactNote(a.note);
       if (note !== '') stepLines.push(`  Note: ${note.replace(/\s*\n\s*/g, ' / ')}`);
     }
     if (reported > 0) lines.push(...stepLines);
-    else if (skip) lines.push(`- Skipped ${when(skip)}`);
-    else continue; // only answers for steps that no longer exist
+    if (skip) lines.push(`- Skipped ${when(skip)}`);
+    if (reported === 0 && !skip) continue; // only answers for steps that no longer exist
     blocks.push(lines.join('\n'));
   }
 

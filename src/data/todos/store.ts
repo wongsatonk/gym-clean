@@ -47,18 +47,26 @@ export async function listAnswers(db: GymDb): Promise<TodoAnswer[]> {
 /**
  * Saves an ask answer. An unsent answer for the same step is changed in place (same id); once it
  * was copied, a change is a new answer (reported next time). An empty note is dropped.
+ *
+ * Clearing: a blank answer (no options and no note left after cleaning) stores nothing, deletes
+ * the step's unsent answer (sent ones stay: they were reported) and returns null. The step is then
+ * not done, unless a sent answer for it remains (`currentAnswer` then shows that one).
  */
 export async function saveAnswer(
   db: GymDb,
   input: AnswerInput,
   now: number,
   release: string,
-): Promise<TodoAnswer> {
+): Promise<TodoAnswer | null> {
   const note = input.note === undefined ? '' : redactNote(input.note);
   return db.transaction('rw', db.todoAnswers, async () => {
     const open = (await db.todoAnswers.where('topicId').equals(input.topicId).toArray()).find(
       (a) => a.stepId === input.stepId && a.kind === 'ask' && a.sentAt === undefined,
     );
+    if (input.optionIds.length === 0 && note === '') {
+      if (open) await db.todoAnswers.delete(open.id);
+      return null;
+    }
     const row: TodoAnswer = {
       id: open?.id ?? `ask:${input.topicId}:${input.stepId}:${now}`,
       topicId: input.topicId,
@@ -162,11 +170,7 @@ function setPath(obj: unknown, path: string[], value: unknown): unknown {
  * fields in the row are kept). Nothing else is touched. Returns false (no write) when the step
  * has no setting or the option isn't mapped (e.g. "Change something": the planner decides).
  */
-export async function applyDecision(
-  db: GymDb,
-  step: TodoStep,
-  optionId: string,
-): Promise<boolean> {
+export async function applyDecision(db: GymDb, step: TodoStep, optionId: string): Promise<boolean> {
   if (step.kind !== 'ask' || !step.setting) return false;
   const { key, path, values } = step.setting;
   if (!Object.prototype.hasOwnProperty.call(values, optionId)) return false;
@@ -186,10 +190,9 @@ function parseWhatsNew(v: unknown): WhatsNewState {
   const out: WhatsNewState = {};
   if (typeof v.seenRelease === 'string' && v.seenRelease !== '') out.seenRelease = v.seenRelease;
   if (isObj(v.builds)) {
-    const builds = Object.fromEntries(Object.entries(v.builds).filter(([, t]) => isTime(t))) as Record<
-      string,
-      number
-    >;
+    const builds = Object.fromEntries(
+      Object.entries(v.builds).filter(([, t]) => isTime(t)),
+    ) as Record<string, number>;
     if (Object.keys(builds).length) out.builds = builds;
   }
   return out;
