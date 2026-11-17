@@ -253,6 +253,12 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* M12: a tab switch slides the screen 8px (motion.ts enterScreen); clip, so the page never
+   scrolls sideways mid-slide. `clip` (not hidden) keeps position: sticky working. */
+#app {
+  overflow-x: clip;
+}
+
 button {
   font: inherit;
   color: inherit;

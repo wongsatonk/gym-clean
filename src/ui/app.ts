@@ -13,7 +13,11 @@ import {
 } from '../core/session';
 import type {
   Accent,
+  ChatCard,
+  ChatMessage,
   DayAdjust,
+  FocusBlock,
+  PeriodScore,
   DayOverride,
   FocusCueId,
   PlanChange,
@@ -60,14 +64,41 @@ import {
 } from '../core/trainer/plan';
 import { applyProposal, resetToProgram, undoLast } from '../core/trainer/changes';
 import {
-  handle as coachHandle,
   MID_SESSION_REPLY,
+  QUICK_CHIPS,
   stallSince,
-  type CoachChip,
+  starterChips,
+  type CoachArgs,
+  type CoachChipId,
   type CoachContext,
   type CoachInput,
   type CoachPhase,
+  type QuickChipId,
 } from '../core/trainer/coach';
+import { isFocusExercise } from '../core/trainer/focusBlock';
+import {
+  dayCompletion,
+  missedDay as coreMissedDay,
+  monthCompletion,
+  monthScore,
+  weekScore,
+  type CompletionInput,
+  type MissedDay,
+} from '../core/progress/completion';
+import { recapDue } from '../core/progress/recap';
+import { createRouter } from '../data/brain/router';
+import { rulesBrain } from '../data/brain/rules';
+import {
+  addMessage,
+  clearChat,
+  getCoachUi,
+  listThread,
+  patchCoachUi,
+  pruneChat,
+  updateCard,
+  type ChatCardPatch,
+  type CoachUiState,
+} from '../data/chat/store';
 import { adjustSummary, rowAdjustNote } from '../core/trainer/replies';
 import { detectStalls, stallLine } from '../core/trainer/actions/stall';
 import type { TrainerCatalog } from '../core/trainer/swapCandidates';
@@ -83,7 +114,6 @@ import {
   finishSession,
   getExerciseNote,
   getCoachTips,
-  finishedHistorySince,
   getAccent,
   setAccent,
   getCoachVoice,
@@ -112,7 +142,19 @@ import {
   type SetRow,
 } from '../data/db';
 import { startDevLogSession, type DevLogRecorder } from '../data/devlog';
-import { coachSheet, type CoachChipId as SheetChipId, type CoachItem } from './coach/coachSheet';
+import {
+  chat,
+  coachTabScreen,
+  splitReplyChips,
+  WORKOUT_CHAT_CHIPS,
+  type ChatActions,
+  type ChatChip,
+  type ChatProps,
+} from './coach/chat';
+import { calendarScreen, dayLong, shiftMonth } from './screens/calendar';
+import { calendarDayScreen } from './screens/calendarDay';
+import { renderShareMonth, shareMonth, shareMonthLayout } from './shareMonth';
+import { enterScreen, reducedMotion, type EnterDir } from './motion';
 import { undoToast, type UndoToast } from './coach/undoToast';
 import { planChangesScreen } from './screens/planChanges';
 import { myGymScreen } from './screens/myGym';
@@ -146,18 +188,12 @@ import { pauseSheet as renderPauseSheet } from './screens/pauseSheet';
 import { previewScreen as renderPreview } from './screens/preview';
 import { historyScreen as renderHistory } from './screens/history';
 import { restScreen as renderRest } from './screens/rest';
-import {
-  exercisesWithHistory,
-  exerciseHistory,
-  historyWindowStart,
-  lastDays,
-  lastDaysStart,
-} from '../core/history';
+import { exerciseHistory } from '../core/history';
 import { settingsScreen as renderSettings } from './screens/settings';
 import { summaryScreen as renderSummary } from './screens/summary';
-import { todayScreen as renderToday, type TodayLast } from './screens/today';
+import { createTodayMotion, todayScreen as renderToday, type TodayLast } from './screens/today';
 import { icon } from './icons';
-import type { TabId } from './tabBar';
+import { TABS, tabBar, type TabId } from './tabBar';
 import { applyAccent } from './tokens';
 import {
   doneDaysThisWeek,
@@ -179,7 +215,6 @@ import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { createFuel } from './fuel/fuelController';
 import { createFoodVisionHost } from './fuel/foodVisionHost';
 import { createHealthHost } from './healthHost';
-import type { FoodSuggestion } from '../core/types';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
 
@@ -199,8 +234,8 @@ type TodayStats = {
   doneThisWeek: Record<string, number>;
 };
 
-/** M6 History: finished sessions and their sets in the window (loaded when the tab opens). */
-type HistoryData = { sessions: SessionRow[]; sets: SetRow[]; today: number } | 'error';
+/** M12 Calendar: every session (the projection reads them), the finished ones and their sets. */
+type CalendarData = { sessions: SessionRow[]; finished: SessionRow[]; sets: SetRow[]; t: number };
 
 /**
  * M10 day preview: `day` is what Start runs. For today's day it's `effectiveDay` (with any adjust
@@ -222,43 +257,21 @@ type View =
   | { screen: 'planChanges' }
   | { screen: 'myGym' }
   | { screen: 'healthSettings' }
-  | { screen: 'history'; exerciseId: string | null; data: HistoryData | null }
+  | { screen: 'coach' }
+  | {
+      screen: 'calendar';
+      /** 'YYYY-MM' shown. */
+      month: string;
+      /** Day detail open (YYYY-MM-DD), else the month. */
+      date: string | null;
+      /** Exercise history open (one tap deeper than a day). */
+      exerciseId: string | null;
+      data: CalendarData | 'error' | null;
+    }
   | ({ screen: 'preview'; loading: boolean } & PreviewDay)
   | { screen: 'session'; s: SessionState; sheet: Sheet };
 
-/** M10 coach sheet state: the open chat (never stored), its proposals and options. */
-type CoachUi = {
-  phase: CoachPhase;
-  items: CoachItem[];
-  /** Proposal items by their index in `items`, with how they were asked for. */
-  proposals: Map<number, { proposal: Proposal; source: PlanChange['source']; intent: string }>;
-  showAreas: boolean;
-  /** The quick chips to offer (core's list for this turn). */
-  quick: SheetChipId[];
-  /** Core chips that aren't quick or area chips ("Try …", "Push the week instead", …). */
-  followUps: CoachChip[];
-  /** History the coach reads (stalls, last weights), loaded when it opens. */
-  sets: SetLog[];
-  lastWeightKg: Record<string, number>;
-  /** M7 F3: the food card from the last "What should I eat?" (logged = row indexes). */
-  food: { suggestions: FoodSuggestion[]; logged: number[] } | null;
-  el: HTMLElement | null;
-  opener: HTMLElement | null;
-};
-
-const QUICK_IDS: readonly string[] = [
-  'notToday',
-  'easyOn',
-  'lighter',
-  'swap',
-  'adjustPlan',
-  'food',
-];
-const AREA_IDS: readonly string[] = ['arms', 'shoulders', 'chest', 'back', 'legs', 'core'];
-const WORKOUT_QUICK: SheetChipId[] = ['easyOn', 'lighter', 'swap'];
-const COACH_GREETING = 'What should we change?';
 const UNDO_FAILED = "Can't undo that now: the plan changed since.";
-const STALE_PROPOSAL = 'The plan changed since. Ask me again.';
 
 export function mountApp(root: HTMLElement): void {
   const db = new GymDb();
@@ -280,7 +293,40 @@ export function mountApp(root: HTMLElement): void {
   let trainerSessions: SessionRow[] = [];
   let changes: PlanChange[] = [];
   let newProgram = false;
-  let coach: CoachUi | null = null;
+  // ----- M12 coach chat (one thread: the Coach tab + the Pause sheet's compact chat) -----
+  // Slice 1 registers the rule brain only (no network). Live Proposals (with their `next`
+  // state) stay in memory by message id; the stored cards keep only what the thread shows.
+  const router = createRouter([rulesBrain]);
+  let thread: ChatMessage[] = [];
+  let threadReady: Promise<void> | null = null;
+  let chatBusy = false;
+  let chatTyping = false;
+  /** Messages with a higher id rise in on the next render (undefined: none). */
+  let chatSeen: number | undefined;
+  let justApplied: number | undefined;
+  let refocusInput = false;
+  let tempMsgId = 0;
+  /** Phase of the Coach tab's turns ('preview' when the preview's Coach button opened it). */
+  let tabPhase: CoachPhase = 'today';
+  let coachHistory: { sets: SetLog[]; lastWeightKg: Record<string, number> } = {
+    sets: [],
+    lastWeightKg: {},
+  };
+  let chatSheet: { el: HTMLElement | null; opener: HTMLElement | null } | null = null;
+  const liveProposals = new Map<
+    number,
+    { proposal: Proposal; source: PlanChange['source']; intent: string }
+  >();
+  /** Focus blocks proposed this run, by block id (applied ones are in trainer.blocks). */
+  const focusDrafts = new Map<string, FocusBlock>();
+  /** Message id → the plan change its Apply made (focus-block cards don't store it). */
+  const appliedChange = new Map<number, number>();
+  // M12 Today prompts and Calendar.
+  let coachUi: CoachUiState = { missedAnswered: [] };
+  let missedPrompt: MissedDay | null = null;
+  let promptsBusy = false;
+  let calCounted = false;
+  const todayMotion = createTodayMotion();
   let toast: (HTMLElement & { dispose?: () => void }) | null = null;
   // The running session's adjustments (SessionRow.adjust): lighter/deload sessions skip stalls.
   let sessionAdjust: ProposalAction[] = [];
@@ -453,7 +499,6 @@ export function mountApp(root: HTMLElement): void {
 
   // ---------- 3D body (lazy, one WebGL context for the whole app) ----------
 
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let body3d: Body3D | null = null;
   let body3dState: 'idle' | 'loading' | 'ready' | 'failed' = 'idle';
 
@@ -466,7 +511,7 @@ export function mountApp(root: HTMLElement): void {
           body3dState = 'failed';
           return;
         }
-        body3d = m.createBody3D({ reducedMotion });
+        body3d = m.createBody3D({ reducedMotion: reducedMotion() });
         body3dState = 'ready';
         placeBody3d();
       })
@@ -711,6 +756,14 @@ export function mountApp(root: HTMLElement): void {
     // Settings shows "Restore undone." inline: the notice would say it twice.
     if (view.screen === 'settings' && toast?.dataset.notice === 'restore') removeToast();
     placeToast();
+    if (pendingEnter) {
+      // The screen's parts slide, not the screen: a transform on it would carry the fixed tab
+      // bar along for the slide.
+      for (const part of screen.children)
+        if (part instanceof HTMLElement && !part.matches('[data-tabbar]'))
+          enterScreen(part, pendingEnter);
+      pendingEnter = null;
+    }
   }
 
   function screenFor(v: View): HTMLElement {
@@ -739,8 +792,10 @@ export function mountApp(root: HTMLElement): void {
             onChange: (equipment) => saveGym(equipment),
           },
         );
-      case 'history':
-        return historyView(v.exerciseId, v.data);
+      case 'coach':
+        return coachTabView();
+      case 'calendar':
+        return calendarView(v);
       case 'preview':
         return previewScreen(v, v.loading);
       case 'session':
@@ -748,9 +803,37 @@ export function mountApp(root: HTMLElement): void {
     }
   }
 
+  /** The tab a view belongs to (sub-screens count as their tab), or null (preview, workout). */
+  function tabOf(v: View): TabId | null {
+    switch (v.screen) {
+      case 'today':
+      case 'fuel':
+      case 'coach':
+      case 'calendar':
+        return v.screen;
+      case 'settings':
+      case 'planChanges':
+      case 'myGym':
+      case 'healthSettings':
+        return 'settings';
+      default:
+        return null;
+    }
+  }
+
+  /** The next render enters in the direction of travel along the tab bar (motion.ts). */
+  let pendingEnter: EnterDir | null = null;
+  function setEnter(to: TabId): void {
+    const from = tabOf(view);
+    if (from === to) return;
+    const i = (t: TabId) => TABS.findIndex((x) => x.id === t);
+    pendingEnter = from === null ? 'up' : i(to) > i(from) ? 'next' : 'prev';
+  }
+
   /** Tab bar: every tab is handled here, so a new tab id fails to compile until it's wired. */
   function goTab(tab: TabId): void {
     navSeq++;
+    setEnter(tab);
     switch (tab) {
       case 'today':
         if (view.screen !== 'today') goToday();
@@ -762,10 +845,14 @@ export function mountApp(root: HTMLElement): void {
         }
         return;
       case 'calendar':
-        if (view.screen !== 'history') openHistory(); // task 16 swaps in the Calendar screen
+        if (view.screen !== 'calendar') openCalendar();
+        else if (view.date !== null || view.exerciseId !== null) {
+          view = { ...view, date: null, exerciseId: null };
+          render();
+        }
         return;
       case 'coach':
-        void openCoach('today'); // task 15: the Coach tab screen
+        if (view.screen !== 'coach') void openCoachTab('today');
         return;
       case 'fuel':
         if (view.screen !== 'fuel') void openFuel();
@@ -788,56 +875,6 @@ export function mountApp(root: HTMLElement): void {
     if (seq !== navSeq || view.screen !== from) return;
     view = { screen: 'fuel' };
     render();
-  }
-
-  function openHistory(): void {
-    view = { screen: 'history', exerciseId: null, data: null };
-    render();
-    const t = now();
-    void finishedHistorySince(db, Math.min(historyWindowStart(t), lastDaysStart(t)))
-      .then(({ sessions, sets }) => {
-        if (view.screen !== 'history') return;
-        view = { ...view, data: { sessions, sets, today: t } };
-        render();
-      })
-      .catch((err: unknown) => {
-        logDbError(err);
-        if (view.screen === 'history') {
-          view = { ...view, data: 'error' };
-          render();
-        }
-      });
-  }
-
-  function historyView(exerciseId: string | null, data: HistoryData | null): HTMLElement {
-    const ok = data !== null && data !== 'error' ? data : null;
-    const sets = ok?.sets ?? [];
-    const today = ok?.today ?? now();
-    return renderHistory(
-      {
-        loading: data === null,
-        error: data === 'error',
-        unit,
-        days: ok ? lastDays(ok.sessions, sets, today) : [],
-        exercises: exercisesWithHistory(sets, today).map((id) => exerciseHistory(sets, id, today)),
-        detail: exerciseId ? exerciseHistory(sets, exerciseId, today) : null,
-        dayName: (id) => planDays().find((d) => d.id === id)?.name ?? id,
-        name: exerciseName,
-      },
-      {
-        onOpenExercise: (id) => {
-          if (view.screen !== 'history') return;
-          view = { ...view, exerciseId: id };
-          render();
-        },
-        onBack: () => {
-          if (view.screen !== 'history') return;
-          view = { ...view, exerciseId: null };
-          render();
-        },
-        onTab: (t) => goTab(t),
-      },
-    );
   }
 
   function goToday(): void {
@@ -887,6 +924,8 @@ export function mountApp(root: HTMLElement): void {
         view = { screen: 'today', upNextDayId: upNext, stats: todayStats(sessions, sets, t) };
         render();
       }
+      // M12: the missed-day card and any recap due (each once; answers in settings 'coach').
+      void coachPrompts(sets);
     } catch (err) {
       console.warn('Could not read history stats', err);
     }
@@ -939,6 +978,8 @@ export function mountApp(root: HTMLElement): void {
         nudge: fuel.nudgeText(),
         missingKit: trainer && upNextDayId !== null ? todayMissingKit() : null,
         ...health.todayProps(),
+        missedDay: trainer && upNextDayId !== null ? missedPrompt : null,
+        motion: todayMotion,
       },
       {
         ...health.readinessActions((chip) => void openCoach('today', { chip })),
@@ -955,6 +996,14 @@ export function mountApp(root: HTMLElement): void {
         onOpenFuel: () => void openFuel(),
         onSeeGymSwap: (id) => seeGymSwap('today', id),
         onKeepExercise: (id) => keepGymExercise(id),
+        onMoveMissed: (m) => {
+          answerMissed(m);
+          doDayToday(m.dayId);
+        },
+        onSkipMissed: (m) => {
+          answerMissed(m);
+          render();
+        },
       },
     );
   }
@@ -1283,43 +1332,6 @@ export function mountApp(root: HTMLElement): void {
 
   // ----- Apply / Undo -----
 
-  async function applyFromCoach(index: number): Promise<void> {
-    const c = coach;
-    const entry = c?.proposals.get(index);
-    if (!c || !entry || !trainer) return;
-    c.proposals.delete(index);
-    const r = applyProposal(trainer, entry.proposal, now(), entry.source);
-    if (!r.ok) {
-      c.items[index] = { kind: 'coach', text: STALE_PROPOSAL };
-      renderCoach();
-      return;
-    }
-    trainer = r.state;
-    const change = await saveChangeRecord(r.state, r.change);
-    changes = [change, ...changes];
-    trainerLog(entry.intent, entry.proposal.action, 'applied', entry.source);
-    const workout = c.phase === 'workout';
-    // Mid-workout Lighter today only changes lifts with no logged set: say so once any are logged.
-    const say =
-      workout &&
-      entry.proposal.action === 'lighter' &&
-      view.screen === 'session' &&
-      view.s.logs.length > 0
-        ? LIGHTER_STARTED
-        : entry.proposal.say;
-    closeCoach();
-    if (workout) {
-      markSessionAdjust(entry.proposal.action);
-      syncSession(r.state);
-      sayConfirmation(say);
-    }
-    showUndoToast(say ?? `Done. ${entry.proposal.title}.`, change.id);
-    refreshAfterChange();
-  }
-
-  /** Lighter today applied after a set was logged: started lifts keep their weights. */
-  const LIGHTER_STARTED = 'Done. Lifts not started yet are lighter.';
-
   /** Undo the newest standing change (LIFO). With `id`, only if it's that one. */
   async function undoNewest(source: string, id?: number): Promise<void> {
     if (!trainer) return;
@@ -1337,6 +1349,8 @@ export function mountApp(root: HTMLElement): void {
     );
     await saveChangeRecord(r.state, undone);
     trainerLog('undo', undone.action, 'undone', source);
+    markCardsUndone(undone.id);
+    expireStale(); // cards built on the plan before the Undo can't apply now
     removeToast();
     syncSession(r.state); // mid-workout: only rows still unstarted go back
     refreshAfterChange();
@@ -1461,56 +1475,195 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
-  // ----- the coach sheet -----
+  // ----- M12 the coach: one thread, two frames (Coach tab + the Pause sheet's compact chat) -----
 
   /**
-   * Opens the coach from Today / the preview / the Pause sheet ('workout') or Summary's stall
-   * card ('today' with a first chip). Reads the history it needs first.
+   * Opens the coach. Mid-workout ('workout', the Pause sheet only) → the compact sheet on the same
+   * thread. Anything else (Today / preview Coach buttons, the readiness card, the missing-kit
+   * prompt, Summary's stall card) → the Coach tab, with `first` already sent.
    */
   async function openCoach(phase: CoachPhase, first?: CoachInput): Promise<void> {
-    if (coach || !trainer) return;
-    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    let sets: SetLog[] = [];
-    let lastW: Record<string, number> = {};
+    if (phase === 'workout') {
+      await openChatSheet();
+      return;
+    }
+    await openCoachTab(phase, first);
+  }
+
+  /** Thread loaded once (pruned to 30 days on start); later turns append to `thread`. */
+  function ensureThread(): Promise<void> {
+    threadReady ??= (async () => {
+      try {
+        await pruneChat(db, now());
+        thread = await listThread(db, now());
+      } catch (err) {
+        logDbError(err);
+      }
+      expireStale();
+    })();
+    return threadReady;
+  }
+
+  /** History the coach reads (stalls, last weights) and Fuel's totals; read on every open. */
+  async function loadCoachHistory(): Promise<void> {
     try {
       trainerSessions = await db.sessions.toArray();
       const finished = trainerSessions.filter((x) => x.endedAt !== undefined);
-      sets = await setsForSessions(
+      const sets = await setsForSessions(
         db,
         finished.map((x) => x.sessionId),
       );
       const ids = [...new Set(planDays().flatMap((d) => d.exercises.map((p) => p.exerciseId)))];
-      lastW = lastWeights(await lastSessionSets(db, ids));
+      coachHistory = { sets, lastWeightKg: lastWeights(await lastSessionSets(db, ids)) };
       await fuel.ensureLoaded();
     } catch (err) {
       logDbError(err);
     }
-    if (view.screen === 'session' && phase === 'workout') lastW = { ...view.s.lastWeightKg };
-    if (coach) return;
-    coach = {
-      phase,
-      items: [{ kind: 'coach', text: phase === 'workout' ? MID_SESSION_REPLY : COACH_GREETING }],
-      proposals: new Map(),
-      showAreas: false,
-      quick: phase === 'workout' ? [...WORKOUT_QUICK] : [],
-      followUps: [],
-      sets,
-      lastWeightKg: lastW,
-      food: null,
-      el: null,
-      opener,
-    };
-    if (first) coachTurn(first);
-    else renderCoach();
+  }
+
+  async function openCoachTab(phase: CoachPhase, first?: CoachInput): Promise<void> {
+    await trainerReady;
+    if (view.screen === 'session') {
+      // Summary's stall card: the workout is over; close its log like Done does.
+      if (view.s.phase !== 'summary') return;
+      finishDevLog();
+    }
+    fuel.closeSheet();
+    tabPhase = phase;
+    if (view.screen !== 'coach') {
+      setEnter('coach');
+      chatSeen = undefined; // a fresh open shows the thread as it is (no rise-in)
+    }
+    await ensureThread();
+    view = { screen: 'coach' };
+    render();
+    await loadCoachHistory();
+    if (first) await coachSend(first, saidFor(first), phase);
+  }
+
+  async function openChatSheet(): Promise<void> {
+    if (chatSheet || !trainer) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    await ensureThread();
+    await loadCoachHistory();
+    if (chatSheet) return;
+    chatSeen = undefined;
+    chatSheet = { el: null, opener };
+    renderChatSheet();
+  }
+
+  function closeChatSheet(): void {
+    const s = chatSheet;
+    if (!s) return;
+    // Mid-workout proposals left open are set aside (they were built for this set's state).
+    for (const m of thread) {
+      if (m.phase !== 'workout' || m.id === undefined || !isPendingCard(m)) continue;
+      const entry = liveProposals.get(m.id);
+      if (entry) trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
+      liveProposals.delete(m.id);
+      patchCard(m.id, { status: 'dismissed' });
+    }
+    s.el?.remove();
+    chatSheet = null;
+    if (!howTo) root.inert = false;
+    const back =
+      (s.opener?.isConnected ? s.opener : null) ??
+      root.querySelector<HTMLElement>('[data-pause="coach"]');
+    back?.focus();
+  }
+
+  /** Words for his bubble when a chip is sent from outside the chat (Today, Summary, …). */
+  function saidFor(input: CoachInput): string {
+    if ('text' in input) return input.text;
+    const quick = QUICK_CHIPS.find((c) => c.id === input.chip);
+    if (quick) return quick.label;
+    const ex = input.args?.exerciseId;
+    switch (input.chip) {
+      case 'deload':
+        return 'Deload week';
+      case 'gymSwap':
+        return ex ? `Swap ${exerciseName(ex)}` : 'Swap an exercise';
+      case 'stallFix':
+        return ex ? `Fix ${exerciseName(ex)}` : 'Adjust my plan';
+      case 'week':
+        return "How's my week?";
+      case 'progress':
+        return 'How am I doing?';
+      default:
+        return input.chip.charAt(0).toUpperCase() + input.chip.slice(1);
+    }
+  }
+
+  const isPendingCard = (m: ChatMessage): boolean =>
+    (m.card?.kind === 'proposal' || m.card?.kind === 'focusBlock') && m.card.status === 'pending';
+
+  /** Updates a card in memory and in the store (ids < 0: the store was unavailable). */
+  function patchCard(id: number, patch: ChatCardPatch): void {
+    const i = thread.findIndex((m) => m.id === id);
+    const m = thread[i];
+    if (!m?.card) return;
+    const card = m.card;
+    let next: ChatCard = card;
+    if (card.kind === 'proposal')
+      next = {
+        ...card,
+        ...(patch.status !== undefined ? { status: patch.status } : {}),
+        ...(patch.changeId !== undefined ? { changeId: patch.changeId } : {}),
+      };
+    else if (card.kind === 'focusBlock' && patch.status !== undefined)
+      next = { ...card, status: patch.status };
+    else if (card.kind === 'food' && patch.logged !== undefined)
+      next = { ...card, logged: [...patch.logged] };
+    thread = thread.map((x, k) => (k === i ? { ...m, card: next } : x));
+    if (id > 0) void updateCard(db, id, patch).catch(logDbError);
+  }
+
+  /**
+   * A pending card can still be applied only while its live Proposal is in memory and the plan
+   * hasn't changed since (baseVersion). Otherwise it reads "expired" with Ask again.
+   */
+  function expireStale(): void {
+    for (const m of thread) {
+      if (m.id === undefined || !isPendingCard(m)) continue;
+      const entry = liveProposals.get(m.id);
+      if (entry && trainer && entry.proposal.baseVersion === trainer.version) continue;
+      liveProposals.delete(m.id);
+      patchCard(m.id, { status: 'expired' });
+    }
+  }
+
+  /** Stores a message; with the store off it still shows (negative id, not kept). */
+  async function postMessage(m: ChatMessage): Promise<ChatMessage> {
+    let id: number;
+    try {
+      id = await addMessage(db, m);
+    } catch (err) {
+      logDbError(err);
+      id = --tempMsgId;
+    }
+    const saved: ChatMessage = { ...m, id };
+    thread = [...thread, saved];
+    return saved;
+  }
+
+  /** The newest pending focus-block card's block: what "only 4 days a week" revises. */
+  function focusDraft(): FocusBlock | undefined {
+    for (let i = thread.length - 1; i >= 0; i--) {
+      const c = thread[i]?.card;
+      if (c?.kind === 'focusBlock' && c.status === 'pending') return focusDrafts.get(c.blockId);
+    }
+    return undefined;
   }
 
   /** What core's coach reads. Mid-workout, today is the running day as it runs now. */
-  function coachContext(c: CoachUi): CoachContext {
+  function coachContext(phase: CoachPhase): CoachContext {
     const t = todayDate();
     let state = trainer ?? seedPlan(program);
     let logged: string[] = [];
-    if (c.phase === 'workout' && view.screen === 'session') {
+    let lastWeightKg = coachHistory.lastWeightKg;
+    if (phase === 'workout' && view.screen === 'session') {
       const s = view.s;
+      lastWeightKg = { ...s.lastWeightKg };
       logged = [...new Set(s.logs.map((l) => l.exerciseId))];
       // The running set's exercise counts as started (the reducer won't replace it).
       if (s.phase === 'exercise') logged.push(currentPlanned(s).exerciseId);
@@ -1521,168 +1674,671 @@ export function mountApp(root: HTMLElement): void {
           overrides: [...state.overrides.filter((o) => o.date !== t), { date: t, dayId: s.day.id }],
         };
     }
+    const draft = phase === 'workout' ? undefined : focusDraft();
     return {
-      phase: c.phase,
+      phase,
       state,
       sessions: trainerSessions,
-      sets: c.sets,
+      sets: coachHistory.sets,
       changes,
       today: t,
       unit,
-      lastWeightKg: c.lastWeightKg,
+      lastWeightKg,
       logged,
       catalog: trainerCatalog,
       gymKept: gym.kept,
       m7Available: fuel.m7Available(),
       fuel: fuel.coachFuel(),
+      ...(draft ? { focusDraft: draft } : {}),
     };
   }
 
-  function coachTurn(input: CoachInput, said?: string): void {
-    const c = coach;
-    if (!c) return;
-    const r = coachHandle(input, coachContext(c));
-    if (said) c.items.push({ kind: 'user', text: said });
-    c.items.push(
-      r.safety === 'redFlag'
-        ? { kind: 'redFlag', text: r.reply }
-        : { kind: 'coach', text: r.reply },
-    );
-    if (r.proposal) {
-      const source: PlanChange['source'] = 'text' in input ? 'rules' : 'chip';
-      c.proposals.set(c.items.length, { proposal: r.proposal, source, intent: r.intent });
-      c.items.push({ kind: 'proposal', proposal: r.proposal });
-      trainerLog(r.intent, r.proposal.action, 'shown', source);
-    }
-    c.food = r.foods?.length ? { suggestions: r.foods, logged: [] } : null;
-    const plain = (x: CoachChip) => QUICK_IDS.includes(x.id) && x.args === undefined;
-    c.quick = r.chips.filter(plain).map((x) => x.id as SheetChipId);
-    c.showAreas = r.chips.some((x) => AREA_IDS.includes(x.id));
-    c.followUps = r.chips.filter(
-      (x) => !plain(x) && !AREA_IDS.includes(x.id) && x.id !== 'endWorkout',
-    );
-    // Only the red-flag line is spoken, and only mid-workout (core sets `say` then).
-    if (r.say && c.phase === 'workout') voice.speak(r.say, { kind: 'cue' });
-    renderCoach();
+  /** The phase of a turn sent now: the open Pause-sheet chat, else the Coach tab's. */
+  function phaseNow(): CoachPhase {
+    return chatSheet ? 'workout' : tabPhase;
   }
 
-  /** The coach's Keep X chip (UI-only): the open proposals are set aside, nothing changes. */
-  function keepFromCoach(c: CoachUi, exerciseId: string, said: string): void {
-    for (const [i, entry] of c.proposals) {
-      trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
-      c.items[i] = { kind: 'coach', text: `${entry.proposal.title}: not now.` };
+  /** One turn: his message, the router's answer (chips → rules), both stored. */
+  async function coachSend(input: CoachInput, said: string, phase: CoachPhase): Promise<void> {
+    if (chatBusy || !trainer) return;
+    chatBusy = true;
+    try {
+      await ensureThread();
+      const chip = 'chip' in input ? input : null;
+      await postMessage({
+        createdAt: now(),
+        role: 'user',
+        text: said,
+        source: chip ? 'chip' : 'rules',
+        phase,
+        // The chip he tapped (id + args), so Ask again can send it again.
+        ...(chip
+          ? {
+              chips: [
+                { id: chip.chip, label: said, ...(chip.args ? { args: { ...chip.args } } : {}) },
+              ],
+            }
+          : {}),
+      });
+      chatTyping = true;
+      renderCoachViews();
+      const r = await router.ask(input, { coach: coachContext(phase), turns: thread });
+      chatTyping = false;
+      const msg: ChatMessage = {
+        createdAt: now(),
+        role: 'coach',
+        text: r.reply,
+        source: r.source,
+        phase,
+        ...(r.say ? { say: r.say } : {}),
+        ...(r.note ? { note: r.note } : {}),
+        ...(r.usedHealth ? { usedHealth: true } : {}),
+        ...(r.chips.length
+          ? {
+              chips: r.chips.map((c) => ({
+                id: c.id,
+                label: c.label,
+                ...(c.args ? { args: { ...c.args } } : {}),
+              })),
+            }
+          : {}),
+      };
+      const p = r.proposal;
+      if (r.safety === 'redFlag') msg.card = { kind: 'redFlag' };
+      else if (p && p.action === 'focusBlock' && r.focusBlock) {
+        focusDrafts.set(r.focusBlock.id, r.focusBlock);
+        msg.card = { kind: 'focusBlock', blockId: r.focusBlock.id, status: 'pending' };
+      } else if (p)
+        msg.card = {
+          kind: 'proposal',
+          title: p.title,
+          lines: p.lines.map((l) => ({ ...l })),
+          why: p.why,
+          status: 'pending',
+          baseVersion: p.baseVersion,
+        };
+      else if (r.foods?.length) msg.card = { kind: 'food', suggestions: r.foods, logged: [] };
+      const saved = await postMessage(msg);
+      if (p && saved.id !== undefined && msg.card?.kind !== 'redFlag') {
+        liveProposals.set(saved.id, { proposal: p, source: r.source, intent: r.intent });
+        trainerLog(r.intent, p.action, 'shown', r.source);
+      }
+      // Only the red-flag line is spoken, and only mid-workout (core sets `say` then).
+      if (r.say && phase === 'workout') voice.speak(r.say, { kind: 'cue' });
+    } finally {
+      chatBusy = false;
+      chatTyping = false;
     }
-    c.proposals.clear();
-    c.items.push({ kind: 'user', text: said });
-    c.items.push({
-      kind: 'coach',
+    renderCoachViews();
+  }
+
+  /** The coach's Keep X chip (UI-only): open proposals are set aside, nothing changes. */
+  async function keepFromCoach(exerciseId: string, said: string): Promise<void> {
+    for (const m of thread) {
+      if (m.id === undefined || !isPendingCard(m)) continue;
+      const entry = liveProposals.get(m.id);
+      if (entry) trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
+      liveProposals.delete(m.id);
+      patchCard(m.id, { status: 'dismissed' });
+    }
+    const phase = phaseNow();
+    await postMessage({ createdAt: now(), role: 'user', text: said, source: 'chip', phase });
+    await postMessage({
+      createdAt: now(),
+      role: 'coach',
       text: `OK, keeping ${exerciseName(exerciseId)}. I won't ask again until you change My gym.`,
+      source: 'chip',
+      phase,
     });
-    c.quick = [];
-    c.followUps = [];
     keepGymExercise(exerciseId);
-    renderCoach();
+    renderCoachViews();
   }
 
-  function dismissProposal(index: number): void {
-    const c = coach;
-    const entry = c?.proposals.get(index);
-    if (!c || !entry) return;
-    c.proposals.delete(index);
-    trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
-    c.items[index] = { kind: 'coach', text: `${entry.proposal.title}: not now. Nothing changed.` };
-    c.quick = c.phase === 'workout' ? [...WORKOUT_QUICK] : [];
-    c.followUps = [];
-    renderCoach();
+  /** Lighter today applied after a set was logged: started lifts keep their weights. */
+  const LIGHTER_STARTED = 'Done. Lifts not started yet are lighter.';
+
+  async function applyFromChat(id: number): Promise<void> {
+    const entry = liveProposals.get(id);
+    liveProposals.delete(id);
+    if (!entry || !trainer) {
+      patchCard(id, { status: 'expired' });
+      renderCoachViews();
+      return;
+    }
+    const r = applyProposal(trainer, entry.proposal, now(), entry.source);
+    if (!r.ok) {
+      patchCard(id, { status: 'expired' });
+      renderCoachViews();
+      return;
+    }
+    trainer = r.state;
+    const change = await saveChangeRecord(r.state, r.change);
+    changes = [change, ...changes];
+    if (change.id !== undefined) appliedChange.set(id, change.id);
+    patchCard(id, {
+      status: 'applied',
+      ...(change.id !== undefined ? { changeId: change.id } : {}),
+    });
+    justApplied = id;
+    trainerLog(entry.intent, entry.proposal.action, 'applied', entry.source);
+    expireStale(); // other open cards were built on the plan before this change
+    const workout = chatSheet !== null && view.screen === 'session';
+    if (workout) {
+      // Mid-workout Lighter today only changes lifts with no logged set: say so once any are.
+      const say =
+        entry.proposal.action === 'lighter' && view.screen === 'session' && view.s.logs.length > 0
+          ? LIGHTER_STARTED
+          : entry.proposal.say;
+      closeChatSheet();
+      markSessionAdjust(entry.proposal.action);
+      syncSession(r.state);
+      sayConfirmation(say);
+      // The sheet is gone, so its Undo lives in the toast.
+      showUndoToast(say ?? `Done. ${entry.proposal.title}.`, change.id);
+    }
+    refreshAfterChange();
   }
 
-  function closeCoach(): void {
-    const c = coach;
-    if (!c) return;
-    for (const entry of c.proposals.values())
-      trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
-    c.el?.remove();
-    coach = null;
-    if (!howTo) root.inert = false;
-    const back =
-      (c.opener?.isConnected ? c.opener : null) ??
-      root.querySelector<HTMLElement>('[data-pause="coach"], [data-coach-open]');
-    back?.focus();
+  function dismissFromChat(id: number): void {
+    const entry = liveProposals.get(id);
+    liveProposals.delete(id);
+    if (entry) trainerLog(entry.intent, entry.proposal.action, 'dismissed', entry.source);
+    patchCard(id, { status: 'dismissed' });
+    renderCoachViews();
   }
 
-  function renderCoach(): void {
-    const c = coach;
-    if (!c) return;
-    const el = coachSheet(
-      {
-        items: c.items,
-        showAreas: c.showAreas,
-        allowTyping: true, // Today, the preview and the Pause sheet only: never during a set
-        chips: c.quick.length ? c.quick : c.phase === 'workout' ? WORKOUT_QUICK : undefined,
-        inWorkout: c.phase === 'workout',
-        followUps: c.followUps,
-        food: c.food ?? undefined,
-      },
-      {
-        onClose: closeCoach,
-        onChip: (id) => coachTurn({ chip: id }, chipLabel(id)),
-        onArea: (area) => coachTurn({ chip: area }, area[0]?.toUpperCase() + area.slice(1)),
-        onText: (text) => coachTurn({ text }, text),
-        onApply: (index) => void applyFromCoach(index),
-        onDismiss: (index) => dismissProposal(index),
-        onEndWorkout: () => {
-          closeCoach();
-          dispatch({ type: 'FINISH', now: now() });
-        },
-        onFollowUp: (index) => {
-          const f = c.followUps[index];
-          const keepId = f?.id === 'keepExercise' ? f.args?.exerciseId : undefined;
-          if (f && keepId) {
-            keepFromCoach(c, keepId, f.label);
-            return;
-          }
-          if (f) coachTurn({ chip: f.id, ...(f.args ? { args: f.args } : {}) }, f.label);
-        },
-        onLogFood: (index) => logCoachFood(c, index),
-      },
-    );
-    if (c.el?.isConnected) c.el.replaceWith(el);
-    else document.body.append(el);
-    c.el = el;
-    root.inert = true; // the sheet is modal
-    const apply = [...el.querySelectorAll<HTMLElement>('.proposal-apply')].at(-1);
-    (apply ?? el).focus();
+  /** The plan change a card applied (proposal: stored; focus block: found in the change log). */
+  function changeIdOf(m: ChatMessage): number | undefined {
+    if (m.id !== undefined && appliedChange.has(m.id)) return appliedChange.get(m.id);
+    const c = m.card;
+    if (c?.kind === 'proposal') return c.changeId;
+    if (c?.kind !== 'focusBlock') return undefined;
+    const has = (s: TrainerState) => (s.blocks ?? []).some((b) => b.id === c.blockId);
+    return changes.find((x) => x.action === 'focusBlock' && has(x.after) && !has(x.before))?.id;
+  }
+
+  async function undoFromChat(id: number): Promise<void> {
+    const m = thread.find((x) => x.id === id);
+    const changeId = m ? changeIdOf(m) : undefined;
+    if (changeId === undefined) {
+      showNotice(UNDO_FAILED);
+      return;
+    }
+    await undoNewest('chat', changeId);
+  }
+
+  /** After any Undo (card, toast, Plan changes): the card that applied it reads "undone". */
+  function markCardsUndone(changeId: number | undefined): void {
+    if (changeId === undefined) return;
+    for (const m of thread)
+      if (m.id !== undefined && m.card && 'status' in m.card && m.card.status === 'applied')
+        if (changeIdOf(m) === changeId) patchCard(m.id, { status: 'undone' });
+  }
+
+  /** Ask again on an expired / dismissed card: what he asked before it, sent again. */
+  function askAgain(id: number): void {
+    const at = thread.findIndex((m) => m.id === id);
+    for (let i = at - 1; i >= 0; i--) {
+      const m = thread[i];
+      if (m?.role !== 'user') continue;
+      const c = m.chips?.[0];
+      const input: CoachInput = c
+        ? { chip: c.id as CoachChipId, ...(c.args ? { args: c.args as CoachArgs } : {}) }
+        : { text: m.text };
+      void coachSend(input, m.text, phaseNow());
+      return;
+    }
   }
 
   /** M7 F3: a food idea's Log → the store, the row marked logged, the Undo toast. */
-  function logCoachFood(c: CoachUi, index: number): void {
-    const food = c.food;
-    const s = food?.suggestions[index];
-    if (!food || !s || food.logged.includes(index)) return;
-    food.logged.push(index);
-    renderCoach();
-    void fuel
-      .logSuggestion(s, () => {
-        food.logged = food.logged.filter((i) => i !== index);
-        if (coach === c) renderCoach();
-      })
-      .catch((err: unknown) => {
-        food.logged = food.logged.filter((i) => i !== index);
-        logDbError(err);
-        if (coach === c) renderCoach();
-      });
+  function logChatFood(id: number, index: number): void {
+    const m = thread.find((x) => x.id === id);
+    const card = m?.card;
+    if (card?.kind !== 'food') return;
+    const s = card.suggestions[index];
+    if (!s || card.logged.includes(index)) return;
+    patchCard(id, { logged: [...card.logged, index] });
+    renderCoachViews();
+    const unlog = () => {
+      const now2 = thread.find((x) => x.id === id)?.card;
+      if (now2?.kind !== 'food') return;
+      patchCard(id, { logged: now2.logged.filter((i) => i !== index) });
+      renderCoachViews();
+    };
+    void fuel.logSuggestion(s, unlog).catch((err: unknown) => {
+      logDbError(err);
+      unlog();
+    });
   }
 
-  function chipLabel(id: SheetChipId): string {
-    const labels: Record<SheetChipId, string> = {
-      notToday: 'Not today',
-      easyOn: 'Go easy on…',
-      lighter: 'Lighter today',
-      swap: 'Swap an exercise',
-      adjustPlan: 'Adjust my plan',
-      food: 'What should I eat?',
+  async function clearThread(): Promise<void> {
+    try {
+      await clearChat(db);
+    } catch (err) {
+      logDbError(err);
+    }
+    thread = [];
+    liveProposals.clear();
+    focusDrafts.clear();
+    appliedChange.clear();
+    chatSeen = undefined;
+    renderCoachViews();
+  }
+
+  /**
+   * What to offer under the thread: the newest coach reply's chips (in its own frame), else the
+   * defaults. An answered card brings the defaults back (as Not now did on the M10 sheet).
+   */
+  function chatOffers(sheet: boolean): {
+    quick: QuickChipId[] | undefined;
+    showAreas: boolean;
+    followUps: ChatChip[];
+  } {
+    const m = thread.at(-1);
+    const none = { quick: undefined, showAreas: false, followUps: [] };
+    if (!m || m.role !== 'coach' || !m.chips?.length) return none;
+    if ((m.phase === 'workout') !== sheet) return none;
+    if (m.card && 'status' in m.card && m.card.status !== 'pending') return none;
+    const split = splitReplyChips(m.chips as ChatChip[]);
+    const quick = sheet ? split.quick.filter((id) => WORKOUT_CHAT_CHIPS.includes(id)) : split.quick;
+    return {
+      quick: quick.length ? quick : undefined,
+      showAreas: split.showAreas,
+      followUps: split.followUps,
     };
-    return labels[id];
+  }
+
+  /** Message ids whose applied card is the newest standing change (Undo is LIFO). */
+  function undoableIds(): number[] {
+    const top = changes
+      .filter((c) => c.undoneAt === undefined)
+      .reduce<PlanChange | null>((a, c) => (!a || c.createdAt > a.createdAt ? c : a), null);
+    if (top?.id === undefined) return [];
+    return thread.flatMap((m) =>
+      m.id !== undefined &&
+      m.card &&
+      'status' in m.card &&
+      m.card.status === 'applied' &&
+      changeIdOf(m) === top.id
+        ? [m.id]
+        : [],
+    );
+  }
+
+  function chatProps(sheet: boolean): Omit<ChatProps, 'variant'> {
+    expireStale();
+    const offers = chatOffers(sheet);
+    const blocks: Record<string, FocusBlock> = Object.fromEntries(focusDrafts);
+    for (const b of trainer?.blocks ?? []) blocks[b.id] = b;
+    let messages: readonly ChatMessage[] = thread;
+    // The Pause sheet opens on what it can do mid-workout (shown, not stored).
+    if (sheet && thread.at(-1)?.phase !== 'workout')
+      messages = [
+        ...thread,
+        {
+          createdAt: now(),
+          role: 'coach',
+          text: MID_SESSION_REPLY,
+          source: 'rules',
+          phase: 'workout',
+        },
+      ];
+    return {
+      messages,
+      typing: chatTyping,
+      chips: offers.quick,
+      starters: trainer && !sheet ? starterChips(coachContext(tabPhase)) : undefined,
+      followUps: offers.followUps,
+      showAreas: offers.showAreas,
+      // The Coach tab, and the Pause sheet (paused: no set is running). Never during a set.
+      allowTyping: true,
+      inWorkout: sheet,
+      focusBlocks: blocks,
+      exerciseName,
+      isFocusExercise: (exId, block) => isFocusExercise(exId, block.group, trainerCatalog),
+      undoable: undoableIds(),
+      justApplied,
+      animateAfter: chatSeen,
+    };
+  }
+
+  function chatActions(): ChatActions {
+    return {
+      onText: (text) => void coachSend({ text }, text, phaseNow()),
+      onChip: (c) =>
+        void coachSend({ chip: c.id, ...(c.args ? { args: c.args } : {}) }, c.label, phaseNow()),
+      onArea: (area) =>
+        void coachSend({ chip: area }, area.charAt(0).toUpperCase() + area.slice(1), phaseNow()),
+      onFollowUp: (index) => {
+        const f = chatOffers(chatSheet !== null).followUps[index];
+        if (!f) return;
+        const keepId = f.id === 'keepExercise' ? f.args?.exerciseId : undefined;
+        if (keepId) {
+          void keepFromCoach(keepId, f.label);
+          return;
+        }
+        void coachSend({ chip: f.id, ...(f.args ? { args: f.args } : {}) }, f.label, phaseNow());
+      },
+      onApply: (id) => void applyFromChat(id),
+      onDismiss: (id) => dismissFromChat(id),
+      onUndo: (id) => void undoFromChat(id),
+      onAskAgain: (id) => askAgain(id),
+      onLogFood: (id, index) => logChatFood(id, index),
+      onEndWorkout: () => {
+        closeChatSheet();
+        dispatch({ type: 'FINISH', now: now() });
+      },
+    };
+  }
+
+  /** After a render: the check morph plays once, and only newer messages rise in next time. */
+  function chatRendered(): void {
+    justApplied = undefined;
+    chatSeen = thread.reduce((n, m) => Math.max(n, m.id ?? 0), 0);
+  }
+
+  function coachTabView(): HTMLElement {
+    const el = coachTabScreen(
+      chatProps(false),
+      { ...chatActions(), onClearChat: () => void clearThread() },
+      tabBar('coach', (t) => goTab(t)),
+    );
+    chatRendered();
+    return el;
+  }
+
+  function renderChatSheet(): void {
+    const s = chatSheet;
+    if (!s) return;
+    const el = chat(
+      { ...chatProps(true), variant: 'sheet' },
+      {
+        ...chatActions(),
+        onClose: closeChatSheet,
+      },
+    );
+    chatRendered();
+    if (s.el?.isConnected) s.el.replaceWith(el);
+    else document.body.append(el);
+    s.el = el;
+    root.inert = true; // the sheet is modal
+    const apply = [...el.querySelectorAll<HTMLElement>('.proposal-apply')].at(-1);
+    const input = el.querySelector<HTMLElement>('#chat-input-sheet');
+    (apply ?? (refocusInput ? input : null) ?? el).focus();
+  }
+
+  /** Re-renders whichever chat frame is up (keeps the text box focused while he types). */
+  function renderCoachViews(): void {
+    const active = document.activeElement;
+    refocusInput = active instanceof HTMLInputElement && active.id.startsWith('chat-input');
+    if (chatSheet) renderChatSheet();
+    else if (view.screen === 'coach') {
+      render();
+      if (refocusInput) root.querySelector<HTMLElement>('#chat-input')?.focus();
+    }
+    refocusInput = false;
+  }
+
+  // ----- M12 Calendar (replaces History; per-exercise history is one tap deeper) -----
+
+  function openCalendar(): void {
+    view = {
+      screen: 'calendar',
+      month: todayDate().slice(0, 7),
+      date: null,
+      exerciseId: null,
+      data: null,
+    };
+    calCounted = false;
+    render();
+    void loadCalendar();
+  }
+
+  async function loadCalendar(): Promise<void> {
+    const t = now();
+    try {
+      await trainerReady;
+      const sessions = await db.sessions.toArray();
+      trainerSessions = sessions;
+      const finished = sessions.filter((x) => x.endedAt !== undefined);
+      const sets = await setsForSessions(
+        db,
+        finished.map((x) => x.sessionId),
+      );
+      if (view.screen !== 'calendar') return;
+      view = { ...view, data: { sessions, finished, sets, t } };
+    } catch (err) {
+      logDbError(err);
+      if (view.screen !== 'calendar') return;
+      view = { ...view, data: 'error' };
+    }
+    render();
+  }
+
+  function completionInput(d: CalendarData): CompletionInput {
+    return {
+      state: trainer ?? seedPlan(program),
+      sessions: d.sessions,
+      sets: d.sets,
+      today: localDate(d.t),
+      catalog: trainerCatalog,
+    };
+  }
+
+  const dayNameOf = (id: string) => planDays().find((d) => d.id === id)?.name ?? id;
+  const blockGroupOf = (blockId: string) =>
+    trainer?.blocks?.find((b) => b.id === blockId)?.group ?? null;
+
+  function calendarView(v: Extract<View, { screen: 'calendar' }>): HTMLElement {
+    const tabs = tabBar('calendar', (t) => goTab(t));
+    const d = v.data !== null && v.data !== 'error' ? v.data : null;
+    if (d && v.exerciseId) {
+      return renderHistory(
+        {
+          unit,
+          days: [],
+          exercises: [],
+          detail: exerciseHistory(d.sets, v.exerciseId, d.t),
+          dayName: dayNameOf,
+          name: exerciseName,
+          backLabel: 'Calendar',
+        },
+        {
+          onOpenExercise: () => {},
+          onBack: () => {
+            if (view.screen !== 'calendar') return;
+            view = { ...view, exerciseId: null };
+            render();
+          },
+          onTab: (t) => goTab(t),
+        },
+      );
+    }
+    const animate = !calCounted && d !== null;
+    if (d) calCounted = true;
+    if (d && v.date) {
+      const day = dayCompletion(completionInput(d), v.date);
+      const group = day.blockId ? blockGroupOf(day.blockId) : null;
+      return calendarDayScreen(
+        {
+          day,
+          today: localDate(d.t),
+          dayName: dayNameOf,
+          name: exerciseName,
+          focusGroup: group,
+          isFocus: group ? (id) => isFocusExercise(id, group, trainerCatalog) : undefined,
+          animate,
+          tabs,
+        },
+        {
+          onBack: () => {
+            if (view.screen !== 'calendar') return;
+            view = { ...view, date: null };
+            render();
+          },
+          onStart: () => {
+            const eff = trainer ? effectiveDay(trainer, trainerSessions, todayDate()) : null;
+            if (eff?.day) void openPreview(eff.day);
+          },
+          onMove: (dt) => moveDay(dt),
+          onDoToday: () => {
+            if (day.dayId) doDayToday(day.dayId);
+          },
+          onHistory: (id) => {
+            if (view.screen !== 'calendar') return;
+            view = { ...view, exerciseId: id };
+            render();
+          },
+        },
+      );
+    }
+    const input = d ? completionInput(d) : null;
+    const today = localDate(d?.t ?? now());
+    const empty: PeriodScore = {
+      from: today,
+      to: today,
+      sessionsPlanned: 0,
+      sessionsDone: 0,
+      setsPlanned: 0,
+      setsDone: 0,
+      extra: 0,
+    };
+    return calendarScreen(
+      {
+        month: v.month,
+        today,
+        days: input ? monthCompletion(input, v.month) : [],
+        week: input ? weekScore(input, today) : empty,
+        monthScore: input ? monthScore(input, v.month) : empty,
+        streakWeeks: d ? weeklyStreak(d.finished, d.t, STREAK_MIN_PER_WEEK) : 0,
+        blockGroup: trainer?.blocks?.length ? blockGroupOf : undefined,
+        dayName: dayNameOf,
+        animate,
+        loading: v.data === null,
+        error: v.data === 'error',
+        tabs,
+      },
+      {
+        onPrevMonth: () => shiftCalendar(-1),
+        onNextMonth: () => shiftCalendar(1),
+        onOpenDay: (date) => {
+          if (view.screen !== 'calendar') return;
+          view = { ...view, date };
+          render();
+        },
+        onShare: () => void shareCalendarMonth(),
+        onRetry: () => {
+          if (view.screen !== 'calendar') return;
+          view = { ...view, data: null };
+          render();
+          void loadCalendar();
+        },
+      },
+    );
+  }
+
+  function shiftCalendar(n: number): void {
+    if (view.screen !== 'calendar') return;
+    view = { ...view, month: shiftMonth(view.month, n) };
+    render();
+  }
+
+  /** Move (Calendar day): today → Not today in the coach; another day → asked in the coach. */
+  function moveDay(date: string): void {
+    if (date === todayDate()) {
+      void openCoachTab('today', { chip: 'notToday' });
+      return;
+    }
+    void openCoachTab('today', { text: `Move ${dayLong(date)}` });
+  }
+
+  /**
+   * Do it today (a missed or later day) and Move it (Today's missed-day card): today's day when
+   * it already is that day (the rotation carries a missed day forward), else that plan day's
+   * preview, whose Start runs it today.
+   */
+  function doDayToday(dayId: string): void {
+    const eff = trainer ? effectiveDay(trainer, trainerSessions, todayDate()) : null;
+    if (eff?.day && !eff.rest && !eff.done && eff.day.id === dayId) {
+      void openPreview(eff.day);
+      return;
+    }
+    const day = planDays().find((d) => d.id === dayId);
+    if (day) void openPreview(day);
+  }
+
+  async function shareCalendarMonth(): Promise<void> {
+    if (view.screen !== 'calendar' || view.data === null || view.data === 'error') return;
+    const d = view.data;
+    const month = view.month;
+    const input = completionInput(d);
+    try {
+      const layout = shareMonthLayout(month, monthCompletion(input, month), {
+        month: monthScore(input, month),
+        streakWeeks: weeklyStreak(d.finished, d.t, STREAK_MIN_PER_WEEK),
+      });
+      const result = await shareMonth(await renderShareMonth(layout), month);
+      if (result === 'downloaded') showNotice('Image saved.');
+    } catch (err) {
+      console.warn('Could not make the month image', err);
+      showNotice("Couldn't make the image.");
+    }
+  }
+
+  // ----- M12 Today prompts: missed day (once) and recaps posted into the chat (once) -----
+
+  async function coachPrompts(sets: readonly SetRow[]): Promise<void> {
+    if (promptsBusy || !trainer) return;
+    promptsBusy = true;
+    try {
+      coachUi = await getCoachUi(db);
+      const input: CompletionInput = {
+        state: trainer,
+        sessions: trainerSessions,
+        sets,
+        today: todayDate(),
+        catalog: trainerCatalog,
+      };
+      missedPrompt = coreMissedDay(input, coachUi.missedAnswered);
+      const due = recapDue(input, {
+        ...(coachUi.lastWeekRecap !== undefined ? { week: coachUi.lastWeekRecap } : {}),
+        ...(coachUi.lastBlockRecap !== undefined ? { block: coachUi.lastBlockRecap } : {}),
+      });
+      if (due.length) await ensureThread();
+      for (const r of due) {
+        // Memory first: a recap is never posted twice, even if the app closes mid-way.
+        await patchCoachUi(
+          db,
+          r.period === 'week'
+            ? { lastWeekRecap: r.from }
+            : r.blockId !== undefined
+              ? { lastBlockRecap: r.blockId }
+              : {},
+        );
+        await postMessage({
+          createdAt: now(),
+          role: 'coach',
+          text: r.text,
+          say: r.say,
+          source: 'rules',
+          phase: 'today',
+          card: { kind: 'recap', period: r.period, from: r.from, to: r.to },
+          ...(r.chips.length ? { chips: r.chips.map((c) => ({ ...c })) } : {}),
+        });
+        trainerLog('recap', r.period, 'shown', 'rules');
+      }
+    } catch (err) {
+      logDbError(err);
+    } finally {
+      promptsBusy = false;
+    }
+    if (view.screen === 'today') render();
+  }
+
+  function answerMissed(m: MissedDay): void {
+    missedPrompt = null;
+    coachUi = { ...coachUi, missedAnswered: [...coachUi.missedAnswered, m.date] };
+    void patchCoachUi(db, { missedAnswered: coachUi.missedAnswered }).catch(logDbError);
   }
 
   // ---------- Settings ----------
@@ -2367,6 +3023,18 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
+  /**
+   * M12 set ring: after an exercise's last set the next set is set 1 of the next exercise, so the
+   * ring shows the sets just finished (none when that exercise was skipped).
+   */
+  function finishedExerciseSets(s: SessionState): { done: number; total: number } | undefined {
+    if (s.setIndex !== 0 || s.exIndex === 0) return undefined;
+    const prev = s.day.exercises[s.exIndex - 1];
+    if (!prev) return undefined;
+    const done = s.logs.filter((l) => l.exerciseId === prev.exerciseId).length;
+    return done > 0 ? { done, total: prev.sets } : undefined;
+  }
+
   function restScreen(s: SessionState): HTMLElement {
     const p = currentPlanned(s);
     const id = p.exerciseId;
@@ -2399,6 +3067,7 @@ export function mountApp(root: HTMLElement): void {
         hasNotes: Boolean(note.note || todayNotes[id]),
         today: today || undefined,
         last: last || undefined,
+        setsDone: finishedExerciseSets(s),
       },
       {
         onList: () => setSheet({ kind: 'list' }),
@@ -2709,6 +3378,22 @@ export function mountApp(root: HTMLElement): void {
     .catch(logDbError);
   // M10: the trainer state first (Today's calendar and up next read it).
   const trainerReady = loadTrainer();
+  // M12: the chat thread pruned to 30 days on start; prompts re-checked when the app comes back.
+  void trainerReady.then(() => ensureThread());
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || view.screen !== 'today') return;
+    const t = now();
+    void sessionsSince(db, t - STATS_WEEKS * 7 * 24 * 3600 * 1000)
+      .then(async (sessions) => {
+        trainerSessions = await db.sessions.toArray();
+        const sets = await setsForSessions(
+          db,
+          sessions.map((x) => x.sessionId),
+        );
+        await coachPrompts(sets);
+      })
+      .catch(logDbError);
+  });
   // M11: the first Health sync once Today's plan and sessions are known.
   void loadUpNext().then(() => health.start());
   // M7: targets / today's totals for the Today nudge (no seeding until Fuel is opened).
