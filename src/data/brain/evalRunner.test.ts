@@ -246,6 +246,41 @@ describe('runBrainEval (fake bridge)', () => {
     expect(rows[0]?.latencyMs).toBe(400);
     expect(rows[3]?.latencyMs).toBe(7); // an error: measured by the injected clock
     expect(rows[5]?.latencyMs).toBe(0); // red flag: the model was never asked
+    expect(out.report.errors).toBe(1);
+  });
+
+  it('a bridge error never passes, even where no action is expected; errors counts them', async () => {
+    const all: Script = Object.fromEntries(
+      [...requests.map((r) => r.text), ...facts.items.map((f) => f.text)].map((t) => [
+        t,
+        'reject' as const,
+      ]),
+    );
+    const out = await runBrainEval(deps(fake(all), { requests, facts }));
+    if (!out.ok) throw new Error('unavailable');
+    const asked = out.report.rows.filter((r) => r.id !== 'req-006'); // req-006: the red flag
+    expect(asked.map((r) => [r.got, r.pass, r.safe])).toEqual(
+      asked.map(() => ['error', false, true]),
+    );
+    // 'none'-expected rows (req-003, req-007) and facts rows fail on an error too.
+    expect(asked.filter((r) => r.expected === 'none').length).toBeGreaterThan(0);
+    expect(out.report.errors).toBe(asked.length);
+    // The red flag is answered by the rules without the model, so it still passes: this is
+    // what an all-error run scores (16 of 136 committed requests), hence the errors count.
+    const red = out.report.rows.find((r) => r.id === 'req-006');
+    expect([red?.got, red?.pass, red?.safe]).toEqual(['none', true, true]);
+  });
+
+  it('a junk bridge reply (no text, no calls) is an error, not a passing "none"', async () => {
+    const junk: Script = { 'made-up: how is my week': { text: '', toolCalls: [] } };
+    const out = await runBrainEval(
+      deps(fake(junk), { requests: requests.slice(2, 3), facts: { scenario, items: [] } }),
+    );
+    if (!out.ok) throw new Error('unavailable');
+    expect(out.report.rows.map((r) => [r.expected, r.got, r.pass, r.safe])).toEqual([
+      ['none', 'error', false, true],
+    ]);
+    expect(out.report.errors).toBe(1);
   });
 
   it('a red flag is never sent to the model', async () => {
@@ -274,7 +309,7 @@ describe('runBrainEval (fake bridge)', () => {
           ? ['expected', 'factsMatch', 'got', 'id', 'latencyMs', 'pass', 'safe', 'set']
           : ['expected', 'got', 'id', 'latencyMs', 'pass', 'safe', 'set'],
       );
-    expect(Object.keys(out.report).sort()).toEqual(['at', 'p50Ms', 'rows']);
+    expect(Object.keys(out.report).sort()).toEqual(['at', 'errors', 'p50Ms', 'rows']);
   });
 
   it('odd tool arg values never reach the report', async () => {
@@ -356,7 +391,7 @@ describe('runBrainEval (fake bridge)', () => {
     const out = await runBrainEval(
       deps(fake(), { now: () => 424242, requests: [], facts: { scenario, items: [] } }),
     );
-    expect(out).toEqual({ ok: true, report: { at: 424242, rows: [], p50Ms: null } });
+    expect(out).toEqual({ ok: true, report: { at: 424242, rows: [], p50Ms: null, errors: 0 } });
   });
 
   it('never calls fetch', async () => {

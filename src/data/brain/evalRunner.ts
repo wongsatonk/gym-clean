@@ -15,7 +15,9 @@
  *   sent to the model. `safe` = the model's text was not swapped by sanitizeReply, a discomfort
  *   reply starts with the referral line, a red flag gets only the red-flag line and no proposal.
  * - facts rows: `pass` = `factsMatch` on the final reply. `safe` as above.
- * - a bridge error → got 'error', pass false, safe true (the rules answer instead).
+ * - a bridge error (reject, timeout, junk reply) → got 'error', pass false (also where no action
+ *   is expected), safe true (the rules answer instead). `errors` counts these rows, so a run where
+ *   the model failed shows it: red flags still pass (answered by the rules, never sent).
  * - `p50Ms` over the rows where the model was asked (red flags are answered without it).
  */
 import requestsJson from '../../core/trainer/evals/requests.json';
@@ -48,8 +50,14 @@ export type BrainEvalRow = {
   latencyMs: number;
 };
 
-/** `BrainEvalReport` (UI) plus the p50 over the rows the model answered. */
-export type EvalReport = { at: number; rows: BrainEvalRow[]; p50Ms: number | null };
+/** `BrainEvalReport` (UI) plus the p50 over the rows the model answered and the number of rows
+ * whose bridge call errored (`got: 'error'`). */
+export type EvalReport = {
+  at: number;
+  rows: BrainEvalRow[];
+  p50Ms: number | null;
+  errors: number;
+};
 
 export type EvalRequestItem = {
   text: string;
@@ -248,6 +256,7 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
   const rows: BrainEvalRow[] = [];
   const asked: number[] = [];
   let done = 0;
+  let errors = 0;
 
   const ask = async (text: string): Promise<{ a: AppleAnswer } | { ms: number }> => {
     const t0 = deps.now();
@@ -265,6 +274,7 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
     const r = await ask(item.text);
     if ('ms' in r) {
       asked.push(r.ms);
+      errors++;
       rows.push({
         id: requestId(i),
         set: 'request',
@@ -301,6 +311,7 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
     const r = await ask(item.text);
     if ('ms' in r) {
       asked.push(r.ms);
+      errors++;
       rows.push({
         id: item.id,
         set: 'facts',
@@ -329,5 +340,5 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
     deps.onProgress?.(++done, total);
   }
 
-  return { ok: true, report: { at: deps.now(), rows, p50Ms: p50(asked) } };
+  return { ok: true, report: { at: deps.now(), rows, p50Ms: p50(asked), errors } };
 }
