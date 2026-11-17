@@ -88,4 +88,21 @@ describe('stylesheet motion guards', () => {
       for (const p of props) expect(['opacity', 'transform']).toContain(p);
     }
   });
+
+  it('handsfree.css and fuel/*.css: no own reduced-motion block, durations from tokens', () => {
+    const files = uiCss.filter(([p]) => /handsfree\.css$|fuel\/[^/]+\.css$/.test(p));
+    expect(files.length).toBeGreaterThan(1);
+    for (const [, css] of files) {
+      expect(css).not.toContain('prefers-reduced-motion');
+      const timings = [...css.matchAll(/(?:transition|animation)[a-z-]*:([^;]*);/g)].map(
+        (m) => m[1] ?? '',
+      );
+      for (const t of timings) expect(t).not.toMatch(/\b\d*\.?\d+m?s\b/);
+    }
+  });
+
+  it('the hands-free auto-stop ring hides under reduced motion via the global rule', () => {
+    const block = stylesCss.slice(stylesCss.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(block).toMatch(/\.auto-stop-ring \{\s*display: none;/);
+  });
 });

@@ -149,7 +149,7 @@
 .auto-stop-ring-fg {
   stroke: var(--bg);
   stroke-linecap: round;
-  transition: stroke-dashoffset 0.25s linear;
+  transition: stroke-dashoffset var(--dur-base) linear;
 }
 
 .auto-stop-secs {
@@ -158,13 +158,6 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /* Numeric countdown only. */
-  .auto-stop-ring {
-    display: none;
-  }
 }
 
 /* ---------- camera rest panel ---------- */

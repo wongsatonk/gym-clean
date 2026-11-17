@@ -197,19 +197,20 @@ describe('fuelScreen', () => {
     expect(calls.dismiss).toBe(1);
   });
 
-  it('the tab bar has 4 tabs in M7-q7 order with Fuel current', () => {
+  it('the tab bar has the 5 M12 tabs with Fuel current', () => {
     const { el, calls } = render();
     const tabs = el.byClass('tab');
     expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual([
       'today',
       'fuel',
-      'history',
+      'coach',
+      'calendar',
       'settings',
     ]);
     expect(tabs[1]?.getAttribute('aria-current')).toBe('page');
     tabs[1]?.click();
-    tabs[2]?.click();
-    expect(calls.tab).toEqual(['history']);
+    tabs[3]?.click();
+    expect(calls.tab).toEqual(['calendar']);
   });
 });
 

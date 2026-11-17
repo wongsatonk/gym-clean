@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WeekDot } from '../../core/stats';
 import type { ProgramDay } from '../../core/types';
 import { dayMuscles, estimateMinutes } from '../../core/dayInfo';
@@ -6,8 +6,12 @@ import { exerciseById, program } from '../../data/catalog';
 import { tabBar, type TabId } from '../tabBar';
 import { FakeEl, asFake, useFakeDom } from './testDom';
 import { previewScreen, type PreviewRow } from './preview';
+import type { MissedDay } from '../../core/progress/completion';
+import { checkCopy } from '../../core/trainer/replies';
 import {
+  createTodayMotion,
   dateLabel,
+  missedDayText,
   isMoved,
   todayScreen,
   volumeLine,
@@ -215,19 +219,22 @@ describe('todayScreen', () => {
     expect(calls.open).toEqual([DAYS[2]?.id]);
   });
 
-  it('ends with the tab bar, Today current; Fuel, History and Settings call onTab', () => {
+  it('ends with the tab bar, Today current; the other tabs call onTab', () => {
     const { el, calls } = render();
     const bar = el.children.at(-1) as FakeEl;
     expect(bar.classes).toContain('tabbar');
     const tabs = bar.byClass('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['Today', 'Fuel', 'History', 'Settings']);
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      'Today',
+      'Fuel',
+      'Coach',
+      'Calendar',
+      'Settings',
+    ]);
     expect(tabs[0]?.getAttribute('aria-current')).toBe('page');
     expect(tabs[1]?.getAttribute('aria-current')).toBeNull();
-    tabs[0]?.click();
-    tabs[1]?.click();
-    tabs[2]?.click();
-    tabs[3]?.click();
-    expect(calls.tab).toEqual(['fuel', 'history', 'settings']);
+    tabs.forEach((t) => t.click());
+    expect(calls.tab).toEqual(['fuel', 'coach', 'calendar', 'settings']);
   });
 });
 
@@ -238,9 +245,15 @@ describe('tabBar', () => {
     expect(bar.tag).toBe('nav');
     expect(bar.getAttribute('aria-label')).toBe('Main');
     const tabs = bar.byClass('tab');
-    expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual(['today', 'fuel', 'history', 'settings']);
+    expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual([
+      'today',
+      'fuel',
+      'coach',
+      'calendar',
+      'settings',
+    ]);
     expect(tabs.every((t) => t.byClass('tab-label').length === 1)).toBe(true);
-    expect(tabs[3]?.classes).toContain('on');
+    expect(tabs[4]?.classes).toContain('on');
     tabs[0]?.click();
     expect(picked).toEqual(['today']);
   });
@@ -594,5 +607,155 @@ describe('todayScreen M7 nudge', () => {
     n[0]?.find((e) => e.hasAttribute('data-nudge-dismiss'))[0]?.click();
     n[0]?.find((e) => e.hasAttribute('data-nudge-open'))[0]?.click();
     expect([dismissed, opened]).toEqual([1, 1]);
+  });
+});
+
+// ---------- M12 task 14: missed-day card + first-load motion ----------
+
+const PUSH_A = DAYS.find((d) => d.name === 'Push A') as ProgramDay;
+const MISSED: MissedDay = { date: '2026-11-10', dayId: PUSH_A.id, name: 'Push A' };
+
+function renderM12(over: Partial<TodayProps> = {}, withMissed = true) {
+  const calls = { move: [] as MissedDay[], skip: [] as MissedDay[] };
+  const el = asFake(
+    todayScreen(props(over), {
+      onStart: () => {},
+      onOpenDay: () => {},
+      onTab: () => {},
+      onLighterToday: () => {},
+      onNotToday: () => {},
+      onTrainAsPlanned: () => {},
+      ...(withMissed
+        ? { onMoveMissed: (m) => calls.move.push(m), onSkipMissed: (m) => calls.skip.push(m) }
+        : {}),
+    }),
+  );
+  return { el, calls };
+}
+const byAttr = (el: FakeEl, name: string) => el.find((e) => e.hasAttribute(name));
+
+describe('Today: missed-day card (M12)', () => {
+  it('says which day was missed, with Move it / Skip it passing the missed day out', () => {
+    const { el, calls } = renderM12({ missedDay: MISSED });
+    const card = byAttr(el, 'data-missed-day');
+    expect(card).toHaveLength(1);
+    expect(card[0]?.getAttribute('data-missed-day')).toBe('2026-11-10');
+    expect(card[0]?.getAttribute('role')).toBe('status');
+    expect(card[0]?.oneByClass('missed-text').textContent).toBe('You missed Push A on Tue.');
+    const move = byAttr(el, 'data-missed-move')[0];
+    const skip = byAttr(el, 'data-missed-skip')[0];
+    expect([move?.textContent, skip?.textContent]).toEqual(['Move it', 'Skip it']);
+    expect(move?.classes).toContain('missed-btn');
+    expect(skip?.classes).toContain('missed-btn');
+    move?.click();
+    skip?.click();
+    expect(calls.move).toEqual([MISSED]);
+    expect(calls.skip).toEqual([MISSED]);
+  });
+
+  it('sits above the hero (after the prompts), and is gone without a missed day or callbacks', () => {
+    const { el } = renderM12({ missedDay: MISSED });
+    const kids = el.children.map((c) =>
+      c.hasAttribute('data-missed-day') ? 'missed' : c.hasAttribute('data-hero') ? 'hero' : '',
+    );
+    expect(kids.indexOf('missed')).toBeGreaterThan(-1);
+    expect(kids.indexOf('missed')).toBeLessThan(kids.indexOf('hero'));
+    expect(byAttr(renderM12({ missedDay: null }).el, 'data-missed-day')).toEqual([]);
+    expect(byAttr(renderM12({}).el, 'data-missed-day')).toEqual([]);
+    expect(byAttr(renderM12({ missedDay: MISSED }, false).el, 'data-missed-day')).toEqual([]);
+  });
+
+  it('names the weekday within 6 days, else weekday + date (7 days back is the same weekday)', () => {
+    expect(missedDayText(MISSED, NOW)).toBe('You missed Push A on Tue.');
+    expect(missedDayText({ ...MISSED, date: '2026-11-12' }, NOW)).toBe('You missed Push A on Thu.');
+    expect(missedDayText({ ...MISSED, date: '2026-11-06' }, NOW)).toBe(
+      'You missed Push A on Fri 6.',
+    );
+  });
+
+  it('copy passes checkCopy', () => {
+    for (const t of [missedDayText(MISSED, NOW), 'Move it', 'Skip it']) {
+      expect(checkCopy(t).ok).toBe(true);
+    }
+  });
+});
+
+describe('Today: first-load motion (M12)', () => {
+  type Anim = { el: FakeEl; frames: Keyframe[] };
+  let anims: Anim[] = [];
+  let reduce = false;
+  const g = globalThis as { matchMedia?: unknown };
+  let savedMM: unknown;
+  const proto = FakeEl.prototype as unknown as { animate?: unknown };
+  beforeEach(() => {
+    anims = [];
+    reduce = false;
+    savedMM = g.matchMedia;
+    g.matchMedia = (q: string) => ({ matches: q.includes('reduced-motion') && reduce, media: q });
+    proto.animate = function (this: FakeEl, frames: Keyframe[]) {
+      anims.push({ el: this, frames });
+      return { cancel: () => {} };
+    };
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    g.matchMedia = savedMM;
+    delete proto.animate;
+    vi.useRealTimers();
+  });
+
+  const READY = {
+    date: '2026-11-13',
+    signals: [],
+    reasons: ['Short sleep last night.'],
+    offer: 'lighter' as const,
+  };
+  const streakText = (el: FakeEl) => byAttr(el, 'data-streak-num')[0]?.textContent;
+
+  it('first render: cards stagger in, the streak counts up to its value, readiness slides in', () => {
+    const motion = createTodayMotion();
+    const { el } = renderM12({ motion, missedDay: MISSED, readiness: READY });
+    const rising = anims.filter((a) => a.frames[0]?.transform === 'translateY(8px)');
+    expect(rising.map((a) => a.el)).toContain(byAttr(el, 'data-missed-day')[0]);
+    expect(rising.map((a) => a.el)).toContain(byAttr(el, 'data-hero')[0]);
+    const slid = anims.filter((a) => a.frames[0]?.transform === 'translateX(8px)');
+    expect(slid.map((a) => a.el)).toEqual(byAttr(el, 'data-readiness'));
+    expect(streakText(el)).toBe('0');
+    vi.runAllTimers();
+    expect(streakText(el)).toBe('3');
+    expect(motion).toEqual({ entered: true, readiness: 'lighter|Short sleep last night.' });
+  });
+
+  it('a re-render with the same motion state plays nothing and shows final numbers', () => {
+    const motion = createTodayMotion();
+    renderM12({ motion, readiness: READY });
+    vi.runAllTimers();
+    anims = [];
+    const { el } = renderM12({ motion, readiness: READY });
+    expect(anims).toEqual([]);
+    expect(streakText(el)).toBe('3');
+  });
+
+  it('the readiness card slides in when it first appears after the entrance', () => {
+    const motion = createTodayMotion();
+    renderM12({ motion });
+    vi.runAllTimers();
+    anims = [];
+    const { el } = renderM12({ motion, readiness: READY });
+    expect(anims.map((a) => a.el)).toEqual(byAttr(el, 'data-readiness'));
+  });
+
+  it('reduced motion: nothing animates and numbers are final at once', () => {
+    reduce = true;
+    const motion = createTodayMotion();
+    const { el } = renderM12({ motion, missedDay: MISSED, readiness: READY });
+    expect(anims).toEqual([]);
+    expect(streakText(el)).toBe('3');
+  });
+
+  it('without a motion state Today renders still (as before M12)', () => {
+    const { el } = renderM12({ missedDay: MISSED, readiness: READY });
+    expect(anims).toEqual([]);
+    expect(streakText(el)).toBe('3');
   });
 });

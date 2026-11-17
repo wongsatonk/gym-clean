@@ -12,13 +12,19 @@
 // M10e (optional): the "missing kit" prompt (`[data-gym-prompt]`, ./gymPrompt.ts).
 // M11 (optional): the "Lighter today?" card (`[data-readiness]`, ./readinessCard.ts; never on a
 // rest day) and the weekly-load line under "Your week" (`[data-week-load]`, ./weekLoad.ts).
+// M12 (optional): the missed-day card (`[data-missed-day]`, Move it `[data-missed-move]`, Skip it
+// `[data-missed-skip]`; shown, not spoken) and first-load motion through a `TodayMotion` that
+// app.ts keeps for the app's life (cards stagger in once, the streak counts up once, the
+// readiness card slides in when it first appears). Without `motion` nothing moves.
 import type { WeekDot } from '../../core/stats';
+import type { MissedDay } from '../../core/progress/completion';
 import type { DayOverride, ProgramDay, ReadinessCard } from '../../core/types';
 import { formatWeight, type Unit } from '../../core/units';
 import { exerciseById } from '../../data/catalog';
 import { bodyMapSvg, pickView } from '../bodyMap';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { countUp, enterScreen, staggerIn } from '../motion';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
 import { nudgeBanner } from '../fuel/links';
@@ -81,7 +87,30 @@ export type TodayProps = {
   readiness?: ReadinessCard | null | undefined;
   /** Core's weekly load (gym sessions + outside workouts). Shows the line under "Your week". */
   weekLoad?: WeekLoad | null | undefined;
+  // ---- M12 (optional) ----
+  /**
+   * Core's `missedDay(...)` (not yet answered). Shows "You missed Push A on Tue." with Move it /
+   * Skip it when both callbacks are set. app.ts stores the answer, so it's shown once.
+   */
+  missedDay?: MissedDay | null | undefined;
+  /** First-load motion state from `createTodayMotion()`, kept by app.ts across re-renders. */
+  motion?: TodayMotion | undefined;
 };
+
+/**
+ * What Today has already played. app.ts makes one with `createTodayMotion()` and passes the same
+ * object on every render, so a re-render (state change, tab back) never replays the entrance.
+ */
+export type TodayMotion = {
+  /** The cards have staggered in and the streak has counted up. */
+  entered: boolean;
+  /** Key of the readiness card on screen (null = none), so it slides in only when new. */
+  readiness: string | null;
+};
+
+export function createTodayMotion(): TodayMotion {
+  return { entered: false, readiness: null };
+}
 
 /** One calendar day, as `src/core/trainer/plan.ts` returns it. `date` is local YYYY-MM-DD. */
 export type CalendarEntry = {
@@ -115,6 +144,10 @@ export type TodayActions = ReadinessActions & {
   onSeeGymSwap?: ((exerciseId: string) => void) | undefined;
   /** M10e: Keep it on the missing-kit prompt. */
   onKeepExercise?: ((exerciseId: string) => void) | undefined;
+  /** M12: Move it on the missed-day card (opens the coach's move proposal for that day). */
+  onMoveMissed?: ((missed: MissedDay) => void) | undefined;
+  /** M12: Skip it on the missed-day card (stored as answered; the card goes away). */
+  onSkipMissed?: ((missed: MissedDay) => void) | undefined;
 };
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -349,13 +382,15 @@ function hero(props: TodayProps, actions: TodayActions): HTMLElement {
   );
 }
 
-function streakTile(props: TodayProps): HTMLElement {
+/** The streak tile and its number (the one Today counts up). */
+function streakTile(props: TodayProps): { el: HTMLElement; num: HTMLElement } {
   const n = props.streakWeeks;
-  return h(
+  const num = h('span', { 'data-streak-num': true }, String(n));
+  const el = h(
     'section',
     { class: 'tile streak', 'data-streak': n },
     h('h2', { class: 'tile-head' }, icon('flame', 'sm'), 'Streak'),
-    h('p', { class: 'tile-num' }, String(n), h('small', {}, n === 1 ? 'wk' : 'wks')),
+    h('p', { class: 'tile-num' }, num, h('small', {}, n === 1 ? 'wk' : 'wks')),
     h(
       'ul',
       { class: 'week', 'aria-label': 'This week' },
@@ -376,6 +411,7 @@ function streakTile(props: TodayProps): HTMLElement {
         ),
     ),
   );
+  return { el, num };
 }
 
 function lastTile(props: TodayProps): HTMLElement {
@@ -538,6 +574,87 @@ function calendarCards(
   return calendar.map((e) => calendarCard(e, e.date === nextDate, props, actions));
 }
 
+/** "Tue" for a date in the last 6 days, else "Mon 9" (7 days back is the same weekday). */
+function missedWhen(date: string, now: number): string {
+  const ms = ymdToMs(date);
+  const wd = new Date(ms).toLocaleDateString('en-GB', { weekday: 'short' });
+  return ymdToMs(ymd(now)) - ms < 7 * DAY_MS ? wd : `${wd} ${new Date(ms).getDate()}`;
+}
+
+/** "You missed Push A on Tue." */
+export function missedDayText(missed: MissedDay, now: number): string {
+  return `You missed ${missed.name} on ${missedWhen(missed.date, now)}.`;
+}
+
+/** The missed-day card, or null with no missed day or when a callback isn't wired. */
+export function missedDayCard(
+  missed: MissedDay | null | undefined,
+  now: number,
+  actions: Pick<TodayActions, 'onMoveMissed' | 'onSkipMissed'>,
+): HTMLElement | null {
+  const { onMoveMissed, onSkipMissed } = actions;
+  if (!missed || !onMoveMissed || !onSkipMissed) return null;
+  return h(
+    'section',
+    { class: 'missed-card', 'data-missed-day': missed.date, role: 'status' },
+    h(
+      'p',
+      { class: 'missed-text' },
+      icon('calendar', 'sm'),
+      h('span', {}, missedDayText(missed, now)),
+    ),
+    h(
+      'div',
+      { class: 'missed-actions' },
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'missed-btn missed-cta',
+          'data-missed-move': true,
+          onclick: () => onMoveMissed(missed),
+        },
+        'Move it',
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'missed-btn',
+          'data-missed-skip': true,
+          onclick: () => onSkipMissed(missed),
+        },
+        'Skip it',
+      ),
+    ),
+  );
+}
+
+const readinessKey = (c: ReadinessCard): string => `${c.offer}|${c.reasons.join('|')}`;
+
+/**
+ * First-load motion (design "Motion": Today). The elements already hold their final state; the
+ * helpers only play toward it, and do nothing under reduced motion.
+ */
+function playTodayMotion(
+  motion: TodayMotion,
+  parts: {
+    cards: HTMLElement[];
+    streakNum: HTMLElement;
+    streak: number;
+    readiness: HTMLElement | null;
+  },
+  props: TodayProps,
+): void {
+  const key = parts.readiness && props.readiness ? readinessKey(props.readiness) : null;
+  if (parts.readiness && key !== motion.readiness) enterScreen(parts.readiness, 'next');
+  motion.readiness = key;
+  if (motion.entered) return;
+  motion.entered = true;
+  staggerIn(parts.cards);
+  countUp(parts.streakNum, parts.streak);
+}
+
 export function todayScreen(props: TodayProps, actions: TodayActions): HTMLElement {
   const strip = h(
     'div',
@@ -557,7 +674,33 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       }
     });
   }
-  return h(
+  const readiness = todayEntry(props)?.rest ? null : readinessCard(props.readiness, actions);
+  const streak = streakTile(props);
+  // The cards that rise in on first load, in reading order (the readiness card slides instead).
+  const cards = [
+    props.newProgram && actions.onUseNewProgram && actions.onKeepPlan
+      ? newProgramPrompt(actions)
+      : null,
+    gymPrompt(props.missingKit, actions),
+    missedDayCard(props.missedDay, props.now, actions),
+  ];
+  const lower = [
+    props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,
+    props.nudge && actions.onDismissNudge
+      ? nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel)
+      : null,
+    hero(props, actions),
+    h('div', { class: 'pair' }, streak.el, lastTile(props)),
+    h(
+      'div',
+      { class: 'days-head' },
+      h('h2', {}, 'Your week'),
+      h('span', {}, `${props.days.length}-day split`),
+    ),
+    weekLoadLine(props.weekLoad),
+    strip,
+  ];
+  const el = h(
     'main',
     { class: `screen today has-tabbar ${moodClass('energy')}`, 'data-screen': 'today' },
     h(
@@ -573,25 +716,22 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
           )
         : h('span', { class: 'date' }, dateLabel(props.now)),
     ),
-    props.newProgram && actions.onUseNewProgram && actions.onKeepPlan
-      ? newProgramPrompt(actions)
-      : null,
-    gymPrompt(props.missingKit, actions),
-    todayEntry(props)?.rest ? null : readinessCard(props.readiness, actions),
-    props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,
-    props.nudge && actions.onDismissNudge
-      ? nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel)
-      : null,
-    hero(props, actions),
-    h('div', { class: 'pair' }, streakTile(props), lastTile(props)),
-    h(
-      'div',
-      { class: 'days-head' },
-      h('h2', {}, 'Your week'),
-      h('span', {}, `${props.days.length}-day split`),
-    ),
-    weekLoadLine(props.weekLoad),
-    strip,
+    ...cards,
+    readiness,
+    ...lower,
     tabBar('today', actions.onTab),
   );
+  if (props.motion) {
+    playTodayMotion(
+      props.motion,
+      {
+        cards: [...cards, ...lower].filter((c): c is HTMLElement => c !== null),
+        streakNum: streak.num,
+        streak: props.streakWeeks,
+        readiness,
+      },
+      props,
+    );
+  }
+  return el;
 }

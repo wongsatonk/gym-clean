@@ -207,6 +207,11 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
+
+  /* Hands-free auto-stop (handsfree.css): the numeric countdown only, no draining ring. */
+  .auto-stop-ring {
+    display: none;
+  }
 }
 
 /* Track's short caps labels (REST, LAST SET). Never on exercise names. */
@@ -734,15 +739,58 @@ h1 {
   color: var(--cta);
 }
 
-.tab.on::before {
-  content: '';
+/* M12 task 9: five tabs (78px each at 390px). Labels stay on one line. */
+.tabbar-5 .tab {
+  min-width: 0;
+}
+
+.tab-label {
+  white-space: nowrap;
+}
+
+/* The active-tab bar: one element that slides between tabs (tabBar.ts animates its transform
+   from the previous tab, --dur-base; instant under reduced motion). One tab wide. */
+.tab-ind {
   position: absolute;
   top: -2px;
-  left: 28%;
-  right: 28%;
+  left: 0;
+  width: 20%;
   height: 4px;
+  pointer-events: none;
+}
+
+.tab-ind::before {
+  content: '';
+  position: absolute;
+  inset: 0 28%;
   border-radius: 0 0 4px 4px;
   background: var(--cta);
+}
+
+/* Coach, the centre tab: a raised, filled round button over the bar's top edge. Active = a
+   thick action-colour ring + action-colour icon (shape and colour) + aria-current; the sliding
+   bar sits under the bubble there. */
+.tab-centre {
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
+
+.tab-bubble {
+  position: relative;
+  z-index: 1;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  margin-top: -26px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 2px solid var(--line);
+  color: var(--text);
+}
+
+.tab-centre.on .tab-bubble {
+  border: 4px solid var(--cta);
 }
 
 /* ---------- M10 trainer on Today and the preview (today.ts, preview.ts) ---------- */
@@ -1551,6 +1599,9 @@ h1 {
 }
 
 .rest-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: var(--fs-label);
   font-weight: 700;
   color: var(--text-2);
@@ -1593,6 +1644,27 @@ h1 {
 
 .rest-ring-fg {
   transition: stroke-dashoffset var(--dur-base) linear;
+}
+
+/* M12: set-progress ring beside "Next · Set 3 of 4" (rest.ts). Filled by motion.ts ringFill. */
+.set-ring {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+.set-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+
+.set-ring-bg {
+  stroke: var(--line);
+}
+
+.set-ring-fg {
+  stroke: var(--cta);
+  stroke-linecap: round;
 }
 
 /* ---------- Pause sheet (src/ui/screens/pauseSheet.ts) ---------- */
@@ -3330,4 +3402,57 @@ textarea:focus-visible {
 
 .body-sheet .legend {
   font-weight: 600;
+}
+
+/* ---------- M12 missed-day card on Today (today.ts missedDayCard) ----------
+   Same card as the missing-kit prompt: amber edge for attention, icon + words (never colour
+   alone), Move it filled, Skip it outlined, both ≥ 56px. Shown, not spoken. */
+.missed-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  border-left: 4px solid var(--warn);
+}
+
+.missed-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.missed-text .ic {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.missed-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.missed-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.missed-cta {
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
 }

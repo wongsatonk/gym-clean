@@ -213,19 +213,20 @@ describe('history screen: list', () => {
     expect(rows.every((r) => r.tag === 'button')).toBe(true);
     const last = el.children[el.children.length - 1];
     expect(last?.getAttribute('data-tabbar')).toBe('');
-    expect(one(el, 'data-tab', 'history').getAttribute('aria-current')).toBe('page');
+    expect(one(el, 'data-tab', 'calendar').getAttribute('aria-current')).toBe('page');
   });
 
   it('opens an exercise and switches tabs through the callbacks', () => {
     const { el, calls } = render();
     one(el, 'data-history-exercise', 'pu').click();
-    one(el, 'data-tab', 'history').click(); // the active tab does nothing
+    one(el, 'data-tab', 'calendar').click(); // the active tab does nothing
     one(el, 'data-tab', 'settings').click();
     expect(calls).toEqual(['open:pu', 'tab:settings']);
   });
 
-  it('has four tabs: Today, Fuel, History, Settings', () => {
-    expect(TABS.map((t) => t.label)).toEqual(['Today', 'Fuel', 'History', 'Settings']);
+  it('sits under the Calendar tab (M12: Calendar replaces History)', () => {
+    expect(TABS.map((t) => t.label)).toContain('Calendar');
+    expect(TABS.map((t) => t.label)).not.toContain('History');
   });
 
   it('empty: no history at all shows one message and a way to Today', () => {
@@ -254,7 +255,7 @@ describe('history screen: list', () => {
     expect(el.textContent).not.toContain('No workouts yet');
     expect(byAttr(el, 'data-week-stat')).toHaveLength(0);
     expect(byAttr(el, 'data-history-exercise')).toHaveLength(0);
-    expect(one(el, 'data-tab', 'history').getAttribute('aria-current')).toBe('page');
+    expect(one(el, 'data-tab', 'calendar').getAttribute('aria-current')).toBe('page');
   });
 
   it('error: "Couldn\'t load history" with a way to Today, not the empty state', () => {
@@ -309,7 +310,13 @@ describe('history screen: exercise detail', () => {
     expect(byAttr(el, 'data-history-exercise')).toHaveLength(0);
     one(el, 'data-history-back').click();
     expect(calls).toEqual(['back']);
-    expect(one(el, 'data-tab', 'history').getAttribute('aria-current')).toBe('page');
+    expect(one(el, 'data-tab', 'calendar').getAttribute('aria-current')).toBe('page');
+  });
+
+  it('the back button says where it goes back to (M12: Calendar)', () => {
+    expect(one(render({ detail: ROW }).el, 'data-history-back').textContent).toBe('History');
+    const { el } = render({ detail: ROW, backLabel: 'Calendar' });
+    expect(one(el, 'data-history-back').textContent).toBe('Calendar');
   });
 
   it('bodyweight: reps trend, reps best, no volume, focus explained', () => {

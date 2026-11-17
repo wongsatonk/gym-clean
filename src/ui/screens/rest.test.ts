@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { RING_C, restScreen, ringOffset, type RestProps } from './rest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { RING_C, resetSetRing, restScreen, ringOffset, type RestProps } from './rest';
 import { FakeEl, asFake, useFakeDom } from './testDom';
 
 useFakeDom();
@@ -127,7 +127,11 @@ describe('restScreen', () => {
   it('top bar: list / Pause, and Camera only when given', () => {
     const plain = render();
     expect(plain.el.byTag('button').some((b) => b.textContent === 'Camera')).toBe(false);
-    one(plain.el, (e) => (e.getAttribute('aria-label') ?? '').endsWith('Exercise list'), 'list').click();
+    one(
+      plain.el,
+      (e) => (e.getAttribute('aria-label') ?? '').endsWith('Exercise list'),
+      'list',
+    ).click();
     buttonByText(plain.el, 'Pause').click();
     expect(plain.calls).toMatchObject({ list: 1, pause: 1 });
     const cam = render({}, true);
@@ -195,5 +199,67 @@ describe('restScreen', () => {
     const bare = render();
     expect(bare.el.find((e) => e.hasAttribute('data-today'))).toHaveLength(0);
     expect(bare.el.find((e) => e.hasAttribute('data-last'))).toHaveLength(0);
+  });
+});
+
+describe('restScreen: set ring (M12)', () => {
+  let anims: { el: FakeEl; frames: Keyframe[] }[] = [];
+  let reduce = false;
+  const g = globalThis as { matchMedia?: unknown };
+  let savedMM: unknown;
+  const proto = FakeEl.prototype as unknown as { animate?: unknown };
+  beforeEach(() => {
+    anims = [];
+    reduce = false;
+    resetSetRing();
+    savedMM = g.matchMedia;
+    g.matchMedia = (q: string) => ({ matches: q.includes('reduced-motion') && reduce, media: q });
+    proto.animate = function (this: FakeEl, frames: Keyframe[]) {
+      anims.push({ el: this, frames });
+      return { cancel: () => {} };
+    };
+  });
+  afterEach(() => {
+    g.matchMedia = savedMM;
+    delete proto.animate;
+  });
+  const arc = (el: FakeEl) => el.byClass('set-ring-fg')[0];
+
+  it('after set 1 of 4: the ring fills quickly from 0 to 25% (final value set first)', () => {
+    const { el } = render({ setIndex: 1, sets: 4 });
+    const ring = attr(el, 'data-set-ring');
+    expect(ring.getAttribute('aria-hidden')).toBe('true');
+    expect([ring.getAttribute('data-done'), ring.getAttribute('data-total')]).toEqual(['1', '4']);
+    expect(arc(el)?.style.strokeDashoffset).toBe('75');
+    expect(anims).toHaveLength(1);
+    expect(anims[0]?.frames).toEqual([{ strokeDashoffset: '100' }, { strokeDashoffset: '75' }]);
+  });
+
+  it('a re-render of the same rest shows it filled without replaying', () => {
+    render({ setIndex: 2, sets: 4 });
+    anims = [];
+    const { el } = render({ setIndex: 2, sets: 4, targetMs: 150_000 });
+    expect(anims).toEqual([]);
+    expect(arc(el)?.style.strokeDashoffset).toBe('50');
+  });
+
+  it('the last set of an exercise: app passes setsDone; no ring at set 1 without it', () => {
+    expect(render({ setIndex: 0 }).el.find((e) => e.hasAttribute('data-set-ring'))).toEqual([]);
+    const { el } = render({ setIndex: 0, exIndex: 1, setsDone: { done: 3, total: 3 } });
+    expect(attr(el, 'data-set-ring').getAttribute('data-done')).toBe('3');
+    expect(arc(el)?.style.strokeDashoffset).toBe('0');
+    expect(anims[0]?.frames[0]).toEqual({ strokeDashoffset: String(100 - 200 / 3) });
+  });
+
+  it('reduced motion: no animation, the final arc at once', () => {
+    reduce = true;
+    const { el } = render({ setIndex: 3, sets: 4 });
+    expect(anims).toEqual([]);
+    expect(arc(el)?.style.strokeDashoffset).toBe('25');
+  });
+
+  it('the eyebrow words are unchanged (the ring is decorative)', () => {
+    const { el } = render({ setIndex: 1, sets: 4 });
+    expect(el.oneByClass('rest-eyebrow').textContent).toBe('Next · Set 2 of 4');
   });
 });

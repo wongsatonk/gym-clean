@@ -761,8 +761,11 @@ export function mountApp(root: HTMLElement): void {
           render();
         }
         return;
-      case 'history':
-        if (view.screen !== 'history') openHistory();
+      case 'calendar':
+        if (view.screen !== 'history') openHistory(); // task 16 swaps in the Calendar screen
+        return;
+      case 'coach':
+        void openCoach('today'); // task 15: the Coach tab screen
         return;
       case 'fuel':
         if (view.screen !== 'fuel') void openFuel();

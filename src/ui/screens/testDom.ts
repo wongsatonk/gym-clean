@@ -8,6 +8,8 @@ export class FakeEl {
   text = '';
   html = '';
   listeners = new Map<string, ((ev?: unknown) => void)[]>();
+  /** Inline style properties (motion helpers set stroke-dash* here). */
+  style: Record<string, string> = {};
   /** Tests flip this to simulate removal from the document. */
   isConnected = true;
   constructor(public tag: string) {}
@@ -50,6 +52,12 @@ export class FakeEl {
         this.children.push(t);
       } else this.children.push(n);
     }
+  }
+  prepend(...nodes: (FakeEl | string)[]) {
+    const kept = this.children;
+    this.children = [];
+    this.append(...nodes);
+    this.children.push(...kept);
   }
   replaceChildren(...nodes: (FakeEl | string)[]) {
     this.children = [];

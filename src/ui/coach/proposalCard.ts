@@ -6,11 +6,18 @@
 // allows (End workout / Not today). Danger is used here because it is a stop, with a flag icon
 // and words, never colour alone (M4e "danger only in confirmations").
 //
+// M12 (task 10): a card in the chat thread outlives its answer. `buildCardOutcome` draws the
+// status line that replaces Apply / Not now once answered (shared with the focus-block card):
+// applied (+ Undo), not now, undone, expired (+ Ask again). Apply → the check pops in
+// (motion.ts checkMorph) on the render right after it.
+//
 // e2e hooks: `data-proposal` on the card, buttons "Apply" / "Not now"; `data-redflag` on the
-// red-flag card, buttons "End workout" / "Not today".
-import type { Proposal } from '../../core/types';
+// red-flag card, buttons "End workout" / "Not today"; `data-card-status=<status>` on an answered
+// card's status line, buttons "Undo" / "Ask again".
+import type { ChatCardStatus, Proposal } from '../../core/types';
 import { h } from '../dom';
-import { icon } from '../icons';
+import { icon, type IconName } from '../icons';
+import { checkMorph } from '../motion';
 import './coach.css';
 
 export type ProposalCardProps = Pick<Proposal, 'title' | 'lines' | 'why'>;
@@ -116,4 +123,99 @@ export function buildRedFlagCard(text: string, a: RedFlagActions): Built {
 
 export function redFlagCard(text: string, a: RedFlagActions): HTMLElement {
   return buildRedFlagCard(text, a).el;
+}
+
+export type AnsweredStatus = Exclude<ChatCardStatus, 'pending'>;
+
+export type OutcomeActions = {
+  /** Applied card: Undo (omit when this change can no longer be undone). */
+  onUndo?: (() => void) | undefined;
+  /** Expired card: ask the coach again (a fresh proposal on today's plan). */
+  onAskAgain?: (() => void) | undefined;
+};
+
+const OUTCOME: Record<AnsweredStatus, { icon: IconName; text: string }> = {
+  applied: { icon: 'check', text: 'Applied.' },
+  dismissed: { icon: 'close', text: 'Not now. Nothing changed.' },
+  undone: { icon: 'back', text: 'Undone. Your plan is back.' },
+  expired: { icon: 'clock', text: 'Your plan changed since. This is out of date.' },
+};
+
+/** Pure: the words on an answered card's status line. */
+export function outcomeText(status: AnsweredStatus): string {
+  return OUTCOME[status].text;
+}
+
+/**
+ * The status line of an answered card. `justApplied` plays the check morph (the Apply that was
+ * just tapped); otherwise the check is simply there.
+ */
+export function buildCardOutcome(
+  status: AnsweredStatus,
+  a: OutcomeActions,
+  opts: { justApplied?: boolean } = {},
+): Built {
+  const o = OUTCOME[status];
+  const morph = status === 'applied' && opts.justApplied === true;
+  const line = h(
+    'p',
+    { class: `card-outcome card-${status}`, 'data-card-status': status },
+    morph ? null : icon(o.icon, 'md', { class: 'card-outcome-icon' }),
+    h('span', {}, o.text),
+  );
+  if (morph) checkMorph(line, icon('check', 'md', { class: 'card-outcome-icon' }));
+  const controls: HTMLElement[] = [];
+  if (status === 'applied' && a.onUndo) {
+    controls.push(
+      h(
+        'button',
+        { type: 'button', class: 'cs-btn card-undo', 'data-card-undo': true, onclick: a.onUndo },
+        icon('back', 'md'),
+        h('span', {}, 'Undo'),
+      ),
+    );
+  }
+  if (status === 'expired' && a.onAskAgain) {
+    controls.push(
+      h(
+        'button',
+        { type: 'button', class: 'cs-btn card-ask', 'data-card-ask': true, onclick: a.onAskAgain },
+        icon('chat', 'md'),
+        h('span', {}, 'Ask again'),
+      ),
+    );
+  }
+  const el = h(
+    'div',
+    { class: 'card-outcome-row' },
+    line,
+    controls.length ? h('div', { class: 'card-outcome-actions' }, ...controls) : null,
+  );
+  return { el, controls };
+}
+
+/**
+ * A proposal card in the chat thread. Pending → the M10 card (Apply / Not now); answered → its
+ * title and the status line (before → after rows are no longer needed in an old card).
+ */
+export function buildThreadProposalCard(
+  p: ProposalCardProps,
+  status: ChatCardStatus,
+  a: ProposalCardActions & OutcomeActions,
+  opts: { justApplied?: boolean } = {},
+): Built {
+  if (status === 'pending') return buildProposalCard(p, a);
+  const out = buildCardOutcome(status, a, opts);
+  const el = h(
+    'section',
+    {
+      class: `proposal-card proposal-answered`,
+      'data-proposal': true,
+      'data-proposal-status': status,
+      'aria-label': p.title,
+    },
+    h('h3', { class: 'proposal-title' }, p.title),
+    out.el,
+  );
+  return { el, controls: out.controls };
 }

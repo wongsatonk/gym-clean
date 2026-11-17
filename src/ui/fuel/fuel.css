@@ -83,7 +83,7 @@
 .fuel-ring-fg {
   stroke: var(--cta);
   stroke-linecap: round;
-  transition: stroke-dashoffset 300ms ease-out;
+  transition: stroke-dashoffset var(--dur-slow) var(--ease-standard);
 }
 
 .fuel-ring-fg.done {
@@ -542,10 +542,4 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
 
 .fuel-sheet .primary-btn.cta-btn {
   margin-top: 4px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fuel-ring-fg {
-    transition: none;
-  }
 }

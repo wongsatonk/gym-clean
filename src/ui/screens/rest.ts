@@ -17,9 +17,14 @@
 // elements app.ts passes in, and the top bar's "Exercise list", "Camera" (pose-tracked next
 // exercise only) and "Pause". New: `[data-rest-timer]` (data-state rest|over),
 // `[data-rest-label]`, `[data-rest-target]`, `[data-rest-extend]`.
+// M12: a small set-progress ring by "Next · Set 3 of 4" (`[data-set-ring]`, data-done/data-total)
+// fills quickly to the set just logged (motion.ts ringFill; final at once under reduced motion).
+// It plays once per logged set: a re-render of the same rest (+30 s, a sheet closing) shows it
+// filled, without replaying. Decorative (aria-hidden): the eyebrow says the same in words.
 import { formatRest } from '../../core/format';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { ringFill } from '../motion';
 import { moodClass } from '../tokens';
 import { workoutTopBar } from '../topBar';
 
@@ -56,6 +61,12 @@ export type RestProps = {
   /** "8×40, 8×40 lb" logged today / last session; omitted when empty. */
   today?: string | undefined;
   last?: string | undefined;
+  /**
+   * Sets of the just-finished exercise, for the set ring. Defaults to `setIndex` of `sets` when
+   * the next set is the same exercise; app.ts passes it after the last set of an exercise
+   * (the next set is then set 1 of the next one). Omitted with setIndex 0 → no ring.
+   */
+  setsDone?: { done: number; total: number } | undefined;
 };
 
 export type RestActions = {
@@ -94,6 +105,53 @@ function svgEl(tag: string, attrs: Record<string, string>): SVGElement {
 }
 
 const plural = (n: number, one: string) => (n === 1 ? one : `${one}s`);
+
+/** The logged set the ring last filled to, so a re-render of the same rest doesn't replay it. */
+let lastFill = '';
+
+/** Test-only: forget the last fill. */
+export function resetSetRing(): void {
+  lastFill = '';
+}
+
+/**
+ * The set ring (28px, pathLength 100): fills from the set before to `done` of `total`, or shows
+ * `done` at once when this rest already played it.
+ */
+function setRing(p: RestProps): SVGElement | null {
+  const s = p.setsDone ?? (p.setIndex > 0 ? { done: p.setIndex, total: p.sets } : null);
+  if (!s || s.total <= 0) return null;
+  const done = Math.min(s.total, Math.max(0, s.done));
+  const arc = svgEl('circle', {
+    class: 'set-ring-fg',
+    cx: '18',
+    cy: '18',
+    r: '15',
+    pathLength: '100',
+    transform: 'rotate(-90 18 18)',
+  });
+  const svg = svgEl('svg', {
+    class: 'set-ring',
+    viewBox: '0 0 36 36',
+    'aria-hidden': 'true',
+    focusable: 'false',
+    'data-set-ring': 'true',
+    'data-done': String(done),
+    'data-total': String(s.total),
+  });
+  svg.append(svgEl('circle', { class: 'set-ring-bg', cx: '18', cy: '18', r: '15' }), arc);
+  const pct = (n: number) => (100 * n) / s.total;
+  const key = `${p.dayName}|${p.exIndex}|${p.setIndex}|${done}/${s.total}`;
+  if (key === lastFill) {
+    arc.style.strokeDasharray = '100 100';
+    arc.style.strokeDashoffset = String(100 - pct(done));
+  } else {
+    lastFill = key;
+    arc.style.strokeDashoffset = String(100 - pct(Math.max(0, done - 1)));
+    ringFill(arc, pct(done));
+  }
+  return svg;
+}
 
 export function restScreen(p: RestProps, a: RestActions): RestView {
   const ringFg = svgEl('circle', {
@@ -164,7 +222,12 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
     h(
       'div',
       { class: 'next-up' },
-      h('p', { class: 'rest-eyebrow caps' }, `Next · Set ${p.setIndex + 1} of ${p.sets}`),
+      h(
+        'p',
+        { class: 'rest-eyebrow caps' },
+        setRing(p),
+        h('span', {}, `Next · Set ${p.setIndex + 1} of ${p.sets}`),
+      ),
       h('p', { class: 'rest-next-name' }, p.name),
       h(
         'p',

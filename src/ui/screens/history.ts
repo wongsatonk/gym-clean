@@ -56,12 +56,17 @@ export type HistoryProps = {
   loading?: boolean | undefined;
   /** The load failed: shows "Couldn't load history". Wins over `loading` and any data. */
   error?: boolean | undefined;
+  /**
+   * M12: the detail's back button words. History now opens from a Calendar day, so app.ts can
+   * pass 'Calendar' (or the day, 'Tue 18 Nov'). Default 'History'.
+   */
+  backLabel?: string | undefined;
 };
 
 export type HistoryActions = {
   /** An exercise row was tapped: load its 4 weeks and re-render with `detail`. */
   onOpenExercise: (exerciseId: string) => void;
-  /** "‹ History" on the detail view: re-render without `detail`. */
+  /** "‹ History" (or `backLabel`) on the detail view: re-render without `detail`. */
   onBack: () => void;
   onTab: (tab: TabId) => void;
 };
@@ -426,12 +431,13 @@ function detailView(
   name: string,
   unit: Unit,
   actions: HistoryActions,
+  backLabel: string,
 ): (HTMLElement | null)[] {
   const back = h(
     'button',
     { type: 'button', class: 'hist-back', 'data-history-back': true, onclick: actions.onBack },
     icon('back', 'md'),
-    h('span', {}, 'History'),
+    h('span', {}, backLabel),
   );
   const title = h('h1', { class: 'page-title hist-title' }, name);
   if (d.sessions.length === 0) {
@@ -511,7 +517,13 @@ export function historyScreen(props: HistoryProps, actions: HistoryActions): HTM
   const body: (HTMLElement | null)[] = state
     ? [h('h1', { class: 'page-title' }, 'History'), state]
     : detail
-      ? detailView(detail, props.name(detail.exerciseId), props.unit, actions)
+      ? detailView(
+          detail,
+          props.name(detail.exerciseId),
+          props.unit,
+          actions,
+          props.backLabel ?? 'History',
+        )
       : [h('h1', { class: 'page-title' }, 'History'), ...listView(props, actions)];
   return h(
     'main',
@@ -521,6 +533,7 @@ export function historyScreen(props: HistoryProps, actions: HistoryActions): HTM
       'data-view': detail ? 'detail' : 'list',
     },
     ...body,
-    tabBar('history', actions.onTab),
+    // M12: History lives under the Calendar tab (one tap deeper than a Calendar day).
+    tabBar('calendar', actions.onTab),
   );
 }
