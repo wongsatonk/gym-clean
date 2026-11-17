@@ -219,3 +219,84 @@ describe('groupBySlot', () => {
     expect(groupBySlot([])).toEqual([]);
   });
 });
+
+describe('M12 1b: Measurements row', () => {
+  const noop = () => undefined;
+  const base = {
+    onLog: noop,
+    onEditEntry: noop,
+    onDeleteEntry: noop,
+    onWeighIn: noop,
+    onSetup: noop,
+    onTab: noop,
+  };
+  const order = (el: FakeEl) =>
+    el
+      .find(
+        (e) =>
+          e.attrs.has('data-measurements-open') ||
+          e.attrs.has('data-log-open') ||
+          e.classes.includes('fuel-entries'),
+      )
+      .map((e) =>
+        e.attrs.has('data-measurements-open')
+          ? 'measure'
+          : e.attrs.has('data-log-open')
+            ? 'log'
+            : 'entries',
+      );
+
+  it('is not there unless both the data and the callback are passed (old callers unchanged)', () => {
+    expect(all(render().el, 'data-measurements-open')).toHaveLength(0);
+    expect(
+      all(
+        render({ measurements: { lastDate: '2026-11-01', due: false } }).el,
+        'data-measurements-open',
+      ),
+    ).toHaveLength(0);
+    const el = asFake(fuelScreen(props(), { ...base, onMeasurements: noop }));
+    expect(all(el, 'data-measurements-open')).toHaveLength(0);
+  });
+
+  it('sits under today’s food and opens the screen', () => {
+    let opened = 0;
+    const el = asFake(
+      fuelScreen(props({ measurements: { lastDate: '2026-11-01', due: false } }), {
+        ...base,
+        onMeasurements: () => opened++,
+      }),
+    );
+    const row = byAttr(el, 'data-measurements-open');
+    expect(row.tag).toBe('button');
+    expect(row.textContent).toContain('Measurements');
+    expect(row.textContent).toContain('Last 1 Nov');
+    expect(order(el)).toEqual(['log', 'entries', 'measure']);
+    row.click();
+    expect(opened).toBe(1);
+    expectCleanCopy(row);
+  });
+
+  it('moves up under the header when it is time to measure again', () => {
+    const el = asFake(
+      fuelScreen(props({ measurements: { lastDate: '2026-10-12', due: true } }), {
+        ...base,
+        onMeasurements: noop,
+      }),
+    );
+    expect(all(el, 'data-measurements-open')).toHaveLength(1);
+    expect(byAttr(el, 'data-measurements-open').textContent).toContain('Measure again');
+    expect(order(el)).toEqual(['measure', 'log', 'entries']);
+  });
+
+  it('never measured: still offered, with a plain line', () => {
+    const el = asFake(
+      fuelScreen(props({ measurements: { lastDate: null, due: false } }), {
+        ...base,
+        onMeasurements: noop,
+      }),
+    );
+    expect(byAttr(el, 'data-measurements-open').textContent).toContain(
+      'Tape measure, once a month',
+    );
+  });
+});

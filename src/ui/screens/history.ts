@@ -21,10 +21,14 @@
 // `[data-history-back]`,
 // `[data-best]`, `[data-trend]` (with `data-metric` volume|reps), `[data-trend-change]`,
 // `[data-trend-focus]`, `[data-history-session]` rows, and the tab bar (`[data-tab]`).
+//
+// M12 slice 1b (optional): the estimated 1-rep-max chart (`[data-e1rm]`, ../charts/e1rmChart.ts)
+// under the bar trend in the detail view, when `e1rm` is passed and the lift is weighted.
 import '../history.css';
 import { formatDuration } from '../../core/format';
 import type { DaySession, ExerciseHistory, ExerciseSessionEntry } from '../../core/history';
 import { formatWeight, toUnit, type Unit } from '../../core/units';
+import { e1rmChart, type E1rmPoint } from '../charts/e1rmChart';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { tabBar, type TabId } from '../tabBar';
@@ -61,6 +65,12 @@ export type HistoryProps = {
    * pass 'Calendar' (or the day, 'Tue 18 Nov'). Default 'History'.
    */
   backLabel?: string | undefined;
+  /**
+   * M12 1b: core's e1RM series for the opened exercise, oldest first (one point per session,
+   * lighter sessions flagged). Omitted: no chart (as before). An empty list shows the "No
+   * estimate yet" card. Never drawn for a bodyweight exercise.
+   */
+  e1rm?: readonly E1rmPoint[] | undefined;
 };
 
 export type HistoryActions = {
@@ -432,6 +442,7 @@ function detailView(
   unit: Unit,
   actions: HistoryActions,
   backLabel: string,
+  e1rm: readonly E1rmPoint[] | undefined,
 ): (HTMLElement | null)[] {
   const back = h(
     'button',
@@ -476,6 +487,7 @@ function detailView(
     title,
     bestBlock,
     trendChart(series, dates, unit),
+    e1rm && !bodyweight ? e1rmChart({ unit, points: e1rm }) : null,
     h(
       'ul',
       { class: 'hist-trend-lines' },
@@ -523,6 +535,7 @@ export function historyScreen(props: HistoryProps, actions: HistoryActions): HTM
           props.unit,
           actions,
           props.backLabel ?? 'History',
+          props.e1rm,
         )
       : [h('h1', { class: 'page-title' }, 'History'), ...listView(props, actions)];
   return h(

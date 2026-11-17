@@ -25,6 +25,7 @@
 import { dateText } from '../../core/trainer/actions/lighter';
 import {
   QUICK_CHIPS,
+  SHORT_ON_TIME_CHIP,
   STARTER_CHIPS,
   type CoachArgs,
   type CoachChipId,
@@ -42,8 +43,11 @@ import './chat.css';
 
 export type ChatChip = { id: CoachChipId; label: string; args?: CoachArgs };
 
-/** Quick-chip icons (decorative; every chip has words). Labels come from core QUICK_CHIPS. */
-const QUICK_ICON: Record<QuickChipId, IconName> = {
+/** M12 1b: the chat's quick chips are core's QUICK_CHIPS plus "Short on time". */
+export type ChatQuickId = QuickChipId | 'shortOnTime';
+
+/** Quick-chip icons (decorative; every chip has words). Labels come from core. */
+const QUICK_ICON: Record<ChatQuickId, IconName> = {
   notToday: 'calendar',
   easyOn: 'pause',
   lighter: 'minus',
@@ -51,15 +55,34 @@ const QUICK_ICON: Record<QuickChipId, IconName> = {
   adjustPlan: 'sliders',
   food: 'flame',
   focusBlock: 'trend',
+  shortOnTime: 'timer',
 };
 
-/** The quick chips in core order, with the M12 focusBlock chip ("Build a focus block"). */
-export const CHAT_CHIPS: readonly { id: QuickChipId; label: string; icon: IconName }[] =
-  QUICK_CHIPS.map((c) => ({
-    id: c.id as QuickChipId,
-    label: c.label,
-    icon: QUICK_ICON[c.id as QuickChipId],
-  }));
+type ChatQuickChip = { id: ChatQuickId; label: string; icon: IconName };
+
+const CORE_QUICK: readonly ChatQuickChip[] = QUICK_CHIPS.map((c) => ({
+  id: c.id as QuickChipId,
+  label: c.label,
+  icon: QUICK_ICON[c.id as QuickChipId],
+}));
+/** M12 1b "Short on time" (core SHORT_ON_TIME_CHIP): asks how long, then proposes today's cut. */
+const SHORT_CHIP: ChatQuickChip = {
+  id: 'shortOnTime',
+  label: SHORT_ON_TIME_CHIP.label,
+  icon: QUICK_ICON.shortOnTime,
+};
+const afterLighter = CORE_QUICK.findIndex((c) => c.id === 'lighter') + 1;
+
+/**
+ * The quick chips: core's order, with "Short on time" next to "Lighter today" (both change
+ * today only) and the M12 focusBlock chip ("Build a focus block"). Tab only: the Pause sheet
+ * keeps its three (WORKOUT_CHAT_CHIPS).
+ */
+export const CHAT_CHIPS: readonly ChatQuickChip[] = [
+  ...CORE_QUICK.slice(0, afterLighter),
+  SHORT_CHIP,
+  ...CORE_QUICK.slice(afterLighter),
+];
 
 /** Mid-workout (the Pause sheet): only what can change what's left (core WORKOUT_CHIPS). */
 export const WORKOUT_CHAT_CHIPS: readonly QuickChipId[] = ['easyOn', 'lighter', 'swap'];
@@ -86,7 +109,7 @@ export type ChatProps = {
   /** The coach is answering: the typing indicator. */
   typing?: boolean | undefined;
   /** Quick chips to offer (default: all for the tab, the workout three for the sheet). */
-  chips?: readonly QuickChipId[] | undefined;
+  chips?: readonly ChatQuickId[] | undefined;
   /** Starters on an empty thread (default core STARTER_CHIPS; main passes starterChips(ctx)). */
   starters?: readonly ChatChip[] | undefined;
   /** The coach's alternatives / questions (core reply chips that aren't quick or area chips). */
@@ -152,7 +175,7 @@ export function visibleChatChips(
   p: Pick<ChatProps, 'messages' | 'chips' | 'variant'>,
 ): (typeof CHAT_CHIPS)[number][] {
   if (redFlagUp(p.messages) || awaitingAnswer(p.messages)) return [];
-  const allow = new Set(
+  const allow = new Set<ChatQuickId>(
     p.chips ?? (p.variant === 'sheet' ? WORKOUT_CHAT_CHIPS : CHAT_CHIPS.map((c) => c.id)),
   );
   return CHAT_CHIPS.filter((c) => allow.has(c.id));
@@ -164,7 +187,8 @@ export function textToSend(raw: string): string | null {
   return t ? t.slice(0, 200) : null;
 }
 
-const QUICK_IDS = new Set<string>(CHAT_CHIPS.map((c) => c.id));
+// Core's quick chips only: a reply's "20 min" chips (shortOnTime + args) are follow-ups.
+const QUICK_IDS = new Set<string>(CORE_QUICK.map((c) => c.id));
 const AREA_IDS = new Set<string>(AREA_CHAT_CHIPS.map((c) => c.area));
 
 /**

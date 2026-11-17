@@ -175,7 +175,11 @@ describe('chat: tab variant', () => {
       CHAT_CHIPS.map((c) => c.id),
     );
     expect(one(el, 'data-coach-chip', 'focusBlock').textContent).toBe('Build a focus block');
-    expect(CHAT_CHIPS).toHaveLength(7);
+    // M12 1b: core's 7 quick chips + "Short on time", next to "Lighter today".
+    expect(CHAT_CHIPS).toHaveLength(8);
+    expect(one(el, 'data-coach-chip', 'shortOnTime').textContent).toBe('Short on time');
+    const ids = CHAT_CHIPS.map((c) => c.id);
+    expect(ids.indexOf('shortOnTime')).toBe(ids.indexOf('lighter') + 1);
     expect(el.byTag('label')[0]?.textContent).toBe('Ask the coach');
     expect(btn(el, 'Send')).toBeTruthy();
     expect(el.oneByClass('cs-privacy').textContent).toBe(PRIVACY_LINE);

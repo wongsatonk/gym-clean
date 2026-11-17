@@ -1,0 +1,326 @@
+<!doctype html>
+<!-- Dev-only visual check for M12 slice 1b tasks 27–29 (measurements, body-composition trends,
+     Health switches, e1RM chart, short-on-time pair lines), with made-up data. Not part of the
+     build or the app. Open on the dev server:
+     /src/ui/screens/trainerKitCharts.harness.html?view=measurements[&unit=lb][&state=first|ok]
+       | weighin | fuel[&due=1] | health | e1rm | e1rm-states | proposal | preview -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Trainer kit charts harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { HEALTH_TYPES } from '../../core/types.ts';
+      import { exerciseName, program } from '../../data/catalog.ts';
+      import { e1rmChart } from '../charts/e1rmChart.ts';
+      import { chat } from '../coach/chat.ts';
+      import { measurementsEntry, measurementsScreen } from '../fuel/measurements.ts';
+      import { weighInScreen } from '../fuel/weighIn.ts';
+      import { fuelScreen } from './fuel.ts';
+      import { healthSettingsScreen } from './healthSettings.ts';
+      import { historyScreen } from './history.ts';
+      import { previewScreen } from './preview.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'measurements';
+      const unit = q.get('unit') === 'lb' ? 'lb' : 'kg';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      const day = (d) => `2026-11-${String(d).padStart(2, '0')}`;
+      const at = (d, h = 18) => new Date(2026, 10, d, h, 0).getTime();
+      const TODAY = '2026-11-17';
+
+      // Made-up numbers only (public repo).
+      const SITES = ['leftArm', 'rightArm', 'chest', 'waist', 'hips', 'leftThigh', 'rightThigh'];
+      const MEASURED = [
+        ['leftArm', 33.5, 34],
+        ['rightArm', 34, 34.5],
+        ['chest', 98, 99],
+        ['waist', 82, 81.5],
+        ['hips', 96, 96],
+        ['leftThigh', 55, 56],
+        ['rightThigh', 55.5, 56],
+      ].flatMap(([site, a, b]) => [
+        { date: '2026-08-14', site, cm: a },
+        { date: '2026-10-12', site, cm: b },
+      ]);
+
+      const TREND = Array.from({ length: 14 }, (_, k) => {
+        const d = k + 4;
+        const weighed = d % 3 !== 0;
+        return {
+          date: day(d),
+          kg: weighed ? 70 + ((k * 7) % 5) * 0.12 + k * 0.03 : null,
+          avgKg: k >= 6 ? 70.2 + (k - 6) * 0.03 : null,
+        };
+      });
+      const BODY_COMP = [
+        [4, 19.2, 56.9],
+        [6, 19.0, 57.0],
+        [8, 19.1, 57.0],
+        [10, 18.8, 57.2],
+        [12, 18.7, 57.3],
+        [14, 18.6, 57.3],
+        [17, 18.4, 57.6],
+      ].map(([d, bodyFatPct, leanMassKg]) => ({ date: day(d), bodyFatPct, leanMassKg }));
+      const HISTORY = [11, 12, 13, 14, 15, 16].map((d, i) => ({
+        date: day(d),
+        totals: { kcal: 2300 + i * 70, proteinG: 118 + i * 4, count: 3 },
+        training: i % 2 === 0,
+      }));
+
+      const E1RM = [
+        { date: day(1), e1rmKg: 66 },
+        { date: day(3), e1rmKg: 67.5 },
+        { date: day(5), e1rmKg: 60, lighter: true },
+        { date: day(8), e1rmKg: 70 },
+        { date: day(10), e1rmKg: 70.5 },
+        { date: day(12), e1rmKg: 72 },
+        { date: day(14), e1rmKg: 70 },
+      ];
+
+      if (view === 'measurements') {
+        const state = q.get('state') ?? 'due';
+        app.replaceChildren(
+          measurementsScreen(
+            {
+              sites: SITES,
+              unit,
+              today: state === 'ok' ? '2026-10-20' : TODAY,
+              measurements: state === 'first' ? [] : MEASURED,
+            },
+            { onBack: () => log('back'), onSave: (rows) => log('save', JSON.stringify(rows)) },
+          ),
+        );
+      } else if (view === 'weighin') {
+        app.replaceChildren(
+          weighInScreen(
+            {
+              unit,
+              todayKg: 70.6,
+              lastKg: 70.4,
+              trend: TREND,
+              check: null,
+              kcalTarget: 2650,
+              history: HISTORY,
+              todaySource: 'health',
+              bodyComp: BODY_COMP,
+            },
+            {
+              onBack: () => log('back'),
+              onSave: (kg) => log('save', kg),
+              onAccept: () => log('accept'),
+              onDismiss: () => log('dismiss'),
+            },
+          ),
+        );
+      } else if (view === 'fuel') {
+        const due = q.get('due') === '1';
+        app.replaceChildren(
+          fuelScreen(
+            {
+              now: at(17, 13),
+              mode: 'quick',
+              targets: {
+                kcal: { value: 2800, estimate: true },
+                proteinG: { value: 140, estimate: true },
+                carbsG: { value: 350, estimate: true },
+                fatG: { value: 80, estimate: false },
+              },
+              totals: { kcal: 1207, proteinG: 69, carbsG: 95, fatG: 36 },
+              entries: [
+                {
+                  id: 'e1',
+                  date: TODAY,
+                  time: at(17, 8),
+                  slot: 'breakfast',
+                  label: 'Protein shake',
+                  amount: { servings: 1 },
+                  estimate: false,
+                  kcal: 200,
+                  proteinG: 30,
+                },
+              ],
+              unit,
+              lastWeighInKg: 70.6,
+              measurements: measurementsEntry(MEASURED, due ? TODAY : '2026-10-20'),
+            },
+            {
+              onLog: () => log('log'),
+              onEditEntry: () => log('edit'),
+              onDeleteEntry: () => log('delete'),
+              onWeighIn: () => log('weigh'),
+              onSetup: () => log('setup'),
+              onMeasurements: () => log('measurements'),
+              onTab: (t) => log('tab', t),
+            },
+          ),
+        );
+      } else if (view === 'health') {
+        const enabled = Object.fromEntries(
+          HEALTH_TYPES.map((t) => [t, t !== 'bodyFat' && t !== 'leanMass']),
+        );
+        app.replaceChildren(
+          healthSettingsScreen(
+            {
+              native: true,
+              connected: true,
+              settings: { enabled, route: 'apple', lastReadAt: at(17, 7) },
+              now: at(17, 9),
+            },
+            {
+              onBack: () => log('back'),
+              onConnect: () => log('connect'),
+              onEnable: (t) => log('enable', t),
+              onTurnOffAndDelete: (t) => log('delete', t),
+              onReadNow: () => log('read'),
+            },
+          ),
+        );
+      } else if (view === 'e1rm') {
+        const sess = (id, d, sets) => ({
+          sessionId: id,
+          date: at(d),
+          dayStart: at(d, 0),
+          sets: sets.map((s) => ({ ...s, focusScore: null })),
+          topSet: sets[0],
+          volumeKg: sets.reduce((n, s) => n + s.reps * s.weightKg, 0),
+          focusScores: [],
+          avgFocus: null,
+        });
+        const set = (reps, weightKg) => ({ reps, weightKg });
+        const detail = {
+          exerciseId: 'bench',
+          sessions: [
+            sess('s1', 1, [set(8, 52.5), set(8, 52.5), set(7, 52.5)]),
+            sess('s2', 3, [set(8, 55), set(7, 55), set(6, 55)]),
+            sess('s3', 5, [set(10, 45), set(10, 45)]),
+            sess('s4', 8, [set(8, 55), set(8, 55), set(8, 55)]),
+            sess('s5', 10, [set(7, 57.5), set(7, 57.5), set(6, 57.5)]),
+            sess('s6', 12, [set(8, 57.5), set(7, 57.5), set(7, 57.5)]),
+            sess('s7', 14, [set(7, 57.5), set(7, 57.5), set(6, 57.5)]),
+          ],
+          trend: {
+            bestSet: { reps: 8, weightKg: 57.5, sessionId: 's6', date: at(12) },
+            volumeChangeKg: 0,
+            volumeChangePct: 3,
+            avgFocus: null,
+          },
+        };
+        app.replaceChildren(
+          historyScreen(
+            {
+              unit,
+              days: [],
+              exercises: [detail],
+              detail,
+              dayName: (id) => id,
+              name: () => 'Bench Press',
+              e1rm: E1RM,
+            },
+            {
+              onOpenExercise: (id) => log('open', id),
+              onBack: () => log('back'),
+              onTab: (t) => log('tab', t),
+            },
+          ),
+        );
+      } else if (view === 'e1rm-states') {
+        const wrap = document.createElement('main');
+        wrap.className = 'screen history mood-track';
+        wrap.append(
+          e1rmChart({ unit, points: [] }),
+          e1rmChart({ unit, points: E1RM.slice(5, 6) }),
+          e1rmChart({ unit, points: E1RM.slice(0, 4) }),
+        );
+        app.replaceChildren(wrap);
+      } else if (view === 'proposal') {
+        const msg = (id, role, text, card) => ({
+          id,
+          createdAt: at(17, 18) + id * 1000,
+          role,
+          text,
+          source: 'rules',
+          phase: 'today',
+          ...(card ? { card } : {}),
+        });
+        app.replaceChildren(
+          chat(
+            {
+              variant: 'tab',
+              messages: [
+                msg(1, 'user', 'I have 30 min'),
+                msg(2, 'coach', 'Here is today in 30 minutes.', {
+                  kind: 'proposal',
+                  title: 'Short on time: 30 min',
+                  lines: [
+                    {
+                      before: 'Dumbbell Curl + Triceps Pushdown',
+                      after: 'Back to back, 45 s rest',
+                    },
+                    { before: 'Lateral Raise + Face Pull', after: 'Back to back, 45 s rest' },
+                    { before: 'Lateral Raise · 3 × 12–15 reps', after: '2 × 12–15 reps' },
+                    { before: 'Cable Crunch · 3 × 15 reps', after: 'Removed today' },
+                  ],
+                  why: 'Your main lifts stay. The smaller moves are paired, trimmed or left out, so today takes about 29 min instead of 52. Just for today.',
+                  status: 'pending',
+                  baseVersion: 1,
+                }),
+              ],
+            },
+            {
+              onChip: (c) => log('chip', c.id),
+              onArea: (a) => log('area', a),
+              onApply: (id) => log('apply', id),
+              onDismiss: (id) => log('dismiss', id),
+            },
+          ),
+        );
+      } else {
+        const d = program.days.find((x) => x.exercises.length >= 5) ?? program.days[0];
+        const ids = d.exercises.map((e) => e.exerciseId);
+        const n = ids.length;
+        const partner = { [ids[n - 2]]: ids[n - 1], [ids[n - 1]]: ids[n - 2] };
+        app.replaceChildren(
+          previewScreen(
+            {
+              day: d,
+              position: 1,
+              total: program.days.length,
+              loading: false,
+              adjustedToday: 'Short on time: 30 min',
+              rows: d.exercises.map((p) => ({
+                exerciseId: p.exerciseId,
+                tracking: p.tracking,
+                name: exerciseName(p.exerciseId),
+                plan: partner[p.exerciseId]
+                  ? `2 × ${p.targetReps[0]}–${p.targetReps[1]} reps · 45 s pair rest`
+                  : `${p.sets} × ${p.targetReps[0]}–${p.targetReps[1]} reps`,
+                ...(partner[p.exerciseId]
+                  ? {
+                      pairedWith: exerciseName(partner[p.exerciseId]),
+                      adjusted: 'lighter',
+                    }
+                  : {}),
+              })),
+            },
+            {
+              onBack: () => log('back'),
+              onStart: () => log('start'),
+              onUndoAdjust: () => log('undo'),
+            },
+          ),
+        );
+      }
+      window.harnessReady = true;
+    </script>
+  </body>
+</html>

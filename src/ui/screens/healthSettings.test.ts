@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { HEALTH_TYPES, type HealthSettings, type HealthType } from '../../core/types';
 import { checkHealthCopy } from '../../core/health/copy';
 import {
+  BODY_COMP_TYPES,
+  HEALTH_BODY_NOTE,
   HEALTH_PWA_LINE,
   HEALTH_TYPE_COPY,
   healthSettingsCopy,
@@ -193,6 +195,75 @@ describe('native, connected', () => {
     del.click();
     expect(calls.del).toEqual(['restingHr']);
     expect(calls.enable).toEqual([]);
+  });
+});
+
+describe('M12 1b: body fat + lean mass switches', () => {
+  const OLD_ROW = {
+    bodyMass: true,
+    workouts: true,
+    activeEnergy: true,
+    sleep: true,
+    restingHr: true,
+    hrv: true,
+  } as Record<HealthType, boolean>; // saved before 1.13.0: no bodyFat / leanMass keys
+
+  it('8 switches: the coach’s 6, then Body fat and Lean mass in their own group', () => {
+    const { el } = render();
+    expect(attr(el, 'data-health-type')).toHaveLength(8);
+    const body = one(el, 'data-health-body');
+    expect(attr(body, 'data-health-type').map((s) => s.getAttribute('data-health-type'))).toEqual([
+      'bodyFat',
+      'leanMass',
+    ]);
+    expect(body.byTag('h2')[0]?.textContent).toBe('Body composition');
+    expect(body.textContent).toContain(HEALTH_BODY_NOTE);
+    // The coach's list doesn't hold them.
+    const coachList = el.find((e) => e.getAttribute('aria-label') === 'What the coach reads')[0];
+    expect(attr(coachList as FakeEl, 'data-health-type')).toHaveLength(6);
+    expect([...BODY_COMP_TYPES]).toEqual(['bodyFat', 'leanMass']);
+  });
+
+  it('off by default: an old settings row without the keys reads them as Off', () => {
+    const { el } = render({ settings: { enabled: OLD_ROW, route: 'apple' } });
+    for (const t of BODY_COMP_TYPES) {
+      const sw = one(el, 'data-health-type', t);
+      expect(sw.getAttribute('aria-checked')).toBe('false');
+      expect(sw.oneByClass('switch-state').textContent).toBe('Off');
+      expect(sw.classes).not.toContain('on');
+    }
+    expect(one(el, 'data-health-type', 'sleep').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('one tap turns one on (iPhone is asked then, by the app); nothing else changes', () => {
+    const { el, calls } = render({ settings: { enabled: OLD_ROW, route: 'apple' } });
+    one(el, 'data-health-type', 'bodyFat').click();
+    expect(calls).toMatchObject({ enable: ['bodyFat'], del: [], connect: 0, readNow: 0 });
+  });
+
+  it('on: turning it off is the same two-step delete as the other types', () => {
+    const { el, calls } = render();
+    one(el, 'data-health-type', 'leanMass').click();
+    expect(calls.del).toEqual([]);
+    one(el, 'data-health-delete', 'leanMass').click();
+    expect(calls.del).toEqual(['leanMass']);
+  });
+
+  it('says where the numbers show and that the coach never uses them', () => {
+    for (const t of BODY_COMP_TYPES) {
+      expect(HEALTH_TYPE_COPY[t].explainer).toMatch(/from your scale/);
+      expect(HEALTH_TYPE_COPY[t].explainer).toMatch(/trend next to your weight in Fuel/);
+      expect(HEALTH_TYPE_COPY[t].explainer).not.toMatch(/coach|lighter/i);
+    }
+    expect(HEALTH_BODY_NOTE).toMatch(/The coach never uses these/);
+    expect(HEALTH_BODY_NOTE).toMatch(/Off until you switch them on/);
+  });
+
+  it('iPhone app only: the PWA has no body-composition group or switches', () => {
+    const { el } = render({ native: false });
+    expect(attr(el, 'data-health-body')).toHaveLength(0);
+    expect(attr(el, 'data-health-type')).toHaveLength(0);
+    expect(el.textContent).not.toContain('Body composition');
   });
 });
 

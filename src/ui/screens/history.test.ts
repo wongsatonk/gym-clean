@@ -353,3 +353,48 @@ describe('history screen: exercise detail', () => {
     expect(byAttr(el, 'data-history-back')).toHaveLength(1);
   });
 });
+
+describe('M12 1b: e1RM chart in the exercise detail', () => {
+  // Made-up estimates, oldest first (core's series shape).
+  const E1RM = [
+    { date: D(6), e1rmKg: 26.7 },
+    { date: D(9), e1rmKg: 24, lighter: true },
+    { date: D(13), e1rmKg: 31.5 },
+  ];
+  const marks = (el: FakeEl) =>
+    el.find(
+      (e) =>
+        e.hasAttribute('data-trend') ||
+        e.hasAttribute('data-e1rm') ||
+        e.hasAttribute('data-trend-change'),
+    );
+
+  it('is not drawn unless the series is passed (old callers unchanged)', () => {
+    expect(byAttr(render({ detail: ROW }).el, 'data-e1rm')).toHaveLength(0);
+    expect(byAttr(render({ e1rm: E1RM }).el, 'data-e1rm')).toHaveLength(0); // list view
+  });
+
+  it('sits under the bar trend, with the summary in words and one mark per session', () => {
+    const { el } = render({ detail: ROW, e1rm: E1RM });
+    const card = one(el, 'data-e1rm');
+    expect(card.getAttribute('data-state')).toBe('line');
+    expect(card.textContent).toContain('Best estimate 31.5 kg on 13 Nov');
+    expect(card.byClass('e1-dot')).toHaveLength(3);
+    expect(card.byClass('e1-dot-lighter')).toHaveLength(1);
+    expect(marks(el).map((e) => e.hasAttribute('data-e1rm'))).toEqual([false, true, false]);
+  });
+
+  it('an empty series says so; lb follows the unit', () => {
+    const empty = one(render({ detail: ROW, e1rm: [] }).el, 'data-e1rm');
+    expect(empty.getAttribute('data-state')).toBe('empty');
+    const lb = one(render({ detail: ROW, e1rm: E1RM, unit: 'lb' }).el, 'data-e1rm');
+    expect(lb.textContent).toContain('Estimated 1-rep max (lb)');
+  });
+
+  it('never for a bodyweight exercise or an exercise with no sessions', () => {
+    expect(byAttr(render({ detail: PU, e1rm: E1RM }).el, 'data-e1rm')).toHaveLength(0);
+    expect(
+      byAttr(render({ detail: { ...ROW, sessions: [] }, e1rm: E1RM }).el, 'data-e1rm'),
+    ).toHaveLength(0);
+  });
+});

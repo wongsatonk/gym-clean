@@ -120,3 +120,20 @@
   flex: none;
   margin-top: 2px;
 }
+
+/* M12 1b: the "Body composition" group (body fat, lean mass): its own heading and note, because
+   these two only draw trends in Fuel and the coach never reads them. */
+.health-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: var(--line-w) solid var(--line);
+}
+
+.health-body-title {
+  margin: 0;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.15;
+}

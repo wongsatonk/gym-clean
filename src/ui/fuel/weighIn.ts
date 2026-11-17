@@ -23,6 +23,12 @@
 // and the activity-level line (`[data-activity-suggest]`, Switch `[data-activity-switch]` /
 // Keep `[data-activity-keep]`) inside the weekly card, or as its own card when no check is
 // pending. It only asks; nothing changes until Switch.
+//
+// M12 slice 1b (optional): body fat % and lean mass from Apple Health as their own small trends
+// under the weight trend (`[data-body-comp]`, one `[data-comp="bodyFat"|"leanMass"]` card each
+// with `[data-comp-now]`, `[data-comp-change]` and `[data-comp-chart]`). Shown only when
+// `bodyComp` has a value; plain numbers, no score and no judgement on them. These values stay
+// out of every coach context (the app never passes them anywhere but here).
 import { checkHasChange, type TrendPoint } from '../../core/nutrition/adjust';
 import type { HistoryDay } from '../../core/nutrition/day';
 import type { WeeklyCheck } from '../../core/types';
@@ -55,6 +61,19 @@ export type WeighInProps = {
   todaySource?: 'manual' | 'health' | undefined;
   /** M11-q8: core's activity-level check (current level + the one Health suggests), or null. */
   activity?: ActivitySuggestion | null | undefined;
+  /**
+   * M12 1b: Health days with a body fat % and / or lean mass (any order; `HealthDay` rows fit).
+   * Omitted or without values: the section isn't drawn.
+   */
+  bodyComp?: readonly BodyCompPoint[] | undefined;
+};
+
+/** One day's body composition from Health (the fields of core `HealthDay` this screen reads). */
+export type BodyCompPoint = {
+  date: string;
+  /** Percent, 0–100. */
+  bodyFatPct?: number | undefined;
+  leanMassKg?: number | undefined;
 };
 
 /** M11-q8: the M7 activity level now and the one his 14-day active energy fits. */
@@ -229,6 +248,97 @@ function longDate(date: string): string {
   const [y, m, d] = date.split('-').map(Number);
   return dateLabel(new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1).getTime());
 }
+
+// ---------- M12 1b: body composition (pure) ----------
+
+export type CompKind = 'bodyFat' | 'leanMass';
+/** One reading in the unit it is shown in (%, kg or lb). */
+export type CompReading = { date: string; value: number };
+
+/** A kind's readings, oldest first, in the display unit (lean mass follows his weight unit). */
+export function compSeries(
+  points: readonly BodyCompPoint[],
+  kind: CompKind,
+  unit: Unit,
+): CompReading[] {
+  const out: CompReading[] = [];
+  for (const p of points) {
+    const raw = kind === 'bodyFat' ? p.bodyFatPct : p.leanMassKg;
+    if (raw === undefined || !Number.isFinite(raw)) continue;
+    out.push({ date: p.date, value: kind === 'bodyFat' ? raw : toUnit(raw, unit) });
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+const comp1 = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 1 });
+
+/** "18.4" for the big number. */
+export function compNow(series: readonly CompReading[]): string | null {
+  const last = series[series.length - 1];
+  return last ? comp1(last.value) : null;
+}
+
+/** "down 0.6 % since 3 Nov" / "same as 3 Nov" / "First reading, 14 Nov". Plain, no judgement. */
+export function compChange(series: readonly CompReading[], unitWord: string): string | null {
+  const first = series[0];
+  const last = series[series.length - 1];
+  if (!first || !last) return null;
+  if (series.length < 2) return `First reading, ${shortDate(last.date)}`;
+  const d = Math.round((last.value - first.value) * 10) / 10;
+  if (d === 0) return `same as ${shortDate(first.date)}`;
+  return `${d > 0 ? 'up' : 'down'} ${comp1(Math.abs(d))} ${unitWord} since ${shortDate(first.date)}`;
+}
+
+// 340 wide: the card is 356px at 390px, so the 20px chart text never renders under 20px.
+export const COMP_CHART = { w: 340, h: 150, padL: 62, padR: 14, padT: 16, padB: 34 } as const;
+
+export type CompGeometry = {
+  dots: { cx: number; cy: number; date: string }[];
+  path: string;
+  yTop: { y: number; label: string };
+  yBottom: { y: number; label: string };
+  xFirst: string;
+  xLast: string;
+};
+
+/** Pure: a small line chart of the readings. null with fewer than 2. */
+export function compGeometry(series: readonly CompReading[]): CompGeometry | null {
+  const first = series[0];
+  const last = series[series.length - 1];
+  if (!first || !last || series.length < 2) return null;
+  const d0 = dayNumber(first.date);
+  const d1 = dayNumber(last.date);
+  const vals = series.map((p) => p.value);
+  let lo = Math.min(...vals);
+  let hi = Math.max(...vals);
+  // At least 1 unit of range, so a flat fortnight doesn't blow up tiny changes.
+  const pad = Math.max(0.5, (hi - lo) * 0.1);
+  lo = Math.floor((lo - pad) * 2) / 2;
+  hi = Math.ceil((hi + pad) * 2) / 2;
+  const x0 = COMP_CHART.padL;
+  const x1 = COMP_CHART.w - COMP_CHART.padR;
+  const y0 = COMP_CHART.padT;
+  const y1 = COMP_CHART.h - COMP_CHART.padB;
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const x = (date: string) =>
+    d1 === d0 ? (x0 + x1) / 2 : x0 + ((dayNumber(date) - d0) / (d1 - d0)) * (x1 - x0);
+  const y = (v: number) => y1 - ((v - lo) / (hi - lo)) * (y1 - y0);
+  const dots = series.map((p) => ({ cx: r1(x(p.date)), cy: r1(y(p.value)), date: p.date }));
+  return {
+    dots,
+    path: dots.map((d, i) => `${i ? 'L' : 'M'}${d.cx} ${d.cy}`).join(' '),
+    yTop: { y: y0, label: comp1(hi) },
+    yBottom: { y: y1, label: comp1(lo) },
+    xFirst: shortDate(first.date),
+    xLast: shortDate(last.date),
+  };
+}
+
+const COMP_COPY: Record<CompKind, { label: string }> = {
+  bodyFat: { label: 'Body fat' },
+  leanMass: { label: 'Lean mass' },
+};
+export const BODY_COMP_NOTE = 'From Apple Health. Kept on this phone only.';
 
 const ACTIVITY_ORDER: readonly Activity[] = ACTIVITY_CHOICES.map((c) => c.value);
 const activityLabel = (a: Activity) => ACTIVITY_CHOICES.find((c) => c.value === a)?.label ?? a;
@@ -413,6 +523,71 @@ function trendChart(p: WeighInProps): HTMLElement {
   );
 }
 
+function compCard(kind: CompKind, series: readonly CompReading[], unit: Unit): HTMLElement | null {
+  const now = compNow(series);
+  const first = series[0];
+  const last = series[series.length - 1];
+  if (now === null || !first || !last) return null;
+  const unitWord = kind === 'bodyFat' ? '%' : unit;
+  const label = COMP_COPY[kind].label;
+  const change = compChange(series, unitWord);
+  const g = compGeometry(series);
+  let chart: Element | null = null;
+  if (g) {
+    chart = svg('svg', {
+      class: 'bc-chart',
+      viewBox: `0 0 ${COMP_CHART.w} ${COMP_CHART.h}`,
+      role: 'img',
+      'aria-label': `${label} from ${g.xFirst} to ${g.xLast}: ${comp1(first.value)} ${unitWord} to ${comp1(last.value)} ${unitWord}.`,
+      'data-comp-chart': kind,
+    });
+    const x0 = COMP_CHART.padL;
+    const x1 = COMP_CHART.w - COMP_CHART.padR;
+    for (const t of [g.yTop, g.yBottom]) {
+      chart.append(svg('line', { class: 'wc-grid', x1: x0, x2: x1, y1: t.y, y2: t.y }));
+      chart.append(
+        svg('text', { class: 'bc-axis', x: x0 - 8, y: t.y + 7, 'text-anchor': 'end' }, t.label),
+      );
+    }
+    const yb = COMP_CHART.h - 8;
+    chart.append(svg('text', { class: 'bc-axis', x: x0, y: yb, 'text-anchor': 'start' }, g.xFirst));
+    chart.append(svg('text', { class: 'bc-axis', x: x1, y: yb, 'text-anchor': 'end' }, g.xLast));
+    chart.append(svg('path', { class: 'bc-line', d: g.path }));
+    for (const d of g.dots) {
+      chart.append(svg('circle', { class: 'bc-dot', cx: d.cx, cy: d.cy, r: 5 }));
+    }
+  }
+  return h(
+    'div',
+    { class: 'bc-card', 'data-comp': kind },
+    h('h3', { class: 'bc-label' }, label),
+    h(
+      'p',
+      { class: 'bc-now' },
+      h('span', { class: 'bc-num', 'data-comp-now': kind }, now),
+      h('span', { class: 'bc-unit' }, unitWord),
+    ),
+    change ? h('p', { class: 'bc-change', 'data-comp-change': kind }, change) : null,
+    chart as unknown as HTMLElement | null,
+  );
+}
+
+/** Body fat % and lean mass trends (from Health), or nothing when there is no reading. */
+function bodyCompSection(p: WeighInProps): HTMLElement | null {
+  const points = p.bodyComp ?? [];
+  const cards = (['bodyFat', 'leanMass'] as const)
+    .map((k) => compCard(k, compSeries(points, k, p.unit), p.unit))
+    .filter((c): c is HTMLElement => c !== null);
+  if (!cards.length) return null;
+  return h(
+    'section',
+    { class: 'bc', 'data-body-comp': true, 'aria-labelledby': 'bc-title' },
+    h('h2', { class: 'fuel-sub bc-title', id: 'bc-title' }, 'Body composition'),
+    ...cards,
+    h('p', { class: 'fuel-note' }, BODY_COMP_NOTE),
+  );
+}
+
 function historyList(p: WeighInProps): HTMLElement {
   if (!p.history.length) {
     return h('p', { class: 'wi-empty', 'data-fuel-history': 'empty' }, 'Nothing logged yet.');
@@ -506,6 +681,7 @@ export function weighInScreen(p: WeighInProps, a: WeighInActions): HTMLElement {
     ),
     h('h2', { class: 'fuel-sub' }, 'Trend'),
     trendChart(p),
+    bodyCompSection(p),
     h('h2', { class: 'fuel-sub' }, 'Last 14 days'),
     historyList(p),
   );

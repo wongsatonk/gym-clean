@@ -8,6 +8,9 @@
 // changed rows (`li.ex-row[data-adjusted]`) and removed rows in their own list
 // (`li.ex-row-removed`, not `.ex-row`, so `.ex-row` still counts the exercises that run).
 // M10e (optional): the "missing kit" prompt (`[data-gym-prompt]`, ./gymPrompt.ts).
+// M12 slice 1b (optional, short on time): a row done back to back with another shows a pair
+// label, "Pair: back to back with Triceps Pushdown" (`.pair-note`, `li.ex-row[data-pair]`; icon
+// + words, never colour alone). The pair rest is in the row's plan text (app.ts formats it).
 import type { PlannedExercise, ProgramDay } from '../../core/types';
 import { exerciseById } from '../../data/catalog';
 import { badgesFor } from '../badges';
@@ -19,7 +22,7 @@ import { adjustedBanner, coachButton } from './today';
 import { gymPrompt, type MissingKit } from './gymPrompt';
 
 /** How a row differs from the default day (M10). `removed` rows aren't part of the day that runs. */
-export type RowAdjust = 'swap' | 'lighter' | 'deload' | 'avoidArea' | 'removed';
+export type RowAdjust = 'swap' | 'lighter' | 'deload' | 'avoidArea' | 'shortOnTime' | 'removed';
 
 export type PreviewRow = {
   exerciseId: string;
@@ -36,7 +39,17 @@ export type PreviewRow = {
   adjusted?: RowAdjust | undefined;
   /** M10: what changed, e.g. "Swapped for Barbell Curl" or "−1 set, −10% weight". */
   adjustNote?: string | undefined;
+  /**
+   * M12 1b: display name of the exercise this one is paired with today (`PlannedExercise.pairWith`
+   * → `exerciseName(id)`). Set it on both rows of a pair. Shows the pair label.
+   */
+  pairedWith?: string | undefined;
 };
+
+/** "Pair: back to back with Triceps Pushdown". */
+export function pairLabel(partner: string): string {
+  return `Pair: back to back with ${partner}`;
+}
 
 export type PreviewProps = {
   day: ProgramDay;
@@ -84,11 +97,20 @@ function exRow(r: PreviewRow): HTMLElement {
       class: r.adjusted ? 'ex-row adjusted' : 'ex-row',
       'data-ex': r.exerciseId,
       'data-adjusted': r.adjusted,
+      'data-pair': r.pairedWith ? true : undefined,
     },
     h('strong', { class: 'ex-row-name' }, r.name),
     r.adjusted ? adjustedBadge() : null,
     badgesFor({ exerciseId: r.exerciseId, tracking: r.tracking }),
     r.adjustNote ? h('span', { class: 'adj-note' }, r.adjustNote) : null,
+    r.pairedWith
+      ? h(
+          'span',
+          { class: 'pair-note' },
+          icon('flip', 'sm'),
+          h('span', {}, pairLabel(r.pairedWith)),
+        )
+      : null,
     h('span', { class: 'ex-row-plan' }, r.plan),
     r.machine ? h('span', { class: 'machine' }, `Machine: ${r.machine}`) : null,
     r.last ? h('span', { class: 'muted ex-row-last' }, `Last time: ${r.last}`) : null,

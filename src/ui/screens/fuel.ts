@@ -11,6 +11,10 @@
 // e2e hooks: `main.screen.fuel[data-screen=fuel]`, `[data-ring=kcal|proteinG|carbsG|fatG]`,
 // `[data-left=…]`, `[data-log-open]`, `[data-weigh-in]`, `[data-setup]`, `[data-fuel-nudge]` (links.ts, shared with Today),
 // `[data-slot=<slot>]` groups, `[data-entry=<id>]` rows, `[data-entry-delete=<id>]`.
+//
+// M12 slice 1b (optional): the "Measurements" row (`[data-measurements-open]`, fuel/measurements.ts)
+// when `measurements` and `onMeasurements` are both set. It sits under today's food, a monthly
+// thing out of the way of logging; once it is time to measure again it moves up under the header.
 import type {
   FoodEntry,
   MacroSet,
@@ -22,6 +26,7 @@ import { formatWeight, type Unit } from '../../core/units';
 import { h } from '../dom';
 import { SLOT_LABEL, amountText, estimateTag, fmtNum, fromHealthTag } from '../fuel/common';
 import { nudgeBanner } from '../fuel/links';
+import { measurementsEntryRow, type MeasurementsEntry } from '../fuel/measurements';
 import { fuelRings } from '../fuel/rings';
 import { icon } from '../icons';
 import { tabBar, type TabId } from '../tabBar';
@@ -44,6 +49,8 @@ export type FuelProps = {
   lastWeighInSource?: 'manual' | 'health' | undefined;
   /** M7-q6 evening nudge text ("40 g protein to go today"), or null. */
   nudge?: string | null | undefined;
+  /** M12 1b: when he last measured and whether it's time again (`measurementsEntry(...)`). */
+  measurements?: MeasurementsEntry | null | undefined;
 };
 
 export type FuelActions = {
@@ -55,6 +62,8 @@ export type FuelActions = {
   onWeighIn: () => void;
   onSetup: () => void;
   onDismissNudge?: (() => void) | undefined;
+  /** M12 1b: opens the Measurements screen. Needed (with `measurements`) to show the row. */
+  onMeasurements?: (() => void) | undefined;
   onTab: (tab: TabId) => void;
 };
 
@@ -195,11 +204,18 @@ function entriesSection(props: FuelProps, actions: FuelActions): HTMLElement {
 }
 
 export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement {
+  const { onMeasurements } = actions;
+  const measure =
+    props.measurements && onMeasurements
+      ? measurementsEntryRow(props.measurements, onMeasurements)
+      : null;
+  const measureDue = props.measurements?.due === true;
   return h(
     'main',
     { class: `screen fuel has-tabbar ${moodClass('pro')}`, 'data-screen': 'fuel' },
     header(props, actions),
     props.nudge ? nudgeBanner(props.nudge, actions.onDismissNudge ?? (() => undefined)) : null,
+    measureDue ? measure : null,
     props.targets ? fuelRings(props.mode, props.totals, props.targets) : setupCard(actions.onSetup),
     h(
       'button',
@@ -213,6 +229,7 @@ export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement 
       'Log food',
     ),
     entriesSection(props, actions),
+    measureDue ? null : measure,
     tabBar('fuel', actions.onTab),
   );
 }

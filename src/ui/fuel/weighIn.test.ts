@@ -10,12 +10,19 @@ import { checkHealthCopy } from '../../core/health/copy';
 import { ACTIVITY_CHOICES } from './setup';
 import {
   activityLine,
+  BODY_COMP_NOTE,
   CHART,
+  COMP_CHART,
+  compChange,
+  compGeometry,
+  compNow,
+  compSeries,
   chartGeometry,
   dayNumber,
   rateText,
   weeklyCardCopy,
   weighInScreen,
+  type BodyCompPoint,
   type WeighInProps,
 } from './weighIn';
 
@@ -407,5 +414,117 @@ describe('M11: from Health tag and activity line', () => {
     expect(byAttr(renderActivity({ activity: null }).el, 'data-activity-suggest')).toHaveLength(0);
     const unwired = render({ activity: { current: 'light', suggested: 'moderate' } }).el;
     expect(byAttr(unwired, 'data-activity-suggest')).toHaveLength(0);
+  });
+});
+
+describe('M12 1b: body composition trends (from Health)', () => {
+  // Made-up readings; HealthDay rows have this shape (other fields are ignored).
+  const COMP: BodyCompPoint[] = [
+    { date: day(14), bodyFatPct: 18.4, leanMassKg: 57.6 },
+    { date: day(3), bodyFatPct: 19, leanMassKg: 57.2 },
+    { date: day(8), bodyFatPct: 18.7 },
+    { date: day(10) },
+  ];
+
+  it('series: oldest first, only days with a value, lean mass in his unit', () => {
+    expect(compSeries(COMP, 'bodyFat', 'kg')).toEqual([
+      { date: day(3), value: 19 },
+      { date: day(8), value: 18.7 },
+      { date: day(14), value: 18.4 },
+    ]);
+    expect(compSeries(COMP, 'leanMass', 'kg').map((r) => r.value)).toEqual([57.2, 57.6]);
+    expect(compSeries(COMP, 'leanMass', 'lb')[1]?.value).toBeCloseTo(126.99, 1);
+    // Body fat is a percent in either unit.
+    expect(compSeries(COMP, 'bodyFat', 'lb')[0]?.value).toBe(19);
+  });
+
+  it('the number and the change are plain words', () => {
+    const fat = compSeries(COMP, 'bodyFat', 'kg');
+    expect(compNow(fat)).toBe('18.4');
+    expect(compChange(fat, '%')).toBe('down 0.6 % since 3 Nov');
+    expect(compChange(compSeries(COMP, 'leanMass', 'kg'), 'kg')).toBe('up 0.4 kg since 3 Nov');
+    expect(compChange([{ date: day(3), value: 19 }], '%')).toBe('First reading, 3 Nov');
+    expect(
+      compChange(
+        [
+          { date: day(3), value: 19 },
+          { date: day(9), value: 19 },
+        ],
+        '%',
+      ),
+    ).toBe('same as 3 Nov');
+    expect(compNow([])).toBeNull();
+    expect(compChange([], '%')).toBeNull();
+  });
+
+  it('geometry: null under 2 readings; dots inside the plot, labelled ends', () => {
+    expect(compGeometry([{ date: day(3), value: 19 }])).toBeNull();
+    const g = compGeometry(compSeries(COMP, 'bodyFat', 'kg'));
+    expect(g?.dots).toHaveLength(3);
+    for (const d of g?.dots ?? []) {
+      expect(d.cx).toBeGreaterThanOrEqual(COMP_CHART.padL);
+      expect(d.cx).toBeLessThanOrEqual(COMP_CHART.w - COMP_CHART.padR);
+      expect(d.cy).toBeGreaterThanOrEqual(COMP_CHART.padT);
+      expect(d.cy).toBeLessThanOrEqual(COMP_CHART.h - COMP_CHART.padB);
+    }
+    // Lower body fat sits lower on the chart (a bigger y).
+    expect(g?.dots[2]?.cy).toBeGreaterThan(g?.dots[0]?.cy ?? 0);
+    expect([g?.xFirst, g?.xLast]).toEqual(['3 Nov', '14 Nov']);
+    expect([g?.yBottom.label, g?.yTop.label]).toEqual(['17.5', '19.5']);
+    expect(g?.path.startsWith('M')).toBe(true);
+  });
+
+  it('not drawn without the prop or without a value', () => {
+    expect(byAttr(render().el, 'data-body-comp')).toHaveLength(0);
+    expect(byAttr(render({ bodyComp: [] }).el, 'data-body-comp')).toHaveLength(0);
+    expect(byAttr(render({ bodyComp: [{ date: day(3) }] }).el, 'data-body-comp')).toHaveLength(0);
+  });
+
+  it('both trends sit between the weight trend and the 14-day list, and say where they come from', () => {
+    const { el } = render({ bodyComp: COMP });
+    const sec = oneAttr(el, 'data-body-comp');
+    expect(BODY_COMP_NOTE).toContain('From Apple Health');
+    expect(byAttr(sec, 'data-comp').map((c) => c.getAttribute('data-comp'))).toEqual([
+      'bodyFat',
+      'leanMass',
+    ]);
+    expect(oneAttr(sec, 'data-comp-now', 'bodyFat').textContent).toBe('18.4');
+    expect(oneAttr(sec, 'data-comp-now', 'leanMass').textContent).toBe('57.6');
+    expect(oneAttr(sec, 'data-comp-change', 'bodyFat').textContent).toBe('down 0.6 % since 3 Nov');
+    const chart = oneAttr(sec, 'data-comp-chart', 'bodyFat');
+    expect(chart.getAttribute('role')).toBe('img');
+    expect(chart.getAttribute('aria-label')).toBe('Body fat from 3 Nov to 14 Nov: 19 % to 18.4 %.');
+    expect(chart.byClass('bc-dot')).toHaveLength(3);
+    // The chart is labelled in text: two values and two dates.
+    expect(chart.byClass('bc-axis').map((t) => t.textContent)).toEqual([
+      '19.5',
+      '17.5',
+      '3 Nov',
+      '14 Nov',
+    ]);
+    expect(sec.textContent).toContain(BODY_COMP_NOTE);
+    const order = el.find(
+      (e) =>
+        e.hasAttribute('data-trend-chart') ||
+        e.hasAttribute('data-body-comp') ||
+        e.hasAttribute('data-fuel-history'),
+    );
+    expect(order.map((e) => e.hasAttribute('data-body-comp'))).toEqual([false, true, false]);
+    expect(copyHits(sec)).toEqual([]);
+    expect(checkHealthCopy(sec.textContent).ok).toBe(true);
+  });
+
+  it('only one kind present: only that card; one reading: the number without a chart', () => {
+    const { el } = render({ bodyComp: [{ date: day(14), bodyFatPct: 18.4 }] });
+    const sec = oneAttr(el, 'data-body-comp');
+    expect(byAttr(sec, 'data-comp')).toHaveLength(1);
+    expect(byAttr(sec, 'data-comp-chart')).toHaveLength(0);
+    expect(oneAttr(sec, 'data-comp-change', 'bodyFat').textContent).toBe('First reading, 14 Nov');
+  });
+
+  it('lean mass follows lb', () => {
+    const { el } = render({ unit: 'lb', bodyComp: COMP });
+    expect(oneAttr(el, 'data-comp-now', 'leanMass').textContent).toBe('127');
+    expect(oneAttr(el, 'data-comp', 'leanMass').textContent).toContain('lb');
   });
 });

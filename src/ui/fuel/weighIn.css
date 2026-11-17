@@ -190,6 +190,93 @@
   color: var(--text-2);
 }
 
+/* ---------- M12 1b: body composition trends (from Health) ----------
+   Same neutral marks as the weight chart. The latest value is the number (≥ 64px), the change is
+   words, the chart has its two value labels and its two dates (20px), so nothing is colour-only. */
+
+.bc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 0 0;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.bc-label,
+.bc-now,
+.bc-change {
+  margin: 0;
+  padding: 0 14px;
+}
+
+.bc-label {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.bc-now {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.bc-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.bc-unit {
+  color: var(--text-2);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.bc-change {
+  padding-bottom: 12px;
+  font-size: var(--fs-body);
+}
+
+.bc-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-top: var(--line-w) solid var(--line);
+}
+
+.bc-axis {
+  fill: var(--text-2);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.bc-line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.bc-dot {
+  fill: var(--edge);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
 /* ---------- 14-day history ---------- */
 
 .wi-hist {

@@ -11,16 +11,64 @@
 // applied (+ Undo), not now, undone, expired (+ Ask again). Apply → the check pops in
 // (motion.ts checkMorph) on the render right after it.
 //
+// M12 slice 1b (short on time): accessories done back to back show as pair lines, "Curl +
+// Triceps: back to back, 45 s rest". A pair line is a row whose `after` says "back to back"
+// (core writes it into `lines`, so a stored chat card keeps it), or an entry of the optional
+// `pairs` prop. Either way it is one sentence under a "Pair" tag (icon + word, `data-pair`),
+// with no before → after arrow: nothing is replaced, two exercises just share a rest.
+//
 // e2e hooks: `data-proposal` on the card, buttons "Apply" / "Not now"; `data-redflag` on the
 // red-flag card, buttons "End workout" / "Not today"; `data-card-status=<status>` on an answered
 // card's status line, buttons "Undo" / "Ask again".
-import type { ChatCardStatus, Proposal } from '../../core/types';
+import type { ChatCardStatus, PlannedExercise, Proposal } from '../../core/types';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
 import { checkMorph } from '../motion';
 import './coach.css';
 
-export type ProposalCardProps = Pick<Proposal, 'title' | 'lines' | 'why'>;
+export type ProposalCardProps = Pick<Proposal, 'title' | 'lines' | 'why'> & {
+  /** M12 1b: accessories paired back to back, drawn as pair lines after `lines`. */
+  pairs?: readonly PairLine[] | undefined;
+};
+
+/** Two exercises (display names) done back to back, then one short rest. */
+export type PairLine = { a: string; b: string; restSec: number };
+
+/** The pair rest when the caller has none (core's time rules own the real value). */
+export const PAIR_REST_SEC = 45;
+
+/** "Curl + Triceps: back to back, 45 s rest". */
+export function pairText(p: PairLine): string {
+  return `${p.a} + ${p.b}: back to back, ${p.restSec} s rest`;
+}
+
+/** Whether a proposal row is a pair line (its `after` says "back to back"). */
+export function isPairLine(line: { before: string; after: string }): boolean {
+  return /\bback to back\b/i.test(line.after);
+}
+
+/**
+ * The pairs in a day, once each, in day order, from `PlannedExercise.pairWith` (either side may
+ * carry it). `restSec` is the pair rest (core's time rules); default 45.
+ */
+export function pairsOf(
+  exercises: readonly Pick<PlannedExercise, 'exerciseId' | 'pairWith'>[],
+  name: (exerciseId: string) => string,
+  restSec: number = PAIR_REST_SEC,
+): PairLine[] {
+  const ids = new Set(exercises.map((e) => e.exerciseId));
+  const seen = new Set<string>();
+  const out: PairLine[] = [];
+  for (const e of exercises) {
+    const other = e.pairWith;
+    if (!other || other === e.exerciseId || !ids.has(other)) continue;
+    if (seen.has(e.exerciseId) || seen.has(other)) continue;
+    seen.add(e.exerciseId);
+    seen.add(other);
+    out.push({ a: name(e.exerciseId), b: name(other), restSec });
+  }
+  return out;
+}
 
 export type ProposalCardActions = {
   onApply: () => void;
@@ -32,12 +80,33 @@ export type Built = { el: HTMLElement; controls: HTMLElement[] };
 
 /** Screen-reader text for one row; the visible row uses an arrow glyph that is aria-hidden. */
 export function rowLabel(line: { before: string; after: string }): string {
+  if (isPairLine(line)) return `Pair: ${pairLineText(line)}`;
   if (!line.before) return `Add ${line.after}`;
   if (!line.after) return `${line.before}, removed`;
   return `${line.before}, becomes ${line.after}`;
 }
 
+/**
+ * A pair line as one sentence. Core's short-on-time rows are `before: "Curl + Triceps"`,
+ * `after: "Back to back, 45 s rest"` → "Curl + Triceps: back to back, 45 s rest".
+ */
+export function pairLineText(line: { before: string; after: string }): string {
+  if (!line.before) return line.after;
+  return `${line.before}: ${line.after.charAt(0).toLowerCase()}${line.after.slice(1)}`;
+}
+
+/** A pair line: the "Pair" tag (icon + word), then the sentence. No arrow: nothing is replaced. */
+function pairRow(line: { before: string; after: string }): HTMLElement {
+  return h(
+    'li',
+    { class: 'proposal-row proposal-pair', 'data-pair': true, 'aria-label': rowLabel(line) },
+    h('span', { class: 'pair-tag', 'aria-hidden': 'true' }, icon('flip', 'sm'), 'Pair'),
+    h('span', { class: 'proposal-after', 'aria-hidden': 'true' }, pairLineText(line)),
+  );
+}
+
 function row(line: { before: string; after: string }): HTMLElement {
+  if (isPairLine(line)) return pairRow(line);
   return h(
     'li',
     { class: 'proposal-row', 'aria-label': rowLabel(line) },
@@ -68,7 +137,12 @@ export function buildProposalCard(p: ProposalCardProps, a: ProposalCardActions):
     'section',
     { class: 'proposal-card', 'data-proposal': true, 'aria-label': p.title },
     h('h3', { class: 'proposal-title' }, p.title),
-    h('ul', { class: 'proposal-rows' }, ...p.lines.map(row)),
+    h(
+      'ul',
+      { class: 'proposal-rows' },
+      ...p.lines.map(row),
+      ...(p.pairs ?? []).map((pair) => pairRow({ before: '', after: pairText(pair) })),
+    ),
     h('p', { class: 'proposal-why' }, p.why),
     h('div', { class: 'proposal-actions' }, apply, dismiss),
   );

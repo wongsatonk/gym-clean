@@ -11,6 +11,12 @@
 // "On" switch opens an inline "Turn off and delete" / "Keep it" choice in that row (no dialog),
 // and only "Turn off and delete" calls back. Turning a type on is one tap.
 //
+// M12 slice 1b: body fat and lean mass (from a scale that feeds Apple Health) are two more
+// switches in their own "Body composition" group under the coach's list, because the coach
+// never reads them: they only draw trends in Fuel. Off until switched on; iPhone asks for each
+// one at that moment (app.ts, on `onEnable`). Like the rest of the screen they exist in the
+// iPhone app only: the PWA still shows just its one line.
+//
 // e2e hooks: `main[data-screen="health-settings"]`, `[data-health-pwa]`, `[data-health-connect]`,
 // `[data-health-type="<type>"]` (role="switch", aria-checked), `[data-health-delete="<type>"]`,
 // `[data-health-keep="<type>"]`, `[data-health-read-now]`, `[data-health-last-read]`.
@@ -79,13 +85,19 @@ export const HEALTH_TYPE_COPY: Record<HealthType, { label: string; explainer: st
   },
   bodyFat: {
     label: 'Body fat',
-    explainer: 'Shows your body fat trend next to your weight in Fuel.',
+    explainer: 'Body fat from your scale. Shown as a trend next to your weight in Fuel.',
   },
   leanMass: {
     label: 'Lean mass',
-    explainer: 'Shows your lean mass trend next to your weight in Fuel.',
+    explainer: 'Lean mass from your scale. Shown as a trend next to your weight in Fuel.',
   },
 };
+
+/** M12 1b: the types in the "Body composition" group (trends in Fuel only, never the coach). */
+export const BODY_COMP_TYPES: readonly HealthType[] = ['bodyFat', 'leanMass'];
+export const HEALTH_BODY_TITLE = 'Body composition';
+export const HEALTH_BODY_NOTE =
+  'Off until you switch them on. iPhone asks for each one then. The coach never uses these.';
 
 const p2 = (n: number) => String(n).padStart(2, '0');
 
@@ -105,6 +117,8 @@ export function healthSettingsCopy(): string[] {
     HEALTH_INTRO,
     HEALTH_CONNECT_NOTE,
     HEALTH_DELETE_NOTE,
+    HEALTH_BODY_TITLE,
+    HEALTH_BODY_NOTE,
     'Health',
     'Connect to Apple Health',
     'Connecting…',
@@ -280,13 +294,26 @@ export function healthSettingsScreen(
         h('p', { class: 'set-note muted' }, HEALTH_CONNECT_NOTE),
       );
 
+  // A settings row saved before these types existed has no key for them: that reads as off.
+  const row = (t: HealthType) => typeRow(t, props.settings.enabled[t] === true, reading, actions);
   return screen(
     h('p', { class: 'set-note' }, HEALTH_INTRO),
     top,
     h(
       'ul',
       { class: 'health-list', 'aria-label': 'What the coach reads' },
-      ...HEALTH_TYPES.map((t) => typeRow(t, props.settings.enabled[t], reading, actions)),
+      ...HEALTH_TYPES.filter((t) => !BODY_COMP_TYPES.includes(t)).map(row),
+    ),
+    h(
+      'section',
+      { class: 'health-body', 'data-health-body': true, 'aria-labelledby': 'health-body-title' },
+      h('h2', { class: 'health-body-title', id: 'health-body-title' }, HEALTH_BODY_TITLE),
+      h('p', { class: 'set-note' }, HEALTH_BODY_NOTE),
+      h(
+        'ul',
+        { class: 'health-list', 'aria-label': 'Body composition trends in Fuel' },
+        ...HEALTH_TYPES.filter((t) => BODY_COMP_TYPES.includes(t)).map(row),
+      ),
     ),
   );
 }
