@@ -764,6 +764,11 @@ export function mountApp(root: HTMLElement): void {
       if (camera) root.append(camera.el);
     }
     if (tour && tour.el.parentNode !== root) root.append(tour.el);
+    // A tab switch opens the new tab at its top (Back inside a tab keeps its scroll).
+    if (scrollTopTab !== null && tabOf(view) === scrollTopTab) {
+      scrollTopTab = null;
+      window.scrollTo(0, 0);
+    }
     if (view.screen === 'session') {
       ensureBody3d();
       placeBody3d();
@@ -856,6 +861,7 @@ export function mountApp(root: HTMLElement): void {
   function goTab(tab: TabId): void {
     navSeq++;
     setEnter(tab);
+    scrollTopTab = tabOf(view) === tab ? null : tab;
     switch (tab) {
       case 'today':
         if (view.screen !== 'today') goToday();
@@ -888,6 +894,8 @@ export function mountApp(root: HTMLElement): void {
 
   /** Bumped on every tab tap, so a slow Fuel load can tell another tab was chosen meanwhile. */
   let navSeq = 0;
+  /** The tab just tapped: its first render scrolls to the top (some tabs load before they render). */
+  let scrollTopTab: TabId | null = null;
 
   async function openFuel(): Promise<void> {
     const seq = ++navSeq;
@@ -2209,6 +2217,17 @@ export function mountApp(root: HTMLElement): void {
         return;
       case 'todos':
         openTodos(tabOf(view) === 'settings' ? 'settings' : 'today');
+        return;
+      // M12 1b placeholders until wiring B (task 36) adds the screens.
+      case 'settings/goal':
+      case 'settings/progressPhotos':
+        goRoute('settings');
+        return;
+      case 'fuel/measurements':
+        goRoute('fuel');
+        return;
+      case 'intake':
+        goRoute('today');
         return;
       default: {
         const unhandled: never = route;
