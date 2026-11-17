@@ -6,6 +6,8 @@ import {
   REMINDERS_ASK,
   REMINDERS_DENIED,
   REMINDERS_PWA_LINE,
+  clockText,
+  reminderRows,
   remindersCopy,
   remindersScreen,
   validTime,
@@ -112,7 +114,30 @@ describe('remindersScreen', () => {
     expect(validTime('7:5')).toBeNull();
   });
 
+  it('clockText follows the clock of the locale (as the time picker does)', () => {
+    const sp = (s: string) => s.replace(/\s/g, ' ');
+    expect(sp(clockText('09:00', 'en-US'))).toBe('09:00 AM');
+    expect(sp(clockText('19:00', 'en-US'))).toBe('07:00 PM');
+    expect(clockText('09:00', 'en-GB')).toBe('09:00');
+    expect(clockText('19:00', 'en-GB')).toBe('19:00');
+    expect(clockText('junk', 'en-US')).toBe('junk');
+  });
+
+  it('the fixed times in the copy use the same clock: 12 h and 24 h locales', () => {
+    const sp = (s: string) => s.replace(/\s/g, ' ');
+    const us = reminderRows('en-US');
+    expect(sp(us.missedDay.note)).toBe('The morning after a missed session, at 09:00 AM.');
+    expect(sp(us.sundayRecap.note)).toBe('Sunday at 07:00 PM: a nudge to look back at your week.');
+    const gb = reminderRows('en-GB');
+    expect(gb.missedDay.note).toBe('The morning after a missed session, at 09:00.');
+    expect(gb.sundayRecap.note).toBe('Sunday at 19:00: a nudge to look back at your week.');
+    // The screen draws them with the locale it's given.
+    const { el } = render({ locale: 'en-US' });
+    expect(sp(at(el, 'id', 'rem-note-missedDay')?.textContent ?? '')).toContain('09:00 AM');
+  });
+
   it('copy passes the coaching-words check and has no numbers about him', () => {
-    for (const s of remindersCopy()) expect(checkCopy(s), s).toEqual({ ok: true, hits: [] });
+    for (const s of [...remindersCopy('en-US'), ...remindersCopy('en-GB')])
+      expect(checkCopy(s), s).toEqual({ ok: true, hits: [] });
   });
 });

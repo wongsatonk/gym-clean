@@ -452,6 +452,21 @@
   color: var(--text-2);
 }
 
+/* A lead-in reply's own options ("I can help with:"), right under its bubble in the thread. The
+   rows still scroll sideways inside themselves, within the thread's width. */
+.chat-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.chat-offers .cs-chips.chat-row {
+  margin: 0;
+  padding: 0;
+}
+
 /* ---------- M12 slice 2: hold-to-talk mic (micButton.ts) ---------- */
 
 .mic {
@@ -514,6 +529,26 @@
 }
 
 .mic-hint[hidden] {
+  display: none;
+}
+
+/* The live words while listening: whole and wrapping, up to three lines with the newest at the
+   bottom (older lines clip off the top). Above the row, so the held button never moves. */
+.mic-live {
+  margin: 0;
+  max-height: calc(3 * 1.3em);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.mic-live[hidden] {
   display: none;
 }
 

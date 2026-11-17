@@ -224,6 +224,12 @@ test('each unavailable reason → quick replies + its note once; Settings → Co
     );
     await expect(first.locator('[data-chat-note]')).toHaveText(note);
     if (i === 0) {
+      // "I can help with:" never dangles: its own chips sit right under its bubble, and the
+      // dock doesn't repeat them.
+      await expect(first.locator('.cs-msg-coach')).toContainText('I can help with:');
+      await expect(first.locator('[data-chat-offers] [data-coach-chip]').first()).toBeVisible();
+      await expect(coachTab(page).locator('.chat-dock [data-coach-chip]')).toHaveCount(0);
+      await expectTapTargets(page, '[data-screen="coach"]');
       await noHorizontalOverflow(page);
       await page.screenshot({ path: testInfo.outputPath('m12s2-apple-off-note.png') });
     }

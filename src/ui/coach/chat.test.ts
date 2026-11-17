@@ -625,6 +625,30 @@ describe('chat: mic (slice 2)', () => {
     expect(kids.indexOf('hint')).toBeLessThan(kids.indexOf('row'));
   });
 
+  it('listening → the live words also show whole, wrapping, above the text row', () => {
+    const long = 'how is my week looking and can we move push to thursday';
+    const { el } = mountMic({ state: 'listening', partial: long });
+    const live = one(el, 'data-mic-live');
+    expect(live.textContent).toBe(long);
+    expect(live.hasAttribute('hidden')).toBe(false);
+    const typing = el.oneByClass('cs-typing');
+    const kids = typing.children.map((c) =>
+      c.hasAttribute('data-mic-live') ? 'live' : c.classes.includes('cs-typing-row') ? 'row' : '',
+    );
+    expect(kids.indexOf('live')).toBeGreaterThanOrEqual(0);
+    expect(kids.indexOf('live')).toBeLessThan(kids.indexOf('row'));
+    // Patched in place, and gone (hidden) once he lets go.
+    updateChatMic(el as unknown as HTMLElement, { state: 'listening', partial: 'how is' });
+    expect(live.textContent).toBe('how is');
+    updateChatMic(el as unknown as HTMLElement, { state: 'idle' });
+    expect(live.hasAttribute('hidden')).toBe(true);
+    // Nothing heard yet: no empty box.
+    const quiet = mountMic({ state: 'listening', partial: '' });
+    expect(one(quiet.el, 'data-mic-live').hasAttribute('hidden')).toBe(true);
+    // Idle: hidden.
+    expect(one(mountMic({ state: 'idle' }).el, 'data-mic-live').hasAttribute('hidden')).toBe(true);
+  });
+
   it('updateChatMic patches words, level and state in place (no re-render)', () => {
     const { el } = mountMic({ state: 'listening', partial: 'mo' });
     const box = input(el) as FakeEl & { value?: string; readOnly?: boolean };
@@ -826,5 +850,72 @@ describe('newestScrollTop (the thread opens on the newest message)', () => {
 
   it('nothing in the thread: the bottom', () => {
     expect(newestScrollTop({ scrollHeight: 500, clientHeight: 400 })).toBe(100);
+  });
+});
+
+describe('chat: a lead-in reply ("I can help with:") keeps its options under it', () => {
+  const coachItems = (el: FakeEl) => el.find((e) => e.classes.includes('chat-item-coach'));
+  const dock = (el: FakeEl) => el.oneByClass('chat-dock');
+  const HELP_CHIPS = [
+    { id: 'notToday', label: 'Not today' },
+    { id: 'lighter', label: 'Lighter today' },
+  ];
+
+  it('newest: its chips sit right under its bubble, not in the dock; they still work', () => {
+    const { el, log } = mount({
+      messages: [msg('user', 'hello'), msg('coach', 'I can help with:', { chips: HELP_CHIPS })],
+      chips: ['notToday', 'lighter'],
+    });
+    const item = coachItems(el)[0];
+    if (!item) throw new Error('no coach item');
+    const kids = item.children;
+    expect(kids[0]?.classes).toContain('chat-bubble');
+    expect(kids[1]?.getAttribute('data-chat-offers')).toBe('');
+    expect(attr(item, 'data-coach-chip').map((c) => c.getAttribute('data-coach-chip'))).toEqual([
+      'notToday',
+      'lighter',
+    ]);
+    expect(attr(dock(el), 'data-coach-chip')).toHaveLength(0);
+    one(item, 'data-coach-chip', 'lighter').click();
+    expect(log).toEqual(['chip:lighter:Lighter today']);
+  });
+
+  it('newest with follow-ups: those sit under it too', () => {
+    const { el, log } = mount({
+      messages: [msg('coach', 'Pick one:', { chips: [{ id: 'swap', label: 'Try Hammer Curls' }] })],
+      chips: [],
+      followUps: [{ label: 'Try Hammer Curls' }],
+    });
+    const item = coachItems(el)[0];
+    if (!item) throw new Error('no coach item');
+    one(item, 'data-coach-followup', '0').click();
+    expect(log).toEqual(['follow:0']);
+    expect(attr(dock(el), 'data-coach-followup')).toHaveLength(0);
+  });
+
+  it('older: the bubble reads whole, its options as words', () => {
+    const { el } = mount({
+      messages: [
+        msg('coach', 'I can help with:', { chips: HELP_CHIPS }),
+        msg('user', 'lighter'),
+        msg('coach', 'Lighter it is.'),
+      ],
+    });
+    const first = coachItems(el)[0];
+    expect(first?.oneByClass('chat-bubble').textContent).toBe(
+      'Coach: I can help with: Not today, Lighter today.',
+    );
+    expect(attr(first as FakeEl, 'data-coach-chip')).toHaveLength(0);
+    // The newest plain reply: chips stay in the dock as before.
+    expect(attr(dock(el), 'data-coach-chip').length).toBeGreaterThan(0);
+  });
+
+  it('a plain reply keeps its chips in the dock', () => {
+    const { el } = mount({
+      messages: [msg('coach', 'Lighter it is.', { chips: HELP_CHIPS })],
+      chips: ['notToday', 'lighter'],
+    });
+    expect(attr(coachItems(el)[0] as FakeEl, 'data-coach-chip')).toHaveLength(0);
+    expect(attr(dock(el), 'data-coach-chip')).toHaveLength(2);
   });
 });

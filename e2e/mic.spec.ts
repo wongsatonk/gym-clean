@@ -149,6 +149,35 @@ test('hold → live words → release sends; the reply is spoken (Mic only); per
   await speechEmit(page, 'partial', { text: 'how is my week' });
   await expect(tab.getByLabel('Ask the coach')).toHaveValue('how is my week');
   await expect(tab.locator('[data-mic-hint]')).toBeVisible();
+  // Longer words: the narrow text box shows only their tail, so they also show whole above the
+  // row, wrapping across the full width, and the button is still under the finger.
+  const longWords = 'how is my week looking and can we move push to thursday please';
+  await speechEmit(page, 'partial', { text: longWords });
+  const live = tab.locator('[data-mic-live]');
+  await expect(live).toBeVisible();
+  await expect(live).toHaveText(longWords);
+  const liveBox = await live.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const row = el.parentElement?.querySelector('.cs-typing-row')?.getBoundingClientRect();
+    const fs = parseFloat(getComputedStyle(el).fontSize);
+    return {
+      width: r.width,
+      rowWidth: row?.width ?? 0,
+      above: !!row && r.bottom <= row.top + 1,
+      lines: Math.round(r.height / (fs * 1.3)),
+      fits: el.scrollWidth <= el.clientWidth + 1,
+      fs,
+    };
+  });
+  expect(liveBox.width).toBeGreaterThanOrEqual(liveBox.rowWidth - 1);
+  expect(liveBox.above).toBe(true);
+  expect(liveBox.lines).toBeGreaterThanOrEqual(2);
+  expect(liveBox.fits).toBe(true);
+  expect(liveBox.fs).toBeGreaterThanOrEqual(20);
+  {
+    const n = await hold.boundingBox();
+    expect(!!n && cx > n.x && cx < n.x + n.width && cy > n.y && cy < n.y + n.height).toBe(true);
+  }
   await noHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('m12s2-mic-listening.png') });
   // Mic down is a strong signal a question follows: Apple's model is warmed.

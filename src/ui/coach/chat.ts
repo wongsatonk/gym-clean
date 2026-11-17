@@ -295,12 +295,52 @@ export function recapRange(from: string, to: string): string {
 
 // ---------- pieces ----------
 
-function bubble(m: ChatMessage): HTMLElement {
+function bubble(m: ChatMessage, text: string = m.text): HTMLElement {
   return h(
     'div',
     { class: `cs-msg chat-bubble cs-msg-${m.role}` },
     h('span', { class: 'sr-only' }, m.role === 'coach' ? 'Coach: ' : 'You: '),
-    m.text,
+    text,
+  );
+}
+
+/** A coach reply that introduces its options ("I can help with:"): its chips finish it. */
+function leadIn(m: ChatMessage | undefined): m is ChatMessage {
+  return !!m && m.role === 'coach' && !m.card && /:\s*$/.test(m.text);
+}
+
+/**
+ * An older lead-in (its chips are gone from the screen) reads whole, its options as words:
+ * "I can help with: Not today, Lighter today." Anything else: its own text.
+ */
+function leadInText(m: ChatMessage): string {
+  const labels = (m.chips ?? []).map((c) => c.label).filter(Boolean);
+  return leadIn(m) && labels.length ? `${m.text.trimEnd()} ${labels.join(', ')}.` : m.text;
+}
+
+function followUpRow(followUps: HTMLElement[]): HTMLElement {
+  return h(
+    'div',
+    { class: 'cs-chips chat-row cs-followups', role: 'group', 'aria-label': 'Options' },
+    ...followUps,
+  );
+}
+
+function quickRow(chips: HTMLElement[]): HTMLElement {
+  return h(
+    'div',
+    { class: 'cs-chips chat-row chat-quick', role: 'group', 'aria-label': 'Quick actions' },
+    ...chips,
+  );
+}
+
+/** The newest lead-in's options, under its bubble (follow-ups first, as in the dock). */
+function offersGroup(followUps: HTMLElement[], chips: HTMLElement[], hook: string): HTMLElement {
+  return h(
+    'div',
+    { class: 'chat-offers', [hook]: true },
+    followUps.length ? followUpRow(followUps) : null,
+    chips.length ? quickRow(chips) : null,
   );
 }
 
@@ -424,6 +464,40 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     headEnd.length ? h('div', { class: 'chat-head-end' }, ...headEnd) : null,
   );
 
+  const followUps =
+    !red && a.onFollowUp
+      ? (p.followUps ?? []).map((f, index) =>
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'cs-chip cs-followup',
+              'data-coach-followup': index,
+              onclick: () => a.onFollowUp?.(index),
+            },
+            h('span', {}, f.label),
+          ),
+        )
+      : [];
+  const chips = visibleChatChips(p).map((c) => {
+    const pressed = c.id === 'easyOn' && p.showAreas === true;
+    return h(
+      'button',
+      {
+        type: 'button',
+        class: 'cs-chip chat-chip',
+        'data-coach-chip': c.id,
+        'aria-expanded': c.id === 'easyOn' ? String(pressed) : undefined,
+        onclick: () => a.onChip({ id: c.id, label: c.label }),
+      },
+      icon(c.icon, 'sm'),
+      h('span', {}, c.label),
+    );
+  });
+  // A lead-in reply ("I can help with:") as the newest message: its options sit right under its
+  // bubble in the thread, so it never reads as a cut-off sentence (and not in the dock too).
+  const inlineOffers = leadIn(last(p.messages)) && (chips.length > 0 || followUps.length > 0);
+
   // The thread.
   const list = h('ol', { class: 'cs-list chat-list', role: 'log', 'aria-live': 'polite' });
   const lastIndex = p.messages.length - 1;
@@ -450,7 +524,9 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     } else if (card?.kind === 'recap') {
       item.append(recapCard({ ...m, card }));
     } else {
-      if (m.text) item.append(bubble(m));
+      const newestLeadIn = inlineOffers && i === lastIndex;
+      if (m.text) item.append(bubble(m, newestLeadIn ? m.text : leadInText(m)));
+      if (newestLeadIn) item.append(offersGroup(followUps, chips, 'data-chat-offers'));
       if (m.text && m.role === 'coach' && p.showSource) {
         const badge = sourceLine(m.source);
         if (badge) item.append(badge);
@@ -552,36 +628,6 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     );
   }
 
-  const followUps =
-    !red && a.onFollowUp
-      ? (p.followUps ?? []).map((f, index) =>
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'cs-chip cs-followup',
-              'data-coach-followup': index,
-              onclick: () => a.onFollowUp?.(index),
-            },
-            h('span', {}, f.label),
-          ),
-        )
-      : [];
-  const chips = visibleChatChips(p).map((c) => {
-    const pressed = c.id === 'easyOn' && p.showAreas === true;
-    return h(
-      'button',
-      {
-        type: 'button',
-        class: 'cs-chip chat-chip',
-        'data-coach-chip': c.id,
-        'aria-expanded': c.id === 'easyOn' ? String(pressed) : undefined,
-        onclick: () => a.onChip({ id: c.id, label: c.label }),
-      },
-      icon(c.icon, 'sm'),
-      h('span', {}, c.label),
-    );
-  });
   const areas =
     p.showAreas && !quiet
       ? AREA_CHAT_CHIPS.map((c) =>
@@ -606,6 +652,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   let micView: MicView | null = null;
   let input: HTMLInputElement | null = null;
   let sendBtn: HTMLButtonElement | null = null;
+  let live: HTMLElement | null = null;
   if (p.allowTyping && a.onText && !red && (!waiting || editable)) {
     const onText = a.onText;
     const inputId = sheet ? 'chat-input-sheet' : 'chat-input';
@@ -656,6 +703,11 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
             micCancel: () => a.micCancel?.(),
           });
     const holdBtn = micView?.button ? micView.el : null;
+    // The live words, whole and wrapping (the text box is narrow next to the held button and
+    // would show only their tail). Above the row, like the hint, so the button never moves.
+    live = holdBtn
+      ? h('p', { class: 'mic-live', 'data-mic-live': true, 'aria-hidden': 'true', hidden: true })
+      : null;
     typingBox = h(
       'div',
       { class: 'cs-typing chat-input' },
@@ -663,6 +715,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       // The hint goes above the row: the dock is bottom-anchored, so a line appearing under the
       // row while listening would lift the held button out from under the finger.
       micView?.hint ?? null,
+      live,
       h('div', { class: 'cs-typing-row' }, box, holdBtn, sendEl),
       holdBtn ? null : (micView?.el ?? null),
     );
@@ -670,7 +723,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     cycle.push(box);
     if (micView?.button) cycle.push(micView.button);
     cycle.push(sendEl);
-    applyMicToInput(box, sendEl, mic);
+    applyMicToInput(box, sendEl, mic, live);
   }
 
   const scroll = h('div', { class: 'cs-scroll chat-scroll' }, starters, list);
@@ -693,13 +746,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   const dock = h(
     'div',
     { class: 'chat-dock' },
-    followUps.length
-      ? h(
-          'div',
-          { class: 'cs-chips chat-row cs-followups', role: 'group', 'aria-label': 'Options' },
-          ...followUps,
-        )
-      : null,
+    followUps.length && !inlineOffers ? followUpRow(followUps) : null,
     areas.length
       ? h(
           'div',
@@ -707,19 +754,13 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
           ...areas,
         )
       : null,
-    chips.length
-      ? h(
-          'div',
-          { class: 'cs-chips chat-row chat-quick', role: 'group', 'aria-label': 'Quick actions' },
-          ...chips,
-        )
-      : null,
+    chips.length && !inlineOffers ? quickRow(chips) : null,
     typingBox,
     h('p', { class: 'cs-privacy chat-privacy' }, icon('lock', 'sm'), h('span', {}, PRIVACY_LINE)),
   );
 
   const body = [head, scroll, dock];
-  const handle: MicHandle = { view: micView, input, send: sendBtn };
+  const handle: MicHandle = { view: micView, input, send: sendBtn, live };
   if (!sheet) {
     const tab = h(
       'section',
@@ -776,16 +817,29 @@ type MicHandle = {
   view: MicView | null;
   input: HTMLInputElement | null;
   send: HTMLButtonElement | null;
+  live: HTMLElement | null;
 };
 const micHandles = new WeakMap<object, MicHandle>();
 
 /**
- * Listening: the text box shows the live words (read-only, the newest words in view) and Send
+ * Listening: the live words show whole above the row (`[data-mic-live]`, wrapping) and in the
+ * text box (read-only, the newest words in view; it's what release sends), and Send
  * is disabled and hidden (chat.css keeps its space, so the mic button never moves under the held
  * finger); release sends them.
  */
-function applyMicToInput(box: HTMLInputElement, send: HTMLButtonElement, mic: MicProps): void {
+function applyMicToInput(
+  box: HTMLInputElement,
+  send: HTMLButtonElement,
+  mic: MicProps,
+  live: HTMLElement | null,
+): void {
   const listening = mic.state === 'listening';
+  if (live) {
+    const words = listening ? (mic.partial ?? '').trim() : '';
+    live.replaceChildren(h('span', { class: 'mic-live-text' }, words));
+    if (words) live.removeAttribute('hidden');
+    else live.setAttribute('hidden', '');
+  }
   box.readOnly = listening;
   if (listening) {
     box.setAttribute('readonly', '');
@@ -814,7 +868,7 @@ export function updateChatMic(root: HTMLElement, mic: MicProps): boolean {
   if (!target?.view?.el || !target.input || !target.send) return false;
   if (mic.state === 'hidden' || mic.state === 'unavailable') return false;
   target.view.update(mic);
-  applyMicToInput(target.input, target.send, mic);
+  applyMicToInput(target.input, target.send, mic, target.live);
   return true;
 }
 

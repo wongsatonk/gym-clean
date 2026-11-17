@@ -59,13 +59,19 @@ test('the thread gets most of the Coach tab: chips in one sideways row, newest r
   expect((await threadLayout(page)).height).toBeGreaterThanOrEqual(VIEW_H * 0.45);
   await noHorizontalOverflow(page);
 
-  // An open question: the coach answers with what it can help with + every quick chip.
+  // An open question: the coach answers with what it can help with + every quick chip, under it.
   const box = coachTab(page).getByLabel('Ask the coach');
   await box.fill('hello there');
   await coachTab(page).getByRole('button', { name: 'Send' }).click();
   await expect(coachTab(page).locator('.cs-msg-coach')).toHaveCount(1);
   const quick = coachTab(page).locator('.chat-quick');
   await expect(quick).toBeVisible();
+  // "I can help with:" is a lead-in: its chips sit right under its bubble (in the thread), not
+  // in the dock, so the bubble never reads as a cut-off sentence.
+  await expect(
+    coachTab(page).locator('li.chat-item-coach').last().locator('.chat-quick'),
+  ).toHaveCount(1);
+  await expect(coachTab(page).locator('.chat-dock .chat-quick')).toHaveCount(0);
   // One row: every chip on the same line, the row scrolls inside itself, the page never does.
   const tops = await quick
     .locator('.cs-chip')

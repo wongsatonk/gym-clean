@@ -28,6 +28,8 @@ export type RemindersProps = {
   settings: ReminderSettings;
   /** iPhone's notification permission for Gym Clean ('unknown': not asked yet). */
   permission: NotificationPermission;
+  /** Locale for the fixed times in the copy (default: the phone's, as the time picker uses). */
+  locale?: string | undefined;
 };
 
 export type RemindersActions = {
@@ -45,9 +47,23 @@ export const REMINDERS_DENIED = 'iPhone has notifications off for Gym Clean, so 
 export const REMINDERS_DENIED_HOW =
   'To allow them: iPhone Settings > Notifications > Gym Clean > Allow Notifications.';
 
+/**
+ * "HH:MM" (24 h) in the phone's own clock: "09:00 AM" on a 12-hour iPhone, "09:00" on a 24-hour
+ * one. The time picker (input type=time) follows the same setting, so the copy and the picker
+ * always agree. Anything that isn't a time comes back unchanged.
+ */
+export function clockText(hhmm: string, locale?: string): string {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm);
+  if (!m) return hhmm;
+  const d = new Date(2026, 0, 1, Number(m[1]), Number(m[2]));
+  return new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(d);
+}
+
 /** The rows as this screen draws them (core's REMINDER_COPY is the notification text). */
-export const REMINDER_ROWS: Record<ReminderKind, { setting: string; label: string; note: string }> =
-  {
+export function reminderRows(
+  locale?: string,
+): Record<ReminderKind, { setting: string; label: string; note: string }> {
+  return {
     session: {
       setting: 'reminder-session',
       label: 'Session reminder',
@@ -56,14 +72,15 @@ export const REMINDER_ROWS: Record<ReminderKind, { setting: string; label: strin
     missedDay: {
       setting: 'reminder-missed-day',
       label: 'Missed-day nudge',
-      note: `The morning after a missed session, at ${MISSED_DAY_TIME}.`,
+      note: `The morning after a missed session, at ${clockText(MISSED_DAY_TIME, locale)}.`,
     },
     sundayRecap: {
       setting: 'reminder-sunday-recap',
       label: 'Sunday recap',
-      note: `Sunday at ${SUNDAY_RECAP_TIME}: a nudge to look back at your week.`,
+      note: `Sunday at ${clockText(SUNDAY_RECAP_TIME, locale)}: a nudge to look back at your week.`,
     },
   };
+}
 
 /** "HH:MM" 24 h, or null. */
 export function validTime(v: string): string | null {
@@ -71,7 +88,7 @@ export function validTime(v: string): string | null {
   return m ? `${m[1]}:${m[2]}` : null;
 }
 
-export function remindersCopy(): string[] {
+export function remindersCopy(locale?: string): string[] {
   return [
     REMINDERS_PWA_LINE,
     REMINDERS_INTRO,
@@ -79,7 +96,7 @@ export function remindersCopy(): string[] {
     REMINDERS_DENIED,
     REMINDERS_DENIED_HOW,
     'Reminder time',
-    ...Object.values(REMINDER_ROWS).flatMap((c) => [c.label, c.note]),
+    ...Object.values(reminderRows(locale)).flatMap((c) => [c.label, c.note]),
   ];
 }
 
@@ -94,8 +111,14 @@ function header(onBack: () => void): HTMLElement[] {
   ];
 }
 
-function row(kind: ReminderKind, on: boolean, a: RemindersActions, extra?: HTMLElement | null) {
-  const c = REMINDER_ROWS[kind];
+function row(
+  rows: ReturnType<typeof reminderRows>,
+  kind: ReminderKind,
+  on: boolean,
+  a: RemindersActions,
+  extra?: HTMLElement | null,
+) {
+  const c = rows[kind];
   const sw = switchRow(c.setting, c.label, on, (next) => a.onToggle(kind, next));
   sw.setAttribute('aria-describedby', `rem-note-${kind}`);
   return h(
@@ -128,6 +151,7 @@ export function remindersScreen(p: RemindersProps, a: RemindersActions): HTMLEle
   }
 
   const s = p.settings;
+  const rows = reminderRows(p.locale);
   const time = h('input', {
     type: 'time',
     id: 'rem-time',
@@ -183,9 +207,9 @@ export function remindersScreen(p: RemindersProps, a: RemindersActions): HTMLEle
     h(
       'ul',
       { class: 'rem-list', 'aria-label': 'Reminders' },
-      row('session', s.session.on, a, timeField),
-      row('missedDay', s.missedDay.on, a),
-      row('sundayRecap', s.sundayRecap.on, a),
+      row(rows, 'session', s.session.on, a, timeField),
+      row(rows, 'missedDay', s.missedDay.on, a),
+      row(rows, 'sundayRecap', s.sundayRecap.on, a),
     ),
   );
 }

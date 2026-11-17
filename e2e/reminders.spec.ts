@@ -231,3 +231,38 @@ test('the PWA: one line, no switches, the plugin is never called', async ({ page
   expect(offsite).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+// The fixed times in the copy follow the same clock as the time picker (the phone's locale):
+// a 12-hour phone reads "09:00 AM" and "07:00 PM", a 24-hour one "09:00" and "19:00".
+for (const c of [
+  { locale: 'en-US', missed: '09:00 AM', recap: '07:00 PM', picker: /PM/ },
+  { locale: 'en-GB', missed: '09:00', recap: '19:00', picker: null },
+] as const) {
+  test.describe(`clock: ${c.locale}`, () => {
+    test.use({ locale: c.locale });
+    test(`the copy's times match the picker's clock (${c.locale})`, async ({ page }, testInfo) => {
+      const { errors } = record(page);
+      await open(page, { display: 'granted' });
+      await openReminders(page);
+      await sw(page, 'session').click();
+      await expect(screen(page).locator('[data-reminder-time]')).toHaveValue('18:00');
+      const sp = (s: string | null) => (s ?? '').replace(/\s/g, ' ');
+      const missed = sp(await screen(page).locator('#rem-note-missedDay').textContent());
+      const recap = sp(await screen(page).locator('#rem-note-sundayRecap').textContent());
+      expect(missed).toBe(`The morning after a missed session, at ${c.missed}.`);
+      expect(recap).toBe(`Sunday at ${c.recap}: a nudge to look back at your week.`);
+      // The browser's own clock for this locale agrees (what the picker draws with).
+      const pickerClock = await page.evaluate(() =>
+        new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(
+          new Date(2026, 0, 1, 18, 0),
+        ),
+      );
+      if (c.picker) expect(pickerClock).toMatch(c.picker);
+      else expect(pickerClock).toBe('18:00');
+      await expectTapTargets(page, 'main[data-screen="reminders"]');
+      await noHorizontalOverflow(page);
+      await page.screenshot({ path: testInfo.outputPath(`m12s2-reminders-${c.locale}.png`) });
+      expect(errors).toEqual([]);
+    });
+  });
+}
