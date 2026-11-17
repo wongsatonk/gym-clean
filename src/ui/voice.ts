@@ -4,9 +4,9 @@ import { createDrillSergeant } from '../core/personas';
 import {
   DRILL_PITCH,
   DRILL_RATE,
-  listMaleVoices,
+  listEnglishVoices,
   pickDrillVoice,
-  type MaleVoice,
+  type EnglishVoice,
   type VoiceConfig,
 } from './voiceNames';
 
@@ -139,7 +139,7 @@ export const voice = {
   /**
    * Coach persona and voice. 'calm' is the original voice (en-US, rate 1, browser default
    * voice). 'drill' rewrites every non-count line through the drill-sergeant script at
-   * `rudeness`, and speaks in `voiceName` (or the default male voice) faster and lower.
+   * `rudeness`, and speaks in `voiceName` (or the default drill voice) faster and lower.
    */
   configure(next: VoiceConfig): void {
     if (next.voiceName !== config.voiceName) drillVoice = undefined;
@@ -153,12 +153,17 @@ export const voice = {
     return { ...config };
   },
 
-  /** Installed male English voices from the known list, with an accent label, for the picker. */
-  maleVoices(): MaleVoice[] {
+  /** Every installed English voice, with an accent/region label, for the picker (M13). */
+  englishVoices(): EnglishVoice[] {
     const s = synth();
     if (!s) return [];
     watchVoices(s);
-    return listMaleVoices(getVoices(s));
+    return listEnglishVoices(getVoices(s));
+  },
+
+  /** @deprecated Old name kept until app.ts calls `englishVoices()` (M13 task 30). */
+  maleVoices(): EnglishVoice[] {
+    return this.englishVoices();
   },
 
   /** Calls `cb` when the browser's voice list changes (iOS loads it late). Returns unsubscribe. */

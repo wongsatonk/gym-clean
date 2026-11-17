@@ -160,7 +160,7 @@ describe('Today with the readiness card', () => {
     expect(unwired.textContent).toBe(plain.textContent);
   });
 
-  it('one card above the hero, after the missing-kit prompt, before Adjusted; Start untouched', () => {
+  it('M13: first in the "things to sort" row below the hero, then Adjusted, then the missing-kit prompt; Start untouched', () => {
     const c = fresh();
     const starts: string[] = [];
     const el = renderToday(
@@ -177,15 +177,17 @@ describe('Today with the readiness card', () => {
       },
     );
     expect(cardOf(el)).toHaveLength(1);
-    const kids = el.children;
+    const top = el.children;
+    const hero = top.findIndex((k) => k.classes.includes('hero'));
+    const row = top.findIndex((k) => k.hasAttribute('data-notices'));
+    expect(row).toBeGreaterThan(hero);
+    const kids = (top[row] as FakeEl).find((k) => k.hasAttribute('data-notices-list'))[0]
+      ?.children as FakeEl[];
     const idx = (pred: (k: FakeEl) => boolean) => kids.findIndex(pred);
-    const gym = idx((k) => k.hasAttribute('data-gym-prompt'));
     const ready = idx((k) => k.hasAttribute('data-readiness'));
     const adj = idx((k) => k.hasAttribute('data-adjusted'));
-    const hero = idx((k) => k.classes.includes('hero'));
-    expect(ready).toBe(gym + 1);
-    expect(adj).toBe(ready + 1);
-    expect(ready).toBeLessThan(hero);
+    const gym = idx((k) => k.hasAttribute('data-gym-prompt'));
+    expect([ready, adj, gym]).toEqual([0, 1, 2]);
     btn(el, 'data-readiness-lighter')?.click();
     expect(c.lighter).toBe(1);
     expect(starts).toEqual([]);

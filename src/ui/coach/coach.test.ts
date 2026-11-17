@@ -274,7 +274,14 @@ describe('proposalCard / redFlagCard', () => {
     );
     const rows = el.byClass('proposal-row');
     expect(rows[0]?.getAttribute('aria-label')).toBe('Bicep Curl, becomes Leg Curl');
-    expect(rows[1]?.oneByClass('proposal-after').textContent).toBe('→Removed');
+    const after = rows[1]?.oneByClass('proposal-after');
+    expect(after?.textContent).toBe('Removed');
+    // M13 task 20: the arrow is the arrow-right icon, not a typed "→".
+    expect(
+      after
+        ?.oneByClass('proposal-arrow')
+        .find((e) => e.getAttribute('data-icon') === 'arrow-right'),
+    ).toHaveLength(1);
     expect(el.oneByClass('proposal-why').textContent).toBe(PROPOSAL.why);
     expect(byText(el, 'Apply').classes).toEqual(expect.arrayContaining(['primary-btn', 'cta-btn']));
     byText(el, 'Not now').click();

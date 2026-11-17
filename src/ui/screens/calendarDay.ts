@@ -186,7 +186,7 @@ export function calendarDayScreen(
   return h(
     'main',
     {
-      class: `screen calendar-day has-tabbar ${moodClass('track')}`,
+      class: `screen calendar-day has-tabbar ${moodClass('pro')}`,
       'data-screen': 'calendar-day',
       'data-date': day.date,
       'data-status': day.status,

@@ -25,14 +25,22 @@
 // the set just logged. It is on the rest screen only (never during a set), never blocks the
 // timer or Start set, and updates in place on a tap (no re-render). When the next set is a
 // warm-up the eyebrow reads "Next · Warm-up 1 of 2" (`[data-warmup]`).
+// M13 task 23: the "Next" card is never an empty box. Its own 2D body map (`[data-rest-fig-2d]`,
+// decorative; the slot's button keeps its "Show target muscles in 3D" name) shows at once under the muscle
+// slot; when app.ts's 3D body lands in the slot and has drawn a frame, the card's `data-3d` turns
+// "shown" and rest.css fades the 3D in over the 2D (tokens: instant under reduced motion). If 3D
+// never arrives, fails, or moves to the 3D sheet, the 2D map stays (or comes back).
 import { formatRest } from '../../core/format';
 import type { SetEffort } from '../../core/types';
+import { exerciseById } from '../../data/catalog';
+import { bodyMapSvg, pickView } from '../bodyMap';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { ringFill } from '../motion';
 import { moodClass } from '../tokens';
 import { workoutTopBar } from '../topBar';
 import type { WarmupStep } from './exercise';
+import './rest.css';
 
 export type RestProps = {
   dayName: string;
@@ -276,6 +284,47 @@ function effortRow(
   return row;
 }
 
+/**
+ * The placeholder 2D map for the "Next" card: the exercise's muscles, same framing as the slot's
+ * map. Decorative copy: ids and the img role are dropped so the page has one labelled map.
+ */
+export function restFigure2d(exerciseId: string): HTMLElement {
+  const ex = exerciseById(exerciseId);
+  const primary = ex?.primaryMuscles ?? [];
+  const secondary = ex?.secondaryMuscles ?? [];
+  const el = h('div', { class: 'rest-fig-2d', 'aria-hidden': 'true', 'data-rest-fig-2d': true });
+  // Constant-only markup (bodyMap.ts), safe as innerHTML.
+  el.innerHTML = bodyMapSvg({ view: pickView(primary), primary, secondary })
+    .replace(/ id="[^"]*"/g, '')
+    .replace(/role="img" aria-label="[^"]*"/, 'aria-hidden="true" focusable="false"');
+  return el;
+}
+
+/** What the card's figure holds: 'shown' once a 3D body in it has drawn a frame, else 'pending'. */
+export function fig3dState(fig: Pick<Element, 'querySelector'>): 'shown' | 'pending' {
+  // The viewer writes data-angle on every render(), so its presence means a frame was drawn.
+  const canvas = fig.querySelector<HTMLCanvasElement>('.body3d[data-angle] canvas');
+  return canvas && canvas.width > 0 && canvas.height > 0 ? 'shown' : 'pending';
+}
+
+/** Keeps `data-3d` on the figure box in step with the 3D body arriving in it or leaving it. */
+function watch3d(box: HTMLElement): void {
+  box.setAttribute('data-3d', 'pending');
+  const MO = (globalThis as { MutationObserver?: typeof MutationObserver }).MutationObserver;
+  if (typeof MO !== 'function' || typeof box.querySelector !== 'function') return;
+  const sync = () => {
+    const state = fig3dState(box);
+    if (box.getAttribute('data-3d') !== state) box.setAttribute('data-3d', state);
+  };
+  new MO(sync).observe(box, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['data-angle', 'width', 'height'],
+  });
+  sync();
+}
+
 export function restScreen(p: RestProps, a: RestActions): RestView {
   const ringFg = svgEl('circle', {
     class: 'rest-ring-fg',
@@ -338,10 +387,13 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
     '+30 s',
   );
 
+  const figBox = h('div', { class: 'rest-card-fig' }, restFigure2d(p.exerciseId), p.figure);
+  watch3d(figBox);
+
   const card = h(
     'article',
     { class: 'rest-card', 'aria-label': 'Next set' },
-    h('div', { class: 'rest-card-fig' }, p.figure),
+    figBox,
     h(
       'div',
       { class: 'next-up' },

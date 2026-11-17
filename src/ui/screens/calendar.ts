@@ -425,7 +425,7 @@ export function calendarScreen(props: CalendarProps, actions: CalendarActions): 
   return h(
     'main',
     {
-      class: `screen calendar has-tabbar ${moodClass('track')}`,
+      class: `screen calendar has-tabbar ${moodClass('pro')}`,
       'data-screen': 'calendar',
       'data-month': props.month,
     },

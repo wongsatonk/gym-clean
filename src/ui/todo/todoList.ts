@@ -11,6 +11,7 @@
 // `data-state` = open / done / skipped / native, `[data-todo-group]` = open / done / native,
 // `[data-copy-report]`.
 import type { TodoTopic } from '../../core/types';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
@@ -139,11 +140,7 @@ export function todoListScreen(props: TodoListProps, actions: TodoListActions): 
     h(
       'header',
       { class: 'top-bar' },
-      h(
-        'button',
-        { class: 'ghost-btn', type: 'button', onclick: () => actions.onBack() },
-        '‹ Back',
-      ),
+      backButton(() => actions.onBack()),
     ),
     h('h1', { class: 'page-title' }, 'To-dos'),
     h('p', { class: 'todo-summary', 'data-todo-summary': true }, summaryText(props.summary)),

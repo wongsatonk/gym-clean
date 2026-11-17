@@ -24,6 +24,7 @@ import {
   record,
   seed,
   type SetSeed,
+  revealNotice,
 } from './app.helpers';
 
 type Day = { id: string; name: string; exercises: { exerciseId: string; sets: number }[] };
@@ -123,6 +124,7 @@ test('missed-day card once on Today; last week recap once in the thread', async 
   await seedWeek(page);
 
   const missed = page.locator('[data-missed-day]');
+  await revealNotice(page, missed);
   await expect(missed).toHaveAttribute('data-missed-day', '2026-11-12');
   await expect(missed.locator('.missed-text')).toHaveText(/^You missed .+ on Thu\.$/);
   // A rotation miss is carried forward to today: Start it, not a Move proposal.
@@ -139,6 +141,7 @@ test('missed-day card once on Today; last week recap once in the thread', async 
   await page.locator('[data-tab="today"]').click();
 
   // Skip it: the card goes and stays gone; the recap isn't posted again.
+  await revealNotice(page, missed);
   await missed.locator('[data-missed-skip]').click();
   await expect(missed).toHaveCount(0);
   // The answer is stored (settings 'coach', no message text) just after the tap.
@@ -416,12 +419,13 @@ test("a rotation miss: Start it opens today's workout and the answer is stored f
   await seedWeek(page);
   const missed = page.locator('[data-missed-day="2026-11-12"]');
   const heroId = (await page.locator('[data-hero]').first().getAttribute('data-hero')) ?? '';
+  await revealNotice(page, missed);
   await missed.locator('[data-missed-start]').click();
   const preview = page.locator('[data-screen="preview"]');
   await expect(preview).toBeVisible();
   await expect(preview.locator('#preview-title')).toHaveText(dayOf(heroId).name);
   expect(await answered(page)).toContain('2026-11-12');
-  await preview.getByRole('button', { name: '‹ Back' }).click();
+  await preview.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(page.locator('[data-hero]').first()).toBeVisible();
   await expect(page.locator('[data-missed-day]')).toHaveCount(0);
 
@@ -457,6 +461,7 @@ test('a focus-block miss: Move it → the Coach tab with Do it today sent → Ap
   await page.reload();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
   const missed = page.locator('[data-missed-day]');
+  await revealNotice(page, missed);
   await expect(missed.locator('[data-missed-move]')).toHaveText('Move it');
   await expect(missed.locator('[data-missed-start]')).toHaveCount(0);
   const date = (await missed.getAttribute('data-missed-day')) ?? '';

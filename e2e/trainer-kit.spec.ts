@@ -22,6 +22,7 @@ import {
   noHorizontalOverflow,
   openApp,
   record,
+  revealNotice,
 } from './app.helpers';
 import { endWorkout } from './workout.helpers';
 
@@ -247,7 +248,7 @@ async function previewShape(page: Page) {
     cut: await preview.locator('.ex-row-removed').count(),
     paired: await preview.locator('.ex-row[data-pair]').count(),
   };
-  await preview.getByRole('button', { name: '‹ Back' }).click();
+  await preview.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
   return shape;
 }
@@ -276,7 +277,7 @@ test('Short on time: "30 min" → proposal → Apply → a shorter day → Undo 
   await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
 
   await leaveCoach(page);
-  await expect(page.locator('[data-adjusted]')).toBeVisible();
+  await revealNotice(page, page.locator('[data-adjusted]'));
   const short = await previewShape(page);
   expect(short.cut + short.paired, 'rows cut or paired').toBeGreaterThan(0);
 
@@ -314,7 +315,7 @@ test('Feel today: energy + a sore area → "Go easy on chest today?" → the coa
   // SPEC M12 item 9: feel today alone (energy 2 + a sore area = two signals) makes the
   // "Lighter today?" card on the web, without Health.
   const lighter = page.locator('[data-readiness="lighter"]');
-  await expect(lighter).toBeVisible();
+  await revealNotice(page, lighter);
   await expect(lighter.getByRole('heading', { name: 'Lighter today?' })).toBeVisible();
   await expect(lighter.locator('[data-readiness-reason]')).toHaveCount(2);
   await expect(lighter.locator('[data-readiness-lighter]')).toBeVisible();
@@ -323,7 +324,7 @@ test('Feel today: energy + a sore area → "Go easy on chest today?" → the coa
   await page.reload();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
   await expect(page.locator('[data-feel-today]')).toHaveAttribute('data-state', 'done');
-  await expect(page.locator('[data-readiness="lighter"]')).toBeVisible();
+  await revealNotice(page, page.locator('[data-readiness="lighter"]'));
 
   const offer = page.locator('[data-easy-on="chest"]').first();
   await expect(offer).toBeVisible();

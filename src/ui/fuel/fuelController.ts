@@ -1222,7 +1222,6 @@ export function createFuel(host: FuelHost) {
         onDismissProteinNudge: (key) => dismissProteinNudge(key),
         onProteinWhy: host.openLearn ? (opener) => host.openLearn?.('protein', opener) : undefined,
         onEditEntry: (e) => openEntry(e),
-        onDeleteEntry: (e) => void removeEntry(e, true, LOG_OPEN).catch(host.logError),
         onWeighIn: () => {
           sub = { kind: 'weighIn' };
           host.render();

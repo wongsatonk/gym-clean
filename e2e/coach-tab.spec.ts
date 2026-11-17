@@ -18,6 +18,7 @@ import {
   openApp,
   record,
   seed,
+  revealNotice,
 } from './app.helpers';
 import { openPause } from './workout.helpers';
 
@@ -165,8 +166,10 @@ test("Today's and the preview's Coach buttons, the missing-kit prompt and a Cale
   );
   await expect(page.locator('[data-hero="legs-b"]')).toBeVisible();
 
-  // Today's Coach button: the tab opens, nothing sent for him (last week's recap may be there).
-  await page.locator('[data-coach-open]').click();
+  // M13: Today has no header Coach button (the tab is the way in): nothing sent for him (last
+  // week's recap may be there).
+  await expect(page.locator('[data-screen="today"] [data-coach-open]')).toHaveCount(0);
+  await page.locator('[data-tab="coach"]').click();
   await expect(coachTab(page)).toBeVisible();
   await expect(page.locator('[data-tab="coach"]')).toHaveAttribute('aria-current', 'page');
   await expect(bubbles(page, 'user')).toHaveCount(0);
@@ -180,6 +183,7 @@ test("Today's and the preview's Coach buttons, the missing-kit prompt and a Cale
   await leaveCoach(page);
 
   // The missing-kit prompt's See a swap: his bubble + the swap proposal, already sent.
+  await revealNotice(page, page.locator('[data-gym-prompt="Leg_Press"]'));
   await page.locator('[data-gym-prompt="Leg_Press"] [data-gym-swap]').click();
   await expect(coachTab(page)).toBeVisible();
   await expect(bubbles(page, 'user').last()).toContainText('Swap Leg Press');

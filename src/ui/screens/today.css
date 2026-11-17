@@ -1,0 +1,99 @@
+/* M13 task 19 (ui-engineer): Today, hero first. Imported by src/ui/screens/today.ts.
+   The "N things to sort" row (a disclosure that opens the notices in place), and the one-filled-
+   button rule: on Today only Start is filled orange; the notice cards' own CTAs become outlines
+   (orange words + orange edge on the card surface). Text ≥ 20px, targets ≥ 56px. */
+
+.today .notices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.today .notices-toggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 72px;
+  padding: 10px 14px;
+  text-align: left;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.today .notices-count {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--warn);
+  color: var(--warn);
+  font-family: var(--font-display);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.today .notices-txt {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.today .notices-title {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.today .notices-sub {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.today .notices-chev {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-2);
+  transform: rotate(-90deg); /* the back chevron, pointing down */
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.today .notices[data-open='true'] .notices-chev {
+  transform: rotate(90deg);
+}
+
+.today .notices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.today .notices-list[hidden] {
+  display: none;
+}
+
+/* Only Start is filled: the notice cards' primary buttons are outlines on Today. */
+.today .readiness-cta,
+.today .missed-cta,
+.today .gym-prompt-cta,
+.today .goal-card-btn.primary,
+.today .feel-save {
+  background: transparent;
+  color: var(--cta);
+  border: 2px solid var(--cta);
+}
+
+/* The last row of the week strip ends clear of the tab bar. */
+.today .day-strip {
+  margin-bottom: 12px;
+}

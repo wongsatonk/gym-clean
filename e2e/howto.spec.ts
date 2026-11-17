@@ -119,7 +119,7 @@ test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Tric
   await expectStaticBadges(page, '.ex-row');
 
   // Legs B preview (M4d batch 2): every row, Leg Press included, has a 3D demo and no Camera.
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page
     .getByRole('button', { name: /Legs B/ })
     .first()
@@ -130,7 +130,7 @@ test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Tric
   await expect(page.locator('.ex-row [data-badge="info"]')).toHaveCount(0);
 
   // Pull A in-session list: every exercise has a 3D demo (M4d); the manual ones no Camera.
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   await page
     .getByRole('button', { name: /Pull A/ })
     .first()

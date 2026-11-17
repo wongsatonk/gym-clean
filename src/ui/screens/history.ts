@@ -541,7 +541,7 @@ export function historyScreen(props: HistoryProps, actions: HistoryActions): HTM
   return h(
     'main',
     {
-      class: `screen history has-tabbar ${moodClass('track')}`,
+      class: `screen history has-tabbar ${moodClass('pro')}`,
       'data-screen': 'history',
       'data-view': detail ? 'detail' : 'list',
     },

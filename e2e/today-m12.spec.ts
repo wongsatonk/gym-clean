@@ -199,8 +199,15 @@ test('Move it passes the missed day out and the card goes away; Skip it and Star
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
 });
 
-test('with the readiness card too: still fits, both cards above the hero', async ({ page }) => {
+test('with the readiness card too (M13): Start first, both cards in one "2 things to sort" row', async ({
+  page,
+}) => {
   await mountToday(page, { readiness: true });
+  await expect(page.getByRole('button', { name: 'Start workout' })).toBeInViewport({ ratio: 1 });
+  const toggle = page.locator('[data-notices="2"] [data-notices-toggle]');
+  await expect(toggle).toContainText('2 things to sort');
+  await expect(page.locator('[data-readiness="lighter"]')).toBeHidden();
+  await toggle.click();
   await expect(page.locator('[data-readiness="lighter"]')).toBeVisible();
   await expect(page.locator('[data-missed-day]')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
@@ -213,7 +220,7 @@ test('with the readiness card too: still fits, both cards above the hero', async
           : 'readiness',
     ),
   );
-  expect(order).toEqual(['missed', 'readiness', 'hero']);
+  expect(order).toEqual(['hero', 'readiness', 'missed']);
   await shot(page, 'm12-today-missed-readiness');
 });
 

@@ -1,0 +1,22 @@
+/* M13 task 20: shared back / done marks (backButton.ts). Tap height comes from `button`
+   (--tap-min, 56px); this only lays out the icon and the word. */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  padding: 0 18px 0 12px;
+  white-space: nowrap;
+}
+
+.back-btn .ic,
+.done-mark .ic {
+  flex: none;
+}
+
+.done-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

@@ -114,7 +114,7 @@ function row(line: { before: string; after: string }): HTMLElement {
     h(
       'span',
       { class: 'proposal-after', 'aria-hidden': 'true' },
-      h('span', { class: 'proposal-arrow' }, '→'),
+      h('span', { class: 'proposal-arrow' }, icon('arrow-right', 'sm')),
       line.after || 'Removed',
     ),
   );

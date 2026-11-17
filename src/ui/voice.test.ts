@@ -11,7 +11,7 @@ import {
   DRILL_PITCH,
   DRILL_RATE,
   baseVoiceName,
-  listMaleVoices,
+  listEnglishVoices,
   pickDrillVoice,
   voice,
 } from './voice';
@@ -82,44 +82,14 @@ describe('voice names', () => {
     expect(baseVoiceName('Rocko (English (UK))')).toBe('Rocko');
   });
 
-  it('lists only known male English voices, default order first, with an accent label', () => {
-    const list = listMaleVoices([
-      v('Samantha'),
-      v('Fred'),
-      v('Gordon', 'en-AU'),
-      v('Rocko (English (UK))', 'en-GB'),
-      v('Daniel', 'en-GB'),
-      v('Rishi', 'en-IN'),
-      v('Thomas', 'fr-FR'),
-      v('Aaron'),
-      v('Aaron'),
-      v('Eddy (German (Germany))', 'de-DE'),
-    ]);
-    expect(list.map((m) => m.name)).toEqual([
-      'Daniel',
-      'Rocko (English (UK))',
-      'Aaron',
-      'Fred',
-      'Gordon',
-      'Rishi',
-    ]);
-    expect(list.map((m) => m.label)).toEqual([
-      'Daniel (UK)',
-      'Rocko (character, UK)',
-      'Aaron (US)',
-      'Fred (US)',
-      'Gordon (Australia)',
-      'Rishi (India)',
-    ]);
-  });
-
   it('picks the saved voice, then the same base name, then the default order, then any English', () => {
     const all = [v('Samantha'), v('Fred'), v('Arthur', 'en-GB'), v('Daniel (Enhanced)', 'en-GB')];
     expect(pickDrillVoice(all, 'Fred')?.name).toBe('Fred');
-    expect(listMaleVoices(all).map((m) => m.label)).toEqual([
+    expect(listEnglishVoices(all).map((m) => m.label)).toEqual([
       'Daniel (UK, Enhanced)',
       'Arthur (UK)',
       'Fred (US)',
+      'Samantha (US)',
     ]);
     expect(pickDrillVoice(all, 'Daniel')?.name).toBe('Daniel (Enhanced)');
     expect(pickDrillVoice(all, 'Gone')?.name).toBe('Daniel (Enhanced)');
@@ -146,7 +116,7 @@ describe('voice.speak with a persona', () => {
     expect(line).not.toHaveBeenCalled();
   });
 
-  it('drill rewrites hints and cues at the chosen level, faster and lower, in the male voice', () => {
+  it('drill rewrites hints and cues at the chosen level, faster and lower, in the drill voice', () => {
     synth.voices = [v('Samantha'), v('Daniel', 'en-GB')];
     voice.configure({ persona: 'drill', rudeness: 3, voiceName: null });
     voice.speak('Go', { kind: 'cue' });
@@ -213,14 +183,15 @@ describe('voice.speak with a persona', () => {
   });
 });
 
-describe('voice.maleVoices and onVoicesChanged', () => {
-  it('lists installed male voices and tells listeners when the list changes', () => {
-    expect(voice.maleVoices()).toEqual([]);
+describe('voice.englishVoices and onVoicesChanged', () => {
+  it('lists installed English voices and tells listeners when the list changes', () => {
+    expect(voice.englishVoices()).toEqual([]);
     const cb = vi.fn();
     const off = voice.onVoicesChanged(cb);
     synth.loadVoices([v('Fred'), v('Samantha')]);
     expect(cb).toHaveBeenCalledTimes(1);
-    expect(voice.maleVoices().map((m) => m.label)).toEqual(['Fred (US)']);
+    expect(voice.englishVoices().map((m) => m.label)).toEqual(['Fred (US)', 'Samantha (US)']);
+    expect(voice.maleVoices()).toEqual(voice.englishVoices()); // old name until task 30
     off();
     synth.loadVoices([]);
     expect(cb).toHaveBeenCalledTimes(1);
@@ -228,7 +199,7 @@ describe('voice.maleVoices and onVoicesChanged', () => {
 
   it('is empty where speech is unsupported', () => {
     g.window = {};
-    expect(voice.maleVoices()).toEqual([]);
+    expect(voice.englishVoices()).toEqual([]);
     expect(voice.speak('Go')).toBeNull();
   });
 });

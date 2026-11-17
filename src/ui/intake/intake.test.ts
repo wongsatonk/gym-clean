@@ -266,7 +266,7 @@ describe('intake: questions', () => {
     expect(calls.done).toEqual([]);
   });
 
-  it('re-run from Settings: starts from the stored answers, with ‹ Back to Settings', () => {
+  it('re-run from Settings: starts from the stored answers, with Back to Settings', () => {
     const { el, calls } = render({ initial: FULL }, { onClose: () => calls.close++ });
     expect(opt(el, 'fat').getAttribute('aria-checked')).toBe('true');
     expect((one(el, 'data-goal-text') as FakeEl & { value: string }).value).toBe(FULL.goalText);

@@ -23,9 +23,17 @@
 // day), and the cardio line under "Your week" (`[data-cardio]`, hidden when null), and the Goal
 // card (`[data-goal-card]`, ./goalCard.ts) under the to-do card when `goal` and both goal
 // callbacks are set.
+// M13 task 19 ("hero first"): the hero with Start comes right after the app bar. The notices
+// (readiness, adjusted, missed day, missing kit, new program, "Set your goal", fuel nudge)
+// follow it: none → nothing; one → that card; two or more → one compact row "N things to sort"
+// (`[data-notices]`, toggle `[data-notices-toggle]`, aria-expanded) that opens them in place
+// (`[data-notices-list]`). `noticesOpen` / `onNoticesToggle` let app.ts keep it open across a
+// re-render. The header Coach button is gone (the Coach tab is the way in): `onCoach` is ignored.
+// Only Start is a filled orange button here; today.css turns the cards' own CTAs into outlines.
 import type { WeekDot } from '../../core/stats';
 import type { MissedDay } from '../../core/progress/completion';
 import type { DayFeel, DayOverride, ProgramDay, ReadinessCard } from '../../core/types';
+import { APP_NAME } from '../../core/brand';
 import { cardioLine } from '../../core/health/cardio';
 import type { FeelOffer } from '../../core/health/readiness';
 import { formatWeight, type Unit } from '../../core/units';
@@ -44,6 +52,7 @@ import { feelToday } from './feelToday';
 import { todoCard, type TodoCardProps } from '../todo/todoCard';
 import { goalCard, type GoalCardProps } from './goalCard';
 import { weekLoadLine, type WeekLoad } from './weekLoad';
+import './today.css';
 
 /** The last finished session, as the Last time tile shows it. */
 export type TodayLast = {
@@ -129,6 +138,9 @@ export type TodayProps = {
   cardioMinutes?: number | null | undefined;
   /** The Goal card (goals + progress, or none = "Set your goal"); null/omitted hides it. */
   goal?: GoalCardProps | null | undefined;
+  // ---- M13 (optional) ----
+  /** Start the "N things to sort" row open (app.ts keeps it open across a re-render). */
+  noticesOpen?: boolean | undefined;
 };
 
 /**
@@ -160,8 +172,13 @@ export type TodayActions = ReadinessActions & {
   /** A day card in the strip (opens the preview, as the old day list did). */
   onOpenDay: (day: ProgramDay) => void;
   onTab: (tab: TabId) => void;
-  /** Shows the Coach button (top bar) when set. */
+  /**
+   * @deprecated M13: Today has no header Coach button any more (the Coach tab is the way in).
+   * Ignored here; app.ts stops passing it in task 31.
+   */
   onCoach?: (() => void) | undefined;
+  /** M13: the "N things to sort" row was opened (true) or closed (false). */
+  onNoticesToggle?: ((open: boolean) => void) | undefined;
   /** Undo on the Adjusted banner. */
   onUndoAdjust?: (() => void) | undefined;
   /** Train anyway on a rest day; falls back to onStart. */
@@ -733,6 +750,109 @@ function playTodayMotion(
   countUp(parts.streakNum, parts.streak);
 }
 
+/** One notice for the "things to sort" row: its card and a short name for the summary line. */
+export type TodayNotice = { key: string; label: string; el: HTMLElement };
+
+/** "1 thing to sort" / "3 things to sort". */
+export function noticesLabel(n: number): string {
+  return `${n} ${n === 1 ? 'thing' : 'things'} to sort`;
+}
+
+/**
+ * The notices in the order they matter for today's workout. Each is present only when its prop
+ * and callbacks are, exactly as before M13; a goal card with goals is progress, not a notice.
+ */
+export function todayNotices(
+  props: TodayProps,
+  actions: TodayActions,
+  readiness: HTMLElement | null,
+): TodayNotice[] {
+  const out: TodayNotice[] = [];
+  const add = (key: string, label: string, el: HTMLElement | null) => {
+    if (el) out.push({ key, label, el });
+  };
+  add(
+    'readiness',
+    props.readiness?.offer === 'deload' ? 'Deload week?' : 'Lighter today?',
+    readiness,
+  );
+  if (props.adjustedToday)
+    add('adjusted', 'Adjusted today', adjustedBanner(props.adjustedToday, actions.onUndoAdjust));
+  add(
+    'missed',
+    props.missedDay ? `Missed ${props.missedDay.name}` : 'Missed day',
+    missedDayCard(props.missedDay, props.now, actions, props.missedAction),
+  );
+  add('kit', 'Missing kit', gymPrompt(props.missingKit, actions));
+  if (props.newProgram && actions.onUseNewProgram && actions.onKeepPlan)
+    add('program', 'New program', newProgramPrompt(actions));
+  if (props.goal && props.goal.goals.length === 0 && actions.onSetGoal && actions.onOpenGoal)
+    add(
+      'goal',
+      'Set your goal',
+      goalCard(props.goal, { onSetGoal: actions.onSetGoal, onOpen: actions.onOpenGoal }),
+    );
+  if (props.nudge && actions.onDismissNudge)
+    add('nudge', 'Food', nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel));
+  return out;
+}
+
+/**
+ * The notices block: null with none, the card itself with one, else a compact row
+ * "N things to sort" that opens the cards in place (a disclosure: button + aria-expanded).
+ */
+export function noticesBlock(
+  notices: readonly TodayNotice[],
+  open: boolean,
+  onToggle?: (open: boolean) => void,
+): HTMLElement | null {
+  if (notices.length === 0) return null;
+  if (notices.length === 1) return notices[0]?.el ?? null;
+  let isOpen = open;
+  const listId = 'today-notices-list';
+  const list = h(
+    'div',
+    { class: 'notices-list', id: listId, 'data-notices-list': true },
+    ...notices.map((n) => n.el),
+  );
+  const toggle = h(
+    'button',
+    {
+      type: 'button',
+      class: 'notices-toggle',
+      'aria-controls': listId,
+      'data-notices-toggle': true,
+    },
+    h('span', { class: 'notices-count', 'aria-hidden': 'true' }, String(notices.length)),
+    h(
+      'span',
+      { class: 'notices-txt' },
+      h('span', { class: 'notices-title' }, noticesLabel(notices.length)),
+      h('span', { class: 'notices-sub' }, notices.map((n) => n.label).join(' · ')),
+    ),
+    h('span', { class: 'notices-chev', 'aria-hidden': 'true' }, icon('back', 'md')),
+  );
+  const block = h(
+    'section',
+    { class: 'notices', 'data-notices': notices.length, 'aria-label': 'Things to sort' },
+    toggle,
+    list,
+  );
+  const paint = () => {
+    toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    block.setAttribute('data-open', isOpen ? 'true' : 'false');
+    if (isOpen) list.removeAttribute('hidden');
+    else list.setAttribute('hidden', '');
+  };
+  toggle.addEventListener('click', () => {
+    isOpen = !isOpen;
+    paint();
+    onToggle?.(isOpen);
+  });
+  paint();
+  return block;
+}
+
 export function todayScreen(props: TodayProps, actions: TodayActions): HTMLElement {
   const strip = h(
     'div',
@@ -755,23 +875,15 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
   const rest = todayEntry(props)?.rest === true;
   const readiness = rest ? null : readinessCard(props.readiness, actions, props.feelOffers);
   const streak = streakTile(props);
-  // The cards that rise in on first load, in reading order (the readiness card slides instead).
+  const notices = todayNotices(props, actions, readiness);
+  const block = noticesBlock(notices, props.noticesOpen === true, actions.onNoticesToggle);
+  // Hero first (M13): Start is always in the first viewport, whatever needs sorting.
   const cards = [
-    props.newProgram && actions.onUseNewProgram && actions.onKeepPlan
-      ? newProgramPrompt(actions)
-      : null,
-    gymPrompt(props.missingKit, actions),
-    missedDayCard(props.missedDay, props.now, actions, props.missedAction),
-  ];
-  const lower = [
-    props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,
-    props.nudge && actions.onDismissNudge
-      ? nudgeBanner(props.nudge, actions.onDismissNudge, actions.onOpenFuel)
-      : null,
     hero(props, actions),
     feelRow(props, actions, rest),
+    block,
     actions.onOpenTodos ? todoCard(props.todo, { onOpen: actions.onOpenTodos }) : null,
-    props.goal && actions.onSetGoal && actions.onOpenGoal
+    props.goal && props.goal.goals.length > 0 && actions.onSetGoal && actions.onOpenGoal
       ? goalCard(props.goal, { onSetGoal: actions.onSetGoal, onOpen: actions.onOpenGoal })
       : null,
     h('div', { class: 'pair' }, streak.el, lastTile(props)),
@@ -791,29 +903,22 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
     h(
       'header',
       { class: 'appbar' },
-      h('span', { class: 'brand' }, icon('logo', 'lg'), 'Gym Clean'),
-      actions.onCoach
-        ? h(
-            'span',
-            { class: 'appbar-end' },
-            h('span', { class: 'date' }, dateLabel(props.now)),
-            coachButton(actions.onCoach),
-          )
-        : h('span', { class: 'date' }, dateLabel(props.now)),
+      h('span', { class: 'brand' }, icon('logo', 'lg'), APP_NAME),
+      h('span', { class: 'date' }, dateLabel(props.now)),
     ),
     ...cards,
-    readiness,
-    ...lower,
     tabBar('today', actions.onTab),
   );
   if (props.motion) {
+    // The readiness card slides in when new; inside a closed row, the row carries the news.
+    const slide = readiness && notices.length > 1 ? block : readiness;
     playTodayMotion(
       props.motion,
       {
-        cards: [...cards, ...lower].filter((c): c is HTMLElement => c !== null),
+        cards: cards.filter((c): c is HTMLElement => c !== null && c !== slide),
         streakNum: streak.num,
         streak: props.streakWeeks,
-        readiness,
+        readiness: slide,
       },
       props,
     );

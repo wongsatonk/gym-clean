@@ -205,7 +205,7 @@ test('progress photos: off by default → on → add two made-up photos → comp
   await expect.poll(async () => (await getRows(page, 'progressPhotos')).length).toBe(1);
 
   // A Back up file never carries them.
-  await photos(page).getByRole('button', { name: '‹ Back' }).click();
+  await photos(page).getByRole('button', { name: 'Back', exact: true }).click();
   await expect(page.locator('main.settings')).toBeVisible();
   const [download] = await Promise.all([
     page.waitForEvent('download'),

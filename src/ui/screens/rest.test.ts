@@ -1,5 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { RING_C, resetSetRing, restScreen, ringOffset, type RestProps } from './rest';
+import {
+  RING_C,
+  fig3dState,
+  resetSetRing,
+  restFigure2d,
+  restScreen,
+  ringOffset,
+  type RestProps,
+} from './rest';
 import type { SetEffort } from '../../core/types';
 import { FakeEl, asFake, useFakeDom } from './testDom';
 
@@ -455,5 +465,91 @@ describe('restScreen: warm-up label (M12 1b task 24)', () => {
     const eyebrow = render().el.oneByClass('rest-eyebrow');
     expect(eyebrow.textContent).toBe('Next · Set 2 of 4');
     expect(eyebrow.hasAttribute('data-warmup')).toBe(false);
+  });
+});
+
+// ---------- M13 task 23: the "Next" card placeholder ----------
+
+describe('Rest "Next" card: 2D at once, 3D fades in over it (M13)', () => {
+  const figBox = (el: FakeEl) => one(el, (e) => e.classes.includes('rest-card-fig'), 'figure box');
+
+  it('the card shows the 2D map at once, under the slot app.ts passes in', () => {
+    const fig = new FakeEl('button');
+    const { el } = render({ figure: fig as unknown as HTMLElement });
+    const box = figBox(el);
+    expect(box.getAttribute('data-3d')).toBe('pending');
+    const map = box.children[0] as FakeEl;
+    expect(map.hasAttribute('data-rest-fig-2d')).toBe(true);
+    expect(map.getAttribute('aria-hidden')).toBe('true');
+    expect(map.innerHTML).toContain('class="body-map"');
+    expect(map.innerHTML).toContain('muscle primary');
+    expect(box.children[1]).toBe(fig);
+  });
+
+  it('the placeholder is decorative: no ids (the slot has the same map), no img role', () => {
+    const html = restFigure2d('One-Arm_Dumbbell_Row').innerHTML;
+    expect(html).not.toMatch(/ id="/);
+    expect(html).not.toContain('role="img"');
+    expect(html).toContain('aria-hidden="true"');
+    // An unknown exercise still draws the figure (never an empty box).
+    expect(restFigure2d('no-such-exercise').innerHTML).toContain('class="body"');
+  });
+
+  it('fig3dState: pending until a 3D body in the slot has drawn a frame', () => {
+    const q = (canvas: unknown) => ({ querySelector: () => canvas }) as unknown as Element;
+    expect(fig3dState(q(null))).toBe('pending');
+    expect(fig3dState(q({ width: 0, height: 0 }))).toBe('pending');
+    expect(fig3dState(q({ width: 360, height: 460 }))).toBe('shown');
+  });
+
+  describe('with a MutationObserver (the 3D body arriving, failing, leaving)', () => {
+    const g = globalThis as { MutationObserver?: unknown };
+    let saved: unknown;
+    let fire: (() => void)[] = [];
+    let canvas: { width: number; height: number } | null = null;
+    beforeEach(() => {
+      saved = g.MutationObserver;
+      fire = [];
+      canvas = null;
+      g.MutationObserver = class {
+        constructor(private cb: () => void) {}
+        observe() {
+          fire.push(() => this.cb());
+        }
+      };
+      (FakeEl.prototype as unknown as { querySelector: unknown }).querySelector = () => canvas;
+    });
+    afterEach(() => {
+      g.MutationObserver = saved;
+      delete (FakeEl.prototype as unknown as { querySelector?: unknown }).querySelector;
+    });
+    const mutate = () => fire.forEach((f) => f());
+
+    it('3D drawn → "shown"; moved to the 3D sheet → back to the 2D ("pending")', () => {
+      const box = figBox(render().el);
+      expect(box.getAttribute('data-3d')).toBe('pending');
+      canvas = { width: 360, height: 460 };
+      mutate();
+      expect(box.getAttribute('data-3d')).toBe('shown');
+      canvas = null;
+      mutate();
+      expect(box.getAttribute('data-3d')).toBe('pending');
+    });
+
+    it('3D never arrives or fails: the card keeps its 2D map', () => {
+      const box = figBox(render().el);
+      mutate();
+      expect(box.getAttribute('data-3d')).toBe('pending');
+      expect(box.find((e) => e.hasAttribute('data-rest-fig-2d'))).toHaveLength(1);
+    });
+  });
+
+  it('rest.css: 3D hidden until shown, the 2D fades out then; slot above; reduced motion instant', () => {
+    const css = readFileSync(join(__dirname, 'rest.css'), 'utf8');
+    expect(css).toMatch(/\.rest-card-fig \.body3d \{[^}]*opacity: 0;/);
+    expect(css).toMatch(/\.rest-card-fig\[data-3d='shown'\] \.body3d \{[^}]*opacity: 1;/);
+    expect(css).toMatch(/\.rest-card-fig\[data-3d='shown'\] \.rest-fig-2d \{[^}]*opacity: 0;/);
+    expect(css).toMatch(/transition: opacity var\(--dur-slow\)/);
+    expect(css).toMatch(/prefers-reduced-motion: reduce[\s\S]*transition: none/);
   });
 });

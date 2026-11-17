@@ -1,0 +1,54 @@
+/* M13 task 23 (ui-engineer): the Rest "Next" card placeholder. Imported by src/ui/screens/rest.ts.
+   The card's own 2D map (.rest-fig-2d) sits under the muscle slot and shows at once; the 3D
+   body (app.ts moves .body3d into the slot) stays invisible until it has drawn a frame
+   (data-3d="shown", set by rest.ts), then fades in over the 2D, which fades out. The motion
+   tokens are 0ms under reduced motion, so the swap is instant there. Never an empty box. */
+
+.rest-card-fig {
+  position: relative;
+}
+
+.rest-card-fig .rest-fig-2d {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-slow) var(--ease-standard);
+}
+
+.rest-card-fig .rest-fig-2d .body-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The slot (and its tap target) above the placeholder. */
+.rest-card-fig .muscle-slot {
+  z-index: 1;
+}
+
+/* The slot's own map is not drawn here (the placeholder draws the same figure, so the two never
+   double up); opacity keeps it in the tree, under the button's "Show target muscles in 3D". */
+.rest-card-fig .muscle-slot .body-map {
+  opacity: 0;
+}
+
+.rest-card-fig .body3d {
+  opacity: 0;
+  transition: opacity var(--dur-slow) var(--ease-standard);
+}
+
+.rest-card-fig[data-3d='shown'] .body3d {
+  opacity: 1;
+}
+
+.rest-card-fig[data-3d='shown'] .rest-fig-2d {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rest-card-fig .rest-fig-2d,
+  .rest-card-fig .body3d {
+    transition: none;
+  }
+}

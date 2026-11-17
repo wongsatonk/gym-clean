@@ -532,3 +532,169 @@ describe('settingsScreen M12 slice 2 rows: Coach, Reminders, Coach eval', () => 
     expect(log).toEqual(['eval']);
   });
 });
+
+describe('settingsScreen M13 owner mode', () => {
+  const all: Required<
+    Pick<
+      SettingsActions,
+      | 'onPlanChanges'
+      | 'onMyGym'
+      | 'onHealth'
+      | 'onTodos'
+      | 'onWhatsNew'
+      | 'onIntake'
+      | 'onProgressPhotos'
+      | 'onCoachSettings'
+      | 'onReminders'
+      | 'onBrainEval'
+    >
+  > = {
+    onPlanChanges: () => {},
+    onMyGym: () => {},
+    onHealth: () => {},
+    onTodos: () => {},
+    onWhatsNew: () => {},
+    onIntake: () => {},
+    onProgressPhotos: () => {},
+    onCoachSettings: () => {},
+    onReminders: () => {},
+    onBrainEval: () => {},
+  };
+  function renderM13(over: Partial<SettingsProps>, extra: Partial<SettingsActions> = {}) {
+    return asFake(
+      settingsScreen(props({ backup: slot('data-backup'), ...over }), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onCameraTest: () => {},
+        onTab: () => {},
+        ...all,
+        ...extra,
+      }),
+    );
+  }
+  const keys = (el: FakeEl) => el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+  const has = (el: FakeEl, attr: string) => el.find((e) => e.hasAttribute(attr)).length > 0;
+  /** Section keys + every element's hook attributes and text, to compare two renders. */
+  const shape = (el: FakeEl) =>
+    el.find(() => true).map((e) => `${e.tag}|${[...e.attrs.keys()].join(',')}|${e.text}`);
+
+  const PRE_M13 = [
+    'goal',
+    'accent',
+    'voice',
+    'camera',
+    'unit',
+    'gym',
+    'health',
+    'coach',
+    'reminders',
+    'plan',
+    'todos',
+    'progress-photos',
+    'backup',
+    'devlog',
+    'about',
+  ];
+
+  it('owner on: the same sections and rows as before M13', () => {
+    const on = renderM13({ owner: true, version: 'Version 1.15.0 (build abc1234)' });
+    expect(keys(on)).toEqual(PRE_M13);
+    // Omitting owner (app.ts before task 30) is the same render.
+    const unset = renderM13({ version: 'Version 1.15.0 (build abc1234)' });
+    expect(shape(unset)).toEqual(shape(on));
+    for (const hook of [
+      'data-todos-open',
+      'data-whats-new-open',
+      'data-devlog',
+      'data-brain-eval-open',
+    ])
+      expect(has(on, hook)).toBe(true);
+    const about = byAttr(on, 'data-section', 'about');
+    expect(about.byTag('button')).toHaveLength(0); // no onAbout → no row, exactly as before
+    expect(
+      one(about, (e) => e.getAttribute('data-about') === 'version', 'version').textContent,
+    ).toBe('Version 1.15.0 (build abc1234)');
+  });
+
+  it("owner off: no To-dos, no Developer log, no Coach eval; What's new stays", () => {
+    const log: string[] = [];
+    const el = renderM13({ owner: false }, { onWhatsNew: () => log.push('tour') });
+    expect(keys(el)).toEqual([
+      'goal',
+      'accent',
+      'voice',
+      'camera',
+      'unit',
+      'gym',
+      'health',
+      'coach',
+      'reminders',
+      'plan',
+      'whats-new',
+      'progress-photos',
+      'backup',
+    ]);
+    expect(has(el, 'data-todos-open')).toBe(false);
+    expect(has(el, 'data-devlog')).toBe(false);
+    expect(has(el, 'data-brain-eval-open')).toBe(false);
+    expect(el.textContent).not.toContain('To-dos');
+    expect(el.textContent).not.toContain('Developer log');
+    expect(el.textContent).not.toContain('Coach eval');
+    const wn = byAttr(el, 'data-section', 'whats-new');
+    expect(wn.byTag('h2')[0]?.textContent).toBe("What's new");
+    one(wn, (e) => e.hasAttribute('data-whats-new-open'), 'whats new').click();
+    expect(log).toEqual(['tour']);
+  });
+
+  it("owner off with no What's new callback → no section at all", () => {
+    const el = renderM13({ owner: false }, { onWhatsNew: undefined });
+    expect(keys(el)).not.toContain('whats-new');
+    expect(keys(el)).not.toContain('todos');
+  });
+
+  it('owner off: About is one row (last section) that opens the About screen', () => {
+    const log: string[] = [];
+    const el = renderM13(
+      { owner: false, version: 'Version 1.15.0 (build abc1234)' },
+      { onAbout: () => log.push('about') },
+    );
+    const about = el.byClass('set-section').at(-1) as FakeEl;
+    expect(about.getAttribute('data-section')).toBe('about');
+    expect(el.children.at(-2)).toBe(about);
+    expect(about.find((e) => e.hasAttribute('data-about'))).toHaveLength(0);
+    const rows = about.byTag('button');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.hasAttribute('data-about-open')).toBe(true);
+    expect(rows[0]?.textContent).toBe('About Gym Clean');
+    expect(rows[0]?.classes).toContain('set-action');
+    // No build hash, version or credit on Settings itself.
+    expect(el.textContent).not.toContain('build');
+    expect(el.textContent).not.toContain(CREDIT);
+    rows[0]?.click();
+    expect(log).toEqual(['about']);
+  });
+
+  it('owner off without onAbout → no About section', () => {
+    expect(keys(renderM13({ owner: false }))).not.toContain('about');
+  });
+
+  it("owner on with onAbout: today's About lines plus the row (owner tools stay reachable)", () => {
+    const log: string[] = [];
+    const el = renderM13({ owner: true }, { onAbout: () => log.push('about') });
+    expect(keys(el)).toEqual(PRE_M13);
+    const about = byAttr(el, 'data-section', 'about');
+    expect(
+      about.find((e) => e.hasAttribute('data-about')).map((e) => e.getAttribute('data-about')),
+    ).toEqual(['name', 'version', 'credit']);
+    one(about, (e) => e.hasAttribute('data-about-open'), 'about row').click();
+    expect(log).toEqual(['about']);
+  });
+
+  it('new copy passes the coaching-words check', () => {
+    for (const s of ['What changed in this version.', 'About Gym Clean'])
+      expect(checkCopy(s).ok).toBe(true);
+  });
+});

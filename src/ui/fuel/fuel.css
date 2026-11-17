@@ -204,9 +204,7 @@
 }
 
 .fuel-entry {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
+  display: block;
 }
 
 .fuel-entry-main,
@@ -221,6 +219,22 @@
   text-align: left;
   border-radius: var(--r-card);
   background: var(--surface);
+}
+
+/* M13 task 24: the whole row is one button (no Delete block); the sheet has Edit and Delete.
+   A quiet pencil in the corner says the row opens. */
+.fuel-entry-main {
+  position: relative;
+  padding-right: 48px;
+}
+
+.fuel-entry-go {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  color: var(--text-2);
 }
 
 .fuel-entry-name,
@@ -247,19 +261,6 @@
 .log-item-th {
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
-}
-
-.fuel-entry-del {
-  min-width: 80px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  border-radius: var(--r-card);
-  background: var(--surface-2);
-  font-size: var(--fs-label);
-  font-weight: 700;
 }
 
 .fuel-empty {

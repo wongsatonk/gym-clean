@@ -407,3 +407,17 @@ export async function todoCounts(page: Page): Promise<{ refreshes: number; tourC
 export async function foreground(page: Page): Promise<void> {
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
 }
+
+/**
+ * M13: Today folds two or more notices (readiness, missed day, missing kit, …) into one
+ * "N things to sort" row. Makes `target` (a notice card or something inside one) visible:
+ * opens the row when the target sits in it closed; a lone notice is shown as is.
+ */
+export async function revealNotice(page: Page, target: Locator): Promise<void> {
+  const toggle = page.locator('[data-screen="today"] [data-notices-toggle]');
+  await expect(target.or(toggle).first()).toBeVisible();
+  if (!(await target.first().isVisible()) && (await toggle.count()) > 0) {
+    if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  }
+  await expect(target.first()).toBeVisible();
+}

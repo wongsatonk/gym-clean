@@ -113,7 +113,7 @@ describe('PWA (no native bridge)', () => {
     expect(attr(el, 'data-health-connect')).toHaveLength(0);
     expect(attr(el, 'data-health-read-now')).toHaveLength(0);
     const buttons = el.byTag('button');
-    expect(buttons.map((b) => b.textContent)).toEqual(['‹ Back']);
+    expect(buttons.map((b) => b.textContent)).toEqual(['Back']);
     buttons[0]?.click();
     expect(calls.back).toBe(1);
   });

@@ -131,7 +131,7 @@ describe('Today with the missing-kit prompt', () => {
     expect(noCallbacks.textContent).toBe(plain.textContent);
   });
 
-  it('shows one prompt above the hero; taps reach the callbacks; Start is untouched', () => {
+  it('shows one prompt right below the hero (M13: hero first); taps reach the callbacks; Start is untouched', () => {
     const calls = { swap: [] as string[], keep: [] as string[] };
     const starts: string[] = [];
     const el = renderToday(
@@ -143,8 +143,8 @@ describe('Today with the missing-kit prompt', () => {
     const kids = el.children;
     const at = kids.indexOf(prompts[0] as FakeEl);
     const heroAt = kids.findIndex((c) => c.classes.includes('hero'));
-    expect(at).toBeGreaterThan(0);
-    expect(at).toBeLessThan(heroAt);
+    expect(heroAt).toBe(1); // right after the app bar
+    expect(at).toBe(heroAt + 1);
     btn(el, 'data-gym-swap')?.click();
     btn(el, 'data-gym-keep')?.click();
     expect(calls).toEqual({ swap: [LEG_PRESS], keep: [LEG_PRESS] });
@@ -153,19 +153,20 @@ describe('Today with the missing-kit prompt', () => {
     expect(starts).toEqual([LEGS_B.id]);
   });
 
-  it('sits with the other prompts: program prompt first, then it, then Adjusted', () => {
+  it('with other notices it sits in the "things to sort" row: Adjusted, then it, then the program prompt', () => {
     const el = renderToday(
       { missingKit: MISSING, newProgram: true, adjustedToday: 'Easy on arms' },
       { ...wired({ swap: [], keep: [] }), onUseNewProgram: () => {}, onKeepPlan: () => {} },
     );
-    const kids = el.children;
+    const list = el.find((c) => c.hasAttribute('data-notices-list'))[0] as FakeEl;
+    const kids = list.children;
     const idx = (pred: (c: FakeEl) => boolean) => kids.findIndex(pred);
-    const prog = idx((c) => c.hasAttribute('data-program-prompt'));
-    const gym = idx((c) => c.hasAttribute('data-gym-prompt'));
     const adj = idx((c) => c.hasAttribute('data-adjusted'));
-    expect(prog).toBeGreaterThan(0);
-    expect(gym).toBe(prog + 1);
-    expect(adj).toBe(gym + 1);
+    const gym = idx((c) => c.hasAttribute('data-gym-prompt'));
+    const prog = idx((c) => c.hasAttribute('data-program-prompt'));
+    expect(adj).toBe(0);
+    expect(gym).toBe(adj + 1);
+    expect(prog).toBe(gym + 1);
   });
 });
 

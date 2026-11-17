@@ -15,12 +15,15 @@ import {
   openApp,
   record,
   seed,
+  revealNotice,
 } from './app.helpers';
 import { leaveSettings } from './workout.helpers';
 
 // M12: the coach lives in the Coach tab (prompts open it with their chip already sent).
 const coach = coachTab;
 const prompt = (page: Page) => page.locator('[data-gym-prompt="Leg_Press"]');
+/** M13: Today's missing-kit prompt, opened from the "things to sort" row if it is folded in. */
+const showPrompt = (page: Page) => revealNotice(page, prompt(page));
 const preview = (page: Page) => page.locator('[data-screen="preview"]');
 
 /** Fri 13 Nov 18:00, the five days before done in order: Legs B is up next today. */
@@ -47,7 +50,7 @@ async function openPreview(page: Page) {
 }
 
 async function backToToday(page: Page) {
-  await preview(page).getByRole('button', { name: '‹ Back' }).click();
+  await preview(page).getByRole('button', { name: 'Back', exact: true }).click();
   await expect(page.locator('[data-hero="legs-b"]')).toBeVisible();
 }
 
@@ -91,6 +94,7 @@ test('Legs B: prompt (no silent change) → See a swap → Apply → Smith Machi
   await openLegsB(page);
 
   // Asked on Today; the day itself is unchanged until he taps.
+  await showPrompt(page);
   await expect(prompt(page)).toContainText('Your gym has no kit for Leg Press.');
   await expectTapTargets(page, '[data-gym-prompt]');
   await noHorizontalOverflow(page);
@@ -102,6 +106,7 @@ test('Legs B: prompt (no silent change) → See a swap → Apply → Smith Machi
   await backToToday(page);
 
   // See a swap: the coach's plan-scope proposal, closest replacement first.
+  await showPrompt(page);
   await prompt(page).locator('[data-gym-swap]').click();
   await expect(coach(page)).toBeVisible();
   const card = coach(page).locator('[data-proposal]');
@@ -143,9 +148,9 @@ test('Legs B: prompt (no silent change) → See a swap → Apply → Smith Machi
   await expect(changes.locator('li.plan-change').first()).toContainText('Leg Press');
   await changes.locator('[data-undo-change]').click();
   await expect(changes.locator('li.plan-change').first()).toHaveAttribute('data-undone');
-  await changes.getByRole('button', { name: '‹ Back' }).click();
+  await changes.getByRole('button', { name: 'Back', exact: true }).click();
   await leaveSettings(page);
-  await expect(prompt(page)).toBeVisible();
+  await showPrompt(page);
   await openPreview(page);
   await expect(preview(page).locator('[data-ex="Leg_Press"]')).toBeVisible();
   await expect(preview(page).locator('[data-ex="Smith_Machine_Squat"]')).toHaveCount(0);
@@ -162,6 +167,7 @@ test('Keep it: the prompt goes and stays gone after a reload; the day keeps Leg 
 }) => {
   const { requests, errors } = record(page);
   await openLegsB(page);
+  await showPrompt(page);
   await prompt(page).locator('[data-gym-keep]').click();
   await expect(prompt(page)).toHaveCount(0);
   await keptStored(page, 'Leg_Press');
@@ -181,6 +187,7 @@ test('the coach\'s "Keep Leg Press" chip keeps it: nothing changes, the prompt g
 }) => {
   const { requests, errors } = record(page);
   await openLegsB(page);
+  await showPrompt(page);
   await prompt(page).locator('[data-gym-swap]').click();
   await coach(page).getByRole('button', { name: 'Keep Leg Press' }).click();
   // M12: the proposal stays in the thread, set aside (no Apply left, nothing applied).
@@ -203,7 +210,7 @@ test('the coach\'s "Keep Leg Press" chip keeps it: nothing changes, the prompt g
 test('typed "my gym has no leg press" gets the same swap proposal', async ({ page, baseURL }) => {
   const { requests, errors } = record(page);
   await openLegsB(page);
-  await page.locator('[data-coach-open]').click();
+  await page.locator('[data-tab="coach"]').click();
   await expect(coach(page)).toBeVisible();
   await coach(page).getByLabel('Ask the coach').fill('my gym has no leg press');
   await coach(page).getByRole('button', { name: 'Send' }).click();
@@ -223,6 +230,7 @@ test('My gym: Keep it resets when the list changes; no smith → barbell squat f
 }, testInfo) => {
   const { requests, errors } = record(page);
   await openLegsB(page);
+  await showPrompt(page);
   await prompt(page).locator('[data-gym-keep]').click();
   await expect(prompt(page)).toHaveCount(0);
   await keptStored(page, 'Leg_Press');
@@ -249,9 +257,9 @@ test('My gym: Keep it resets when the list changes; no smith → barbell squat f
     'aria-checked',
     'false',
   );
-  await screen.getByRole('button', { name: '‹ Back' }).click();
+  await screen.getByRole('button', { name: 'Back', exact: true }).click();
   await leaveSettings(page);
-  await expect(prompt(page)).toBeVisible();
+  await showPrompt(page);
   await prompt(page).locator('[data-gym-swap]').click();
   const card = coach(page).locator('[data-proposal]');
   await expect(card).toContainText('Barbell Squat');
@@ -262,7 +270,10 @@ test('My gym: Keep it resets when the list changes; no smith → barbell squat f
   await openMyGym(page);
   await page.locator('[data-gym-item="leg-press"]').click();
   await expect(page.locator('[data-gym-item="leg-press"]')).toHaveAttribute('aria-checked', 'true');
-  await page.locator('[data-screen="my-gym"]').getByRole('button', { name: '‹ Back' }).click();
+  await page
+    .locator('[data-screen="my-gym"]')
+    .getByRole('button', { name: 'Back', exact: true })
+    .click();
   await leaveSettings(page);
   await expect(page.locator('[data-hero="legs-b"]')).toBeVisible();
   await expect(prompt(page)).toHaveCount(0);

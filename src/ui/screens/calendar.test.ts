@@ -98,6 +98,9 @@ describe('calendarScreen', () => {
   it('renders the month grid with a cell per date after the Monday-first blanks', () => {
     const root = render();
     expect(root.getAttribute('data-screen')).toBe('calendar');
+    // M13 task 18 (one look): the standard surface + 20px cards, not the black workout track.
+    expect(root.classes).toContain('mood-pro');
+    expect(root.classes).not.toContain('mood-track');
     expect(root.byClass('cal-blank')).toHaveLength(6);
     expect(root.byClass('cal-day')).toHaveLength(30);
     expect(root.byClass('cal-month')[0]?.textContent).toBe('November 2026');

@@ -42,9 +42,11 @@ describe('planChangesScreen', () => {
     expect(el.getAttribute('data-screen')).toBe('plan-changes');
     expect(el.classes).toContain('mood-pro');
     expect(el.byTag('h1')[0]?.textContent).toBe('Plan changes');
-    el.byTag('button')
-      .find((b) => b.textContent === '‹ Back')
-      ?.click();
+    const back = el.byTag('button').find((b) => b.textContent === 'Back');
+    // M13 task 20: the shared back control (chevron icon + word), not a typed "‹".
+    expect(back?.hasAttribute('data-back')).toBe(true);
+    expect(back?.find((e) => e.getAttribute('data-icon') === 'back')).toHaveLength(1);
+    back?.click();
     expect(calls.back).toBe(1);
   });
 

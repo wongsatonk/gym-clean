@@ -106,13 +106,23 @@ describe("What's New tour", () => {
     expect(wn(el, 'version')).toHaveLength(0);
   });
 
-  it('defaults the version to versionLabel()', () => {
+  it('shows the version text it is given and nothing of its own (M13: no build hash)', () => {
     const tour = whatsNewTour(
-      { pages: PAGES, addedTopics: [] },
+      { pages: PAGES, addedTopics: [], version: 'Version 1.15' },
       { onTryIt: () => {}, onSkip: () => {}, onDone: () => {}, onOpenTodos: () => {} },
     );
-    expect(one(asFake(tour.el), 'version').textContent).toBe(versionLabel());
-    expect(versionLabel()).toMatch(/^Version \d+\.\d+\.\d+/);
+    const el = asFake(tour.el);
+    expect(one(el, 'version').textContent).toBe('Version 1.15');
+    expect(el.textContent).not.toContain('build');
+    expect(el.textContent).not.toContain(versionLabel());
+  });
+
+  it('an owner-on version line (with the build) is shown as given', () => {
+    const tour = whatsNewTour(
+      { pages: [], addedTopics: [], version: 'Version 1.15.0 (build abc1234)' },
+      { onTryIt: () => {}, onSkip: () => {}, onDone: () => {}, onOpenTodos: () => {} },
+    );
+    expect(one(asFake(tour.el), 'version').textContent).toBe('Version 1.15.0 (build abc1234)');
   });
 
   it('shows what + why and the icon', () => {

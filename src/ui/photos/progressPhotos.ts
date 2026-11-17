@@ -19,6 +19,7 @@
 // `[data-compare-side=<id>]`, `[data-compare-clear]`, `[data-photo-delete=<id>]` and
 // `[data-photos-delete-all]` (`data-armed` while armed).
 import type { ProgressPhoto } from '../../core/types';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { reducedMotion } from '../motion';
@@ -242,11 +243,7 @@ export function createProgressPhotos(
     icon('lock', 'sm'),
     h('span', {}, PHOTOS_PRIVACY),
   );
-  const top = h(
-    'header',
-    { class: 'top-bar' },
-    h('button', { class: 'ghost-btn', type: 'button', onclick: actions.onBack }, '‹ Back'),
-  );
+  const top = h('header', { class: 'top-bar' }, backButton(actions.onBack));
   const deleteAll = () => {
     const t = twoTap({
       idle: PHOTOS_COPY.delAll,

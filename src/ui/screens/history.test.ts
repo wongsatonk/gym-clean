@@ -186,10 +186,10 @@ describe('history helpers', () => {
 });
 
 describe('history screen: list', () => {
-  it('is a Track screen with the 7-day scoreboard, the days and the exercises, tab bar last', () => {
+  it('is a standard (pro) screen (M13 one look) with the 7-day scoreboard, the days and the exercises, tab bar last', () => {
     const { el } = render();
     expect(el.classes).toEqual(
-      expect.arrayContaining(['screen', 'history', 'has-tabbar', 'mood-track']),
+      expect.arrayContaining(['screen', 'history', 'has-tabbar', 'mood-pro']),
     );
     expect(el.getAttribute('data-view')).toBe('list');
     expect(one(el, 'data-week-stat', 'sessions').oneByClass('hist-stat-value').textContent).toBe(

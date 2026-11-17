@@ -23,6 +23,7 @@ import {
   record,
   seed,
   type SetSeed,
+  revealNotice,
 } from './app.helpers';
 
 const intake = (page: Page) => page.locator('main[data-screen="intake"]');
@@ -192,6 +193,7 @@ test('an existing install is never forced: Set your goal → intake → goals on
 
   const card = page.locator('[data-goal-card]');
   await expect(card).toHaveAttribute('data-goal-card', 'prompt');
+  await revealNotice(page, card);
   await card.locator('[data-goal-set]').click();
   await expect(intake(page)).toBeVisible();
   await expect(intake(page).locator('[data-intake-close]')).toBeVisible();

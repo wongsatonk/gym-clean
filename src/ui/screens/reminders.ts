@@ -13,6 +13,7 @@
 // "reminder-session"|"reminder-missed-day"|"reminder-sunday-recap"]`, `[data-reminder-time]`
 // (input type=time), `[data-reminders-ask]`, `[data-reminders-denied]`.
 import type { ReminderKind, ReminderSettings } from '../../core/types';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { MISSED_DAY_TIME, SUNDAY_RECAP_TIME } from '../../core/reminders/schedule';
@@ -102,11 +103,7 @@ export function remindersCopy(locale?: string): string[] {
 
 function header(onBack: () => void): HTMLElement[] {
   return [
-    h(
-      'header',
-      { class: 'top-bar' },
-      h('button', { class: 'ghost-btn', type: 'button', onclick: onBack }, '‹ Back'),
-    ),
+    h('header', { class: 'top-bar' }, backButton(onBack)),
     h('h1', { class: 'page-title' }, 'Reminders'),
   ];
 }

@@ -103,7 +103,7 @@ async function setSpeakReplies(page: Page, v: 'mic' | 'always' | 'off') {
   const opt = screen.locator(`[data-speak-replies="${v}"]`);
   await opt.click();
   await expect(opt).toHaveAttribute('aria-pressed', 'true');
-  await screen.getByRole('button', { name: '‹ Back' }).click();
+  await screen.getByRole('button', { name: 'Back', exact: true }).click();
   await expect(page.locator('[data-tab="coach"]')).toBeVisible();
 }
 

@@ -32,6 +32,8 @@ export const ICON_PATHS = {
   timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M10 3h4M18.5 6.5L20 5"/>',
   trend: '<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>',
   back: '<path d="M15 5l-7 7 7 7"/>',
+  /** M13: forward / "goes to" arrow (replaces a typed "→"). `back` is the chevron-left. */
+  'arrow-right': '<path d="M4.5 12h14.5M13 6l6 6-6 6"/>',
   pencil: '<path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5zM13.5 7l3 3"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   bars: '<path d="M5 20v-7M10 20V8M15 20v-9M20 20V5"/>',

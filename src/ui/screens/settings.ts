@@ -23,8 +23,15 @@
 // M12 slice 2 task 18: rows to Settings → Coach (`[data-coach-settings-open]`, section "coach")
 // and Settings → Reminders (`[data-reminders-open]`, section "reminders"), and, under Developer
 // log, "Coach eval" (`[data-brain-eval-open]`; main passes it in the iPhone app only).
+//
+// M13 task 16: `owner` (owner mode, default on = everything as before M13). Off hides the
+// To-dos row (What's new stays, in its own "What's new" section), the Developer log section
+// and Coach eval; About becomes one row (`[data-about-open]`) opening the About screen. On keeps
+// today's About lines and adds the same row when `onAbout` is set (the owner-tools switch lives
+// on the About screen, so it must stay reachable while owner mode is on).
 import type { Accent, BodyArea, Intake } from '../../core/types';
 import type { Unit } from '../../core/units';
+import { APP_NAME } from '../../core/brand';
 import { CREDIT, versionLabel } from '../../core/version';
 import { accentPicker } from '../accentPicker';
 import { h } from '../dom';
@@ -62,6 +69,11 @@ export type SettingsProps = {
   easyOn?: readonly BodyArea[] | undefined;
   /** M12 slice 1b: is the Progress photos switch on? Default off. */
   progressPhotos?: boolean | undefined;
+  /**
+   * M13: owner mode. Off → no To-dos row, no Developer log section, no Coach eval, and About is
+   * one row to the About screen. Default true (as before M13) until app.ts passes it.
+   */
+  owner?: boolean | undefined;
 };
 
 export type SettingsActions = {
@@ -101,6 +113,8 @@ export type SettingsActions = {
   onReminders?: (() => void) | undefined;
   /** M12 slice 2: the developer Coach eval (iPhone app only). Omitted → no row. */
   onBrainEval?: (() => void) | undefined;
+  /** M13: opens Settings → About (route 'settings/about'). Omitted → no About row. */
+  onAbout?: (() => void) | undefined;
 };
 
 export const GOAL_NOT_SET = 'Not set yet.';
@@ -149,8 +163,12 @@ export function switchRow(
   );
 }
 
-/** M12 slice 1c: "To-dos" + "What's new" rows (each only when its callback is set). */
+/**
+ * M12 slice 1c: "To-dos" + "What's new" rows (each only when its callback is set). M13: owner
+ * mode off → no To-dos row; What's new alone is its own "What's new" section.
+ */
 function todosSection(
+  owner: boolean,
   actions: SettingsActions,
   section: (
     key: string,
@@ -159,7 +177,8 @@ function todosSection(
     ...c: (HTMLElement | null)[]
   ) => HTMLElement,
 ): HTMLElement | null {
-  if (!actions.onTodos && !actions.onWhatsNew) return null;
+  const onTodos = owner ? actions.onTodos : undefined;
+  if (!onTodos && !actions.onWhatsNew) return null;
   const row = (hook: string, label: string, onTap: (() => void) | undefined) =>
     onTap
       ? h(
@@ -168,11 +187,19 @@ function todosSection(
           label,
         )
       : null;
+  if (!owner)
+    return section(
+      'whats-new',
+      'list',
+      "What's new",
+      row('data-whats-new-open', "What's new", actions.onWhatsNew),
+      h('p', { class: 'muted set-note' }, 'What changed in this version.'),
+    );
   return section(
     'todos',
     'list',
     'To-dos',
-    row('data-todos-open', 'To-dos', actions.onTodos),
+    row('data-todos-open', 'To-dos', onTodos),
     row('data-whats-new-open', "What's new", actions.onWhatsNew),
     h(
       'p',
@@ -291,7 +318,47 @@ function progressPhotosSection(
   );
 }
 
+/** The row that opens the About screen (M13). */
+function aboutRow(onAbout: () => void): HTMLElement {
+  return h(
+    'button',
+    { type: 'button', class: 'set-action', 'data-about-open': true, onclick: () => onAbout() },
+    `About ${APP_NAME}`,
+  );
+}
+
+/**
+ * About, always the last section. Owner on: today's name / version / credit lines (M12 slice
+ * 1c), plus the About row when `onAbout` is set. Owner off: the About row only (the version, the
+ * privacy promise and the credit are on the About screen).
+ */
+function aboutSection(
+  props: SettingsProps,
+  actions: SettingsActions,
+  owner: boolean,
+  section: (
+    key: string,
+    iconName: IconName,
+    title: string,
+    ...c: (HTMLElement | null)[]
+  ) => HTMLElement,
+): HTMLElement | null {
+  const open = actions.onAbout ? aboutRow(actions.onAbout) : null;
+  if (!owner) return open ? section('about', 'logo', 'About', open) : null;
+  // Plain text, no links, nothing sent.
+  return section(
+    'about',
+    'logo',
+    'About',
+    h('p', { class: 'about-name', 'data-about': 'name' }, 'Gym Clean'),
+    h('p', { class: 'set-note', 'data-about': 'version' }, props.version ?? versionLabel()),
+    h('p', { class: 'muted set-note', 'data-about': 'credit' }, CREDIT),
+    open,
+  );
+}
+
 export function settingsScreen(props: SettingsProps, actions: SettingsActions): HTMLElement {
+  const owner = props.owner ?? true;
   const unitBtn = (u: Unit) => {
     const on = props.unit === u;
     return h(
@@ -453,36 +520,30 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           ),
         )
       : null,
-    todosSection(actions, section),
+    todosSection(owner, actions, section),
     progressPhotosSection(props, actions, section),
     props.backup ? section('backup', 'lock', 'Backup', props.backup) : null,
-    section(
-      'devlog',
-      'bars',
-      'Developer log',
-      props.devLog,
-      actions.onBrainEval
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-brain-eval-open': true,
-              onclick: () => actions.onBrainEval?.(),
-            },
-            'Coach eval',
-          )
-        : null,
-    ),
-    // M12 slice 1c: always the last section. Plain text, no links, nothing sent.
-    section(
-      'about',
-      'logo',
-      'About',
-      h('p', { class: 'about-name', 'data-about': 'name' }, 'Gym Clean'),
-      h('p', { class: 'set-note', 'data-about': 'version' }, props.version ?? versionLabel()),
-      h('p', { class: 'muted set-note', 'data-about': 'credit' }, CREDIT),
-    ),
+    owner
+      ? section(
+          'devlog',
+          'bars',
+          'Developer log',
+          props.devLog,
+          actions.onBrainEval
+            ? h(
+                'button',
+                {
+                  type: 'button',
+                  class: 'set-action',
+                  'data-brain-eval-open': true,
+                  onclick: () => actions.onBrainEval?.(),
+                },
+                'Coach eval',
+              )
+            : null,
+        )
+      : null,
+    aboutSection(props, actions, owner, section),
     tabBar('settings', actions.onTab),
   );
 }

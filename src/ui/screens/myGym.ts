@@ -16,6 +16,7 @@
 // `[data-gym-item="<id>"]` with aria-checked, `[data-gym-share]`, `[data-gym-shared]`,
 // `[data-gym-import]` (the file input), `[data-gym-import-preview]`, `[data-gym-import-apply]`,
 // `[data-gym-import-cancel]`, `[data-gym-import-error]`.
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
@@ -259,11 +260,7 @@ export function myGymScreen(props: MyGymProps, actions: MyGymActions): HTMLEleme
   return h(
     'main',
     { class: `screen my-gym ${moodClass('pro')}`, 'data-screen': 'my-gym' },
-    h(
-      'header',
-      { class: 'top-bar' },
-      h('button', { class: 'ghost-btn', type: 'button', onclick: actions.onBack }, '‹ Back'),
-    ),
+    h('header', { class: 'top-bar' }, backButton(actions.onBack)),
     h('h1', { class: 'page-title' }, 'My gym'),
     h('p', { class: 'set-note' }, MY_GYM_INTRO),
     ...groupItems(props.items).map(([group, items]) => {

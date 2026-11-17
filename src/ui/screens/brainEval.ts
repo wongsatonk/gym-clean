@@ -15,6 +15,7 @@
 // `[data-eval-summary]`, `[data-eval-stat=<actions|safe|facts|p50>]`, `[data-eval-row=<id>]`
 // (+ `data-pass`), `[data-eval-export]`, `[data-eval-unavailable]`, `[data-eval-tokens]`.
 import type { BrainUnavailableReason } from '../../core/types';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
@@ -282,11 +283,7 @@ export function brainEvalScreen(p: BrainEvalProps, a: BrainEvalActions): HTMLEle
   return h(
     'main',
     { class: `screen brain-eval settings ${moodClass('pro')}`, 'data-screen': 'brain-eval' },
-    h(
-      'header',
-      { class: 'top-bar' },
-      h('button', { class: 'ghost-btn', type: 'button', onclick: a.onBack }, '‹ Back'),
-    ),
+    h('header', { class: 'top-bar' }, backButton(a.onBack)),
     h('h1', { class: 'page-title' }, 'Coach eval'),
     ...kids,
   );

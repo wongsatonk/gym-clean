@@ -12,6 +12,7 @@
 // (+ `data-brain-reason`), `[data-brain-howto]`, `[data-brain-recheck]`,
 // `[data-speak-replies=<mic|always|off>]` (aria-pressed), `[data-speak-note]`.
 import type { BrainUnavailableReason, CoachSettings } from '../../core/types';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
@@ -175,11 +176,7 @@ export function coachSettingsScreen(p: CoachSettingsProps, a: CoachSettingsActio
       class: `screen coach-settings settings ${moodClass('pro')}`,
       'data-screen': 'coach-settings',
     },
-    h(
-      'header',
-      { class: 'top-bar' },
-      h('button', { class: 'ghost-btn', type: 'button', onclick: a.onBack }, '‹ Back'),
-    ),
+    h('header', { class: 'top-bar' }, backButton(a.onBack)),
     h('h1', { class: 'page-title' }, 'Coach'),
     statusCard(p, a),
     h(

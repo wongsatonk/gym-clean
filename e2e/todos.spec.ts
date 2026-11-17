@@ -161,7 +161,7 @@ test('Today card → list → guide; asking the coach ticks the auto step; Try i
   ]);
 
   // A settings deep link: the hands-free topic's dev-log step opens Settings at the dev log.
-  await guide(page).getByRole('button', { name: '‹ To-dos' }).click();
+  await guide(page).getByRole('button', { name: 'To-dos', exact: true }).click();
   await openTopic(page, 'hands-free');
   const devlogStep = guide(page).locator('[data-try-it="settings/devlog"]');
   while ((await devlogStep.count()) === 0) await guide(page).locator('[data-guide-next]').click();
@@ -213,7 +213,7 @@ test('ask answers + a note survive a reload; a decision sets its setting; Skip t
   await expect(guide(page).locator('[data-note]')).toHaveValue('The ring felt slow on rest days');
 
   // Decision M12-q1: "No" writes coach.appleCardReasons = false (other coach fields kept).
-  await guide(page).getByRole('button', { name: '‹ To-dos' }).click();
+  await guide(page).getByRole('button', { name: 'To-dos', exact: true }).click();
   await openTopic(page, 'apple-card');
   await guide(page).locator('[data-option="no"]').click();
   await expect(guide(page).locator('[data-decision]')).toContainText('No');
@@ -222,13 +222,13 @@ test('ask answers + a note survive a reload; a decision sets its setting; Skip t
     .poll(() => getSetting(page, 'coach'))
     .toEqual(expect.objectContaining({ appleCardReasons: false }));
   // Claude: "Not now" → coach.claudeWanted only; the earlier decision stays.
-  await guide(page).getByRole('button', { name: '‹ To-dos' }).click();
+  await guide(page).getByRole('button', { name: 'To-dos', exact: true }).click();
   await openTopic(page, 'claude');
   await guide(page).locator('[data-option="later"]').click();
   await expect
     .poll(() => getSetting(page, 'coach'))
     .toEqual(expect.objectContaining({ appleCardReasons: false, claudeWanted: 'later' }));
-  await guide(page).getByRole('button', { name: '‹ To-dos' }).click();
+  await guide(page).getByRole('button', { name: 'To-dos', exact: true }).click();
   await expect(row(page, 'apple-card')).toHaveAttribute('data-state', 'done');
   await expect(row(page, 'claude')).toHaveAttribute('data-state', 'done');
 
@@ -239,7 +239,7 @@ test('ask answers + a note survive a reload; a decision sets its setting; Skip t
   await expect(skip).toHaveAttribute('data-armed', 'true');
   await skip.click();
   await expect(guide(page).locator('[data-topic-skipped]')).toBeVisible();
-  await guide(page).getByRole('button', { name: '‹ To-dos' }).click();
+  await guide(page).getByRole('button', { name: 'To-dos', exact: true }).click();
   await expect(row(page, 'food-photos')).toHaveAttribute('data-state', 'skipped');
   await expect(list(page).locator('[data-todo-summary]')).toContainText(`3 of ${WEB_TOTAL} done`);
 
@@ -270,10 +270,10 @@ test('Copy report: preview without private data → clipboard → marked sent �
     .locator('[data-note]')
     .fill('Ring slow sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789 here');
   await guide(page).locator('[data-guide-next]').click();
-  await guide(page).getByRole('button', { name: '‹ To-dos' }).click();
+  await guide(page).getByRole('button', { name: 'To-dos', exact: true }).click();
   await openTopic(page, 'apple-card');
   await guide(page).locator('[data-option="yes"]').click();
-  await guide(page).getByRole('button', { name: '‹ To-dos' }).click();
+  await guide(page).getByRole('button', { name: 'To-dos', exact: true }).click();
 
   await list(page).locator('[data-copy-report]').click();
   const sheet = page.locator('[data-report-sheet]');
@@ -317,7 +317,7 @@ test('Copy report: preview without private data → clipboard → marked sent �
   while ((await guide(page).locator('[data-option="right"]').count()) === 0)
     await guide(page).locator('[data-guide-next]').click();
   await guide(page).locator('[data-option="right"]').first().click();
-  await guide(page).getByRole('button', { name: '‹ To-dos' }).click();
+  await guide(page).getByRole('button', { name: 'To-dos', exact: true }).click();
   await list(page).locator('[data-copy-report]').click();
   await expect(sheet.locator('[data-report-text]')).toContainText('Just right');
   await expect(sheet.locator('[data-report-text]')).not.toContainText('Ring slow');

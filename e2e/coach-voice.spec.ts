@@ -18,7 +18,7 @@ type CvWindow = Window & {
   __cvFreezeAt: number | null;
 };
 
-const MALE: FakeVoice[] = [
+const VOICES: FakeVoice[] = [
   { name: 'Samantha', lang: 'en-US', default: true, localService: true },
   { name: 'Daniel', lang: 'en-GB', default: false, localService: true },
   { name: 'Fred', lang: 'en-US', default: false, localService: true },
@@ -137,7 +137,7 @@ test('Drill → Savage → Fred: Test voice speaks a Savage line in Fred, faster
   page,
 }) => {
   const errors = watch(page);
-  await installMocks(page, MALE);
+  await installMocks(page, VOICES);
   await page.goto('/');
   let cv = await openSettings(page);
 
@@ -156,11 +156,12 @@ test('Drill → Savage → Fred: Test voice speaks a Savage line in Fred, faster
   await cv.getByRole('button', { name: 'Savage' }).click();
   await pressed(cv.locator('[data-rudeness="3"]'));
   await expect(cv.locator('[data-strong-language]')).toHaveClass(/cv-note-on/);
-  // Picker: Automatic (Daniel, the default order's first) then the installed male voices only.
+  // Picker: Automatic (Daniel, the default order's first) then every installed English voice.
   await expect(cv.locator('[data-voice-name]')).toHaveText([
     'Automatic: Daniel',
     'Daniel (UK)',
     'Fred (US)',
+    'Samantha (US)',
   ]);
   await cv.locator('[data-voice-name="Fred"]').click();
   await pressed(cv.locator('[data-voice-name="Fred"]'));
@@ -206,19 +207,24 @@ test('Drill → Savage → Fred: Test voice speaks a Savage line in Fred, faster
   expect(errors).toEqual([]);
 });
 
-test('no male voice installed: the picker shows how to add one in iOS', async ({ page }) => {
+test('only a female voice installed: it is offered and Automatic speaks in it', async ({
+  page,
+}) => {
   const errors = watch(page);
   await installMocks(page, [
     { name: 'Samantha', lang: 'en-US', default: true, localService: true },
+    { name: 'Amélie', lang: 'fr-CA', default: false, localService: true },
   ]);
   await page.goto('/');
   const cv = await openSettings(page);
   await cv.getByRole('button', { name: 'Drill sergeant' }).click();
-  const hint = page.locator('[data-coach-voice] [data-no-male-voice]');
-  await expect(hint).toBeVisible();
-  await expect(hint).toContainText('Settings → Accessibility → Spoken Content → Voices → English');
-  await expect(page.locator('[data-coach-voice] [data-voice-name]')).toHaveCount(0);
-  // Test voice still speaks, in the only English voice, with the drill delivery.
+  await expect(page.locator('[data-coach-voice] [data-no-voice]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-voice] [data-voice-name]')).toHaveText([
+    'Automatic: Samantha',
+    'Samantha (US)',
+  ]);
+  await expect(page.locator('[data-coach-voice]')).not.toContainText(/\bmale\b/i);
+  // Test voice speaks in the only English voice, with the drill delivery.
   await page.locator('[data-coach-voice]').getByRole('button', { name: 'Test voice' }).click();
   await expect.poll(async () => (await said(page)).at(-1)?.voice).toBe('Samantha');
   expect((await said(page)).at(-1)?.rate).toBeCloseTo(1.15);
@@ -226,9 +232,23 @@ test('no male voice installed: the picker shows how to add one in iOS', async ({
   expect(errors).toEqual([]);
 });
 
+test('no English voice installed: the picker shows how to add one in iOS', async ({ page }) => {
+  const errors = watch(page);
+  await installMocks(page, [{ name: 'Amélie', lang: 'fr-CA', default: true, localService: true }]);
+  await page.goto('/');
+  const cv = await openSettings(page);
+  await cv.getByRole('button', { name: 'Drill sergeant' }).click();
+  const hint = page.locator('[data-coach-voice] [data-no-voice]');
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText('Settings → Accessibility → Spoken Content → Voices → English');
+  await expect(page.locator('[data-coach-voice] [data-voice-name]')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(errors).toEqual([]);
+});
+
 test('drill on: live rep counts stay plain numbers; hints are rewritten', async ({ page }) => {
   const errors = watch(page);
-  await installMocks(page, MALE);
+  await installMocks(page, VOICES);
   await page.goto('/');
   const cv = await openSettings(page);
   await cv.getByRole('button', { name: 'Drill sergeant' }).click();

@@ -22,6 +22,7 @@
 // `[data-guide-back]`, `[data-guide-next]`, `[data-skip-topic]` (`data-armed` while armed),
 // `[data-topic-skipped]`.
 import type { AppRoute, DetectorResult, TodoAnswer, TodoStep, TodoTopic } from '../../core/types';
+import { backButton, forwardContent } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { dateLabel } from '../screens/today';
@@ -108,8 +109,7 @@ function tryItButton(route: AppRoute | undefined, actions: TodoGuideActions): HT
       'data-try-it': route,
       onclick: () => actions.onTryIt(route),
     },
-    h('span', {}, 'Try it'),
-    h('span', { 'aria-hidden': 'true' }, '›'),
+    ...forwardContent('Try it'),
   );
 }
 
@@ -408,18 +408,10 @@ export function todoGuideScreen(props: TodoGuideProps, actions: TodoGuideActions
     h(
       'header',
       { class: 'top-bar' },
-      h(
-        'button',
-        {
-          class: 'ghost-btn',
-          type: 'button',
-          onclick: () => {
-            flush();
-            actions.onClose();
-          },
-        },
-        '‹ To-dos',
-      ),
+      backButton(() => {
+        flush();
+        actions.onClose();
+      }, 'To-dos'),
     ),
     h(
       'div',
@@ -492,7 +484,7 @@ export function todoGuideScreen(props: TodoGuideProps, actions: TodoGuideActions
           },
         },
         h('span', {}, last ? 'Done' : 'Next'),
-        last ? icon('check', 'sm') : h('span', { 'aria-hidden': 'true' }, '›'),
+        icon(last ? 'check' : 'arrow-right', 'sm'),
       ),
     ),
     props.status.skipped

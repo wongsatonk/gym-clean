@@ -200,9 +200,9 @@ const coach = (page: Page) => page.getByRole('dialog', { name: 'Coach' });
 /** M12: the Coach tab, the coach's home on Today / the preview / Summary. */
 const coachTab = (page: Page) => page.locator('[data-screen="coach"]');
 
-/** Today's Coach button opens the Coach tab. */
+/** M13: the Coach tab is the way in (Today has no header Coach button any more). */
 async function openCoach(page: Page) {
-  await page.locator('[data-coach-open]').click();
+  await page.locator('[data-tab="coach"]').click();
   await expect(coachTab(page)).toBeVisible();
 }
 
@@ -675,7 +675,7 @@ test('rest day: "Rest day" hero → Train anyway runs the next day; the calendar
   await noHorizontalOverflow(page);
   await hero.getByRole('button', { name: 'Train anyway' }).click();
   await expect(page.locator('[data-screen="preview"] h1')).toHaveText('Push A');
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   // Today trains now: the normal hero, and the coach can change today.
   await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
   await expect(page.locator('[data-cal="2026-11-15"]')).toHaveAttribute('data-day', 'push-a');
@@ -719,7 +719,7 @@ test('Not today → Train anyway takes the postpone back: the week is as before,
   await expectToastClear(page, ['.sticky-bottom', '.sticky-bottom .primary-btn']);
   await expect(page.getByRole('button', { name: 'Start workout' })).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: testInfo.outputPath('undo-toast-preview-390.png') });
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
   // Still up after Back: it moves above Today's tab bar.
   await expectToastClear(page, ['[data-tabbar]']);
   // The postpone is taken back: Sunday rests again, no extra session, no "Adjusted" banner.
@@ -823,7 +823,7 @@ test('Plan changes: newest first, Reset to default (two taps) → Undo brings th
   await expect(screen.locator('li.plan-change').first()).toHaveAttribute('data-undone');
   await expect(screen.locator('[data-undo-change]')).toHaveCount(1); // now on Lighter today
 
-  await screen.getByRole('button', { name: '‹ Back' }).click();
+  await screen.getByRole('button', { name: 'Back', exact: true }).click();
   await leaveSettings(page);
   await expect(page.locator('[data-adjusted]')).toContainText('Lighter today');
   expect(offDevice(requests, baseURL)).toEqual([]);

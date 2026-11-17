@@ -45,7 +45,7 @@ describe('My gym screen', () => {
     expect(el.getAttribute('data-screen')).toBe('my-gym');
     expect(el.classes).toEqual(expect.arrayContaining(['screen', 'my-gym', 'mood-pro']));
     expect(el.byTag('h1')[0]?.textContent).toBe('My gym');
-    expect(el.byTag('button').filter((e) => e.textContent === '‹ Back')).toHaveLength(1);
+    expect(el.byTag('button').filter((e) => e.textContent === 'Back')).toHaveLength(1);
     const groups = el
       .find((e) => e.getAttribute('data-gym-group') !== null)
       .map((g) => g.getAttribute('data-gym-group'));
@@ -97,7 +97,7 @@ describe('My gym screen', () => {
     expect(MY_GYM_KEEP_NOTE).toMatch(/Keep it/);
     expect(el.textContent).toContain(MY_GYM_PRIVACY);
     el.byTag('button')
-      .find((e) => e.textContent === '‹ Back')
+      .find((e) => e.textContent === 'Back')
       ?.click();
     expect(calls.back).toBe(1);
   });

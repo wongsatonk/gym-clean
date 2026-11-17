@@ -71,7 +71,6 @@ function render(over: Partial<FuelProps> = {}) {
   const calls = {
     log: 0,
     edit: [] as string[],
-    del: [] as string[],
     weigh: 0,
     setup: 0,
     dismiss: 0,
@@ -81,7 +80,6 @@ function render(over: Partial<FuelProps> = {}) {
     fuelScreen(props(over), {
       onLog: () => calls.log++,
       onEditEntry: (e) => calls.edit.push(e.id),
-      onDeleteEntry: (e) => calls.del.push(e.id),
       onWeighIn: () => calls.weigh++,
       onSetup: () => calls.setup++,
       onDismissNudge: () => calls.dismiss++,
@@ -163,14 +161,20 @@ describe('fuelScreen', () => {
     expect(kraPao.byClass('fuel-tag')[0]?.textContent).toBe('estimate');
   });
 
-  it('a row opens the editor; Delete calls onDeleteEntry (Undo is the toast) and is named', () => {
+  it('M13: a row is one button that opens the sheet (Edit / Delete); no Delete block on the row', () => {
     const { el, calls } = render();
     byAttr(el, 'data-entry-edit', 'e2').click();
     expect(calls.edit).toEqual(['e2']);
-    const del = byAttr(el, 'data-entry-delete', 'e3');
-    expect(del.getAttribute('aria-label')).toBe('Delete Banana');
-    del.click();
-    expect(calls.del).toEqual(['e3']);
+    for (const id of ['e1', 'e2', 'e3']) {
+      const row = byAttr(el, 'data-entry', id);
+      const buttons = row.byTag('button');
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0]?.getAttribute('data-entry-edit')).toBe(id);
+      expect(row.textContent).not.toContain('Delete');
+      expect(row.oneByClass('sr-only').textContent).toBe(', edit or delete');
+      expect(row.oneByClass('fuel-entry-go').getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(el.find((e) => e.hasAttribute('data-entry-delete'))).toEqual([]);
   });
 
   it('weigh-in button shows the last weigh-in in the unit', () => {
@@ -225,7 +229,6 @@ describe('M12 1b: Measurements row', () => {
   const base = {
     onLog: noop,
     onEditEntry: noop,
-    onDeleteEntry: noop,
     onWeighIn: noop,
     onSetup: noop,
     onTab: noop,

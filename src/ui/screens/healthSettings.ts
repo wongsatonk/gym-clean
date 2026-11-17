@@ -21,6 +21,7 @@
 // `[data-health-type="<type>"]` (role="switch", aria-checked), `[data-health-delete="<type>"]`,
 // `[data-health-keep="<type>"]`, `[data-health-read-now]`, `[data-health-last-read]`.
 import { HEALTH_TYPES, type HealthSettings, type HealthType } from '../../core/types';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
@@ -134,11 +135,7 @@ export function healthSettingsCopy(): string[] {
 
 function header(onBack: () => void): HTMLElement[] {
   return [
-    h(
-      'header',
-      { class: 'top-bar' },
-      h('button', { class: 'ghost-btn', type: 'button', onclick: onBack }, '‹ Back'),
-    ),
+    h('header', { class: 'top-bar' }, backButton(onBack)),
     h('h1', { class: 'page-title' }, 'Health'),
   ];
 }

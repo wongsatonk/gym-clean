@@ -17,6 +17,7 @@ import {
   openApp,
   putSetting,
   record,
+  revealNotice,
 } from './app.helpers';
 import {
   DEFAULT_BRAIN_TEXT,
@@ -297,7 +298,7 @@ test('appleCardReasons false → the "Lighter today?" reasons never reach the mo
   await feel.locator('[data-feel-energy="2"]').click();
   await feel.locator('[data-feel-sore="chest"]').click();
   await feel.locator('[data-feel-save]').click();
-  await expect(page.locator('[data-readiness="lighter"]')).toBeVisible();
+  await revealNotice(page, page.locator('[data-readiness="lighter"]'));
 
   await goCoach(page);
   await ask(page, 'Should I train hard today?');

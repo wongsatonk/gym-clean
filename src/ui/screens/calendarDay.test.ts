@@ -87,6 +87,9 @@ describe('calendarDayScreen', () => {
   it('a done day: every exercise Done with sets of planned, no actions', () => {
     const root = render(props('2026-11-02'));
     expect(root.getAttribute('data-screen')).toBe('calendar-day');
+    // M13 task 18 (one look): the standard surface + 20px cards, not the black workout track.
+    expect(root.classes).toContain('mood-pro');
+    expect(root.classes).not.toContain('mood-track');
     expect(root.byTag('h1')[0]?.textContent).toBe('Mon 2 Nov');
     expect(root.oneByClass('cal-day-sub').textContent).toBe('Push A · Done');
     expect(root.oneByClass('cal-day-big-num').textContent).toBe('18');

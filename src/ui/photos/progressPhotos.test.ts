@@ -99,7 +99,7 @@ describe('Progress photos: off (the default)', () => {
     at('data-photos-enable')?.click();
     expect(calls.enable).toBe(1);
     el.byTag('button')
-      .find((b) => b.textContent === '‹ Back')
+      .find((b) => b.textContent === 'Back')
       ?.click();
     expect(calls.back).toBe(1);
   });

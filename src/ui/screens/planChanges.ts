@@ -14,6 +14,7 @@
 // or its index when unsaved) with `data-undone` when undone, Undo `[data-undo-change]`, Reset
 // `[data-reset-plan]` (`data-armed` while armed), empty state `[data-plan-changes="empty"]`.
 import type { PlanChange } from '../../core/types';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
@@ -144,11 +145,7 @@ export function planChangesScreen(
   return h(
     'main',
     { class: `screen plan-changes ${moodClass('pro')}`, 'data-screen': 'plan-changes' },
-    h(
-      'header',
-      { class: 'top-bar' },
-      h('button', { class: 'ghost-btn', type: 'button', onclick: actions.onBack }, '‹ Back'),
-    ),
+    h('header', { class: 'top-bar' }, backButton(actions.onBack)),
     h('h1', { class: 'page-title' }, 'Plan changes'),
     sorted.length
       ? h(

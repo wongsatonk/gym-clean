@@ -15,6 +15,7 @@ import {
   leaveCoach,
   noHorizontalOverflow,
   record,
+  revealNotice,
 } from './app.helpers';
 
 declare global {
@@ -126,7 +127,7 @@ async function openHealthSettings(page: Page) {
 }
 
 async function backToToday(page: Page) {
-  await healthScreen(page).getByRole('button', { name: '‹ Back' }).click();
+  await healthScreen(page).getByRole('button', { name: 'Back', exact: true }).click();
   await page.locator('[data-tab="today"]').click();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
 }
@@ -210,6 +211,7 @@ test('connect → switches → "Lighter today?" with two reasons → Lighter tod
 
   // Today: the card with the two reasons, and the week line with the outside run.
   await backToToday(page);
+  await revealNotice(page, card(page));
   await expect(card(page)).toHaveAttribute('data-readiness', 'lighter');
   const reasons = card(page).locator('[data-readiness-reason]');
   await expect(reasons).toHaveCount(2);
@@ -253,7 +255,7 @@ test('an imported weigh-in shows "from Health" in Fuel', async ({ page }, testIn
   const { errors } = record(page);
   await open(page, true);
   await connect(page);
-  await healthScreen(page).getByRole('button', { name: '‹ Back' }).click();
+  await healthScreen(page).getByRole('button', { name: 'Back', exact: true }).click();
   await page.locator('[data-tab="fuel"]').click();
   const weigh = page.locator('[data-weigh-in]');
   await expect(weigh).toContainText('70.4');
@@ -295,7 +297,7 @@ test('Health wins: a typed weigh-in for today is replaced by Health\'s, shown "f
   await expect(weigh.locator('[data-from-health]')).toHaveCount(0);
 
   await connect(page);
-  await healthScreen(page).getByRole('button', { name: '‹ Back' }).click();
+  await healthScreen(page).getByRole('button', { name: 'Back', exact: true }).click();
   await page.locator('[data-tab="fuel"]').click();
   await expect(weigh).toContainText('70.4');
   await expect(weigh).not.toContainText('72.8');

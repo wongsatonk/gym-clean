@@ -140,7 +140,6 @@ describe('logSheet', () => {
             sheet = open();
           },
           onEditEntry: () => undefined,
-          onDeleteEntry: () => undefined,
           onWeighIn: () => undefined,
           onSetup: () => undefined,
           onTab: () => undefined,

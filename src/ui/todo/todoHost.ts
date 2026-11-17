@@ -30,7 +30,7 @@ import type {
   TodoTopic,
   WhatsNewPage,
 } from '../../core/types';
-import { APP_BUILD, APP_RELEASE } from '../../core/version';
+import { APP_BUILD, APP_RELEASE, versionLabel } from '../../core/version';
 import type { GymDb } from '../../data/db';
 import { gatherFacts } from '../../data/todos/facts';
 import {
@@ -401,7 +401,8 @@ export function createTodoHost(deps: TodoHostDeps) {
       then?.();
     };
     const tour = whatsNewTour(
-      { pages: shown, addedTopics: added },
+      // M13 task 30 swaps this for the owner-mode version line.
+      { pages: shown, addedTopics: added, version: versionLabel(release, build) },
       {
         onSkip: () => close(),
         onDone: () => close(),

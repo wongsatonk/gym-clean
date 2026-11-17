@@ -32,10 +32,13 @@ describe('icon set', () => {
       'flag',
       'chat',
       'bowl',
+      'back',
+      'check',
+      'arrow-right',
     ] as const) {
       expect(ICON_NAMES).toContain(n);
     }
-    expect(ICON_NAMES.length).toBe(32);
+    expect(ICON_NAMES.length).toBe(33); // M13 task 20: + arrow-right
     for (const n of ICON_NAMES) expect(ICON_PATHS[n]).toMatch(/^<(path|rect|circle) /);
   });
 

@@ -576,7 +576,10 @@ test("the Undo toast never covers a sheet's main button: Thai detail Log, food e
   expect(errors).toEqual([]);
 });
 
-test('delete an entry → the rings drop it → Undo puts it back', async ({ page, baseURL }) => {
+test('delete an entry (row → sheet → Delete entry) → the rings drop it → Undo puts it back', async ({
+  page,
+  baseURL,
+}) => {
   const { requests, errors } = record(page);
   await openApp(page, at(11, 12));
   await goFuel(page);
@@ -590,7 +593,10 @@ test('delete an entry → the rings drop it → Undo puts it back', async ({ pag
 
   const row = entries(page).first();
   const id = await row.getAttribute('data-entry');
-  await row.locator('[data-entry-delete]').click(); // no confirm dialog
+  // M13 task 24: no Delete block on the row: the row opens the sheet, Delete is there.
+  await expect(row.locator('button')).toHaveCount(1);
+  await row.locator('[data-entry-edit]').click();
+  await page.locator('[data-entry-remove]').click(); // no confirm dialog
   await expect(entries(page)).toHaveCount(0);
   await expect(fuelMain(page).locator('[data-entries="none"]')).toBeVisible();
   expect((await ring(page, 'kcal')).eaten).toBe(0);
@@ -619,8 +625,9 @@ test("coach's What should I eat? → Log → Fuel shows the entry", async ({ pag
   await page.locator('[data-tab="today"]').click();
   await expect(page.locator('[data-screen="today"]')).toBeVisible();
 
-  // M12: Today's Coach button opens the Coach tab.
-  await page.locator('[data-coach-open]').click();
+  // M13: Today has no header Coach button; the Coach tab is the way in.
+  await expect(page.locator('[data-screen="today"] [data-coach-open]')).toHaveCount(0);
+  await page.locator('[data-tab="coach"]').click();
   const coach = page.locator('[data-screen="coach"]');
   await expect(coach).toBeVisible();
   await coach.locator('[data-coach-chip="food"]').click();

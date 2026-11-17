@@ -1,11 +1,12 @@
 import { h } from './dom';
 import { icon } from './icons';
-import { DEFAULT_DRILL_ORDER, type MaleVoice, type Rudeness, type VoiceConfig } from './voiceNames';
+import type { EnglishVoice, Rudeness, VoiceConfig } from './voiceNames';
 import './coachVoiceSettings.css';
 
 /**
  * Settings → "Coach voice" (drill-sergeant design 2026-11-13): Calm / Drill sergeant, and for
- * the drill sergeant a 3-step rudeness, a male-voice picker and a "Test voice" button.
+ * the drill sergeant a 3-step rudeness, a voice picker (any installed English voice, M13) and a
+ * "Test voice" button.
  * Stateless about storage: every pick goes to `onChange`; the caller saves it, calls
  * voice.configure() and update(). Test voice hands the current value to `onTest` (call it
  * inside the tap so iOS allows speech).
@@ -19,32 +20,35 @@ export const RUDENESS_LEVELS: readonly { level: Rudeness; label: string }[] = [
 
 export const STRONG_LANGUAGE_NOTE = 'Savage: strong language.';
 
-export const NO_MALE_VOICE_HINT =
-  'No male voice on this phone. Add one in Settings → Accessibility → Spoken Content → Voices → English (try Daniel or Arthur).';
+export const NO_VOICE_HINT =
+  'No English voice on this phone. Add one in Settings → Accessibility → Spoken Content → Voices → English.';
 
-/** The picker's first row (voiceName null): names the voice the default order lands on. */
-export function automaticLabel(voices: readonly MaleVoice[]): string {
-  const auto = voices.find((v) => DEFAULT_DRILL_ORDER.includes(v.base));
+/**
+ * The picker's first row (voiceName null): names the voice Automatic lands on. The list comes
+ * from `listEnglishVoices`, whose first row is the one `pickDrillVoice` picks with nothing saved.
+ */
+export function automaticLabel(voices: readonly EnglishVoice[]): string {
+  const auto = voices[0];
   return auto ? `Automatic: ${auto.base}` : 'Automatic';
 }
 
 export type CoachVoiceSettingsOptions = {
   value: VoiceConfig;
-  voices: readonly MaleVoice[];
+  voices: readonly EnglishVoice[];
   onChange: (next: VoiceConfig) => void;
   onTest: (value: VoiceConfig) => void;
 };
 
 export type CoachVoiceSettingsHandle = {
   el: HTMLElement;
-  update(value: VoiceConfig, voices: readonly MaleVoice[]): void;
+  update(value: VoiceConfig, voices: readonly EnglishVoice[]): void;
 };
 
 export function createCoachVoiceSettings(
   opts: CoachVoiceSettingsOptions,
 ): CoachVoiceSettingsHandle {
   let value: VoiceConfig = { ...opts.value };
-  let voices: readonly MaleVoice[] = opts.voices;
+  let voices: readonly EnglishVoice[] = opts.voices;
 
   const body = h('div', { class: 'cv-body' });
   const el = h(
@@ -115,7 +119,7 @@ export function createCoachVoiceSettings(
         ),
         h('p', { class: 'cv-sub', id: 'cv-voice-label' }, 'Voice'),
         voices.length === 0
-          ? h('p', { class: 'cv-hint', 'data-no-male-voice': true }, NO_MALE_VOICE_HINT)
+          ? h('p', { class: 'cv-hint', 'data-no-voice': true }, NO_VOICE_HINT)
           : h(
               'div',
               { class: 'cv-voices', role: 'group', 'aria-labelledby': 'cv-voice-label' },

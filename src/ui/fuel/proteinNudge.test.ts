@@ -100,7 +100,6 @@ describe('Fuel screen slot', () => {
   const actions = (over: Partial<FuelActions> = {}): FuelActions => ({
     onLog: () => {},
     onEditEntry: () => {},
-    onDeleteEntry: () => {},
     onWeighIn: () => {},
     onSetup: () => {},
     onTab: () => {},

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  NO_MALE_VOICE_HINT,
+  NO_VOICE_HINT,
   RUDENESS_LEVELS,
   STRONG_LANGUAGE_NOTE,
   automaticLabel,
   createCoachVoiceSettings,
 } from './coachVoiceSettings';
-import type { MaleVoice, VoiceConfig } from './voiceNames';
+import { listEnglishVoices, type EnglishVoice, type VoiceConfig } from './voiceNames';
 
 // ---------- tiny DOM stub (vitest runs in node) ----------
 
@@ -75,14 +75,14 @@ afterEach(() => {
   g.document = saved;
 });
 
-const VOICES: MaleVoice[] = [
+const VOICES: EnglishVoice[] = [
   { name: 'Daniel', base: 'Daniel', accent: 'UK', label: 'Daniel (UK)' },
   { name: 'Fred', base: 'Fred', accent: 'US', label: 'Fred (US)' },
 ];
 const CALM: VoiceConfig = { persona: 'calm', rudeness: 2, voiceName: null };
 const DRILL: VoiceConfig = { persona: 'drill', rudeness: 2, voiceName: null };
 
-function mount(value: VoiceConfig, voices: MaleVoice[] = VOICES) {
+function mount(value: VoiceConfig, voices: EnglishVoice[] = VOICES) {
   const onChange = vi.fn<(v: VoiceConfig) => void>();
   const onTest = vi.fn<(v: VoiceConfig) => void>();
   const handle = createCoachVoiceSettings({ value, voices, onChange, onTest });
@@ -144,11 +144,38 @@ describe('coach voice settings', () => {
     expect(onChange).toHaveBeenLastCalledWith(DRILL);
   });
 
-  it('with no male voice installed, shows the iOS hint instead of rows', () => {
+  it('with no English voice installed, shows the iOS hint instead of rows', () => {
     const { el } = mount(DRILL, []);
     expect(el.all('data-voice-name')).toHaveLength(0);
-    expect(el.one('data-no-male-voice').textContent).toBe(NO_MALE_VOICE_HINT);
-    expect(NO_MALE_VOICE_HINT).toContain('Accessibility → Spoken Content → Voices → English');
+    expect(el.one('data-no-voice').textContent).toBe(NO_VOICE_HINT);
+    expect(NO_VOICE_HINT).toContain('Accessibility → Spoken Content → Voices → English');
+    expect(NO_VOICE_HINT).not.toMatch(/\bmale\b/i);
+  });
+
+  it('offers female and male voices alike (M13: anyone)', () => {
+    const voices = listEnglishVoices([
+      { name: 'Samantha', lang: 'en-US' },
+      { name: 'Karen', lang: 'en-AU' },
+      { name: 'Daniel', lang: 'en-GB' },
+      { name: 'Fred', lang: 'en-US' },
+    ]);
+    const { el, onChange } = mount(DRILL, voices);
+    expect(el.all('data-voice-name').map((r) => r.textContent)).toEqual([
+      'Automatic: Daniel',
+      'Daniel (UK)',
+      'Fred (US)',
+      'Samantha (US)',
+      'Karen (Australia)',
+    ]);
+    el.one('data-voice-name', 'Karen').click();
+    expect(onChange).toHaveBeenLastCalledWith({ ...DRILL, voiceName: 'Karen' });
+    expect(el.textContent).not.toMatch(/\bmale\b/i);
+  });
+
+  it('a saved voice shows as chosen, not Automatic', () => {
+    const { el } = mount({ ...DRILL, voiceName: 'Fred' });
+    expect(pressed(el.one('data-voice-name', 'Fred'))).toBe(true);
+    expect(pressed(el.one('data-voice-name', ''))).toBe(false);
   });
 
   it('Test voice hands over the current value', () => {
@@ -160,9 +187,9 @@ describe('coach voice settings', () => {
 
   it('update() re-renders with new value and voices (late iOS voices)', () => {
     const { el, handle } = mount(DRILL, []);
-    expect(el.all('data-no-male-voice')).toHaveLength(1);
+    expect(el.all('data-no-voice')).toHaveLength(1);
     handle.update({ ...DRILL, voiceName: 'Daniel' }, VOICES);
-    expect(el.all('data-no-male-voice')).toHaveLength(0);
+    expect(el.all('data-no-voice')).toHaveLength(0);
     expect(pressed(el.one('data-voice-name', 'Daniel'))).toBe(true);
     handle.update(CALM, VOICES);
     expect(el.all('data-voice-name')).toHaveLength(0);
@@ -179,10 +206,11 @@ describe('coach voice settings', () => {
       expect(b.all('data-icon').length).toBe(pressed(b) ? 1 : 0);
   });
 
-  it('automatic label names the default-order voice, if any', () => {
+  it('automatic label names the first listed voice (what Automatic picks), or none', () => {
     expect(automaticLabel(VOICES)).toBe('Automatic: Daniel');
     expect(
       automaticLabel([{ name: 'Gordon', base: 'Gordon', accent: 'Australia', label: 'Gordon' }]),
-    ).toBe('Automatic');
+    ).toBe('Automatic: Gordon');
+    expect(automaticLabel([])).toBe('Automatic');
   });
 });

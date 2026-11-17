@@ -1,16 +1,16 @@
 // M7 Fuel tab (task 11, SPEC M7 "Screens & UX", Pro mood). Pure render: values and callbacks in,
 // element out. No DB: app.ts loads today's entries, runs the core totals/targets selectors and
-// passes the results here. A delete is undone with the app's Undo toast (`showUndoToast`, which
-// already keeps clear of the tab bar).
+// passes the results here.
 //
 // Layout: title + date + Weigh-in, the nudge banner slot, the rings with the big "to go" numbers
 // (or the "Set up your targets" card), Log food (the one orange action), today's entries grouped
-// by meal slot (each row opens the entry editor; Delete is a separate button, undone by the app's toast),
+// by meal slot (each row opens the entry sheet, which has Edit and Delete; M13 task 24: no Delete
+// block on the row, a delete in the sheet is still undone by the app's Undo toast),
 // then the 4-tab bar (Today / Fuel / History / Settings).
 //
 // e2e hooks: `main.screen.fuel[data-screen=fuel]`, `[data-ring=kcal|proteinG|carbsG|fatG]`,
 // `[data-left=…]`, `[data-log-open]`, `[data-weigh-in]`, `[data-setup]`, `[data-fuel-nudge]` (links.ts, shared with Today),
-// `[data-slot=<slot>]` groups, `[data-entry=<id>]` rows, `[data-entry-delete=<id>]`.
+// `[data-slot=<slot>]` groups, `[data-entry=<id>]` rows, `[data-entry-edit=<id>]` (the row's button).
 //
 // M12 slice 1b (optional): the "Measurements" row (`[data-measurements-open]`, fuel/measurements.ts)
 // when `measurements` and `onMeasurements` are both set. It sits under today's food, a monthly
@@ -62,9 +62,8 @@ export type FuelProps = {
 export type FuelActions = {
   /** Opens the log sheet. */
   onLog: () => void;
+  /** The row was tapped: opens the entry sheet (Edit amount / slot, Delete with the Undo toast). */
   onEditEntry: (entry: FoodEntry) => void;
-  /** Delete at once; the app shows the Undo toast (no confirm dialog). */
-  onDeleteEntry: (entry: FoodEntry) => void;
   onWeighIn: () => void;
   onSetup: () => void;
   onDismissNudge?: (() => void) | undefined;
@@ -165,19 +164,8 @@ function entryRow(e: FoodEntry, mode: NutritionMode, actions: FuelActions): HTML
         e.estimate ? estimateTag() : null,
       ),
       h('span', { class: 'fuel-entry-macros' }, macros.join(' · ')),
-      h('span', { class: 'sr-only' }, ', edit'),
-    ),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'fuel-entry-del',
-        'data-entry-delete': e.id,
-        'aria-label': `Delete ${e.label}`,
-        onclick: () => actions.onDeleteEntry(e),
-      },
-      icon('close', 'md'),
-      h('span', { 'aria-hidden': 'true' }, 'Delete'),
+      h('span', { class: 'fuel-entry-go', 'aria-hidden': 'true' }, icon('pencil', 'sm')),
+      h('span', { class: 'sr-only' }, ', edit or delete'),
     ),
   );
 }

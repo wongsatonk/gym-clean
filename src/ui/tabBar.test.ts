@@ -117,4 +117,19 @@ describe('tabBar: M12 five tabs with a centre Coach', () => {
     expect(rule('.tab-bubble')).toMatch(/width: var\(--tap-min\);/);
     expect(rule('.tab-bubble')).toMatch(/height: var\(--tap-min\);/);
   });
+
+  it('M13 task 17: labels use the condensed display font at the 18px label size', () => {
+    // Barlow at 18px left 2px between "Calendar" and "Settings" at 360 wide; the condensed
+    // face at 18px leaves a clear gap at 390 and 360 (e2e/tabbar.spec.ts measures it).
+    const label = rule('.tab-label');
+    expect(label).toMatch(/font-family: var\(--font-display\);/);
+    expect(label).toMatch(/font-size: var\(--fs-label\);/);
+    expect(label).toMatch(/white-space: nowrap;/);
+    // Active state is never colour alone: the sliding bar + aria-current stay.
+    expect(rule('.tab-ind::before')).toMatch(/background: var\(--cta\);/);
+  });
+
+  it('M13 task 17: labels stay short (≤ 8 letters) so five fit at 360px', () => {
+    expect(Math.max(...TABS.map((t) => t.label.length))).toBeLessThanOrEqual(8);
+  });
 });

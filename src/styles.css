@@ -120,6 +120,8 @@
   --line-w: 1px;
 }
 
+/* Track: pure black + 8px cards, for in-workout screens only (Exercise, Rest and the camera).
+   M13 task 18: Calendar and its day view moved to the standard surface (pro). */
 .mood-track {
   --bg: #000000;
   --line: #3a3a3a;
@@ -745,12 +747,18 @@ h1 {
   color: var(--cta);
 }
 
-/* M12 task 9: five tabs (78px each at 390px). Labels stay on one line. */
+/* M12 task 9: five tabs (78px each at 390px, 72px at 360px). Labels stay on one line.
+   M13 task 17: labels in the condensed display face (18px, the label floor), so "Calendar"
+   and "Settings" never touch at 360 wide (Barlow 18px left 2px between them). */
 .tabbar-5 .tab {
   min-width: 0;
 }
 
 .tab-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-label);
+  line-height: 1.1;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 

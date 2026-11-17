@@ -192,7 +192,7 @@ test('Settings at 390×844: readable, big targets, no overflow, chosen states in
   ])
     await expect(page.locator(sel), sel).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Camera test' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '‹ Back' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Back', exact: true })).toHaveCount(0);
 });
 
 test('Accent: Volt swaps the action colour and success to gold; Yellow keeps green', async ({

@@ -12,8 +12,12 @@ export const DRILL_PITCH = 0.8;
 
 export type Accent = 'US' | 'UK' | 'Australia' | 'India' | 'character';
 
-/** Known male English voices (design 2026-11-13), by base name (iOS adds " (Enhanced)" etc.). */
-export const MALE_VOICES: Readonly<Record<string, Accent>> = {
+/**
+ * English voices we know by name (design 2026-11-13), by base name (iOS adds " (Enhanced)" etc.),
+ * with the accent shown in the picker. Any other installed English voice is offered too
+ * (M13: anyone can use the app), labelled by its region.
+ */
+export const KNOWN_VOICES: Readonly<Record<string, Accent>> = {
   Aaron: 'US',
   Fred: 'US',
   Evan: 'US',
@@ -38,7 +42,8 @@ export const DEFAULT_DRILL_ORDER: readonly string[] = [
   'Fred',
 ];
 
-export type MaleVoice = { name: string; base: string; accent: Accent; label: string };
+/** A picker row. `accent` is the known accent, else the region from the lang ("US"), else null. */
+export type EnglishVoice = { name: string; base: string; accent: string | null; label: string };
 
 type VoiceLike = Pick<SpeechSynthesisVoice, 'name' | 'lang'>;
 
@@ -51,7 +56,7 @@ function isEnglish(v: VoiceLike): boolean {
   return v.lang.toLowerCase().replace('_', '-').startsWith('en');
 }
 
-/** Region shown for a character voice, from its lang: en-GB → UK. */
+/** Region from a lang tag: en-GB → UK; null when the tag has none. */
 function regionOf(lang: string): string | null {
   const r = lang.toUpperCase().replace('_', '-').split('-')[1];
   if (!r) return null;
@@ -64,40 +69,48 @@ function regionOf(lang: string): string | null {
         IN: 'India',
         IE: 'Ireland',
         ZA: 'South Africa',
+        NZ: 'New Zealand',
+        CA: 'Canada',
+        SG: 'Singapore',
       } as Record<string, string>
     )[r] ?? r
   );
 }
 
-function accentLabel(v: VoiceLike, accent: Accent): string {
-  if (accent !== 'character') return accent;
+function accentOf(v: VoiceLike, base: string): string | null {
+  const known = KNOWN_VOICES[base];
+  if (!known) return regionOf(v.lang);
+  if (known !== 'character') return known;
   const region = regionOf(v.lang);
   return region ? `character, ${region}` : 'character';
 }
 
-/** Installed English voices on the known male list, default order first, no duplicate names. */
-export function listMaleVoices(voices: readonly VoiceLike[]): MaleVoice[] {
-  const known = Object.keys(MALE_VOICES);
+/**
+ * Every installed English voice for the drill-sergeant picker, no duplicate names: the default
+ * order first (Daniel → Arthur → Rocko → Aaron → Fred), then the rest in the phone's order, so
+ * the first row is also the voice `pickDrillVoice` falls back to. Known names keep their accent
+ * label; others show their region ("Samantha (US)").
+ */
+export function listEnglishVoices(voices: readonly VoiceLike[]): EnglishVoice[] {
   const rank = (base: string) => {
     const d = DEFAULT_DRILL_ORDER.indexOf(base);
-    return d >= 0 ? d : DEFAULT_DRILL_ORDER.length + known.indexOf(base);
+    return d >= 0 ? d : DEFAULT_DRILL_ORDER.length;
   };
   const seen = new Set<string>();
-  const out: MaleVoice[] = [];
+  const out: EnglishVoice[] = [];
   for (const v of voices) {
     if (!isEnglish(v) || seen.has(v.name)) continue;
-    const base = baseVoiceName(v.name);
-    const accent = MALE_VOICES[base];
-    if (!accent) continue;
     seen.add(v.name);
-    const accentText = accentLabel(v, accent);
+    const base = baseVoiceName(v.name);
+    const accent = accentOf(v, base);
     // "Daniel (Enhanced)" keeps "Enhanced"; "Rocko (English (UK))" drops the language name.
     const suffix = v.name
       .slice(base.length)
       .trim()
       .replace(/^\(|\)$/g, '');
-    const extra = suffix && !/^english\b/i.test(suffix) ? `, ${suffix}` : '';
-    const label = `${base} (${accentText}${extra})`;
+    const extra = suffix && !/^english\b/i.test(suffix) ? suffix : '';
+    const bits = [accent, extra].filter((b): b is string => !!b);
+    const label = bits.length ? `${base} (${bits.join(', ')})` : base;
     out.push({ name: v.name, base, accent, label });
   }
   return out

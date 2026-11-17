@@ -282,7 +282,9 @@ describe('log and delete with Undo', () => {
     await quickLog(app, '400', '20');
     const today = localDate(EVENING);
     const [e] = await entriesBetween(db, today, today);
-    app.onScreen('data-entry-delete', e?.id).click();
+    // M13 task 24: the row opens the sheet; Delete is there (no Delete block on the row).
+    app.onScreen('data-entry-edit', e?.id).click();
+    app.inSheet('data-entry-remove').click();
     await flush();
     expect(await entriesBetween(db, today, today)).toHaveLength(0);
     expect(app.toasts.at(-1)?.text).toMatch(/^Deleted /);

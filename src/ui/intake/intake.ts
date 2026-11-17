@@ -19,6 +19,7 @@
 // `[data-intake-skip]`, `[data-intake-close]`, `[data-change=<id>]`, `[data-apply=<id>]`
 // (`data-applied` once applied), `[data-change-error=<id>]`, `[data-intake-done]`.
 import type { BodyArea, GoalKind, Intake } from '../../core/types';
+import { backButton, forwardContent } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { checkMorph, enterScreen } from '../motion';
@@ -613,16 +614,7 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
       'header',
       { class: 'top-bar intake-top' },
       actions.onClose
-        ? h(
-            'button',
-            {
-              class: 'ghost-btn',
-              type: 'button',
-              'data-intake-close': true,
-              onclick: () => actions.onClose?.(),
-            },
-            '‹ Back',
-          )
+        ? backButton(() => actions.onClose?.(), 'Back', { 'data-intake-close': true })
         : null,
       isSummary
         ? h('span', { class: 'intake-count', 'data-intake-count': true }, 'Your answers')
@@ -653,8 +645,7 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
             'data-intake-next': true,
             onclick: next,
           },
-          h('span', {}, step === 'easyOn' ? 'See what changes' : 'Next'),
-          h('span', { 'aria-hidden': 'true' }, '›'),
+          ...forwardContent(step === 'easyOn' ? 'See what changes' : 'Next'),
         );
     syncNext();
     const nav = h(

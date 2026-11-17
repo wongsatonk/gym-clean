@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WeekDot } from '../../core/stats';
 import type { ProgramDay } from '../../core/types';
@@ -13,6 +15,7 @@ import {
   dateLabel,
   missedDayText,
   isMoved,
+  noticesLabel,
   todayScreen,
   volumeLine,
   whenLabel,
@@ -291,7 +294,8 @@ describe('previewScreen', () => {
     const { el, calls } = renderPreview(false);
     expect(el.getAttribute('data-screen')).toBe('preview');
     expect(el.classes).toContain('mood-energy');
-    const back = el.byTag('button').find((b) => b.textContent === '‹ Back');
+    // M13 task 20: the shared back button (chevron icon + "Back"); the old text was "‹ Back".
+    const back = el.byTag('button').find((b) => /^(‹ )?Back$/.test(b.textContent));
     back?.click();
     expect(calls.back).toBe(1);
     expect(el.byTag('h1')[0]?.textContent).toBe('Pull A');
@@ -369,27 +373,24 @@ describe('todayScreen with M10 trainer props', () => {
     expect(el.oneByClass('days-head').textContent).toBe(`Your week${DAYS.length}-day split`);
   });
 
-  it('shows a Coach button in the app bar that calls onCoach', () => {
+  it('M13: no Coach button in the app bar, even with onCoach (the Coach tab is the way in)', () => {
     const { el, calls } = renderM10();
-    const coach = el.find((e) => e.hasAttribute('data-coach-open'));
-    expect(coach).toHaveLength(1);
-    expect(coach[0]?.tag).toBe('button');
-    expect(coach[0]?.textContent).toBe('Coach');
-    expect(coach[0]?.classes).toContain('coach-btn');
-    // The date stays next to it.
-    expect(el.oneByClass('appbar-end').oneByClass('date').textContent).toBe('Fri 13 Nov');
-    coach[0]?.click();
-    expect(calls.coach).toBe(1);
+    expect(el.find((e) => e.hasAttribute('data-coach-open'))).toHaveLength(0);
+    expect(el.byClass('coach-btn')).toHaveLength(0);
+    const bar = el.oneByClass('appbar');
+    expect(bar.children.map((c) => c.classes[0])).toEqual(['brand', 'date']);
+    expect(bar.oneByClass('date').textContent).toBe('Fri 13 Nov');
+    expect(calls.coach).toBe(0);
   });
 
-  it('shows "Adjusted today: …" with Undo above the hero', () => {
+  it('shows "Adjusted today: …" with Undo as the one notice, right below the hero', () => {
     const { el, calls } = renderM10({ adjustedToday: 'Easy on arms · 2 swaps' });
     const banner = el.oneByClass('adjusted-banner');
     expect(banner.getAttribute('role')).toBe('status');
     expect(banner.oneByClass('adjusted-text').textContent).toBe(
       'Adjusted today: Easy on arms · 2 swaps',
     );
-    expect(el.children.indexOf(banner)).toBe(el.children.indexOf(el.oneByClass('hero')) - 1);
+    expect(el.children.indexOf(banner)).toBe(el.children.indexOf(el.oneByClass('hero')) + 1);
     const undo = banner.find((e) => e.hasAttribute('data-undo-adjust'))[0];
     expect(undo?.textContent).toBe('Undo');
     undo?.click();
@@ -586,7 +587,7 @@ describe('todayScreen M7 nudge', () => {
     expect(nudges(render({ nudge: '40 g protein to go today.' }).el)).toHaveLength(0);
   });
 
-  it('shown above the hero with Dismiss and Log food', () => {
+  it('shown below the hero (M13: hero first) with Dismiss and Log food', () => {
     let dismissed = 0;
     let opened = 0;
     const el = asFake(
@@ -603,7 +604,7 @@ describe('todayScreen M7 nudge', () => {
     expect(n[0]?.textContent).toContain('40 g protein to go today.');
     const idx = el.children.findIndex((c) => c.hasAttribute('data-fuel-nudge'));
     const hero = el.children.findIndex((c) => c.classes.some((k) => k.includes('hero')));
-    expect(idx).toBeLessThan(hero);
+    expect(idx).toBe(hero + 1);
     n[0]?.find((e) => e.hasAttribute('data-nudge-dismiss'))[0]?.click();
     n[0]?.find((e) => e.hasAttribute('data-nudge-open'))[0]?.click();
     expect([dismissed, opened]).toEqual([1, 1]);
@@ -653,13 +654,13 @@ describe('Today: missed-day card (M12)', () => {
     expect(calls.skip).toEqual([MISSED]);
   });
 
-  it('sits above the hero (after the prompts), and is gone without a missed day or callbacks', () => {
+  it('sits below the hero (M13: hero first), and is gone without a missed day or callbacks', () => {
     const { el } = renderM12({ missedDay: MISSED });
     const kids = el.children.map((c) =>
       c.hasAttribute('data-missed-day') ? 'missed' : c.hasAttribute('data-hero') ? 'hero' : '',
     );
     expect(kids.indexOf('missed')).toBeGreaterThan(-1);
-    expect(kids.indexOf('missed')).toBeLessThan(kids.indexOf('hero'));
+    expect(kids.indexOf('missed')).toBe(kids.indexOf('hero') + 1);
     expect(byAttr(renderM12({ missedDay: null }).el, 'data-missed-day')).toEqual([]);
     expect(byAttr(renderM12({}).el, 'data-missed-day')).toEqual([]);
     expect(byAttr(renderM12({ missedDay: MISSED }, false).el, 'data-missed-day')).toEqual([]);
@@ -748,9 +749,8 @@ describe('Today: first-load motion (M12)', () => {
 
   it('first render: cards stagger in, the streak counts up to its value, readiness slides in', () => {
     const motion = createTodayMotion();
-    const { el } = renderM12({ motion, missedDay: MISSED, readiness: READY });
+    const { el } = renderM12({ motion, readiness: READY });
     const rising = anims.filter((a) => a.frames[0]?.transform === 'translateY(8px)');
-    expect(rising.map((a) => a.el)).toContain(byAttr(el, 'data-missed-day')[0]);
     expect(rising.map((a) => a.el)).toContain(byAttr(el, 'data-hero')[0]);
     const slid = anims.filter((a) => a.frames[0]?.transform === 'translateX(8px)');
     expect(slid.map((a) => a.el)).toEqual(byAttr(el, 'data-readiness'));
@@ -758,6 +758,17 @@ describe('Today: first-load motion (M12)', () => {
     vi.runAllTimers();
     expect(streakText(el)).toBe('3');
     expect(motion).toEqual({ entered: true, readiness: 'lighter|Short sleep last night.' });
+  });
+
+  it('M13: with two notices the "things to sort" row slides in; a lone missed card rises', () => {
+    const two = renderM12({ motion: createTodayMotion(), missedDay: MISSED, readiness: READY }).el;
+    const slid = anims.filter((a) => a.frames[0]?.transform === 'translateX(8px)');
+    expect(slid.map((a) => a.el)).toEqual(byAttr(two, 'data-notices'));
+    vi.runAllTimers();
+    anims = [];
+    const one = renderM12({ motion: createTodayMotion(), missedDay: MISSED }).el;
+    const rising = anims.filter((a) => a.frames[0]?.transform === 'translateY(8px)');
+    expect(rising.map((a) => a.el)).toContain(byAttr(one, 'data-missed-day')[0]);
   });
 
   it('a re-render with the same motion state plays nothing and shows final numbers', () => {
@@ -876,3 +887,213 @@ describe('Today: feel today + cardio line (M12 1b tasks 31, 32)', () => {
     expect(byAttr(render().el, 'data-cardio')).toEqual([]);
   });
 });
+
+// ---------- M13 task 19: hero first, notices in one row, one filled button ----------
+
+describe('Today: hero first + "things to sort" (M13)', () => {
+  const READY = {
+    date: '2026-11-13',
+    signals: [],
+    reasons: ['Short sleep last night.'],
+    offer: 'lighter' as const,
+  };
+  const ALL_ACTIONS = {
+    onStart: () => {},
+    onOpenDay: () => {},
+    onTab: () => {},
+    onCoach: () => {},
+    onLighterToday: () => {},
+    onNotToday: () => {},
+    onTrainAsPlanned: () => {},
+    onMoveMissed: () => {},
+    onSkipMissed: () => {},
+    onUndoAdjust: () => {},
+    onSeeGymSwap: () => {},
+    onKeepExercise: () => {},
+    onUseNewProgram: () => {},
+    onKeepPlan: () => {},
+    onDismissNudge: () => {},
+    onOpenFuel: () => {},
+    onSetGoal: () => {},
+    onOpenGoal: () => {},
+    onSaveFeel: () => {},
+    onOpenTodos: () => {},
+  };
+  const kids = (el: FakeEl) => el.children.filter((c) => c.tag !== '#text');
+  const byAttr = (el: FakeEl, name: string) => el.find((e) => e.hasAttribute(name));
+  const NOTICE_ATTRS = [
+    'data-readiness',
+    'data-adjusted',
+    'data-missed-day',
+    'data-gym-prompt',
+    'data-program-prompt',
+    'data-goal-card',
+    'data-fuel-nudge',
+  ];
+  const isNotice = (e: FakeEl) => NOTICE_ATTRS.some((a) => e.hasAttribute(a));
+
+  function renderAll(over: Partial<TodayProps> = {}, acts: Record<string, unknown> = {}) {
+    return asFake(
+      todayScreen(
+        props({
+          readiness: READY,
+          adjustedToday: 'Easy on arms',
+          missedDay: MISSED_M13,
+          missingKit: { exerciseId: 'Leg_Press', name: 'Leg Press' },
+          newProgram: true,
+          goal: { goals: [], today: ymd(NOW) },
+          nudge: '40 g protein to go today.',
+          feelOpen: true,
+          todo: { done: 3, total: 12, visible: true, nextTitle: 'Coach tab' },
+          ...over,
+        }),
+        { ...ALL_ACTIONS, ...acts } as Parameters<typeof todayScreen>[1],
+      ),
+    );
+  }
+
+  it('noticesLabel: "1 thing to sort" / "3 things to sort"', () => {
+    expect(noticesLabel(1)).toBe('1 thing to sort');
+    expect(noticesLabel(3)).toBe('3 things to sort');
+    expect(checkCopy(noticesLabel(2)).ok).toBe(true);
+  });
+
+  it('0 notices: no row, no notice card; the hero is the first thing after the app bar', () => {
+    const el = asFake(todayScreen(props(), ALL_ACTIONS));
+    expect(byAttr(el, 'data-notices')).toEqual([]);
+    expect(el.find(isNotice)).toEqual([]);
+    expect(kids(el)[0]?.tag).toBe('header');
+    expect(kids(el)[1]?.hasAttribute('data-hero')).toBe(true);
+  });
+
+  it('1 notice: that card itself, after the hero and the feel row (no row)', () => {
+    const el = asFake(todayScreen(props({ missedDay: MISSED_M13 }), ALL_ACTIONS));
+    expect(byAttr(el, 'data-notices')).toEqual([]);
+    const k = kids(el);
+    expect(k[1]?.hasAttribute('data-hero')).toBe(true);
+    expect(k[2]?.hasAttribute('data-feel-today')).toBe(true);
+    expect(k[3]?.hasAttribute('data-missed-day')).toBe(true);
+  });
+
+  it('3 notices: one compact row "3 things to sort", closed, that opens in place', () => {
+    const toggles: boolean[] = [];
+    const el = asFake(
+      todayScreen(
+        props({ readiness: READY, missedDay: MISSED_M13, nudge: '40 g protein to go today.' }),
+        { ...ALL_ACTIONS, onNoticesToggle: (o: boolean) => toggles.push(o) },
+      ),
+    );
+    const k = kids(el);
+    expect(k[1]?.hasAttribute('data-hero')).toBe(true);
+    // No notice card sits directly on the screen: all three are inside the row.
+    expect(k.filter(isNotice)).toEqual([]);
+    const row = byAttr(el, 'data-notices')[0] as FakeEl;
+    expect(k.indexOf(row)).toBe(3); // header, hero, feel row, then the row
+    expect(row.getAttribute('data-notices')).toBe('3');
+    const toggle = byAttr(row, 'data-notices-toggle')[0] as FakeEl;
+    expect(toggle.tag).toBe('button');
+    expect(toggle.oneByClass('notices-title').textContent).toBe('3 things to sort');
+    expect(toggle.oneByClass('notices-sub').textContent).toBe(
+      'Lighter today? · Missed Push A · Food',
+    );
+    const list = byAttr(row, 'data-notices-list')[0] as FakeEl;
+    expect(toggle.getAttribute('aria-controls')).toBe(list.getAttribute('id'));
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(list.hasAttribute('hidden')).toBe(true);
+    expect(list.children.map((c) => NOTICE_ATTRS.find((a) => c.hasAttribute(a)))).toEqual([
+      'data-readiness',
+      'data-missed-day',
+      'data-fuel-nudge',
+    ]);
+    toggle.click();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(list.hasAttribute('hidden')).toBe(false);
+    toggle.click();
+    expect(list.hasAttribute('hidden')).toBe(true);
+    expect(toggles).toEqual([true, false]);
+  });
+
+  it('noticesOpen keeps the row open across a re-render', () => {
+    const el = renderAll({ noticesOpen: true });
+    const row = byAttr(el, 'data-notices')[0] as FakeEl;
+    expect(row.getAttribute('data-notices')).toBe('7');
+    expect(byAttr(row, 'data-notices-toggle')[0]?.getAttribute('aria-expanded')).toBe('true');
+    expect(byAttr(row, 'data-notices-list')[0]?.hasAttribute('hidden')).toBe(false);
+  });
+
+  it('a goal card with goals is progress, not a notice: it stays on the screen below', () => {
+    const goal = {
+      goals: [
+        {
+          goal: { id: 'g1', text: 'Bench 60 kg × 5', kind: 'strength', due: '2027-01-31' },
+          pct: 40,
+          status: 'onTrack' as const,
+        },
+      ],
+      today: ymd(NOW),
+    } as unknown as TodayProps['goal'];
+    const el = asFake(todayScreen(props({ goal, missedDay: MISSED_M13 }), ALL_ACTIONS));
+    const k = kids(el);
+    expect(byAttr(el, 'data-notices')).toEqual([]);
+    const card = k.findIndex((c) => c.getAttribute('data-goal-card') === 'goals');
+    expect(card).toBeGreaterThan(k.findIndex((c) => c.hasAttribute('data-missed-day')));
+  });
+
+  // The CSS rules that paint a button with the orange fill, from every stylesheet in src/, and
+  // the outline overrides today.css adds. Every rule's last compound selector → its class set.
+  const SRC = join(__dirname, '..', '..');
+  function cssFiles(dir: string): string[] {
+    return readdirSync(dir).flatMap((n) => {
+      const p = join(dir, n);
+      if (statSync(p).isDirectory()) return cssFiles(p);
+      return n.endsWith('.css') ? [p] : [];
+    });
+  }
+  function compounds(css: string, body: RegExp): string[][] {
+    const out: string[][] = [];
+    const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const m of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!body.test(m[2] ?? '')) continue;
+      for (const sel of (m[1] ?? '').split(',')) {
+        const last =
+          sel
+            .trim()
+            .split(/[\s>+~]+/)
+            .at(-1) ?? '';
+        const classes = [...last.replace(/:[\w-]+(\([^)]*\))?/g, '').matchAll(/\.([\w-]+)/g)].map(
+          (c) => c[1] ?? '',
+        );
+        if (classes.length) out.push(classes);
+      }
+    }
+    return out;
+  }
+  const FILLED = cssFiles(SRC).flatMap((f) =>
+    compounds(readFileSync(f, 'utf8'), /background(-color)?:\s*var\(--cta\)/),
+  );
+  const OUTLINED = compounds(
+    readFileSync(join(__dirname, 'today.css'), 'utf8'),
+    /background:\s*transparent/,
+  );
+  const hit = (e: FakeEl, sets: string[][]) =>
+    sets.some((cls) => cls.every((c) => e.classes.includes(c)));
+
+  it('exactly one filled primary button: Start (every notice open, the feel row open)', () => {
+    // The scan sees the fills it guards against (else this test would pass vacuously).
+    for (const c of ['primary-btn', 'readiness-cta', 'missed-cta', 'gym-prompt-cta', 'feel-save'])
+      expect(FILLED).toContainEqual([c]);
+    expect(FILLED).toContainEqual(['goal-card-btn', 'primary']);
+    for (const over of [{}, { noticesOpen: true }]) {
+      const el = renderAll(over);
+      const filled = el.byTag('button').filter((b) => hit(b, FILLED) && !hit(b, OUTLINED));
+      expect(filled).toHaveLength(1);
+      expect(filled[0]?.classes).toContain('hero-cta');
+      expect(filled[0]?.textContent).toBe('Start workout');
+      // The notice CTAs that would be filled elsewhere are outlined on Today.
+      const outlined = el.byTag('button').filter((b) => hit(b, FILLED) && hit(b, OUTLINED));
+      expect(outlined.length).toBeGreaterThanOrEqual(4);
+    }
+  });
+});
+
+const MISSED_M13: MissedDay = { date: '2026-11-10', dayId: 'push-a', name: 'Push A' };

@@ -15,7 +15,6 @@
 // Motion: a page change is motion.ts enterScreen (fade + 8px slide in the direction of travel),
 // a no-op under prefers-reduced-motion. No other animation here.
 import type { AppRoute, WhatsNewPage } from '../../core/types';
-import { versionLabel } from '../../core/version';
 import { h } from '../dom';
 import { icon, ICON_NAMES, type IconName } from '../icons';
 import { enterScreen, type Stop } from '../motion';
@@ -29,8 +28,12 @@ export type WhatsNewTourProps = {
   pages: readonly WhatsNewPage[];
   /** To-do topics new in these releases; empty → no "Added to your to-dos" page. */
   addedTopics: readonly TourTopic[];
-  /** Shown under page 1's title. Default `versionLabel()` ("Version 1.12.0 (build abc1234)"). */
-  version?: string | undefined;
+  /**
+   * Shown under page 1's title. The caller decides it (M13): owner mode on → `versionLabel()`
+   * ("Version 1.15.0 (build abc1234)"), off → the short line ("Version 1.15"). The tour has no
+   * version or build of its own.
+   */
+  version: string;
   /** Page to open on (default 0). */
   startIndex?: number | undefined;
 };
@@ -78,7 +81,7 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
   const pages = props.pages;
   const hasTodoPage = props.addedTopics.length > 0;
   const total = Math.max(1, pages.length + (hasTodoPage ? 1 : 0));
-  const version = props.version ?? versionLabel();
+  const version = props.version;
   let index = Math.min(Math.max(0, props.startIndex ?? 0), total - 1);
   let stopAnim: Stop = () => {};
   /** The page's own buttons (Try it / Open to-dos), for the focus trap. */

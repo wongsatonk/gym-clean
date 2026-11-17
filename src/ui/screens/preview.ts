@@ -14,6 +14,7 @@
 import type { PlannedExercise, ProgramDay } from '../../core/types';
 import { exerciseById } from '../../data/catalog';
 import { badgesFor } from '../badges';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
@@ -137,7 +138,7 @@ export function previewScreen(props: PreviewProps, actions: PreviewActions): HTM
     h(
       'header',
       { class: 'top-bar' },
-      h('button', { class: 'ghost-btn', type: 'button', onclick: actions.onBack }, '‹ Back'),
+      backButton(actions.onBack),
       actions.onCoach ? coachButton(actions.onCoach) : null,
     ),
     gymPrompt(props.missingKit, actions),
