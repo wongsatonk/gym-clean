@@ -297,6 +297,22 @@ describe('chat: tab variant', () => {
     expect(log).toEqual([`apply:${m.id}`]);
   });
 
+  it('pending focus block: no quick chips, but the text box stays for edits ("only 4 days a week")', () => {
+    const m = msg('coach', "Here's a 2-week chest block.", {
+      card: { kind: 'focusBlock', blockId: 'b1', status: 'pending' },
+    });
+    const { el, log } = mount({ messages: [m], focusBlocks: { b1: BLOCK } });
+    expect(attr(el, 'data-coach-chip')).toHaveLength(0);
+    const box = input(el);
+    expect(box).toBeDefined();
+    (box as unknown as { value: string }).value = 'only 4 days a week';
+    btn(el, 'Send').click();
+    expect(log).toEqual(['text:only 4 days a week']);
+    // A red flag still wins: nothing to type.
+    const red = msg('coach', RED, { card: { kind: 'redFlag' } });
+    expect(input(mount({ messages: [m, red] }).el)).toBeUndefined();
+  });
+
   it('food card: Log by message id and row; logged rows marked', () => {
     const card: ChatCard = {
       kind: 'food',

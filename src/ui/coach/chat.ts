@@ -15,7 +15,8 @@
 //
 // Rules kept from the M10 sheet: a red flag as the newest message → only its buttons (no chips,
 // no text box); a pending proposal as the newest message → no quick chips / text box, so Apply
-// stays on screen (Not now brings them back). Nothing here speaks: `say` is main's job.
+// stays on screen (Not now brings them back). A pending focus block keeps the text box (its
+// edits are typed) but not the quick chips. Nothing here speaks: `say` is main's job.
 //
 // e2e hooks (kept from the M10 sheet): `data-coach-chip=<id>`, `data-coach-area=<area>`,
 // `data-coach-followup=<index>`, the text box labelled "Ask the coach", button "Send"; the sheet
@@ -444,8 +445,11 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       : [];
   cycle.push(...followUps, ...areas, ...chips);
 
+  // A pending focus block keeps the text box: its edits are typed ("only 4 days a week",
+  // "swap Thursday's flyes", SPEC M12 goal 6). Quick chips still wait for the answer.
+  const editable = waiting && last(p.messages)?.card?.kind === 'focusBlock';
   let typingBox: HTMLElement | null = null;
-  if (p.allowTyping && a.onText && !quiet) {
+  if (p.allowTyping && a.onText && !red && (!waiting || editable)) {
     const onText = a.onText;
     const inputId = sheet ? 'chat-input-sheet' : 'chat-input';
     const input = h('input', {

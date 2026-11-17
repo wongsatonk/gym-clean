@@ -134,6 +134,9 @@ export async function seed(page: Page, sessions: SessionSeed[], sets: SetSeed[])
 export async function expectTapTargets(page: Page, selector: string) {
   // evaluateAll doesn't wait: let the screen's buttons render first.
   await expect(page.locator(`${selector} button`).first()).toBeVisible();
+  // M12 motion: let rise-ins finish first (a fractional translateY mid-animation can measure a
+  // 56px button as 55.9999px). Reduced motion has none to wait for.
+  await animationsSettled(page);
   // Some screens render twice (e.g. Plan changes after its async list load), so the buttons can be
   // swapped out between the wait above and the measure. Retry until a laid-out set is measured.
   let heights: (readonly [string, number])[] = [];
@@ -193,4 +196,39 @@ export async function tapInPlace(page: Page, target: Locator) {
   const b = await target.boundingBox();
   if (!b) throw new Error('target has no box');
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+}
+
+/** M12: the Coach tab (the coach's home; the old dialog is only the Pause sheet's chat now). */
+export const coachTab = (page: Page): Locator => page.locator('[data-screen="coach"]');
+
+/** M12: leaves the Coach tab for Today through the tab bar (the tab has no Close). */
+export async function leaveCoach(page: Page): Promise<void> {
+  await page.locator('[data-tab="today"]').click();
+  await expect(coachTab(page)).toHaveCount(0);
+}
+
+/**
+ * Every request must stay on the dev server (as health.spec): anything else is recorded and
+ * aborted, so a leak fails the test instead of reaching the network.
+ */
+export async function guardNetwork(page: Page): Promise<string[]> {
+  const offsite: string[] = [];
+  await page.context().route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'localhost') return route.continue();
+    offsite.push(url.href);
+    return route.abort();
+  });
+  return offsite;
+}
+
+/** Waits until no finite animation is running (rise-ins, slides); infinite loops are ignored. */
+export async function animationsSettled(page: Page): Promise<void> {
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity,
+      ),
+  );
 }

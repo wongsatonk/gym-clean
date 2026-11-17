@@ -8,6 +8,8 @@ import {
   MIN,
   at,
   expectTapTargets,
+  coachTab,
+  leaveCoach,
   noHorizontalOverflow,
   offDevice,
   openApp,
@@ -16,7 +18,8 @@ import {
 } from './app.helpers';
 import { leaveSettings } from './workout.helpers';
 
-const coach = (page: Page) => page.getByRole('dialog', { name: 'Coach' });
+// M12: the coach lives in the Coach tab (prompts open it with their chip already sent).
+const coach = coachTab;
 const prompt = (page: Page) => page.locator('[data-gym-prompt="Leg_Press"]');
 const preview = (page: Page) => page.locator('[data-screen="preview"]');
 
@@ -106,12 +109,14 @@ test('Legs B: prompt (no silent change) → See a swap → Apply → Smith Machi
   await expect(card).toContainText('Leg Press');
   await expect(card).toContainText('Smith Machine Squat');
   await expect(coach(page).getByRole('button', { name: 'Keep Leg Press' })).toBeVisible();
-  await expectTapTargets(page, '[data-coach-sheet]');
+  await expectTapTargets(page, '[data-screen="coach"]');
   await noHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath('m10e-proposal.png') });
   await card.getByRole('button', { name: 'Apply' }).click();
-  await expect(coach(page)).toHaveCount(0);
-  await expect(page.locator('[data-undo-toast]')).toBeVisible();
+  // M12: on the tab, Undo sits on the applied card (no toast).
+  await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Undo' })).toBeVisible();
+  await leaveCoach(page);
   await expect(prompt(page)).toHaveCount(0);
 
   // The preview runs the replacement, marked "Info" (no 3D demo yet).
@@ -178,10 +183,14 @@ test('the coach\'s "Keep Leg Press" chip keeps it: nothing changes, the prompt g
   await openLegsB(page);
   await prompt(page).locator('[data-gym-swap]').click();
   await coach(page).getByRole('button', { name: 'Keep Leg Press' }).click();
-  await expect(coach(page).locator('[data-proposal]')).toHaveCount(0);
+  // M12: the proposal stays in the thread, set aside (no Apply left, nothing applied).
+  await expect(coach(page).locator('[data-proposal]')).toHaveAttribute(
+    'data-proposal-status',
+    'dismissed',
+  );
+  await expect(coach(page).getByRole('button', { name: 'Apply' })).toHaveCount(0);
   await expect(coach(page).locator('.cs-msg-coach').last()).toContainText('keeping Leg Press');
-  await coach(page).getByRole('button', { name: 'Close' }).click();
-  await expect(coach(page)).toHaveCount(0);
+  await leaveCoach(page);
   await expect(prompt(page)).toHaveCount(0);
   await keptStored(page, 'Leg_Press');
   await page.reload();
@@ -247,7 +256,7 @@ test('My gym: Keep it resets when the list changes; no smith → barbell squat f
   const card = coach(page).locator('[data-proposal]');
   await expect(card).toContainText('Barbell Squat');
   await expect(card).not.toContainText('Smith Machine Squat');
-  await coach(page).getByRole('button', { name: 'Close' }).click();
+  await leaveCoach(page);
 
   // A leg press after all: no prompt, and it survives a reload.
   await openMyGym(page);

@@ -7,7 +7,15 @@
 // server (route-asserted). The PWA (no native bridge) shows "Health data works in the iPhone
 // app." and never calls the plugin.
 import { expect, test, type Page } from '@playwright/test';
-import { at, expectTapTargets, installMocks, noHorizontalOverflow, record } from './app.helpers';
+import {
+  at,
+  coachTab,
+  expectTapTargets,
+  installMocks,
+  leaveCoach,
+  noHorizontalOverflow,
+  record,
+} from './app.helpers';
 
 declare global {
   interface Window {
@@ -216,14 +224,18 @@ test('connect → switches → "Lighter today?" with two reasons → Lighter tod
   // Lighter today → the M10 Lighter proposal → Apply → Undo.
   await card(page).locator('[data-readiness-lighter]').click();
   await expect(card(page)).toHaveCount(0);
-  const coach = page.getByRole('dialog', { name: 'Coach' });
+  // M12: the card opens the Coach tab with its chip already sent; Undo sits on the applied card.
+  const coach = coachTab(page);
   const proposal = coach.locator('[data-proposal]');
   await expect(proposal).toBeVisible();
   await proposal.getByRole('button', { name: 'Apply' }).click();
-  await expect(coach).toHaveCount(0);
+  await expect(proposal.locator('[data-card-status="applied"]')).toBeVisible();
+  await leaveCoach(page);
   await expect(page.locator('[data-adjusted]')).toContainText('Lighter today');
-  const toast = page.locator('[data-undo-toast]');
-  await toast.getByRole('button', { name: 'Undo' }).click();
+  await page.locator('[data-tab="coach"]').click();
+  await proposal.getByRole('button', { name: 'Undo' }).click();
+  await expect(proposal.locator('[data-card-status="undone"]')).toBeVisible();
+  await leaveCoach(page);
   await expect(page.locator('[data-adjusted]')).toHaveCount(0);
   // Answered: the card doesn't come back today, even after the app comes back to the front.
   await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
@@ -252,7 +264,7 @@ test('an imported weigh-in shows "from Health" in Fuel', async ({ page }, testIn
   expect(errors).toEqual([]);
 });
 
-test("Health wins: a typed weigh-in for today is replaced by Health's, shown \"from Health\"", async ({
+test('Health wins: a typed weigh-in for today is replaced by Health\'s, shown "from Health"', async ({
   page,
 }) => {
   const offsite = await guardNetwork(page);

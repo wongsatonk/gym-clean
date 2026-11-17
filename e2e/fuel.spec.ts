@@ -619,8 +619,9 @@ test("coach's What should I eat? → Log → Fuel shows the entry", async ({ pag
   await page.locator('[data-tab="today"]').click();
   await expect(page.locator('[data-screen="today"]')).toBeVisible();
 
+  // M12: Today's Coach button opens the Coach tab.
   await page.locator('[data-coach-open]').click();
-  const coach = page.getByRole('dialog', { name: 'Coach' });
+  const coach = page.locator('[data-screen="coach"]');
   await expect(coach).toBeVisible();
   await coach.locator('[data-coach-chip="food"]').click();
   const card = coach.locator('[data-food-card]');
@@ -633,10 +634,9 @@ test("coach's What should I eat? → Log → Fuel shows the entry", async ({ pag
   await card.locator('[data-food-log="0"]').click();
   await expect(card.locator('[data-food-logged="0"]')).toBeVisible();
   await expect(page.locator('[data-undo-toast]')).toContainText('Logged');
-  await coach.getByRole('button', { name: 'Close' }).click();
-  await expect(coach).toHaveCount(0);
 
   await goFuel(page);
+  await expect(coach).toHaveCount(0);
   await expect(entries(page)).toHaveCount(1);
   const label = (
     (await entries(page).first().locator('.fuel-entry-name').textContent()) ?? ''

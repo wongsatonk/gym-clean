@@ -146,9 +146,16 @@ test('back up → wipe → restore (two taps) → History and settings are back;
   await expect(page.locator('[data-unit="lb"]')).toHaveAttribute('aria-pressed', 'true');
   expect(await count(page, 'sessions')).toBe(2);
   expect(await count(page, 'sets')).toBe(2);
-  await page.locator('[data-tab="history"]').click();
-  await expect(page.locator('[data-history-day="s-2"]')).toBeVisible();
-  await expect(page.locator('[data-history-day="s-1"]')).toBeVisible();
+  // M12: Calendar replaces History; the restored sessions show as trained days (not missed).
+  await page.locator('[data-tab="calendar"]').click();
+  await expect(page.locator('[data-cal-day="2026-11-12"]')).toHaveAttribute(
+    'data-status',
+    /^(done|partial|extra)$/,
+  );
+  await expect(page.locator('[data-cal-day="2026-11-11"]')).toHaveAttribute(
+    'data-status',
+    /^(done|partial|extra)$/,
+  );
 
   // Undo (the toast is still up for 10 s): the wiped state comes back.
   await toast.getByRole('button', { name: 'Undo' }).click();

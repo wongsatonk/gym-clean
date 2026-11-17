@@ -1,5 +1,5 @@
-// M10 phase A, end to end in the real app (SPEC M10 "Accept", phase A E2E list): the coach sheet
-// on Today / the preview / the Pause sheet, Apply → Undo, the calendar (Not today, rest day,
+// M10 phase A, end to end in the real app (SPEC M10 "Accept", phase A E2E list): the coach (since
+// M12 the Coach tab from Today / the preview / Summary, the compact sheet from the Pause sheet), Apply → Undo, the calendar (Not today, rest day,
 // Train anyway), Lighter today in lb, a mid-workout swap, a mid-workout removal + Undo, a stall on Summary from seeded history,
 // a red flag, Plan changes with Reset + Undo, and the plan surviving a reload.
 // Replies on Today and the preview are shown, not spoken; a change applied mid-workout is spoken
@@ -192,17 +192,36 @@ async function openApp(page: Page, time: number) {
   await expect(page.locator('[data-cal]').first()).toBeVisible();
 }
 
+/** The Pause sheet's compact chat (mid-workout only since M12). */
 const coach = (page: Page) => page.getByRole('dialog', { name: 'Coach' });
+/** M12: the Coach tab, the coach's home on Today / the preview / Summary. */
+const coachTab = (page: Page) => page.locator('[data-screen="coach"]');
 
+/** Today's Coach button opens the Coach tab. */
 async function openCoach(page: Page) {
   await page.locator('[data-coach-open]').click();
-  await expect(coach(page)).toBeVisible();
+  await expect(coachTab(page)).toBeVisible();
+}
+
+/** Back to Today through the tab bar (the tab has no Close). */
+async function leaveCoach(page: Page) {
+  await page.locator('[data-tab="today"]').click();
+  await expect(coachTab(page)).toHaveCount(0);
 }
 
 /** Every visible button in `scope` is at least 56px tall (gym rule). */
 async function expectTapTargets(page: Page, selector: string) {
   // evaluateAll doesn't wait: let the screen's buttons render first.
   await expect(page.locator(`${selector} button`).first()).toBeVisible();
+  // M12 motion: let rise-ins finish first (a fractional translateY mid-animation can measure a
+  // 56px button as 55.9999px). Reduced motion has none to wait for.
+  await page.waitForFunction(() =>
+    document
+      .getAnimations()
+      .every(
+        (a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity,
+      ),
+  );
   // Some screens render twice (e.g. Plan changes after its async list load), so the buttons can be
   // swapped out between the wait above and the measure. Retry until a laid-out set is measured.
   let heights: (readonly [string, number])[] = [];
@@ -265,20 +284,33 @@ test('Not today: the 7-day preview → Apply → Today rests, next day up → Un
   await expect(page.locator('[data-cal="2026-11-15"]')).toHaveAttribute('data-rest');
 
   await openCoach(page);
-  await expectTapTargets(page, '[data-coach-sheet]');
-  await coach(page).locator('[data-coach-chip="notToday"]').click();
-  const card = coach(page).locator('[data-proposal]');
+  await expectTapTargets(page, '[data-screen="coach"]');
+  await coachTab(page).locator('[data-coach-chip="notToday"]').click();
+  const card = coachTab(page).locator('[data-proposal]');
   await expect(card).toBeVisible();
   await expect(card).toContainText('Sunday becomes a training day');
   // The moved week, before → after, one row per changed date.
   await expect(card.locator('.proposal-row').first()).toBeVisible();
   await expect(card).toContainText('Push A');
-  await expectTapTargets(page, '[data-coach-sheet]');
+  await expectTapTargets(page, '[data-screen="coach"]');
   await noHorizontalOverflow(page);
   await card.getByRole('button', { name: 'Apply' }).click();
 
-  // Today rests; the strip moves the day; the confirmation offers Undo.
-  await expect(coach(page)).toHaveCount(0);
+  // M12: on the Coach tab the applied card offers Undo (no toast), on screen above the tab bar.
+  const undo = card.getByRole('button', { name: 'Undo' });
+  await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
+  await expect(page.locator('[data-undo-toast]')).toHaveCount(0);
+  await expectTapTargets(page, '[data-screen="coach"]');
+  await expect(undo).toBeInViewport({ ratio: 1 });
+  const [u, bar] = await Promise.all([
+    undo.boundingBox(),
+    page.locator('[data-tabbar]').boundingBox(),
+  ]);
+  expect(u && bar && u.y + u.height <= bar.y, 'Undo above the tab bar').toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('undo-card-coach-390.png') });
+
+  // Today rests; the strip moves the day.
+  await leaveCoach(page);
   await expect(page.locator('[data-hero="rest"]')).toContainText('Rest day');
   await expect(page.locator('[data-hero="rest"]')).toContainText('Next up: Push A');
   await expect(page.locator('[data-adjusted]')).toContainText('Rest day (moved)');
@@ -286,14 +318,11 @@ test('Not today: the 7-day preview → Apply → Today rests, next day up → Un
   await expect(page.locator('[data-cal="2026-11-14"]')).toHaveAttribute('data-day', 'push-a');
   // useRestDay: the week keeps every session, so Sunday trains instead of resting.
   await expect(page.locator('[data-cal="2026-11-15"]')).not.toHaveAttribute('data-rest');
-  const toast = page.locator('[data-undo-toast]');
-  await expect(toast).toBeVisible();
-  await expectTapTargets(page, '[data-undo-toast]');
-  // Above the tab bar, never over it, for its whole 10 s.
-  await expectToastClear(page, ['[data-tabbar]']);
-  await page.screenshot({ path: testInfo.outputPath('undo-toast-today-390.png') });
 
-  await toast.getByRole('button', { name: 'Undo' }).click();
+  await page.locator('[data-tab="coach"]').click();
+  await undo.click();
+  await expect(card.locator('[data-card-status="undone"]')).toBeVisible();
+  await leaveCoach(page);
   await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
   await expect(page.locator('[data-adjusted]')).toHaveCount(0);
   await expect(page.locator('[data-cal="2026-11-13"]')).toHaveAttribute('data-day', 'push-a');
@@ -326,14 +355,16 @@ test('"my arms hurt": referral line + go-easy proposal → preview shows the cha
   await expect(page.locator('[data-hero="pull-a"]')).toBeVisible();
 
   await openCoach(page);
-  const box = coach(page).getByLabel('Ask the coach');
+  const box = coachTab(page).getByLabel('Ask the coach');
   await box.fill('my arms hurt');
-  await coach(page).getByRole('button', { name: 'Send' }).click();
-  await expect(coach(page).locator('.cs-msg-coach').last()).toContainText(REFERRAL);
-  const card = coach(page).locator('[data-proposal]');
+  await coachTab(page).getByRole('button', { name: 'Send' }).click();
+  await expect(coachTab(page).locator('.cs-msg-coach').last()).toContainText(REFERRAL);
+  const card = coachTab(page).locator('[data-proposal]');
   await expect(card).toBeVisible();
   await expect(card).toContainText('Dumbbell Bicep Curl');
   await card.getByRole('button', { name: 'Apply' }).click();
+  await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
+  await leaveCoach(page);
   await expect(page.locator('[data-adjusted]')).toContainText('Easy on arms');
 
   // The preview lists today as it runs: curls gone, changed rows badged.
@@ -392,11 +423,13 @@ test('Lighter today in lb: 35 lb → 30 lb on the Exercise screen, and the plan 
   await leaveSettings(page);
 
   await openCoach(page);
-  await coach(page).locator('[data-coach-chip="lighter"]').click();
-  const card = coach(page).locator('[data-proposal]');
+  await coachTab(page).locator('[data-coach-chip="lighter"]').click();
+  const card = coachTab(page).locator('[data-proposal]');
   await expect(card).toContainText('35 lb');
   await expect(card).toContainText('30 lb');
   await card.getByRole('button', { name: 'Apply' }).click();
+  await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
+  await leaveCoach(page);
   await expect(page.locator('[data-adjusted]')).toContainText('Lighter today');
 
   await page.reload();
@@ -583,11 +616,19 @@ test('a stalled lift on Summary (seeded history) opens its proposal; Apply', asy
   const stall = page.locator('[data-stall="Dumbbell_Bench_Press"]');
   await expect(stall).toContainText('Dumbbell Bench Press: same best set for 4 sessions.');
   await stall.getByRole('button', { name: 'Go lighter' }).click();
-  const card = coach(page).locator('[data-proposal]');
+  // M12: the stall card opens the Coach tab with its chip already sent (Summary is done).
+  const card = coachTab(page).locator('[data-proposal]');
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Apply' }).click();
-  await expect(page.locator('[data-undo-toast]')).toBeVisible();
+  await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Undo' })).toBeVisible();
   await expect(page.locator('[data-stall="Dumbbell_Bench_Press"]')).toHaveCount(0);
+  // Applied: a plan change for the stalled lift.
+  await page.locator('[data-tab="settings"]').click();
+  await page.locator('[data-plan-changes-open]').click();
+  await expect(page.locator('[data-screen="plan-changes"] li.plan-change').first()).toContainText(
+    'Dumbbell Bench Press',
+  );
 
   expect(offDevice(requests, baseURL)).toEqual([]);
   expect(errors).toEqual([]);
@@ -600,13 +641,13 @@ test('a red-flag phrase gets the fixed line and no training proposal', async ({
   const { requests, errors } = record(page);
   await openApp(page, at(13, 18));
   await openCoach(page);
-  await coach(page).getByLabel('Ask the coach').fill('I have chest pain');
-  await coach(page).getByRole('button', { name: 'Send' }).click();
-  const flag = coach(page).locator('[data-redflag]');
+  await coachTab(page).getByLabel('Ask the coach').fill('I have chest pain');
+  await coachTab(page).getByRole('button', { name: 'Send' }).click();
+  const flag = coachTab(page).locator('[data-redflag]');
   await expect(flag).toContainText(RED_FLAG);
-  await expect(coach(page).locator('[data-proposal]')).toHaveCount(0);
-  await expect(coach(page).locator('[data-coach-chip]')).toHaveCount(0);
-  await expect(coach(page).getByLabel('Ask the coach')).toHaveCount(0);
+  await expect(coachTab(page).locator('[data-proposal]')).toHaveCount(0);
+  await expect(coachTab(page).locator('[data-coach-chip]')).toHaveCount(0);
+  await expect(coachTab(page).getByLabel('Ask the coach')).toHaveCount(0);
   await expect(flag.getByRole('button', { name: 'Not today' })).toBeVisible();
   await expect(flag.getByRole('button', { name: 'End workout' })).toHaveCount(0);
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
@@ -636,8 +677,8 @@ test('rest day: "Rest day" hero → Train anyway runs the next day; the calendar
   await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
   await expect(page.locator('[data-cal="2026-11-15"]')).toHaveAttribute('data-day', 'push-a');
   await openCoach(page);
-  await coach(page).locator('[data-coach-chip="lighter"]').click();
-  await expect(coach(page).locator('[data-proposal]')).toBeVisible();
+  await coachTab(page).locator('[data-coach-chip="lighter"]').click();
+  await expect(coachTab(page).locator('[data-proposal]')).toBeVisible();
   expect(offDevice(requests, baseURL)).toEqual([]);
   expect(errors).toEqual([]);
 });
@@ -659,8 +700,10 @@ test('Not today → Train anyway takes the postpone back: the week is as before,
   const before = await week();
 
   await openCoach(page);
-  await coach(page).locator('[data-coach-chip="notToday"]').click();
-  await coach(page).locator('[data-proposal]').getByRole('button', { name: 'Apply' }).click();
+  await coachTab(page).locator('[data-coach-chip="notToday"]').click();
+  await coachTab(page).locator('[data-proposal]').getByRole('button', { name: 'Apply' }).click();
+  await expect(coachTab(page).locator('[data-card-status="applied"]')).toBeVisible();
+  await leaveCoach(page);
   await expect(page.locator('[data-hero="rest"]')).toBeVisible();
   // useRestDay turned Sunday into a training day.
   await expect(page.locator('[data-cal="2026-11-15"]')).not.toHaveAttribute('data-rest');
@@ -752,8 +795,10 @@ test('Plan changes: newest first, Reset to default (two taps) → Undo brings th
   const { requests, errors } = record(page);
   await openApp(page, at(13, 18));
   await openCoach(page);
-  await coach(page).locator('[data-coach-chip="lighter"]').click();
-  await coach(page).locator('[data-proposal]').getByRole('button', { name: 'Apply' }).click();
+  await coachTab(page).locator('[data-coach-chip="lighter"]').click();
+  await coachTab(page).locator('[data-proposal]').getByRole('button', { name: 'Apply' }).click();
+  await expect(coachTab(page).locator('[data-card-status="applied"]')).toBeVisible();
+  await leaveCoach(page);
   await expect(page.locator('[data-adjusted]')).toContainText('Lighter today');
 
   await page.locator('[data-tab="settings"]').click();

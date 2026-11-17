@@ -217,9 +217,12 @@ test('Accent: Volt swaps the action colour and success to gold; Yellow keeps gre
   expect(await varOf(page, '--success')).toBe(green);
   expect(await calls(page)).toEqual(['accent:volt', 'accent:yellow']);
 
-  // The active tab marker follows the accent.
+  // The active tab marker follows the accent. M12: the marker is the sliding `.tab-ind` bar
+  // (drawn by its ::before) under the active tab, which also carries aria-current.
+  await expect(page.locator('[data-tab="settings"]')).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.tab-ind')).toHaveAttribute('data-tab-ind', 'settings');
   const bar = await page
-    .locator('[data-tab="settings"]')
+    .locator('.tab-ind')
     .evaluate((el) => getComputedStyle(el, '::before').backgroundColor);
   expect(bar).toBe('rgb(255, 214, 10)');
 });
