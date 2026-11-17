@@ -6,7 +6,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 - **Live:** b2c532e on main, deployed 2026-11-15 (CI: 2582 unit, 135 e2e passed): everything above plus the polish batch and **M7 Fuel** (Fuel tab, targets + weekly check, weigh-ins, 47 Thai dishes, offline USDA search, recipes, coach food ideas, opt-in barcode scan). First CI run (e01600c) failed on the short-phone set-up card under Linux text rendering; fixed in b2c532e (reproduced in the Playwright Linux container).
 - **In progress:** cloud sessions during Wongsaton's flight (2026-11-15), per `docs/cloud-briefs.md`. Open follow-up: the 10 s Undo toast covers a Fuel sheet's main button until you scroll (verifier note; in cloud session 2).
-- **Now (2026-11-17, resumed in ~/Develop/gym-clean):** slice 1b verified (PASS). **Slice 2 building:** tasks 1, 2, 10 done; next G1 (3–5, 9, 12, 13 core ∥ 11 ios ∥ 16–18 ui). Task 2 notes: `CheckIn.skipped?: true` added (skip stays for the week); `checkIn` card `{ weekStart, status: 'pending'|'done'|'skipped' }`; the 4 new detectors are never-met placeholders until task 15; `settings/coach` and `settings/reminders` open Settings until task 20.
+- **Now (2026-11-17, resumed in ~/Develop/gym-clean):** slice 1b verified (PASS). **Slice 2 builds on branch `m12-slice2`** in worktree `.claude/worktrees/resume-4f67e1` (cut from `m12-coach-tab` at 69fb2a1; that session cannot write into the agents-75bc3a worktree). Tasks 1–5, 9–13, 16–18 done (G1 reviewer: one blocking fix, then PASS). **Next: G2** — 6 [ios] codegen → 7 [ios] GymBrain plugin; 8 [core] Apple adapter → 14 [core] eval runner; 15 [core] What's New + Checkpoint J to-do. Then 19–20 [main], 21–22, review, verify. Merge: `m12-slice2` contains slices 1, 1c, 1b; merge/push stays his call.
+- **Task 20 wiring notes (from G1):** run stored `'reminders'` through core `mergeReminders` before the screen/plan; re-run `reminderPlan` on app open/foreground **and after a session finishes**; `pending` → string ids via `reminderIdFromNumber`; `answeredMissed` from coach UI state `missedAnswered`; `request()` only from a switch-on. Start GymSpeech only after `micDown`; a cancel from blur (iOS permission alert) is not an error. Post the check-in card on the Coach tab only (omit check-in callbacks in the Pause sheet). Use `updateChatMic` for the ~10/s partial/level events. `showSource` only in the native build. Brain request: turns live in the context text (last 8, 140 chars each), so `GymBrainRequest.messages` carries only the new message (≤ ~400 chars); red flags go to the rules brain. Pass `listCheckIns` to `recapDue`.
 - **Earlier next step:** build **M12 slice 1b "Trainer kit"** on `m12-coach-tab` (plan under "Current milestone plan → M12 — slice 1b"; first parallel group: 1b tasks 1 [main] ∥ 2 [core] ∥ 3 [ios] ∥ 4 [main], plus slice 2 tasks 1 and 10 [ios] early), then **slice 2** (Apple brain + mic + reminders + check-in; plan under "→ M12 — slice 2") → 🧍 Checkpoint J. His go-ahead 2026-11-17: "Go ahead slice 2 and 1b". Slices 1 + 1c are verified (745a143) and on his iPhone, not merged; merge/push stays his call. Older gym checkpoints (E, F1, …) are his to-dos in the app.
 - **M12 slices 1b + 2: planned 2026-11-17** (Decision "M12 slices 1b + 2"). Defaults taken for M12-q1 and M12-q4 (planner calls he can correct in the to-do decision steps). Apple Intelligence is on and downloaded on his iPhone (his words 2026-11-17: "It finished"). Nothing blocks on him until Checkpoint J.
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
@@ -93,19 +94,19 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Adds: `BrainUnavailableReason` (`'deviceNotEligible' | 'appleIntelligenceNotEnabled' | 'modelNotReady' | 'unsupported' | 'notNative'`), `BrainErrorCode` (`'guardrail' | 'contextTooLong' | 'unsupportedLanguage' | 'timeout' | 'other'`), `ToolCall = { name: string; args: Record<string, unknown> }`, `ReadToolName` (`'weekSummary' | 'progressSummary' | 'exerciseInfo' | 'foodIdeas'`), `GymBrainRequest` / `GymBrainResponse` (`{ text; toolCalls; latencyMs }`), `ChatMessage.viaMic?: true`, `CoachSettings` gains `speakReplies?: 'mic' | 'always' | 'off'` (default `'mic'`), `brainNotes?: Partial<Record<BrainUnavailableReason, number>>` (when each plain note was shown), `ReminderKind` (`'session' | 'missedDay' | 'sundayRecap'`), `ReminderSettings = { session: { on: boolean; time: string /* HH:MM */ }; missedDay: { on: boolean }; sundayRecap: { on: boolean }; askedPermission?: boolean }`, `CheckIn = { weekStart: string; energy?: 1|2|3|4|5; sleep?: 1|2|3|4|5; soreness?: 1|2|3|4|5; at: number }`, `ChatCard` kind `'checkIn'`, `TodoDetectorId` + `'appleAnswers' | 'micUses' | 'reminderOn' | 'checkInDone'`, `AppRoute` + `'settings/coach' | 'settings/reminders'`.
   - Done when: `npm run check` passes; no runtime change; iOS project still builds (`npx cap sync ios`).
   - Deps: slice 1b task 40 (verifier PASS; the 1b merge is his call and not needed) and task 1.
-- [ ] 3. [core-engineer] Tool definitions, the single source (M10 B1), **tests first**.
+- [x] 3. [core-engineer] Tool definitions, the single source (M10 B1), **tests first**.
   - Files: src/core/trainer/tools.ts(+test), src/core/trainer/tools.contract.json.
   - One `propose*` tool per `ProposalAction` (postponeSession, avoidBodyArea, lighterToday, deloadWeek, swapExercise, adjustStalledExercise, suggestFood, proposeFocusBlock **params only** `{ group, weeks, weekdays }`, shortOnTime `{ minutes }` from 1b, setEasyOn `{ add?, remove? }` from 1b) with JSON-schema args (enums from data: areas, catalog ids, dates `YYYY-MM-DD`, 20/30/45) and `toProposal(args, ctx)`; an explicit, tested exception list (`starterPlan`: intake only). Read-only tools `weekSummary`, `progressSummary`, `exerciseInfo { exerciseId }`, `foodIdeas` (no args except exerciseId) flagged `readOnly: true`.
   - Done when tests cover: 1:1 with `ProposalAction` minus the exception list; invalid args rejected with a short reason (unknown exercise, past date, bad group, weeks out of 2–6); a tool call returns a Proposal, never a state; `proposeFocusBlock` goes through `buildFocusBlock` (the model never sends days); `tools.contract.json` regenerated by the test equals the committed file.
   - Deps: 2.
-- [ ] 4. [core-engineer] Instructions, context, output filter (M10 B2), **tests first**.
+- [x] 4. [core-engineer] Instructions, context, output filter (M10 B2), **tests first**.
   - Files: src/core/trainer/brain/instructions.ts, context.ts, sanitize.ts (+tests).
   - Instructions: M10 Safety + M12 "Brains" (free answers from the context allowed, facts via read-only tools, every change via a `propose*` tool and his tap, ≤ 4 short sentences, `say` ≤ 12 words / ≤ 8 mid-workout, referral line verbatim, no medical content, no promises, English only; a Drill-sergeant style line for `say` when that voice is on).
   - `serializeContext(input, { brain: 'apple', appleCardReasons })`: today's plan, next 7 days, 4 weeks of top sets (warm-ups excluded), active overrides + focus block + easy-on list, week/month scores, today's Fuel totals vs targets, goal text + lift-goal progress, the last 8 turns; the "Lighter today?" **reason sentences only when `appleCardReasons !== false`** (sets `usedHealth: true`). **Never:** Health numbers, weekly load, cardio minutes, body fat / lean mass, measurements, weigh-in values, progress photos, check-in answers, notes, the dev log. Budget constant (from task 1's context size; provisional ≤ 6,000 chars).
   - `sanitizeReply(text, safety)`: banned/diagnosis words → the fixed safe line; referral line on discomfort; cap 4 sentences; `say` capped.
   - Done when tests cover: budget on a heavy made-up 4-week history; a never-contains test (seed Health values, body fat, measurements, a photo, a check-in, a note → none in the text); reasons present with `appleCardReasons` true/undefined and absent with false (the M12-q1 decision step's setting); sanitize on a list of bad replies.
   - Deps: 3.
-- [ ] 5. [core-engineer] Read-only tool results + facts eval, **tests first**.
+- [x] 5. [core-engineer] Read-only tool results + facts eval, **tests first**.
   - Files: src/core/trainer/brain/readTools.ts(+test), src/core/trainer/evals/facts.json, src/core/trainer/evals/facts.test.ts.
   - `readToolResults(input)` → `Record<ReadToolName, string>` (+ `exerciseInfo` per id): week/progress text from the slice 1 scores (same numbers as the rule answers), how-to + cues + muscles from the catalog, food ideas from the M10 food suggestion. Same never-contains rules as task 4.
   - Done when: numbers equal `periodScore` / rule replies (test); facts eval set ≥ 20 made-up items, each with the numbers a correct answer must quote; a checker `factsMatch(reply, item)` used by task 14.
@@ -125,7 +126,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `appleBrain(bridge, deps)`: `status()` from `availability()`; `ask()` builds instructions + context + read-tool results, calls `respond`, runs `sanitizeReply`, turns the first valid tool call into a Proposal via task 3 (an invalid one → "I couldn't do that." + chips; a second one → a chip), sets `source: 'apple'`, `usedHealth`. Router: an unavailable Apple brain → rules, and the chat gets **one plain note per reason, once** (stored in `coach.brainNotes`), e.g. "Apple Intelligence is off, so I'm using quick replies. Turn it on in Settings > Apple Intelligence & Siri." / "Apple Intelligence is still downloading. Quick replies until it's ready." / "This iPhone can't run Apple Intelligence. Quick replies still work."; errors → rules + a one-line note every time. Copy as data, `checkCopy`.
   - Done when tests cover: every availability reason → rules + its note once (second ask: no note); every error code → rules + note; tool call → Proposal; invalid → help + chips; two calls; chips bypass; sanitize always applied; `usedHealth` set only with reasons; no `fetch` anywhere (test stubs `fetch` to throw).
   - Deps: 3, 4, 5.
-- [ ] 9. [core-engineer] Speak-replies + mic rules, **tests first**.
+- [x] 9. [core-engineer] Speak-replies + mic rules, **tests first**.
   - Files: src/core/trainer/speakRules.ts(+test).
   - `shouldSpeak({ speakReplies, viaMic, phase, inSet })` (default `'mic'`: speak only replies to mic-sent messages; never in a set); `micAllowed({ native, inSet, screen })` (iPhone app only, Coach tab or Pause sheet, never in a set or on the camera); `sayFor(reply, phase)` caps (12 / 8 words).
   - Done when tests cover each combination and the caps.
@@ -135,16 +136,16 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - API per task 1: `availability()` (on-device only; else `{ available: false, reason }`), `start({ locale: 'en' })` → events `partial { text }`, `level { rms }`, `final { text }`, `error { code }`; `stop()`. Permissions requested on the first `start` only. No audio file written; the engine stops on stop / app background / a 60 s cap.
   - Done when: XCTests cover partial → final, stop, permission denied, not-on-device → unavailable, background stop; TS bridge test with a fake; no permission prompt at launch (test that nothing calls request at init).
   - Deps: 1 (may start during 1b; Info.plist is ios-engineer's).
-- [ ] 11. [ios-engineer] Local-notification bridge.
+- [x] 11. [ios-engineer] Local-notification bridge.
   - Files: src/native/reminders.ts(+test) (wraps the task 1 choice: `permission()`, `request()`, `schedule(items)`, `cancel(ids)`, `pending()`; a fake for tests/e2e), ios/** only if task 1 picks a custom plugin.
   - Done when: bridge tests with a fake scheduler (schedule, cancel by id, permission asked only by `request()`); no network; simulator build passes.
   - Deps: 1, 2.
-- [ ] 12. [core-engineer] Reminder schedule rules, **tests first**.
+- [x] 12. [core-engineer] Reminder schedule rules, **tests first**.
   - Files: src/core/reminders/schedule.ts(+test), src/core/reminders/copy.ts(+test).
   - `reminderPlan(settings, state, sessions, now)` → notifications for the next 14 days with stable ids: session reminder at his time on projected training days (not on rest days, not once today's session is done), missed-day nudge the next day at 09:00 (data) once per missed planned day, Sunday recap at 19:00 (data); everything off by default; turning one off → its ids in `cancel`. Text as data, no body, Health, weight or food numbers (e.g. "Pull A today. Ready when you are.").
   - Done when tests cover: all off → nothing; each on; times across DST; rest days; done today; missed-day once; off → cancel list; copy passes `checkCopy` + a no-numbers rule.
   - Deps: 2.
-- [ ] 13. [core-engineer] Weekly check-in, Dexie **v11**, **tests first**.
+- [x] 13. [core-engineer] Weekly check-in, Dexie **v11**, **tests first**.
   - Files: src/core/checkIn/checkIn.ts(+test), src/data/db.ts(+test), src/data/checkIn/store.ts(+test), src/data/backup.ts(+test), src/core/progress/recap.ts(+test).
   - `checkIns: 'weekStart'` (new table, no upgrade function, **backed up**). `checkInDue(today, checkIns)` → once per week (from Sunday, first Coach-tab open; skipped stays skipped for that week); 3 questions as data (energy, sleep, soreness, 1–5 chips); the week recap gains one line from it ("You rated energy 4, sleep 3, soreness 2."). Check-in answers stay out of every brain context (task 4 test).
   - Done when tests cover: v10 → v11 keeps every row; due once; skip; recap line; backup table list; not in the dev log.
@@ -159,17 +160,17 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Pages (`release: '1.14.0'`): chat freely (Apple's on-device coach), hold to talk, Speak replies, reminders (off until you turn them on), weekly check-in. New topic "Coach on your iPhone (Checkpoint J)", native, `since: '1.14.0'`: auto steps `appleAnswers` (≥ 5 replies with source apple), `micUses` (≥ 3 mic-sent messages), `reminderOn` (any reminder on), `checkInDone` (1); ask steps: wrong answers (note), a wrong action (note), the voice felt (right / too much / too little), the mic heard you (mostly / half / rarely), anything in the trainer kit that felt off (note; slice 1b feedback folds in here).
   - Done when: slice 1c data tests still pass (ids, routes, copy, detectors known) plus boundary tests for the 4 new detectors; facts are counts only.
   - Deps: 2, 13.
-- [ ] 16. [ui-engineer] Chat: mic, source badge, brain note, thinking.
+- [x] 16. [ui-engineer] Chat: mic, source badge, brain note, thinking.
   - Files: src/ui/coach/micButton.ts(+test), src/ui/coach/chat.ts(+test), src/ui/coach/chat.css.
   - Props add `mic: { state: 'hidden' | 'unavailable' | 'idle' | 'listening'; partial?: string; level?: number; reason?: string }`, callbacks `micDown`, `micUp`, `micCancel`. Hold-to-talk button ≥ 56px next to Send (pointer + keyboard: Space held); live partial text in the text box; level ring (transform/opacity, static under reduced motion); unavailable → a short line, typing still works; hidden in the PWA and during a set. Bubble source badge "On-device AI" / "Quick replies" (text, not colour alone); the brain note as a muted system line; "Thinking…" typing state.
   - Done when: render tests (each mic state, keyboard hold, reduced motion, badges, note) + 390×844 screenshots (listening with partial text, a reply with the badge, the "Apple Intelligence is off" note).
   - Deps: 2.
-- [ ] 17. [ui-engineer] Check-in card.
+- [x] 17. [ui-engineer] Check-in card.
   - Files: src/ui/coach/checkInCard.ts(+test), src/ui/coach/chat.ts (register the card kind; after 16).
   - Three questions, 1–5 chips each (≥ 56px, labelled ends "Low" / "High", selection not colour alone), Skip this week, Done; then a summary state.
   - Done when: render tests (keyboard, partial answers, skip) + 390×844 screenshot.
   - Deps: 2, 16.
-- [ ] 18. [ui-engineer] Settings: Coach, Reminders, eval screen.
+- [x] 18. [ui-engineer] Settings: Coach, Reminders, eval screen.
   - Files: src/ui/screens/coachSettings.ts(+test) (which brain answers + why + how to turn on Apple Intelligence; Speak replies: Mic only / Always / Off), src/ui/screens/reminders.ts(+test) (3 switches, all off by default, session time picker ≥ 56px, "We'll ask iPhone for permission the first time you turn one on", denied state with how to allow it), src/ui/screens/brainEval.ts(+test) (dev-only, native build, behind the existing developer settings: Run, progress, report summary + Export report), src/ui/screens/settings.ts (rows).
   - Done when: render tests + 390×844 screenshots (Coach status available / off, Reminders, eval report).
   - Deps: 2.
@@ -3336,6 +3337,15 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-17: **M12 slice 2, G1 build calls** (main + owners, reviewer-checked):
+  - **Context budget `CONTEXT_BUDGET_CHARS = 3200`** (plan said ≤ 6,000 provisional): Apple's window is 4,096 tokens per session incl. all 14 tool schemas; at 3 chars/token, minus instructions (~880), tool JSON (~4,730), a 400-char message, 2×600 read results and a 600-token reply leaves ~3,280. `context.test.ts` recomputes it from the real texts. Real token counts get logged on the phone (task 7 / Checkpoint J); lower it if a session hits the context limit, or move the 4 read results into the context text.
+  - **Exercise ids in tool args are patterned strings checked against the catalog at runtime**, not enums (60 ids × 4 fields ≈ 1,500 tokens).
+  - **Last 8 turns go inside the context text**, not as separate messages.
+  - **Reminder ids:** `kind:YYYY-MM-DD` ↔ `code×100,000,000 + yyyymmdd` (session 1, missedDay 2, sundayRecap 3). Missed-day nudge only for yesterday (if missed, unanswered) and today (if still planned), so a long break doesn't nudge daily. Session reminder default time 18:00.
+  - **Check-in week:** opens Sunday, stays open through Saturday (Mon–Sun week keyed by its Monday); skipped stays skipped; check-ins are backed up, never in the dev log or any brain context.
+  - **sanitizeReply fails closed** (some fine replies like "rest 2 days between leg sessions" get replaced); watch it in the task 14 eval.
+  - **Open question for Wongsaton (not blocking, default kept):** the intake's own-words goal text (e.g. "lose 5 kg") goes into Apple's on-device context as typed; weight/measurement *goal numbers* are filtered. Default: keep it (on-device only, never Claude).
 
 - 2026-11-17: **M15 Best-rep clips (his words, 2026-11-17: "Don't forget about social engineer job, it can record in the app while i'm working out, randomize record of the perfect lift up weight or anything to be good of public via instagram"; on the no-recording rule: "you can change that but need to save only on my phone not on cloud").** CLAUDE.md's Privacy hard rule was updated by main the same day to allow exactly this (opt-in, visible dot, others blurred, phone-only storage excluded from iCloud backup, shared only by him via the share sheet). New milestone **M15** in SPEC (after M14), release **1.17.0**, branch `m15-best-rep-clips` cut from the M14 result, ends at 🧍 **Checkpoint M**. SPEC §6 "recording/saving video" is changed (noted there and in M15 "Changes to earlier contracts"). Plan under "Current milestone plan → M15". **Planner calls he can correct:**
   - **Order: after M14** (default). Running it in parallel with M14's watch track is possible (M15-q1) but not planned.

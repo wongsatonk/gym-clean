@@ -56,3 +56,4 @@ ios/App/App/config.xml
 ios/App/Signing.local.xcconfig
 # Backups (M9 B1-B3) hold workout history: never commit
 *.gymclean-backup.json
+.vitest/
