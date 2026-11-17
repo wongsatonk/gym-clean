@@ -11,6 +11,10 @@
 // setting" button, `[data-today]` / `[data-last]`, stepper buttons "Reps minus" / "kg plus" and
 // outputs labelled "Reps" / the unit, the "Set done" button, and the top bar's "Exercise list",
 // "Camera", "Pause".
+// M12 1b: a warm-up set (`warmup` given) shows a text strip "Warm-up 1 of 2 · 20 kg × 8"
+// (`[data-warmup]`, `[data-warmup-label]`) with Skip warm-ups (`[data-skip-warmups]`), and the
+// set badge reads "Warm-up 1 of 2" instead of "Set 1 of 4" (no working-set pip is lit). Plain
+// text and one button: no motion (this screen stays motion-off, motion.ts MOTION_OFF).
 import type { PlannedExercise } from '../../core/types';
 import { exerciseById } from '../../data/catalog';
 import { badgesFor } from '../badges';
@@ -21,6 +25,9 @@ import { workoutTopBar } from '../topBar';
 import { muscleLabel } from '../../core/dayInfo';
 
 export type StepField = 'reps' | 'weight';
+
+/** Which warm-up set this is: 0-based `index` of `total` (from the session state). */
+export type WarmupStep = { index: number; total: number };
 
 export type ExerciseProps = {
   dayName: string;
@@ -53,6 +60,11 @@ export type ExerciseProps = {
   /** "8×40, 8×40 lb" logged today / last session; omitted when empty. */
   today?: string | undefined;
   last?: string | undefined;
+  /**
+   * This set is a warm-up (before set 1 of the day's first heavy lift). `reps`, `weightText` and
+   * `unit` are then the warm-up's; `setIndex` / `sets` stay the working sets (pips, all unlit).
+   */
+  warmup?: WarmupStep | undefined;
 };
 
 export type ExerciseActions = {
@@ -65,6 +77,11 @@ export type ExerciseActions = {
   /** -1 or +1 step; app.ts applies the step size (1 rep, 2.5 kg, 5 lb). */
   onAdjust: (field: StepField, dir: -1 | 1) => void;
   onSetDone: () => void;
+  /**
+   * Shows "Skip warm-ups" on a warm-up set: app.ts dispatches `{ type: 'SKIP_WARMUPS' }` and
+   * goes to set 1.
+   */
+  onSkipWarmups?: (() => void) | undefined;
 };
 
 function stepper(
@@ -109,6 +126,7 @@ function stepper(
   );
 }
 
+/** Working-set pips; `setIndex` -1 (a warm-up) lights none. */
 function setPips(setIndex: number, sets: number): HTMLElement {
   return h(
     'span',
@@ -116,6 +134,39 @@ function setPips(setIndex: number, sets: number): HTMLElement {
     ...Array.from({ length: sets }, (_, i) =>
       h('i', { class: i === setIndex ? 'cur' : i < setIndex ? 'past' : '' }),
     ),
+  );
+}
+
+/** Pure: "Warm-up 1 of 2". */
+export function warmupCount(w: WarmupStep): string {
+  return `Warm-up ${w.index + 1} of ${w.total}`;
+}
+
+/** The warm-up strip: the label as text, and Skip warm-ups when the app allows it. */
+function warmupStrip(p: ExerciseProps, w: WarmupStep, onSkip?: () => void): HTMLElement {
+  return h(
+    'section',
+    { class: 'warmup-strip', 'aria-label': 'Warm-up set', 'data-warmup': true },
+    h(
+      'p',
+      { class: 'warmup-label', 'data-warmup-label': true },
+      h('span', { class: 'warmup-count' }, warmupCount(w)),
+      // The dot belongs to the second part, so it is clipped away when that part wraps to its
+      // own line beside Skip (styles.css .warmup-sep); the text still reads as one line.
+      h(
+        'span',
+        { class: 'warmup-load' },
+        h('span', { class: 'warmup-sep' }, ' · '),
+        `${p.weightText} ${p.unit} × ${p.reps}`,
+      ),
+    ),
+    onSkip
+      ? h(
+          'button',
+          { type: 'button', class: 'warmup-skip', 'data-skip-warmups': true, onclick: onSkip },
+          'Skip warm-ups',
+        )
+      : null,
   );
 }
 
@@ -167,12 +218,12 @@ export function exerciseScreen(p: ExerciseProps, a: ExerciseActions): HTMLElemen
           h(
             'p',
             { class: 'set-badge', 'data-set-counter': true },
-            h('span', { class: 'set-lbl caps' }, 'Set'),
+            h('span', { class: 'set-lbl caps' }, p.warmup ? 'Warm-up' : 'Set'),
             ' ',
-            h('span', { class: 'set-num' }, String(p.setIndex + 1)),
-            h('span', { class: 'set-of' }, ` of ${p.sets}`),
+            h('span', { class: 'set-num' }, String((p.warmup?.index ?? p.setIndex) + 1)),
+            h('span', { class: 'set-of' }, ` of ${p.warmup?.total ?? p.sets}`),
           ),
-          setPips(p.setIndex, p.sets),
+          setPips(p.warmup ? -1 : p.setIndex, p.sets),
           legend
             ? h(
                 'p',
@@ -186,6 +237,7 @@ export function exerciseScreen(p: ExerciseProps, a: ExerciseActions): HTMLElemen
         h('div', { class: 'stage-fig' }, p.figure),
       ),
     ),
+    p.warmup ? warmupStrip(p, p.warmup, a.onSkipWarmups) : null,
     p.cue
       ? h(
           'div',

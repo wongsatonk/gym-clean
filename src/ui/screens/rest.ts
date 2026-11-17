@@ -21,12 +21,18 @@
 // fills quickly to the set just logged (motion.ts ringFill; final at once under reduced motion).
 // It plays once per logged set: a re-render of the same rest (+30 s, a sheet closing) shows it
 // filled, without replaying. Decorative (aria-hidden): the eyebrow says the same in words.
+// M12 1b: an optional effort row ("How was that set?" Easy / Good / Hard, `[data-effort]`) for
+// the set just logged. It is on the rest screen only (never during a set), never blocks the
+// timer or Start set, and updates in place on a tap (no re-render). When the next set is a
+// warm-up the eyebrow reads "Next · Warm-up 1 of 2" (`[data-warmup]`).
 import { formatRest } from '../../core/format';
+import type { SetEffort } from '../../core/types';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { ringFill } from '../motion';
 import { moodClass } from '../tokens';
 import { workoutTopBar } from '../topBar';
+import type { WarmupStep } from './exercise';
 
 export type RestProps = {
   dayName: string;
@@ -67,6 +73,14 @@ export type RestProps = {
    * (the next set is then set 1 of the next one). Omitted with setIndex 0 → no ring.
    */
   setsDone?: { done: number; total: number } | undefined;
+  /**
+   * Effort of the set just logged: `null` shows the row with nothing chosen, a value shows it
+   * chosen, `undefined` (or no `onEffort`) leaves the row out (no logged set to rate, e.g. after
+   * a warm-up or a skipped exercise).
+   */
+  effort?: SetEffort | null | undefined;
+  /** The upcoming set is a warm-up: the eyebrow reads "Next · Warm-up 1 of 2". */
+  warmup?: WarmupStep | undefined;
 };
 
 export type RestActions = {
@@ -78,6 +92,13 @@ export type RestActions = {
   onExtend: () => void;
   onNotes: () => void;
   onStartSet: () => void;
+  /**
+   * A new effort was chosen (tap or arrow keys): app.ts dispatches
+   * `{ type: 'SET_EFFORT', setIndex, effort }`. The row already shows it; no re-render needed.
+   */
+  onEffort?: ((effort: SetEffort) => void) | undefined;
+  /** "Why?": app.ts opens the effort learn card; `opener` gets the focus back on close. */
+  onEffortWhy?: ((opener: HTMLElement) => void) | undefined;
 };
 
 export type RestView = {
@@ -153,6 +174,108 @@ function setRing(p: RestProps): SVGElement | null {
   return svg;
 }
 
+/** The three answers, in order, with the "reps left in the tank" words under each. */
+const EFFORTS: readonly { id: SetEffort; name: string; sub: string; spoken: string }[] = [
+  { id: 'easy', name: 'Easy', sub: '3+ left', spoken: 'Easy, 3 or more reps left' },
+  { id: 'good', name: 'Good', sub: '2 left', spoken: 'Good, 2 reps left' },
+  { id: 'hard', name: 'Hard', sub: '0–1 left', spoken: 'Hard, 0 to 1 reps left' },
+];
+
+/**
+ * "How was that set?" — a radio group of three buttons (one tab stop; arrows move and select,
+ * like native radios). The chosen one is marked by `aria-checked`, a check mark and a filled
+ * tile, so the state isn't colour alone. Optional: nothing here touches the timer or Start set.
+ */
+function effortRow(
+  value: SetEffort | null,
+  onEffort: (effort: SetEffort) => void,
+  onWhy: RestActions['onEffortWhy'],
+): HTMLElement {
+  let current = value;
+  const row = h('section', { class: 'effort', 'aria-label': 'Set effort', 'data-effort': '' });
+  const btns = EFFORTS.map((e) =>
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'effort-opt',
+        role: 'radio',
+        'aria-label': e.spoken,
+        'data-effort-opt': e.id,
+      },
+      h('span', { class: 'effort-mark', 'aria-hidden': 'true' }, icon('check', 'sm')),
+      h('span', { class: 'effort-name' }, e.name),
+      h('span', { class: 'effort-sub' }, e.sub),
+    ),
+  );
+  const paint = () => {
+    row.setAttribute('data-effort', current ?? '');
+    const tabStop = Math.max(
+      0,
+      EFFORTS.findIndex((e) => e.id === current),
+    );
+    btns.forEach((b, i) => {
+      b.setAttribute('aria-checked', EFFORTS[i]?.id === current ? 'true' : 'false');
+      b.setAttribute('tabindex', i === tabStop ? '0' : '-1');
+    });
+  };
+  const choose = (i: number, focus: boolean) => {
+    const e = EFFORTS[i];
+    const b = btns[i];
+    if (!e || !b) return;
+    if (focus) b.focus();
+    if (e.id === current) return;
+    current = e.id;
+    paint();
+    onEffort(e.id);
+  };
+  btns.forEach((b, i) => {
+    b.addEventListener('click', () => choose(i, false));
+    b.addEventListener('keydown', (ev) => {
+      const n = EFFORTS.length;
+      const k = ev.key;
+      const to =
+        k === 'ArrowRight' || k === 'ArrowDown'
+          ? (i + 1) % n
+          : k === 'ArrowLeft' || k === 'ArrowUp'
+            ? (i + n - 1) % n
+            : k === 'Home'
+              ? 0
+              : k === 'End'
+                ? n - 1
+                : -1;
+      if (to < 0) return;
+      ev.preventDefault();
+      choose(to, true);
+    });
+  });
+  paint();
+  const why: HTMLElement | null = onWhy
+    ? h(
+        'button',
+        {
+          type: 'button',
+          class: 'effort-why',
+          'aria-label': 'Why? About set effort',
+          'data-effort-why': true,
+          onclick: () => onWhy(why as HTMLElement),
+        },
+        icon('help', 'sm'),
+        'Why?',
+      )
+    : null;
+  row.append(
+    h(
+      'div',
+      { class: 'effort-head' },
+      h('p', { class: 'effort-q', id: 'effort-q' }, 'How was that set?'),
+      ...(why ? [why] : []),
+    ),
+    h('div', { class: 'effort-opts', role: 'radiogroup', 'aria-labelledby': 'effort-q' }, ...btns),
+  );
+  return row;
+}
+
 export function restScreen(p: RestProps, a: RestActions): RestView {
   const ringFg = svgEl('circle', {
     class: 'rest-ring-fg',
@@ -222,12 +345,18 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
     h(
       'div',
       { class: 'next-up' },
-      h(
-        'p',
-        { class: 'rest-eyebrow caps' },
-        setRing(p),
-        h('span', {}, `Next · Set ${p.setIndex + 1} of ${p.sets}`),
-      ),
+      p.warmup
+        ? h(
+            'p',
+            { class: 'rest-eyebrow caps', 'data-warmup': true },
+            h('span', {}, `Next · Warm-up ${p.warmup.index + 1} of ${p.warmup.total}`),
+          )
+        : h(
+            'p',
+            { class: 'rest-eyebrow caps' },
+            setRing(p),
+            h('span', {}, `Next · Set ${p.setIndex + 1} of ${p.sets}`),
+          ),
       h('p', { class: 'rest-next-name' }, p.name),
       h(
         'p',
@@ -262,6 +391,7 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
     timer,
     extend,
     p.fixEl ?? null,
+    p.effort !== undefined && a.onEffort ? effortRow(p.effort, a.onEffort, a.onEffortWhy) : null,
     p.coachTipEl ?? null,
     card,
     h(

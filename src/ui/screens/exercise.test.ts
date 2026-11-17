@@ -36,6 +36,7 @@ function render(over: Partial<ExerciseProps> = {}, camera = true) {
     notes: 0,
     adjust: [] as [StepField, number][],
     done: 0,
+    skipWarmups: 0,
   };
   const p = props(over);
   const el = asFake(
@@ -47,6 +48,7 @@ function render(over: Partial<ExerciseProps> = {}, camera = true) {
       onNotes: () => calls.notes++,
       onAdjust: (f, d) => calls.adjust.push([f, d]),
       onSetDone: () => calls.done++,
+      onSkipWarmups: () => calls.skipWarmups++,
     }),
   );
   return { el, calls, p };
@@ -410,5 +412,83 @@ describe('pauseSheet', () => {
       expect(vi.getTimerCount()).toBe(0);
       expect(observers.filter((o) => o.observing)).toHaveLength(0);
     });
+  });
+});
+
+describe('exerciseScreen: warm-up set (M12 1b task 24)', () => {
+  const warm = { warmup: { index: 0, total: 2 }, reps: 8, weightText: '20', unit: 'kg' } as const;
+  const strip = (el: FakeEl) => el.find((e) => e.hasAttribute('data-warmup'))[0];
+
+  it('a working set has no warm-up label and no Skip warm-ups', () => {
+    const { el } = render();
+    expect(strip(el)).toBeUndefined();
+    expect(el.byTag('button').some((b) => /warm/i.test(b.textContent))).toBe(false);
+    expect(el.find((e) => e.hasAttribute('data-set-counter'))[0]?.textContent).toBe('Set 1 of 4');
+  });
+
+  it('label reads "Warm-up 1 of 2 · 20 kg × 8" as text', () => {
+    const { el } = render(warm);
+    const label = el.find((e) => e.hasAttribute('data-warmup-label'))[0];
+    expect(label?.tag).toBe('p');
+    expect(label?.textContent).toBe('Warm-up 1 of 2 · 20 kg × 8');
+    expect(
+      render({ ...warm, warmup: { index: 1, total: 2 }, reps: 4, weightText: '27.5' }).el.find(
+        (e) => e.hasAttribute('data-warmup-label'),
+      )[0]?.textContent,
+    ).toBe('Warm-up 2 of 2 · 27.5 kg × 4');
+    expect(
+      render({ ...warm, warmup: { index: 0, total: 1 }, weightText: '45', unit: 'lb' }).el.find(
+        (e) => e.hasAttribute('data-warmup-label'),
+      )[0]?.textContent,
+    ).toBe('Warm-up 1 of 1 · 45 lb × 8');
+  });
+
+  it('the set badge says Warm-up (never "Set 1 of 4") and no working-set pip is current', () => {
+    const { el } = render(warm);
+    const badge = el.find((e) => e.hasAttribute('data-set-counter'))[0];
+    expect(badge?.textContent).toBe('Warm-up 1 of 2');
+    const pips = el.oneByClass('pips').children;
+    expect(pips).toHaveLength(4);
+    expect(pips.some((p) => p.classes.includes('cur') || p.classes.includes('past'))).toBe(false);
+  });
+
+  it('Skip warm-ups is a button that calls onSkipWarmups; Set done still logs the warm-up', () => {
+    const { el, calls } = render(warm);
+    const skip = buttonByText(el, 'Skip warm-ups');
+    expect(skip.hasAttribute('data-skip-warmups')).toBe(true);
+    skip.click();
+    expect(calls.skipWarmups).toBe(1);
+    buttonByText(el, 'Set done').click();
+    expect(calls.done).toBe(1);
+  });
+
+  it('no onSkipWarmups → the label alone', () => {
+    const el = asFake(
+      exerciseScreen(props(warm), {
+        onList: () => {},
+        onPause: () => {},
+        onHowTo: () => {},
+        onNotes: () => {},
+        onAdjust: () => {},
+        onSetDone: () => {},
+      }),
+    );
+    expect(strip(el)?.textContent).toBe('Warm-up 1 of 2 · 20 kg × 8');
+    expect(el.byTag('button').some((b) => b.textContent === 'Skip warm-ups')).toBe(false);
+  });
+
+  it('adds no motion: nothing in the strip animates', () => {
+    const proto = FakeEl.prototype as unknown as { animate?: unknown };
+    let n = 0;
+    proto.animate = () => {
+      n++;
+      return { cancel: () => {} };
+    };
+    try {
+      render(warm);
+    } finally {
+      delete proto.animate;
+    }
+    expect(n).toBe(0);
   });
 });

@@ -1399,6 +1399,61 @@ h1 {
   font-weight: 700;
 }
 
+/* === M12 1b task 24: warm-up strip on the Exercise screen (exercise.ts) — start ===
+   Plain text and one neutral button on one row; no transition or animation (the screen is
+   motion-off). The label wraps to "Warm-up 1 of 2" / "20 kg × 8" beside Skip on a phone; the
+   " · " sits in the gap before the second part and is clipped when that part starts a line. */
+.warmup-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 6px 4px 12px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-left: 6px solid var(--warn);
+  border-radius: var(--r-btn);
+}
+
+.warmup-label {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.9em;
+  overflow: hidden;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.warmup-count,
+.warmup-load {
+  white-space: nowrap;
+}
+
+.warmup-load {
+  font-variant-numeric: tabular-nums;
+}
+
+.warmup-sep {
+  display: inline-block;
+  width: 0.9em;
+  margin-left: -0.9em;
+  text-align: center;
+  white-space: pre;
+}
+
+.warmup-skip {
+  flex: none;
+  min-height: var(--tap-min);
+  padding: 0 12px;
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+/* === M12 1b task 24 — end === */
+
 /* ---------- Rest (M4e Track, src/ui/screens/rest.ts) ---------- */
 
 .rest.mood-track {
@@ -1672,6 +1727,108 @@ h1 {
   stroke: var(--cta);
   stroke-linecap: round;
 }
+
+/* === M12 1b task 23: effort row on the Rest screen (rest.ts effortRow) — start ===
+   Three radio tiles. Chosen = white fill + dark text + a check mark (never colour alone). */
+.effort {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.effort-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.effort-q {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.effort-why {
+  flex: none;
+  min-width: 96px;
+  min-height: var(--tap-min);
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+}
+
+.effort-why .ic {
+  color: var(--info);
+}
+
+.effort-opts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.effort-opt {
+  position: relative;
+  min-height: 76px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1.1;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.effort-name {
+  font-size: var(--fs-lead);
+  font-weight: 700;
+}
+
+.effort-sub {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.effort-mark {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  line-height: 0;
+  display: none;
+}
+
+.effort-mark .ic {
+  width: 20px;
+  height: 20px;
+}
+
+.effort-opt[aria-checked='true'] {
+  background: var(--selected);
+  border-color: var(--selected);
+  color: var(--on-selected);
+}
+
+.effort-opt[aria-checked='true'] .effort-sub {
+  color: var(--on-selected);
+}
+
+.effort-opt[aria-checked='true'] .effort-mark {
+  display: block;
+}
+/* === M12 1b task 23 — end === */
 
 /* ---------- Pause sheet (src/ui/screens/pauseSheet.ts) ---------- */
 

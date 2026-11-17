@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RING_C, resetSetRing, restScreen, ringOffset, type RestProps } from './rest';
+import type { SetEffort } from '../../core/types';
 import { FakeEl, asFake, useFakeDom } from './testDom';
 
 useFakeDom();
@@ -25,8 +26,17 @@ function props(over: Partial<RestProps> = {}): RestProps {
   };
 }
 
-function render(over: Partial<RestProps> = {}, camera = false) {
-  const calls = { list: 0, camera: 0, pause: 0, extend: 0, notes: 0, start: 0 };
+function render(over: Partial<RestProps> = {}, camera = false, effortActions = true) {
+  const calls = {
+    list: 0,
+    camera: 0,
+    pause: 0,
+    extend: 0,
+    notes: 0,
+    start: 0,
+    effort: [] as SetEffort[],
+    why: [] as unknown[],
+  };
   const view = restScreen(props(over), {
     onList: () => calls.list++,
     onCamera: camera ? () => calls.camera++ : undefined,
@@ -34,6 +44,8 @@ function render(over: Partial<RestProps> = {}, camera = false) {
     onExtend: () => calls.extend++,
     onNotes: () => calls.notes++,
     onStartSet: () => calls.start++,
+    onEffort: effortActions ? (e) => calls.effort.push(e) : undefined,
+    onEffortWhy: effortActions ? (o) => calls.why.push(o) : undefined,
   });
   return { view, el: asFake(view.el), calls };
 }
@@ -261,5 +273,185 @@ describe('restScreen: set ring (M12)', () => {
   it('the eyebrow words are unchanged (the ring is decorative)', () => {
     const { el } = render({ setIndex: 1, sets: 4 });
     expect(el.oneByClass('rest-eyebrow').textContent).toBe('Next · Set 2 of 4');
+  });
+});
+
+describe('restScreen: effort row (M12 1b task 23)', () => {
+  const row = (el: FakeEl) => attr(el, 'data-effort');
+  const opt = (el: FakeEl, e: SetEffort) =>
+    one(el, (x) => x.getAttribute('data-effort-opt') === e, `effort ${e}`);
+  const checked = (el: FakeEl) =>
+    (['easy', 'good', 'hard'] as const).filter(
+      (e) => opt(el, e).getAttribute('aria-checked') === 'true',
+    );
+  const key = (target: FakeEl, k: string) => {
+    let prevented = false;
+    target.dispatch('keydown', { key: k, preventDefault: () => (prevented = true) });
+    return prevented;
+  };
+  const active = () => (globalThis as unknown as { document: { activeElement: unknown } }).document;
+
+  it('absent unless the app asks for it (effort undefined, or no onEffort)', () => {
+    expect(render().el.find((e) => e.hasAttribute('data-effort'))).toEqual([]);
+    expect(
+      render({ effort: null }, false, false).el.find((e) => e.hasAttribute('data-effort')),
+    ).toEqual([]);
+  });
+
+  it('asks "How was that set?" with Easy / Good / Hard and the reps-left words', () => {
+    const { el } = render({ effort: null });
+    const r = row(el);
+    expect(r.textContent).toContain('How was that set?');
+    const group = one(r, (e) => e.getAttribute('role') === 'radiogroup', 'radiogroup');
+    const q = one(r, (e) => e.textContent === 'How was that set?' && e.tag === 'p', 'question');
+    expect(group.getAttribute('aria-labelledby')).toBe(q.getAttribute('id'));
+    const radios = group.find((e) => e.getAttribute('role') === 'radio');
+    expect(radios.map((b) => b.tag)).toEqual(['button', 'button', 'button']);
+    expect(radios.map((b) => b.oneByClass('effort-name').textContent)).toEqual([
+      'Easy',
+      'Good',
+      'Hard',
+    ]);
+    expect(radios.map((b) => b.oneByClass('effort-sub').textContent)).toEqual([
+      '3+ left',
+      '2 left',
+      '0–1 left',
+    ]);
+    // Spoken in full for a screen reader; the name starts with the visible label.
+    expect(radios.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Easy, 3 or more reps left',
+      'Good, 2 reps left',
+      'Hard, 0 to 1 reps left',
+    ]);
+    expect(checked(el)).toEqual([]);
+  });
+
+  it('optional: nothing chosen leaves the timer, +30 s and Start set working', () => {
+    const { el, view, calls } = render({ effort: null });
+    view.update(30_000, 120_000);
+    expect(attr(el, 'data-rest-clock').textContent).toBe('0:30');
+    attr(el, 'data-rest-extend').click();
+    buttonByText(el, 'Start set').click();
+    expect(calls).toMatchObject({ extend: 1, start: 1, effort: [] });
+  });
+
+  it('select: a tap marks it in place (aria-checked, data-effort, a check mark) and reports it', () => {
+    const { el, calls } = render({ effort: null });
+    opt(el, 'good').click();
+    expect(calls.effort).toEqual(['good']);
+    expect(checked(el)).toEqual(['good']);
+    expect(row(el).getAttribute('data-effort')).toBe('good');
+    // Not colour alone: every option carries a check mark, shown only on the chosen one.
+    for (const e of ['easy', 'good', 'hard'] as const) {
+      const mark = opt(el, e).oneByClass('effort-mark');
+      expect(mark.find((x) => x.getAttribute('data-icon') === 'check')).toHaveLength(1);
+    }
+  });
+
+  it('change: another tap moves the selection; the same tap again reports nothing new', () => {
+    const { el, calls } = render({ effort: null });
+    opt(el, 'easy').click();
+    opt(el, 'hard').click();
+    opt(el, 'hard').click();
+    expect(calls.effort).toEqual(['easy', 'hard']);
+    expect(checked(el)).toEqual(['hard']);
+  });
+
+  it('a stored answer shows selected on a re-render (+30 s, a sheet closing)', () => {
+    const { el, calls } = render({ effort: 'hard' });
+    expect(checked(el)).toEqual(['hard']);
+    expect(row(el).getAttribute('data-effort')).toBe('hard');
+    expect(calls.effort).toEqual([]);
+  });
+
+  it('keyboard: one tab stop; arrows move, select and wrap; Home / End', () => {
+    const { el, calls } = render({ effort: null });
+    const tab = () =>
+      (['easy', 'good', 'hard'] as const).map((e) => opt(el, e).getAttribute('tabindex'));
+    expect(tab()).toEqual(['0', '-1', '-1']);
+    expect(key(opt(el, 'easy'), 'ArrowRight')).toBe(true);
+    expect(checked(el)).toEqual(['good']);
+    expect(active().activeElement).toBe(opt(el, 'good'));
+    expect(tab()).toEqual(['-1', '0', '-1']);
+    key(opt(el, 'good'), 'ArrowDown');
+    key(opt(el, 'hard'), 'ArrowRight'); // wraps
+    expect(checked(el)).toEqual(['easy']);
+    key(opt(el, 'easy'), 'ArrowLeft'); // wraps back
+    expect(checked(el)).toEqual(['hard']);
+    key(opt(el, 'hard'), 'Home');
+    key(opt(el, 'easy'), 'End');
+    key(opt(el, 'hard'), 'ArrowUp');
+    expect(calls.effort).toEqual(['good', 'hard', 'easy', 'hard', 'easy', 'hard', 'good']);
+    // Other keys are left alone (Tab leaves the group, Space / Enter are the button's click).
+    expect(key(opt(el, 'good'), 'Tab')).toBe(false);
+    expect(key(opt(el, 'good'), ' ')).toBe(false);
+    expect(calls.effort).toHaveLength(7);
+  });
+
+  it('"Why?" is a button that hands its element to onEffortWhy; left out without the callback', () => {
+    const { el, calls } = render({ effort: null });
+    const why = attr(el, 'data-effort-why');
+    expect(why.tag).toBe('button');
+    expect(why.textContent).toBe('Why?');
+    expect(why.getAttribute('aria-label')).toBe('Why? About set effort');
+    why.click();
+    expect(calls.why).toEqual([why]);
+    expect(calls.effort).toEqual([]);
+    const view = restScreen(props({ effort: null }), {
+      onList: () => {},
+      onPause: () => {},
+      onExtend: () => {},
+      onNotes: () => {},
+      onStartSet: () => {},
+      onEffort: () => {},
+    });
+    expect(asFake(view.el).find((e) => e.hasAttribute('data-effort-why'))).toEqual([]);
+  });
+
+  it('sits after the Fix and before the coach tip and the Next card', () => {
+    const fix = new FakeEl('section');
+    const tip = new FakeEl('section');
+    const { el } = render({
+      effort: null,
+      fixEl: fix as unknown as HTMLElement,
+      coachTipEl: tip as unknown as HTMLElement,
+    });
+    const order = el.children.map((c) =>
+      c === fix
+        ? 'fix'
+        : c === tip
+          ? 'tip'
+          : c.hasAttribute('data-effort')
+            ? 'effort'
+            : c.classes.includes('rest-card')
+              ? 'next'
+              : '',
+    );
+    expect(order.filter(Boolean)).toEqual(['fix', 'effort', 'tip', 'next']);
+  });
+});
+
+describe('restScreen: warm-up label (M12 1b task 24)', () => {
+  it('the next set is a warm-up: "Next · Warm-up 1 of 2", no set ring, the target line as usual', () => {
+    const { el } = render({
+      setIndex: 0,
+      warmup: { index: 0, total: 2 },
+      reps: 8,
+      weightText: '20',
+    });
+    const eyebrow = el.oneByClass('rest-eyebrow');
+    expect(eyebrow.textContent).toBe('Next · Warm-up 1 of 2');
+    expect(eyebrow.hasAttribute('data-warmup')).toBe(true);
+    expect(el.find((e) => e.hasAttribute('data-set-ring'))).toEqual([]);
+    expect(el.oneByClass('next-up').textContent).toContain('8 reps × 20 kg');
+    expect(
+      render({ warmup: { index: 1, total: 2 } }).el.oneByClass('rest-eyebrow').textContent,
+    ).toBe('Next · Warm-up 2 of 2');
+  });
+
+  it('no warm-up → the set words, unchanged', () => {
+    const eyebrow = render().el.oneByClass('rest-eyebrow');
+    expect(eyebrow.textContent).toBe('Next · Set 2 of 4');
+    expect(eyebrow.hasAttribute('data-warmup')).toBe(false);
   });
 });

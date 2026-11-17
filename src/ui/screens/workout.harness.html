@@ -1,0 +1,115 @@
+<!doctype html>
+<!-- Dev-only visual check for M12 slice 1b tasks 23 (effort row on Rest) and 24 (warm-up set on
+     Exercise and Rest), with made-up data. Not part of the build or the app. Open on the dev
+     server: /src/ui/screens/workout.harness.html?view=rest-effort | rest-effort&effort=good
+     | rest-effort&fix=1 | rest-warmup | exercise-warmup | exercise -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Workout harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { bodyMapSvg, pickView } from '../bodyMap.ts';
+      import { createLastSetCorrection } from '../lastSetCorrection.ts';
+      import { exerciseScreen } from './exercise.ts';
+      import { restScreen } from './rest.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'rest-effort';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      const figure = (variant) => {
+        const primary = ['chest'];
+        const slot = document.createElement('div');
+        slot.className = `muscle-slot ${variant}`;
+        slot.innerHTML = bodyMapSvg({ view: pickView(primary), primary, secondary: ['triceps'] });
+        const btn = document.createElement('button');
+        btn.className = 'muscle-btn';
+        btn.setAttribute('aria-label', 'Show target muscles in 3D');
+        btn.append(slot);
+        return btn;
+      };
+      const base = {
+        dayName: 'Push A',
+        exIndex: 0,
+        exTotal: 5,
+        exerciseId: 'Dumbbell_Bench_Press',
+        name: 'Dumbbell Bench Press',
+        sets: 4,
+        unit: 'kg',
+        cue: 'Squeeze your chest at the top.',
+        hasNotes: false,
+      };
+      const common = {
+        onList: () => log('list'),
+        onPause: () => log('pause'),
+        onNotes: () => log('notes'),
+      };
+      if (view.startsWith('rest')) {
+        const warm = view === 'rest-warmup';
+        const effort = q.get('effort');
+        const { el } = restScreen(
+          {
+            ...base,
+            remainingMs: 74_000,
+            targetMs: 120_000,
+            setIndex: warm ? 0 : 1,
+            reps: warm ? 4 : 10,
+            weightText: warm ? '17.5' : '25',
+            figure: figure('rest'),
+            fixEl:
+              q.get('fix') === '1'
+                ? createLastSetCorrection({ reps: 10, partials: 0, onCorrect: () => {} }).el
+                : null,
+            effort: warm ? undefined : (effort ?? null),
+            warmup: warm ? { index: 1, total: 2 } : undefined,
+            today: warm ? '8×12.5 kg' : '10×25 kg',
+            last: '10×22.5, 9×22.5 kg',
+          },
+          {
+            ...common,
+            onExtend: () => log('extend'),
+            onStartSet: () => log('start'),
+            onEffort: (e) => log('effort', e),
+            onEffortWhy: () => log('why'),
+          },
+        );
+        app.replaceChildren(el);
+      } else {
+        const warm = view === 'exercise-warmup';
+        app.replaceChildren(
+          exerciseScreen(
+            {
+              ...base,
+              tracking: 'pose',
+              repsRange: '8–12',
+              setIndex: 0,
+              reps: warm ? 8 : 10,
+              weightText: warm ? '12.5' : '25',
+              figure: figure('inline'),
+              warmup: warm ? { index: 0, total: 2 } : undefined,
+              last: '10×22.5, 9×22.5 kg',
+            },
+            {
+              ...common,
+              onCamera: () => log('camera'),
+              onHowTo: () => log('howto'),
+              onAdjust: (f, d) => log('adjust', f, d),
+              onSetDone: () => log('done'),
+              onSkipWarmups: () => log('skipWarmups'),
+            },
+          ),
+        );
+      }
+      window.harnessReady = true;
+    </script>
+  </body>
+</html>
