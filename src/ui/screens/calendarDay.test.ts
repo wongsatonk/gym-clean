@@ -43,13 +43,13 @@ const actionIds = (root: FakeEl) =>
 const rows = (root: FakeEl) => root.byClass('cal-ex');
 
 describe('dayActions', () => {
-  it('Start + Move today; Do it today + Move for future planned and past missed; none otherwise', () => {
+  it('Start + Move today; Do it today + Move for future planned; Do it today for past missed (Move is from today on); none otherwise', () => {
     const T = FIX_TODAY;
     expect(dayActions({ date: T, status: 'planned' }, T)).toEqual(['start', 'move']);
     expect(dayActions({ date: T, status: 'partial' }, T)).toEqual(['start', 'move']);
     expect(dayActions({ date: T, status: 'done' }, T)).toEqual([]);
     expect(dayActions({ date: '2026-11-20', status: 'planned' }, T)).toEqual(['doToday', 'move']);
-    expect(dayActions({ date: '2026-11-10', status: 'missed' }, T)).toEqual(['doToday', 'move']);
+    expect(dayActions({ date: '2026-11-10', status: 'missed' }, T)).toEqual(['doToday']);
     for (const s of ['done', 'partial', 'rest', 'extra'] as const)
       expect(dayActions({ date: '2026-11-06', status: s }, T)).toEqual([]);
     expect(dayActions({ date: '2026-11-22', status: 'rest' }, T)).toEqual([]);
@@ -114,15 +114,24 @@ describe('calendarDayScreen', () => {
     expect(rows(root)[3]?.oneByClass('cal-ex-status').textContent).toBe('Missed · 0 of 4 sets');
   });
 
-  it('a missed day offers Do it today and Move with its date', () => {
+  it('a missed day offers Do it today (not Move: that is from today on) with its date', () => {
     const a = acts();
     const root = render(props('2026-11-10'), a);
     expect(root.oneByClass('cal-day-sub').textContent).toBe('Pull A · Missed');
+    expect(actionIds(root)).toEqual(['doToday']);
+    root.find((e) => e.getAttribute('data-day-action') === 'doToday')[0]?.click();
+    expect(a.onDoToday).toHaveBeenCalledWith('2026-11-10');
+    expect(a.onMove).not.toHaveBeenCalled();
+  });
+
+  it('a later planned day offers Do it today and Move, each with its date', () => {
+    const a = acts();
+    const root = render(props('2026-11-20'), a);
     expect(actionIds(root)).toEqual(['doToday', 'move']);
     root.find((e) => e.getAttribute('data-day-action') === 'doToday')[0]?.click();
     root.find((e) => e.getAttribute('data-day-action') === 'move')[0]?.click();
-    expect(a.onDoToday).toHaveBeenCalledWith('2026-11-10');
-    expect(a.onMove).toHaveBeenCalledWith('2026-11-10');
+    expect(a.onDoToday).toHaveBeenCalledWith('2026-11-20');
+    expect(a.onMove).toHaveBeenCalledWith('2026-11-20');
   });
 
   it('today: To do rows, Start + Move, focus block line and focus tags', () => {

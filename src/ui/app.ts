@@ -54,6 +54,7 @@ import {
 import { missingKit as coreMissingKit } from '../core/trainer/equipment';
 import { keepExercise, loadGymProfile, saveGymProfile } from '../data/gym';
 import {
+  blockAt,
   calendar,
   effectiveDay,
   localDate,
@@ -979,6 +980,7 @@ export function mountApp(root: HTMLElement): void {
         missingKit: trainer && upNextDayId !== null ? todayMissingKit() : null,
         ...health.todayProps(),
         missedDay: trainer && upNextDayId !== null ? missedPrompt : null,
+        missedAction: missedActionOf(missedPrompt),
         motion: todayMotion,
       },
       {
@@ -996,14 +998,14 @@ export function mountApp(root: HTMLElement): void {
         onOpenFuel: () => void openFuel(),
         onSeeGymSwap: (id) => seeGymSwap('today', id),
         onKeepExercise: (id) => keepGymExercise(id),
-        onMoveMissed: (m) => {
-          answerMissed(m);
-          doDayToday(m.dayId);
-        },
-        onSkipMissed: (m) => {
-          answerMissed(m);
-          render();
-        },
+        // A focus-block miss: the coach's Do it today proposal for that day.
+        onMoveMissed: (m) =>
+          void answerMissed(m).then(() =>
+            openCoachTab('today', { chip: 'doToday', args: { dayId: m.dayId } }),
+          ),
+        // A rotation miss is carried forward (usually today's workout): its preview.
+        onStartMissed: (m) => void answerMissed(m).then(() => startMissed(m.dayId)),
+        onSkipMissed: (m) => void answerMissed(m).then(() => render()),
       },
     );
   }
@@ -1589,6 +1591,15 @@ export function mountApp(root: HTMLElement): void {
         return "How's my week?";
       case 'progress':
         return 'How am I doing?';
+      case 'doToday': {
+        const id = input.args?.dayId;
+        const name = id ? planDays().find((d) => d.id === id)?.name : undefined;
+        return name ? `Do ${name} today` : 'Do a workout today';
+      }
+      case 'moveDay': {
+        const from = input.args?.from;
+        return from ? `Move ${dayLong(from)}` : 'Move a workout';
+      }
       default:
         return input.chip.charAt(0).toUpperCase() + input.chip.slice(1);
     }
@@ -1627,6 +1638,15 @@ export function mountApp(root: HTMLElement): void {
       if (m.id === undefined || !isPendingCard(m)) continue;
       const entry = liveProposals.get(m.id);
       if (entry && trainer && entry.proposal.baseVersion === trainer.version) continue;
+      liveProposals.delete(m.id);
+      patchCard(m.id, { status: 'expired' });
+    }
+  }
+
+  /** Waiting focus-block cards read "expired" (their live proposals are dropped, not logged). */
+  function expireWaitingBlocks(): void {
+    for (const m of thread) {
+      if (m.id === undefined || m.card?.kind !== 'focusBlock' || !isPendingCard(m)) continue;
       liveProposals.delete(m.id);
       patchCard(m.id, { status: 'expired' });
     }
@@ -1758,6 +1778,8 @@ export function mountApp(root: HTMLElement): void {
           baseVersion: p.baseVersion,
         };
       else if (r.foods?.length) msg.card = { kind: 'food', suggestions: r.foods, logged: [] };
+      // A revised focus block replaces the one waiting: only the newest card keeps Apply.
+      if (msg.card?.kind === 'focusBlock') expireWaitingBlocks();
       const saved = await postMessage(msg);
       if (p && saved.id !== undefined && msg.card?.kind !== 'redFlag') {
         liveProposals.set(saved.id, { proposal: p, source: r.source, intent: r.intent });
@@ -2182,7 +2204,8 @@ export function mountApp(root: HTMLElement): void {
           },
           onMove: (dt) => moveDay(dt),
           onDoToday: () => {
-            if (day.dayId) doDayToday(day.dayId);
+            if (day.dayId)
+              void openCoachTab('today', { chip: 'doToday', args: { dayId: day.dayId } });
           },
           onHistory: (id) => {
             if (view.screen !== 'calendar') return;
@@ -2243,23 +2266,34 @@ export function mountApp(root: HTMLElement): void {
     render();
   }
 
-  /** Move (Calendar day): today → Not today in the coach; another day → asked in the coach. */
+  /**
+   * Move (Calendar day): today → Not today in the coach; a later planned date → the coach's
+   * moveDay, which asks "Move X to which day?" with date chips.
+   */
   function moveDay(date: string): void {
     if (date === todayDate()) {
       void openCoachTab('today', { chip: 'notToday' });
       return;
     }
-    void openCoachTab('today', { text: `Move ${dayLong(date)}` });
+    void openCoachTab('today', { chip: 'moveDay', args: { from: date } });
   }
 
   /**
-   * Do it today (a missed or later day) and Move it (Today's missed-day card): today's day when
-   * it already is that day (the rotation carries a missed day forward), else that plan day's
-   * preview, whose Start runs it today.
+   * The missed-day card's first button: a focus-block date → Move it (Do it today proposal); a
+   * rotation date → Start it (the rotation already carried the day forward).
    */
-  function doDayToday(dayId: string): void {
+  function missedActionOf(m: MissedDay | null): 'move' | 'start' {
+    return m && trainer && blockAt(trainer, m.date) ? 'move' : 'start';
+  }
+
+  /**
+   * Start it (Today's missed-day card, a rotation miss): today's workout's preview when there is
+   * one to do (the rotation carries a missed day forward, so it usually is that day), else the
+   * missed day's preview, whose Start runs it today.
+   */
+  function startMissed(dayId: string): void {
     const eff = trainer ? effectiveDay(trainer, trainerSessions, todayDate()) : null;
-    if (eff?.day && !eff.rest && !eff.done && eff.day.id === dayId) {
+    if (eff?.day && !eff.rest && !eff.done) {
       void openPreview(eff.day);
       return;
     }
@@ -2335,10 +2369,15 @@ export function mountApp(root: HTMLElement): void {
     if (view.screen === 'today') render();
   }
 
-  function answerMissed(m: MissedDay): void {
+  /** Stores the answer (once per missed date) before the caller re-renders or navigates. */
+  async function answerMissed(m: MissedDay): Promise<void> {
     missedPrompt = null;
     coachUi = { ...coachUi, missedAnswered: [...coachUi.missedAnswered, m.date] };
-    void patchCoachUi(db, { missedAnswered: coachUi.missedAnswered }).catch(logDbError);
+    try {
+      await patchCoachUi(db, { missedAnswered: coachUi.missedAnswered });
+    } catch (err) {
+      logDbError(err);
+    }
   }
 
   // ---------- Settings ----------

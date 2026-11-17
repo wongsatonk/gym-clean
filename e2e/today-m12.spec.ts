@@ -43,11 +43,14 @@ async function stubs(page: Page): Promise<void> {
   });
 }
 
-async function mountToday(page: Page, opts: { readiness?: boolean } = {}): Promise<void> {
+async function mountToday(
+  page: Page,
+  opts: { readiness?: boolean; missedAction?: 'move' | 'start' } = {},
+): Promise<void> {
   await stubs(page);
   await page.goto('/');
   await page.evaluate(
-    async ({ now, readiness }) => {
+    async ({ now, readiness, missedAction }) => {
       const today = await import('/src/ui/screens/today.ts' as string);
       const catalog = await import('/src/data/catalog.ts' as string);
       const days = catalog.program.days as { id: string; name: string }[];
@@ -84,6 +87,7 @@ async function mountToday(page: Page, opts: { readiness?: boolean } = {}): Promi
             },
             unit: 'kg',
             missedDay: state.missed,
+            missedAction,
             motion,
             readiness: readiness
               ? {
@@ -107,6 +111,11 @@ async function mountToday(page: Page, opts: { readiness?: boolean } = {}): Promi
               state.missed = null;
               render();
             },
+            onStartMissed: (m: { date: string }) => {
+              window.__calls.push(`startMissed:${m.date}`);
+              state.missed = null;
+              render();
+            },
             onSkipMissed: (m: { date: string }) => {
               window.__calls.push(`skip:${m.date}`);
               state.missed = null;
@@ -119,7 +128,7 @@ async function mountToday(page: Page, opts: { readiness?: boolean } = {}): Promi
       window.__rerender = render;
       render();
     },
-    { now: NOW, readiness: opts.readiness ?? false },
+    { now: NOW, readiness: opts.readiness ?? false, missedAction: opts.missedAction ?? 'move' },
   );
   await expect(page.locator('main.today')).toBeVisible();
 }
@@ -152,6 +161,12 @@ test('Today at 390×844: the missed-day card, readable, big targets, no overflow
     const box = await page.locator(sel).boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(56);
   }
+  // A rotation miss: Start it in the same place, the same size.
+  await mountToday(page, { missedAction: 'start' });
+  await expect(page.locator('[data-missed-move]')).toHaveCount(0);
+  const start = await page.locator('[data-missed-start]').boundingBox();
+  expect(start?.height ?? 0).toBeGreaterThanOrEqual(56);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   const sizes = await card.evaluate((c) =>
     [...c.querySelectorAll('p, button')].map((e) => parseFloat(getComputedStyle(e).fontSize)),
   );
@@ -162,7 +177,7 @@ test('Today at 390×844: the missed-day card, readable, big targets, no overflow
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
 });
 
-test('Move it passes the missed day out and the card goes away; Skip it likewise', async ({
+test('Move it passes the missed day out and the card goes away; Skip it and Start it likewise', async ({
   page,
 }) => {
   await mountToday(page);
@@ -173,6 +188,13 @@ test('Move it passes the missed day out and the card goes away; Skip it likewise
   await mountToday(page);
   await page.getByRole('button', { name: 'Skip it' }).click();
   expect(await calls(page)).toEqual(['skip:2026-11-10']);
+  await expect(page.locator('[data-missed-day]')).toHaveCount(0);
+
+  // A rotation miss offers Start it (no Move it): it passes the missed day out the same way.
+  await mountToday(page, { missedAction: 'start' });
+  await expect(page.getByRole('button', { name: 'Move it' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Start it' }).click();
+  expect(await calls(page)).toEqual(['startMissed:2026-11-10']);
   await expect(page.locator('[data-missed-day]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
 });

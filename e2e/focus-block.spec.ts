@@ -65,6 +65,12 @@ test('"This month I want to build my chest" → days question → card → edit 
   await expect(coachTab(page).locator('[data-focus-block-card]')).toHaveCount(2);
   await expect(block(page)).toHaveAttribute('data-proposal-status', 'pending');
   await expect(block(page).locator('[data-fb-week]').first()).toContainText('4 days');
+  // Only the revised card keeps Apply: the first one reads expired.
+  const older = coachTab(page).locator('[data-focus-block-card]').first();
+  await expect(older).toHaveAttribute('data-proposal-status', 'expired');
+  await expect(older.locator('[data-card-status="expired"]')).toBeVisible();
+  await expect(older.getByRole('button', { name: 'Apply' })).toHaveCount(0);
+  await expect(coachTab(page).getByRole('button', { name: 'Apply' })).toHaveCount(1);
 
   // Week → days → exercises, by keyboard as well as by tap.
   const week = block(page).locator('[data-fb-week]').first();

@@ -673,8 +673,42 @@ describe('Today: missed-day card (M12)', () => {
     );
   });
 
+  it('a rotation miss (missedAction "start") offers Start it / Skip it instead of Move it', () => {
+    const calls = { start: [] as MissedDay[], skip: [] as MissedDay[] };
+    const el = asFake(
+      todayScreen(props({ missedDay: MISSED, missedAction: 'start' }), {
+        onStart: () => {},
+        onOpenDay: () => {},
+        onTab: () => {},
+        onMoveMissed: () => {
+          throw new Error('Move it is not offered');
+        },
+        onStartMissed: (m) => calls.start.push(m),
+        onSkipMissed: (m) => calls.skip.push(m),
+      }),
+    );
+    expect(byAttr(el, 'data-missed-move')).toEqual([]);
+    const start = byAttr(el, 'data-missed-start')[0];
+    const skip = byAttr(el, 'data-missed-skip')[0];
+    expect([start?.textContent, skip?.textContent]).toEqual(['Start it', 'Skip it']);
+    expect(start?.classes).toContain('missed-cta');
+    start?.click();
+    skip?.click();
+    expect(calls).toEqual({ start: [MISSED], skip: [MISSED] });
+    // Without its callback the card isn't shown.
+    const bare = asFake(
+      todayScreen(props({ missedDay: MISSED, missedAction: 'start' }), {
+        onStart: () => {},
+        onOpenDay: () => {},
+        onTab: () => {},
+        onSkipMissed: () => {},
+      }),
+    );
+    expect(byAttr(bare, 'data-missed-day')).toEqual([]);
+  });
+
   it('copy passes checkCopy', () => {
-    for (const t of [missedDayText(MISSED, NOW), 'Move it', 'Skip it']) {
+    for (const t of [missedDayText(MISSED, NOW), 'Move it', 'Start it', 'Skip it']) {
       expect(checkCopy(t).ok).toBe(true);
     }
   });

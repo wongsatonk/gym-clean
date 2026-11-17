@@ -6,6 +6,10 @@
 // a day lists each exercise done / partly / missed with the per-exercise history one tap deeper
 // (back label "Calendar"); the week score reads the same as the grid; Share month makes a PNG on
 // the phone (the download fallback here) with no request off the dev server (route-asserted).
+// Day actions open the Coach tab with the chip sent: Do it today → doToday (a later day: proposal
+// → Apply → Today and the Calendar run it today → Undo; a missed rotation day: "already today's
+// workout"), Move on a later day → moveDay → date chips → Apply → moved → Undo. The missed-day
+// card: a rotation miss offers Start it (today's preview), a focus-block miss Move it (doToday).
 // Nothing on these screens is spoken.
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
@@ -121,6 +125,9 @@ test('missed-day card once on Today; last week recap once in the thread', async 
   const missed = page.locator('[data-missed-day]');
   await expect(missed).toHaveAttribute('data-missed-day', '2026-11-12');
   await expect(missed.locator('.missed-text')).toHaveText(/^You missed .+ on Thu\.$/);
+  // A rotation miss is carried forward to today: Start it, not a Move proposal.
+  await expect(missed.locator('[data-missed-start]')).toHaveText('Start it');
+  await expect(missed.locator('[data-missed-move]')).toHaveCount(0);
   await expectTapTargets(page, '[data-missed-day]');
   await noHorizontalOverflow(page);
 
@@ -235,11 +242,19 @@ test('month rings by status → a day per exercise → exercise history (‹ Cal
   await dayScreen(page).locator('[data-cal-back]').click();
   await expect(month(page)).toBeVisible();
 
-  // A missed day offers Do it today and Move; Do it today opens that day to start now.
+  // A missed day offers Do it today only (Move is from today on). Do it today opens the Coach tab
+  // with doToday sent; the rotation already carried that day to today, so the coach says so.
   await cell(page, '2026-11-12').click();
-  await expect(dayScreen(page).locator('[data-day-action]')).toHaveCount(2);
+  await expect(dayScreen(page).locator('[data-day-action]')).toHaveCount(1);
   await dayScreen(page).locator('[data-day-action="doToday"]').click();
-  await expect(page.locator('[data-screen="preview"]')).toBeVisible();
+  await expect(coachTab(page)).toBeVisible();
+  const said = coachTab(page).locator('.cs-msg-user').last();
+  await expect(said).toHaveText(/Do (.+) today$/);
+  const name = /Do (.+) today$/.exec((await said.textContent()) ?? '')?.[1] ?? '';
+  await expect(coachTab(page).locator('.cs-msg-coach').last()).toContainText(
+    `${name} is already today's workout.`,
+  );
+  await expect(coachTab(page).locator('[data-proposal]')).toHaveCount(0);
 
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
   expect(offsite).toEqual([]);
@@ -278,6 +293,193 @@ test('Share month: a 1080×1350 PNG made on the phone (download fallback), nothi
   // Made from the page alone: only blob:/data: URLs (or nothing) since the tap.
   const after = requests.slice(before).filter((u) => !/^(blob|data):/.test(u));
   expect(after.filter((u) => !u.startsWith(new URL(page.url()).origin))).toEqual([]);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+/** "Pull A" from a day screen's "Pull A · Planned". */
+async function dayNameOn(page: Page, date: string): Promise<string> {
+  await month(page).locator(`[data-cal-day="${date}"]`).click();
+  await expect(dayScreen(page)).toHaveAttribute('data-date', date);
+  const sub = (await dayScreen(page).locator('[data-day-sub]').textContent()) ?? '';
+  return sub.split(' · ')[0] ?? '';
+}
+
+async function backToMonth(page: Page) {
+  await dayScreen(page).locator('[data-cal-back]').click();
+  await expect(month(page)).toBeVisible();
+}
+
+test('a later day: Do it today → proposal → Apply → Today and Calendar run it today → Undo', async ({
+  page,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  await openApp(page, at(13, 18));
+  await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
+
+  await page.locator('[data-tab="calendar"]').click();
+  const later = await dayNameOn(page, '2026-11-14');
+  expect(later).not.toBe('Push A');
+  const laterId = PROGRAM.days.find((d) => d.name === later)?.id ?? '';
+  await expect(dayScreen(page).locator('[data-day-action]')).toHaveCount(2);
+  await dayScreen(page).locator('[data-day-action="doToday"]').click();
+
+  // The Coach tab with doToday sent: his bubble, then the proposal waiting for Apply.
+  await expect(coachTab(page)).toBeVisible();
+  await expect(coachTab(page).locator('.cs-msg-user').last()).toHaveText(`You: Do ${later} today`);
+  const card = coachTab(page).locator('[data-proposal]').last();
+  await expect(card).toContainText(`Do ${later} today`);
+  await expectTapTargets(page, '[data-screen="coach"]');
+  await noHorizontalOverflow(page);
+  await card.getByRole('button', { name: 'Apply' }).click();
+  await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
+
+  // Today runs it now; the Calendar's today reads it as to do today.
+  await page.locator('[data-tab="today"]').click();
+  await expect(page.locator(`[data-hero="${laterId}"]`)).toBeVisible();
+  await page.locator('[data-tab="calendar"]').click();
+  expect(await dayNameOn(page, '2026-11-13')).toBe(later);
+  await expect(dayScreen(page).locator('[data-day-sub]')).toContainText('To do today');
+  await backToMonth(page);
+
+  // Undo on the card: back to the plan as it was.
+  await page.locator('[data-tab="coach"]').click();
+  await card.getByRole('button', { name: 'Undo' }).click();
+  await expect(card.locator('[data-card-status="undone"]')).toBeVisible();
+  await page.locator('[data-tab="today"]').click();
+  await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
+  await page.locator('[data-tab="calendar"]').click();
+  expect(await dayNameOn(page, '2026-11-13')).toBe('Push A');
+
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('a later day: Move → "to which day?" date chips → Apply → the Calendar shows it moved → Undo', async ({
+  page,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  await openApp(page, at(13, 18));
+  await page.locator('[data-tab="calendar"]').click();
+  const name = await dayNameOn(page, '2026-11-14');
+  await dayScreen(page).locator('[data-day-action="move"]').click();
+
+  // The coach asks where to, with date chips (≥ 56px).
+  await expect(coachTab(page)).toBeVisible();
+  await expect(coachTab(page).locator('.cs-msg-user').last()).toHaveText('You: Move Sat 14 Nov');
+  await expect(coachTab(page).locator('.cs-msg-coach').last()).toContainText(
+    `Move ${name} to which day?`,
+  );
+  const chips = coachTab(page).locator('[data-coach-followup]');
+  await expect(chips.first()).toBeVisible();
+  await expectTapTargets(page, '[data-screen="coach"]');
+  await noHorizontalOverflow(page);
+  const label = (await chips.first().textContent())?.trim() ?? '';
+  const dom = Number(/(\d+)$/.exec(label)?.[1]);
+  expect(dom).toBeGreaterThan(14);
+  const to = `2026-11-${String(dom)}`;
+  await chips.first().click();
+
+  const card = coachTab(page).locator('[data-proposal]').last();
+  await expect(card).toContainText(`Move ${name}`);
+  await card.getByRole('button', { name: 'Apply' }).click();
+  await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
+
+  // The Calendar: Sat 14 rests, the day lands on the chosen date.
+  await page.locator('[data-tab="calendar"]').click();
+  await expect(cell(page, '2026-11-14')).toHaveAttribute('data-status', 'rest');
+  expect(await dayNameOn(page, to)).toBe(name);
+  await backToMonth(page);
+
+  // Undo: Sat 14 has it again.
+  await page.locator('[data-tab="coach"]').click();
+  await card.getByRole('button', { name: 'Undo' }).click();
+  await expect(card.locator('[data-card-status="undone"]')).toBeVisible();
+  await page.locator('[data-tab="calendar"]').click();
+  await expect(cell(page, '2026-11-14')).toHaveAttribute('data-status', 'planned');
+  expect(await dayNameOn(page, '2026-11-14')).toBe(name);
+
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("a rotation miss: Start it opens today's workout and the answer is stored first", async ({
+  page,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  await openApp(page, at(13, 18));
+  await seedWeek(page);
+  const missed = page.locator('[data-missed-day="2026-11-12"]');
+  const heroId = (await page.locator('[data-hero]').first().getAttribute('data-hero')) ?? '';
+  await missed.locator('[data-missed-start]').click();
+  const preview = page.locator('[data-screen="preview"]');
+  await expect(preview).toBeVisible();
+  await expect(preview.locator('#preview-title')).toHaveText(dayOf(heroId).name);
+  expect(await answered(page)).toContain('2026-11-12');
+  await preview.getByRole('button', { name: '‹ Back' }).click();
+  await expect(page.locator('[data-hero]').first()).toBeVisible();
+  await expect(page.locator('[data-missed-day]')).toHaveCount(0);
+
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('a focus-block miss: Move it → the Coach tab with Do it today sent → Apply → Today runs it', async ({
+  page,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  // Wed 11 (Push A done on Mon 9, so misses count from there): a chest block starting today,
+  // applied in the chat.
+  await openApp(page, at(11, 18));
+  await seed(
+    page,
+    [{ sessionId: 'b-mon', dayId: 'push-a', startedAt: at(9, 18), endedAt: at(9, 18) + 70 * MIN }],
+    allSets('b-mon', PUSH_A, at(9, 18)),
+  );
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+  await page.locator('[data-tab="coach"]').click();
+  await coachTab(page).getByLabel('Ask the coach').fill('This month I want to build my chest');
+  await coachTab(page).getByRole('button', { name: 'Send' }).click();
+  await coachTab(page).locator('[data-coach-followup]').filter({ hasText: '5 days' }).click();
+  const block = coachTab(page).locator('[data-focus-block-card]').last();
+  await block.getByRole('button', { name: 'Apply' }).click();
+  await expect(block.locator('[data-card-status="applied"]')).toBeVisible();
+
+  // Two days later, nothing done: the newest missed block day is offered with Move it.
+  await page.clock.setSystemTime(at(13, 18));
+  await page.reload();
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+  const missed = page.locator('[data-missed-day]');
+  await expect(missed.locator('[data-missed-move]')).toHaveText('Move it');
+  await expect(missed.locator('[data-missed-start]')).toHaveCount(0);
+  const date = (await missed.getAttribute('data-missed-day')) ?? '';
+  const text = (await missed.locator('.missed-text').textContent()) ?? '';
+  const name = /You missed (.+) on /.exec(text)?.[1] ?? '';
+  expect(name).not.toBe('');
+  await missed.locator('[data-missed-move]').click();
+
+  await expect(coachTab(page)).toBeVisible();
+  await expect(coachTab(page).locator('.cs-msg-user').last()).toHaveText(`You: Do ${name} today`);
+  const card = coachTab(page).locator('[data-proposal]').last();
+  await expect(card).toContainText(`Do ${name} today`);
+  await expect(card).toContainText('focus block stays as planned');
+  expect(await answered(page)).toContain(date);
+  await card.getByRole('button', { name: 'Apply' }).click();
+  await expect(card.locator('[data-card-status="applied"]')).toBeVisible();
+  await page.locator('[data-tab="today"]').click();
+  await expect(page.locator('[data-hero]').first()).toBeVisible();
+  await expect(page.locator('[data-missed-day]')).toHaveCount(0);
+  await page.locator('[data-tab="calendar"]').click();
+  expect(await dayNameOn(page, '2026-11-13')).toBe(name);
+
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
   expect(offsite).toEqual([]);
   expect(errors).toEqual([]);
 });

@@ -9,7 +9,7 @@
 //   origin; the stream stops on a hit and on Close.
 // Fuel is never mid-set, so nothing is spoken (asserted).
 import { expect, test, type Page, type Request } from '@playwright/test';
-import { expectClearOfToast, tapInPlace } from './app.helpers';
+import { animationsSettled, expectClearOfToast, tapInPlace } from './app.helpers';
 
 declare global {
   interface Window {
@@ -407,6 +407,8 @@ test('camera: no BarcodeDetector → the on-device reader from our own origin; C
   expect(
     await cam.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
   ).toBeGreaterThanOrEqual(20);
+  // M12 motion: let the sheet's rise-in land first (mid-animation a 56px button can measure 55.99).
+  await animationsSettled(page);
   for (const sel of ['[data-scan-lookup]', '[data-close]'])
     expect((await scanSheet(page).locator(sel).boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(
       56,

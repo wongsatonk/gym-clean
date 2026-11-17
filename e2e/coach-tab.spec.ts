@@ -2,9 +2,9 @@
 // Five tabs with Coach raised in the centre; an empty thread shows the starters; a starter gets
 // a rule answer; Not today → Apply → Undo on the card in the thread; the thread survives a
 // reload; Clear chat (two taps) empties it for good; Today's / the preview's Coach buttons and
-// the openers (missing-kit prompt, a Calendar day's Move) open the tab with their chip already
-// sent; the Pause sheet shows the same thread as a compact chat with the workout chips only;
-// nothing to type during a set; a red flag mid-workout is the one line that is spoken.
+// the openers (missing-kit prompt, a Calendar day's Move: today → Not today, a later day → "Move
+// X to which day?") open the tab with their chip already sent; the Pause sheet shows the same
+// thread as a compact chat with the workout chips only; nothing to type during a set; a red flag mid-workout is the one line that is spoken.
 // Replies on the tab are shown, never spoken. No request leaves the dev server (route-asserted).
 import { expect, test, type Page } from '@playwright/test';
 import {
@@ -201,6 +201,15 @@ test("Today's and the preview's Coach buttons, the missing-kit prompt and a Cale
   await expect(
     coachTab(page).locator('[data-proposal]').last().getByRole('button', { name: 'Apply' }),
   ).toBeVisible();
+
+  // A later day's Move: the coach's moveDay, already sent; it asks where to with date chips.
+  await page.locator('[data-tab="calendar"]').click();
+  await page.locator('[data-cal-day="2026-11-14"]').click();
+  await page.locator('[data-day-action="move"]').click();
+  await expect(coachTab(page)).toBeVisible();
+  await expect(bubbles(page, 'user').last()).toHaveText('You: Move Sat 14 Nov');
+  await expect(bubbles(page, 'coach').last()).toContainText(/Move .+ to which day\?/);
+  await expect(coachTab(page).locator('[data-coach-followup]').first()).toBeVisible();
 
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
   expect(offsite).toEqual([]);

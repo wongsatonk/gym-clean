@@ -12,7 +12,8 @@
 // M10e (optional): the "missing kit" prompt (`[data-gym-prompt]`, ./gymPrompt.ts).
 // M11 (optional): the "Lighter today?" card (`[data-readiness]`, ./readinessCard.ts; never on a
 // rest day) and the weekly-load line under "Your week" (`[data-week-load]`, ./weekLoad.ts).
-// M12 (optional): the missed-day card (`[data-missed-day]`, Move it `[data-missed-move]`, Skip it
+// M12 (optional): the missed-day card (`[data-missed-day]`, Move it `[data-missed-move]` or Start
+// it `[data-missed-start]` for a rotation miss, Skip it
 // `[data-missed-skip]`; shown, not spoken) and first-load motion through a `TodayMotion` that
 // app.ts keeps for the app's life (cards stagger in once, the streak counts up once, the
 // readiness card slides in when it first appears). Without `motion` nothing moves.
@@ -93,6 +94,11 @@ export type TodayProps = {
    * Skip it when both callbacks are set. app.ts stores the answer, so it's shown once.
    */
   missedDay?: MissedDay | null | undefined;
+  /**
+   * The missed-day card's first button: 'move' (default) → Move it (`onMoveMissed`); 'start' →
+   * Start it (`onStartMissed`), for a rotation miss the rotation already carried forward to today.
+   */
+  missedAction?: 'move' | 'start' | undefined;
   /** First-load motion state from `createTodayMotion()`, kept by app.ts across re-renders. */
   motion?: TodayMotion | undefined;
 };
@@ -146,6 +152,8 @@ export type TodayActions = ReadinessActions & {
   onKeepExercise?: ((exerciseId: string) => void) | undefined;
   /** M12: Move it on the missed-day card (opens the coach's move proposal for that day). */
   onMoveMissed?: ((missed: MissedDay) => void) | undefined;
+  /** M12: Start it on the missed-day card (`missedAction: 'start'`; opens today's workout). */
+  onStartMissed?: ((missed: MissedDay) => void) | undefined;
   /** M12: Skip it on the missed-day card (stored as answered; the card goes away). */
   onSkipMissed?: ((missed: MissedDay) => void) | undefined;
 };
@@ -590,10 +598,12 @@ export function missedDayText(missed: MissedDay, now: number): string {
 export function missedDayCard(
   missed: MissedDay | null | undefined,
   now: number,
-  actions: Pick<TodayActions, 'onMoveMissed' | 'onSkipMissed'>,
+  actions: Pick<TodayActions, 'onMoveMissed' | 'onStartMissed' | 'onSkipMissed'>,
+  action: 'move' | 'start' = 'move',
 ): HTMLElement | null {
-  const { onMoveMissed, onSkipMissed } = actions;
-  if (!missed || !onMoveMissed || !onSkipMissed) return null;
+  const { onSkipMissed } = actions;
+  const onFirst = action === 'start' ? actions.onStartMissed : actions.onMoveMissed;
+  if (!missed || !onFirst || !onSkipMissed) return null;
   return h(
     'section',
     { class: 'missed-card', 'data-missed-day': missed.date, role: 'status' },
@@ -611,10 +621,10 @@ export function missedDayCard(
         {
           type: 'button',
           class: 'missed-btn missed-cta',
-          'data-missed-move': true,
-          onclick: () => onMoveMissed(missed),
+          [action === 'start' ? 'data-missed-start' : 'data-missed-move']: true,
+          onclick: () => onFirst(missed),
         },
-        'Move it',
+        action === 'start' ? 'Start it' : 'Move it',
       ),
       h(
         'button',
@@ -682,7 +692,7 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
       ? newProgramPrompt(actions)
       : null,
     gymPrompt(props.missingKit, actions),
-    missedDayCard(props.missedDay, props.now, actions),
+    missedDayCard(props.missedDay, props.now, actions, props.missedAction),
   ];
   const lower = [
     props.adjustedToday ? adjustedBanner(props.adjustedToday, actions.onUndoAdjust) : null,

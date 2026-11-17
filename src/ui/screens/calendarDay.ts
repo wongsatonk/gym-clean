@@ -52,7 +52,8 @@ export function dayActions(
   if (day.date === today)
     return day.status === 'planned' || day.status === 'partial' ? ['start', 'move'] : [];
   if (day.date > today) return day.status === 'planned' ? ['doToday', 'move'] : [];
-  return day.status === 'missed' ? ['doToday', 'move'] : [];
+  // SPEC: Move is for today or a later planned day; a past miss can only be done today.
+  return day.status === 'missed' ? ['doToday'] : [];
 }
 
 type RowState = 'done' | 'partial' | 'missed' | 'todo';
