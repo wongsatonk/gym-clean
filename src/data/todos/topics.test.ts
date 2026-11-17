@@ -29,11 +29,12 @@ function strings(t: TodoTopic): string[] {
 }
 
 describe('TODO_TOPICS', () => {
-  it('has the 12 topics of the SPEC table plus the 1.13.0 and 1.14.0 ones, in order, with their checkpoints', () => {
+  it('has the 12 topics of the SPEC table plus the 1.13.0, 1.14.0 and 1.15.0 ones, in order, with their checkpoints', () => {
     expect(TODO_TOPICS.map((t) => [t.id, t.checkpoint])).toEqual([
       ['coach-calendar', 'Checkpoint I'],
       ['coach-iphone', 'Checkpoint J'],
       ['trainer-kit-gym', 'Checkpoint J'],
+      ['published-look', 'Checkpoint K'],
       ['health-week', 'Checkpoint H'],
       ['iphone-week', 'Checkpoint G'],
       ['coach-gym', 'Checkpoint E'],
@@ -48,8 +49,12 @@ describe('TODO_TOPICS', () => {
     ]);
   });
 
-  it('all came with 1.12.0, except the trainer-kit gym topic (1.13.0) and the iPhone coach (1.14.0)', () => {
-    const since: Record<string, string> = { 'trainer-kit-gym': '1.13.0', 'coach-iphone': '1.14.0' };
+  it('all came with 1.12.0, except the trainer-kit gym topic (1.13.0), the iPhone coach (1.14.0) and the published look (1.15.0)', () => {
+    const since: Record<string, string> = {
+      'trainer-kit-gym': '1.13.0',
+      'coach-iphone': '1.14.0',
+      'published-look': '1.15.0',
+    };
     for (const t of TODO_TOPICS) expect(t.since, t.id).toBe(since[t.id] ?? '1.12.0');
   });
 
@@ -58,10 +63,13 @@ describe('TODO_TOPICS', () => {
     expect(ids('1.12.0')).toHaveLength(12);
     expect(ids('1.12.0')).not.toContain('trainer-kit-gym');
     expect(ids('1.12.3')).toEqual(ids('1.12.0'));
-    expect(ids('1.13.0')).toEqual(TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'coach-iphone'));
+    expect(ids('1.13.0')).toEqual(
+      TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'coach-iphone' && id !== 'published-look'),
+    );
     expect(ids('1.13.4')).toEqual(ids('1.13.0'));
-    expect(ids('1.14.0')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.14.0')).toEqual(TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'published-look'));
     expect(ids('1.15.0')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.16.0')).toEqual(TODO_TOPICS.map((t) => t.id));
     expect(ids('1.11.0')).toEqual([]);
     // Data order is kept, and another list can be passed in.
     expect(topicsForRelease('1.12.0', [byId('trainer-kit-gym'), byId('resign')])).toEqual([
@@ -142,6 +150,7 @@ describe('TODO_TOPICS', () => {
       'coach-calendar': ['chatAsked', 'proposalOutcome', 'calendarAfterSession'],
       'coach-iphone': ['appleAnswers', 'micUses', 'reminderOn', 'checkInDone'],
       'trainer-kit-gym': ['effortSets', 'warmupSession', 'intakeDone', 'measurementLogged'],
+      'published-look': [],
       'health-week': ['healthConnected', 'healthDays'],
       'iphone-week': ['nativeApp', 'nativeSessions'],
       'coach-gym': ['coachChanges', 'legSwapSession'],
@@ -241,6 +250,38 @@ describe('TODO_TOPICS', () => {
       ]);
       expect(asks(topic).find((s) => s.id === 'voice')?.tryIt).toBe('settings/coach');
       for (const s of asks(topic)) expect(s.multi, s.id).toBeUndefined();
+    });
+  });
+
+  describe('published look (1.15.0, Checkpoint K)', () => {
+    const topic = byId('published-look');
+
+    it('is for both apps, titled as in the plan, ask steps only, no decision steps', () => {
+      expect(topic.title).toBe('Published look');
+      expect(topic.checkpoint).toBe('Checkpoint K');
+      expect(topic.platform).toBe('any');
+      expect(topic.recurring).toBeUndefined();
+      expect(topic.owner).toBeUndefined();
+      expect(autos(topic)).toEqual([]);
+    });
+
+    it('asks what still looks home-made, what assumed you, the first launch and the second install', () => {
+      expect(asks(topic).map((s) => [s.id, s.options.map((o) => o.id), s.note])).toEqual([
+        ['home-made', ['nothing', 'something'], 'optional'],
+        ['assumed-you', ['no', 'yes'], 'optional'],
+        ['first-launch', ['fine', 'much'], 'optional'],
+        ['second-install', ['iphone', 'pwa', 'notYet'], 'optional'],
+      ]);
+      for (const s of asks(topic)) {
+        expect(s.multi, s.id).toBeUndefined();
+        expect(s.setting, s.id).toBeUndefined();
+      }
+      expect(asks(topic).find((s) => s.id === 'first-launch')?.tryIt).toBe('welcome');
+    });
+
+    it('says nothing about who the second person is', () => {
+      const text = strings(topic).join(' ');
+      expect(text).not.toMatch(/\b(he|his|him|she|her|hers|wife|husband)\b/i);
     });
   });
 

@@ -7,7 +7,11 @@
  *   one (no options, no/blank note: he cleared his answer) doesn't count anywhere.
  * - A topic is done when every step is; skipped when a `skip` answer exists and it isn't done.
  * - Native-only topics don't apply (and don't count) in the PWA.
+ * - M13 owner mode: the To-dos are owner tools. With it off (`owner = false`) there is no Today
+ *   card, no auto tick is recorded, no re-sign line, and `owner: true` topics don't count. The
+ *   `owner` arguments default to on, which is exactly the behaviour before M13.
  */
+import { isVisible } from '../ownerMode';
 import type { TodoAnswer, TodoFacts, TodoStep, TodoTopic } from '../types';
 import { runDetector } from './detectors';
 
@@ -30,6 +34,11 @@ export type TodoSummary = {
 };
 
 export type AutoTick = { topicId: string; stepId: string };
+
+/** The topics owner mode lets through: all when on; without the `owner: true` ones when off. */
+export function ownerTopics(topics: readonly TodoTopic[], owner: boolean): TodoTopic[] {
+  return owner ? [...topics] : topics.filter((t) => t.owner !== true);
+}
 
 export function topicApplies(topic: TodoTopic, platform: TodoFacts['platform']): boolean {
   return topic.platform === 'any' || platform === 'native';
@@ -84,30 +93,33 @@ export function topicStatus(
   return out;
 }
 
-/** "To-dos: 6 of 12 done" and whether the Today card shows. */
+/** "To-dos: 6 of 12 done" and whether the Today card shows (never with owner mode off). */
 export function todoSummary(
   topics: readonly TodoTopic[],
   answers: readonly TodoAnswer[],
   facts: TodoFacts,
+  owner = true,
 ): TodoSummary {
-  const mine = topics.filter((t) => topicApplies(t, facts.platform));
+  const mine = ownerTopics(topics, owner).filter((t) => topicApplies(t, facts.platform));
   const done = mine.filter((t) => {
     const s = topicStatus(t, answers, facts);
     return s.done || s.skipped;
   }).length;
-  return { done, total: mine.length, visible: done < mine.length };
+  return { done, total: mine.length, visible: isVisible('todos', owner) && done < mine.length };
 }
 
 /**
  * Auto steps met now with no stored tick yet (the store records them with their time). Not for
- * recurring topics, topics of the other platform or skipped topics.
+ * recurring topics, topics of the other platform or skipped topics. None with owner mode off.
  */
 export function pendingAutoTicks(
   topics: readonly TodoTopic[],
   answers: readonly TodoAnswer[],
   facts: TodoFacts,
+  owner = true,
 ): AutoTick[] {
   const out: AutoTick[] = [];
+  if (!isVisible('todos', owner)) return out;
   for (const t of topics) {
     if (t.recurring || !topicApplies(t, facts.platform)) continue;
     const mine = answers.filter((a) => a.topicId === t.id);
@@ -141,10 +153,15 @@ export function currentAnswer(
 /**
  * Days left for the Today card's "Re-sign in N days" line: a number once the re-sign step's
  * detector is no longer met (≤ 2 days left with the default `minDaysLeft: 3`), else null (also on
- * web, with the paid account, or without a re-sign topic).
+ * web, with the paid account, without a re-sign topic, or with owner mode off).
  */
-export function resignReminder(topics: readonly TodoTopic[], facts: TodoFacts): number | null {
-  for (const t of topics)
+export function resignReminder(
+  topics: readonly TodoTopic[],
+  facts: TodoFacts,
+  owner = true,
+): number | null {
+  if (!isVisible('resign', owner)) return null;
+  for (const t of ownerTopics(topics, owner))
     for (const s of t.steps) {
       if (s.kind !== 'auto' || s.detector !== 'resignDaysLeft') continue;
       if (!topicApplies(t, facts.platform)) return null;

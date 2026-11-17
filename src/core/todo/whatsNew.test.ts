@@ -4,10 +4,12 @@ import {
   RESIGN_WINDOW_DAYS,
   addedTopics,
   compareReleases,
+  ownerPages,
   replayPages,
   resignDaysLeft,
   tourReleases,
   tourToShow,
+  tourVersion,
 } from './whatsNew';
 
 // Made-up pages and topics only (public repo).
@@ -176,5 +178,73 @@ describe('resignDaysLeft', () => {
       expect(resignDaysLeft(first, at(2026, 11, 4, 23, 59))).toBe(3);
       expect(resignDaysLeft(first, at(2026, 11, 5, 0, 1))).toBe(2);
     });
+  });
+});
+
+describe('owner mode (M13)', () => {
+  const ownerPage = (release: string, id: string): WhatsNewPage => ({
+    ...page(release, id),
+    owner: true,
+  });
+  const WITH_OWNER: WhatsNewPage[] = [
+    ...PAGES,
+    page('1.15.0', 'look'),
+    ownerPage('1.15.0', 'tools'),
+    page('1.15.0', 'story'),
+    ownerPage('1.16.0', 'only-owner'),
+  ];
+  const TOPICS = [topic('t12', '1.12.0'), topic('t15', '1.15.0')];
+
+  it('ownerPages drops owner-only pages when off and keeps all when on', () => {
+    expect(ownerPages(WITH_OWNER, true)).toEqual(WITH_OWNER);
+    expect(ownerPages(WITH_OWNER, false).map((p) => p.id)).toEqual([
+      'a',
+      'b',
+      'c',
+      'd',
+      'e',
+      'look',
+      'story',
+    ]);
+  });
+
+  it('owner on: the tour, replay and added topics are what they were before (defaults = on)', () => {
+    const state = { seenRelease: '1.14.0' };
+    expect(tourToShow(WITH_OWNER, state, '1.15.0', true, true)).toEqual(
+      tourToShow(WITH_OWNER, state, '1.15.0', true),
+    );
+    expect(
+      (tourToShow(WITH_OWNER, state, '1.15.0', true, true) as WhatsNewPage[]).map((p) => p.id),
+    ).toEqual(['look', 'tools', 'story']);
+    expect(replayPages(WITH_OWNER, '1.16.0', true).map((p) => p.id)).toEqual(['only-owner']);
+    expect(addedTopics(TOPICS, ['1.15.0'], true)).toEqual(addedTopics(TOPICS, ['1.15.0']));
+    expect(addedTopics(TOPICS, ['1.15.0'], true).map((t) => t.id)).toEqual(['t15']);
+  });
+
+  it('owner off: no owner pages in the tour', () => {
+    const r = tourToShow(WITH_OWNER, { seenRelease: '1.14.0' }, '1.16.0', true, false);
+    expect((r as WhatsNewPage[]).map((p) => p.id)).toEqual(['look', 'story']);
+    expect((r as WhatsNewPage[]).some((p) => p.owner)).toBe(false);
+    // A release with only owner pages shows nothing when off.
+    expect(tourToShow(WITH_OWNER, { seenRelease: '1.15.0' }, '1.16.0', true, false)).toEqual([]);
+    // A fresh install is still marked seen silently.
+    expect(tourToShow(WITH_OWNER, {}, '1.15.0', false, false)).toEqual({ markSeen: true });
+  });
+
+  it('owner off: replay skips owner pages and falls back to the newest release with some left', () => {
+    expect(replayPages(WITH_OWNER, '1.15.0', false).map((p) => p.id)).toEqual(['look', 'story']);
+    expect(replayPages(WITH_OWNER, '1.16.0', false).map((p) => p.id)).toEqual(['look', 'story']);
+  });
+
+  it('owner off: no "Added to your to-dos" page (no topics), owner-only topics never listed', () => {
+    expect(addedTopics(TOPICS, ['1.15.0', '1.12.0'], false)).toEqual([]);
+    const ownerTopic: TodoTopic = { ...topic('t15o', '1.15.0'), owner: true };
+    expect(addedTopics([ownerTopic], ['1.15.0'], true).map((t) => t.id)).toEqual(['t15o']);
+  });
+
+  it("the first page's version: no build hash when off, the full label when on", () => {
+    expect(tourVersion(false, '1.15.0', 'abc1234')).toBe('Version 1.15');
+    expect(tourVersion(false, '1.15.0', 'abc1234')).not.toContain('abc1234');
+    expect(tourVersion(true, '1.15.0', 'abc1234')).toBe('Version 1.15.0 (build abc1234)');
   });
 });

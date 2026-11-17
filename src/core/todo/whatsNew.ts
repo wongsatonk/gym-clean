@@ -6,7 +6,11 @@
  * - Fresh install (no data and no 'whatsNew' row): nothing changed for him, so the tour is marked
  *   seen without showing.
  * - Several unseen releases: one tour with all their pages, newest release first.
+ * - M13 owner mode: with it off, `owner: true` pages, the "Added to your to-dos" page and the build
+ *   hash on the first page are left out. The `owner` arguments default to on, which is exactly
+ *   the behaviour before M13.
  */
+import { isVisible, versionLine } from '../ownerMode';
 import type { TodoTopic, WhatsNewPage, WhatsNewState } from '../types';
 
 /** A free Apple ID build runs for 7 days after install. */
@@ -32,6 +36,11 @@ export function compareReleases(a: string, b: string): number {
   return 0;
 }
 
+/** The pages owner mode lets through: all when on; without the `owner: true` ones when off. */
+export function ownerPages(pages: readonly WhatsNewPage[], owner: boolean): WhatsNewPage[] {
+  return owner ? [...pages] : pages.filter((p) => p.owner !== true);
+}
+
 /** Pages of the given releases: newest release first, data order within a release. */
 function pagesOf(pages: readonly WhatsNewPage[], keep: (release: string) => boolean): WhatsNewPage[] {
   return pages
@@ -52,11 +61,12 @@ export function tourToShow(
   state: WhatsNewState,
   current: string,
   hasData: boolean,
+  owner = true,
 ): WhatsNewPage[] | { markSeen: true } {
   const seen = state.seenRelease;
   if (seen === undefined && !hasData) return { markSeen: true };
   return pagesOf(
-    pages,
+    ownerPages(pages, owner),
     (r) =>
       compareReleases(r, current) <= 0 && (seen === undefined || compareReleases(r, seen) > 0),
   );
@@ -73,14 +83,32 @@ export function tourReleases(pages: readonly WhatsNewPage[]): string[] {
  * Settings → What's new: the running release's pages, or, for a release without pages (a fix-only
  * patch), the newest release up to it that has some.
  */
-export function replayPages(pages: readonly WhatsNewPage[], current: string): WhatsNewPage[] {
-  const latest = tourReleases(pages.filter((p) => compareReleases(p.release, current) <= 0))[0];
-  return latest === undefined ? [] : pagesOf(pages, (r) => r === latest);
+export function replayPages(
+  pages: readonly WhatsNewPage[],
+  current: string,
+  owner = true,
+): WhatsNewPage[] {
+  const mine = ownerPages(pages, owner);
+  const latest = tourReleases(mine.filter((p) => compareReleases(p.release, current) <= 0))[0];
+  return latest === undefined ? [] : pagesOf(mine, (r) => r === latest);
 }
 
-/** Topics added in these releases (the tour's last page, "Added to your to-dos"), data order. */
-export function addedTopics(topics: readonly TodoTopic[], releases: readonly string[]): TodoTopic[] {
+/**
+ * Topics added in these releases (the tour's last page, "Added to your to-dos"), data order.
+ * None with owner mode off: that page is left out.
+ */
+export function addedTopics(
+  topics: readonly TodoTopic[],
+  releases: readonly string[],
+  owner = true,
+): TodoTopic[] {
+  if (!isVisible('tourTodos', owner)) return [];
   return topics.filter((t) => releases.some((r) => compareReleases(r, t.since) === 0));
+}
+
+/** The version under the first page's title: `versionLine(owner)` (no build hash when off). */
+export function tourVersion(owner: boolean, release?: string, build?: string): string {
+  return versionLine(owner, release, build);
 }
 
 const DAY_MS = 86_400_000;

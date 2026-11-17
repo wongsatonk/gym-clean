@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { isAppRoute } from '../../core/todo/routes';
 import { checkCopy } from '../../core/trainer/replies';
-import { compareReleases, replayPages, tourToShow } from '../../core/todo/whatsNew';
+import {
+  addedTopics,
+  compareReleases,
+  replayPages,
+  tourReleases,
+  tourToShow,
+  tourVersion,
+} from '../../core/todo/whatsNew';
+import type { WhatsNewPage } from '../../core/types';
+import { TODO_TOPICS } from '../todos/topics';
 import { WHATS_NEW_PAGES } from './pages';
 
 const sentences = (s: string) => s.split(/(?<=[.!?])\s+/).filter((x) => x.trim() !== '');
@@ -95,8 +104,93 @@ describe('WHATS_NEW_PAGES', () => {
     expect(text('reminders')).not.toMatch(/before a training day/i);
   });
 
-  it('holds only releases 1.12.0, 1.13.0 and 1.14.0, every page in one of them', () => {
-    expect(r112.length + r113.length + r114.length).toBe(WHATS_NEW_PAGES.length);
+  const r115 = WHATS_NEW_PAGES.filter((p) => p.release === '1.15.0');
+
+  it('has four pages for 1.15.0 (M13): new look, About + privacy, Story, owner tools (owner only)', () => {
+    expect(r115.map((p) => [p.id, p.tryIt, p.owner])).toEqual([
+      ['new-look', 'today', undefined],
+      ['about', 'settings/about', undefined],
+      ['story', 'calendar', undefined],
+      ['owner-tools', 'settings/about', true],
+    ]);
+  });
+
+  it('1.15.0 says what stays on the phone and how owner tools open', () => {
+    const text = (id: string) => {
+      const p = r115.find((x) => x.id === id);
+      return `${p?.title} ${p?.what} ${p?.why}`;
+    };
+    expect(text('about')).toMatch(/stays on this phone/i);
+    expect(text('about')).toMatch(/not medical advice/i);
+    expect(text('story')).toMatch(/Story/);
+    expect(text('story')).toMatch(/nothing is (uploaded|sent)/i);
+    expect(text('owner-tools')).toMatch(/7 times/);
+    expect(text('owner-tools')).toMatch(/version/i);
+  });
+
+  it('marks only the to-dos page (1.12.0) and owner tools (1.15.0) owner-only', () => {
+    expect(WHATS_NEW_PAGES.filter((p) => p.owner).map((p) => `${p.release}/${p.id}`)).toEqual([
+      '1.12.0/todos',
+      '1.15.0/owner-tools',
+    ]);
+    for (const p of WHATS_NEW_PAGES) expect(p.owner === undefined || p.owner === true).toBe(true);
+  });
+
+  it('holds only releases 1.12.0 to 1.15.0, every page in one of them', () => {
+    expect(r112.length + r113.length + r114.length + r115.length).toBe(WHATS_NEW_PAGES.length);
+  });
+
+  describe('owner mode (M13)', () => {
+    const ids = (r: WhatsNewPage[] | { markSeen: true }) =>
+      Array.isArray(r) ? r.map((p) => p.id) : r;
+
+    it('owner on: the 1.15.0 tour has every page, the to-dos page and the full version', () => {
+      const shown = tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.14.0' }, '1.15.0', true, true);
+      expect(shown).toEqual(r115);
+      const added = addedTopics(TODO_TOPICS, tourReleases(r115), true).map((t) => t.id);
+      expect(added).toEqual(['published-look']);
+      expect(tourVersion(true, '1.15.0', 'abc1234')).toBe('Version 1.15.0 (build abc1234)');
+    });
+
+    it('owner on: identical to the 1.14.0 behaviour for earlier releases', () => {
+      for (const [seen, current] of [
+        ['1.11.0', '1.14.0'],
+        ['1.12.0', '1.14.0'],
+        ['1.13.0', '1.14.0'],
+        ['1.11.0', '1.12.0'],
+      ] as const) {
+        expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: seen }, current, true, true)).toEqual(
+          tourToShow(WHATS_NEW_PAGES, { seenRelease: seen }, current, true),
+        );
+        expect(replayPages(WHATS_NEW_PAGES, current, true)).toEqual(
+          replayPages(WHATS_NEW_PAGES, current),
+        );
+      }
+      expect(ids(tourToShow(WHATS_NEW_PAGES, {}, '1.12.0', true, true))).toContain('todos');
+    });
+
+    it('owner off: no owner pages, no to-dos page, no build hash', () => {
+      const shown = tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.11.0' }, '1.15.0', true, false);
+      expect(Array.isArray(shown)).toBe(true);
+      const list = shown as WhatsNewPage[];
+      expect(list.some((p) => p.owner)).toBe(false);
+      expect(ids(list)).not.toContain('todos');
+      expect(ids(list)).not.toContain('owner-tools');
+      expect(ids(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.14.0' }, '1.15.0', true, false))).toEqual([
+        'new-look',
+        'about',
+        'story',
+      ]);
+      expect(replayPages(WHATS_NEW_PAGES, '1.15.0', false).map((p) => p.id)).toEqual([
+        'new-look',
+        'about',
+        'story',
+      ]);
+      expect(addedTopics(TODO_TOPICS, tourReleases(list), false)).toEqual([]);
+      expect(tourVersion(false, '1.15.0', 'abc1234')).toBe('Version 1.15');
+      // A fresh install still sees no tour.
+      expect(tourToShow(WHATS_NEW_PAGES, {}, '1.15.0', false, false)).toEqual({ markSeen: true });
+    });
   });
 
   it('shows the 1.14.0 pages once the version is 1.14.0, and keeps them back before', () => {

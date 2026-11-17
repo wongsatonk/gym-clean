@@ -3,6 +3,7 @@
  * tour). Each page: a short title, what changed and why, each at most 2 short sentences, and a
  * Try it route. `icon` names an original icon drawn by the UI. Copy passes `checkCopy`
  * (pages.test.ts). A release with pages is a new MINOR (version policy, Decision "M12 slice 1c").
+ * M13: `owner: true` pages show only in owner mode (src/core/todo/whatsNew.ts `ownerPages`).
  */
 import type { WhatsNewPage } from '../../core/types';
 
@@ -61,6 +62,8 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     why: 'When you are ready, copy one report and paste it where you want. The app sends nothing.',
     tryIt: 'todos',
     icon: 'todos',
+    // M13: the to-dos are owner tools, so this page shows only in owner mode.
+    owner: true,
   },
   // 1.13.0: M12 slice 1b (trainer kit). Shown once the version reaches 1.13.0.
   {
@@ -180,5 +183,43 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     why: 'One line from your answers joins your week recap. They stay on this phone.',
     tryIt: 'coach',
     icon: 'sliders',
+  },
+  // 1.15.0: M13 Published look (new look, About + privacy, Story share; owner tools owner-only).
+  {
+    release: '1.15.0',
+    id: 'new-look',
+    title: 'A cleaner look',
+    what: 'Start now comes first on Today, notices fold into one row, and the tab bar fits every phone.',
+    why: 'Less to read before you train. The workout screens stay as they were.',
+    tryIt: 'today',
+    icon: 'palette',
+  },
+  {
+    release: '1.15.0',
+    id: 'about',
+    title: 'About and privacy',
+    what: 'Settings has an About screen with the privacy promise and the open-source credits.',
+    why: 'Everything stays on this phone: video, body data, Health data and chat. Coaching, not medical advice.',
+    tryIt: 'settings/about',
+    icon: 'lock',
+  },
+  {
+    release: '1.15.0',
+    id: 'story',
+    title: 'Share to your Story',
+    what: 'Share month in the Calendar now also makes a Story-size picture that leads with one number you pick.',
+    why: 'The picture is made on this phone and nothing is uploaded. You choose where it goes.',
+    tryIt: 'calendar',
+    icon: 'trophy',
+  },
+  {
+    release: '1.15.0',
+    id: 'owner-tools',
+    title: 'Owner tools',
+    what: 'To-dos, the developer log and the build number now sit behind Owner tools in About.',
+    why: 'Tap the version line in About 7 times to show the switch. It stays on for this phone.',
+    tryIt: 'settings/about',
+    icon: 'sliders',
+    owner: true,
   },
 ];

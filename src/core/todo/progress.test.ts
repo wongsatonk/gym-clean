@@ -3,6 +3,7 @@ import type { TodoAnswer, TodoFacts, TodoTopic } from '../types';
 import {
   currentAnswer,
   isBlankAnswer,
+  ownerTopics,
   pendingAutoTicks,
   resignReminder,
   topicApplies,
@@ -285,5 +286,37 @@ describe('resignReminder', () => {
     expect(resignReminder(topics, facts('web', {}, {}, late))).toBe(null);
     expect(resignReminder(topics, facts('native', {}, { signingPaid: true }, late))).toBe(null);
     expect(resignReminder([MIXED], facts('native', {}, {}, late))).toBe(null);
+  });
+});
+
+describe('owner mode (M13)', () => {
+  const OWNER_ONLY: TodoTopic = { ...ASK_ONLY, id: 'owner-only', owner: true };
+  const topics = [MIXED, NATIVE, ASK_ONLY, RESIGN, OWNER_ONLY];
+  const late = { buildFirstSeenAt: new Date(2026, 10, 10, 9).getTime() };
+
+  it('ownerTopics keeps owner-only topics only when on', () => {
+    expect(ownerTopics(topics, true)).toEqual(topics);
+    expect(ownerTopics(topics, false).map((t) => t.id)).toEqual(['mixed', 'phone', 'ask', 'resign']);
+  });
+
+  it('owner on: the summary, ticks and re-sign line are unchanged (defaults = on)', () => {
+    const f = facts('native', { chatQuestions: 1 }, {}, late);
+    const a = [ans('ask', '', 'skip')];
+    expect(todoSummary(topics, a, f, true)).toEqual(todoSummary(topics, a, f));
+    expect(todoSummary(topics, a, f, true)).toEqual({ done: 2, total: 5, visible: true });
+    expect(pendingAutoTicks(topics, a, f, true)).toEqual(pendingAutoTicks(topics, a, f));
+    expect(pendingAutoTicks(topics, a, f, true).length).toBeGreaterThan(0);
+    expect(resignReminder(topics, f, true)).toBe(resignReminder(topics, f));
+    expect(resignReminder(topics, f, true)).toBe(1);
+  });
+
+  it('owner off: no Today card, no auto ticks recorded, no re-sign line', () => {
+    const f = facts('native', { chatQuestions: 1 }, {}, late);
+    const s = todoSummary(topics, [], f, false);
+    expect(s.visible).toBe(false);
+    // Owner-only topics don't count when off.
+    expect(s.total).toBe(4);
+    expect(pendingAutoTicks(topics, [], f, false)).toEqual([]);
+    expect(resignReminder(topics, f, false)).toBe(null);
   });
 });

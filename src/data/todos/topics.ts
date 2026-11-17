@@ -15,6 +15,9 @@
  * Release 1.14.0 (M12 slice 2) adds "Coach on your iPhone" (Checkpoint J): Apple's on-device
  * coach, the mic, reminders and the weekly check-in. Its last question collects trainer-kit
  * feedback too (slice 1b folds into Checkpoint J).
+ *
+ * Release 1.15.0 (M13) adds "Published look" (Checkpoint K: a fresh install on a second phone).
+ * Like every to-do it shows only in owner mode (src/core/todo/progress.ts).
  */
 import { RULES } from '../../core/exercises';
 import { TRAINER_KIT_DEFAULTS } from '../../core/trainerKit/defaults';
@@ -54,6 +57,8 @@ const R = '1.12.0';
 const R113 = '1.13.0';
 /** M12 slice 2 (Apple brain, mic, reminders, check-in). */
 const R114 = '1.14.0';
+/** M13 Published look (first launch, owner mode, About, Story share). */
+const R115 = '1.15.0';
 
 export const TODO_TOPICS: readonly TodoTopic[] = [
   {
@@ -332,6 +337,60 @@ export const TODO_TOPICS: readonly TodoTopic[] = [
         options: [
           { id: 'nothing', label: 'Nothing' },
           { id: 'something', label: 'Something, see my note' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'published-look',
+    title: 'Published look',
+    checkpoint: 'Checkpoint K',
+    since: R115,
+    platform: 'any',
+    steps: [
+      {
+        id: 'home-made',
+        title: 'Does anything still look home-made?',
+        why: 'Think of a screen you would not show a friend. Name it in the note.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'nothing', label: 'Nothing' },
+          { id: 'something', label: 'Something, see my note' },
+        ],
+      },
+      {
+        id: 'assumed-you',
+        title: 'Did any screen or line assume who uses the app?',
+        why: 'A goal, a name or a word that only fits one person.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'no', label: 'No' },
+          { id: 'yes', label: 'Yes, see my note' },
+        ],
+      },
+      {
+        id: 'first-launch',
+        title: 'How did the first launch feel on a fresh install?',
+        why: 'The welcome pages, the questions and the permission pages.',
+        tryIt: 'welcome',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'fine', label: 'Fine' },
+          { id: 'much', label: 'It asked too much' },
+        ],
+      },
+      {
+        id: 'second-install',
+        title: 'Which app went on the second phone?',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'iphone', label: 'The iPhone app' },
+          { id: 'pwa', label: 'The Home Screen web app' },
+          { id: 'notYet', label: 'Not installed yet' },
         ],
       },
     ],
