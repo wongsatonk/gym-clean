@@ -3,8 +3,10 @@
 //
 // - Web first: on the PWA (no native Capacitor) the brain is "unavailable: notNative" and the
 //   router keeps the rules brain. No `@capacitor/core` import at module level (see health.ts).
-// - `availability()` never throws: a missing plugin, a junk reply or a plugin error is
-//   "unavailable" (unknown reasons → `unsupported`).
+// - `availability()` resolves only a real answer: the PWA's `notNative`, or what the native plugin
+//   said (incl. `unsupported`, e.g. no English). A plugin rejection, a junk reply or no answer
+//   within DIRECT_BRAIN_TIMEOUT_MS rejects with `GymBrainAvailabilityError`, so the router treats
+//   it as a failed check (generic note, nothing stored) and never as "this iPhone can't".
 // - `respond()` follows src/data/brain/apple.ts's `GymBrainBridge` convention: it resolves a
 //   clean `GymBrainResponse` or rejects with a `GymBrainError` whose `code` is a `BrainErrorCode`
 //   (junk replies and unknown codes → `other`).
@@ -27,8 +29,11 @@ export const MAX_BRAIN_REPLY_CHARS = 2000;
 export const MAX_TOOL_CALLS = 8;
 /** Swift times out at 15 s; this is the backstop if the native call never settles. */
 export const RESPOND_BACKSTOP_MS = 20_000;
-/** How long availability() may take before the brain counts as unavailable. */
-export const DIRECT_BRAIN_TIMEOUT_MS = 4000;
+/**
+ * How long availability() may take before it rejects. Shorter than the router's 4 s status
+ * timeout (src/data/brain/router.ts STATUS_TIMEOUT_MS), so this one always fires first.
+ */
+export const DIRECT_BRAIN_TIMEOUT_MS = 3000;
 /** measure() gives up after this (dev eval only). */
 export const MEASURE_TIMEOUT_MS = 10_000;
 
@@ -69,6 +74,14 @@ export class GymBrainError extends Error {
   }
 }
 
+/** The availability check failed (rejection, junk reply or timeout): not a reason. */
+export class GymBrainAvailabilityError extends Error {
+  constructor(why: 'rejected' | 'junk' | 'timeout') {
+    super(`GymBrain availability check failed: ${why}`);
+    this.name = 'GymBrainAvailabilityError';
+  }
+}
+
 /** Raw shape of the Swift plugin, as registered with `registerPlugin('GymBrain')`. */
 export interface GymBrainNativeBridge {
   availability(): Promise<unknown>;
@@ -78,7 +91,7 @@ export interface GymBrainNativeBridge {
 }
 
 export interface GymBrain {
-  /** Never throws, never prompts. */
+  /** Never prompts. Rejects with GymBrainAvailabilityError when the check itself failed. */
   availability(): Promise<GymBrainAvailability>;
   /** Resolves the reply or rejects with `GymBrainError`. */
   respond(request: GymBrainRequest): Promise<GymBrainResponse>;
@@ -92,15 +105,13 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const count = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
 
-/** Pure mapping of the plugin's `availability()` reply. Anything unclear is "unsupported". */
-export function mapBrainAvailability(reply: unknown): GymBrainAvailability {
-  if (!isObj(reply)) return { available: false, reason: 'unsupported' };
+/** Pure mapping of the plugin's `availability()` reply. Null for a junk reply. */
+export function mapBrainAvailability(reply: unknown): GymBrainAvailability | null {
+  if (!isObj(reply)) return null;
   if (reply.available === true) return { available: true };
-  const known = (NATIVE_REASONS as readonly unknown[]).includes(reply.reason);
-  return {
-    available: false,
-    reason: known ? (reply.reason as BrainUnavailableReason) : 'unsupported',
-  };
+  if (reply.available !== false) return null;
+  if (!(NATIVE_REASONS as readonly unknown[]).includes(reply.reason)) return null;
+  return { available: false, reason: reply.reason as BrainUnavailableReason };
 }
 
 /** Keeps only well-formed `{ name, args }` calls (at most MAX_TOOL_CALLS). */
@@ -179,17 +190,21 @@ export function createGymBrain(
   return {
     async availability() {
       if (!bridge) return { available: false, reason: 'notNative' };
+      let reply: unknown;
       try {
-        return mapBrainAvailability(
-          await withTimeout(
-            bridge.availability(),
-            DIRECT_BRAIN_TIMEOUT_MS,
-            () => new Error('timeout'),
-          ),
+        reply = await withTimeout(
+          bridge.availability(),
+          DIRECT_BRAIN_TIMEOUT_MS,
+          () => new GymBrainAvailabilityError('timeout'),
         );
-      } catch {
-        return { available: false, reason: 'unsupported' };
+      } catch (e) {
+        throw e instanceof GymBrainAvailabilityError
+          ? e
+          : new GymBrainAvailabilityError('rejected');
       }
+      const mapped = mapBrainAvailability(reply);
+      if (!mapped) throw new GymBrainAvailabilityError('junk');
+      return mapped;
     },
 
     async respond(request) {

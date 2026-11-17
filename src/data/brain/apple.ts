@@ -50,6 +50,10 @@ import { BrainError, UNAVAILABLE_COPY, brainErrorCode, isUnavailableReason } fro
 
 /** The minimal native bridge this adapter needs (task 7 implements it). */
 export type GymBrainBridge = {
+  /**
+   * Rejects when the check itself fails (plugin error, junk reply, timeout); the router then shows
+   * a generic one-off note and stores nothing. Only a real native answer resolves a reason.
+   */
   availability(): Promise<
     { available: true } | { available: false; reason: BrainUnavailableReason }
   >;

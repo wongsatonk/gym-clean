@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GymBrainRequest } from '../core/types';
 import {
   DIRECT_BRAIN_TIMEOUT_MS,
+  GymBrainAvailabilityError,
   GymBrainError,
   MAX_BRAIN_REPLY_CHARS,
   MAX_TOOL_CALLS,
@@ -14,6 +15,7 @@ import {
   mapTokenCounts,
   type GymBrainNativeBridge,
 } from './gymBrain';
+import { STATUS_TIMEOUT_MS } from '../data/brain/router';
 
 // Made-up text only. The bridge is a fake of the GymBrain Swift plugin.
 
@@ -81,13 +83,20 @@ describe('availability', () => {
       { available: false, reason: 'notNative' },
     ],
     ['a number reason', { available: false, reason: 3 }],
-  ])('junk reply (%s) → unavailable: unsupported', async (_, reply) => {
-    expect(mapBrainAvailability(reply)).toEqual({ available: false, reason: 'unsupported' });
+  ])('junk reply (%s) → rejects, never a stored-forever reason', async (_, reply) => {
+    expect(mapBrainAvailability(reply)).toBeNull();
     const b = createGymBrain(fake({ availability: async () => reply }));
-    expect(await b.availability()).toEqual({ available: false, reason: 'unsupported' });
+    await expect(b.availability()).rejects.toBeInstanceOf(GymBrainAvailabilityError);
   });
 
-  it('a throwing plugin → unavailable', async () => {
+  it("'unsupported' only when the native reply says so (e.g. no English)", async () => {
+    expect(mapBrainAvailability({ available: false, reason: 'unsupported' })).toEqual({
+      available: false,
+      reason: 'unsupported',
+    });
+  });
+
+  it('a throwing plugin → rejects', async () => {
     const b = createGymBrain(
       fake({
         availability: async () => {
@@ -95,15 +104,16 @@ describe('availability', () => {
         },
       }),
     );
-    expect(await b.availability()).toEqual({ available: false, reason: 'unsupported' });
+    await expect(b.availability()).rejects.toBeInstanceOf(GymBrainAvailabilityError);
   });
 
-  it('a plugin that never answers → unavailable after the timeout', async () => {
+  it('a plugin that never answers → rejects after its own timeout, before the router gives up', async () => {
+    expect(DIRECT_BRAIN_TIMEOUT_MS).toBeLessThanOrEqual(STATUS_TIMEOUT_MS - 1000);
     vi.useFakeTimers();
     const b = createGymBrain(fake({ availability: () => new Promise(() => undefined) }));
-    const p = b.availability();
+    const p = b.availability().catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(DIRECT_BRAIN_TIMEOUT_MS + 1);
-    expect(await p).toEqual({ available: false, reason: 'unsupported' });
+    expect(await p).toBeInstanceOf(GymBrainAvailabilityError);
   });
 });
 
