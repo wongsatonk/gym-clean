@@ -1850,7 +1850,7 @@ medical claims, privacy).
    - With owner mode off, the to-do decision steps are unreachable; their settings keep their defaults.
 4. **Brand.** One name constant and one tagline constant (`src/core/brand.ts`); every shown name reads it,
    so a rename is one edit plus the listed non-TS files (a test names them). Built with the current name
-   "Gym Clean" (keeping it is M13-q1, not blocking).
+   "Gym Clean" (M13-q1 answered 2026-11-17: keep it).
    - **Launch screen:** the orange dumbbell-pulse mark on `#0d0f12` in the iPhone app (splash image and
      storyboard background; today a blank square on a white storyboard) and as a static pre-boot mark in
      the web app (no script, replaced when the app mounts).

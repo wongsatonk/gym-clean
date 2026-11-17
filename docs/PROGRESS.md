@@ -11,7 +11,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **M12 Coach tab, slice 1: planned 2026-11-16** on `m12-coach-tab` (design approved; he said "start slice 1" alongside his Checkpoint H week). Plan under "Current milestone plan → M12 — slice 1"; contract SPEC M12 + Decision "M12 plan". Nothing in it blocks on him.
 - **M12 slice 1c (What's New tour + To-do guides + Copy report): planned 2026-11-16** (his yes), on `m12-coach-tab` after slice 1's verifier PASS; plan under "Current milestone plan → M12 — slice 1c"; Decision "M12 slice 1c". Not blocking on him (M12-q5 has a default).
-- **M13 "Published look": planned 2026-11-17** (his yes; Decision "M13 Published look"; owner mode = option A). Starts only after M12 slices 1b and 2 are verified; plan under "Current milestone plan → M13" (below the M12 slice 1b plan). Open, not blocking: M13-q1 (keep the name "Gym Clean"?).
+- **M13 "Published look": planned 2026-11-17** (his yes; Decision "M13 Published look"; owner mode = option A). Starts only after M12 slices 1b and 2 are verified; plan under "Current milestone plan → M13" (below the M12 slice 1b plan). M13-q1 answered: keep the name "Gym Clean" (his words 2026-11-17: "Keep it Gym Clean").
 - **Waiting on Wongsaton:**
   - **M11 Health data (Apple Health + WHOOP): built 2026-11-16 on `m11-build`** (read-only, route A, defaults). Reviewer PASS (424cafd), verifier PASS on the Mac (check 3157, full e2e 159/1 skipped, simulator build + 19 XCTests). Next: 🧍 task 13 on his iPhone (`ios/` checklist in docs/ios-setup.md), then merge; 🧍 task 2: 2026-11-16 he says WHOOP writes "a lot of things" into Health (exact list not given); the iPhone test (task 13) confirms which of the six arrive.
   - Deploy OK for m4e-redesign.
@@ -3036,7 +3036,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
     - With owner mode off the **developer log records nothing** (a normal user can't see or clear it); the saved switch is kept and applies again when owner mode is on.
     - With owner mode off the to-do **decision steps** can't be reached; their settings stay at the defaults (M12-q1, M12-q4, Claude, signing).
     - An install that trained on 1.13/1.14 before 1.15.0 (e.g. her phone, if installed early) starts with owner mode **on**; the switch is visible there, so she turns it off once.
-    - **Name:** built with "Gym Clean" behind `APP_NAME` in `src/core/brand.ts` (a scan test lists the few non-TS places), so a rename is cheap. Keeping the name is open (M13-q1, not blocking). **Tagline default: "Your pocket strength coach."** (one constant; he can reword it).
+    - **Name:** built with "Gym Clean" behind `APP_NAME` in `src/core/brand.ts` (a scan test lists the few non-TS places), so a rename is cheap. He keeps the name (M13-q1, 2026-11-17: "Keep it Gym Clean"). **Tagline default: "Your pocket strength coach."** (one constant; he can reword it).
     - **Permission pages explain first and keep the slice 2 rules:** mic is still asked only on first mic use (its page has no Allow button); notifications only when a reminder is switched on (the page's button switches the session reminder on); Health through the M11 connect flow; camera on its button. The PWA shows the camera page only.
     - **Story image:** 1080×1920; the lead number is his choice in the preview, **sessions done by default**; "total lifted" shows only if he picks it (this relaxes slice 1's "no weights" for a monthly total only; never per-lift weights, body or Health data); missed days are grey rings with no "missed" text.
     - **Landing page:** `public/welcome/index.html`, served by the existing Pages deploy at `<site>/welcome/`; static, no script, no tracker, no personal name; the service worker skips that path (`navigateFallbackDenylist`).
@@ -3918,7 +3918,7 @@ Verifier on `m12-coach-tab` at 9ecd50c (reviewer PASS: slice 1 after 85fb908, sl
 
 ## Blockers / questions for Wongsaton
 - **New (M13 Published look, planned 2026-11-17; not blocking):**
-  - **(M13-q1) Keep the name "Gym Clean"?** M13 is built with the current name behind one constant, so a new name later is a small change (the constant, the page title, the iPhone app's display name, the icon caption). Tell us a new name any time before Checkpoint K, or keep it.
+  - ~~(M13-q1) Keep the name "Gym Clean"?~~ **Answered 2026-11-17: keep it** ("Keep it Gym Clean"). The name stays behind one constant anyway.
   - Owner mode: **answered 2026-11-17, option A** (7 taps on the version line; Decision "M13 Published look").
 - **New (M12 Coach tab, planned 2026-11-16; not blocking slice 1. The defaults are what gets built):**
   - ~~M12-q1~~ and ~~M12-q4~~: **defaults taken 2026-11-17** with his "Go ahead slice 2 and 1b" (Decision "M12 slices 1b + 2"); he can still change either in the to-do decision steps and the app follows. Kept below for the record.
