@@ -5,6 +5,7 @@
 // Replies on Today and the preview are shown, not spoken; a change applied mid-workout is spoken
 // once as a short cue. No text box on the Exercise screen during a set; no off-device request.
 import { expect, test, type Page } from '@playwright/test';
+import { APP_RELEASE, putSetting } from './app.helpers';
 import { openPause, endWorkout, leaveSettings } from './workout.helpers';
 
 declare global {
@@ -95,6 +96,8 @@ type SetSeed = {
 
 /** Writes sessions and sets into the app's IndexedDB once Dexie has created it, then reloads. */
 async function seed(page: Page, sessions: SessionSeed[], sets: SetSeed[]) {
+  // M12 slice 1c: this release's What's New tour counts as seen, so it can't race the test.
+  await putSetting(page, 'whatsNew', { seenRelease: APP_RELEASE });
   await expect
     .poll(() =>
       page.evaluate(

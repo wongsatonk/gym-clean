@@ -17,6 +17,7 @@ import {
   noHorizontalOverflow,
   openApp,
   record,
+  todoReady,
 } from './app.helpers';
 
 /** Topics for the web app (platform 'any'); the 4 iPhone-only ones don't count here. */
@@ -339,7 +340,7 @@ test('nothing during a workout; the card hides when every web topic is done or s
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.locator('[data-screen="exercise"]')).toBeVisible();
   await expect(card(page)).toHaveCount(0);
-  await expect(page.locator('[data-tour]')).toHaveCount(0);
+  // (The tour over a workout / its preview is covered in whats-new.spec.ts with an unseen release.)
   const spoken = await page.evaluate(() => window.__spoken);
   expect(spoken.filter((s) => /to-do|report|what's new/i.test(s))).toEqual([]);
 
@@ -369,7 +370,7 @@ test('nothing during a workout; the card hides when every web topic is done or s
   );
   await page.reload();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
-  await page.waitForTimeout(300);
+  await todoReady(page);
   await expect(card(page)).toHaveCount(0);
   await openListFromSettings(page);
   await expect(list(page).locator('[data-todo-summary]')).toContainText(

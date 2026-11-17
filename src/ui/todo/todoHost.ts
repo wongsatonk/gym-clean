@@ -66,7 +66,25 @@ export type TodoHostDeps = {
   build?: string | undefined;
   topics?: readonly TodoTopic[] | undefined;
   pages?: readonly WhatsNewPage[] | undefined;
+  /** Where the ready signal goes (default: `<html>`'s data attributes, see `ReadySignal`). */
+  signal?: ((s: ReadySignal) => void) | undefined;
 };
+
+/**
+ * Settled points for tests (e2e waits on these before asserting that something is absent):
+ * `refreshes` facts refreshes finished, `tourChecks` tour checks finished (app.ts calls
+ * `tourChecked`), `ready` once both have happened at least once since the app opened.
+ */
+export type ReadySignal = { refreshes: number; tourChecks: number; ready: boolean };
+
+/** Default signal: `data-todo-refreshes`, `data-tour-checks` and `data-todo-ready` on `<html>`. */
+function stampHtml(s: ReadySignal): void {
+  const root = typeof document === 'undefined' ? null : document.documentElement;
+  if (!root) return;
+  root.setAttribute('data-todo-refreshes', String(s.refreshes));
+  root.setAttribute('data-tour-checks', String(s.tourChecks));
+  if (s.ready) root.setAttribute('data-todo-ready', '');
+}
 
 export type GuideNav = {
   onTryIt: (route: AppRoute) => void;
@@ -115,6 +133,13 @@ export function createTodoHost(deps: TodoHostDeps) {
   let shown: { topicId: string; stepId: string } | null = null;
   /** A caller of the refresh in flight wants the screen re-rendered after it. */
   let loud = false;
+  const settled: ReadySignal = { refreshes: 0, tourChecks: 0, ready: false };
+  const signal = deps.signal ?? stampHtml;
+  function bump(key: 'refreshes' | 'tourChecks'): void {
+    settled[key] += 1;
+    settled.ready = settled.refreshes > 0 && settled.tourChecks > 0;
+    signal({ ...settled });
+  }
 
   const topicOf = (id: string) => topics.find((t) => t.id === id);
   const statusOf = (t: TodoTopic) => (facts ? topicStatus(t, answers, facts) : undefined);
@@ -158,6 +183,7 @@ export function createTodoHost(deps: TodoHostDeps) {
         loud = false;
         deps.onChange();
       }
+      bump('refreshes');
     })();
     return refreshing;
   }
@@ -396,6 +422,8 @@ export function createTodoHost(deps: TodoHostDeps) {
     pendingTour,
     replay,
     createTour,
+    /** The app finished a tour check (shown or not): moves the ready signal on. */
+    tourChecked: () => bump('tourChecks'),
     /** Drops an open report preview (leaving To-dos). */
     closeReport: () => {
       report = null;

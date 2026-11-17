@@ -325,3 +325,28 @@ export async function animationsSettled(page: Page): Promise<void> {
       ),
   );
 }
+
+/**
+ * M12 slice 1c: waits until the app has finished its first to-do facts refresh and its first
+ * What's New tour check since this page load (todoHost's ready signal on `<html>`). Assert that
+ * the tour or the to-do card is absent only after this, never after a fixed wait.
+ */
+export async function todoReady(page: Page): Promise<void> {
+  await expect(page.locator('html[data-todo-ready]')).toBeAttached();
+}
+
+/** How many to-do facts refreshes / tour checks have finished since this page load. */
+export async function todoCounts(page: Page): Promise<{ refreshes: number; tourChecks: number }> {
+  return page.evaluate(() => {
+    const html = document.documentElement;
+    return {
+      refreshes: Number(html.getAttribute('data-todo-refreshes') ?? 0),
+      tourChecks: Number(html.getAttribute('data-tour-checks') ?? 0),
+    };
+  });
+}
+
+/** Fires the "app came back to the foreground" event the app listens for. */
+export async function foreground(page: Page): Promise<void> {
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+}

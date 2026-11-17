@@ -4,6 +4,7 @@
 // anywhere; open an exercise, read its detail, Back, then the Today tab. History is read at rest,
 // so nothing is spoken. No third-party requests, no console errors.
 import { expect, test, type Page } from '@playwright/test';
+import { APP_RELEASE, putSetting } from './app.helpers';
 
 declare global {
   interface Window {
@@ -82,6 +83,8 @@ type SetSeed = {
 
 /** Writes sessions and set logs into the app's IndexedDB once Dexie has created it. */
 async function seed(page: Page, sessions: SessionSeed[], sets: SetSeed[]) {
+  // M12 slice 1c: this release's What's New tour counts as seen, so it can't race the test.
+  await putSetting(page, 'whatsNew', { seenRelease: APP_RELEASE });
   await expect
     .poll(() =>
       page.evaluate(

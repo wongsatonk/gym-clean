@@ -2174,6 +2174,7 @@ export function mountApp(root: HTMLElement): void {
       if (view.screen === 'today' && !camera) showTour(pages);
     } finally {
       tourChecking = false;
+      todos.tourChecked(); // e2e ready signal (data-tour-checks / data-todo-ready)
     }
   }
 

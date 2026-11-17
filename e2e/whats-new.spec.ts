@@ -11,13 +11,18 @@ import {
   MIN,
   at,
   expectTapTargets,
+  foreground,
   getSetting,
   guardNetwork,
   noHorizontalOverflow,
   openApp,
+  putSetting,
   record,
   seed,
+  todoCounts,
+  todoReady,
 } from './app.helpers';
+import { endWorkout } from './workout.helpers';
 
 const TOUR = '[data-tour="whats-new"]';
 const tour = (page: Page) => page.locator(TOUR);
@@ -98,7 +103,7 @@ test('an update shows the tour once: version on page 1, Next / Back, last page, 
 
   await page.reload();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
-  await page.waitForTimeout(300);
+  await todoReady(page);
   await expect(tour(page)).toHaveCount(0);
 
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
@@ -117,7 +122,7 @@ test('Skip closes it on any page and marks the release seen', async ({ page }) =
   await expect.poll(() => seenRelease(page)).toBe(APP_RELEASE);
   await page.reload();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
-  await page.waitForTimeout(300);
+  await todoReady(page);
   await expect(tour(page)).toHaveCount(0);
   expect(offsite).toEqual([]);
 });
@@ -200,4 +205,55 @@ test('reduced motion: page changes are instant (no animation)', async ({ page })
   );
   expect(running).toEqual([]);
   expect(offsite).toEqual([]);
+});
+
+test('never over a workout or its preview, even on foreground; back on Today it shows', async ({
+  page,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  // A profile with a session and this release seen: no tour at open.
+  await openApp(page, at(16, 18));
+  await seed(
+    page,
+    [{ sessionId: 's1', dayId: 'push-a', startedAt: at(13, 18), endedAt: at(13, 18) + 40 * MIN }],
+    [],
+  );
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+  await todoReady(page);
+  await expect(tour(page)).toHaveCount(0);
+
+  // On the preview, an update lands (older release seen) and the app comes back to the
+  // foreground: facts refresh, but no tour over the preview.
+  await page.locator('[data-start]').first().click();
+  await expect(page.locator('[data-screen="preview"]')).toBeVisible();
+  await putSetting(page, 'whatsNew', { seenRelease: '1.11.0' });
+  const before = await todoCounts(page);
+  await foreground(page);
+  await expect
+    .poll(async () => (await todoCounts(page)).refreshes)
+    .toBeGreaterThan(before.refreshes);
+  await expect(tour(page)).toHaveCount(0);
+
+  // Mid-workout: foreground does nothing at all (no refresh, no tour check, no tour).
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.locator('[data-screen="exercise"]')).toBeVisible();
+  const mid = await todoCounts(page);
+  await foreground(page); // the app's listeners run synchronously inside this dispatch
+  expect(await todoCounts(page)).toEqual(mid);
+  await expect(tour(page)).toHaveCount(0);
+  const spoken = await page.evaluate(() => window.__spoken);
+  expect(spoken.filter((s) => /what's new|to-do/i.test(s))).toEqual([]);
+
+  // Workout over → Today → foreground: now the unseen release's tour shows.
+  await endWorkout(page);
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+  await expect(tour(page)).toHaveCount(0);
+  await foreground(page);
+  await expect(tour(page)).toBeVisible();
+  await expect(wn(page, 'count')).toHaveText(`1 of ${TOTAL}`);
+
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
 });

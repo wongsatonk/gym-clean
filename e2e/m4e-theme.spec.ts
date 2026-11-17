@@ -2,6 +2,7 @@
 // +30 s on Rest (and what's spoken), Skip/End only in the Pause sheet, self-hosted fonts, the
 // Today tiles after a finished session, and no third-party request anywhere.
 import { expect, test, type Page } from '@playwright/test';
+import { APP_RELEASE, putSetting } from './app.helpers';
 import { endWorkout, openPause, skipExercise } from './workout.helpers';
 
 declare global {
@@ -298,6 +299,8 @@ async function seedSessions(
   page: Page,
   rows: { sessionId: string; dayId: string; startedAt: number; endedAt: number }[],
 ) {
+  // M12 slice 1c: this release's What's New tour counts as seen, so it can't race the test.
+  await putSetting(page, 'whatsNew', { seenRelease: APP_RELEASE });
   await expect
     .poll(() =>
       page.evaluate(
