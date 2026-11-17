@@ -152,7 +152,11 @@ describe('onboarding store', () => {
       easyOn: [],
       at: T0,
     });
-    expect((await loadOnboardingFacts(db)).intakeDone).toBe(true);
+    const answered = await loadOnboardingFacts(db);
+    expect(answered.intakeDone).toBe(true);
+    // A pre-1.15 install that answered the intake but logged no session is existing: no welcome.
+    expect(answered.sessions).toBe(0);
+    expect(shouldOnboard(answered)).toBe(false);
     await db.settings.put({ key: INTAKE_SKIPPED_KEY, value: T0 });
     const facts = await loadOnboardingFacts(db);
     expect(facts.intakeSkipped).toBe(true);

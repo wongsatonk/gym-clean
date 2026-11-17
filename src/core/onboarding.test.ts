@@ -113,6 +113,13 @@ describe('shouldOnboard', () => {
   it('an install that already skipped the 1.13 intake is not fresh', () => {
     expect(shouldOnboard({ sessions: 0, row: undefined, intakeSkipped: true })).toBe(false);
   });
+
+  it('an install that already answered the 1.13 intake is not fresh (pre-1.15, no sessions yet)', () => {
+    expect(shouldOnboard({ sessions: 0, row: undefined, intakeDone: true })).toBe(false);
+    expect(
+      shouldOnboard({ sessions: 0, row: undefined, intakeSkipped: false, intakeDone: false }),
+    ).toBe(true);
+  });
 });
 
 describe('closeOnboarding (finish or skip, stored once)', () => {

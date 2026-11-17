@@ -9,7 +9,8 @@
  *   camera page only (no Health, mic or local reminders there).
  * - Who gets it: the slice 1b "fresh" test (no sessions) and no 'onboarding' row. Any row, even a
  *   damaged one, counts as seen, so an install is never put through it twice; an install that
- *   already skipped the 1.13 intake ('intakeSkipped' row) is not fresh either.
+ *   already skipped or answered the 1.13 intake ('intakeSkipped' / 'intake' row) is not fresh
+ *   either (a pre-1.15 install with no session yet is still an existing install).
  * - Finish / skip is stored once in settings 'onboarding': the first outcome stays.
  * The page copy (titles, the four "why" texts, button labels) is data: src/data/onboarding.ts.
  */
@@ -65,11 +66,18 @@ export type OnboardingFacts = {
   row: unknown;
   /** settings 'intakeSkipped' exists (the 1.13 first-run intake was skipped). */
   intakeSkipped?: boolean;
+  /** settings 'intake' exists (the 1.13 intake was answered). */
+  intakeDone?: boolean;
 };
 
 /** True only for a fresh install that has never finished or skipped the flow. */
 export function shouldOnboard(facts: OnboardingFacts): boolean {
-  return facts.sessions === 0 && facts.row === undefined && facts.intakeSkipped !== true;
+  return (
+    facts.sessions === 0 &&
+    facts.row === undefined &&
+    facts.intakeSkipped !== true &&
+    facts.intakeDone !== true
+  );
 }
 
 const isTime = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
