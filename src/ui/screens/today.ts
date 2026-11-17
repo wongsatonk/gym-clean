@@ -20,7 +20,9 @@
 // M12 1b (optional): "How do you feel today?" below Start (`[data-feel-today]`, ./feelToday.ts,
 // shown when `onSaveFeel` is set) with "Go easy on … today?" offers (`[data-easy-on]`; on the
 // readiness card when a sore area is one of its reasons, else on the feel row; never on a rest
-// day), and the cardio line under "Your week" (`[data-cardio]`, hidden when null).
+// day), and the cardio line under "Your week" (`[data-cardio]`, hidden when null), and the Goal
+// card (`[data-goal-card]`, ./goalCard.ts) under the to-do card when `goal` and both goal
+// callbacks are set.
 import type { WeekDot } from '../../core/stats';
 import type { MissedDay } from '../../core/progress/completion';
 import type { DayFeel, DayOverride, ProgramDay, ReadinessCard } from '../../core/types';
@@ -40,6 +42,7 @@ import { gymPrompt, type MissingKit } from './gymPrompt';
 import { cardShowsEasyOn, readinessCard, type ReadinessActions } from './readinessCard';
 import { feelToday } from './feelToday';
 import { todoCard, type TodoCardProps } from '../todo/todoCard';
+import { goalCard, type GoalCardProps } from './goalCard';
 import { weekLoadLine, type WeekLoad } from './weekLoad';
 
 /** The last finished session, as the Last time tile shows it. */
@@ -124,6 +127,8 @@ export type TodayProps = {
   feelOpen?: boolean | undefined;
   /** Core's `weeklyCardioMinutes(...)`: "Cardio this week: 95 min" under "Your week"; null hides it. */
   cardioMinutes?: number | null | undefined;
+  /** The Goal card (goals + progress, or none = "Set your goal"); null/omitted hides it. */
+  goal?: GoalCardProps | null | undefined;
 };
 
 /**
@@ -187,6 +192,10 @@ export type TodayActions = ReadinessActions & {
    * The "Go easy on … today?" buttons call `onEasyOn` (ReadinessActions).
    */
   onSaveFeel?: ((feel: DayFeel) => void) | undefined;
+  /** M12 1b: "Set your goal" on the Goal card (opens the intake). */
+  onSetGoal?: (() => void) | undefined;
+  /** M12 1b: "Change" on the Goal card (opens Settings → Your goal). */
+  onOpenGoal?: (() => void) | undefined;
 };
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -762,6 +771,9 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
     hero(props, actions),
     feelRow(props, actions, rest),
     actions.onOpenTodos ? todoCard(props.todo, { onOpen: actions.onOpenTodos }) : null,
+    props.goal && actions.onSetGoal && actions.onOpenGoal
+      ? goalCard(props.goal, { onSetGoal: actions.onSetGoal, onOpen: actions.onOpenGoal })
+      : null,
     h('div', { class: 'pair' }, streak.el, lastTile(props)),
     h(
       'div',

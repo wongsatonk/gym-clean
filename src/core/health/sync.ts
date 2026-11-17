@@ -31,6 +31,7 @@
 import { addDate, localDate } from '../trainer/plan';
 import {
   HEALTH_TYPES,
+  type DayFeel,
   type HealthDay,
   type HealthSettings,
   type HealthType,
@@ -88,6 +89,8 @@ export type HealthSyncInput = {
    * WHOOP logging the same lifting), never a "hard outside workout" signal.
    */
   gymSessions?: readonly LoadSession[];
+  /** M12 1b: his "How do you feel today" answers, passed through to the card (feel signals). */
+  feels?: readonly DayFeel[];
   rules?: HealthRules;
 };
 
@@ -211,6 +214,7 @@ async function todaysCard(
     history,
     rules,
     ...(input.gymSessions ? { gymSessions: input.gymSessions } : {}),
+    ...(input.feels ? { feels: input.feels } : {}),
   });
   if (card && history.lastCard !== card) {
     await store.patchSettings((s) => ({

@@ -4,7 +4,10 @@ import { asFake, useFakeDom } from '../screens/testDom';
 import { copyHits, oneAttr, byAttr, typeInto } from './fuelTestUtil';
 import {
   BARCODE_EXPLAINER,
+  FLOORED_NOTE,
   nutritionSettings,
+  surplusLabel,
+  surplusRange,
   targetText,
   type MacroKey,
   type NutritionSettingsProps,
@@ -127,6 +130,26 @@ describe('Settings → Nutrition', () => {
     expect(calls.protein).toEqual([2.1, 2]);
     typeInto(protein.oneByClass('nf-value'), '3');
     expect(calls.protein.at(-1)).toBe(2.2);
+  });
+
+  it('M12 1b: a "lose fat" goal lets the stepper go below maintenance (to −600)', () => {
+    expect(surplusRange('fat')).toEqual({ min: -600, max: 0, step: 50 });
+    expect(surplusRange(undefined)).toEqual({ min: 0, max: 600, step: 50 });
+    expect(surplusLabel('fat')).toMatch(/vs maintenance/);
+    expect(surplusLabel('muscle')).toBe('Calories above maintenance');
+    const { el, calls } = render({
+      settings: { ...SETTINGS, goalKind: 'fat', surplusKcal: -400 },
+    });
+    const surplus = oneAttr(el, 'data-field', 'surplus');
+    expect(oneAttr(surplus, 'data-step', 'up').hasAttribute('disabled')).toBe(false);
+    oneAttr(surplus, 'data-step', 'down').click();
+    expect(calls.surplus).toEqual([-450]);
+  });
+
+  it('M12 1b: says so when the kcal target was lifted to the resting estimate', () => {
+    expect(byAttr(render().el, 'data-kcal-floored')).toHaveLength(0);
+    const { el } = render({ kcalFloored: true });
+    expect(oneAttr(el, 'data-kcal-floored').textContent).toBe(FLOORED_NOTE);
   });
 
   it('Re-run setup calls onSetup', () => {

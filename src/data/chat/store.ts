@@ -97,6 +97,10 @@ export type CoachUiState = {
   lastWeekRecap?: string;
   /** Id of the last focus block whose recap was posted. */
   lastBlockRecap?: string;
+  /** M12 1b: when the last goal review was posted in the chat (ms). */
+  lastReviewAt?: number;
+  /** M12 1b: local date (YYYY-MM-DD) the last deload suggestion was posted in the chat. */
+  lastDeloadOfferAt?: string;
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -115,6 +119,10 @@ function parseCoachUi(v: unknown): CoachUiState {
     out.lastWeekRecap = o.lastWeekRecap;
   if (typeof o.lastBlockRecap === 'string' && o.lastBlockRecap !== '')
     out.lastBlockRecap = o.lastBlockRecap;
+  if (typeof o.lastReviewAt === 'number' && Number.isFinite(o.lastReviewAt) && o.lastReviewAt > 0)
+    out.lastReviewAt = o.lastReviewAt;
+  if (typeof o.lastDeloadOfferAt === 'string' && DATE_RE.test(o.lastDeloadOfferAt))
+    out.lastDeloadOfferAt = o.lastDeloadOfferAt;
   return out;
 }
 

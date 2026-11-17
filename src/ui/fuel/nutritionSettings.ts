@@ -6,7 +6,9 @@
 // - Targets for the visible macros, each with its number (≥ 64px), "estimate" when computed and
 //   "set by you" when overridden. "Change" opens an inline editor (number field, Save, and
 //   "Use estimate" to drop the override).
-// - Calorie surplus 0–600 (step 50) and protein 1.6–2.2 g/kg (step 0.1) steppers.
+// - Calorie change vs maintenance (step 50; M12 1b: the goal's range, e.g. −600–0 to lose fat,
+//   0–600 with no goal) and protein 1.6–2.2 g/kg (step 0.1) steppers. A note shows when the
+//   kcal target was lifted to the resting estimate (`kcalFloored`).
 // - "Re-run setup".
 // - Barcode lookup (M7-q5, off by default). Turning it on first shows what it sends: only the
 //   barcode number. Turning it off is immediate.
@@ -15,6 +17,7 @@
 // proteinG|carbsG|fatG]` with `.nt-value`, `[data-target-edit]`, `[data-field=surplus|protein]`,
 // `[data-setup-rerun]`, `[data-setting=barcode-lookup]` (role=switch), `[data-barcode-confirm]`.
 import { visibleMacros, type MacroKey } from '../../core/nutrition/targets';
+import { fuelRuleFor } from '../../core/nutrition/goalTargets';
 import type { NutritionMode, NutritionSettings, NutritionTargets } from '../../core/types';
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -35,6 +38,8 @@ export type NutritionSettingsProps = {
   barcodeLookup?: boolean | undefined;
   /** From core `targets(...)`; null when there's no weigh-in yet. */
   targets: NutritionTargets | null;
+  /** M12 1b: the kcal target was below the resting estimate and was lifted to it. */
+  kcalFloored?: boolean | undefined;
 };
 
 export type NutritionSettingsActions = {
@@ -58,7 +63,28 @@ export const MACRO_META: Record<
   fatG: { label: 'Fat', unit: 'g', min: 20, max: 300, step: 1 },
 };
 
+/** No goal / a gain goal. A goal's own range comes from `surplusRange(goalKind)`. */
 export const SURPLUS_RANGE = { min: 0, max: 600, step: 50 } as const;
+
+/** M12 1b: the stepper range for the goal (a deficit for "lose fat" / "general fitness"). */
+export function surplusRange(goalKind: NutritionSettings['goalKind']): {
+  min: number;
+  max: number;
+  step: number;
+} {
+  const [min, max] = fuelRuleFor(goalKind).deltaRange;
+  return { min, max, step: SURPLUS_RANGE.step };
+}
+
+/** The stepper's label: "above" when it can only add, "vs" when it can go below maintenance. */
+export function surplusLabel(goalKind: NutritionSettings['goalKind']): string {
+  return surplusRange(goalKind).min < 0
+    ? 'Calories vs maintenance (minus = below)'
+    : 'Calories above maintenance';
+}
+
+export const FLOORED_NOTE =
+  'Calories are kept at your resting estimate, the lowest this app suggests.';
 export const PROTEIN_RANGE = { min: 1.6, max: 2.2, step: 0.1 } as const;
 
 export const MODE_NOTE: Record<NutritionMode, string> = {
@@ -287,12 +313,15 @@ export function nutritionSettings(
     modeSwitch(s.mode, a.onMode),
     h('h3', { class: 'nt-sub' }, 'Daily targets'),
     targets,
+    p.kcalFloored && t
+      ? h('p', { class: 'set-note', 'data-kcal-floored': true }, FLOORED_NOTE)
+      : null,
     numberField({
       id: 'surplus',
-      label: 'Calories above maintenance',
+      label: surplusLabel(s.goalKind),
       unit: 'kcal',
       value: s.surplusKcal,
-      ...SURPLUS_RANGE,
+      ...surplusRange(s.goalKind),
       onChange: a.onSurplus,
     }).el,
     numberField({

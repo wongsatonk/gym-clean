@@ -37,7 +37,19 @@ import {
   type EntryOpts,
 } from '../../core/nutrition/portions';
 import { buildSearchIndex, searchFoods, type SearchIndex, type SearchResult } from '../../core/nutrition/search';
-import { NUTRITION_DEFAULTS, clampProtein, clampSurplus, computeTargets, type TargetsResult } from '../../core/nutrition/targets';
+import {
+  NUTRITION_DEFAULTS,
+  clampProtein,
+  clampSurplus,
+  computeTargets,
+  goalTargetChange,
+  type GoalTargetChange,
+  type TargetsResult,
+} from '../../core/nutrition/targets';
+import { withGoal } from '../../core/nutrition/goalTargets';
+import { proteinNudge as mealProteinNudge } from '../../core/nutrition/nudges';
+import { listMeasurements, saveMeasurement } from '../../data/trainerKit/store';
+import { measurementsEntry, measurementsScreen } from './measurements';
 import type { CoachFuel } from '../../core/trainer/coach';
 import { entryFromSuggestion } from '../../core/trainer/actions/food';
 import { addDate } from '../../core/trainer/plan';
@@ -50,11 +62,15 @@ import type {
   FoodModelRecord,
   FoodVisionSettings,
   FoodSuggestion,
+  GoalKind,
+  HealthDay,
   MacroSet,
+  Measurement,
   MealSlot,
   NutritionMode,
   NutritionSettings,
   Recipe,
+  TrainerKitSettings,
   WeeklyCheck,
   WeighIn,
 } from '../../core/types';
@@ -136,6 +152,12 @@ export type FuelHost = {
   photo?: FuelPhotoHost | undefined;
   /** M11: Health pass-through. Omitted → no activity-level line. */
   health?: FuelHealthHost | undefined;
+  /** M12 1b: the trainer-kit setting (measurement sites). Omitted → the default sites. */
+  trainerKit?: (() => TrainerKitSettings) | undefined;
+  /** M12 1b: Health days with body fat / lean mass for the weigh-in screen. Omitted → none. */
+  bodyComp?: (() => readonly HealthDay[]) | undefined;
+  /** M12 1b: opens a learn card ("Why?" on the protein nudge). Omitted → no Why? link. */
+  openLearn?: ((id: string, opener: HTMLElement) => void) | undefined;
 };
 
 /** M11-q8: what the weigh-in screen needs from the Health wiring (app.ts). */
@@ -164,7 +186,16 @@ export type FuelPhotoHost = {
 /** A photo still in memory while its dish is being picked (search after a photo). */
 type PendingPhoto = { photo: CapturedPhoto; takenAt: number };
 
-type Sub = { kind: 'main' } | { kind: 'weighIn' } | { kind: 'setup'; back: 'fuel' | 'settings' };
+type Sub =
+  | { kind: 'main' }
+  | { kind: 'weighIn' }
+  | { kind: 'setup'; back: 'fuel' | 'settings' }
+  | { kind: 'measurements' };
+
+/** M12 1b: settings key of the protein-nudge meals already dismissed (once per meal). */
+const NUDGE_SEEN_KEY = 'proteinNudgeSeen';
+/** Keys kept (oldest dropped): a month of meals is plenty. */
+const NUDGE_SEEN_MAX = 120;
 
 const ENTRY_DAYS = 30;
 const HISTORY_DAYS = 14;
@@ -234,6 +265,12 @@ export function createFuel(host: FuelHost) {
   let sessions: { startedAt: number; endedAt?: number }[] = [];
   let nudgeShownDate: string | null = null;
   let nudge: Nudge | null = null;
+  // ----- M12 1b -----
+  let measurements: Measurement[] = [];
+  /** Protein-nudge meal keys dismissed (core's `date:slot`). */
+  let nudgeSeen: string[] = [];
+  /** Setup opened from the intake's "Set up Fuel for this goal": saved with this goal. */
+  let pendingGoal: GoalKind | null = null;
   /** M7b: the imported food model (null: none) and the save-photos setting. */
   let photoModel: FoodModelRecord | null = null;
   let photoSettings: FoodVisionSettings = { savePhotos: false };
@@ -331,6 +368,15 @@ export function createFuel(host: FuelHost) {
     index = null;
     loaded = true;
     evaluateNudge();
+    // M12 1b: tape measurements and the dismissed protein nudges (small; read apart from the
+    // retried batch above, so a failure here never blocks Fuel).
+    try {
+      measurements = await listMeasurements(db);
+      const seen = (await db.settings.get(NUDGE_SEEN_KEY))?.value;
+      nudgeSeen = Array.isArray(seen) ? seen.filter((k): k is string => typeof k === 'string') : [];
+    } catch (err) {
+      host.logError(err);
+    }
   }
 
   /** Re-reads everything (cheap: small tables). Errors are logged, the old data stays. */
@@ -440,6 +486,7 @@ export function createFuel(host: FuelHost) {
       settings,
       kcalTarget: r.targets.kcal.value,
       maintenanceKcal: r.maintenanceKcal,
+      bmrKcal: r.bmrKcal,
     });
   }
 
@@ -1162,9 +1209,18 @@ export function createFuel(host: FuelHost) {
         lastWeighInKg: latestKg(),
         lastWeighInSource: latestWeighIn()?.source,
         nudge: nudge?.text ?? null,
+        measurements: measurementsEntry(measurements, today()),
+        proteinNudge: currentProteinNudge(),
       },
       {
         onLog: () => openLog(),
+        onMeasurements: () => {
+          sub = { kind: 'measurements' };
+          host.render();
+          window.scrollTo(0, 0);
+        },
+        onDismissProteinNudge: (key) => dismissProteinNudge(key),
+        onProteinWhy: host.openLearn ? (opener) => host.openLearn?.('protein', opener) : undefined,
         onEditEntry: (e) => openEntry(e),
         onDeleteEntry: (e) => void removeEntry(e, true, LOG_OPEN).catch(host.logError),
         onWeighIn: () => {
@@ -1176,6 +1232,49 @@ export function createFuel(host: FuelHost) {
         onTab: (t) => host.goTab(t),
       },
     );
+  }
+
+  /** M12 1b: today's protein-per-meal nudge (once per meal), or null. */
+  function currentProteinNudge(): { mealKey: string; text: string } | null {
+    const n = mealProteinNudge(entries, targets(), today(), new Set(nudgeSeen));
+    return n ? { mealKey: n.mealKey, text: n.text } : null;
+  }
+
+  function dismissProteinNudge(key: string): void {
+    if (nudgeSeen.includes(key)) return;
+    nudgeSeen = [...nudgeSeen, key].slice(-NUDGE_SEEN_MAX);
+    void track(db.settings.put({ key: NUDGE_SEEN_KEY, value: [...nudgeSeen] })).catch(host.logError);
+    host.render();
+  }
+
+  /** M12 1b: Fuel → Measurements (tape measure). Values never reach the dev log or the coach. */
+  function measurementsView(): HTMLElement {
+    const sites = host.trainerKit?.().measurementSites ?? [];
+    return measurementsScreen(
+      { sites, unit: host.unit(), today: today(), measurements },
+      {
+        onBack: () => {
+          sub = { kind: 'main' };
+          host.render();
+        },
+        onSave: (rows) => void saveMeasurements(rows),
+      },
+    );
+  }
+
+  async function saveMeasurements(rows: Measurement[]): Promise<void> {
+    try {
+      for (const m of rows) await track(saveMeasurement(db, m));
+      const key = (m: Measurement) => `${m.date}|${m.site}`;
+      const fresh = new Set(rows.map(key));
+      measurements = [...measurements.filter((m) => !fresh.has(key(m))), ...rows].sort((a, b) =>
+        a.date < b.date ? -1 : a.date > b.date ? 1 : 0,
+      );
+    } catch (err) {
+      host.logError(err);
+    }
+    sub = { kind: 'main' };
+    host.render();
   }
 
   /** M11-q8: the activity-level suggestion for the weigh-in screen, or null. */
@@ -1201,6 +1300,7 @@ export function createFuel(host: FuelHost) {
         check: currentCheck(),
         kcalTarget: r?.ok ? r.targets.kcal.value : null,
         history: nutritionHistory(entries, sessions, d, HISTORY_DAYS),
+        bodyComp: host.bodyComp?.(),
       },
       {
         onBack: () => {
@@ -1304,10 +1404,14 @@ export function createFuel(host: FuelHost) {
           barcodeLookup: storedBarcode,
           ...body,
         };
+    const goal = pendingGoal;
+    pendingGoal = null;
+    // M12 1b: setup opened from the intake's Fuel offer saves that goal's targets.
+    const withGoalKind = goal ? withGoal(next, goal) : next;
     const w: WeighIn = { date: today(), kg: v.weightKg };
-    await track(saveNutritionSettings(db, next));
+    await track(saveNutritionSettings(db, withGoalKind));
     await track(saveWeighIn(db, w));
-    settings = next;
+    settings = withGoalKind;
     mode = next.mode;
     barcode = next.barcodeLookup;
     weighIns = [...weighIns.filter((x) => x.date !== w.date), w].sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -1325,7 +1429,15 @@ export function createFuel(host: FuelHost) {
 
   function settingsBlock(): HTMLElement {
     return nutritionSettings(
-      { settings, barcodeLookup: barcode, targets: targets() },
+      {
+        settings,
+        barcodeLookup: barcode,
+        targets: targets(),
+        kcalFloored: (() => {
+          const r = targetsResult();
+          return r?.ok === true && r.kcalFloored;
+        })(),
+      },
       {
         onMode: (m) => {
           mode = m;
@@ -1344,7 +1456,8 @@ export function createFuel(host: FuelHost) {
           else delete next.overrides;
           saveSettings(next);
         },
-        onSurplus: (kcal) => settings && saveSettings({ ...settings, surplusKcal: clampSurplus(kcal) }),
+        onSurplus: (kcal) =>
+          settings && saveSettings({ ...settings, surplusKcal: clampSurplus(kcal, settings.goalKind) }),
         onProteinPerKg: (g) => settings && saveSettings({ ...settings, proteinGPerKg: clampProtein(g) }),
         onSetup: () => openSetup('settings'),
         onBarcodeLookup: (on) => {
@@ -1377,7 +1490,43 @@ export function createFuel(host: FuelHost) {
           return weighInView();
         case 'setup':
           return setupView(sub.back);
+        case 'measurements':
+          return measurementsView();
       }
+    },
+    /** M12 1b: Fuel opens on Measurements (route `fuel/measurements`). */
+    async openMeasurements(): Promise<void> {
+      await ensureLoaded();
+      sub = { kind: 'measurements' };
+    },
+    /** M12 1b: the stored weigh-ins and measurements (goal progress on Today). */
+    weighInList: (): readonly WeighIn[] => weighIns,
+    measurementList: (): readonly Measurement[] => measurements,
+    /** M12 1b: Fuel's goal now; null when Fuel isn't set up. */
+    fuelGoal: (): { goalKind?: GoalKind } | null =>
+      settings ? (settings.goalKind !== undefined ? { goalKind: settings.goalKind } : {}) : null,
+    /** M12 1b: the intake's Fuel offer as before → after; null when Fuel isn't set up. */
+    goalChange(goalKind: GoalKind): GoalTargetChange | null {
+      return settings ? goalTargetChange(settings, weighIns, today(), goalKind) : null;
+    },
+    /**
+     * M12 1b: Apply on the intake's Fuel offer: the goal's settings are saved, with Undo in the
+     * toast (the old settings back). False when Fuel isn't set up.
+     */
+    applyGoal(goalKind: GoalKind): boolean {
+      const before = settings;
+      if (!before) return false;
+      const change = goalTargetChange(before, weighIns, today(), goalKind);
+      saveSettings(change.next);
+      host.toast(change.ok ? `Done. ${change.text}.` : 'Done. Fuel follows your goal.', () => {
+        saveSettings(before);
+      });
+      return true;
+    },
+    /** M12 1b: "Set up Fuel for this goal": setup, saved with the goal's targets. */
+    setupForGoal(goalKind: GoalKind): void {
+      pendingGoal = goalKind;
+      openSetup('fuel');
     },
     settingsBlock,
     /** Summary's protein line, or null without targets. */

@@ -3,6 +3,7 @@
 import { restCueText, restCuesBetween } from '../core/restCues';
 import {
   currentPlanned,
+  currentWarmup,
   next,
   next as nextState,
   restElapsedMs,
@@ -18,17 +19,78 @@ import type {
   DayAdjust,
   FocusBlock,
   PeriodScore,
+  BodyArea,
+  DayFeel,
   DayOverride,
   FocusCueId,
+  FoodSuggestion,
+  Goal,
+  Intake,
   PlanChange,
   PlannedExercise,
   ProgramDay,
   Proposal,
   ProposalAction,
   GymProfile,
+  SetEffort,
   SetLog,
+  TrainerKitSettings,
   TrainerState,
 } from '../core/types';
+import { isWarmup, warmupLabel, warmupLifts, warmupLine, workingSets } from '../core/warmup';
+import { setupCuesFor } from '../core/setupCues';
+import { mergeTrainerKit } from '../core/trainerKit/defaults';
+import { summaryFoodIdea } from '../core/nutrition/nudges';
+import {
+  getDayFeel,
+  getIntake,
+  getTrainerKit,
+  listDayFeels,
+  listGoals,
+  deleteGoal,
+  saveDayFeel,
+  saveGoal,
+  saveIntake,
+} from '../data/trainerKit/store';
+import { LEARN_CARDS } from '../data/learnCards';
+import { closeLearnCard, findLearnCard, openLearnCard } from './coach/learnCard';
+import type { MealIdea } from './fuel/proteinNudge';
+// ----- M12 1b wiring B -----
+import { easyOnTreatment, proposeEasyOn } from '../core/trainer/actions/easyOn';
+import { proposeStarterPlan } from '../core/trainer/actions/starterPlan';
+import type { ActionContext } from '../core/trainer/actions/lighter';
+import { intakeToChanges, normalizeIntake } from '../core/trainerKit/intake';
+import { goalProgress, goalProgressText, suggestGoals } from '../core/trainerKit/goals';
+import { reviewDue } from '../core/trainerKit/review';
+import { deloadSuggested } from '../core/trainer/nextBlock';
+import { todaysFeelOffers } from '../core/health/readiness';
+import { e1rmSeries } from '../core/progress/e1rm';
+import {
+  addProgressPhoto,
+  deleteAllProgressPhotos,
+  deleteProgressPhoto,
+  listProgressPhotos,
+} from '../data/progressPhotos/store';
+import {
+  GYM_FILE_MIME,
+  GYM_FILE_NAME,
+  GYM_FILE_REASON_TEXT,
+  exportGymFile,
+  parseGymFile,
+} from '../data/gymFile';
+import {
+  EASY_ON_TITLE,
+  FUEL_TITLE,
+  PLAN_TITLE_REBUILD,
+  PLAN_TITLE_STARTER,
+  areaList,
+  intakeScreen,
+  type IntakeChange,
+  type IntakeChangeId,
+} from './intake/intake';
+import type { GoalCardItem, GoalCardProps } from './screens/goalCard';
+import { createProgressPhotos, type ProgressPhotosView } from './photos/progressPhotos';
+import { GYM_IMPORT_NOTHING, GYM_SHARED_NOTE, type GymImportPreview } from './screens/myGym';
 import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
 import { shouldSpeakFocusCue } from '../core/focusCue';
 import {
@@ -62,6 +124,8 @@ import {
   seedPlan,
   upNext as trainerUpNext,
   type EffectiveDay,
+  type EffectiveOptions,
+  addDate,
 } from '../core/trainer/plan';
 import { applyProposal, resetToProgram, undoLast } from '../core/trainer/changes';
 import {
@@ -138,7 +202,6 @@ import {
   setSpokenCount,
   setUnit,
   startSessionRow,
-  updateSet,
   type ExerciseNoteRow,
   type SetRow,
 } from '../data/db';
@@ -266,6 +329,10 @@ type View =
   | { screen: 'coach' }
   // M12 slice 1c: the to-do list and one topic's guide (`from` = the tab that opened them).
   | { screen: 'todos'; from: 'today' | 'settings' }
+  // M12 slice 1b: the intake (first run, Today's Goal card or Settings → Your goal) and
+  // Settings → Progress photos.
+  | { screen: 'intake'; from: 'first' | 'today' | 'settings' }
+  | { screen: 'progressPhotos' }
   | { screen: 'todoTopic'; from: 'today' | 'settings'; topicId: string; stepIndex: number }
   | {
       screen: 'calendar';
@@ -352,6 +419,36 @@ export function mountApp(root: HTMLElement): void {
   const todayDate = () => localDate(now());
   const planDays = () => trainer?.plan.days ?? program.days;
 
+  // ----- M12 1b: the standing go-easy list, applied wherever a day is shown or started -----
+  /** Last working weight per plan exercise (loaded off-workout, stable during one). */
+  let easyLastKg: Record<string, number> = {};
+  const easyOpts = (): EffectiveOptions => ({
+    easyOn: easyOnTreatment({ catalog: trainerCatalog, unit, lastWeightKg: easyLastKg }),
+  });
+  /** What `date` runs as shown / started (the go-easy list applied). */
+  const effDay = (state: TrainerState, date: string): EffectiveDay =>
+    effectiveDay(state, trainerSessions, date, easyOpts());
+  async function loadEasyLastKg(): Promise<void> {
+    try {
+      const ids = [...new Set(planDays().flatMap((d) => d.exercises.map((p) => p.exerciseId)))];
+      const last = await lastSessionSets(db, ids);
+      easyLastKg = lastWeights(
+        Object.fromEntries(Object.entries(last).map(([id, rows]) => [id, workingSets(rows)])),
+      );
+    } catch (err) {
+      logDbError(err);
+    }
+  }
+
+  // ----- M12 1b: intake, goals, feel today, progress photos -----
+  let intake: Intake | null = null;
+  let goals: Goal[] = [];
+  /** Today's Goal card (null: not loaded yet). */
+  let goalItems: GoalCardItem[] | null = null;
+  let feels: DayFeel[] = [];
+  let feelOpen = false;
+  let progressPhotosOn = false;
+
   // ---------- M7 Fuel (state, sub-views and sheets live in fuel/fuelController.ts) ----------
   // Nutrition data never goes to the developer log (no `rec` calls on this path).
   // M7b food photos: classifier + Settings → Food photos (fuel/foodVisionHost.ts).
@@ -383,6 +480,13 @@ export function mountApp(root: HTMLElement): void {
     health: {
       activitySuggestion: (c) => health.fuelHost.activitySuggestion(c),
       onActivityAnswered: (a, l) => health.fuelHost.onActivityAnswered(a, l),
+    },
+    // M12 1b
+    trainerKit: () => kit,
+    bodyComp: () => health.bodyCompDays(),
+    openLearn: (id, opener) => {
+      const card = findLearnCard(LEARN_CARDS, id);
+      if (card) openLearnCard(card, opener);
     },
   });
 
@@ -434,6 +538,16 @@ export function mountApp(root: HTMLElement): void {
   let coachTip: { key: string; tip: ReturnType<typeof createCoachTip>; applied: boolean } | null =
     null;
   let adviceSpokenKey = '';
+  // ----- M12 1b trainer kit (the stored 'trainerKit' row merged over the defaults) -----
+  let kit: TrainerKitSettings = mergeTrainerKit(undefined);
+  /** How each catalog exercise is loaded, for warm-up sets (built once). */
+  let liftsForWarmups: ReturnType<typeof warmupLifts> | null = null;
+  /** Exercises whose setup cues were spoken this workout (once each). */
+  let setupCuesSaid: string[] = [];
+  /** The upcoming set the between-sets lines were last spoken for (no repeats on re-render). */
+  let betweenSetsKey = '';
+  /** Summary's post-workout meal idea for this session (null: none to show). */
+  let mealIdea: { sessionId: string; idea: MealIdea | null } | null = null;
 
   function currentAdvice(s: SessionState): Advice | null {
     return coachTips ? afterSetAdvice(s, exerciseName, lastTime) : null;
@@ -717,7 +831,12 @@ export function mountApp(root: HTMLElement): void {
     const p = currentPlanned(s);
     camera.setRest({
       restMs: s.restTargetSec * 1000 - restElapsedMs(s, now()),
-      nextLine: `Next: Set ${s.setIndex + 1} of ${p.sets} · ${s.reps} reps × ${w(s.weightKg)} ${unit}`,
+      nextLine: (() => {
+        const warm = currentWarmup(s);
+        return warm
+          ? `Next: ${warmupLabel(warm, unit)}`
+          : `Next: Set ${s.setIndex + 1} of ${p.sets} · ${s.reps} reps × ${w(s.weightKg)} ${unit}`;
+      })(),
       coachTipEl: coachTipFor(s),
       fixEl: lastSetFix(s),
     });
@@ -749,6 +868,12 @@ export function mountApp(root: HTMLElement): void {
     // Left Settings by any route (a tab, Nutrition setup, Plan changes): stop the audio test's
     // camera and beep context. A no-op when there is no live panel.
     if (view.screen !== 'settings') disposeAudioTest();
+    // M12 1b: leaving Progress photos frees its object URLs.
+    if (view.screen !== 'progressPhotos' && photosView) {
+      photosView.dispose();
+      photosView = null;
+    }
+    if (view.screen !== 'intake') intakeEl = null;
     // M12 slice 1c: the What's New tour never stays over a workout, its preview or the camera.
     if (tour && (view.screen === 'session' || view.screen === 'preview' || camera)) closeTour();
     const screen = screenFor(view);
@@ -802,16 +927,11 @@ export function mountApp(root: HTMLElement): void {
           render();
         });
       case 'myGym':
-        return myGymScreen(
-          { items: equipmentItems(), equipment: gym.equipment },
-          {
-            onBack: () => {
-              view = { screen: 'settings' };
-              render();
-            },
-            onChange: (equipment) => saveGym(equipment),
-          },
-        );
+        return myGymView();
+      case 'intake':
+        return intakeView(v);
+      case 'progressPhotos':
+        return progressPhotosScreen();
       case 'coach':
         return coachTabView();
       case 'todos':
@@ -839,7 +959,10 @@ export function mountApp(root: HTMLElement): void {
       case 'planChanges':
       case 'myGym':
       case 'healthSettings':
+      case 'progressPhotos':
         return 'settings';
+      case 'intake':
+        return v.from === 'settings' ? 'settings' : v.from === 'today' ? 'today' : null;
       case 'todos':
       case 'todoTopic':
         return v.from;
@@ -956,6 +1079,10 @@ export function mountApp(root: HTMLElement): void {
       }
       // M12: the missed-day card and any recap due (each once; answers in settings 'coach').
       void coachPrompts(sets);
+      // M12 1b: feel today, the Goal card and the go-easy weights (off-workout only).
+      void Promise.all([loadFeels(), loadGoals(), loadEasyLastKg()]).then(() => {
+        if (view.screen === 'today') render();
+      });
     } catch (err) {
       console.warn('Could not read history stats', err);
     }
@@ -1012,9 +1139,21 @@ export function mountApp(root: HTMLElement): void {
         missedAction: missedActionOf(missedPrompt),
         motion: todayMotion,
         todo: todos.cardProps(),
+        // M12 1b
+        feel: feels.find((f) => f.date === todayDate()) ?? null,
+        feelOffers: todaysFeelOffers(feels, todayDate()),
+        feelOpen,
+        cardioMinutes: health.cardioMinutes(),
+        goal: goalCardProps(),
       },
       {
-        ...health.readinessActions((chip) => void openCoach('today', { chip })),
+        ...health.readinessActions(
+          (chip) => void openCoach('today', { chip }),
+          (area) => easyOnToday(area),
+        ),
+        onSaveFeel: (feel) => saveFeel(feel),
+        onSetGoal: () => openIntake('today'),
+        onOpenGoal: () => openIntake('settings'),
         // The hero goes through the preview, which loads last time's weights for the defaults.
         onStart: (day) => void openPreview(day),
         onOpenDay: (day) => void openPreview(day),
@@ -1045,10 +1184,16 @@ export function mountApp(root: HTMLElement): void {
 
   async function loadTrainer(): Promise<void> {
     try {
+      kit = await getTrainerKit(db);
+    } catch (err) {
+      logDbError(err); // the defaults stay
+    }
+    try {
       trainer = await loadTrainerState(db, program);
       newProgram = defaultProgramChanged(trainer, program);
       changes = await listChanges(db);
       gym = await loadGymProfile(db);
+      await loadEasyLastKg();
     } catch (err) {
       // No stored plan (IndexedDB off): the default program, in memory, still runs.
       logDbError(err);
@@ -1117,7 +1262,7 @@ export function mountApp(root: HTMLElement): void {
   /** "Adjusted today: …" for today's override; null when there's none to show or undo. */
   function adjustedTodayText(): string | null {
     if (!trainer) return null;
-    const eff: EffectiveDay = effectiveDay(trainer, trainerSessions, todayDate());
+    const eff: EffectiveDay = effDay(trainer, todayDate());
     const o = eff.override;
     if (!o || eff.done) return null;
     // Train anyway writes a plain override that isn't a coach change (nothing to undo).
@@ -1129,7 +1274,7 @@ export function mountApp(root: HTMLElement): void {
   /** The plan days, with today's day as it runs (so the hero counts what Start runs). */
   function todayDays(): readonly ProgramDay[] {
     if (!trainer) return program.days;
-    const eff = effectiveDay(trainer, trainerSessions, todayDate());
+    const eff = effDay(trainer, todayDate());
     const run = !eff.done && !eff.rest && eff.adjusted ? eff.day : null;
     return trainer.plan.days.map((d) => (run && d.id === run.id ? run : d));
   }
@@ -1159,7 +1304,7 @@ export function mountApp(root: HTMLElement): void {
         version: trainer.version + 1,
         overrides: [...trainer.overrides.filter((o) => o.date !== date), { date }],
       });
-      const eff = effectiveDay(trainer, trainerSessions, date);
+      const eff = effDay(trainer, date);
       void openPreview(eff.day ?? day);
       return;
     }
@@ -1228,7 +1373,7 @@ export function mountApp(root: HTMLElement): void {
     changes = [change, ...changes];
     trainerLog('trainAnyway', 'postpone', 'applied', 'chip');
     showUndoToast('Done. Today is a training day.', change.id);
-    const eff = effectiveDay(next, trainerSessions, date);
+    const eff = effDay(next, date);
     void openPreview(eff.day ?? day);
   }
 
@@ -1273,7 +1418,7 @@ export function mountApp(root: HTMLElement): void {
     if (view.screen === 'today') {
       void loadUpNext();
     } else if (view.screen === 'preview') {
-      const eff = trainer ? effectiveDay(trainer, trainerSessions, todayDate()) : null;
+      const eff = trainer ? effDay(trainer, todayDate()) : null;
       // Not today from the preview: today no longer runs this day, so back to Today.
       if (view.today && (!eff || eff.rest || eff.day?.id !== view.day.id)) goToday();
       else void openPreview(view.planDay);
@@ -1301,7 +1446,7 @@ export function mountApp(root: HTMLElement): void {
     if (view.screen !== 'session' || view.s.phase === 'summary') return;
     const start = view.s;
     const t = now();
-    const today = effectiveDay(next, trainerSessions, todayDate());
+    const today = effDay(next, todayDate());
     if (!today.day || today.day.id !== start.day.id) return;
     const target = today.day.exercises;
     const replaced = today.override?.adjust?.replaced ?? [];
@@ -1784,6 +1929,7 @@ export function mountApp(root: HTMLElement): void {
         ...(r.say ? { say: r.say } : {}),
         ...(r.note ? { note: r.note } : {}),
         ...(r.usedHealth ? { usedHealth: true } : {}),
+        ...(r.learnId ? { learnId: r.learnId } : {}),
         ...(r.chips.length
           ? {
               chips: r.chips.map((c) => ({
@@ -2065,6 +2211,12 @@ export function mountApp(root: HTMLElement): void {
       onFollowUp: (index) => {
         const f = chatOffers(chatSheet !== null).followUps[index];
         if (!f) return;
+        // M12 1b review: "Set a goal" / "Change my goal" opens Settings → Your goal.
+        if ((f.id as string) === 'goalEdit') {
+          closeChatSheet();
+          openIntake('settings');
+          return;
+        }
         const keepId = f.id === 'keepExercise' ? f.args?.exerciseId : undefined;
         if (keepId) {
           void keepFromCoach(keepId, f.label);
@@ -2077,6 +2229,10 @@ export function mountApp(root: HTMLElement): void {
       onUndo: (id) => void undoFromChat(id),
       onAskAgain: (id) => askAgain(id),
       onLogFood: (id, index) => logChatFood(id, index),
+      onLearn: (learnId, opener) => {
+        const card = findLearnCard(LEARN_CARDS, learnId);
+        if (card) openLearnCard(card, opener);
+      },
       onEndWorkout: () => {
         closeChatSheet();
         dispatch({ type: 'FINISH', now: now() });
@@ -2218,16 +2374,25 @@ export function mountApp(root: HTMLElement): void {
       case 'todos':
         openTodos(tabOf(view) === 'settings' ? 'settings' : 'today');
         return;
-      // M12 1b placeholders until wiring B (task 36) adds the screens.
+      // M12 slice 1b.
       case 'settings/goal':
+        openIntake('settings');
+        return;
       case 'settings/progressPhotos':
-        goRoute('settings');
+        // Only while the switch is on; off → Settings at the switch.
+        if (progressPhotosOn) openProgressPhotos();
+        else openSettingsAt('progress-photos');
         return;
       case 'fuel/measurements':
-        goRoute('fuel');
+        setEnter('fuel');
+        void fuel.openMeasurements().then(() => {
+          view = { screen: 'fuel' };
+          render();
+          window.scrollTo(0, 0);
+        });
         return;
       case 'intake':
-        goRoute('today');
+        openIntake(tabOf(view) === 'settings' ? 'settings' : 'today');
         return;
       default: {
         const unhandled: never = route;
@@ -2343,6 +2508,8 @@ export function mountApp(root: HTMLElement): void {
           days: [],
           exercises: [],
           detail: exerciseHistory(d.sets, v.exerciseId, d.t),
+          // M12 1b: the estimated 1-rep max per session (working sets only).
+          e1rm: e1rmSeries(v.exerciseId, d.sets, d.sessions, { formula: kit.e1rmFormula }),
           dayName: dayNameOf,
           name: exerciseName,
           backLabel: 'Calendar',
@@ -2381,7 +2548,7 @@ export function mountApp(root: HTMLElement): void {
             render();
           },
           onStart: () => {
-            const eff = trainer ? effectiveDay(trainer, trainerSessions, todayDate()) : null;
+            const eff = trainer ? effDay(trainer, todayDate()) : null;
             if (eff?.day) void openPreview(eff.day);
           },
           onMove: (dt) => moveDay(dt),
@@ -2419,6 +2586,7 @@ export function mountApp(root: HTMLElement): void {
         blockGroup: trainer?.blocks?.length ? blockGroupOf : undefined,
         dayName: dayNameOf,
         animate,
+        cardioMinutes: health.cardioMinutes(),
         loading: v.data === null,
         error: v.data === 'error',
         tabs,
@@ -2474,7 +2642,7 @@ export function mountApp(root: HTMLElement): void {
    * missed day's preview, whose Start runs it today.
    */
   function startMissed(dayId: string): void {
-    const eff = trainer ? effectiveDay(trainer, trainerSessions, todayDate()) : null;
+    const eff = trainer ? effDay(trainer, todayDate()) : null;
     if (eff?.day && !eff.rest && !eff.done) {
       void openPreview(eff.day);
       return;
@@ -2543,12 +2711,67 @@ export function mountApp(root: HTMLElement): void {
         });
         trainerLog('recap', r.period, 'shown', 'rules');
       }
+      await postTrainerKitPrompts(sets);
     } catch (err) {
       logDbError(err);
     } finally {
       promptsBusy = false;
     }
     if (view.screen === 'today') render();
+  }
+
+  /**
+   * M12 1b, posted in the chat once each (like recaps): the goal review every `reviewWeeks`, and
+   * a deload-week suggestion after hard weeks or stalls. The time is stored first.
+   */
+  async function postTrainerKitPrompts(sets: readonly SetRow[]): Promise<void> {
+    if (!trainer) return;
+    const today = todayDate();
+    const open = (await listGoals(db)).filter((g) => g.doneAt === undefined);
+    const h = await goalHistory();
+    const progress = open.map((g) =>
+      goalProgress(g, h.sets, h.measurements, h.weighIns, today, { formula: kit.e1rmFormula }),
+    );
+    const review = reviewDue(open, coachUi.lastReviewAt, kit.reviewWeeks, today, {
+      progress,
+      ...(intake ? { since: intake.at } : {}),
+    });
+    if (review) {
+      await ensureThread();
+      const at = now();
+      coachUi = { ...coachUi, lastReviewAt: at };
+      await patchCoachUi(db, { lastReviewAt: at });
+      await postMessage({
+        createdAt: now(),
+        role: 'coach',
+        text: [review.text, ...review.lines].join(' '),
+        say: review.say,
+        source: 'rules',
+        phase: 'today',
+        chips: review.chips.map((c) => ({ id: c.id, label: c.label })),
+      });
+      trainerLog('review', review.offer, 'shown', 'rules');
+    }
+    const deload = deloadSuggested(trainerSessions, trainer, today, coachUi.lastDeloadOfferAt, {
+      sets,
+      stallSince: stallSince(changes),
+      name: exerciseName,
+    });
+    if (deload) {
+      await ensureThread();
+      coachUi = { ...coachUi, lastDeloadOfferAt: today };
+      await patchCoachUi(db, { lastDeloadOfferAt: today });
+      await postMessage({
+        createdAt: now(),
+        role: 'coach',
+        text: deload.text,
+        say: deload.say,
+        source: 'rules',
+        phase: 'today',
+        chips: deload.chips.map((c) => ({ id: c.id, label: c.label })),
+      });
+      trainerLog('deloadSuggest', deload.reason, 'shown', 'rules');
+    }
   }
 
   /** Stores the answer (once per missed date) before the caller re-renders or navigates. */
@@ -2560,6 +2783,468 @@ export function mountApp(root: HTMLElement): void {
     } catch (err) {
       logDbError(err);
     }
+  }
+
+  // ---------- M12 slice 1b: trainer kit (intake, goals, feel today, photos, gym file) ----------
+
+  /** The settings key that records "Skip for now" on the first-run intake. */
+  const INTAKE_SKIPPED_KEY = 'intakeSkipped';
+  /** The settings key of the Progress photos switch (off by default). */
+  const PROGRESS_PHOTOS_KEY = 'progressPhotos';
+
+  /** Intake, switch and today's feel, read once at start (Settings and Today read them). */
+  async function loadTrainerKitState(): Promise<void> {
+    try {
+      intake = (await getIntake(db)) ?? null;
+      progressPhotosOn = (await db.settings.get(PROGRESS_PHOTOS_KEY))?.value === true;
+    } catch (err) {
+      logDbError(err);
+    }
+  }
+
+  /**
+   * First run: a fresh install (no session, no intake, never skipped) opens the intake before
+   * Today. An install with any session is never forced (Today shows "Set your goal").
+   */
+  async function firstRunIntake(): Promise<boolean> {
+    try {
+      if (intake) return false;
+      if ((await db.sessions.count()) > 0) return false;
+      if ((await db.settings.get(INTAKE_SKIPPED_KEY)) !== undefined) return false;
+      return true;
+    } catch (err) {
+      logDbError(err);
+      return false;
+    }
+  }
+
+  /** The ActionContext the 1b proposals build on (the plan as written, like the coach's). */
+  function actionCtx(): ActionContext {
+    return {
+      state: trainer ?? seedPlan(program),
+      sessions: trainerSessions,
+      today: todayDate(),
+      unit,
+      lastWeightKg: easyLastKg,
+      exerciseName,
+    };
+  }
+
+  /**
+   * Apply a proposal now (his tap was the decision: intake Apply, Settings Remove): through
+   * changes.ts with the usual Undo toast and Plan changes entry. False when it can't apply.
+   */
+  async function applyNow(proposal: Proposal, intent: string): Promise<boolean> {
+    if (!trainer) return false;
+    const r = applyProposal(trainer, proposal, now(), 'chip');
+    if (!r.ok) return false;
+    trainer = r.state;
+    const change = await saveChangeRecord(r.state, r.change);
+    changes = [change, ...changes];
+    trainerLog(intent, proposal.action, 'applied', 'chip');
+    expireStale();
+    showUndoToast(proposal.say ?? `Done. ${proposal.title}.`, change.id);
+    if (view.screen !== 'intake') refreshAfterChange();
+    return true;
+  }
+
+  /** Settings → Go easy on → Remove: the list change, applied with Undo (changes.ts). */
+  async function removeEasyOn(area: BodyArea): Promise<void> {
+    await trainerReady;
+    const r = proposeEasyOn(actionCtx(), { remove: [area] }, trainerCatalog);
+    if (!r.ok || !(await applyNow(r.proposal, 'easyOn'))) showNotice(UNDO_FAILED);
+    if (view.screen === 'settings') render();
+  }
+
+  // ----- intake -----
+
+  /** The intake element stays while it is open (it keeps its own answers and step). */
+  let intakeEl: { from: string; el: HTMLElement } | null = null;
+  /** Proposals the intake's last screen showed, applied as shown on Apply. */
+  const intakeOffers = new Map<IntakeChangeId, Proposal>();
+
+  function openIntake(from: 'first' | 'today' | 'settings'): void {
+    intakeEl = null;
+    if (from !== 'first') setEnter(from === 'settings' ? 'settings' : 'today');
+    view = { screen: 'intake', from };
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function leaveIntake(from: 'first' | 'today' | 'settings'): void {
+    intakeEl = null;
+    intakeOffers.clear();
+    if (from === 'settings') {
+      view = { screen: 'settings' };
+      render();
+      openSettingsAt('goal');
+      return;
+    }
+    goToday();
+  }
+
+  const lineText = (l: { before: string; after: string }) =>
+    l.before ? `${l.before} → ${l.after}` : l.after;
+
+  /** Core's offers for these answers, as rows; each proposal is built now and kept for Apply. */
+  async function intakeChanges(answers: Intake): Promise<IntakeChange[]> {
+    await trainerReady;
+    await fuel.ensureLoaded();
+    intakeOffers.clear();
+    const a = normalizeIntake(answers);
+    const state = trainer ?? seedPlan(program);
+    const offers = intakeToChanges(a, {
+      hasHistory: trainerSessions.some((x) => x.endedAt !== undefined),
+      planEdited: state.plan.edited || changes.some((c) => c.undoneAt === undefined),
+      easyOn: state.easyOn ?? [],
+      fuel: fuel.fuelGoal(),
+    });
+    const rows: IntakeChange[] = [];
+    for (const o of offers) {
+      if (o.kind === 'starterPlan') {
+        const r = proposeStarterPlan({ state, today: todayDate(), catalog: trainerCatalog }, a);
+        if (!r.ok) continue;
+        intakeOffers.set('plan', r.proposal);
+        rows.push({
+          id: 'plan',
+          title: o.primary ? PLAN_TITLE_STARTER : PLAN_TITLE_REBUILD,
+          lines: [r.proposal.title, ...r.proposal.lines.map(lineText)],
+        });
+      } else if (o.kind === 'easyOn') {
+        const r = proposeEasyOn(actionCtx(), { add: o.add, remove: o.remove }, trainerCatalog);
+        if (!r.ok) continue;
+        intakeOffers.set('easyOn', r.proposal);
+        rows.push({ id: 'easyOn', title: EASY_ON_TITLE, lines: [areaList(o.areas) || 'None'] });
+      } else if (o.needsSetup) {
+        rows.push({ id: 'fuel', title: FUEL_TITLE, lines: [o.label] });
+      } else {
+        const c = fuel.goalChange(o.goalKind);
+        const kcal = c?.ok ? c.lines.find((l) => l.label === 'Calories') : undefined;
+        rows.push({
+          id: 'fuel',
+          title: FUEL_TITLE,
+          lines: [o.label],
+          ...(kcal ? { before: kcal.before, after: kcal.after } : {}),
+        });
+      }
+    }
+    return rows;
+  }
+
+  async function applyIntakeChange(id: IntakeChangeId, answers: Intake): Promise<boolean> {
+    if (id === 'fuel') {
+      const a = normalizeIntake(answers);
+      if (fuel.fuelGoal() === null) {
+        // Fuel isn't set up: its setup opens after Done, saved with this goal.
+        pendingFuelSetup = a.goalKind;
+        return true;
+      }
+      return fuel.applyGoal(a.goalKind);
+    }
+    const p = intakeOffers.get(id);
+    if (!p) return false;
+    return applyNow(p, id === 'plan' ? 'starterPlan' : 'easyOn');
+  }
+
+  /** Set by the intake's "Set up Fuel for this goal": Fuel's setup opens after Done. */
+  let pendingFuelSetup: Intake['goalKind'] | null = null;
+
+  /** Done: goals suggested from the answers (replacing the open ones), then Today / Settings. */
+  async function intakeDone(answers: Intake, from: 'first' | 'today' | 'settings'): Promise<void> {
+    const a = normalizeIntake(answers);
+    try {
+      const history = await goalHistory();
+      const suggested = suggestGoals(a, history).goals;
+      if (suggested.length > 0) {
+        for (const g of await listGoals(db)) if (g.doneAt === undefined) await deleteGoal(db, g.id);
+        for (const g of suggested) await saveGoal(db, g);
+      }
+    } catch (err) {
+      logDbError(err);
+    }
+    const goal = pendingFuelSetup;
+    pendingFuelSetup = null;
+    if (goal) {
+      intakeEl = null;
+      intakeOffers.clear();
+      fuel.setupForGoal(goal);
+      return;
+    }
+    leaveIntake(from);
+  }
+
+  function intakeView(v: Extract<View, { screen: 'intake' }>): HTMLElement {
+    if (intakeEl?.from === v.from) return intakeEl.el;
+    const el = intakeScreen(
+      { initial: intake, changes: (a) => intakeChanges(a), now: () => now() },
+      {
+        onSave: (a) => {
+          intake = normalizeIntake(a);
+          void saveIntake(db, intake).catch(logDbError);
+        },
+        onApply: (id, a) => applyIntakeChange(id, a),
+        onDone: (a) => void intakeDone(a, v.from),
+        onSkip: () => {
+          if (v.from === 'first')
+            void db.settings.put({ key: INTAKE_SKIPPED_KEY, value: now() }).catch(logDbError);
+          leaveIntake(v.from);
+        },
+        ...(v.from === 'first' ? {} : { onClose: () => leaveIntake(v.from) }),
+      },
+    );
+    intakeEl = { from: v.from, el };
+    return el;
+  }
+
+  // ----- goals (Today's Goal card, the review) -----
+
+  /** What suggestGoals / goalProgress read: finished sessions' sets, measurements, weigh-ins. */
+  async function goalHistory() {
+    await fuel.ensureLoaded();
+    const finished = trainerSessions.filter((x) => x.endedAt !== undefined);
+    const sets = await setsForSessions(
+      db,
+      finished.map((x) => x.sessionId),
+    );
+    const names: Record<string, string> = {};
+    for (const d of planDays())
+      for (const p of d.exercises) names[p.exerciseId] = exerciseName(p.exerciseId);
+    return {
+      today: todayDate(),
+      now: now(),
+      sets,
+      sessions: finished,
+      measurements: fuel.measurementList(),
+      weighIns: fuel.weighInList(),
+      exerciseNames: names,
+      unit,
+      sites: kit.measurementSites,
+      formula: kit.e1rmFormula,
+      preferLifts: Object.keys(names),
+    };
+  }
+
+  /**
+   * Today's Goal card: open goals with progress. With answers but no goal yet (nothing logged
+   * to base a number on), goals are suggested once something is logged.
+   */
+  async function loadGoals(): Promise<void> {
+    try {
+      goals = (await listGoals(db)).filter((g) => g.doneAt === undefined);
+      const h = await goalHistory();
+      if (goals.length === 0 && intake) {
+        const suggested = suggestGoals(intake, h).goals;
+        for (const g of suggested) await saveGoal(db, g);
+        goals = suggested;
+      }
+      goalItems = goals.map((g) => {
+        const p = goalProgress(g, h.sets, h.measurements, h.weighIns, h.today, {
+          formula: kit.e1rmFormula,
+        });
+        return {
+          goal: g,
+          pct: p.pct ?? 0,
+          status: p.status === 'noData' ? 'onTrack' : p.status,
+          now: goalProgressText(p),
+        };
+      });
+    } catch (err) {
+      logDbError(err);
+    }
+  }
+
+  /** The Goal card: goals, or "Set your goal" before any intake; hidden with answers and no goal. */
+  function goalCardProps(): GoalCardProps | null {
+    if (goalItems === null) return null;
+    if (goalItems.length === 0 && intake) return null;
+    return { goals: goalItems, today: todayDate() };
+  }
+
+  // ----- feel today -----
+
+  async function loadFeels(): Promise<void> {
+    try {
+      feels = await listDayFeels(db, addDate(todayDate(), -7));
+    } catch (err) {
+      logDbError(err);
+    }
+  }
+
+  function saveFeel(feel: DayFeel): void {
+    feels = [...feels.filter((f) => f.date !== feel.date), feel];
+    feelOpen = false;
+    render();
+    void saveDayFeel(db, feel)
+      .then(() => getDayFeel(db, feel.date))
+      .then((row) => {
+        feels = [...feels.filter((f) => f.date !== feel.date), ...(row ? [row] : [])];
+        // The "Lighter today?" card weighs it in (iPhone app; never spoken).
+        void health.sync();
+        if (view.screen === 'today') render();
+      })
+      .catch(logDbError);
+  }
+
+  /** "Go easy on <area> today?": today's avoid-area proposal in the coach. */
+  function easyOnToday(area: BodyArea): void {
+    void openCoachTab('today', {
+      chip: area,
+    });
+  }
+
+  // ----- progress photos (this phone only: never backed up, logged or shown to a coach) -----
+
+  let photosView: ProgressPhotosView | null = null;
+
+  function openProgressPhotos(): void {
+    setEnter('settings');
+    void listProgressPhotos(db)
+      .then((photos) => {
+        photosView?.dispose();
+        photosView = null;
+        view = { screen: 'progressPhotos' };
+        photosCache = photos;
+        render();
+        window.scrollTo(0, 0);
+      })
+      .catch(logDbError);
+  }
+
+  let photosCache: Awaited<ReturnType<typeof listProgressPhotos>> = [];
+
+  function progressPhotosScreen(): HTMLElement {
+    if (photosView) return photosView.el;
+    const reload = async () => {
+      photosCache = await listProgressPhotos(db);
+      photosView?.dispose();
+      photosView = null;
+      if (view.screen === 'progressPhotos') render();
+    };
+    photosView = createProgressPhotos(
+      { enabled: progressPhotosOn, photos: photosCache, today: todayDate() },
+      {
+        onBack: () => {
+          photosView?.dispose();
+          photosView = null;
+          photosCache = [];
+          openSettingsAt('progress-photos');
+        },
+        onEnable: () => {
+          setProgressPhotos(true);
+          void reload();
+        },
+        onAdd: async (photo) => {
+          await addProgressPhoto(db, {
+            id: crypto.randomUUID(),
+            createdAt: now(),
+            date: photo.date,
+            blob: photo.blob,
+            pose: photo.pose,
+          });
+          await reload();
+        },
+        onDelete: (id) => void deleteProgressPhoto(db, id).then(reload).catch(logDbError),
+        onDeleteAll: () => void deleteAllProgressPhotos(db).then(reload).catch(logDbError),
+      },
+    );
+    return photosView.el;
+  }
+
+  function setProgressPhotos(on: boolean): void {
+    progressPhotosOn = on;
+    void db.settings.put({ key: PROGRESS_PHOTOS_KEY, value: on }).catch(logDbError);
+  }
+
+  // ----- Share my gym / import a gym file (equipment ids only) -----
+
+  let gymImport: { equipment: string[]; preview: GymImportPreview } | null = null;
+  let gymImportError: string | null = null;
+  let gymShareNote: string | null = null;
+
+  async function shareGym(): Promise<void> {
+    const file = new File([exportGymFile(gym)], GYM_FILE_NAME, { type: GYM_FILE_MIME });
+    try {
+      const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean };
+      if (nav.share && nav.canShare?.({ files: [file] })) {
+        await nav.share({ files: [file] }); // the phone's share sheet; the app sends nothing
+      } else {
+        const url = URL.createObjectURL(file);
+        const a = h('a', { href: url, download: GYM_FILE_NAME, hidden: true });
+        document.body.append(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      }
+      gymShareNote = GYM_SHARED_NOTE;
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === 'AbortError')) logDbError(err);
+    }
+    if (view.screen === 'myGym') render();
+  }
+
+  function importGymText(text: string): void {
+    gymImport = null;
+    gymImportError = null;
+    const r = parseGymFile(text);
+    if (!r.ok) {
+      gymImportError = GYM_FILE_REASON_TEXT[r.reason];
+    } else {
+      const have = new Set(gym.equipment);
+      const adds = r.equipment.filter((id) => !have.has(id));
+      if (adds.length === 0) gymImportError = GYM_IMPORT_NOTHING;
+      else {
+        const label = new Map(equipmentItems().map((i) => [i.id, i.label]));
+        gymImport = {
+          equipment: [...gym.equipment, ...adds],
+          preview: {
+            adds: equipmentItems()
+              .filter((i) => adds.includes(i.id))
+              .map((i) => label.get(i.id) ?? i.id),
+            unknown: r.unknown.length,
+            already: r.equipment.length - adds.length,
+          },
+        };
+      }
+    }
+    render();
+  }
+
+  function myGymView(): HTMLElement {
+    return myGymScreen(
+      {
+        items: equipmentItems(),
+        equipment: gym.equipment,
+        importPreview: gymImport?.preview ?? null,
+        importError: gymImportError,
+        shareNote: gymShareNote,
+      },
+      {
+        onBack: () => {
+          gymImport = null;
+          gymImportError = null;
+          gymShareNote = null;
+          view = { screen: 'settings' };
+          render();
+        },
+        onChange: (equipment) => saveGym(equipment),
+        onShare: () => void shareGym(),
+        onImportText: (text) => importGymText(text),
+        onImportApply: () => {
+          const next = gymImport;
+          if (!next) return;
+          gymImport = null;
+          // Kept in item order; only adds (import never unticks anything).
+          const order = equipmentItems().map((i) => i.id);
+          saveGym(order.filter((id) => next.equipment.includes(id)));
+          render();
+        },
+        onImportCancel: () => {
+          gymImport = null;
+          gymImportError = null;
+          render();
+        },
+      },
+    );
   }
 
   // ---------- Settings ----------
@@ -2660,6 +3345,9 @@ export function mountApp(root: HTMLElement): void {
         ),
         audioTest: audioTestPanel(),
         devLog: devLogPanel.el,
+        intake,
+        easyOn: trainer?.easyOn ?? [],
+        progressPhotos: progressPhotosOn,
       },
       {
         onAccent: (a) => {
@@ -2707,6 +3395,14 @@ export function mountApp(root: HTMLElement): void {
         },
         onTodos: () => openTodos('settings'),
         onWhatsNew: () => showTour(todos.replay()),
+        // M12 1b
+        onIntake: () => openIntake('settings'),
+        onEasyOnRemove: (area) => void removeEasyOn(area),
+        onProgressPhotos: (on) => {
+          setProgressPhotos(on);
+          render();
+        },
+        onProgressPhotosOpen: () => openProgressPhotos(),
       },
     );
   }
@@ -2822,7 +3518,7 @@ export function mountApp(root: HTMLElement): void {
   function previewDayFor(day: ProgramDay): PreviewDay {
     const planDay = planDays().find((d) => d.id === day.id) ?? day;
     if (trainer) {
-      const eff = effectiveDay(trainer, trainerSessions, todayDate());
+      const eff = effDay(trainer, todayDate());
       if (!eff.done && !eff.rest && eff.day?.id === day.id)
         return {
           day: eff.day,
@@ -2848,7 +3544,12 @@ export function mountApp(root: HTMLElement): void {
         lastSessionSets(db, ids),
         Promise.all(ids.map((id) => getExerciseNote(db, id))),
       ]);
-      lastTime = last;
+      // Warm-up sets (M12 1b) never show as "last time" or set the next default.
+      lastTime = Object.fromEntries(
+        Object.entries(last)
+          .map(([id, rows]) => [id, workingSets(rows)] as const)
+          .filter(([, rows]) => rows.length > 0),
+      );
       exerciseNotes = Object.fromEntries(notes.map((n) => [n.exerciseId, n]));
     } catch (err) {
       logDbError(err);
@@ -2940,12 +3641,19 @@ export function mountApp(root: HTMLElement): void {
   function startDay(day: ProgramDay, adjust: ProposalAction | null = null): void {
     voice.unlock(); // must happen inside the tap
     const t = now();
+    liftsForWarmups ??= warmupLifts(catalogExercises());
     const s = startSession(day, crypto.randomUUID(), t, {
       unit,
       lastWeightKg: lastWeights(lastTime),
+      // M12 1b: warm-up sets from the trainer-kit rule (off = none). The gym profile has no kit
+      // steps yet, so the default steps for the unit apply.
+      ...(kit.warmups === 'off' ? {} : { warmups: { rule: kit.warmups, lifts: liftsForWarmups } }),
     });
     view = { screen: 'session', s, sheet: null };
     todayNotes = {};
+    setupCuesSaid = [];
+    betweenSetsKey = '';
+    mealIdea = null;
     lastCueElapsedMs = 0;
     placementSpoken = new Set();
     correction = null;
@@ -2961,6 +3669,7 @@ export function mountApp(root: HTMLElement): void {
     startTicker();
     render();
     speakFocusCue(null, s);
+    speakBetweenSets(s);
   }
 
   function startDevLog(s: SessionState, dayId: string): void {
@@ -3059,7 +3768,18 @@ export function mountApp(root: HTMLElement): void {
     view = { screen: 'session', s, sheet: null };
 
     for (const log of s.logs.slice(prev.logs.length)) void saveSet(db, log).catch(logDbError);
+    // M12 1b: SET_EFFORT replaces the last log in place (no new log), so its row is updated here.
+    if (e.type === 'SET_EFFORT') {
+      const last = s.logs.at(-1);
+      if (last)
+        void updateSetRow(last, (r) => {
+          if (last.effort === undefined) delete r.effort;
+          else r.effort = last.effort;
+        }).catch(logDbError);
+    }
     logToDevLog(prev, s, e);
+    // A set starts: an open learn card (effort "Why?") never stays over it.
+    if (s.phase === 'exercise' && !s.paused && shouldSpeakFocusCue(prev, s)) closeLearnCard();
     if (prev.phase !== 'rest' && s.phase === 'rest') lastCueElapsedMs = 0;
     if (s.phase === 'summary' && prev.phase !== 'summary') onFinished(s);
     syncCamera(); // before render: the rest screen leaves the tip/Fix to the camera's rest panel
@@ -3069,7 +3789,63 @@ export function mountApp(root: HTMLElement): void {
     // Back from the sheet: focus the Pause button it came from (the sheet is gone).
     if (prev.paused && !s.paused) root.querySelector<HTMLElement>('[data-pause-open]')?.focus();
     if (camera) camera.el.inert = s.paused; // the Pause sheet is modal over the camera too
+    // The effort row was re-rendered: keep focus on the option he chose (tap or arrow keys).
+    if (e.type === 'SET_EFFORT' && e.effort !== null)
+      root.querySelector<HTMLElement>(`[data-effort-opt="${e.effort}"]`)?.focus();
     speakFocusCue(prev, s);
+    speakBetweenSets(s);
+  }
+
+  /**
+   * M12 1b: one logged row, matched exactly. Warm-up sets reuse set indexes 0, 1, … (setIndex
+   * stays 0 during warm-ups), so the warm-up flag is part of the match.
+   */
+  function updateSetRow(log: SetLog, change: (row: SetRow) => void): Promise<number> {
+    return db.sets
+      .where('sessionId')
+      .equals(log.sessionId)
+      .filter(
+        (r) =>
+          r.exerciseId === log.exerciseId &&
+          r.setIndex === log.setIndex &&
+          isWarmup(r) === isWarmup(log),
+      )
+      .modify(change);
+  }
+
+  /**
+   * M12 1b, between sets only (on Rest, or as the workout starts, before set 1): the upcoming
+   * warm-up set's line ("Warm-up: 20 kilos for 8."), else the setup checks before an exercise's
+   * first working set (once per workout). Queued cues (never a count, never cancelling), said once
+   * per upcoming set. Deferred a tick: a hands-free "Start next set" logs and starts in one go,
+   * and then nothing is said over the running set.
+   */
+  function speakBetweenSets(s: SessionState): void {
+    if (s.paused || s.phase === 'summary') return;
+    const atStart = s.phase === 'exercise' && s.logs.length === 0 && s.exIndex === 0;
+    if (s.phase !== 'rest' && !atStart) return;
+    const w = currentWarmup(s);
+    const key = `${s.sessionId}:${s.exIndex}:${s.setIndex}:${w ? w.index : 'work'}`;
+    if (key === betweenSetsKey) return;
+    betweenSetsKey = key;
+    window.setTimeout(() => {
+      if (view.screen !== 'session' || view.s.sessionId !== s.sessionId) return;
+      const cur = view.s;
+      if (cur.paused || (cur.phase !== 'rest' && !(atStart && cur.logs.length === 0))) return;
+      if (cur.exIndex !== s.exIndex || cur.setIndex !== s.setIndex) return;
+      const exerciseId = currentPlanned(cur).exerciseId;
+      const warm = currentWarmup(cur);
+      if (warm) {
+        voice.speak(warmupLine(warm, unit), { kind: 'cue' });
+        rec((r) => r.logEvent('warmupLine', { exerciseId, index: warm.index, of: warm.of }));
+        return;
+      }
+      const lines = setupCuesFor(exerciseId, { logs: cur.logs, setupCuesSaid });
+      if (lines.length === 0) return;
+      setupCuesSaid = [...setupCuesSaid, exerciseId];
+      for (const line of lines) voice.speak(line, { kind: 'cue' });
+      rec((r) => r.logEvent('setupCues', { exerciseId, lines: lines.length }));
+    }, 0);
   }
 
   function onFinished(s: SessionState): void {
@@ -3079,6 +3855,7 @@ export function mountApp(root: HTMLElement): void {
     void loadSummaryHistory(s);
     // M7: today's protein vs target on Summary (read fresh: this workout counts for "post-workout").
     void fuel.refresh().then(() => {
+      if (mealIdea?.sessionId !== s.sessionId) pickMealIdea(s);
       if (view.screen === 'session' && view.s.phase === 'summary') render();
     });
     // Keep the dev log open on Summary so a last-set fix there still reaches it;
@@ -3140,7 +3917,14 @@ export function mountApp(root: HTMLElement): void {
     if (!last) return;
     const counts = { reps: last.reps, partials: last.partials ?? 0 };
     // The reducer recomputed the focus score from the stored cues; null removes it (0 reps).
-    void updateSet(db, last, { ...counts, focusScore: last.focusScore ?? null }).catch(logDbError);
+    // Matched with the warm-up flag (warm-ups reuse set indexes), like db.updateSet otherwise.
+    void updateSetRow(last, (r) => {
+      r.reps = Math.max(0, Math.round(counts.reps));
+      if (counts.partials > 0) r.partials = Math.round(counts.partials);
+      else delete r.partials;
+      if (last.focusScore === undefined) delete r.focusScore;
+      else r.focusScore = Math.min(100, Math.max(0, Math.round(last.focusScore)));
+    }).catch(logDbError);
     rec((r) => void r.correctSet(counts));
     if (last.cues) logFocusScore(last);
     if (s.phase === 'summary') saveTotals(s);
@@ -3205,8 +3989,9 @@ export function mountApp(root: HTMLElement): void {
     const p = currentPlanned(s);
     const id = p.exerciseId;
     const note = noteFor(id);
-    const today = setsText(s.logs.filter((l) => l.exerciseId === id));
+    const today = setsText(workingSets(s.logs).filter((l) => l.exerciseId === id));
     const last = setsText(lastTime[id] ?? []);
+    const warm = currentWarmup(s);
     return renderExercise(
       {
         dayName: s.day.name,
@@ -3228,11 +4013,13 @@ export function mountApp(root: HTMLElement): void {
         hasNotes: Boolean(note.note || todayNotes[id]),
         today: today || undefined,
         last: last || undefined,
+        warmup: warm ? { index: warm.index, total: warm.of } : undefined,
       },
       {
         onList: () => setSheet({ kind: 'list' }),
         onCamera: p.tracking === 'pose' ? () => openCameraView(exerciseName(id), id) : undefined,
         onPause: () => dispatch({ type: 'PAUSE', now: now() }),
+        onSkipWarmups: warm ? () => dispatch({ type: 'SKIP_WARMUPS', now: now() }) : undefined,
         onHowTo: (opener) => openHowTo(p, opener),
         onNotes: () => setSheet({ kind: 'notes', exerciseId: id }),
         onAdjust: (field, dir) =>
@@ -3254,7 +4041,7 @@ export function mountApp(root: HTMLElement): void {
     if (s.setIndex !== 0 || s.exIndex === 0) return undefined;
     const prev = s.day.exercises[s.exIndex - 1];
     if (!prev) return undefined;
-    const done = s.logs.filter((l) => l.exerciseId === prev.exerciseId).length;
+    const done = workingSets(s.logs).filter((l) => l.exerciseId === prev.exerciseId).length;
     return done > 0 ? { done, total: prev.sets } : undefined;
   }
 
@@ -3262,9 +4049,13 @@ export function mountApp(root: HTMLElement): void {
     const p = currentPlanned(s);
     const id = p.exerciseId;
     const note = noteFor(id);
-    const today = setsText(s.logs.filter((l) => l.exerciseId === id));
+    const today = setsText(workingSets(s.logs).filter((l) => l.exerciseId === id));
     const last = setsText(lastTime[id] ?? []);
     const targetMs = s.restTargetSec * 1000;
+    const warm = currentWarmup(s);
+    // M12 1b: the effort row rates the working set just logged (none after a warm-up).
+    const lastLog = s.logs.at(-1);
+    const rate = lastLog && !isWarmup(lastLog) ? lastLog : null;
     // Hands-free rest on the camera shows the Fix and tip in its own panel (one element, one place).
     const onCamera = camera?.mode === 'rest';
     const v = renderRest(
@@ -3291,6 +4082,8 @@ export function mountApp(root: HTMLElement): void {
         today: today || undefined,
         last: last || undefined,
         setsDone: finishedExerciseSets(s),
+        effort: rate ? (rate.effort ?? null) : undefined,
+        warmup: warm ? { index: warm.index, total: warm.of } : undefined,
       },
       {
         onList: () => setSheet({ kind: 'list' }),
@@ -3299,6 +4092,13 @@ export function mountApp(root: HTMLElement): void {
         onExtend: () => dispatch({ type: 'EXTEND_REST', sec: 30, now: now() }),
         onNotes: () => setSheet({ kind: 'notes', exerciseId: id }),
         onStartSet: () => dispatch({ type: 'START_SET', now: now() }),
+        onEffort: rate
+          ? (effort: SetEffort) => dispatch({ type: 'SET_EFFORT', setIndex: rate.setIndex, effort })
+          : undefined,
+        onEffortWhy: (opener) => {
+          const card = findLearnCard(LEARN_CARDS, 'effort');
+          if (card) openLearnCard(card, opener);
+        },
       },
     );
     restView = v;
@@ -3343,7 +4143,7 @@ export function mountApp(root: HTMLElement): void {
         'ol',
         { class: 'ex-list' },
         ...s.day.exercises.map((p, i) => {
-          const done = s.logs.filter((l) => l.exerciseId === p.exerciseId).length;
+          const done = workingSets(s.logs).filter((l) => l.exerciseId === p.exerciseId).length;
           const finished = done >= p.sets;
           const skipped = s.skipped.includes(p.exerciseId);
           const current = i === s.exIndex;
@@ -3458,33 +4258,61 @@ export function mountApp(root: HTMLElement): void {
   function summaryScreen(s: SessionState): HTMLElement {
     const sum = summarize(s);
     const hist = summaryHistory?.sessionId === s.sessionId ? summaryHistory : null;
+    // M12 1b: Summary counts working sets only (warm-ups are not sets, volume or bests).
+    const logs = workingSets(s.logs);
+    const idea = mealIdea?.sessionId === s.sessionId ? mealIdea.idea : null;
     return renderSummary(
       {
         dayName: s.day.name,
         date: s.startedAt,
         durationSec: sum.durationSec,
         unit,
-        logs: s.logs,
+        logs,
         plannedExercises: s.day.exercises.length,
         restOverruns: sum.restOverruns,
         skipped: sum.skipped,
-        vsLastPct: hist ? volumeVsLast(s.logs, hist.prevLogs) : null,
+        vsLastPct: hist ? volumeVsLast(logs, hist.prevLogs) : null,
         last: hist?.last ?? null,
-        bests: hist ? newBests(s.logs, hist.history) : [],
+        bests: hist ? newBests(logs, hist.history) : [],
         name: exerciseName,
         todayNotes,
         fixEl: lastSetFix(s),
         coachEl: createCoachSummary(coachSummary(s, lastTime, exerciseName), exerciseName),
-        focusEl: createFocusSummary(s.logs, exerciseName),
+        focusEl: createFocusSummary(logs, exerciseName),
         stalls: summaryStalls?.sessionId === s.sessionId ? summaryStalls.stalls : [],
         fuel: fuel.summaryFuel(),
+        mealIdea: idea,
       },
       {
         onDone: goToday,
+        onLogMealIdea: (suggestion) => logMealIdea(s.sessionId, suggestion),
         onStallOption: (exerciseId, option) =>
           void openCoach('today', { chip: 'stallFix', args: { exerciseId, option } }),
       },
     );
+  }
+
+  /** M12 1b: the post-workout meal idea, chosen once as Summary opens (none without targets). */
+  function pickMealIdea(s: SessionState): void {
+    const cf = fuel.coachFuel();
+    const suggestion = summaryFoodIdea(cf.totals, cf.targets, cf);
+    mealIdea = { sessionId: s.sessionId, idea: suggestion ? { suggestion } : null };
+  }
+
+  /** Log on the meal idea: the entry, the row reads "Logged"; the toast's Undo takes both back. */
+  function logMealIdea(sessionId: string, suggestion: FoodSuggestion): void {
+    const set = (logged: boolean) => {
+      if (mealIdea?.sessionId !== sessionId || !mealIdea.idea) return;
+      mealIdea = { sessionId, idea: { ...mealIdea.idea, logged } };
+      if (view.screen === 'session' && view.s.phase === 'summary') render();
+    };
+    set(true);
+    void fuel
+      .logSuggestion(suggestion, () => set(false))
+      .catch((err: unknown) => {
+        logDbError(err);
+        set(false);
+      });
   }
 
   /** Summary extras: the same day last time (volume / reps) and today's new bests. */
@@ -3493,7 +4321,8 @@ export function mountApp(root: HTMLElement): void {
       const t = now();
       const sessions = await sessionsSince(db, t - STATS_WEEKS * 7 * 24 * 3600 * 1000);
       const prev = previousSameDaySession(sessions, s.sessionId);
-      const prevLogs = prev ? await setsForSessions(db, [prev.sessionId]) : [];
+      // Working sets only on both sides (M12 1b warm-ups are not volume or reps).
+      const prevLogs = prev ? workingSets(await setsForSessions(db, [prev.sessionId])) : [];
       const ids = [...new Set(s.logs.map((l) => l.exerciseId))];
       const history = await setsForExercises(db, ids);
       // M10: lifts stalled for 3 sessions (shown under the coach line with their two fixes).
@@ -3620,12 +4449,20 @@ export function mountApp(root: HTMLElement): void {
       })
       .catch(logDbError);
   });
+  // M12 1b: intake / switch first; a fresh install opens the intake before Today.
+  const kitReady = loadTrainerKitState();
   // M11: the first Health sync once Today's plan and sessions are known.
-  void loadUpNext().then(() => {
-    health.start();
-    // M12 slice 1c: the What's New tour once Today is up (an update with unseen pages).
-    void maybeShowTour(firstTour);
-  });
+  void kitReady
+    .then(() => firstRunIntake())
+    .then((first) => {
+      if (first && view.screen === 'today') openIntake('first');
+      return loadUpNext();
+    })
+    .then(() => {
+      health.start();
+      // M12 slice 1c: the What's New tour once Today is up (an update with unseen pages).
+      void maybeShowTour(firstTour);
+    });
   // M12 slice 1c: the build id (iPhone app, re-sign clock), facts and auto ticks.
   void todos.start();
   document.addEventListener('visibilitychange', () => {

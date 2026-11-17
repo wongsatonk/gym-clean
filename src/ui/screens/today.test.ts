@@ -842,6 +842,22 @@ describe('Today: feel today + cardio line (M12 1b tasks 31, 32)', () => {
     expect(byAttr(rest, 'data-easy-on')).toEqual([]);
   });
 
+  it('Goal card: shown with both callbacks; "Set your goal" with no goals opens the intake', () => {
+    const goal = { goals: [], today: TODAY };
+    expect(byAttr(render({ goal }).el, 'data-goal-card')).toEqual([]);
+    let set = 0;
+    const el = asFake(
+      todayScreen(props({ goal }), { ...base, onSetGoal: () => set++, onOpenGoal: () => {} }),
+    );
+    expect(byAttr(el, 'data-goal-card')).toHaveLength(1);
+    byAttr(el, 'data-goal-set')[0]?.click();
+    expect(set).toBe(1);
+    const none = asFake(
+      todayScreen(props({ goal: null }), { ...base, onSetGoal: () => {}, onOpenGoal: () => {} }),
+    );
+    expect(byAttr(none, 'data-goal-card')).toEqual([]);
+  });
+
   it('cardio line: "Cardio this week: 95 min" under Your week; hidden when null or absent', () => {
     const { el } = render({ cardioMinutes: 95 });
     const line = byAttr(el, 'data-cardio');

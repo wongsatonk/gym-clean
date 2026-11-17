@@ -20,6 +20,9 @@
 // into the coach context.
 import { answerCard, syncHealth, type HealthSyncSource } from '../core/health/sync';
 import { weeklyLoad, type LoadSession } from '../core/health/weeklyLoad';
+import { weeklyCardioMinutes } from '../core/health/cardio';
+import type { BodyArea } from '../core/types';
+import { listDayFeels } from '../data/trainerKit/store';
 import { activityCheck } from '../core/nutrition/activityCheck';
 import { addDate, localDate } from '../core/trainer/plan';
 import {
@@ -77,8 +80,13 @@ export type HealthHostDeps = {
   loadHealth?: () => Promise<HealthApi | null>;
 };
 
-/** Days of `healthDays` kept in memory (weekly load: this week; activity check: 14 days). */
-const DAYS_KEPT = 21;
+/**
+ * Days of `healthDays` kept in memory (weekly load and cardio: this week; activity check: 14
+ * days; M12 1b body fat / lean mass trends on the weigh-in screen: 5 weeks).
+ */
+const DAYS_KEPT = 35;
+/** M12 1b: feel-today rows read for the card (today's row is the one it uses). */
+const FEEL_DAYS = 7;
 /** After Switch / Keep on the activity line, it isn't asked again for this many days. */
 const ACTIVITY_QUIET_DAYS = 7;
 
@@ -155,6 +163,13 @@ export function createHealthHost(deps: HealthHostDeps) {
     const health = await load();
     const now = deps.now();
     const trainingDay = deps.trainingDay();
+    // M12 1b: his "How do you feel today" answers count as card signals (never spoken).
+    const feels = await listDayFeels(db, addDate(localDate(now), -FEEL_DAYS)).catch(
+      (err: unknown) => {
+        deps.logError(err);
+        return [];
+      },
+    );
     const res = await syncHealth({
       health,
       store,
@@ -163,6 +178,7 @@ export function createHealthHost(deps: HealthHostDeps) {
       ...(trainingDay !== undefined ? { trainingDay } : {}),
       inWorkout: deps.inWorkout(),
       gymSessions: deps.sessions(),
+      feels,
     });
     card = res.card;
     if (!health) return; // PWA: nothing stored, nothing to show
@@ -312,14 +328,42 @@ export function createHealthHost(deps: HealthHostDeps) {
       const readiness = card && card.date === today() && deps.trainingDay() === true ? card : null;
       return { readiness, weekLoad };
     },
-    /** The card's buttons; `open` opens the coach on that M10 chip. */
-    readinessActions(open: (chip: CardChip) => void): ReadinessActions {
+    /**
+     * The card's buttons; `open` opens the coach on that M10 chip. M12 1b: `onEasyOn` (a sore
+     * area's "Go easy on … today?") answers the card and opens today's avoid-area proposal.
+     */
+    readinessActions(
+      open: (chip: CardChip) => void,
+      easyOn?: (area: BodyArea) => void,
+    ): ReadinessActions {
       return {
         onLighterToday: () => answer(() => open('lighter')),
         onDeloadWeek: () => answer(() => open('deload')),
         onNotToday: () => answer(() => open('notToday')),
         onTrainAsPlanned: () => answer(),
+        ...(easyOn
+          ? {
+              onEasyOn: (area: BodyArea) => {
+                // The feel row offers it too (no card): only a card on show is answered.
+                if (card) answer(() => easyOn(area));
+                else easyOn(area);
+              },
+            }
+          : {}),
       };
+    },
+    /**
+     * M12 1b: cardio minutes this week from Health workouts; null on the PWA or with workouts
+     * off (the line is hidden).
+     */
+    cardioMinutes(): number | null {
+      if (!api || !settings.enabled.workouts) return null;
+      return weeklyCardioMinutes(days, deps.sessions(), deps.now());
+    },
+    /** M12 1b: Health days with body fat / lean mass (weigh-in screen only; never the coach). */
+    bodyCompDays(): readonly HealthDay[] {
+      if (!api) return [];
+      return days.filter((d) => d.bodyFatPct !== undefined || d.leanMassKg !== undefined);
     },
     /** Settings → Health. */
     settingsScreen(onBack: () => void): HTMLElement {

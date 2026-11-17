@@ -494,6 +494,16 @@ describe('syncHealth', () => {
     expect(store.settings.readiness?.lastDeloadOfferDate).toBeUndefined();
   });
 
+  it('M12 1b: passes his feel-today answers to the card (low energy + sore = two signals)', async () => {
+    const quiet = await run(new FakeHealth(usualRead()), new FakeStore());
+    expect(quiet.card).toBeNull();
+    const store = new FakeStore();
+    const res = await run(new FakeHealth(usualRead()), store, {
+      feels: [{ date: TODAY, energy: 1, sore: ['shoulders'] }],
+    });
+    expect(res.card?.signals).toEqual(expect.arrayContaining(['feltLow', 'sore']));
+  });
+
   it('no card on a rest day, mid-workout, or when trainingDay is not known', async () => {
     for (const over of [{ trainingDay: false }, { inWorkout: true }, { trainingDay: undefined }]) {
       const store = new FakeStore();

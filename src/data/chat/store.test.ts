@@ -195,6 +195,16 @@ describe('coach UI state (settings key "coach")', () => {
     expect((await db.settings.get('coach'))?.value).toMatchObject({ model: 'x' });
   });
 
+  it('M12 1b: keeps the last review time and deload offer date; drops bad ones', async () => {
+    await patchCoachUi(db, { lastReviewAt: 1_900_000_000_000, lastDeloadOfferAt: '2030-01-21' });
+    expect(await getCoachUi(db)).toMatchObject({
+      lastReviewAt: 1_900_000_000_000,
+      lastDeloadOfferAt: '2030-01-21',
+    });
+    await db.settings.put({ key: 'coach', value: { lastReviewAt: 'x', lastDeloadOfferAt: 'soon' } });
+    expect(await getCoachUi(db)).toEqual({ missedAnswered: [] });
+  });
+
   it('reads bad stored values as defaults', async () => {
     await db.settings.put({
       key: 'coach',

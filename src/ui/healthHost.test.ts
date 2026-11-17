@@ -11,6 +11,7 @@ import { HEALTH_CONNECT_TYPES, HEALTH_TYPES, type HealthType } from '../core/typ
 import { GymDb } from '../data/db';
 import { HEALTH_SETTINGS_KEY, getHealthSettings, listHealthDays } from '../data/health/store';
 import { listWeighIns, saveWeighIn } from '../data/nutrition/store';
+import { saveDayFeel } from '../data/trainerKit/store';
 import { createHealthHost, type CardChip, type HealthApi } from './healthHost';
 import { asFake, useFakeDom, type FakeEl } from './screens/testDom';
 
@@ -139,6 +140,33 @@ describe('healthHost', () => {
     expect(attr(el, 'data-health-read-now')).toHaveLength(1);
     expect(attr(el, 'data-health-connect')).toHaveLength(0);
     expect(h.todayProps().weekLoad).toEqual({ gymSessions: 0, outside: [], outsideMinutes: 0 });
+  });
+
+  it('M12 1b: feel-today answers reach the card; Go easy answers it and opens the area', async () => {
+    // Usual nights only (no Health signal): low energy + sore shoulders are the two signals.
+    const { api } = fakeApi();
+    const usual = data();
+    api.read = async ({ types }) => {
+      const r: Record<string, unknown> = { status: 'ok' };
+      for (const t of types) r[t] = t === 'sleep' || t === 'restingHr' ? usual[t]?.slice(1) : [];
+      return r as HealthRead & { status: string };
+    };
+    await saveDayFeel(db, { date: TODAY, energy: 1, sore: ['shoulders'] });
+    const { h } = host(api);
+    await connect(h);
+    const card = h.todayProps().readiness;
+    expect(card?.signals).toEqual(expect.arrayContaining(['feltLow', 'sore']));
+    const areas: string[] = [];
+    h.readinessActions(() => undefined, (a) => areas.push(a)).onEasyOn?.('shoulders');
+    expect(areas).toEqual(['shoulders']);
+    expect(h.todayProps().readiness, 'answered').toBeNull();
+  });
+
+  it('M12 1b: cardio minutes and body comp are null / empty on the PWA', async () => {
+    const { h } = host(null);
+    await h.sync();
+    expect(h.cardioMinutes()).toBeNull();
+    expect(h.bodyCompDays()).toEqual([]);
   });
 
   it('every card button records the answer and opens its M10 chip; Train as planned opens nothing', async () => {
