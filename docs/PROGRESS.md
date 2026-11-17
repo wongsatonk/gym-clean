@@ -12,6 +12,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **M12 Coach tab, slice 1: planned 2026-11-16** on `m12-coach-tab` (design approved; he said "start slice 1" alongside his Checkpoint H week). Plan under "Current milestone plan → M12 — slice 1"; contract SPEC M12 + Decision "M12 plan". Nothing in it blocks on him.
 - **M12 slice 1c (What's New tour + To-do guides + Copy report): planned 2026-11-16** (his yes), on `m12-coach-tab` after slice 1's verifier PASS; plan under "Current milestone plan → M12 — slice 1c"; Decision "M12 slice 1c". Not blocking on him (M12-q5 has a default).
 - **M13 "Published look": planned 2026-11-17** (his yes; Decision "M13 Published look"; owner mode = option A). Starts only after M12 slices 1b and 2 are verified; plan under "Current milestone plan → M13" (below the M12 slice 1b plan). M13-q1 answered: keep the name "Gym Clean" (his words 2026-11-17: "Keep it Gym Clean").
+- **M14 "Wrist and ears" (Apple Watch app + AirPods head motion): planned 2026-11-17** (his words: "Add it and I need apple watch app too"; Decision "M14 Wrist and ears"). Starts after M13 is verified; plan under "Current milestone plan → M14" (below M13). M14 tasks 1–2 (facts + a scratch watch spike on his devices) may run any time; they decide M14-q1 (paid Apple account needed for the watch? his call only if yes).
 - **Waiting on Wongsaton:**
   - **M11 Health data (Apple Health + WHOOP): built 2026-11-16 on `m11-build`** (read-only, route A, defaults). Reviewer PASS (424cafd), verifier PASS on the Mac (check 3157, full e2e 159/1 skipped, simulator build + 19 XCTests). Next: 🧍 task 13 on his iPhone (`ios/` checklist in docs/ios-setup.md), then merge; 🧍 task 2: 2026-11-16 he says WHOOP writes "a lot of things" into Health (exact list not given); the iPhone test (task 13) confirms which of the six arrive.
   - Deploy OK for m4e-redesign.
@@ -52,6 +53,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M11 Health data (Apple Health + WHOOP, native app only): **built 2026-11-16 on `m11-build` (read-only, route A); reviewer PASS, verifier PASS on the Mac; waiting on the iPhone test (task 13)** → 🧍 Checkpoint H
 - [ ] M12 Coach tab: chat, focus blocks, calendar, motion (approved 2026-11-16). **Slice 1 planned 2026-11-16** on `m12-coach-tab` (Coach centre tab + chat + history, rules brain behind a router, focus blocks, Calendar replaces History with completion + scores + Share month, motion) → 🧍 Checkpoint I; **slice 1c "What's New + To-dos" planned 2026-11-16** (tour per release, to-do guides for his open checkpoints + decisions, one Copy report; ships with slice 1 by default); **slice 1b "Trainer kit" planned 2026-11-17** (1.13.0: effort, warm-ups, intake/goal + starter plan for a second user, measurements + e1RM + body fat/lean mass, short on time, next block, progress photos, feel today, setup cues, cardio line, nudges + learn cards); **slice 2 planned 2026-11-17** (1.14.0: Apple brain + on-device mic + reminders + weekly check-in, iPhone) → 🧍 Checkpoint J; slice 3 (Claude brain, his key)
 - [ ] M13 Published look (approved 2026-11-17; **planned 2026-11-17**, builds after M12 slices 1b and 2 on `m13-published-look`; release 1.15.0: first-launch welcome + permission pages, owner mode (off on fresh installs), brand + launch screen, polish from the UX review, About + privacy + licenses, Story-size share + store screenshots + landing page, "her phone" checklist) → 🧍 Checkpoint K
+- [ ] M14 Wrist and ears (approved 2026-11-17: "Add it and I need apple watch app too"; **planned 2026-11-17**, builds after M13 on `m14-wrist-ears`; release 1.16.0: Apple Watch remote + live heart rate + opt-in Save to Health, AirPods head-still / neck hints + head-counted calf raises and shrugs). Watch track waits on M14-q1 only if the free Apple ID can't run a watch app → 🧍 Checkpoint L
 
 ## Current milestone plan
 
@@ -619,6 +621,176 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Deps: 40.
 
 **Later, not in M13:** a second anatomy silhouette option ([anatomy-3d-engineer], only if he asks after Checkpoint K).
+
+### M14 — Wrist and ears: Apple Watch app + AirPods head motion (planned 2026-11-17; release 1.16.0; builds AFTER M13)
+**Contract:** SPEC "M14 — Wrist and ears" (Goals 1–8, head-motion fixture guide, Changes to earlier contracts, Privacy, Data model, Accept) and Decision "M14 Wrist and ears" (2026-11-17), which wins where it is more specific. **No network request** by the app or the watch app (WatchConnectivity is the paired-device link). All logic **tests first** (Vitest, made-up data; the repo is public); Swift logic in `…Core` Swift packages with XCTests, like `ios/App/App/Plugins/GymHealth/GymHealthCore`; Swift stays thin (no rules, thresholds or copy in Swift except watch layout). UI tasks: props in / callbacks out, render tests + 390×844 harness screenshots, tokens + motion helpers, text ≥ 20px, targets ≥ 56px; nothing new shown during a set on the phone (head hints are spoken only).
+
+**Do not start before** M13's verifier task (M13 task 39) has passed, except tasks 1 and 2 (paper / scratch project, no repo files), which may run any time.
+
+**Branch:** `m14-wrist-ears`, cut from the M13 result (`m13-published-look` after verify, or `main` if he has merged by then). Subagents never commit.
+
+**Blocking:** **M14-q1** (paid Apple Developer Program, his call) blocks tasks 14–19, 27 and the watch half of 24 **only if** tasks 1–2 find the free Personal Team can't install/run the watch app. The AirPods track (4, 8–10, 12, 22, 25) runs on the free account either way. If he says "pause the watch", 1.16.0 ships the AirPods track plus tasks 5–7 dormant, and the watch tasks wait.
+
+**Fit with the current code (skimmed 2026-11-17; re-check when M14 starts, M12/M13 are moving these files):**
+- Session reducer `src/core/session.ts`: `SessionEvent` already has `SET_DONE` (backdatable `now`), `START_SET`, `EXTEND_REST`, `PAUSE`, `RESUME`, `SKIP_EXERCISE` → watch events map onto them; **no reducer change**. `SessionState` has `phase`, `exIndex`, `setIndex`, `restTargetSec`, `restAccumMs` / `restRunningSince`, `paused`, `warmups` → the snapshot is computed from it.
+- `SetLog` in `src/core/types.ts` (has `effort?`, `warmup?`) gains `hr?` and `head?`; backup row shapes in `src/data/backup.ts` (`validateBackup`, optional fields typed when present).
+- Native: `src/native/{health,speech}.ts` + `ios/App/App/Plugins/{GymHealth,GymSpeech}/` are the patterns (plugin + `…Core` package + TS bridge with a fake for e2e). `scripts/sync-ios-version.mjs` (ios-engineer) sets `MARKETING_VERSION`; it must also cover the watch target.
+- Camera exercise rules live in `src/core/exercises/*.ts` (`index.ts` registry, `learning.ts`); calf raises (`Standing_Calf_Raises`, `Standing_Dumbbell_Calf_Raise`, `Smith_Machine_Calf_Raise`) are in `src/data/exercises.json`, **shrugs are not** (task 9 vendors one).
+- M13 gives: owner mode (`isVisible(surface)`), the permission page component (`src/ui/onboarding/permissionPage.ts`), the What's New / to-do data files. M11 gives Health workout reads (dedupe by source).
+
+**Order / parallel groups:**
+- **Any time:** 1 [ios] facts → 2 🧍 spike on his devices → M14-q1 verdict.
+- **G0 (after M13 verify):** 3 [main] types; 13 [main] watch icon output.
+- **G1 core (after 3), in parallel by file:** 5, 6, 7, 11; 4 [ios] fixtures; then 8 ∥ 9 (after 4), then 10.
+- **G1 ios:** 12 (after 1, 3); watch track 14 (after 2, 13, M14-q1) → 15 → 16 ∥ 17; 18 (after 14); 19 (after 14).
+- **G1 ui (after 3):** 21; 20 after 6; 22 after 12.
+- **G2:** 23 [main] version → 24 [main] wiring A (watch) → 25 [main] wiring B (AirPods).
+- **G3:** 26 [ui] e2e ∥ 27 [ios] simulator round trip; 28 🧍 clips (any time after 25 is on his phone) → 29 [core] tune (doesn't gate 30–32 if the clips aren't in yet).
+- **G4:** 30 reviewer → 31 verifier → 32 main merge + ask → 33 🧍 Checkpoint L.
+
+- [ ] 1. [ios-engineer] Facts check against current Apple docs (paper; no repo files; findings to main for Decision "M14 Wrist and ears").
+  - Check and link: (a) a **free Personal Team** building, installing and running a **watchOS companion** (single-target watch app embedded in the iOS app), the 7-day expiry for the watch app, App ID count per 7 days, the 3-device limit (does the watch count?), watch Developer Mode; capabilities a Personal Team can't use on watchOS (HealthKit, background mode `workout-processing`); (b) `HKWorkoutSession` + `HKLiveWorkoutBuilder` on watchOS: which authorisation is needed just to **run** a session and read heart rate vs to **save** it, and that `discardWorkout()` leaves nothing in Health; (c) **mirrored workout sessions** to the iPhone (iOS 17+ `startMirroringToCompanionDevice`): does the iPhone app get background time, and does a **WKWebView** keep running JS (events, speech) with the phone locked; (d) WatchConnectivity semantics: `sendMessage` (reachable only), `transferUserInfo` (queued FIFO), `updateApplicationContext` (latest only), delivery when the iPhone app is suspended; (e) `CMHeadphoneMotionManager`: supported AirPods models (Pro 1/2, 3, 4, Max), sample rate, `NSMotionUsageDescription`, authorisation states, foreground/background, iOS floor; (f) current Xcode / watchOS SDK and the oldest watchOS we can target.
+  - Done when: each item is marked VERIFIED (doc link or Xcode result) or NOT VERIFIED, with a one-line verdict for M14-q1 (free works / needs paid / unknown until task 2).
+  - Deps: none (may run now).
+- [ ] 2. 🧍 [ios-engineer + Wongsaton] Free-team watch spike on his devices (needs his iPhone plugged into the Mac; notify him).
+  - A **scratch** Xcode project outside the repo: blank iOS app + watch app, Personal Team signing, HealthKit + workout-processing on the watch target, a button that starts an `HKWorkoutSession` and shows heart rate. Install on his iPhone + watch.
+  - Done when: it installs and shows live heart rate on his watch (→ M14-q1 resolved, free works), or the exact Xcode/device error is recorded (→ M14-q1 goes to him with the facts and the US$99/year cost). His watch model + watchOS and AirPods model noted (M14-q2).
+  - Deps: 1.
+- [ ] 3. [main] Shared types (no behaviour change).
+  - Files: src/core/types.ts.
+  - Per SPEC M14 data model: `SetLog.hr?`, `SetLog.head?`, `WatchPhase`, `WatchSetView`, `WatchSnapshot`, `WatchEventType`, `WatchEvent`, `HrSample`, `WatchMessage`, `WatchSettings`, `HeadFrame`, `HeadRule`, `HeadMotionSettings`, `HeadEvent`; `AppRoute` + `'settings/watch' | 'settings/airpods' | 'settings/headclip'`; `OwnerSurface` + `'headClip'`.
+  - Done when: `npm run check` passes; no runtime change.
+  - Deps: M13 verified.
+- [ ] 4. [ios-engineer] Synthetic head-motion fixtures + format.
+  - Files: fixtures/headmotion/README.md (format, filename rule, pointer to the SPEC guide), fixtures/headmotion/gen-synthetic.mjs, fixtures/headmotion/synthetic/** (made-up clips: still curl, curl with 3 side looks, push-up with chin drops, 12 calf raises clean + 2 half reps, 12 shrugs clean + 2 half, AirPods dropping out mid-set).
+  - Done when: each clip is valid `HeadFrame[]` JSON at ~25 Hz with its expected counts in the filename; regenerating gives the same files.
+  - Deps: 3.
+- [ ] 5. [core-engineer] Watch protocol. Tests first.
+  - Files: src/core/watch/protocol.ts(+test).
+  - `watchSnapshot(state, ctx, rev, now)` → `WatchSnapshot` (texts in his unit, warm-up label, `rest.endsAt` from the rest clock, one-step `next` lookahead incl. its rest seconds, summary); `watchEventToSession(ev, state, seen, clock)` → `SessionEvent | null` (dedupe by id, stale `basedOnRev` dropped by exercise/set/phase, watch time → phone time via the offset, clamped like M5c); `clockOffset(hello/snapshot pairs)`; replay of a queued list in order.
+  - Done when: tests cover every phase (warm-up, last set of an exercise, last set of the day, paused, summary), each event type, duplicate, stale, phone + watch double Set done → one log, offline Set done then reconnect, offset + clamp; `npm run check`.
+  - Deps: 3.
+- [ ] 6. [core-engineer] Heart-rate summaries + recovery rule. Tests first.
+  - Files: src/core/watch/heartRate.ts(+test), src/core/watch/hrRules.ts (data), src/core/watch/copy.ts(+test).
+  - `setHr(samples, set)` → `{ avgBpm, maxBpm, samples }` inside `startedAt..endedAt` (none when < 3 samples); `attachLate(logs, samples)`; `recoveryReady(restState, samples, baseline, rules)` per SPEC (45 s, 15 s left, baseline + 30% of the rise, fallback max − 25, once per rest); `sessionBaseline`. Copy: "Heart rate back down. Ready when you are." and the Settings explainers; pass `checkCopy` + the M11 banned list + no zone/max/safe words.
+  - Done when: edge tests (44/45 s, 14/15 s left, missing baseline, sparse samples, warm-up sets), copy tests; `npm run check`.
+  - Deps: 3.
+- [ ] 7. [core-engineer] Data layer for the new set fields + exclusions. Tests first.
+  - Files: src/data/backup.ts(+test) (row shapes for `sets.hr` / `sets.head`), the session-save module in src/data (grep for where SetLogs are written)(+test) (`attachSetHr(sessionId, exerciseId, setIndex, hr)` for late samples), the brain-context builders in src/core (rules, Apple, Claude) + src/core/todo/report.ts + the devlog writer (+tests), src/core/health (workout dedupe by own source)(+test), src/data/settings defaults for `'watch'` and `'headMotion'`.
+  - Done when: backup round-trips both fields and rejects wrong types; late attach updates only the matching set; tests prove `hr` and `head` never reach any brain context, Claude, the copy report or share stats, and `hr` never reaches the dev log; an own-source Health workout is skipped in the weekly load; `npm run check`.
+  - Deps: 3.
+- [ ] 8. [core-engineer] Head attitude + still / neck detectors. Tests first.
+  - Files: src/core/headmotion/attitude.ts(+test) (quaternion → yaw/pitch/roll relative to a set reference = median of the first second; vertical acceleration from `acc` · `grav`), src/core/headmotion/drift.ts(+test).
+  - `detectDrift(frames, rule)` → `HeadEvent[]` for `still` (yaw/roll beyond limits for ≥ holdMs) and `neck` (pitch beyond band); gaps (AirPods out) reset without events.
+  - Done when: fixture tests: drift clips fire the expected count, clean clips fire none, dropout clip is quiet; `npm run check`.
+  - Deps: 3, 4.
+- [ ] 9. [core-engineer] Head rep counter + head rules as data. Tests first.
+  - Files: src/core/headmotion/headCounter.ts(+test), src/core/exercises/headRules.ts(+test) (still: curls, hammer, incline, concentration, rows, bent-over row, shoulder press, DB shoulder press, lateral raise, triceps extension; neck: push-up, rows, bent-over row, goblet squat; count: the three standing calf raises + shrug, all `learning`), src/core/exercises/index.ts (expose `headRuleFor(id)`), src/data/exercises.json (vendor `Dumbbell_Shrug` from free-exercise-db if absent; Unlicense, no images).
+  - Counter mirrors §3 on the vertical signal: EMA, hysteresis, min leg times, partials not counted as reps; emits `HeadEvent` reps.
+  - Done when: exact counts on the synthetic clean clips, half reps not counted, data test (every id exists in the catalog, no exercise has both a camera `count` and a head `count` without the camera winning); `npm run check`.
+  - Deps: 3, 4.
+- [ ] 10. [core-engineer] Head hint scheduler + per-set numbers. Tests first.
+  - Files: src/core/headmotion/hints.ts(+test), src/core/headmotion/copy.ts(+test).
+  - Hold a drift until the next counted rep (camera or head), or speak at holdMs when nothing counts; at most one head hint per set; shares the camera hint cooldown; never cuts a count (voice queue kind `hint`). `setHead(frames…)` → `{ stillPct, hints, counted }`. Copy "Keep your head still." / "Keep your neck long, eyes ahead." passes `checkCopy`.
+  - Done when: timing tests (between reps, once per set, cooldown shared, nothing during rest); `npm run check`.
+  - Deps: 8, 9.
+- [ ] 11. [core-engineer] What's New 1.16.0 + to-do topic.
+  - Files: src/data/whatsNew/pages.ts, src/data/todos/topics.ts (+ their data tests).
+  - Pages: Apple Watch remote, heart rate on Rest + recovery line, Save to Health (off by default), AirPods head hints + counting (iPhone-only pages labelled in the PWA). Topic "Wrist and ears (Checkpoint L)": ask steps per the SPEC checkpoint list (pocket vs floor, haptics, walking away, recovery line timing, Health save + WHOOP double count, head hints, counts, clips recorded), owner-only step "Record head clips".
+  - Done when: data tests (unique ids, valid routes, `checkCopy`, owner flags) pass.
+  - Deps: 3.
+- [ ] 12. [ios-engineer] `GymHeadMotion` plugin + TS bridge.
+  - Files: ios/App/App/Plugins/GymHeadMotion/** (plugin + `GymHeadMotionCore` package with XCTests), ios/App/App/Info.plist (`NSMotionUsageDescription` = the SPEC why text), ios project registration, src/native/headMotion.ts(+test).
+  - `availability()` (no AirPods / unsupported / available), `authorization()`, `start()` / `stop()`, `onFrame(cb)` (≤ 25 Hz, `HeadFrame`), `onConnection(cb)`. Permission prompt only on first `start()`. TS side behind `isNative()` + plugin check; any error → no frames, never an error screen.
+  - Done when: XCTests (quaternion/accel mapping, rate limit, states) and bridge tests with a fake (unavailable, denied, disconnect mid-stream, PWA) pass; simulator build OK.
+  - Deps: 1, 3.
+- [ ] 13. [main] Watch app icon output.
+  - Files: scripts/icons.mjs (`--watch <dir>`: the same logo path, 1024×1024 single-size watch icon on `#0d0f12`).
+  - Done when: the PNG renders and matches the iPhone icon side by side.
+  - Deps: M13 task 26 (already done by then).
+- [ ] 14. [ios-engineer] Watch target skeleton.
+  - Files: ios/App/GymWatch Watch App/** (SwiftUI app, idle screen "Start on your iPhone" + day name), ios/App/App.xcodeproj (target embedded in the iOS app; bundle id `<ios id>.watchkitapp` from the gitignored local signing config + `.example`), the icon from task 13, scripts/sync-ios-version.mjs(+test) (watch target follows package.json).
+  - Done when: paired iPhone + watch simulator build succeeds; the idle screen screenshot; sync script test covers both targets; `npm run check` and existing XCTests pass.
+  - Deps: 2 (+ M14-q1 if paid is needed), 13.
+- [ ] 15. [ios-engineer] `GymWatchCore` package (watch-side logic). Tests first (XCTest).
+  - Files: ios/App/GymWatch Watch App/GymWatchCore/**.
+  - Snapshot decode (v1, unknown fields ignored), offline rest countdown from `rest.endsAt`, offline Set done → `next` lookahead + "will sync", **persisted** event queue until acked (survives app relaunch), haptic schedule (10 s left, 0 s, Set done confirm), HR sample buffer (batched every ~5 s when reachable, kept in memory for the session only), link state.
+  - Done when: XCTests for each, incl. relaunch with a non-empty queue and a snapshot arriving after offline taps (snapshot wins).
+  - Deps: 5 (protocol shape), 14.
+- [ ] 16. [ios-engineer] Watch UI (SwiftUI).
+  - Files: ios/App/GymWatch Watch App/Views/**.
+  - Exercise, Rest, Controls (Pause/Resume, +30 s, Skip exercise with confirm), Summary, Not connected, idle. Sizes per SPEC (main numbers ≥ 64 pt, text ≥ 20 pt, primary button ≥ 56 pt, black background, state not by colour alone); recovery line text from the snapshot/phone, never composed in Swift beyond layout; SF Symbols or our own glyphs only (no art copied from the web).
+  - Done when: watch simulator screenshots of every screen at 41 mm and 46 mm (or Ultra); VoiceOver labels on every control.
+  - Deps: 15.
+- [ ] 17. [ios-engineer] Watch workout session, heart rate, Save to Health.
+  - Files: ios/App/GymWatch Watch App/Workout/** (+ Core tests where logic), watch Info.plist + entitlements (HealthKit, `workout-processing`), ios/App/App/Info.plist (`NSHealthUpdateUsageDescription`), the HealthKit authorisation path found in task 1 (HR read at first use; workout share only when Save to Health is switched on, unless task 1 shows running a session needs it — then recorded in the Decision).
+  - Start with the first snapshot of a started session, pause/resume with the app, end at Finish: `finishWorkout` when `saveToHealth`, else `discardWorkout`; HR samples into the buffer from task 15. Mirroring to the iPhone only if task 1 says it helps the locked-phone case.
+  - Done when: simulator run shows the session states; XCTests for the save/discard decision; a test that no Health write call happens with the switch off.
+  - Deps: 1, 15.
+- [ ] 18. [ios-engineer] iPhone `GymWatch` plugin + TS bridge.
+  - Files: ios/App/App/Plugins/GymWatch/** (WCSession on the phone: snapshot via `updateApplicationContext` + `sendMessage` when reachable; events/HR in via message and `transferUserInfo`; acks), src/native/watch.ts(+test).
+  - Bridge: `status()` (no watch / app not installed / reachable / not reachable), `sendSnapshot(s)`, `onMessage(cb)`, `ack(ids)`, `requestHealthWrite()` (if task 1 puts the prompt on the phone). Behind `isNative()` + plugin check; errors → "no watch".
+  - Done when: bridge tests with a fake (status changes, message order, ack, PWA no-op); simulator build.
+  - Deps: 3, 14.
+- [ ] 19. [ios-engineer] docs/ios-setup.md: watch + AirPods.
+  - Install the watch app (Watch app on iPhone, Developer Mode on the watch), re-sign every 7 days covers the watch too (per task 1/2 facts), AirPods head-tracking check, the clip recorder steps, the Checkpoint L checklist.
+  - Done when: the section exists and matches the task 1/2 facts.
+  - Deps: 2, 14.
+- [ ] 20. [ui-engineer] Rest screen heart rate + recovery line + watch chip.
+  - Files: src/ui/watch/hrLine.ts(+test, + watch.css), src/ui/screens/rest.ts(+test).
+  - Props: `bpm?`, `recovery?: string`, `watch?: 'connected' | 'offline'`. HR line ≥ 20px with a heart glyph (original) and the word "Heart rate"; the recovery line as text; a small "Watch" status chip (text, not colour alone) on the exercise/rest header. Nothing renders when props are absent (no watch = today's screen).
+  - Done when: render tests (absent / present / offline); 390×844 harness screenshot of Rest with HR + recovery line.
+  - Deps: 3, 6.
+- [ ] 21. [ui-engineer] Settings → Apple Watch, Settings → AirPods, why page.
+  - Files: src/ui/screens/watchSettings.ts(+test), src/ui/screens/headMotionSettings.ts(+test), src/ui/headmotion/whyPage.ts(+test) (reuses the M13 permission page), a css file.
+  - Watch: status line, "Heart rate in the app", "Recovery hint", "Say it", "Save to Apple Health" (off; switching on shows the explain step → `onRequestHealthWrite`; denied → switch back off with a line). AirPods: availability line, master switch (first switch-on → why page → `onRequestMotion`), then Head still / Neck / Count reps switches. PWA: one "work in the iPhone app" line.
+  - Done when: render tests for each state; 390×844 screenshots.
+  - Deps: 3.
+- [ ] 22. [ui-engineer] Head-motion clip recorder (owner mode).
+  - Files: src/ui/headmotion/recorder.ts(+test).
+  - Pick exercise + label + reps/drifts typed, Start / Stop (frames in memory), preview line (duration, frames), **Save file** → share sheet / download with the guide's filename; Discard. Nothing written to IndexedDB.
+  - Done when: render + unit tests (filename, JSON shape = `HeadFrame[]` + meta, nothing persisted); screenshot.
+  - Deps: 3, 12.
+- [ ] 23. [main] Version 1.16.0 + configs.
+  - Files: package.json (`version`), anything the build needs for the watch target (via ios-engineer's sync script).
+  - Done when: `npm run build` shows 1.16.0; `scripts/sync-ios-version.mjs` reports 1.16.0 for the iOS and watch targets.
+  - Deps: 11, 14 (if the watch track is paused: 11 only).
+- [ ] 24. [main] Wiring A: watch.
+  - Files: src/ui/app.ts, src/main.ts.
+  - On every session change (throttled ~1/s, plus immediately on phase change) send `watchSnapshot`; watch messages → `watchEventToSession` → the reducer; HR batches → current rest HR + recovery line + `setHr` on SET_DONE + `attachSetHr` for late ones; settings `'watch'` rows; Save to Health switch flow; routes `settings/watch`; PWA shows the line only.
+  - Done when: `npm run check`; manual 390×844 run with the fake bridge (snapshot out, Set done in, HR line, stored `hr`).
+  - Deps: 5, 6, 7, 18, 20, 21.
+- [ ] 25. [main] Wiring B: AirPods.
+  - Files: src/ui/app.ts, src/main.ts.
+  - For an exercise with a head rule and the switches on: `start()` at START_SET, `stop()` at SET_DONE / pause / leave; frames → detectors → hints into the voice queue; head-counted reps → `SET_COUNTED` (camera wins when on); `setHead` on SET_DONE; routes `settings/airpods`, `settings/headclip` (owner mode only via `isVisible('headClip')`).
+  - Done when: `npm run check`; manual run with the fake bridge (drift clip → spoken hint between reps; calf-raise clip counted); no frames kept after Stop.
+  - Deps: 10, 12, 21, 22, 24 (same file).
+- [ ] 26. [ui-engineer] E2E with fake bridges + existing specs.
+  - Files: e2e/watch.spec.ts, e2e/headmotion.spec.ts, e2e helpers (fake `GymWatch` / `GymHeadMotion` on `window.Capacitor`), any existing spec whose Rest/Settings selectors moved.
+  - Covers the SPEC M14 E2E list; every spec asserts no off-device request.
+  - Done when: each new spec passes 3× in a row; full `npm run e2e` green.
+  - Deps: 25.
+- [ ] 27. [ios-engineer] Simulator round trip + watch evidence.
+  - Paired iPhone + watch simulators running the native build: Start on the phone → watch shows the set → Set done on the watch → Rest on both → link off → two taps queued → link on → replayed, one log each; screenshots into the PR notes for the verifier.
+  - Done when: the run is recorded (steps + screenshots); XCTests green.
+  - Deps: 16, 17, 18, 24.
+- [ ] 28. 🧍 Record head-motion clips (Wongsaton; any time after 25 is installed on his phone; notify him). Per the SPEC guide: clean + mistakes for a curl, a row, a press, push-ups, calf raises, shrugs. ios-engineer checks the files (numbers only) and adds them under `fixtures/headmotion/<exercise>/`.
+  - Deps: 25 (installed by main on his phone).
+- [ ] 29. [core-engineer] Tune head rules + counter on his clips. Tests first (the new clips become test cases).
+  - Files: src/core/exercises/headRules.ts, src/core/headmotion/*(+tests).
+  - A count rule moves to `ready` only at ≥ 90% exact sets; thresholds change as data only.
+  - Done when: all fixture tests green; Decision line with before/after numbers. Doesn't gate 30–32 if the clips aren't in yet (then it runs after Checkpoint L).
+  - Deps: 28.
+- [ ] 30. [reviewer] Review the M14 diff: no network request (app or watch); the phone is the only brain (no rules in Swift); watch events map to existing reducer events, dedupe + stale handling tested; HR / head numbers out of every brain context, Claude, the copy report and (HR) the dev log; frames and samples never persisted (except the owner-mode clip file on his tap); Save to Health off by default, permission asked on switch-on, discard when off; motion permission only after the why page; no medical wording (no zones, maxima, safe/unsafe); sizes on phone and watch; original art; ownership; tests-first evidence.
+  - Deps: 26, 27.
+- [ ] 31. [verifier] Verify milestone against SPEC acceptance criteria (M14): `npm run check`, full `npm run e2e`, `npm run build` (1.16.0), iOS + watch simulator build, XCTests (GymWatchCore, GymHeadMotionCore, existing), task 27 evidence, the 390×844 screenshots and watch screenshots listed in SPEC, the 1.16.0 tour; evidence into Verification evidence → M14.
+  - Deps: 30.
+- [ ] 32. [main] merge + ask to push (his call). Install on his iPhone + watch (notify him when the phone must be plugged in).
+  - Deps: 31.
+- [ ] 33. 🧍 **Checkpoint L** (gym, watch + AirPods): per SPEC M14 Accept; clips per the guide if task 28 hasn't happened. Feedback through the "Wrist and ears" to-do or `/feedback`.
+  - Deps: 32.
+
+**Later, not in M14:** starting a workout from the watch, a complication / Smart Stack widget, head-motion use during rest, more head-counted moves (after Checkpoint L data).
 
 ### M12 — slice 1c: What's New tour + To-do guides + one copy report (planned 2026-11-16)
 **Contract:** SPEC "M12" → "What's New tour + To-do guides (slice 1c)" + slice 1c Accept, the approved section "Slice 1c" of `docs/superpowers/specs/2026-11-16-coach-tab-chat-design.md`, and Decision "M12 slice 1c (his yes, 2026-11-16)", which wins where it is more specific. **No network** (the report leaves only through the clipboard on his tap), no new plugin, no new permission. All logic is **tests first** (Vitest, made-up data only; the repo is public). UI tasks are props in / callbacks out with render tests + 390×844 harness screenshots, tokens + motion helpers from slice 1 task 8, text ≥ 20px, targets ≥ 56px, nothing shown or spoken during a set.
@@ -3030,6 +3202,18 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-17: **M14 Wrist and ears (his words, 2026-11-17: "Add it and I need apple watch app too").** After being told AirPods head motion and an Apple Watch app were parked / out of scope, he asked for both. New milestone **M14** in SPEC (after M13), release **1.16.0**, branch `m14-wrist-ears` from the M13 result, ends at 🧍 **Checkpoint L** (gym, watch + AirPods). SPEC §6, M9 "Later" and M11 "What stays out" are changed (noted in each and in M14 "Changes to earlier contracts"). Plan under "Current milestone plan → M14". **iPhone app only.** **Planner calls he can correct:**
+  - **The phone stays the brain.** The watch is a remote: it sends `SET_DONE` / `START_SET` (Start now) / `EXTEND_REST` (+30 s) / `PAUSE` / `RESUME` / `SKIP_EXERCISE` (with a confirm) and shows phone snapshots. These are existing reducer events, so **no session reducer change**. Events carry an id + the snapshot rev; the phone dedupes and drops stale ones (a Set done tapped on both counts once). Workouts **start on the phone only**; starting from the watch, complications and standalone watch use are later.
+  - **Link drops:** the watch keeps the rest countdown, shows a one-step lookahead after an offline Set done, and keeps a **persisted** event queue until the phone acks; the next snapshot wins. Locked-phone handling (mirrored workout session keeping the iPhone app and its WebView alive) is only promised if the facts task proves it; until then the supported setup is the phone unlocked with the screen kept on (M9), in a pocket or face down.
+  - **Heart rate:** from an `HKWorkoutSession` (traditional strength training) on the watch. "Heart rate in the app" **on by default**: current value on the phone's Rest screen and **per-set avg/max on `SetLog.hr`**, local and **backed up like sets** (his brief), unlike M11's `healthDays`. Raw samples in memory only. HR and head numbers stay **out of every coach/brain context (rules, Apple, Claude)**, the copy report and share images (same spirit as the M11 build Decision (8)); HR also stays out of the dev log.
+  - **Recovery hint** on by default, shown on watch + Rest screen, **not spoken by default** ("Say it" switch): "Heart rate back down. Ready when you are." Rule as data (≥ 45 s rested, ≥ 15 s left, 5 s median ≤ baseline + 30% of the set's rise; fallback max − 25 bpm), tuned at Checkpoint L. No zones, no age-based max, no safe/unsafe, no number spoken.
+  - **Save to Apple Health = off by default**; writing is new. Turning it on shows what is written (a Strength Training workout with HR and calories, nothing else) and iOS asks then. Off → the watch workout is **discarded** at Finish. M11's own-source dedupe keeps it out of the weekly load. Whether WHOOP double-counts it is asked at Checkpoint L. (This is the "plan writing later" from M11-q5.)
+  - **Watch sizes:** the CLAUDE.md numbers apply in points on the watch (main numbers ≥ 64 pt, text ≥ 20 pt, primary button ≥ 56 pt), black background, one primary action per screen; haptics at 10 s left and rest end (stronger), light tap on Set done. Phone voice unchanged.
+  - **AirPods uses (all off until he turns AirPods on; each its own switch):** "Keep your head still." (yaw/roll drift; curls, rows, presses, lateral raise, triceps extension), "Keep your neck long, eyes ahead." (pitch; push-up, rows, bent-over row, goblet squat), and **head-counted reps** for the three standing calf raises + **dumbbell shrug** (vendored from free-exercise-db if absent). Counting starts `learning` (pre-fills the set, corrected on Rest) and becomes `ready` at ≥ 90% exact sets on his clips; the camera wins when both exist. Head hints are spoken between reps, at most one per set, sharing the camera hint cooldown; nothing on screen mid-set. No head motion during rest ("neck-friendly reminders" = the neck-neutral cue, not posture nags at rest).
+  - **Motion permission** asked on first switch-on in Settings after a why page; **not** added to the M13 first-launch flow (keeps first launch short).
+  - **Fixtures:** head frames are never stored; the **only** raw export is the owner-mode clip recorder (in memory → a JSON file via the share sheet on his tap). Synthetic clips first (ios-engineer, `fixtures/headmotion/synthetic/`), his clips per the SPEC guide at Checkpoint L or earlier (task 28); thresholds are provisional until then, like M4 on synthetic fixtures.
+  - **Paid account:** if the free Personal Team can't install/run the watch app, the watch tasks wait for **M14-q1** (US$99/year, his call); the AirPods track and the core watch logic still build. No Dexie version change (optional `SetLog` fields + settings rows `'watch'`, `'headMotion'`).
+
 - 2026-11-17: **M13 Published look (his yes, 2026-11-17).** Wongsaton: "Help me think about the app, how to approve or make it ready to use as a public app (not public right now but just need the app look like startup and published app on app store)". Audience: "my friends seeing it on my instagram and my wife using it daily". Approval: "Yes, plan it and give me options to turn on owner mode". New milestone **M13** in SPEC; plan under "Current milestone plan → M13". It builds **after M12 slices 1b and 2** on its own branch `m13-published-look` from the M12 result; release **1.15.0** with tour pages; ends at 🧍 **Checkpoint K** (he and his wife try a fresh install; he posts if he wants). The app is not being published: no paid Apple account, TestFlight, App Review, store labels, accounts, sync or analytics.
   - **Owner mode = option A (his pick, 2026-11-17: "Go with option A").** Tap the version line in Settings → About **7 times** to show an "Owner tools" switch. **Fresh installs start off; installs from before 1.15.0 (sessions or to-do answers already there, i.e. his phone) start on**, decided once on the first launch without a `settings 'ownerMode'` row; the row is local and backed up. Off hides: the To-dos card / list / guides / Copy report, the re-sign reminder, the Developer log section, the build hash (About and tour), the tour's "Added to your to-dos" page and the slice 2 dev eval screen; a user sees "Version 1.15". On = everything exactly as before M13. Options B (a visible switch at the bottom of Settings) and C (long-press the logo on Today) were not chosen.
   - **Planner calls he can correct:**
@@ -3917,6 +4101,9 @@ Verifier on `m12-coach-tab` at 9ecd50c (reviewer PASS: slice 1 after 85fb908, sl
 - 🧍 Pending: Checkpoint I on his iPhone (slice 1 task 22); slice 1 task 21 / 1c task 17 merge (M12-q5).
 
 ## Blockers / questions for Wongsaton
+- **New (M14 Wrist and ears, planned 2026-11-17):**
+  - **(M14-q1, BLOCKING for the watch tasks only, and only if needed) Paid Apple account for the watch app?** M14 tasks 1–2 check (Apple's docs + a blank watch app on your iPhone and watch) whether your free Apple ID can install and run a watch app, and how the 7-day re-sign applies. If it can't: pay **US$99/year** for the Apple Developer Program, or pause the watch part? **Default: pause the watch part and ask you again with the facts.** The AirPods part works on the free account either way.
+  - **(M14-q2, not blocking; needed for task 2) Your devices.** Which Apple Watch model and watchOS version, and which AirPods (Pro 2, 3, 4, Max)? Head tracking needs a model with spatial audio head tracking. **Default:** we target the oldest watchOS current Xcode supports and check on your devices in task 2.
 - **New (M13 Published look, planned 2026-11-17; not blocking):**
   - ~~(M13-q1) Keep the name "Gym Clean"?~~ **Answered 2026-11-17: keep it** ("Keep it Gym Clean"). The name stays behind one constant anyway.
   - Owner mode: **answered 2026-11-17, option A** (7 taps on the version line; Decision "M13 Published look").

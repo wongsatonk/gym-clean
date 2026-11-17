@@ -895,7 +895,8 @@ web can't do on iOS. It is not an App Store app.
 
 **Later, not in M9 (each needs its own SPEC section first):** AirPods head motion
 (`CMHeadphoneMotionManager`), local notifications, HealthKit / Apple Watch (still out of scope per §6;
-reading Apple Health is proposed as M11, 2026-11-16), live-update services.
+reading Apple Health is proposed as M11, 2026-11-16), live-update services. **Changed 2026-11-17:** AirPods
+head motion and the Apple Watch app are now M14 ("Wrist and ears").
 
 #### What stays web
 - The **PWA on GitHub Pages stays** the main, always-working app (unless M9-q6 says otherwise). Every
@@ -1975,6 +1976,204 @@ type ShareStats = { sessionsDone: number; volumeKg: number; streakWeeks: number 
   it for a few days; he looks at the Story pack and posts it himself if he wants. They report what still
   looks home-made, anything that assumed him, and whether the first launch asked too much.
 
+### M14 — Wrist and ears: Apple Watch app + AirPods head motion (approved 2026-11-17; builds after M13; release 1.16.0)
+Wongsaton (2026-11-17), after being told AirPods head motion and an Apple Watch app were parked / out of
+scope: **"Add it and I need apple watch app too."** Both are in. Planner calls are in Decision "M14 Wrist and
+ears" (2026-11-17) and can be corrected. Branch `m14-wrist-ears`, cut from the M13 result. **iPhone app only**
+(the PWA shows "Apple Watch and AirPods work in the iPhone app."). Hard rules in CLAUDE.md win everywhere.
+
+**Blocking for the watch part only (M14-q1):** whether a free Personal Team Apple ID can install and run a
+watchOS companion (and with which limits) is checked first against current Apple docs and a blank-target test
+on his devices. If it needs the paid Apple Developer Program (US$99/year), the watch tasks wait for his call;
+the AirPods part runs on the free account either way.
+
+#### Goals — Apple Watch app
+1. **A remote on the wrist; the phone stays the brain.** A watchOS companion (SwiftUI, single-target watch
+   app, WatchConnectivity) for the Capacitor iPhone app. The session reducer (`src/core/session.ts`) stays the
+   only source of truth. The watch **sends events** and **receives state snapshots**; it never decides what
+   the next set is beyond the one-step lookahead in the snapshot.
+   - Watch events map onto existing reducer events, no new reducer event: **Set done** → `SET_DONE`;
+     **Start now** (on rest) → `START_SET`; **+30 s** → `EXTEND_REST`; **Pause / Resume** → `PAUSE` /
+     `RESUME`; **Skip exercise** (behind a confirm) → `SKIP_EXERCISE`.
+   - Every event has an id, the snapshot `rev` it was based on, and the watch tap time. The phone applies an
+     event once (dedupe by id) and drops a stale one (its rev's exercise/set/phase no longer matches, e.g. he
+     already tapped Set done on the phone). The tap time is mapped to the phone clock with the offset measured
+     from snapshots and clamped like the M5c backdates.
+   - Workouts start on the phone (Today → Start). With no session the watch shows "Start on your iPhone" and
+     the day's name. Starting from the watch is later.
+2. **What the watch shows** (one primary action per screen; original glyphs only):
+   - **Exercise:** exercise name, **Set x of y** (warm-ups labelled), the rep target and the weight in his
+     unit, current heart rate (small), and a full-width **Set done** button.
+   - **Rest:** the countdown (largest thing on screen), the next set (name, set x of y, target), heart rate,
+     the recovery line when it fires, and **Start now**.
+   - **Controls** (swipe): Pause / Resume, +30 s, Skip exercise (confirm). **Summary** at the end: sets done,
+     duration, average heart rate.
+   - **Haptics:** a tap at **10 s left** and a stronger one at **rest end**; a light tap confirming Set done.
+     Voice on the phone is unchanged (the watch never replaces a spoken cue).
+   - **Readable at a glance:** the hard sizes apply on the watch in points: the countdown and main numbers
+     ≥ 64 pt (rounded monospaced digits), other text ≥ 20 pt, the primary button ≥ 56 pt tall, white or the
+     brand orange on black, state never shown by colour alone.
+3. **Works with the phone in the pocket or on the floor.** With the link up, the watch follows the phone
+   within about a second. **If the link drops**, the watch keeps the rest countdown from the last snapshot
+   (`rest.endsAt`), shows the one-step lookahead after an offline Set done, and **queues events** in its own
+   storage until the phone acknowledges them; on reconnect the phone applies them in order and the next
+   snapshot wins. A small "Not connected" line shows on the watch while offline (text, not only a colour).
+   Whether the iPhone app keeps handling events with its **screen locked** (via a mirrored workout session)
+   is checked in the facts task; until proven, the supported setup is the phone unlocked with the screen kept
+   on (M9), face down or in a pocket, and a locked phone catches up on unlock.
+4. **Live heart rate** from an `HKWorkoutSession` (traditional strength training) on the watch, running from
+   the first snapshot of a started session to Finish, paused with the app's Pause.
+   - **Heart rate in the app** (switch, default **on**): the watch sends heart-rate samples to the phone;
+     the phone shows the current value on the **Rest screen** and stores **per-set average and maximum** on
+     `SetLog.hr` (warm-ups too, marked as such by the existing `warmup` flag). Raw samples live in memory only
+     and are dropped once reduced. Samples that arrive late (link was down) are attached to the saved set.
+   - **Recovery hint** (switch, default on; "Say it" switch, default off): during rest, when heart rate has
+     come back down (rule below), the watch and the Rest screen show **"Heart rate back down. Ready when you
+     are."** Coaching only: no zones, no age-based maximum, no "safe/unsafe", no warning about a high value,
+     never spoken as a number.
+   - **Save to Apple Health** (switch, **default off**; writing to Health is new): when he turns it on, the
+     app explains what is written ("Saves each gym session as a Strength Training workout with its heart rate
+     and calories. Nothing else.") and iOS asks for permission then, not before. With it off the watch's
+     workout is **discarded** at Finish. M11's reads skip workouts written by this app (by source), so they
+     are never counted twice in the weekly load.
+
+#### Goals — AirPods head motion (iPhone app, AirPods models with head tracking)
+5. **Head frames from `CMHeadphoneMotionManager`**, about 25 per second, only **during a set** of an
+   exercise that has a head rule and only while the matching switch is on. Pure logic in
+   `src/core/headmotion/` takes `HeadFrame`s and returns events, tested from recorded JSON like the pose rep
+   counter. Rules and thresholds are **data** (`src/core/exercises/headRules.ts` plus a `head` field per rule).
+6. **Three uses (each with its own switch in Settings → AirPods; all default off until he turns AirPods on):**
+   - **Head still** (curls, rows, presses, lateral raise, triceps extension): yaw or roll moving away from the
+     set's starting head position (median of the first second) beyond the rule's limit for longer than its
+     hold time → the hint **"Keep your head still."** spoken **between reps** (after the next counted rep from
+     the camera or the head counter; on a set nothing counts, once the drift has lasted the hold time), at most
+     once per set, sharing the camera hints' cooldown and the voice queue (never cuts a count).
+   - **Neck neutral** (push-up, rows, bent-over row, goblet squat): pitch beyond the rule's band from the
+     set's start → **"Keep your neck long, eyes ahead."** Same timing rules. Coaching words only.
+   - **Head-counted reps** for moves the camera can't see well: standing calf raises (the three catalog
+     variants) and **dumbbell shrugs** (vendored into `exercises.json` from free-exercise-db if absent). The
+     counter follows §3's ideas (smoothing, hysteresis, minimum leg times) on a vertical-movement signal. They
+     start as **`learning`** (count shown and spoken, pre-fills the set via `SET_COUNTED`, corrected on Rest
+     like the camera) and become `ready` only when real fixtures count ≥ 90% of sets exactly. The camera wins
+     when an exercise has both.
+7. **Permission:** the motion permission is asked **on first use** (turning on AirPods in Settings), after a
+   **why page** ("Uses your AirPods' head movement to remind you to keep your head still and to count some
+   reps. Stays on this phone."). AirPods missing, unsupported or disconnected mid-set → nothing happens and no
+   error screen; Settings says which.
+8. **Per-set numbers only.** Head frames are never stored or sent. A set keeps `SetLog.head` (share of the set
+   the head stayed inside its limits, the number of head hints, the head-counted reps). The only way raw frames
+   leave memory is the **owner-mode clip recorder** (below), on his tap, as a file through the share sheet.
+
+#### Head-motion fixture recording guide (for Checkpoint L)
+- Settings → About → Owner tools on → **Record head-motion clip**: pick the exercise and a label, type the
+  reps you will do, Start, do the set with AirPods in, Stop, **Save file** (share sheet → AirDrop to the Mac).
+  The clip stays in memory until saved; nothing is kept in the app.
+- Per exercise: one **clean** clip (head still, full range) and one with **deliberate mistakes** (2–3 looks to
+  the side, 2 chin-up / chin-down moments, and for calf raises / shrugs 2 half reps). 10–30 s each.
+- Filename: `fixtures/headmotion/<exercise>/<label>__reps-<n>__drifts-<m>.json`, e.g.
+  `shrug/clean-01__reps-12__drifts-0.json`. The JSON holds numbers only (time, attitude, acceleration); it is
+  committed like pose landmarks. Phone on the bench, the same AirPods each time, nobody's voice is recorded.
+
+#### Changes to earlier contracts
+- **§6** listed "Apple Watch / heart rate" as out of scope: an Apple Watch companion app, live heart rate
+  during a workout and opt-in workout writing to Apple Health are now in scope (M14 only).
+- **M9 "Later"**: AirPods head motion and the Apple Watch move from "later" into M14.
+- **M11** ("What stays out": writing to Health, Apple Watch app, live HR during sets): all three are now in
+  M14, writing only as the off-by-default switch above. M11's reads, types and rules are unchanged; its
+  workout de-duplication by source now matters (tested).
+- **M13 first launch:** no new pages. The motion and Health-write permissions are asked from Settings on
+  first use, not in the first-launch flow. `OwnerSurface` gains the clip recorder.
+
+#### Non-goals
+Starting or editing a workout on the watch; a watch complication or Smart Stack widget; the watch working
+without the iPhone app installed; standalone watch use; Wi-Fi/cellular watch features; heart-rate zones,
+calorie targets from heart rate or any health score; writing anything to Health other than the gym-session
+workout; reading new Health types; head motion in the PWA; Android, Wear OS or other earbuds; spatial audio;
+using head motion during rest; the paid Apple Developer account unless M14-q1 needs it and he says yes.
+
+#### Privacy
+- No network request by the app or the watch app. Phone ↔ watch messages use WatchConnectivity (Apple's
+  paired-device link); there is no server of ours. No analytics, no crash reporting.
+- Heart rate: samples in memory only; per-set average/max on `SetLog.hr` (local, backed up like sets). Kept
+  out of **every coach/brain context** (rules, Apple, Claude), the dev log, the copy report and share images.
+- Head motion: frames in memory only; per-set numbers on `SetLog.head` (local, backed up like sets; the dev log
+  may hold the per-set numbers, never frames); out of every brain context and Claude.
+- Health writing only with the switch on, after iOS's permission sheet. Info.plist strings: motion (the why
+  text above), `NSHealthUpdateUsageDescription` ("Saves your gym sessions as Strength Training workouts when
+  you turn this on."), the watch's Health read string ("Shows your heart rate during your workout. Stays on
+  your watch and iPhone."). Signing data stays in the gitignored local config; the repo stays public.
+
+#### Data model (adds to §4; final shape in `src/core/types.ts`)
+```ts
+// SetLog gains (optional, backed up like the rest of the set):
+//   hr?: { avgBpm: number; maxBpm: number; samples: number };
+//   head?: { stillPct?: number; hints?: number; counted?: number };
+type WatchPhase = 'idle' | 'exercise' | 'rest' | 'summary';
+type WatchSetView = { name: string; setNo: number; setCount: number; warmup?: true;
+  repsText: string; weightText: string };                       // texts made on the phone, in his unit
+type WatchSnapshot = { v: 1; rev: number; sentAt: number; sessionId: string | null; phase: WatchPhase;
+  paused: boolean; dayName?: string; current?: WatchSetView;
+  rest?: { endsAt: number; targetSec: number };
+  next?: WatchSetView & { restSec: number };                   // one-step lookahead for offline Set done
+  summary?: { sets: number; minutes: number; avgBpm?: number };
+  settings: { hrInApp: boolean; recoveryHint: boolean; saveToHealth: boolean } };
+type WatchEventType = 'SET_DONE' | 'START_SET' | 'EXTEND_REST' | 'PAUSE' | 'RESUME' | 'SKIP_EXERCISE';
+type WatchEvent = { id: string; type: WatchEventType; basedOnRev: number; watchT: number };
+type HrSample = { t: number; bpm: number };                    // watch clock, mapped on the phone
+type WatchMessage = { kind: 'event'; event: WatchEvent } | { kind: 'hr'; samples: HrSample[] }
+  | { kind: 'hello'; watchNow: number; appVersion: string } | { kind: 'ack'; ids: string[] };
+type WatchSettings = { hrInApp: boolean; recoveryHint: boolean; sayRecovery: boolean;
+  saveToHealth: boolean };                                     // settings 'watch'
+type HeadFrame = { t: number; q: [number, number, number, number];   // attitude quaternion x,y,z,w
+  acc: [number, number, number]; grav: [number, number, number] };  // user acceleration + gravity, g
+type HeadRule = { still?: { maxYawDeg: number; maxRollDeg: number; holdMs: number };
+  neck?: { maxPitchDeg: number; holdMs: number };
+  count?: { signal: 'vertical' | 'pitch'; status: 'learning' | 'ready'; /* thresholds as in §3 */ } };
+type HeadMotionSettings = { on: boolean; still: boolean; neck: boolean; count: boolean }; // settings 'headMotion'
+type HeadEvent = { type: 'drift' | 'neck'; t: number } | { type: 'rep'; t: number; index: number };
+// AppRoute gains: 'settings/watch' | 'settings/airpods' | 'settings/headclip'
+// OwnerSurface gains: 'headClip'
+// No Dexie version change (optional fields on sets; settings rows).
+```
+Recovery rule (data, `src/core/watch/hrRules.ts`, tuned at Checkpoint L): after ≥ 45 s of rest and with
+≥ 15 s left, the 5 s median heart rate is ≤ baseline + 30% of (the set's max − baseline); baseline = the lowest
+5 s median in the minute before the session's first working set, else the set's max − 25 bpm. Once per rest.
+
+#### Accept
+- Facts task done first: free-account verdict with Apple doc links or an on-device result (M14-q1), mirrored
+  session / locked-phone behaviour, HealthKit-on-watch authorisation needs, AirPods model support.
+- Unit tests, written first (made-up data):
+  - watch protocol: snapshot from every session phase (warm-up, last set of an exercise, last set of the day,
+    paused, summary), lookahead correct, each event → its reducer event, dedupe by id, stale rev dropped, a
+    phone + watch double Set done logs one set, clock offset + clamp, queued events replayed in order;
+  - heart rate: per-set avg/max from samples inside the set window, late samples attached to the saved set,
+    nothing when off, recovery rule at its edges (45 s, 15 s left, baseline missing), copy passes `checkCopy`
+    plus the M11 banned list; HR and head numbers absent from every brain context, the dev log (HR) and the
+    copy report; backup round-trips `SetLog.hr` / `head`; M11 skips own-source workouts;
+  - head motion from fixtures (synthetic first, his recordings when they arrive): set reference, still and
+    neck detectors fire on drift clips and stay quiet on clean clips, hint timing (between reps, once per set,
+    shared cooldown), head-counted reps exact on the clean clips, `stillPct` / `hints` / `counted` per set.
+- Swift: `GymWatchCore` XCTests (snapshot decode, offline countdown, haptic schedule 10 s / 0 s, persisted
+  queue until ack, HR buffer) and `GymHeadMotionCore` XCTests (quaternion → frame mapping, rate limit,
+  unavailable / denied / disconnected states).
+- E2E (390×844, fake `GymWatch` and `GymHeadMotion` bridges, no off-device request): Start → a snapshot is
+  sent; watch Set done → Rest; duplicate and stale events ignored; offline queue replays; the Rest screen shows
+  heart rate and the recovery line; the stored set has `hr`; Save to Health off → no write call, on → the
+  explain step then the permission call; AirPods why page before the permission call; a drift clip → "Keep your
+  head still." spoken between reps; a calf-raise clip counted; AirPods disconnect → no error; the PWA shows the
+  "iPhone app" line and calls neither bridge.
+- Simulator: iPhone + paired watch simulators build; a round trip (Start on the phone, Set done on the watch,
+  rest on both, link off → queue → link on → replay); watch screenshots of exercise, rest, controls, summary,
+  not-connected on a 41 mm and a 46 mm (or Ultra) watch.
+- 390×844 screenshots: Rest with heart rate + recovery line, Settings → Apple Watch, Settings → AirPods, the why
+  page, the clip recorder (owner mode on). Version 1.16.0 with What's New pages.
+- 🧍 **Checkpoint L** (gym, watch + AirPods on, a few sessions): phone in the pocket for one session and on the
+  floor for another; Set done / Start now / Pause from the watch; haptics at 10 s and rest end; behaviour when
+  he walks away from the phone and back; heart rate on the Rest screen and the recovery line (too early? too
+  late?); Save to Health on once and the workout in Health (and whether WHOOP double-counts it); head hints fire
+  when he looks around and stay quiet when still; calf raise / shrug counts; head-motion clips recorded per the
+  guide. He reports through the "Wrist and ears" to-do or `/feedback`.
+
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).
@@ -2112,6 +2311,13 @@ only hands an on-device image to the system share sheet on his tap.
 **Changed by M13 (approved 2026-11-17):** still no accounts, sync or in-app sharing. M13 adds a second
 on-device share image (Story size, system share sheet on his tap) and one static landing page on GitHub
 Pages with no script and no trackers. The app is not submitted to the App Store.
+
+**Changed by M14 (approved 2026-11-17: "Add it and I need apple watch app too"):** "Apple Watch / heart rate"
+is no longer out of scope for the iPhone app: an **Apple Watch companion app** (a remote for the phone's
+session, with live heart rate from a watch workout session), per-set heart-rate average/max, opt-in writing
+of gym sessions to Apple Health (off by default), and **AirPods head motion** (head-still / neck cues and
+head-counted reps) are in M14. Still out: a standalone watch app, heart-rate zones or any health score,
+medical wording, other Health writes, and all of it in the PWA.
 
 **PROPOSED change (M11, 2026-11-16; applies only if Wongsaton approves M11-q1):** reading a listed set of
 Apple Health types in the native app (body mass, workouts, active energy, sleep, resting HR, HRV — including
