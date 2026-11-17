@@ -2,18 +2,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import programJson from '../../data/program.json';
 import { trainerCatalog } from '../../core/testkit/trainerCatalog';
 import { handle, type CoachContext } from '../../core/trainer/coach';
-import { checkCopy } from '../../core/trainer/replies';
+import { RED_FLAG_LINE, checkCopy } from '../../core/trainer/replies';
 import { seedPlan } from '../../core/trainer/plan';
 import type {
   BrainContext,
+  BrainErrorCode,
   BrainReply,
   BrainSource,
+  BrainUnavailableReason,
   ChatMessage,
   CoachBrain,
   Program,
 } from '../../core/types';
 import { BRAIN_ORDER, MAX_TURNS, createRouter, turnsFor } from './router';
 import { rulesBrain } from './rules';
+import { appleBrain, type GymBrainBridge } from './apple';
+import { UNAVAILABLE_COPY, errorNote, memoryNoteStore } from './notes';
 
 // Made-up context: the repo's default program, no history, no personal numbers.
 const coach: CoachContext = {
@@ -171,7 +175,13 @@ describe('brain router (M12)', () => {
     };
     const claude = fake('claude', {
       answer: () =>
-        Promise.resolve({ reply: '  ', chips: [], safety: 'none', intent: 'help', source: 'claude' }),
+        Promise.resolve({
+          reply: '  ',
+          chips: [],
+          safety: 'none',
+          intent: 'help',
+          source: 'claude',
+        }),
     });
     const reply = await createRouter([apple, claude]).ask({ text: 'hi' }, ctx());
     expect(reply.source).toBe('rules');
@@ -204,7 +214,13 @@ describe('brain router (M12)', () => {
   it('stamps the answering brain as source, whatever the brain claimed', async () => {
     const apple = fake('apple', {
       answer: () =>
-        Promise.resolve({ reply: 'ok', chips: [], safety: 'none', intent: 'help', source: 'claude' }),
+        Promise.resolve({
+          reply: 'ok',
+          chips: [],
+          safety: 'none',
+          intent: 'help',
+          source: 'claude',
+        }),
     });
     const reply = await createRouter([apple]).ask({ text: 'hi' }, ctx());
     expect(reply.source).toBe('apple');
@@ -326,7 +342,12 @@ describe('router status (Settings line)', () => {
     const s = await createRouter([claude, apple]).status();
     expect(s.answering).toBe('rules');
     expect(s.brains).toEqual([
-      { id: 'apple', label: 'Apple Intelligence', available: false, reason: 'Apple Intelligence is off' },
+      {
+        id: 'apple',
+        label: 'Apple Intelligence',
+        available: false,
+        reason: 'Apple Intelligence is off',
+      },
       { id: 'claude', label: 'Claude', available: false, reason: 'Claude is off in Settings' },
       { id: 'rules', label: 'Quick replies', available: true },
     ]);
@@ -347,5 +368,159 @@ describe('router status (Settings line)', () => {
       (await createRouter([fake('apple', { statusThrows: true })]).ask({ text: 'hi' }, ctx())).note,
     ];
     for (const l of lines) expect(checkCopy(l ?? '').ok).toBe(true);
+  });
+});
+
+// ---------- M12 slice 2 (task 8): Apple's plain notes, error notes, red flags ----------
+
+describe('router with the Apple brain (notes once per reason, errors every time)', () => {
+  const REASONS: BrainUnavailableReason[] = [
+    'deviceNotEligible',
+    'appleIntelligenceNotEnabled',
+    'modelNotReady',
+    'unsupported',
+    'notNative',
+  ];
+  const CODES: BrainErrorCode[] = [
+    'guardrail',
+    'contextTooLong',
+    'unsupportedLanguage',
+    'timeout',
+    'other',
+  ];
+
+  const unavailable = (reason: BrainUnavailableReason): GymBrainBridge => ({
+    availability: () => Promise.resolve({ available: false, reason }),
+    respond: () => Promise.reject(new Error('must not be asked')),
+  });
+  const failing = (code: BrainErrorCode): GymBrainBridge & { asked: number } => {
+    const b = {
+      asked: 0,
+      availability: () => Promise.resolve({ available: true as const }),
+      respond: () => {
+        b.asked++;
+        return Promise.reject(Object.assign(new Error('native'), { code }));
+      },
+    };
+    return b;
+  };
+
+  for (const reason of REASONS)
+    it(`${reason}: rules answer, the plain note once, stored in brainNotes`, async () => {
+      const notes = memoryNoteStore();
+      const router = createRouter([appleBrain(unavailable(reason)), rulesBrain], {
+        notes,
+        now: () => 5000,
+      });
+      const first = await router.ask({ text: 'lighter today' }, ctx());
+      expect(first.source).toBe('rules');
+      expect(first.proposal?.action).toBe('lighter');
+      expect(first.note).toBe(UNAVAILABLE_COPY[reason].note);
+      expect(await notes.load()).toEqual({ [reason]: 5000 });
+      const second = await router.ask({ text: 'lighter today' }, ctx());
+      expect(second.source).toBe('rules');
+      expect(second.note).toBeUndefined();
+    });
+
+  it('a note shown before (stored) is not shown again; another reason still is', async () => {
+    const notes = memoryNoteStore({ modelNotReady: 1 });
+    const r1 = await createRouter([appleBrain(unavailable('modelNotReady'))], { notes }).ask(
+      { text: 'hi' },
+      ctx(),
+    );
+    expect(r1.note).toBeUndefined();
+    const r2 = await createRouter([appleBrain(unavailable('appleIntelligenceNotEnabled'))], {
+      notes,
+      now: () => 9,
+    }).ask({ text: 'hi' }, ctx());
+    expect(r2.note).toBe(UNAVAILABLE_COPY.appleIntelligenceNotEnabled.note);
+    expect(await notes.load()).toEqual({ modelNotReady: 1, appleIntelligenceNotEnabled: 9 });
+  });
+
+  it('a broken note store still answers, and shows the note once per router', async () => {
+    const broken = {
+      load: () => Promise.reject(new Error('db closed')),
+      save: () => Promise.reject(new Error('db closed')),
+    };
+    const router = createRouter([appleBrain(unavailable('modelNotReady'))], { notes: broken });
+    expect((await router.ask({ text: 'hi' }, ctx())).note).toBe(
+      UNAVAILABLE_COPY.modelNotReady.note,
+    );
+    expect((await router.ask({ text: 'hi' }, ctx())).note).toBeUndefined();
+  });
+
+  for (const code of CODES)
+    it(`error ${code}: rules + a one-line note, every time`, async () => {
+      const b = failing(code);
+      const router = createRouter([appleBrain(b), rulesBrain], { notes: memoryNoteStore() });
+      for (let i = 0; i < 2; i++) {
+        const r = await router.ask({ text: 'lighter today' }, ctx());
+        expect(r.source).toBe('rules');
+        expect(r.proposal?.action).toBe('lighter');
+        expect(r.note).toBe(errorNote(code, 'apple', 'rules'));
+      }
+      expect(b.asked).toBe(2);
+    });
+
+  it('an Apple answer carries no note', async () => {
+    const b: GymBrainBridge = {
+      availability: () => Promise.resolve({ available: true }),
+      respond: () => Promise.resolve({ text: 'Rows first today.', toolCalls: [], latencyMs: 5 }),
+    };
+    const r = await createRouter([appleBrain(b)]).ask({ text: 'what first?' }, ctx());
+    expect(r.source).toBe('apple');
+    expect(r.reply).toBe('Rows first today.');
+    expect(r.note).toBeUndefined();
+  });
+
+  it('a red flag goes to the rules: no model is checked or asked, no note', async () => {
+    const apple = fake('apple', { available: false, reason: 'off' });
+    const notes = memoryNoteStore();
+    const r = await createRouter([apple], { notes }).ask(
+      { text: 'I have chest pain and feel dizzy' },
+      ctx(),
+    );
+    expect(r.source).toBe('rules');
+    expect(r.safety).toBe('redFlag');
+    expect(r.reply).toBe(RED_FLAG_LINE);
+    expect(r.note).toBeUndefined();
+    expect(apple.checked).toBe(0);
+    expect(apple.asked).toHaveLength(0);
+    expect(await notes.load()).toEqual({});
+  });
+
+  it('the Settings status line uses the short reason', async () => {
+    const s = await createRouter([appleBrain(unavailable('appleIntelligenceNotEnabled'))]).status();
+    expect(s.line).toBe('Quick replies answer your messages: Apple Intelligence is off.');
+    expect(s.brains[0]).toEqual({
+      id: 'apple',
+      label: 'Apple Intelligence',
+      available: false,
+      reason: 'Apple Intelligence is off',
+      reasonId: 'appleIntelligenceNotEnabled',
+    });
+  });
+
+  it('every note the router can show passes the copy check', async () => {
+    for (const reason of REASONS) {
+      const r = await createRouter([appleBrain(unavailable(reason))]).ask({ text: 'hi' }, ctx());
+      expect(checkCopy(r.note ?? '').ok).toBe(true);
+    }
+    for (const code of CODES) {
+      const r = await createRouter([appleBrain(failing(code))]).ask({ text: 'hi' }, ctx());
+      expect(checkCopy(r.note ?? '').ok).toBe(true);
+    }
+  });
+
+  it('never calls fetch', async () => {
+    const spy = vi.fn(() => {
+      throw new Error('no network');
+    });
+    vi.stubGlobal('fetch', spy);
+    await createRouter([appleBrain(unavailable('modelNotReady'))]).ask({ text: 'hi' }, ctx());
+    await createRouter([appleBrain(failing('timeout'))]).ask({ text: 'hi' }, ctx());
+    await createRouter([appleBrain(failing('timeout'))]).status();
+    expect(spy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });

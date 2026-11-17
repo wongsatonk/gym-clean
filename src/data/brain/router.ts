@@ -10,6 +10,11 @@
  * - Health never reaches Claude (M11-q7): Claude gets no turn with `usedHealth`, no Health /
  *   readiness field of the coach context, and its reply never carries `usedHealth`.
  * - Every brain gets at most the last MAX_TURNS turns.
+ * - M12 slice 2: a red flag in the message goes straight to the rules (no model sees it). A
+ *   brain whose status carries a `reasonId` (Apple) gets its plain note (notes.ts) **once per
+ *   reason**, remembered in the injected note store (settings 'coach' → `brainNotes`); a
+ *   rejection carrying a `code` (BrainError) gets its one-line error note **every time**. Other
+ *   failures keep the generic "Answered by …: …" note.
  *
  * Lives in src/data (not core) because it deals with async brains and timers.
  */
@@ -27,7 +32,18 @@ import type {
   ChatMessage,
   CoachBrain,
 } from '../../core/types';
+import { matchIntent } from '../../core/trainer/intents';
+import type { BrainErrorCode, BrainUnavailableReason } from '../../core/types';
 import { answerChip, rulesBrain } from './rules';
+import {
+  UNAVAILABLE_COPY,
+  brainErrorCode,
+  errorNote,
+  isUnavailableReason,
+  memoryNoteStore,
+  type BrainNoteStore,
+  type NoteBrain,
+} from './notes';
 
 /** Free-text order. 'chip' is not a brain (it's the rules, answering a tap). */
 export const BRAIN_ORDER: readonly BrainSource[] = ['apple', 'claude', 'rules'];
@@ -49,13 +65,22 @@ export const BRAIN_LABEL: Record<BrainSource, string> = {
 
 export type RouterInput = { text: string } | { chip: CoachChipId; args?: CoachArgs };
 
-export type RouterOptions = { askTimeoutMs?: number; statusTimeoutMs?: number };
+export type RouterOptions = {
+  askTimeoutMs?: number;
+  statusTimeoutMs?: number;
+  /** Where "note shown" times live (default: in memory). Main passes `coachNoteStore(db)`. */
+  notes?: BrainNoteStore;
+  /** Clock for the stored note times (default Date.now). */
+  now?: () => number;
+};
 
 export type BrainStatusLine = {
   id: BrainSource;
   label: string;
   available: boolean;
   reason?: string;
+  /** Apple's reason id, when the brain gives one (drives the once-only note). */
+  reasonId?: BrainUnavailableReason;
 };
 
 /** For Settings: who answers free text now, in one line, and each brain with its reason. */
@@ -122,7 +147,13 @@ async function checkStatus(brain: CoachBrain, ms: number): Promise<BrainStatusLi
     const s = await within(ms, () => brain.status());
     if (s.available === true) return { ...base, available: true };
     const reason = typeof s.reason === 'string' && s.reason.trim() ? s.reason.trim() : '';
-    return { ...base, available: false, reason: reason || notAvailable(brain.id) };
+    const reasonId = (s as { reasonId?: unknown }).reasonId;
+    return {
+      ...base,
+      available: false,
+      reason: reason || notAvailable(brain.id),
+      ...(isUnavailableReason(reasonId) && { reasonId }),
+    };
   } catch {
     return { ...base, available: false, reason: notAvailable(brain.id) };
   }
@@ -135,7 +166,8 @@ function isAnswer(r: unknown): r is BrainReply {
 }
 
 /** Sentence-case label inside a note ("Answered by quick replies: …"). */
-const inNote = (id: BrainSource) => (id === 'rules' || id === 'chip' ? 'quick replies' : BRAIN_LABEL[id]);
+const inNote = (id: BrainSource) =>
+  id === 'rules' || id === 'chip' ? 'quick replies' : BRAIN_LABEL[id];
 
 const sentence = (s: string) => (/[.!?]$/.test(s) ? s : `${s}.`);
 
@@ -144,9 +176,9 @@ const WORKOUT_CHIP_IDS: readonly CoachChipId[] = ['easyOn', 'lighter', 'swap'];
 /** Last resort when even the rules throw: the help line and the quick chips. */
 function helpReply(ctx: BrainContext, source: BrainSource): BrainReply {
   const workout = (ctx.coach as Partial<CoachContext> | undefined)?.phase === 'workout';
-  const chips = QUICK_CHIPS.filter((c) => !workout || WORKOUT_CHIP_IDS.includes(c.id)).map(
-    (c) => ({ ...c }),
-  );
+  const chips = QUICK_CHIPS.filter((c) => !workout || WORKOUT_CHIP_IDS.includes(c.id)).map((c) => ({
+    ...c,
+  }));
   return { reply: HELP_TEXT, chips, safety: 'none', intent: 'help', source };
 }
 
@@ -165,14 +197,52 @@ export function createRouter(brains: readonly CoachBrain[], opts: RouterOptions 
     return b ? [b] : [];
   });
 
+  const notes = opts.notes ?? memoryNoteStore();
+  const now = opts.now ?? Date.now;
+  /** Reasons noted by this router (so a failing store can't repeat the note). */
+  const noted = new Set<BrainUnavailableReason>();
+
+  /** True the first time `reason` is seen (stored + remembered); never throws. */
+  async function firstTime(reason: BrainUnavailableReason): Promise<boolean> {
+    if (noted.has(reason)) return false;
+    noted.add(reason);
+    const stored = await notes.load().catch(() => ({}) as Awaited<ReturnType<typeof notes.load>>);
+    if (stored[reason] !== undefined) return false;
+    await notes.save({ ...stored, [reason]: now() }).catch(() => undefined);
+    return true;
+  }
+
+  type Miss =
+    | { kind: 'plain'; text: string }
+    | { kind: 'error'; code: BrainErrorCode; brain: NoteBrain }
+    | { kind: 'generic'; text: string };
+
+  function noteFor(misses: readonly Miss[], answered: NoteBrain): string | undefined {
+    const parts: string[] = [];
+    const generic: string[] = [];
+    for (const m of misses) {
+      if (m.kind === 'plain') parts.push(m.text);
+      else if (m.kind === 'error') parts.push(errorNote(m.code, m.brain, answered));
+      else generic.push(m.text);
+    }
+    if (generic.length)
+      parts.push(sentence(`Answered by ${inNote(answered)}: ${generic.join('; ')}`));
+    return parts.length ? parts.join(' ') : undefined;
+  }
+
   async function askText(text: string, ctx: BrainContext): Promise<BrainReply> {
-    const reasons: string[] = [];
+    const misses: Miss[] = [];
+    const redFlag = matchIntent(text).safety === 'redFlag';
     for (const brain of chain) {
       const isRules = brain.id === 'rules';
       if (!isRules) {
+        if (redFlag) continue;
         const s = await checkStatus(brain, statusMs);
         if (!s.available) {
-          reasons.push(s.reason ?? notAvailable(brain.id));
+          if (s.reasonId) {
+            if (await firstTime(s.reasonId))
+              misses.push({ kind: 'plain', text: UNAVAILABLE_COPY[s.reasonId].note });
+          } else misses.push({ kind: 'generic', text: s.reason ?? notAvailable(brain.id) });
           continue;
         }
       }
@@ -181,22 +251,29 @@ export function createRouter(brains: readonly CoachBrain[], opts: RouterOptions 
         if (!isAnswer(raw)) throw new Error('empty answer');
         const reply: BrainReply = { ...raw, source: brain.id };
         if (brain.id === 'claude') delete reply.usedHealth;
-        if (reasons.length)
-          reply.note = sentence(`Answered by ${inNote(brain.id)}: ${reasons.join('; ')}`);
+        const note = noteFor(misses, brain.id as NoteBrain);
+        if (note) reply.note = note;
         else delete reply.note;
         return reply;
       } catch (err) {
         if (isRules) break;
-        reasons.push(
-          err instanceof Timeout
-            ? `${BRAIN_LABEL[brain.id]} took too long`
-            : `${BRAIN_LABEL[brain.id]} didn't answer`,
+        const code = err instanceof Timeout ? undefined : brainErrorCode(err);
+        misses.push(
+          code
+            ? { kind: 'error', code, brain: brain.id as NoteBrain }
+            : {
+                kind: 'generic',
+                text:
+                  err instanceof Timeout
+                    ? `${BRAIN_LABEL[brain.id]} took too long`
+                    : `${BRAIN_LABEL[brain.id]} didn't answer`,
+              },
         );
       }
     }
     const fallback = helpReply(ctx, 'rules');
-    if (reasons.length)
-      fallback.note = sentence(`Answered by ${inNote('rules')}: ${reasons.join('; ')}`);
+    const note = noteFor(misses, 'rules');
+    if (note) fallback.note = note;
     return fallback;
   }
 
@@ -220,7 +297,11 @@ export function createRouter(brains: readonly CoachBrain[], opts: RouterOptions 
       const lines = await Promise.all(
         chain.map((b) =>
           b.id === 'rules'
-            ? Promise.resolve<BrainStatusLine>({ id: 'rules', label: BRAIN_LABEL.rules, available: true })
+            ? Promise.resolve<BrainStatusLine>({
+                id: 'rules',
+                label: BRAIN_LABEL.rules,
+                available: true,
+              })
             : checkStatus(b, statusMs),
         ),
       );
