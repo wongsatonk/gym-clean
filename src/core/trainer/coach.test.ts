@@ -6,18 +6,21 @@ import evals from './evals/requests.json';
 import { wordCount } from '../advice';
 import { applyProposal, undoLast, type TrainerChange } from './changes';
 import { addDate, effectiveDay, seedPlan } from './plan';
+import { estimateMinutes } from './estimate';
 import type { StallSession } from './actions/stall';
 import type { TrainerCatalog } from './swapCandidates';
 import {
   AREA_CHIP_IDS,
   ASK_DAYS,
   ASK_GROUP,
+  ASK_MINUTES,
   ASK_WEEKS,
   MID_SESSION_REPLY,
   STARTER_CHIPS,
   starterChips,
   PROPOSAL_REPLY,
   QUICK_CHIPS,
+  SHORT_ON_TIME_CHIP,
   handle,
   type CoachContext,
   type CoachInput,
@@ -1196,5 +1199,128 @@ describe('M12 starters', () => {
     rest.state.schedule.restWeekdays = [3];
     expect(starterChips(rest)[1]).toEqual({ id: 'swap', label: 'Swap an exercise' });
     for (const ch of chips) expect(checkCopy(ch.label).ok).toBe(true);
+  });
+});
+
+// ---------- M12 1b: short on time ----------
+
+describe('M12 1b short on time', () => {
+  const todayMinutes = (c: CoachContext, state: TrainerState) =>
+    estimateMinutes({ exercises: effectiveDay(state, c.sessions, TODAY).day?.exercises ?? [] });
+
+  it('the chip is "Short on time"', () => {
+    expect(SHORT_ON_TIME_CHIP).toEqual({ id: 'shortOnTime', label: 'Short on time' });
+  });
+
+  it('"I have 30 min" → a today-only proposal that fits, with the other lengths as chips', () => {
+    const c = ctxFor('push-a');
+    const r = handle(text('I have 30 min'), c);
+    expect(r.intent).toBe('shortOnTime');
+    expect(r.reply).toBe("Here's a 30-minute version of today.");
+    expect(r.proposal).toMatchObject({ action: 'shortOnTime', scope: 'today' });
+    expect(r.proposal?.title).toBe('Short on time: 30 min');
+    if (!r.proposal) throw new Error('no proposal');
+    expect(todayMinutes(c, r.proposal.next)).toBeLessThanOrEqual(30);
+    expect(r.chips).toEqual([
+      { id: 'shortOnTime', label: '20 min', args: { minutes: 20 } },
+      { id: 'shortOnTime', label: '45 min', args: { minutes: 45 } },
+    ]);
+    expectClean(r, 'short on time');
+  });
+
+  it('"I have 25 min" → the 20-minute version', () => {
+    const c = ctxFor('push-a');
+    const r = handle(text('I have 25 min'), c);
+    expect(r.reply).toBe("Here's a 20-minute version of today.");
+    expect(r.proposal?.title).toBe('Short on time: 20 min');
+    if (!r.proposal) throw new Error('no proposal');
+    expect(todayMinutes(c, r.proposal.next)).toBeLessThanOrEqual(20);
+  });
+
+  it('less than the shortest length → says so and offers the 20-minute version', () => {
+    const r = handle(text('I only have 10 minutes'), ctxFor('push-a'));
+    expect(r.reply).toBe(
+      "The shortest plan I build is 20 min. Here's a 20-minute version of today.",
+    );
+    expect(r.proposal?.title).toBe('Short on time: 20 min');
+    expectClean(r, '10 min');
+  });
+
+  it('no length yet → asks, with 20 / 30 / 45 chips (text and chip)', () => {
+    for (const input of [text("I'm short on time"), { chip: 'shortOnTime' } as CoachInput]) {
+      const r = handle(input, ctxFor('pull-a'));
+      expect(r.intent).toBe('shortOnTime');
+      expect(r.reply).toBe(ASK_MINUTES);
+      expect(r.proposal).toBeUndefined();
+      expect(r.chips).toEqual([
+        { id: 'shortOnTime', label: '20 min', args: { minutes: 20 } },
+        { id: 'shortOnTime', label: '30 min', args: { minutes: 30 } },
+        { id: 'shortOnTime', label: '45 min', args: { minutes: 45 } },
+      ]);
+      expectClean(r, 'ask minutes');
+    }
+  });
+
+  it('a length chip → that proposal; Apply and Undo round trip', () => {
+    const c = ctxFor('legs-a');
+    const r = handle({ chip: 'shortOnTime', args: { minutes: 20 } }, c);
+    if (!r.proposal) throw new Error('no proposal');
+    const applied = applyProposal(c.state, r.proposal, at(11, 11), 'chip');
+    if (!applied.ok) throw new Error(applied.reason);
+    expect(applied.change).toMatchObject({ action: 'shortOnTime', title: 'Short on time: 20 min' });
+    expect(todayMinutes(c, applied.state)).toBeLessThanOrEqual(20);
+    expect(applied.state.plan).toEqual(c.state.plan);
+    const undone = undoLast(applied.state, [applied.change], at(11, 11) + 1000);
+    if (!undone.ok) throw new Error(undone.reason);
+    expect(effectiveDay(undone.state, c.sessions, TODAY).day).toEqual(
+      effectiveDay(c.state, c.sessions, TODAY).day,
+    );
+  });
+
+  it('a day that is already short enough → "Your day already fits."', () => {
+    for (const input of [
+      text('I have 45 minutes'),
+      { chip: 'shortOnTime', args: { minutes: 45 } } as CoachInput,
+      text('I have an hour'),
+    ]) {
+      const r = handle(input, ctxFor('pull-b'));
+      expect(r.reply).toBe('Your day already fits.');
+      expect(r.proposal).toBeUndefined();
+    }
+  });
+
+  it('a rest day or a finished day → a plain reply, no proposal', () => {
+    const rest = ctxFor('push-a');
+    rest.state.schedule.restWeekdays = [3];
+    for (const input of [text('I have 30 min'), text('short on time')]) {
+      const r = handle(input, rest);
+      expect(r.proposal).toBeUndefined();
+      expect(r.reply).toMatch(/rest day/);
+    }
+  });
+
+  it('is not offered mid-workout', () => {
+    const c = workoutCtx('push-a', []);
+    for (const input of [
+      text('I have 30 min'),
+      { chip: 'shortOnTime', args: { minutes: 30 } } as CoachInput,
+    ]) {
+      const r = handle(input, c);
+      expect(r.reply).toBe(MID_SESSION_REPLY);
+      expect(r.proposal).toBeUndefined();
+    }
+  });
+
+  it('every length on every day gives clean copy', () => {
+    for (const dayId of ROTATION) {
+      for (const minutes of [5, 20, 25, 30, 45, 60]) {
+        const r = handle({ chip: 'shortOnTime', args: { minutes } }, ctxFor(dayId));
+        expectClean(r, `${dayId}/${minutes}`);
+        if (r.proposal) {
+          expect(r.proposal.action).toBe('shortOnTime');
+          expect(checkCopy(r.reply).ok).toBe(true);
+        }
+      }
+    }
   });
 });

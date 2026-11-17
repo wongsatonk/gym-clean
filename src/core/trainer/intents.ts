@@ -10,6 +10,9 @@
  *  2. deload, 3. swap;
  *  3b. M12 doToday: a "do" word right before one of the coach's plan day names ("do Push A
  *     today", "let's do pull a"), when no other day than today is named and it isn't a skip;
+ *  3c. M12 1b shortOnTime: a short-on-time phrase, or a session length ("I have 30 min", "half
+ *     an hour", 5–180 minutes) unless a food phrase matched; never with a discomfort word (those
+ *     go on to rules 5 / 9);
  *  4. postpone (incl. "skip leg day" / "skip <plan day name>", and M12 "move Thursday to
  *     Friday": a move word with both a day and a target day);
  *  4b. missing kit (M10e): a named exercise with "has no" / "there's no" / "ไม่มีเครื่อง" (or a
@@ -29,13 +32,15 @@
  * Slots: `dayName` only for doToday (the plan day name as passed in `dayNames`; its `date` is
  * 'today' when a today word is there, as "today" or "today instead"), `area` only for avoidArea, `exerciseId` only for swap/stall/focusEdit, `group` only for
  * focusBlock, `weeks` / `daysPerWeek` only for focusBlock/focusEdit ("this month" = 4 weeks,
- * "N months" = 4N), `date` / `moveTo` / `scope` for any non-help intent. `date` is the day the request is about (e.g. the day to skip); `moveTo` is the
+ * "N months" = 4N), `minutes` only for shortOnTime (the length as typed; absent when none was
+ * given), `date` / `moveTo` / `scope` for any non-help intent. `date` is the day the request is about (e.g. the day to skip); `moveTo` is the
  * target day of a move ("to Friday", "Saturday instead"). Both are day words; the coach resolves them
  * against its own `today`.
  */
 import phrasesJson from './phrases.json';
 import exercisesJson from '../../data/exercises.json';
 import type { BodyArea } from '../types';
+import { SHORT_ON_TIME } from './timeRules';
 
 export type Intent =
   | 'postpone'
@@ -50,7 +55,8 @@ export type Intent =
   | 'progress'
   | 'focusBlock'
   | 'focusEdit'
-  | 'doToday';
+  | 'doToday'
+  | 'shortOnTime';
 export type DayWord = 'today' | 'tomorrow' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 export type Safety = 'none' | 'discomfort' | 'redFlag';
 
@@ -68,6 +74,8 @@ export type IntentSlots = {
   daysPerWeek?: number;
   /** M12 doToday: the plan day to run today, as written in `MatchContext.dayNames`. */
   dayName?: string;
+  /** M12 1b shortOnTime: the session length he typed, in minutes. */
+  minutes?: number;
 };
 
 export type IntentMatch = { intent: Intent; slots: IntentSlots; safety: Safety };
@@ -167,6 +175,26 @@ const NUM = `(\\d{1,2}|${Object.keys(NUMBER_WORDS).join('|')})`;
 const DAYS_COUNT = new RegExp(`(?<![a-z0-9])${NUM}\\s+(?:days?|times)(?![a-z0-9])`);
 const WEEKS_COUNT = new RegExp(`(?<![a-z0-9])${NUM}\\s+weeks?(?![a-z0-9])`);
 const MONTHS_COUNT = new RegExp(`(?<![a-z0-9])${NUM}\\s+months?(?![a-z0-9])`);
+const SHORT = {
+  phrases: compileList(P.shortOnTime.phrases),
+  halfHour: compileList(P.shortOnTime.halfHour),
+};
+const SHORT_NUMBERS: Record<string, number> = { ...NUMBER_WORDS, ...P.shortOnTime.numbers };
+/** Alternation of the words as typed (normalized), longest first; spaces match any whitespace. */
+const wordsRe = (words: readonly string[]): string =>
+  words
+    .map((w) => normalizeText(w))
+    .filter((w) => w !== '')
+    .sort((a, b) => b.length - a.length)
+    .map((w) => escapeRegex(w).replace(/ /g, '\\s+'))
+    .join('|');
+const MINUTES_COUNT = new RegExp(
+  `(?<![a-z0-9])(\\d{1,3}|${wordsRe(Object.keys(SHORT_NUMBERS))})\\s*(?:${wordsRe(P.shortOnTime.minuteWords)})(?![a-z0-9])`,
+);
+const HOURS_COUNT = new RegExp(
+  `(?<![a-z0-9])(\\d{1,2}|${wordsRe([...Object.keys(SHORT_NUMBERS), ...P.shortOnTime.hourArticles])})\\s*(?:${wordsRe(P.shortOnTime.hourWords)})(?![a-z0-9])`,
+);
+const HOUR_ARTICLES = new Set(P.shortOnTime.hourArticles.map((w) => normalizeText(w)));
 const AVOID_ANYWHERE = compileList(P.avoidArea.anywhere);
 const AVOID_BEFORE = P.avoidArea.before.map((w) => normalizeText(w));
 const AREA_FILLERS = ['on my', 'on the', 'for my', 'my', 'the', 'on'];
@@ -342,6 +370,23 @@ function countsOf(text: string): { weeks?: number; daysPerWeek?: number } {
   return out;
 }
 
+/**
+ * M12 1b: the session length in minutes: "30 min", "forty-five minutes", "half an hour" (30),
+ * "an hour" (60). Lengths outside `SHORT_ON_TIME.typedMinutes` aren't session lengths.
+ */
+function minutesOf(text: string): number | undefined {
+  const words = (w: string) => w.replace(/\s+/g, ' ');
+  let n: number | undefined;
+  const m = MINUTES_COUNT.exec(text);
+  const h = HOURS_COUNT.exec(text);
+  if (m?.[1]) n = SHORT_NUMBERS[words(m[1])] ?? Number(m[1]);
+  else if (has(SHORT.halfHour, text)) n = 30;
+  else if (h?.[1])
+    n = (HOUR_ARTICLES.has(h[1]) ? 1 : (SHORT_NUMBERS[words(h[1])] ?? Number(h[1]))) * 60;
+  const { min, max } = SHORT_ON_TIME.typedMinutes;
+  return n !== undefined && Number.isFinite(n) && n >= min && n <= max ? n : undefined;
+}
+
 function scopeOf(text: string): 'today' | 'plan' | undefined {
   if (has(SCOPE_PLAN, text)) return 'plan';
   if (has(SCOPE_TODAY, text)) return 'today';
@@ -423,10 +468,16 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   const { date, moveTo } = daysOf(t);
   const onlyToday = (date ?? 'today') === 'today' && (moveTo ?? 'today') === 'today';
   const dayName = onlyToday && !skipsDay(t, ctx) ? doDayOf(t, ctx) : undefined;
+  const minutes = minutesOf(t);
   let intent: Intent;
   if (has(INTENTS.deload, t)) intent = 'deload';
   else if (has(INTENTS.swap, t)) intent = 'swap';
   else if (dayName !== undefined) intent = 'doToday';
+  else if (
+    safety === 'none' &&
+    (has(SHORT.phrases, t) || (minutes !== undefined && !has(INTENTS.food, t)))
+  )
+    intent = 'shortOnTime';
   else if (
     has(INTENTS.postpone, t) ||
     skipsDay(t, ctx) ||
@@ -465,6 +516,7 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   }
   if (intent === 'focusBlock' && area) slots.group = area.area;
   if (intent === 'focusBlock' || intent === 'focusEdit') Object.assign(slots, counts);
+  if (intent === 'shortOnTime' && minutes !== undefined) slots.minutes = minutes;
   if (date) slots.date = date;
   if (moveTo) slots.moveTo = moveTo;
   const scope = scopeOf(t);

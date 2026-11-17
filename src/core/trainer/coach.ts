@@ -36,6 +36,12 @@
  *   to 3 dates that work. Typed: "do Push A today" → doToday; "move Thursday to Friday" (a day
  *   other than today plus a target) → moveDay; another day without a target → the "which day"
  *   question. Refusals are plain replies. None of these mid-workout.
+ * - M12 1b Short on time (actions/shortOnTime.ts): `shortOnTime` {minutes} (chip, or typed "I
+ *   have 30 min") → today's proposal fitted into the nearest lower of 20 / 30 / 45 min, with the
+ *   other lengths as chips; without a length it asks "How much time do you have?". A day that
+ *   already fits gets "Your day already fits.". Not mid-workout. `SHORT_ON_TIME_CHIP` is the
+ *   quick chip for the UI to register (it isn't in `QUICK_CHIPS` yet: the UI keeps an icon per
+ *   quick chip).
  * Chip ids: the 7 quick actions (UI COACH_CHIPS + M12 focusBlock), the 6 BodyArea values, the M12
  * `week` / `progress` chips, and the follow-ups below (`args` say what they act on). 'endWorkout' and 'keepExercise' are handled by the UI, not
  * here.
@@ -97,6 +103,8 @@ import { proposePostpone, type PostponeMode } from './actions/postpone';
 import { longDate, proposeDoToday, proposeMoveDay } from './actions/move';
 import { proposeSwap, proposeSwapOptions, type SwapScope } from './actions/swap';
 import { proposeRemove } from './actions/remove';
+import { proposeShortOnTime, shortOptionFor } from './actions/shortOnTime';
+import { SHORT_ON_TIME } from './timeRules';
 import {
   detectStalls,
   proposeStallFix,
@@ -152,7 +160,9 @@ export type CoachChipId =
   /** M12: args.dayId: run that plan day today (no dayId: asks which). */
   | 'doToday'
   /** M12: args.from, to (local YYYY-MM-DD): move that planned date (no `to`: asks where). */
-  | 'moveDay';
+  | 'moveDay'
+  /** M12 1b: args.minutes: fit today into that long (no minutes: asks how long). */
+  | 'shortOnTime';
 
 export type CoachArgs = {
   exerciseId?: string;
@@ -172,6 +182,8 @@ export type CoachArgs = {
   /** M12 moveDay: the planned date to move and the date to move it to (local YYYY-MM-DD). */
   from?: string;
   to?: string;
+  /** M12 1b shortOnTime: the time he has, in minutes. */
+  minutes?: number;
 };
 
 export type CoachChip = { id: CoachChipId; label: string; args?: CoachArgs };
@@ -265,6 +277,9 @@ export const NO_STALLS = 'No stalled lifts right now. A deload week or a swap fr
 export const ASK_GROUP = 'Which area should the block build?';
 export const ASK_WEEKS = 'For how many weeks?';
 export const ASK_DAYS = 'How many days a week?';
+export const ASK_MINUTES = 'How much time do you have?';
+/** M12 1b: the "Short on time" quick chip (asks how long, then proposes). */
+export const SHORT_ON_TIME_CHIP: CoachChip = { id: 'shortOnTime', label: 'Short on time' };
 
 /** M12: the starters on an empty thread (the swap one names today's first exercise when it can). */
 export const STARTER_CHIPS: readonly CoachChip[] = [
@@ -376,6 +391,30 @@ function postpone(ctx: CoachContext, mode: PostponeMode, slots: IntentSlots = {}
     ? []
     : [{ id: 'postponeMode', label: MODE_LABEL[other], args: { mode: other } }];
   return fromResult(ctx, r, chips);
+}
+
+// ---------- M12 1b: short on time ----------
+
+/** One chip per session length (data), minus the one already proposed. */
+const timeChips = (except?: number): CoachChip[] =>
+  SHORT_ON_TIME.options
+    .filter((m) => m !== except)
+    .map((m) => ({ id: 'shortOnTime', label: `${m} min`, args: { minutes: m } }));
+
+function shortOnTime(ctx: CoachContext, minutes: number | undefined): Body {
+  if (minutes === undefined || !Number.isFinite(minutes) || minutes <= 0) {
+    const t = todayDay(actionCtx(ctx));
+    return t.ok ? { reply: ASK_MINUTES, chips: timeChips() } : { reply: t.reply };
+  }
+  const r = proposeShortOnTime(actionCtx(ctx), minutes, ctx.catalog);
+  if (!r.ok) return { reply: r.reply };
+  const limit = shortOptionFor(minutes);
+  const lead = minutes < limit ? `The shortest plan I build is ${limit} min. ` : '';
+  return {
+    reply: `${lead}Here's a ${limit}-minute version of today.`,
+    proposal: r.proposal,
+    chips: timeChips(limit),
+  };
 }
 
 // ---------- M12: do it today / move a day ----------
@@ -865,6 +904,7 @@ const BLOCKED_MID_SESSION = new Set<string>([
   'focusEdit',
   'doToday',
   'moveDay',
+  'shortOnTime',
 ]);
 
 function redFlag(ctx: CoachContext): CoachResponse {
@@ -930,6 +970,8 @@ function handleText(text: string, ctx: CoachContext): CoachResponse {
       const day = ctx.state.plan.days.find((d) => normalizeText(d.name) === want);
       return done(day ? doToday(ctx, day.id) : doToday(ctx, undefined));
     }
+    case 'shortOnTime':
+      return done(shortOnTime(ctx, s.minutes));
     case 'help':
       return done({ reply: HELP_TEXT });
   }
@@ -954,6 +996,7 @@ const CHIP_INTENT: Partial<Record<CoachChipId, Intent>> = {
   focusBlock: 'focusBlock',
   doToday: 'doToday',
   moveDay: 'postpone',
+  shortOnTime: 'shortOnTime',
 };
 
 function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachResponse {
@@ -1005,6 +1048,8 @@ function handleChip(id: CoachChipId, args: CoachArgs, ctx: CoachContext): CoachR
       return done(doToday(ctx, args.dayId));
     case 'moveDay':
       return done(moveDay(ctx, args.from, args.to));
+    case 'shortOnTime':
+      return done(shortOnTime(ctx, args.minutes));
     default:
       return done({ reply: HELP_TEXT });
   }

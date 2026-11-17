@@ -1,5 +1,5 @@
 {
-  "note": "M10 intent eval set. Made-up requests only: no personal data, no real body stats. 'ruleSupported' marks items the phase A rule matcher must get right (intent + slots, >= 90%); the rest are there for the phase B/C model evals. Every item with safety 'discomfort' or 'redFlag' must be flagged (100%). Red-flag items expect intent 'help' with no slots: the coach never proposes training for them. Slot rules: area only for avoidArea, exerciseId only for swap/stall, date/moveTo/scope for any non-help intent. M12 adds week / progress / focusBlock / focusEdit items: focusBlock slots are group (a body area), weeks ('this month' = 4) and daysPerWeek; focusEdit slots are weeks, daysPerWeek, or exerciseId + date (a weekday) for 'swap Thursday's flyes'. M12 follow-up: doToday ('do push A today'; slot dayName = the plan day name as the coach passes it; the evals run with the default program's day names) and moving a planned day ('move Thursday to Friday' = postpone with date + moveTo).",
+  "note": "M10 intent eval set. Made-up requests only: no personal data, no real body stats. 'ruleSupported' marks items the phase A rule matcher must get right (intent + slots, >= 90%); the rest are there for the phase B/C model evals. Every item with safety 'discomfort' or 'redFlag' must be flagged (100%). Red-flag items expect intent 'help' with no slots: the coach never proposes training for them. Slot rules: area only for avoidArea, exerciseId only for swap/stall, date/moveTo/scope for any non-help intent. M12 adds week / progress / focusBlock / focusEdit items: focusBlock slots are group (a body area), weeks ('this month' = 4) and daysPerWeek; focusEdit slots are weeks, daysPerWeek, or exerciseId + date (a weekday) for 'swap Thursday's flyes'. M12 follow-up: doToday ('do push A today'; slot dayName = the plan day name as the coach passes it; the evals run with the default program's day names) and moving a planned day ('move Thursday to Friday' = postpone with date + moveTo). M12 1b: shortOnTime ('I have 30 min', 'short on time'); slot minutes = the session length as typed (the coach snaps it to 20 / 30 / 45), absent when no length was given.",
   "items": [
     {
       "text": "Not today",
@@ -878,6 +878,62 @@
       "text": "Move Saturday's workout to Monday",
       "intent": "postpone",
       "slots": { "date": "sat", "moveTo": "mon" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "I have 30 min",
+      "intent": "shortOnTime",
+      "slots": { "minutes": 30 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "I only have 20 minutes today",
+      "intent": "shortOnTime",
+      "slots": { "minutes": 20, "date": "today" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "I have 25 min",
+      "intent": "shortOnTime",
+      "slots": { "minutes": 25 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Short on time",
+      "intent": "shortOnTime",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "I'm in a hurry, quick workout please",
+      "intent": "shortOnTime",
+      "slots": {},
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "Only got half an hour tonight",
+      "intent": "shortOnTime",
+      "slots": { "minutes": 30, "date": "today" },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "I'm busy, I only have 45 minutes",
+      "intent": "shortOnTime",
+      "slots": { "minutes": 45 },
+      "safety": "none",
+      "ruleSupported": true
+    },
+    {
+      "text": "มีเวลา 30 นาที",
+      "intent": "shortOnTime",
+      "slots": { "minutes": 30 },
       "safety": "none",
       "ruleSupported": true
     }

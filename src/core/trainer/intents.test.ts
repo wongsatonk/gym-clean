@@ -332,6 +332,89 @@ describe('M12 intents: week, progress, focus block, focus edits', () => {
   });
 });
 
+describe('M12 1b short on time', () => {
+  const short = (text: string) => matchIntent(text, evalCtx);
+
+  it('a session length in minutes → shortOnTime with the minutes as typed', () => {
+    expect(short('I have 30 min')).toEqual({
+      intent: 'shortOnTime',
+      slots: { minutes: 30 },
+      safety: 'none',
+    });
+    expect(short('I have 25 min today').slots).toEqual({ minutes: 25, date: 'today' });
+    expect(short('only 20 minutes').slots).toEqual({ minutes: 20 });
+    expect(short('got 45mins').slots).toEqual({ minutes: 45 });
+    expect(short("I'm busy, I only have 30 minutes")).toMatchObject({
+      intent: 'shortOnTime',
+      slots: { minutes: 30 },
+    });
+  });
+
+  it('reads number words, half an hour and hours', () => {
+    expect(short('I only have twenty minutes').slots).toEqual({ minutes: 20 });
+    expect(short('forty-five minutes tops').slots).toEqual({ minutes: 45 });
+    expect(short('I have half an hour').slots).toEqual({ minutes: 30 });
+    expect(short('I have an hour').slots).toEqual({ minutes: 60 });
+    expect(short('just 1 hour today').slots).toEqual({ minutes: 60, date: 'today' });
+  });
+
+  it('a short-on-time phrase without a length → shortOnTime with no minutes', () => {
+    for (const text of [
+      'Short on time',
+      "I'm short on time today",
+      "I'm in a hurry",
+      'quick workout please',
+      "I don't have much time",
+    ]) {
+      const got = short(text);
+      expect(got.intent, text).toBe('shortOnTime');
+      expect(got.slots.minutes, text).toBeUndefined();
+    }
+  });
+
+  it('understands Thai', () => {
+    expect(short('มีเวลา 30 นาที')).toMatchObject({ intent: 'shortOnTime', slots: { minutes: 30 } });
+    expect(short('วันนี้มีเวลาน้อย').intent).toBe('shortOnTime');
+    expect(short('มีเวลาแค่ครึ่งชั่วโมง').slots.minutes).toBe(30);
+  });
+
+  it('`minutes` is only ever a shortOnTime slot', () => {
+    for (const item of ITEMS) {
+      const got = matchIntent(item.text, evalCtx);
+      if (got.intent !== 'shortOnTime') expect(got.slots.minutes, item.text).toBeUndefined();
+    }
+  });
+
+  it('leaves other requests alone', () => {
+    expect(short('No time for the gym on Wednesday').intent).toBe('postpone');
+    expect(short("I can't make it today, something came up").intent).toBe('postpone');
+    expect(short('rest 2 minutes').intent).toBe('help');
+    expect(short('what can I eat in 10 minutes').intent).toBe('food');
+    expect(short('deload week, I only have 30 minutes').intent).toBe('deload');
+    // Discomfort first: the area is handled, never a faster workout.
+    expect(short('my knee hurts and I only have 20 minutes')).toMatchObject({
+      intent: 'avoidArea',
+      safety: 'discomfort',
+    });
+    expect(short('chest pain and dizzy, only 20 minutes')).toEqual({
+      intent: 'help',
+      slots: {},
+      safety: 'redFlag',
+    });
+  });
+
+  it('has at least 5 rule-supported eval items', () => {
+    const items = ITEMS.filter((i) => i.intent === 'shortOnTime');
+    expect(items.length).toBeGreaterThanOrEqual(5);
+    for (const item of items) {
+      expect(item.ruleSupported, item.text).toBe(true);
+      const got = matchIntent(item.text, evalCtx);
+      expect(got.intent, item.text).toBe('shortOnTime');
+      expect(sortKeys(got.slots), item.text).toEqual(sortKeys(item.slots));
+    }
+  });
+});
+
 describe('eval set (SPEC M10 Accept)', () => {
   it('has at least 60 items and no personal data', () => {
     expect(ITEMS.length).toBeGreaterThanOrEqual(60);

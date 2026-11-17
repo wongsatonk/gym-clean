@@ -1,0 +1,352 @@
+{
+  "note": "M12 1b starter-plan templates (SPEC M12 trainer kit item 3: a plan for anyone who answers the intake). Data only: src/core/trainer/starterPlan.ts builds a plan from the intake answers with these and nothing else. 'byDays' picks the split by training days a week (full body 2-3, upper/lower 4, push/pull/legs 5-6) and its rotation of day templates; 'trainWeekdays' are the default training weekdays (0 = Sunday), the others become rest weekdays. A day is a list of slots in priority order ('main' slots are the day's main lifts, kept longest when the day is trimmed to the session length). A slot is a movement pattern: an exercise fits when one of its primary muscles is in 'muscles' and, when given, its 'mechanic' and 'force' match (free-exercise-db fields); 'prefer' orders the fits (ids from src/data/exercises.json, generic picks, nobody's personal list), then catalog order; 'orElse' names the slot to use when the gym has nothing for this one. 'prescription' is reps and rest per goal, 'sets' is sets per experience; no weights (each person picks their own). 'copy' is the proposal text ({days}, {goal}, {minutes}, {areas} are filled in).",
+  "byDays": {
+    "2": { "split": "fullBody", "rotation": ["full-a", "full-b"] },
+    "3": { "split": "fullBody", "rotation": ["full-a", "full-b", "full-c"] },
+    "4": { "split": "upperLower", "rotation": ["upper-a", "lower-a", "upper-b", "lower-b"] },
+    "5": {
+      "split": "pushPullLegs",
+      "rotation": ["push-a", "pull-a", "legs-a", "push-b", "pull-b", "legs-b"]
+    },
+    "6": {
+      "split": "pushPullLegs",
+      "rotation": ["push-a", "pull-a", "legs-a", "push-b", "pull-b", "legs-b"]
+    }
+  },
+  "trainWeekdays": {
+    "2": [1, 4],
+    "3": [1, 3, 5],
+    "4": [1, 2, 4, 5],
+    "5": [1, 2, 3, 4, 5],
+    "6": [1, 2, 3, 4, 5, 6]
+  },
+  "days": {
+    "full-a": {
+      "id": "starter-full-a",
+      "name": "Full body A",
+      "slots": [
+        { "slot": "squat", "main": true },
+        { "slot": "pressHorizontal", "main": true },
+        { "slot": "rowHorizontal", "main": true },
+        { "slot": "hamstringCurl" },
+        { "slot": "lateralRaise" },
+        { "slot": "biceps" },
+        { "slot": "triceps" }
+      ]
+    },
+    "full-b": {
+      "id": "starter-full-b",
+      "name": "Full body B",
+      "slots": [
+        { "slot": "hinge", "main": true },
+        { "slot": "pressVertical", "main": true },
+        { "slot": "pullVertical", "main": true },
+        { "slot": "singleLeg" },
+        { "slot": "chestFly" },
+        { "slot": "rearDelt" },
+        { "slot": "calves" }
+      ]
+    },
+    "full-c": {
+      "id": "starter-full-c",
+      "name": "Full body C",
+      "slots": [
+        { "slot": "squat", "main": true },
+        { "slot": "pressHorizontal", "main": true },
+        { "slot": "pullVertical", "main": true },
+        { "slot": "hinge" },
+        { "slot": "lateralRaise" },
+        { "slot": "triceps" },
+        { "slot": "biceps" }
+      ]
+    },
+    "upper-a": {
+      "id": "starter-upper-a",
+      "name": "Upper A",
+      "slots": [
+        { "slot": "pressHorizontal", "main": true },
+        { "slot": "rowHorizontal", "main": true },
+        { "slot": "pressVertical" },
+        { "slot": "pullVertical" },
+        { "slot": "lateralRaise" },
+        { "slot": "biceps" },
+        { "slot": "triceps" }
+      ]
+    },
+    "lower-a": {
+      "id": "starter-lower-a",
+      "name": "Lower A",
+      "slots": [
+        { "slot": "squat", "main": true },
+        { "slot": "hinge", "main": true },
+        { "slot": "singleLeg" },
+        { "slot": "hamstringCurl" },
+        { "slot": "calves" }
+      ]
+    },
+    "upper-b": {
+      "id": "starter-upper-b",
+      "name": "Upper B",
+      "slots": [
+        { "slot": "pullVertical", "main": true },
+        { "slot": "pressVertical", "main": true },
+        { "slot": "pressHorizontal" },
+        { "slot": "rowHorizontal" },
+        { "slot": "rearDelt" },
+        { "slot": "triceps" },
+        { "slot": "biceps" }
+      ]
+    },
+    "lower-b": {
+      "id": "starter-lower-b",
+      "name": "Lower B",
+      "slots": [
+        { "slot": "hinge", "main": true },
+        { "slot": "squat", "main": true },
+        { "slot": "quadExtension" },
+        { "slot": "hamstringCurl" },
+        { "slot": "glutes" },
+        { "slot": "calves" }
+      ]
+    },
+    "push-a": {
+      "id": "starter-push-a",
+      "name": "Push A",
+      "slots": [
+        { "slot": "pressHorizontal", "main": true },
+        { "slot": "pressVertical", "main": true },
+        { "slot": "chestFly" },
+        { "slot": "lateralRaise" },
+        { "slot": "triceps" }
+      ]
+    },
+    "pull-a": {
+      "id": "starter-pull-a",
+      "name": "Pull A",
+      "slots": [
+        { "slot": "rowHorizontal", "main": true },
+        { "slot": "pullVertical", "main": true },
+        { "slot": "rearDelt" },
+        { "slot": "biceps" },
+        { "slot": "biceps" }
+      ]
+    },
+    "legs-a": {
+      "id": "starter-legs-a",
+      "name": "Legs A",
+      "slots": [
+        { "slot": "squat", "main": true },
+        { "slot": "hinge", "main": true },
+        { "slot": "singleLeg" },
+        { "slot": "hamstringCurl" },
+        { "slot": "calves" }
+      ]
+    },
+    "push-b": {
+      "id": "starter-push-b",
+      "name": "Push B",
+      "slots": [
+        { "slot": "pressVertical", "main": true },
+        { "slot": "pressHorizontal", "main": true },
+        { "slot": "lateralRaise" },
+        { "slot": "chestFly" },
+        { "slot": "triceps" }
+      ]
+    },
+    "pull-b": {
+      "id": "starter-pull-b",
+      "name": "Pull B",
+      "slots": [
+        { "slot": "pullVertical", "main": true },
+        { "slot": "rowHorizontal", "main": true },
+        { "slot": "rearDelt" },
+        { "slot": "biceps" }
+      ]
+    },
+    "legs-b": {
+      "id": "starter-legs-b",
+      "name": "Legs B",
+      "slots": [
+        { "slot": "squat", "main": true },
+        { "slot": "singleLeg", "main": true },
+        { "slot": "hinge" },
+        { "slot": "quadExtension" },
+        { "slot": "hamstringCurl" },
+        { "slot": "calves" }
+      ]
+    }
+  },
+  "slots": {
+    "squat": {
+      "muscles": ["quadriceps"],
+      "mechanic": "compound",
+      "prefer": [
+        "Goblet_Squat",
+        "Dumbbell_Squat",
+        "Leg_Press",
+        "Smith_Machine_Squat",
+        "Barbell_Squat"
+      ]
+    },
+    "singleLeg": {
+      "muscles": ["quadriceps"],
+      "mechanic": "compound",
+      "prefer": [
+        "Dumbbell_Lunges",
+        "Split_Squat_with_Dumbbells",
+        "Dumbbell_Step_Ups",
+        "Dumbbell_Rear_Lunge"
+      ]
+    },
+    "hinge": {
+      "muscles": ["hamstrings", "glutes"],
+      "prefer": ["Stiff-Legged_Dumbbell_Deadlift"]
+    },
+    "pressHorizontal": {
+      "muscles": ["chest"],
+      "mechanic": "compound",
+      "prefer": [
+        "Dumbbell_Bench_Press",
+        "Incline_Dumbbell_Press",
+        "Cable_Chest_Press",
+        "Pushups",
+        "Incline_Push-Up"
+      ]
+    },
+    "pressVertical": {
+      "muscles": ["shoulders"],
+      "mechanic": "compound",
+      "force": "push",
+      "prefer": ["Dumbbell_Shoulder_Press", "Seated_Dumbbell_Press", "Arnold_Dumbbell_Press"]
+    },
+    "rowHorizontal": {
+      "muscles": ["middle back"],
+      "mechanic": "compound",
+      "prefer": [
+        "One-Arm_Dumbbell_Row",
+        "Seated_Cable_Rows",
+        "Bent_Over_Two-Dumbbell_Row",
+        "Dumbbell_Incline_Row"
+      ]
+    },
+    "pullVertical": {
+      "muscles": ["lats"],
+      "prefer": [
+        "Wide-Grip_Lat_Pulldown",
+        "Close-Grip_Front_Lat_Pulldown",
+        "Underhand_Cable_Pulldowns",
+        "Straight-Arm_Pulldown"
+      ],
+      "orElse": "rowHorizontal"
+    },
+    "chestFly": {
+      "muscles": ["chest"],
+      "prefer": [
+        "Dumbbell_Flyes",
+        "Cable_Crossover",
+        "Incline_Dumbbell_Flyes",
+        "Flat_Bench_Cable_Flyes"
+      ]
+    },
+    "lateralRaise": {
+      "muscles": ["shoulders"],
+      "mechanic": "isolation",
+      "force": "push",
+      "prefer": ["Side_Lateral_Raise", "Front_Dumbbell_Raise"]
+    },
+    "rearDelt": {
+      "muscles": ["shoulders"],
+      "force": "pull",
+      "prefer": [
+        "Reverse_Flyes",
+        "Face_Pull",
+        "Seated_Bent-Over_Rear_Delt_Raise",
+        "Cable_Rear_Delt_Fly"
+      ]
+    },
+    "biceps": {
+      "muscles": ["biceps"],
+      "prefer": ["Dumbbell_Bicep_Curl", "Hammer_Curls", "Incline_Dumbbell_Curl"]
+    },
+    "triceps": {
+      "muscles": ["triceps"],
+      "prefer": [
+        "Triceps_Pushdown",
+        "Standing_Dumbbell_Triceps_Extension",
+        "Lying_Dumbbell_Tricep_Extension"
+      ]
+    },
+    "quadExtension": {
+      "muscles": ["quadriceps"],
+      "mechanic": "isolation",
+      "prefer": ["Leg_Extensions"],
+      "orElse": "singleLeg"
+    },
+    "hamstringCurl": {
+      "muscles": ["hamstrings"],
+      "mechanic": "isolation",
+      "prefer": ["Lying_Leg_Curls", "Seated_Leg_Curl"],
+      "orElse": "glutes"
+    },
+    "glutes": {
+      "muscles": ["glutes"],
+      "prefer": ["Single_Leg_Glute_Bridge"]
+    },
+    "calves": {
+      "muscles": ["calves"],
+      "prefer": [
+        "Standing_Dumbbell_Calf_Raise",
+        "Standing_Calf_Raises",
+        "Smith_Machine_Calf_Raise",
+        "Dumbbell_Seated_One-Leg_Calf_Raise"
+      ]
+    }
+  },
+  "prescription": {
+    "muscle": {
+      "main": { "reps": [8, 12], "restSec": 90 },
+      "accessory": { "reps": [10, 15], "restSec": 60 }
+    },
+    "strength": {
+      "main": { "reps": [5, 8], "restSec": 150 },
+      "accessory": { "reps": [8, 12], "restSec": 90 }
+    },
+    "fat": {
+      "main": { "reps": [10, 12], "restSec": 75 },
+      "accessory": { "reps": [12, 15], "restSec": 45 }
+    },
+    "general": {
+      "main": { "reps": [8, 12], "restSec": 90 },
+      "accessory": { "reps": [10, 15], "restSec": 60 }
+    }
+  },
+  "sets": {
+    "new": { "main": 3, "accessory": 2 },
+    "some": { "main": 3, "accessory": 3 },
+    "years": { "main": 4, "accessory": 3 }
+  },
+  "easyOn": {
+    "note": "A pick that only helps with a go-easy area (secondary muscle) runs lighter: one set fewer (never below minSets), or for a bodyweight move the rep range times bodyweightRepsFactor. Picks whose primary muscle is in the area are never made.",
+    "setsDrop": 1,
+    "minSets": 2,
+    "bodyweightRepsFactor": 0.8
+  },
+  "bodyweightEquipment": "body only",
+  "copy": {
+    "title": "Starter plan: {days} days a week",
+    "why": "Built for your goal ({goal}): {days} days a week, about {minutes} min a session, with the kit your gym has. Your current plan stays until you tap Apply.",
+    "whyEasyOn": "It goes easy on your {areas}.",
+    "say": "Done. Your plan is set.",
+    "planLineBefore": "Now: {names}",
+    "planLineAfter": "{days} days a week: {names}",
+    "dayLineAfter": "{names} · about {minutes} min",
+    "badDays": "A starter plan trains 2 to 6 days a week.",
+    "noKit": "I can't build a plan with the kit your gym has ticked. Add your kit first, then ask again.",
+    "goals": {
+      "muscle": "build muscle",
+      "fat": "lose fat",
+      "strength": "get stronger",
+      "general": "general fitness"
+    }
+  }
+}
