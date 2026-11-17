@@ -119,21 +119,16 @@ describe('block recap', () => {
     expect(b?.score.focus).toEqual({ group: 'chest', sets: 9, target: 14 });
     expect(b?.text).toMatch(/^Chest block done: /);
     expect(b?.text).toMatch(/Chest sets: 9 of 14\./);
-    // M12 1b: a lighter week, then the next block (same group, or the next in the order);
-    // "Keep going" still starts another block right away.
-    expect(b?.text).toMatch(/ Next up: a lighter week, then another block\?$/);
-    expect(b?.say).toBe('Chest block done. Lighter week, then another block?');
+    // M12 1b: the block already ended with a lighter week, so the offers go straight to the
+    // next block (same group, or the next in the order) from the day after it; "Keep going"
+    // stays.
+    expect(b?.text).toMatch(/ Ready for the next block\?$/);
+    expect(b?.text).not.toMatch(/lighter/i);
+    expect(b?.say).toBe('Chest block done. Ready for the next block?');
+    const next = { weeks: 2, weekdays: [1, 3, 5], lighterWeek: false, startDate: '2026-11-16' };
     expect(b?.chips).toEqual([
-      {
-        id: 'nextBlock',
-        label: 'Lighter week, then Chest',
-        args: { group: 'chest', weeks: 2, weekdays: [1, 3, 5], lighterWeek: true },
-      },
-      {
-        id: 'nextBlock',
-        label: 'Lighter week, then Back',
-        args: { group: 'back', weeks: 2, weekdays: [1, 3, 5], lighterWeek: true },
-      },
+      { id: 'nextBlock', label: 'Next: Chest', args: { group: 'chest', ...next } },
+      { id: 'nextBlock', label: 'Next: Back', args: { group: 'back', ...next } },
       {
         id: 'focusBlock',
         label: 'Keep going',
@@ -159,8 +154,8 @@ describe('block recap', () => {
     const [b] = recapDue(input({ state: state({ blocks: [legs] }) }), { week: '2026-11-09' });
     const next = b?.chips.filter((c) => c.id === NEXT_BLOCK_CHIP) ?? [];
     expect(next.map((c) => c.label)).toEqual([
-      'Lighter week, then Legs',
-      `Lighter week, then ${groupLabel(nextGroup('legs'))}`,
+      'Next: Legs',
+      `Next: ${groupLabel(nextGroup('legs'))}`,
     ]);
     for (const c of b?.chips ?? []) expect(checkCopy(c.label).hits, c.label).toEqual([]);
 
@@ -177,8 +172,10 @@ describe('block recap', () => {
       args,
       trainerCatalog(),
     );
-    expect(r.ok && r.proposal.title).toBe('Lighter week, then Legs focus: 2 weeks');
-    expect(r.ok && r.proposal.next.blocks?.at(-1)?.startDate).toBe('2026-11-23');
+    // No second lighter week: the block alone, from the day after the old one ended.
+    expect(r.ok && r.proposal.title).toBe('Legs focus: 2 weeks');
+    expect(r.ok && r.proposal.next.blocks?.at(-1)?.startDate).toBe('2026-11-16');
+    expect(r.ok && r.proposal.next.overrides.some((o) => o.adjust?.kind === 'deload')).toBe(false);
   });
 
   it('week and block recaps together, week first', () => {

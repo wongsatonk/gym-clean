@@ -2,11 +2,13 @@
  * M12 1b "Plan beyond a month" (trainer-kit item 7). Pure; dates are passed in. Proposals only:
  * nothing here changes the plan, it only builds what Apply would do.
  *
- * - Next block: when a focus block ends, the recap (progress/recap.ts) offers a lighter week
- *   (7 days, the M10 deload rule) followed by another block, for the same group or the next one
- *   in `NEXT_BLOCK_RULES.groupOrder`. `proposeNextBlock` builds both as ONE Proposal, so one
- *   Apply puts them in and one Undo takes them out: the deload overrides sit on today … day 7 and
- *   the block starts on day 8.
+ * - Next block: when a focus block ends, the recap (progress/recap.ts) offers another block for
+ *   the same group or the next one in `NEXT_BLOCK_RULES.groupOrder`, from the day after it ends.
+ *   A block's last week is already lighter, so these offers add no lighter week of their own.
+ * - `lighterWeek: true` is for offers that don't follow a block's lighter week (e.g. after the
+ *   deload suggestion): `proposeNextBlock` then builds the lighter week (7 days, the M10 deload
+ *   rule) and the block as ONE Proposal, so one Apply puts them in and one Undo takes them out:
+ *   the deload overrides sit on today … day 7 and the block starts on day 8.
  * - Deload suggestion: `deloadSuggested` says when to offer a Deload week: after
  *   `hardWeeks` full Mon–Sun weeks in a row (every planned session done, no lighter / deload
  *   day, not a block's lighter last week), or when `stalledExercises` plan exercises are stalled
@@ -57,30 +59,52 @@ export type NextBlockArgs = {
   weeks: number;
   /** Training weekdays, 0 = Sun. */
   weekdays: number[];
-  /** Put a 7-day lighter week (the deload rule) before the block. */
+  /**
+   * Put a 7-day lighter week (the deload rule) before the block. Never after a focus block,
+   * which already ends with one.
+   */
   lighterWeek?: boolean;
+  /**
+   * Earliest start (local YYYY-MM-DD), e.g. the day after the block before it. A date in the
+   * past moves to today (tomorrow when today is trained; day 8 with `lighterWeek`).
+   */
+  startDate?: string;
 };
 
 export type NextBlockOffer = { label: string; args: NextBlockArgs };
 
 /**
- * The two offers after `block`: a lighter week, then the same group again or the next group in
- * the order, with the block's length and weekdays.
+ * The two offers after `block` ended: the same group again or the next group in the order, with
+ * the block's length and weekdays, from the day after its last date. No lighter week: the block's
+ * own last week was one.
  */
 export function nextBlockOffers(
-  block: Pick<FocusBlock, 'group' | 'weeks'> & { weekdays: readonly number[] },
+  block: Pick<FocusBlock, 'group' | 'weeks' | 'startDate'> & {
+    weekdays: readonly number[];
+    days?: FocusBlock['days'];
+  },
 ): NextBlockOffer[] {
+  const startDate = addDate(blockEnd(block), 1);
   return [block.group, nextGroup(block.group)].map((group) => ({
-    label: `Lighter week, then ${groupLabel(group)}`,
-    args: { group, weeks: block.weeks, weekdays: [...block.weekdays], lighterWeek: true },
+    label: `Next: ${groupLabel(group)}`,
+    args: {
+      group,
+      weeks: block.weeks,
+      weekdays: [...block.weekdays],
+      lighterWeek: false,
+      startDate,
+    },
   }));
 }
 
+const later = (a: string, b: string | undefined): string => (b !== undefined && b > a ? b : a);
+
 /**
  * The Proposal for a next block. With `lighterWeek`: the M10 deload on the workouts of the next
- * 7 days, then the block from day 8, as one change. Without: the block alone, from today (or
- * tomorrow when today already has a session). When the next 7 days have no workout to make
- * lighter, the block still starts on day 8 and the proposal is the block alone.
+ * 7 days, then the block from day 8 (or `startDate` if later), as one change. Without: the block
+ * alone, from `startDate`, but never before today (tomorrow when today already has a session).
+ * When the next 7 days have no workout to make lighter, the block still starts on day 8 and the
+ * proposal is the block alone.
  */
 export function proposeNextBlock(
   ctx: ActionContext,
@@ -95,10 +119,11 @@ export function proposeNextBlock(
   });
   if (args.lighterWeek !== true) {
     const busy = ctx.sessions.some((s) => localDate(s.startedAt) === ctx.today);
-    return proposeFocusBlock(ctx, params(busy ? addDate(ctx.today, 1) : ctx.today), catalog);
+    const first = busy ? addDate(ctx.today, 1) : ctx.today;
+    return proposeFocusBlock(ctx, params(later(first, args.startDate)), catalog);
   }
 
-  const start = addDate(ctx.today, DELOAD.days);
+  const start = later(addDate(ctx.today, DELOAD.days), args.startDate);
   const light = proposeDeload(ctx);
   if (!light.ok) return proposeFocusBlock(ctx, params(start), catalog);
   // The block is built on the state the lighter week leaves; it starts after those dates, so it

@@ -6,10 +6,11 @@
  * - Week: last week (the Mon–Sun week before today's), when it had anything planned or done and
  *   `last.week` is older than its Monday. Only the latest week; missed recaps aren't backfilled.
  * - Block: the newest block whose last date is before today and at most 7 days back, unless
- *   `last.block` is its id. M12 1b: it offers a lighter week and then the next block, for the
- *   same group or the next one in the order (two `nextBlock` chips whose args are
- *   trainer/nextBlock.ts `NextBlockArgs`; `proposeNextBlock` turns them into one Proposal), and
- *   still "Keep going" (chip `focusBlock` with the same params: another block right away).
+ *   `last.block` is its id. M12 1b: it offers the next block, for the same group or the next one
+ *   in the order, from the day after the block (two `nextBlock` chips whose args are
+ *   trainer/nextBlock.ts `NextBlockArgs`; `proposeNextBlock` turns them into a Proposal). No
+ *   extra lighter week: the block's own last week was lighter. "Keep going" (chip `focusBlock`
+ *   with the same params) stays.
  * - Numbers come from completion.ts `periodScore`; every text passes `checkCopy`, `say` ≤ 12 words.
  */
 import { addDate } from '../trainer/plan';
@@ -41,7 +42,7 @@ export type Recap = {
   chips: RecapChip[];
 };
 
-/** Chip id of a "lighter week, then the next block" offer (args: `NextBlockArgs`). */
+/** Chip id of a "next block" offer (args: `NextBlockArgs`). */
 export const NEXT_BLOCK_CHIP = 'nextBlock';
 
 /** How long after a block's last date its recap is still offered. */
@@ -84,8 +85,8 @@ function blockRecapText(label: string, s: PeriodScore): { text: string; say: str
   const line = scoreLine(s) ?? plural(s.extra, 'extra session');
   const focus = s.focus ? ` ${label} sets: ${s.focus.sets} of ${s.focus.target}.` : '';
   return {
-    text: `${label} block done: ${line}.${focus} Next up: a lighter week, then another block?`,
-    say: `${label} block done. Lighter week, then another block?`,
+    text: `${label} block done: ${line}.${focus} Ready for the next block?`,
+    say: `${label} block done. Ready for the next block?`,
   };
 }
 

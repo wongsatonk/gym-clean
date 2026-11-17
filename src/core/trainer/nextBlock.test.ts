@@ -57,21 +57,46 @@ describe('next group order (data)', () => {
     expect(nextGroup('chest')).toBe('back');
   });
 
-  it('the block after one: the same group, or the next in the order, after a lighter week', () => {
-    const block = { group: 'chest' as const, weeks: 3, weekdays: [1, 3, 5] };
+  it('after a block (which already ends lighter): same group or the next, no extra lighter week', () => {
+    // A 3-week block from Mon 2026-10-26; its last date is Sun 2026-11-15.
+    const block = {
+      group: 'chest' as const,
+      startDate: '2026-10-26',
+      weeks: 3,
+      weekdays: [1, 3, 5],
+    };
     expect(nextBlockOffers(block)).toEqual([
       {
-        label: 'Lighter week, then Chest',
-        args: { group: 'chest', weeks: 3, weekdays: [1, 3, 5], lighterWeek: true },
+        label: 'Next: Chest',
+        args: {
+          group: 'chest',
+          weeks: 3,
+          weekdays: [1, 3, 5],
+          lighterWeek: false,
+          startDate: '2026-11-16',
+        },
       },
       {
-        label: 'Lighter week, then Back',
-        args: { group: 'back', weeks: 3, weekdays: [1, 3, 5], lighterWeek: true },
+        label: 'Next: Back',
+        args: {
+          group: 'back',
+          weeks: 3,
+          weekdays: [1, 3, 5],
+          lighterWeek: false,
+          startDate: '2026-11-16',
+        },
       },
     ]);
+    for (const o of nextBlockOffers(block)) expect(o.label).not.toMatch(/lighter/i);
+    // A block cut short by a newer one: the day after its real last date.
+    const cut = {
+      ...block,
+      days: Array.from({ length: 10 }, (_, i) => ({ date: addDate('2026-10-26', i), day: null })),
+    };
+    expect(nextBlockOffers(cut)[0]?.args.startDate).toBe('2026-11-05');
     // The args are copies: changing them doesn't change the block.
     const weekdays = [1, 3, 5];
-    const [first] = nextBlockOffers({ group: 'legs', weeks: 2, weekdays });
+    const [first] = nextBlockOffers({ ...block, group: 'legs', weekdays });
     first?.args.weekdays.push(6);
     expect(weekdays).toEqual([1, 3, 5]);
   });
@@ -186,6 +211,28 @@ describe('proposeNextBlock', () => {
     expect(p.next.overrides.some((o) => o.adjust?.kind === 'deload')).toBe(false);
     const busy = ctxFor({ sessions: [done('push-a', TODAY)] });
     expect(blockOf(ok(proposeNextBlock(busy, args, CATALOG))).startDate).toBe(addDate(TODAY, 1));
+  });
+
+  it('startDate: the block starts then, never in the past or on a trained today', () => {
+    const args = { ...ARGS, lighterWeek: false };
+    const later = addDate(TODAY, 3);
+    const p = ok(proposeNextBlock(ctxFor(), { ...args, startDate: later }, CATALOG));
+    expect(blockOf(p).startDate).toBe(later);
+    expect(p.next.overrides.some((o) => o.adjust?.kind === 'deload')).toBe(false);
+    // The day after the old block is past (recap seen a few days late): from today.
+    const past = addDate(TODAY, -4);
+    expect(
+      blockOf(ok(proposeNextBlock(ctxFor(), { ...args, startDate: past }, CATALOG))).startDate,
+    ).toBe(TODAY);
+    const busy = ctxFor({ sessions: [done('push-a', TODAY)] });
+    expect(
+      blockOf(ok(proposeNextBlock(busy, { ...args, startDate: TODAY }, CATALOG))).startDate,
+    ).toBe(addDate(TODAY, 1));
+    // With the lighter week (deload path), the block never starts before day 8.
+    const lw = ok(proposeNextBlock(ctxFor(), { ...ARGS, startDate: TODAY }, CATALOG));
+    expect(blockOf(lw).startDate).toBe(addDate(TODAY, 7));
+    const lw2 = ok(proposeNextBlock(ctxFor(), { ...ARGS, startDate: addDate(TODAY, 10) }, CATALOG));
+    expect(blockOf(lw2).startDate).toBe(addDate(TODAY, 10));
   });
 
   it('no workouts in the next 7 days: no lighter week to offer, the block still starts on day 8', () => {
