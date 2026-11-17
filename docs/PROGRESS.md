@@ -272,7 +272,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `suggestGoals(intake, history)` → 1–2 measurable targets + a date (lift: e1RM-based, e.g. "Bench 60 kg × 8 by 2027-02-01"; measurement; weight), all as data; `goalProgress(goal, sets, measurements, weighIns, today)` → % + on track / behind; `intakeToChanges(intake, current)` → which proposals to offer (starter plan for a fresh install or "Build a new plan from my answers", the easy-on proposal, Fuel goal targets); `reviewDue(goals, lastReviewAt, trainerKit.reviewWeeks, today)` → once per period, with a recap text + an offer (focus block or goal edit).
   - Done when tests cover each goal kind, progress from made-up data, review every 5 weeks once (and every 4/6 when the setting says so), `checkCopy` on every string.
   - Deps: 10.
-- [ ] 12. [core-engineer] Standing "go easy on" list, **tests first** (item 3).
+- [x] 12. [core-engineer] Standing "go easy on" list, **tests first** (item 3).
   - Files: src/core/trainer/plan.ts(+test), src/core/trainer/actions/easyOn.ts(+test), src/core/trainer/actions/*.ts (swap, focusBlock, shortOnTime, stall, lighter checks), src/core/trainer/focusBlock.ts(+test), src/core/trainer/starterPlan.ts.
   - `TrainerState.easyOn` changed only by a Proposal (`easyOn`, scope `plan`, Apply / Undo, Plan changes). `effectiveDay` applies the avoid-area treatment for each listed area on every projected day (computed, so removing the area restores the plan). Every `propose*` and the focus-block builder never add or increase load on a listed area (swap candidates excluded; a focus block on a listed group → "Remove shoulders from your go-easy list first?" with that proposal).
   - Done when tests cover: add → every future day lightened/swapped; remove → restored; each action + the builder honour it; Undo; feel-today soreness (task 17) only offers today's avoid-area, never the standing list.
@@ -316,7 +316,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - At a block's end: the recap offers a lighter week (7 days, the deload rule) then a next block (same group or the next in an order as data). `deloadSuggested(sessions, state, today, lastOfferAt)`: after 6 hard weeks in a row (all planned sessions done, no lighter/deload days) or ≥ 2 exercises stalled at once (M10 stall rule) → once, then not again for 4 weeks (data). Proposals only.
   - Done when tests cover both triggers, once, the recap offer, Apply/Undo.
   - Deps: 1.
-- [ ] 21. [core-engineer] Protein nudge, post-workout idea, learn cards (item 12), **tests first**.
+- [x] 21. [core-engineer] Protein nudge, post-workout idea, learn cards (item 12), **tests first**.
   - Files: src/core/nutrition/nudges.ts(+test) (a logged meal ≥ 250 kcal with protein < 60% of his per-meal share (daily protein / 4 meals, data) → one nudge per meal), src/data/learnCards.ts(+test) (~10: progressive overload, effort, warm-ups, protein, sleep, deloads, focus blocks, short sessions, measurements, consistency), src/core/trainer/coach.ts (`learnId` on replies where a card fits; data map intent → card), src/core/trainer/replies.ts.
   - Done when tests cover nudge thresholds and once-per-meal, every card and link passing `checkCopy`, links point to existing ids. The post-workout idea reuses the M10 food suggestion (no new logic; a test that Summary's input gets it).
   - Deps: 12 (coach.ts after 8/12).
@@ -360,15 +360,15 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: src/ui/photos/progressPhotos.ts(+test) (list by date, add via take/pick (`input type=file accept=image/*`), downscale to 1080 px long edge on a canvas (drops EXIF), compare two dates side by side, delete one (two taps) / delete all (two taps), privacy line "Stays on this phone. Not in backups."), src/ui/photos/photos.css.
   - Done when: render tests (off state, add, compare, delete confirm) + 390×844 screenshot with made-up images.
   - Deps: 26.
-- [ ] 31. [ui-engineer] Feel today on Today + readiness card offer (item 9).
+- [x] 31. [ui-engineer] Feel today on Today + readiness card offer (item 9).
   - Files: src/ui/screens/today.ts(+test) (collapsed "How do you feel today?" row below Start → energy 1–5 + sore-area chips, optional, once per day), src/ui/screens/readinessCard.ts(+test) ("Go easy on shoulders today?" button when a sore area is a reason).
   - Done when: render tests + 390×844 screenshots (feel-today open, card with the sore offer).
   - Deps: 25 (today.ts: Goal card slot).
-- [ ] 32. [ui-engineer] Cardio line (item 11).
+- [x] 32. [ui-engineer] Cardio line (item 11).
   - Files: src/ui/screens/today.ts(+test) (week strip line "Cardio this week: 95 min", hidden when null), src/ui/screens/calendar.ts(+test) (week score line).
   - Done when: render tests (shown/hidden) + 390×844 screenshot.
   - Deps: 31 (today.ts).
-- [ ] 33. [ui-engineer] Protein nudge, post-workout idea, learn cards (item 12).
+- [x] 33. [ui-engineer] Protein nudge, post-workout idea, learn cards (item 12).
   - Files: src/ui/fuel/proteinNudge.ts(+test), src/ui/screens/fuel.ts (slot; after 27), src/ui/screens/summary.ts(+test) (post-workout meal idea with Log), src/ui/coach/learnCard.ts(+test) (sheet), src/ui/coach/chat.ts ("Why?" link on a bubble with `learnId`; after 29).
   - Done when: render tests + 390×844 screenshots (nudge, Summary idea, a learn card).
   - Deps: 27, 29.
