@@ -15,6 +15,8 @@ const ROUTES: Record<AppRoute, true> = {
   'settings/goal': true,
   'settings/progressPhotos': true,
   'fuel/measurements': true,
+  'settings/coach': true,
+  'settings/reminders': true,
   intake: true,
   todos: true,
 };

@@ -40,6 +40,10 @@ describe('detector registry', () => {
       intakeDone: true,
       measurementLogged: true,
       bodyCompDays: true,
+      appleAnswers: true,
+      micUses: true,
+      reminderOn: true,
+      checkInDone: true,
     };
     expect([...DETECTOR_IDS].sort()).toEqual(Object.keys(all).sort());
     expect(Object.keys(detectors).sort()).toEqual(Object.keys(all).sort());

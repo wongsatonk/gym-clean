@@ -116,6 +116,11 @@ export const detectors: Record<TodoDetectorId, Detector> = {
   intakeDone: flag('intakeDone'),
   measurementLogged: atLeast('measurements', 1),
   bodyCompDays: atLeast('bodyCompDays', 1, true),
+  // M12 slice 2: placeholders until task 15 adds their counts (never met until then).
+  appleAnswers: () => ({ done: false }),
+  micUses: () => ({ done: false }),
+  reminderOn: () => ({ done: false }),
+  checkInDone: () => ({ done: false }),
 };
 
 export const DETECTOR_IDS = Object.keys(detectors) as TodoDetectorId[];

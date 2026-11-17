@@ -485,7 +485,8 @@ export type ChatCard =
   | { kind: 'focusBlock'; blockId: string; status: ChatCardStatus }
   | { kind: 'food'; suggestions: FoodSuggestion[]; logged: number[] }
   | { kind: 'redFlag' }
-  | { kind: 'recap'; period: 'week' | 'block'; from: string; to: string };
+  | { kind: 'recap'; period: 'week' | 'block'; from: string; to: string }
+  | { kind: 'checkIn'; weekStart: string; status: 'pending' | 'done' | 'skipped' };
 
 /** Who answered: a chip (rules directly), the rule matcher, Apple's model or Claude. */
 export type BrainSource = 'chip' | 'rules' | 'apple' | 'claude';
@@ -507,6 +508,8 @@ export type ChatMessage = {
   usedHealth?: boolean;
   /** e.g. "Answered by quick replies: Apple Intelligence is off". */
   note?: string;
+  /** M12 slice 2: the user's message was sent with the hold-to-talk mic. */
+  viaMic?: true;
 };
 
 export type DayStatus = 'done' | 'partial' | 'missed' | 'rest' | 'planned' | 'extra';
@@ -575,6 +578,8 @@ export type AppRoute =
   | 'settings/goal'
   | 'settings/progressPhotos'
   | 'fuel/measurements'
+  | 'settings/coach'
+  | 'settings/reminders'
   | 'intake'
   | 'todos';
 
@@ -601,7 +606,11 @@ export type TodoDetectorId =
   | 'warmupSession'
   | 'intakeDone'
   | 'measurementLogged'
-  | 'bodyCompDays';
+  | 'bodyCompDays'
+  | 'appleAnswers'
+  | 'micUses'
+  | 'reminderOn'
+  | 'checkInDone';
 
 export type TodoOption = { id: string; label: string };
 
@@ -673,6 +682,63 @@ export type TodoSignals = { calendarAfterSessionAt?: number };
 export type CoachDecisionSettings = {
   appleCardReasons?: boolean;
   claudeWanted?: 'yes' | 'later' | 'no';
+};
+
+// ---- M12 slice 2: Apple on-device brain, mic, reminders, weekly check-in ----
+
+/** Why Apple's on-device model can't answer (docs/ios-setup.md "Slice 2 API notes" §1). */
+export type BrainUnavailableReason =
+  | 'deviceNotEligible'
+  | 'appleIntelligenceNotEnabled'
+  | 'modelNotReady'
+  | 'unsupported'
+  | 'notNative';
+
+/** A failed `respond` call, mapped from Apple's error families. */
+export type BrainErrorCode = 'guardrail' | 'contextTooLong' | 'unsupportedLanguage' | 'timeout' | 'other';
+
+/** A tool call the model made (recorded, never applied without a tap). */
+export type ToolCall = { name: string; args: Record<string, unknown> };
+
+/** Read-only tools: results are computed in the app and passed in before `respond`. */
+export type ReadToolName = 'weekSummary' | 'progressSummary' | 'exerciseInfo' | 'foodIdeas';
+
+export type GymBrainRequest = {
+  instructions: string;
+  context: string;
+  messages: { role: 'user' | 'coach'; text: string }[];
+  /** `exerciseInfo` results are keyed `exerciseInfo:<exerciseId>`. */
+  toolResults: Partial<Record<ReadToolName, string>> & Record<string, string>;
+};
+
+export type GymBrainResponse = { text: string; toolCalls: ToolCall[]; latencyMs: number };
+
+/** settings 'coach' (slice 2 fields; merged with CoachDecisionSettings in the same row). */
+export type CoachSettings = CoachDecisionSettings & {
+  /** Default 'mic': speak only replies to mic-sent messages. */
+  speakReplies?: 'mic' | 'always' | 'off';
+  /** When each plain "quick replies" note was shown (once per reason). */
+  brainNotes?: Partial<Record<BrainUnavailableReason, number>>;
+};
+
+export type ReminderKind = 'session' | 'missedDay' | 'sundayRecap';
+
+/** settings 'reminders'. Everything off by default. */
+export type ReminderSettings = {
+  session: { on: boolean; time: string /* HH:MM */ };
+  missedDay: { on: boolean };
+  sundayRecap: { on: boolean };
+  askedPermission?: boolean;
+};
+
+/** Dexie `checkIns` (v11), keyed by weekStart (YYYY-MM-DD). Never in a brain context. */
+export type CheckIn = {
+  weekStart: string;
+  energy?: 1 | 2 | 3 | 4 | 5;
+  sleep?: 1 | 2 | 3 | 4 | 5;
+  soreness?: 1 | 2 | 3 | 4 | 5;
+  skipped?: true;
+  at: number;
 };
 
 export type TrainerKitSettings = {

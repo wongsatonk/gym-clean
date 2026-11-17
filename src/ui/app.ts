@@ -2395,6 +2395,11 @@ export function mountApp(root: HTMLElement): void {
       case 'intake':
         openIntake(tabOf(view) === 'settings' ? 'settings' : 'today');
         return;
+      // M12 slice 2: the Coach and Reminders screens land in task 20; Settings until then.
+      case 'settings/coach':
+      case 'settings/reminders':
+        goTab('settings');
+        return;
       default: {
         const unhandled: never = route;
         throw new Error(`Unhandled route: ${String(unhandled)}`);

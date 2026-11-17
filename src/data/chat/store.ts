@@ -66,6 +66,7 @@ function patched(card: ChatCard, p: ChatCardPatch): ChatCard {
       return { ...card, ...(p.logged !== undefined && { logged: [...p.logged] }) };
     case 'redFlag':
     case 'recap':
+    case 'checkIn': // M12 slice 2: task 17 decides how a check-in card is patched.
       return card;
   }
 }
