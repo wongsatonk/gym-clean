@@ -581,7 +581,10 @@ export type AppRoute =
   | 'settings/coach'
   | 'settings/reminders'
   | 'intake'
-  | 'todos';
+  | 'todos'
+  | 'welcome'
+  | 'settings/about'
+  | 'settings/licenses';
 
 /** native = iPhone app only. */
 export type TodoPlatform = 'any' | 'native';
@@ -635,6 +638,8 @@ export type TodoTopic = {
   platform: TodoPlatform;
   recurring?: boolean;
   steps: TodoStep[];
+  /** M13: shown only in owner mode. */
+  owner?: true;
 };
 
 export type TodoAnswer = {
@@ -669,6 +674,8 @@ export type WhatsNewPage = {
   why: string;
   tryIt?: AppRoute;
   icon?: string;
+  /** M13: shown only in owner mode. */
+  owner?: true;
 };
 
 /** settings 'whatsNew'. */
@@ -794,3 +801,39 @@ export type LearnCard = { id: string; title: string; body: string; why?: string 
 
 /** "Share my gym": equipment ids only, no personal data. */
 export type GymFile = { format: 'gym-clean-gym'; version: 1; equipment: string[] };
+
+// ---- M13: Published look (SPEC M13 data model) ----
+
+/** settings 'ownerMode'. Off on fresh installs; on for installs that already had his data. */
+export type OwnerMode = { on: boolean; setAt: number; by: 'fresh' | 'existing' | 'user' };
+
+/** Things only the owner sees (developer and checkpoint tools). */
+export type OwnerSurface =
+  | 'todos'
+  | 'resign'
+  | 'devlog'
+  | 'buildHash'
+  | 'tourTodos'
+  | 'evalScreen'
+  | 'copyReport';
+
+/** settings 'onboarding'. */
+export type Onboarding = { doneAt?: number; skippedAt?: number };
+
+export type OnboardingStep =
+  | { kind: 'welcome'; id: string }
+  | { kind: 'intake' }
+  | { kind: 'permission'; permission: 'camera' | 'health' | 'mic' | 'notifications' };
+
+export type LicenseEntry = {
+  name: string;
+  version?: string;
+  license: string;
+  source: 'npm' | 'data' | 'model' | 'font';
+  text?: string;
+};
+
+export type ShareLead = 'sessions' | 'volume' | 'streak';
+
+/** Story-size share numbers; warm-ups excluded. */
+export type ShareStats = { sessionsDone: number; volumeKg: number; streakWeeks: number };

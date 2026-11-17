@@ -3057,6 +3057,12 @@ export function mountApp(root: HTMLElement): void {
       case 'intake':
         openIntake(tabOf(view) === 'settings' ? 'settings' : 'today');
         return;
+      // M13: the welcome / About / Licenses screens land in tasks 30–31; Settings until then.
+      case 'welcome':
+      case 'settings/about':
+      case 'settings/licenses':
+        goTab('settings');
+        return;
       // M12 slice 2.
       case 'settings/coach':
         setEnter('settings');
