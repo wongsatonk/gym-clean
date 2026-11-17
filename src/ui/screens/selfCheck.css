@@ -1,0 +1,156 @@
+/* 1.15.0 Settings → Self-check (selfCheck.ts). Pro mood. Each row: state icon + state word
+   (never colour alone), the check name, a detail line and a fix line when not ok. Text ≥ 20px,
+   buttons ≥ 56px. Tokens only, no motion (the Checking state is a word + a static icon). */
+
+.selfcheck-intro,
+.selfcheck-version {
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.selfcheck-summary {
+  margin: 0;
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.selfcheck-summary[data-tone='ready'] {
+  color: var(--success);
+}
+
+.selfcheck-summary[data-tone='attention'] {
+  color: var(--warn);
+}
+
+.selfcheck-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.selfcheck-row {
+  display: grid;
+  grid-template-columns: minmax(118px, max-content) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  min-width: 0;
+}
+
+.selfcheck-row.is-fail {
+  border-color: var(--danger);
+}
+
+.selfcheck-row.is-warn {
+  border-color: var(--warn);
+}
+
+.selfcheck-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.selfcheck-state .ic {
+  flex: none;
+}
+
+.is-ok .selfcheck-state {
+  color: var(--success);
+}
+
+.is-warn .selfcheck-state {
+  color: var(--warn);
+}
+
+.is-fail .selfcheck-state {
+  color: var(--danger);
+}
+
+.is-running .selfcheck-state {
+  color: var(--text);
+}
+
+.selfcheck-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.selfcheck-name,
+.selfcheck-detail,
+.selfcheck-fix {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.selfcheck-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.selfcheck-detail {
+  color: var(--text-2);
+}
+
+.selfcheck-fix {
+  color: var(--text);
+}
+
+.selfcheck-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.selfcheck-again,
+.selfcheck-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 64px;
+  width: 100%;
+  padding: 0 18px;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+}
+
+.selfcheck-again {
+  background: var(--cta);
+  color: var(--on-cta);
+  border: none;
+}
+
+.selfcheck-copy {
+  background: var(--surface-2);
+}
+
+.selfcheck-again:disabled,
+.selfcheck-copy:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.selfcheck-copied {
+  margin: 0;
+  min-height: 1.3em;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
