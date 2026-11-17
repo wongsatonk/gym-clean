@@ -131,10 +131,12 @@ export type TrainerState = {
   plan: UserPlan;
   schedule: Schedule;
   overrides: DayOverride[];
+  /** M12 focus blocks (dated, built by the app); missing = none. */
+  blocks?: FocusBlock[];
 };
 
 export type ProposalAction =
-  'postpone' | 'avoidArea' | 'lighter' | 'deload' | 'swap' | 'stall' | 'food';
+  'postpone' | 'avoidArea' | 'lighter' | 'deload' | 'swap' | 'stall' | 'food' | 'focusBlock';
 
 export type Proposal = {
   action: ProposalAction;
@@ -378,4 +380,119 @@ export type ReadinessCard = {
   /** Plain coaching reasons, each passing checkCopy + the M11 banned list. */
   reasons: string[];
   offer: 'lighter' | 'deload';
+};
+
+// ---- M12 Coach tab: chat, focus blocks, calendar (SPEC M12 "Data model") ----
+
+export type FocusGroup = BodyArea;
+
+export type FocusBlockParams = {
+  group: FocusGroup;
+  /** 2–6. */
+  weeks: number;
+  /** Training weekdays, 0 = Sun. */
+  weekdays: number[];
+  /** Local YYYY-MM-DD. */
+  startDate: string;
+};
+
+/** A dated, deterministic block the app builds; a brain only picks the params. */
+export type FocusBlock = {
+  id: string;
+  group: FocusGroup;
+  startDate: string;
+  weeks: number;
+  weekdays: number[];
+  /** Every date of the block; `day: null` = rest. */
+  days: { date: string; day: ProgramDay | null }[];
+  /** Focus group's weekly sets: target in the block vs his base plan (for the scores). */
+  targetSetsPerWeek: number;
+  baseSetsPerWeek: number;
+};
+
+export type ChatCardStatus = 'pending' | 'applied' | 'dismissed' | 'undone' | 'expired';
+
+export type ChatCard =
+  | {
+      kind: 'proposal';
+      title: string;
+      lines: { before: string; after: string }[];
+      why: string;
+      status: ChatCardStatus;
+      baseVersion: number;
+      changeId?: number;
+    }
+  | { kind: 'focusBlock'; blockId: string; status: ChatCardStatus }
+  | { kind: 'food'; suggestions: FoodSuggestion[]; logged: number[] }
+  | { kind: 'redFlag' }
+  | { kind: 'recap'; period: 'week' | 'block'; from: string; to: string };
+
+/** Who answered: a chip (rules directly), the rule matcher, Apple's model or Claude. */
+export type BrainSource = 'chip' | 'rules' | 'apple' | 'claude';
+
+export type ChatMessage = {
+  id?: number;
+  createdAt: number;
+  role: 'user' | 'coach';
+  text: string;
+  /** Short spoken line (≤ 12 words; ≤ 8 mid-workout). */
+  say?: string;
+  source: BrainSource;
+  phase: 'today' | 'preview' | 'workout';
+  card?: ChatCard;
+  chips?: { id: string; label: string; args?: Record<string, unknown> }[];
+  /** True when this turn's context included M11 card reasons: never sent to Claude. */
+  usedHealth?: boolean;
+  /** e.g. "Answered by quick replies: Apple Intelligence is off". */
+  note?: string;
+};
+
+export type DayStatus = 'done' | 'partial' | 'missed' | 'rest' | 'planned' | 'extra';
+
+export type DayCompletion = {
+  date: string;
+  status: DayStatus;
+  dayId: string | null;
+  blockId?: string;
+  setsPlanned: number;
+  setsDone: number;
+  exercises: {
+    exerciseId: string;
+    setsPlanned: number;
+    setsDone: number;
+    repsTarget: [number, number];
+    reps: number[];
+    status: 'done' | 'partial' | 'missed';
+  }[];
+};
+
+export type PeriodScore = {
+  from: string;
+  to: string;
+  sessionsPlanned: number;
+  sessionsDone: number;
+  setsPlanned: number;
+  setsDone: number;
+  extra: number;
+  focus?: { group: FocusGroup; sets: number; target: number };
+};
+
+/** What a brain sees: the M10 coach context plus the last turns (≤ 8). */
+export type BrainContext = {
+  coach: import('./trainer/coach').CoachContext;
+  turns: readonly ChatMessage[];
+};
+
+/** A brain's answer: the M10 `handle()` result plus where it came from. */
+export type BrainReply = import('./trainer/coach').CoachResponse & {
+  source: BrainSource;
+  note?: string;
+  usedHealth?: boolean;
+};
+
+/** The seam slices 2/3 plug into (Apple, Claude); slice 1 has chip + rules. */
+export type CoachBrain = {
+  id: BrainSource;
+  status(): Promise<{ available: boolean; reason?: string }>;
+  ask(text: string, ctx: BrainContext): Promise<BrainReply>;
 };
