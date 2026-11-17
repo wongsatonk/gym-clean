@@ -228,7 +228,11 @@ describe('syncHealth', () => {
     ];
     const res = await run(new FakeHealth(usualRead()), store);
     expect(res.weighIns.find((w) => w.date === d)).toEqual({ date: d, kg: 70.1, source: 'health' });
-    expect(store.weighIns.find((w) => w.date === d)).toEqual({ date: d, kg: 70.1, source: 'health' });
+    expect(store.weighIns.find((w) => w.date === d)).toEqual({
+      date: d,
+      kg: 70.1,
+      source: 'health',
+    });
     expect(store.weighIns.find((w) => w.date === addDate(TODAY, -40))).toEqual({
       date: addDate(TODAY, -40),
       kg: 73,
@@ -240,7 +244,11 @@ describe('syncHealth', () => {
     const store = new FakeStore({ deletedHealthWeighIns: [d] });
     store.weighIns = [{ date: d, kg: 72.5, source: 'manual' }];
     await run(new FakeHealth(usualRead()), store);
-    expect(store.weighIns.find((w) => w.date === d)).toEqual({ date: d, kg: 72.5, source: 'manual' });
+    expect(store.weighIns.find((w) => w.date === d)).toEqual({
+      date: d,
+      kg: 72.5,
+      source: 'manual',
+    });
   });
 
   it("a later read updates today's imported weigh-in when a morning sample arrives late", async () => {
@@ -386,7 +394,8 @@ describe('syncHealth', () => {
         kg: 70.1,
         source: 'health',
       });
-      for (const w of store.weighIns) expect(Object.keys(w).sort()).toEqual(['date', 'kg', 'source']);
+      for (const w of store.weighIns)
+        expect(Object.keys(w).sort()).toEqual(['date', 'kg', 'source']);
     });
 
     it('a switch turned off while the read runs: that value is dropped', async () => {
@@ -419,7 +428,11 @@ describe('syncHealth', () => {
         enabled: { ...ALL_OFF, bodyFat: true },
         lastReadAt: NOW - HOUR,
       });
-      const old = { start: Date.parse(`${addDate(TODAY, -2)}T20:00:00+07:00`), pct: 25, source: 'Scale' };
+      const old = {
+        start: Date.parse(`${addDate(TODAY, -2)}T20:00:00+07:00`),
+        pct: 25,
+        source: 'Scale',
+      };
       const res = await run(new FakeHealth({ bodyFat: [old] }), store);
       expect(res.daysMerged).toBe(0);
       expect(store.days.size).toBe(0);
@@ -457,6 +470,108 @@ describe('syncHealth', () => {
       expect(store.patches).toEqual([]);
       expect(store.weighIns).toEqual([]);
     }
+  });
+
+  describe('feel today without Health (M12 1b item 9: PWA, or Health not connected)', () => {
+    const LOW_AND_SORE = [{ date: TODAY, energy: 2 as const, sore: ['chest' as const] }];
+
+    /** Stored Health days that would add signals if they were (wrongly) read. */
+    async function storeWithBadDays(s: Partial<HealthSettings> = {}): Promise<FakeStore> {
+      const store = new FakeStore();
+      await run(new FakeHealth(badToday()), store, { trainingDay: false });
+      store.settings = { ...store.settings, ...s };
+      store.merges = [];
+      store.patches = [];
+      return store;
+    }
+
+    it('unavailable (no plugin) + energy 2 + a sore area: the card, status kept', async () => {
+      const store = new FakeStore();
+      store.listDays = async () => {
+        throw new Error('Health days must not be read without Health');
+      };
+      const res = await run(null, store, { feels: LOW_AND_SORE });
+      expect(res.status).toBe('unavailable');
+      expect(res.daysMerged).toBe(0);
+      expect(res.weighIns).toEqual([]);
+      expect(res.card).toMatchObject({
+        date: TODAY,
+        offer: 'lighter',
+        signals: ['feltLow', 'sore'],
+      });
+      expect(store.settings.readiness?.lastCard).toEqual(res.card);
+      expect(store.merges).toEqual([]);
+      expect(store.settings.lastReadAt).toBeUndefined();
+    });
+
+    it('plugin there but not available: same card, the plugin is never read', async () => {
+      const health = Object.assign(new FakeHealth(badToday()), { available: false });
+      const res = await run(health, new FakeStore(), { feels: LOW_AND_SORE });
+      expect(res.status).toBe('unavailable');
+      expect(res.card?.signals).toEqual(['feltLow', 'sore']);
+      expect(health.calls).toEqual([]);
+    });
+
+    it('off (no type on) + energy 2 + a sore area: the card from feel alone, no Health read', async () => {
+      const store = await storeWithBadDays({ enabled: { ...ALL_OFF } });
+      const health = new FakeHealth(badToday());
+      const res = await run(health, store, { feels: LOW_AND_SORE });
+      expect(res.status).toBe('off');
+      // Stored sleep / resting HR signals are never added: Health values aren't involved.
+      expect(res.card?.signals).toEqual(['feltLow', 'sore']);
+      expect(health.calls).toEqual([]);
+      expect(store.merges).toEqual([]);
+    });
+
+    it('a failed sync (plugin throws) still makes the feel-only card', async () => {
+      const health = Object.assign(new FakeHealth(badToday()), { throws: true });
+      const res = await run(health, new FakeStore(), { feels: LOW_AND_SORE });
+      expect(res.status).toBe('failed');
+      expect(res.card?.signals).toEqual(['feltLow', 'sore']);
+    });
+
+    it('one signal only (low energy, or a sore area): no card, nothing written', async () => {
+      for (const feels of [
+        [{ date: TODAY, energy: 2 as const }],
+        [{ date: TODAY, energy: 4 as const, sore: ['chest' as const] }],
+      ]) {
+        const store = new FakeStore();
+        const res = await run(null, store, { feels });
+        expect(res.card).toBeNull();
+        expect(store.patches).toEqual([]);
+      }
+    });
+
+    it('a feel row from another day does not count today', async () => {
+      const res = await run(null, new FakeStore(), {
+        feels: [{ date: addDate(TODAY, -1), energy: 1, sore: ['chest'] }],
+      });
+      expect(res.card).toBeNull();
+    });
+
+    it('answered today: no card again; once per day otherwise', async () => {
+      const store = new FakeStore();
+      const first = await run(null, store, { feels: LOW_AND_SORE });
+      const again = await run(null, store, { feels: LOW_AND_SORE, now: NOW + HOUR });
+      expect(again.card).toEqual(first.card);
+      expect(store.patches.filter((p) => p.readiness)).toHaveLength(1);
+      await answerCard(store, TODAY);
+      const after = await run(null, store, { feels: LOW_AND_SORE, now: NOW + 2 * HOUR });
+      expect(after.card).toBeNull();
+    });
+
+    it('no card on a rest day, mid-workout, or when trainingDay is not known', async () => {
+      for (const over of [
+        { trainingDay: false },
+        { inWorkout: true },
+        { trainingDay: undefined },
+      ]) {
+        const store = new FakeStore({ enabled: { ...ALL_OFF } });
+        const res = await run(null, store, { feels: LOW_AND_SORE, ...over });
+        expect(res.card).toBeNull();
+        expect(store.patches).toEqual([]);
+      }
+    });
   });
 
   it('a store that throws: reported as failed, never thrown', async () => {

@@ -5,7 +5,10 @@
  * `src/native/health.ts` (`Health`), matched structurally so core imports no native code.
  *
  * One sync:
- * 1. Plugin missing / unavailable (PWA) or no type on → quiet no-op (nothing written, no card).
+ * 1. Plugin missing / unavailable (PWA) or no type on → quiet no-op for Health: nothing read or
+ *    merged, `lastReadAt` untouched. M12 1b item 9: today's card is still made from his
+ *    "feel today" answers alone (no Health days, no weigh-ins), with the same rules as 5. The same
+ *    goes for a failed sync (status 'failed').
  * 2. Read only the enabled types from local midnight of the window's first day (`since`): 35 days
  *    back on the first read, else the day before `lastReadAt`. Merges are per field (a new value
  *    replaces the stored one), so only whole days may be merged:
@@ -26,7 +29,7 @@
  *    never a readiness signal.
  * 5. Today's `ReadinessCard` from the stored days and `settings.readiness`; a new card is saved as
  *    `lastCard` (+ `lastDeloadOfferDate` when it offers a deload), so it shows once per day.
- * Never throws: any error ends as status 'failed' with no card.
+ * Never throws: any error ends as status 'failed' (with at most a feel-only card).
  */
 import { addDate, localDate } from '../trainer/plan';
 import {
@@ -137,21 +140,27 @@ function only(read: HealthRead, types: readonly HealthType[]): HealthRead {
   return out;
 }
 
-const EMPTY = (status: HealthSyncStatus): HealthSyncResult => ({
-  status,
-  daysMerged: 0,
-  weighIns: [],
-  card: null,
-});
+/**
+ * Nothing read from Health (unavailable / off / failed): the status as it is, plus today's card
+ * from his feel-today answers alone (never throws; a store error → no card).
+ */
+async function withoutHealth(
+  status: HealthSyncStatus,
+  input: HealthSyncInput,
+  rules: HealthRules,
+): Promise<HealthSyncResult> {
+  const card = await todaysCard(input, rules, false).catch(() => null);
+  return { status, daysMerged: 0, weighIns: [], card };
+}
 
 /** One sync. Never throws. */
 export async function syncHealth(input: HealthSyncInput): Promise<HealthSyncResult> {
   const { health, store, now, today, rules = HEALTH_RULES } = input;
   try {
-    if (!health || !(await health.isAvailable())) return EMPTY('unavailable');
+    if (!health || !(await health.isAvailable())) return withoutHealth('unavailable', input, rules);
     const before = await store.getSettings();
     const asked = enabledTypes(before);
-    if (asked.length === 0) return EMPTY('off');
+    if (asked.length === 0) return withoutHealth('off', input, rules);
 
     const since = healthReadSince(before.lastReadAt, today, now);
     const firstFullDay = localDate(since);
@@ -187,17 +196,21 @@ export async function syncHealth(input: HealthSyncInput): Promise<HealthSyncResu
       await store.patchSettings(() => ({ lastReadAt: now }));
     }
 
-    const card = await todaysCard(input, rules);
+    const card = await todaysCard(input, rules, true);
     return { status, daysMerged, weighIns, card };
   } catch {
-    return EMPTY('failed');
+    return withoutHealth('failed', input, rules);
   }
 }
 
-/** Today's card from the stored days; a newly made card is saved in `readiness`. */
+/**
+ * Today's card from the stored days (`useHealth`; else from his feel-today answers alone, no
+ * Health day read); a newly made card is saved in `readiness`.
+ */
 async function todaysCard(
   input: HealthSyncInput,
   rules: HealthRules,
+  useHealth: boolean,
 ): Promise<ReadinessCard | null> {
   const { store, today, now } = input;
   if (input.trainingDay !== true || input.inWorkout === true) return null;
@@ -205,7 +218,7 @@ async function todaysCard(
   // Enough days for the 28-day baselines of each of the 7 days the deload nudge looks back on,
   // plus the 2 days the outside-workout check looks up by time.
   const from = addDate(today, -(rules.baselineDays + rules.deloadWindowDays + 2));
-  const days = await store.listDays(from, today);
+  const days = useHealth ? await store.listDays(from, today) : [];
   const card = readinessCard({
     date: today,
     now,

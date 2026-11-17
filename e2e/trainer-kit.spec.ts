@@ -311,10 +311,19 @@ test('Feel today: energy + a sore area → "Go easy on chest today?" → the coa
   await feel.locator('[data-feel-save]').click();
   await expect(feel).toHaveAttribute('data-state', 'done');
 
-  // Saved for today: still answered after a reload.
+  // SPEC M12 item 9: feel today alone (energy 2 + a sore area = two signals) makes the
+  // "Lighter today?" card on the web, without Health.
+  const lighter = page.locator('[data-readiness="lighter"]');
+  await expect(lighter).toBeVisible();
+  await expect(lighter.getByRole('heading', { name: 'Lighter today?' })).toBeVisible();
+  await expect(lighter.locator('[data-readiness-reason]')).toHaveCount(2);
+  await expect(lighter.locator('[data-readiness-lighter]')).toBeVisible();
+
+  // Saved for today: still answered after a reload, and today's card stays as shown.
   await page.reload();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
   await expect(page.locator('[data-feel-today]')).toHaveAttribute('data-state', 'done');
+  await expect(page.locator('[data-readiness="lighter"]')).toBeVisible();
 
   const offer = page.locator('[data-easy-on="chest"]').first();
   await expect(offer).toBeVisible();

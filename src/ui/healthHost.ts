@@ -13,7 +13,9 @@
 //   asking iOS; iOS then lets him pick per type. All types off → the Connect button again.
 // - The "Lighter today?" card is only handed to Today; it is never spoken. Its buttons record
 //   the answer (`answerCard`) and open the existing M10 coach proposals (the caller's `open`),
-//   so Apply / Undo / Plan changes work as for any proposal.
+//   so Apply / Undo / Plan changes work as for any proposal. M12 1b: feel today alone (energy
+//   ≤ 2 + a sore area) makes the card on the PWA / with Health off too; its answer is stored in
+//   settings like any card, with no native call.
 // - Turning a type off deletes what the app kept of it (setHealthTypeEnabled) and drops today's
 //   saved card when it leaned on that type, so the next sync decides again without it.
 // Privacy: nothing here touches the network or the developer log, and nothing from Health goes
@@ -180,8 +182,9 @@ export function createHealthHost(deps: HealthHostDeps) {
       gymSessions: deps.sessions(),
       feels,
     });
+    // Without Health (PWA / not connected) the card can still come from feel today alone.
     card = res.card;
-    if (!health) return; // PWA: nothing stored, nothing to show
+    if (!health) return; // PWA: no Health data stored, nothing else to reload
     await reload();
     if (res.weighIns.length > 0) deps.onWeighIns();
   }
@@ -316,16 +319,18 @@ export function createHealthHost(deps: HealthHostDeps) {
       void sync();
     },
     /**
-     * Today's Health props: the card (null on the PWA / no card) and the weekly-load line. The
-     * card from the last sync is shown only while it is still today's and today is still a
-     * training day that isn't done (no sync needed for it to go after midnight or the workout).
+     * Today's Health props: the card (also on the PWA, from feel today alone) and the weekly-load
+     * line (Health only: null on the PWA). The card from the last sync is shown only while it is
+     * still today's and today is still a training day that isn't done (no sync needed for it to
+     * go after midnight or the workout).
      */
     todayProps(): { readiness: ReadinessCard | null; weekLoad: WeekLoad | null } {
-      if (!api) return { readiness: null, weekLoad: null };
-      const weekLoad = settings.enabled.workouts
-        ? weeklyLoad({ sessions: deps.sessions(), healthDays: days, today: deps.now() })
-        : null;
+      // M12 1b item 9: feel today alone can make the card, so it shows without Health too.
       const readiness = card && card.date === today() && deps.trainingDay() === true ? card : null;
+      const weekLoad =
+        api && settings.enabled.workouts
+          ? weeklyLoad({ sessions: deps.sessions(), healthDays: days, today: deps.now() })
+          : null;
       return { readiness, weekLoad };
     },
     /**

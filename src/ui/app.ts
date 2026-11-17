@@ -3086,7 +3086,7 @@ export function mountApp(root: HTMLElement): void {
       .then(() => getDayFeel(db, feel.date))
       .then((row) => {
         feels = [...feels.filter((f) => f.date !== feel.date), ...(row ? [row] : [])];
-        // The "Lighter today?" card weighs it in (iPhone app; never spoken).
+        // The "Lighter today?" card weighs it in (never spoken).
         void health.sync();
         if (view.screen === 'today') render();
       })

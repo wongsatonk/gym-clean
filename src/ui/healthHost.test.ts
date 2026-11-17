@@ -157,9 +157,84 @@ describe('healthHost', () => {
     const card = h.todayProps().readiness;
     expect(card?.signals).toEqual(expect.arrayContaining(['feltLow', 'sore']));
     const areas: string[] = [];
-    h.readinessActions(() => undefined, (a) => areas.push(a)).onEasyOn?.('shoulders');
+    h.readinessActions(
+      () => undefined,
+      (a) => areas.push(a),
+    ).onEasyOn?.('shoulders');
     expect(areas).toEqual(['shoulders']);
     expect(h.todayProps().readiness, 'answered').toBeNull();
+  });
+
+  it('M12 1b PWA (no plugin): energy 2 + a sore area alone make the card; weekLoad stays null', async () => {
+    await saveDayFeel(db, { date: TODAY, energy: 2, sore: ['chest'] });
+    const { h } = host(null);
+    await h.sync();
+    const props = h.todayProps();
+    expect(props.weekLoad).toBeNull();
+    expect(props.readiness).toMatchObject({ date: TODAY, signals: ['feltLow', 'sore'] });
+    expect(h.cardioMinutes()).toBeNull();
+    expect(await db.healthDays.count()).toBe(0);
+    expect((await getHealthSettings(db)).lastReadAt).toBeUndefined();
+  });
+
+  it('M12 1b PWA: one feel signal only → no card', async () => {
+    await saveDayFeel(db, { date: TODAY, energy: 2 });
+    const { h } = host(null);
+    await h.sync();
+    expect(h.todayProps().readiness).toBeNull();
+  });
+
+  it('M12 1b PWA: the card buttons work without Health and the answer sticks for the day', async () => {
+    for (const [action, chip] of [
+      ['onLighterToday', 'lighter'],
+      ['onNotToday', 'notToday'],
+      ['onTrainAsPlanned', null],
+    ] as const) {
+      await saveDayFeel(db, { date: TODAY, energy: 1, sore: ['chest'] });
+      const { h } = host(null);
+      await h.sync();
+      expect(h.todayProps().readiness).not.toBeNull();
+      const opened: CardChip[] = [];
+      h.readinessActions((c) => opened.push(c))[action]?.();
+      expect(h.todayProps().readiness).toBeNull();
+      expect(opened).toEqual(chip ? [chip] : []);
+      await vi.waitFor(async () =>
+        expect((await getHealthSettings(db)).readiness?.answeredDate).toBe(TODAY),
+      );
+      await h.sync();
+      expect(h.todayProps().readiness, 'answered: not again today').toBeNull();
+      db.close();
+      await db.delete();
+      db = new GymDb(`health-host-${n++}`);
+      await db.open();
+    }
+  });
+
+  it('M12 1b PWA: Go easy on a sore area answers the card and opens the area', async () => {
+    await saveDayFeel(db, { date: TODAY, energy: 2, sore: ['chest'] });
+    const { h } = host(null);
+    await h.sync();
+    expect(h.todayProps().readiness).not.toBeNull();
+    const areas: string[] = [];
+    h.readinessActions(
+      () => undefined,
+      (a) => areas.push(a),
+    ).onEasyOn?.('chest');
+    expect(areas).toEqual(['chest']);
+    expect(h.todayProps().readiness).toBeNull();
+  });
+
+  it('M12 1b PWA: no card on a rest day / when the day is done, and none after midnight', async () => {
+    await saveDayFeel(db, { date: TODAY, energy: 2, sore: ['chest'] });
+    const clock = { now: NOW, trainingDay: true as boolean | undefined };
+    const { h } = host(null, clock);
+    await h.sync();
+    expect(h.todayProps().readiness).not.toBeNull();
+    clock.trainingDay = false;
+    expect(h.todayProps().readiness).toBeNull();
+    clock.trainingDay = true;
+    clock.now = NOW + 20 * HOUR;
+    expect(h.todayProps().readiness).toBeNull();
   });
 
   it('M12 1b: cardio minutes and body comp are null / empty on the PWA', async () => {
