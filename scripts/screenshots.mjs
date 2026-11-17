@@ -37,6 +37,9 @@
 //   node scripts/screenshots.mjs --store     # M13 store set: restores the made-up demo backup (owner
 //                                            #   mode off) at 390x844 @3x, 6 screens plain + captioned
 //                                            #   on the brand background: docs/screenshots/store/*.png
+//   node scripts/screenshots.mjs m13         # M13 verify: fresh install welcome → intake → camera
+//                                            #   page → Today; Settings, Self-check, tour, About owner
+//                                            #   off; 7-tap unlock → owner on: m13-verify-*.png
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -3974,6 +3977,200 @@ async function store(browser) {
   results.push(flow, ...storeResults);
 }
 
+// ------------------------------------------------- M13 verify (task 39): fresh install, owner off
+// A fresh profile (no seed rows): welcome pages → intake (Skip for now) → camera page (Allow) →
+// Today; Settings, Self-check, About and the What's New tour with owner mode off; then the 7-tap
+// unlock → Owner tools on → About + Settings again. docs/screenshots/m13-verify-*.png.
+async function m13Visible(page, sel) {
+  return page.locator(sel).evaluateAll((els) => els.filter((e) => e.getClientRects().length > 0).length);
+}
+
+async function m13Leaks(page) {
+  return page.evaluate(() => {
+    const text = document.body.innerText;
+    return {
+      hashLike: text.match(/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/g) ?? [],
+      buildWord: /\(build /i.test(text),
+      todoWord: /to-?dos?\b/i.test(text),
+      devLogWord: /developer log/i.test(text),
+    };
+  });
+}
+
+async function m13Shot(p, name, extra = {}, opts = {}) {
+  await p.page.waitForTimeout(350);
+  const metrics = await m12Metrics(p.page, opts.scope);
+  const leaks = await m13Leaks(p.page);
+  await shot(p.page, p.log, `m13-verify-${name}`, { metrics, leaks, ...extra });
+  if (opts.fullPage)
+    await p.page.screenshot({ path: `${OUT}/m13-verify-${name}-full.png`, fullPage: true });
+}
+
+async function m13(browser) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    ignoreHTTPSErrors: true,
+    permissions: ['camera'],
+    reducedMotion: 'reduce',
+  });
+  const offsite = [];
+  await ctx.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'localhost') return route.continue();
+    offsite.push(url.href);
+    return route.abort();
+  });
+  const page = await ctx.newPage();
+  const log = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => log.push(`pageerror: ${e.message}`));
+  await page.addInitScript(() => {
+    window.__spoken = [];
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => window.__spoken.push(u.text), cancel: () => {}, pause: () => {},
+        resume: () => {}, getVoices: () => [], addEventListener: () => {},
+        speaking: false, pending: false, paused: false,
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => {}, release: async () => {} }) },
+    });
+  });
+  await page.clock.install({ time: m12At(18, 18) });
+  const p = { ctx, page, log };
+  const flow = { flow: 'm13', steps: [] };
+  const step = (s) => flow.steps.push(s);
+  const welcome = page.locator('[data-screen="welcome"]');
+  const count = page.locator('[data-ob="count"]');
+  const primary = page.locator('[data-ob="primary"]');
+
+  await page.goto(BASE + '/');
+  await welcome.waitFor();
+  step({ welcomeShown: true, tabbar: await page.locator('[data-tabbar]').count() });
+  // Welcome pages until the intake appears.
+  for (let i = 1; i <= 6; i++) {
+    if (await page.locator('main[data-screen="intake"]').count()) break;
+    const c = (await count.textContent())?.trim();
+    await m13Shot(p, `welcome-${i}`, { count: c, primary: (await primary.textContent())?.trim() },
+      { scope: '[data-screen="welcome"]' });
+    await primary.click();
+  }
+  await page.locator('main[data-screen="intake"]').waitFor();
+  await m13Shot(p, 'welcome-intake', {}, { scope: 'main[data-screen="intake"]' });
+  await page.locator('main[data-screen="intake"] [data-intake-skip]').click();
+  await page.locator('[data-permission="camera"]').waitFor();
+  await m13Shot(p, 'welcome-perm-camera', { count: (await count.textContent())?.trim(),
+    notNow: await page.locator('[data-ob="not-now"]').count() }, { scope: '[data-screen="welcome"]' });
+  await primary.click();
+  await page.locator('[data-ob="granted"]').waitFor();
+  await m13Shot(p, 'welcome-perm-camera-allowed', { primary: (await primary.textContent())?.trim() },
+    { scope: '[data-screen="welcome"]' });
+  await primary.click();
+  await page.locator('[data-cal]').first().waitFor();
+  await m13Shot(p, 'today-fresh', {
+    todoCard: await m13Visible(page, '[data-todo-card]'),
+    filledPrimary: await page.evaluate(() =>
+      [...document.querySelectorAll('main button')].filter((b) => {
+        if (b.getClientRects().length === 0) return false;
+        const bg = getComputedStyle(b).backgroundColor;
+        const m = /rgba?\((\d+), (\d+), (\d+)/.exec(bg);
+        return m && +m[1] > 200 && +m[2] > 80 && +m[2] < 160 && +m[3] < 80;
+      }).map((b) => b.textContent.trim().slice(0, 30))),
+  });
+  await page.reload();
+  await page.locator('[data-cal]').first().waitFor();
+  step({ afterReloadWelcome: await welcome.count() });
+
+  // Settings, owner off.
+  await page.locator('[data-tab="settings"]').click();
+  await page.locator('main[data-screen="settings"]').waitFor();
+  const settingsHooks = {};
+  for (const h of ['data-todos-open', 'data-devlog', 'data-about-open', 'data-selfcheck-open',
+    'data-whats-new-open'])
+    settingsHooks[h] = await page.locator(`main[data-screen="settings"] [${h}]`).count();
+  await m13Shot(p, 'settings-owner-off', { hooks: settingsHooks }, { fullPage: true });
+
+  // Self-check, owner off.
+  await page.locator('[data-selfcheck-open]').scrollIntoViewIfNeeded();
+  await page.locator('[data-selfcheck-open]').click();
+  await page.locator('main[data-screen="selfcheck"]').waitFor();
+  let summaryText = '';
+  for (let i = 0; i < 150; i++) {
+    summaryText = (await page.locator('[data-selfcheck-summary]').textContent())?.trim() ?? '';
+    if (/^All \d+ ready$|need/.test(summaryText)) break;
+    await page.clock.runFor(500);
+    await page.waitForTimeout(200);
+  }
+  const rows = await page.locator('[data-check]').evaluateAll((els) =>
+    els.map((e) => ({ id: e.getAttribute('data-check'), state: e.getAttribute('data-state'),
+      text: e.textContent.trim().replace(/\s+/g, ' ').slice(0, 120) })));
+  await m13Shot(p, 'selfcheck-owner-off', { summary: summaryText, rows }, { fullPage: true });
+  await page.locator('main[data-screen="selfcheck"] .back-btn').first().click();
+  await page.locator('main[data-screen="settings"]').waitFor();
+
+  // What's New tour replay, owner off.
+  await page.locator('[data-whats-new-open]').scrollIntoViewIfNeeded();
+  await page.locator('[data-whats-new-open]').click();
+  const tour = page.locator('[data-tour="whats-new"]');
+  await tour.waitFor();
+  const tourPages = [];
+  for (let i = 1; i <= 10; i++) {
+    const c = (await tour.locator('[data-wn="count"]').textContent())?.trim();
+    const title = (await tour.locator('[data-wn="title"]').first().textContent().catch(() => ''))?.trim();
+    tourPages.push({ c, title });
+    if (i === 1) await m13Shot(p, 'tour-1', { count: c, version: (await tour.locator('[data-wn="version"]').textContent().catch(() => null))?.trim() });
+    const next = tour.locator('[data-wn="next"]');
+    if (!(await next.count())) break;
+    const label = (await next.textContent())?.trim();
+    if (/done/i.test(label ?? '')) {
+      await m13Shot(p, 'tour-last', { count: c, title });
+      await next.click();
+      break;
+    }
+    await next.click();
+  }
+  step({ tourPages });
+
+  // About, owner off.
+  await page.locator('main[data-screen="settings"]').waitFor();
+  await page.locator('[data-about-open]').scrollIntoViewIfNeeded();
+  await page.locator('[data-about-open]').click();
+  const about = page.locator('main[data-screen="about"]');
+  await about.waitFor();
+  const version = about.locator('[data-about-version]');
+  await m13Shot(p, 'about-owner-off', { version: (await version.textContent())?.trim(),
+    text: (await about.innerText()).replace(/\s+/g, ' ').slice(0, 600) }, { fullPage: true });
+
+  // 7 taps → Owner tools → on.
+  for (let i = 0; i < 7; i++) await version.click();
+  const sw = page.locator('[data-setting="owner-tools"]');
+  await sw.waitFor();
+  await sw.click();
+  await page.waitForTimeout(300);
+  await m13Shot(p, 'about-owner-on', { version: (await version.textContent())?.trim(),
+    checked: await sw.getAttribute('aria-checked') });
+  await about.locator('.back-btn').click();
+  await page.locator('main[data-screen="settings"]').waitFor();
+  const onHooks = {};
+  for (const h of ['data-todos-open', 'data-devlog', 'data-about-open', 'data-selfcheck-open'])
+    onHooks[h] = await page.locator(`main[data-screen="settings"] [${h}]`).count();
+  await m13Shot(p, 'settings-owner-on', { hooks: onHooks }, { fullPage: true });
+
+  flow.offsite = offsite;
+  flow.spoken = await page.evaluate(() => window.__spoken);
+  flow.console = [...log];
+  results.push(flow);
+  await ctx.close();
+}
+
 const milestone = (process.argv[2] ?? 'm4').replace(/^--/, '');
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -4013,6 +4210,7 @@ try {
   else if (milestone === 'm12') await m12(browser);
   else if (milestone === 'm12b') await m12b(browser, process.argv[3]);
   else if (milestone === 'store') await store(browser);
+  else if (milestone === 'm13') await m13(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
