@@ -22,6 +22,8 @@
 		C2B22E000000000000000002 /* GymSpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B22E000000000000000012 /* GymSpeechPlugin.swift */; };
 		C2B22E000000000000000003 /* GymSpeechCore in Frameworks */ = {isa = PBXBuildFile; productRef = C2B22E000000000000000023 /* GymSpeechCore */; };
 		C2B22E000000000000000004 /* GymSpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2B22E000000000000000013 /* GymSpeechEngine.swift */; };
+		D3C33E000000000000000002 /* GymBrainPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3C33E000000000000000012 /* GymBrainPlugin.swift */; };
+		D3C33E000000000000000003 /* GymBrainCore in Frameworks */ = {isa = PBXBuildFile; productRef = D3C33E000000000000000023 /* GymBrainCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +44,7 @@
 		B1A11E000000000000000012 /* GymHealthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymHealthPlugin.swift; sourceTree = "<group>"; };
 		C2B22E000000000000000012 /* GymSpeechPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSpeechPlugin.swift; sourceTree = "<group>"; };
 		C2B22E000000000000000013 /* GymSpeechEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSpeechEngine.swift; sourceTree = "<group>"; };
+		D3C33E000000000000000012 /* GymBrainPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymBrainPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +55,7 @@
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
 				B1A11E000000000000000003 /* GymHealthCore in Frameworks */,
 				C2B22E000000000000000003 /* GymSpeechCore in Frameworks */,
+				D3C33E000000000000000003 /* GymBrainCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -100,6 +104,7 @@
 			children = (
 				B1A11E000000000000000014 /* GymHealth */,
 				C2B22E000000000000000014 /* GymSpeech */,
+				D3C33E000000000000000014 /* GymBrain */,
 			);
 			path = Plugins;
 			sourceTree = "<group>";
@@ -119,6 +124,14 @@
 				C2B22E000000000000000013 /* GymSpeechEngine.swift */,
 			);
 			path = GymSpeech;
+			sourceTree = "<group>";
+		};
+		D3C33E000000000000000014 /* GymBrain */ = {
+			isa = PBXGroup;
+			children = (
+				D3C33E000000000000000012 /* GymBrainPlugin.swift */,
+			);
+			path = GymBrain;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -141,6 +154,7 @@
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
 				B1A11E000000000000000023 /* GymHealthCore */,
 				C2B22E000000000000000023 /* GymSpeechCore */,
+				D3C33E000000000000000023 /* GymBrainCore */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -175,6 +189,7 @@
 				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
 				B1A11E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymHealth/GymHealthCore" */,
 				C2B22E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymSpeech/GymSpeechCore" */,
+				D3C33E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymBrain/GymBrainCore" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -212,6 +227,7 @@
 				B1A11E000000000000000002 /* GymHealthPlugin.swift in Sources */,
 				C2B22E000000000000000002 /* GymSpeechPlugin.swift in Sources */,
 				C2B22E000000000000000004 /* GymSpeechEngine.swift in Sources */,
+				D3C33E000000000000000002 /* GymBrainPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -353,14 +369,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 245;
+				CURRENT_PROJECT_VERSION = 267;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.13.0;
+				MARKETING_VERSION = 1.14.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -376,14 +392,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 245;
+				CURRENT_PROJECT_VERSION = 267;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.13.0;
+				MARKETING_VERSION = 1.14.0;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
@@ -427,6 +443,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = App/Plugins/GymSpeech/GymSpeechCore;
 		};
+		D3C33E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymBrain/GymBrainCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = App/Plugins/GymBrain/GymBrainCore;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -444,6 +464,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C2B22E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymSpeech/GymSpeechCore" */;
 			productName = GymSpeechCore;
+		};
+		D3C33E000000000000000023 /* GymBrainCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D3C33E000000000000000022 /* XCLocalSwiftPackageReference "App/Plugins/GymBrain/GymBrainCore" */;
+			productName = GymBrainCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
