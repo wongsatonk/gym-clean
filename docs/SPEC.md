@@ -1394,7 +1394,12 @@ the M10 phase B/C sections above stay the contract for those brains, with the ch
 2. **Slice 2 (iPhone app):** the Apple brain (M10 phase B: `GymBrain` plugin, tools 1:1 with actions, plus
    read-only `weekSummary` / `progressSummary` / `exerciseInfo` / `foodIdeas` and `proposeFocusBlock`
    (parameters only)), the **hold-to-talk mic** (below), and **reminders + weekly check-in** (trainer kit
-   item 6, below).
+   item 6, below). Release 1.14.0 (1b is 1.13.0). Apple Intelligence is on and downloaded on his iPhone
+   (2026-11-17), so Checkpoint J tests the real model; when it is unavailable on a phone (off, still
+   downloading, not eligible) free text goes to the rules and the chat says so **once per reason**, plainly,
+   with how to turn it on.
+3. **Slice 3:** the Claude brain (M10 phase C). His "both" counts as the yes to build it (M10-q7); default
+   model `claude-opus-5-5`; nothing calls Anthropic until he pastes his own key in Settings.
 
 #### What's New tour + To-do guides (slice 1c)
 Wongsaton (2026-11-16): "Plan to add everything in the list to the app such as wizard that I need to do step
@@ -1514,9 +1519,10 @@ type WhatsNewPage = { release: string; id: string; title: string; what: string; 
 Research basis in the design doc (NASM OPT, ACSM 2026 resistance-training summary, app reviews). Every
 number below is a default held as data and tuned at a checkpoint. Every change to the plan is a Proposal
 (Apply / Undo); all copy passes `checkCopy` (no medical words, no promises).
-1. **Effort after each set:** optional one tap (or, in slice 2, one word) **Easy / Good / Hard** (≈ 3+ / 2 /
-   0–1 reps left) on the rest screen; never blocks the flow, never asked mid-set; stored on the set log. The
-   M5b next-set / next-session weight uses it (Easy → step up sooner, Hard → hold).
+1. **Effort after each set:** optional one tap **Easy / Good / Hard** (≈ 3+ / 2 / 0–1 reps left) on the rest
+   screen; never blocks the flow, never asked mid-set; stored on the set log. The M5b next-set / next-session
+   weight uses it (Easy → step up sooner, Hard → hold). (Effort by voice is not planned: the slice 2 mic is
+   chat-only; Decision "M12 slices 1b + 2".)
 2. **Warm-up sets:** before the day's first big lift (data per exercise), an automatic ramp ≈ 50% × 8 and
    70% × 4 of the working weight, snapped down to his kit's step, announced by voice; can be skipped; logged
    as warm-ups and **excluded from volume, bests, stall detection and completion %**.
@@ -1525,15 +1531,28 @@ number below is a default held as data and tuned at a checkpoint. Every change t
    × 8 by 2027-02-01", "Arms +1 cm"). A **standing "go easy on" list** (areas) that every proposal and
    focus block honours until he removes an area. A coach **review every 4–6 weeks** in the chat: progress
    on the goal, then an offer to adjust (a Proposal or a new focus block).
-4. **Measurements + e1RM:** monthly tape measurements (arms, chest, waist, thighs, … as data) logged in Fuel
-   **+ Body fat % and lean body mass from Apple Health** (his VeSync scale writes them; added 2026-11-16): two more
-   read-only M11 Health types (`bodyFat`, `leanMass`), each with its own switch, same per-day summary rules as
-   weight (morning pick, Health wins); shown as trends next to weight in Fuel; stay out of every coach/Claude
-   context like other Health data; not sent anywhere.
-   next to weigh-ins; an **estimated one-rep-max** chart per lift (a standard formula, top set per session,
-   warm-ups excluded) in the exercise history.
+   **Second user (his wife, Decision 2026-11-16; detail in Decision "M12 slices 1b + 2"):** nothing is
+   hard-coded to him. The intake asks goal kind (build muscle / lose fat / get stronger / general fitness, plus
+   optional own words), training days (2–6), session length (30/45/60/75 min), experience and easy-on areas.
+   A fresh install sees it before the first Today (skippable); an existing install is never forced (a "Set
+   your goal" card). From the answers the app builds a **starter plan deterministically from templates as
+   data** (kit-aware, fits the session length) and offers it as a Proposal; an existing plan is never replaced
+   without Apply. **Fuel targets follow the goal and sex** (deficit for "lose fat", surplus for muscle /
+   strength, maintenance for general; never below BMR), shown before → after and changed only on Apply.
+   **Share my gym:** a file with the gym's equipment ids only (no personal data) that another phone imports
+   in My gym with a preview. The standing easy-on list is a plan change (Proposal, Apply / Undo).
+4. **Measurements + e1RM:** monthly tape measurements logged in Fuel next to weigh-ins (sites from the
+   trainer-kit setting; default left/right arm, chest, waist, hips, left/right thigh), cm or in by his unit;
+   an **estimated one-rep-max** chart per lift in the exercise history (Epley on each session's top set,
+   warm-ups excluded, sets over 12 reps not charted). **Body fat % and lean body mass from Apple Health** (his
+   VeSync scale writes them; added 2026-11-16): two more read-only M11 Health types (`bodyFat`, `leanMass`),
+   each with its own switch (off by default; asked only when turned on), same per-day summary rules as weight
+   (morning pick, Health wins), stored with the other Health days (not backed up; re-read after a restore);
+   shown as trends next to weight in Fuel; out of every coach/Claude context like other Health data; not sent
+   anywhere.
 5. **Short on time:** "I have 20 / 30 / 45 min" (chip or text) → a Proposal for today that keeps the main
-   lifts, pairs accessories into supersets and trims sets to fit the estimated time; Apply / Undo.
+   lifts, **pairs accessories back to back with a short pair rest** (true alternating supersets deferred,
+   Decision "M12 slices 1b + 2") and trims sets to fit the estimated time; Apply / Undo.
 6. **Reminders + weekly check-in (slice 2, iPhone app):** **local notifications only** (no server, no push
    service), **off by default**, each switched on separately: a session reminder at a time he sets, a
    missed-day nudge, a Sunday recap. A weekly 3-question check-in in the chat (energy, sleep, soreness 1–5)
@@ -1543,8 +1562,9 @@ number below is a default held as data and tuned at a checkpoint. Every change t
 8. **Progress photos (opt-in, off by default):** taken or picked in the app, **stored only on the phone**
    (IndexedDB), **never in backups, the dev log, the Apple model's context or Claude**, never sent anywhere;
    side-by-side compare of two dates; delete one or all at any time.
-9. **How do you feel today:** an optional energy (1–5) + soreness-by-area tap before Start. Low energy or a
-   sore area counts as one "Lighter today?" signal (M11 card rules; works without Health). Soreness only
+9. **How do you feel today:** an optional energy (1–5) + soreness-by-area tap before Start. Low energy
+   (`feltLow`) and a sore area (`sore`) each count as one "Lighter today?" signal (M11 two-signal rule, so
+   both together work without Health). Soreness only
    leads to coaching ("Go easy on shoulders today?"), never medical talk; the M10 discomfort/red-flag rules
    still apply to typed words.
 10. **Setup cues:** 2–3 short spoken setup checks before lifts the camera can't judge (data per exercise,
@@ -1556,8 +1576,6 @@ number below is a default held as data and tuned at a checkpoint. Every change t
     protein versus his per-meal share; a post-workout meal idea on Summary (the M10 food suggestion); ~10
     short "why" cards (progressive overload, effort, warm-ups, protein, sleep, deloads, …) as data that the
     coach and screens can link to.
-3. **Slice 3:** the Claude brain (M10 phase C). His "both" counts as the yes to build it (M10-q7); default
-   model `claude-opus-5-5`; nothing calls Anthropic until he pastes his own key in Settings.
 
 #### Mic (slice 2, iPhone app only)
 - Hold to talk; **on-device** speech-to-text (Apple Speech with on-device recognition required, or the
@@ -1575,7 +1593,8 @@ number below is a default held as data and tuned at a checkpoint. Every change t
   still goes through a `propose*` tool and his tap. Replies ≤ 4 short sentences. M10 safety unchanged.
 - Context: today's plan, the next 7 days, 4 weeks of top sets, active overrides and focus block, week/month
   scores, today's Fuel totals vs targets, the last ~8 turns, within a test-enforced token budget; for Apple
-  only, the M11 card reasons (see the open item in Decision "M12 plan").
+  only, the M11 card **reason sentences** (never numbers; M12-q1 default taken 2026-11-17, switchable by
+  `coach.appleCardReasons`).
 - **Health never reaches Claude:** a message stores `usedHealth: true` when its context had Health card
   reasons; Claude requests drop those turns and never get Health context (a request-body test enforces it).
 - A coach reply offers **Ask Claude instead** when Claude is on.
@@ -1635,16 +1654,33 @@ type DayCompletion = {
 };
 type PeriodScore = { from: string; to: string; sessionsPlanned: number; sessionsDone: number;
   setsPlanned: number; setsDone: number; extra: number; focus?: { group: FocusGroup; sets: number; target: number } };
-// Slice 1b (trainer kit)
-// SetLog gains: effort?: 'easy' | 'good' | 'hard';  warmup?: true   (warm-ups excluded from volume/bests/completion)
+// Slice 1b (trainer kit; edited 2026-11-17 with the plan)
+// SetLog gains: effort?: 'easy' | 'good' | 'hard';  warmup?: true   (warm-ups excluded from volume/bests/stalls/e1RM/completion)
+type GoalKind = 'muscle' | 'fat' | 'strength' | 'general';
 type Goal = { id: string; text: string; target: { kind: 'lift' | 'measurement' | 'weight';
   ref?: string; value: number; reps?: number }; due: string; createdAt: number; doneAt?: number };
-type Intake = { goal: string; days: number; experience: 'new' | 'some' | 'years'; easyOn: BodyArea[]; at: number };
-// TrainerState gains: easyOn?: BodyArea[]   (standing "go easy on" list, honoured by every proposal)
-type Measurement = { date: string; site: string /* 'arm-l', 'chest', 'waist', … as data */; cm: number };
+type Intake = { goalKind: GoalKind; goalText?: string; days: number /* 2–6 */; sessionMin: 30 | 45 | 60 | 75;
+  experience: 'new' | 'some' | 'years'; easyOn: BodyArea[]; at: number };   // settings key 'intake'
+// TrainerState gains: easyOn?: BodyArea[]   (standing "go easy on" list, changed by Proposal, honoured by every proposal)
+// ProposalAction gains: 'shortOnTime' | 'starterPlan' | 'easyOn'    PlannedExercise gains: pairWith?: string
+// NutritionSettings gains: goalKind?: GoalKind   (targets per goal + sex; none = today's surplus behaviour)
+type Measurement = { date: string; site: string /* 'leftArm', 'chest', 'waist', … from settings 'trainerKit' */; cm: number };
 type ProgressPhoto = { id: string; date: string; createdAt: number; blob: Blob; pose?: 'front' | 'side' | 'back' };
 type DayFeel = { date: string; energy?: 1 | 2 | 3 | 4 | 5; sore?: BodyArea[] };
-// ReadinessSignal gains: 'feltLow' (energy ≤ 2 or any sore area)
+// ReadinessSignal gains: 'feltLow' (energy ≤ 2) | 'sore' (any sore area)
+// HealthType gains: 'bodyFat' (%) | 'leanMass' (kg), off by default; HealthDay gains bodyFatPct?, leanMassKg?
+type LearnCard = { id: string; title: string; body: string };   // ChatMessage gains learnId?: string
+type GymFile = { format: 'gym-clean-gym'; version: 1; equipment: string[] };   // "Share my gym", no personal data
+// Dexie v10: measurements '[date+site], date', goals 'id, createdAt', dayFeels 'date' (backed up);
+//            progressPhotos 'id, date, createdAt' (LOCAL_ONLY_TABLES)
+// Slice 2
+type BrainUnavailableReason = 'deviceNotEligible' | 'appleIntelligenceNotEnabled' | 'modelNotReady'
+  | 'unsupported' | 'notNative';
+type ReminderSettings = { session: { on: boolean; time: string }; missedDay: { on: boolean };
+  sundayRecap: { on: boolean } };   // settings key 'reminders'; all off by default
+type CheckIn = { weekStart: string; energy?: 1|2|3|4|5; sleep?: 1|2|3|4|5; soreness?: 1|2|3|4|5; at: number };
+// Dexie v11: checkIns 'weekStart' (backed up; never in a brain context). ChatCard gains kind 'checkIn'.
+// coach settings gain: speakReplies?: 'mic' | 'always' | 'off' (default 'mic'); brainNotes? (reason → shown at)
 ```
 
 #### Accept
@@ -1736,13 +1772,23 @@ type DayFeel = { date: string; energy?: 1 | 2 | 3 | 4 | 5; sore?: BodyArea[] };
     - (11) cardio minutes per week from `healthDays` outside workouts, no double count with gym sessions;
     - (12) protein-per-meal nudge thresholds; every learn card passes `checkCopy`;
     - storage: the Dexie bump keeps every row; `progressPhotos` on `LOCAL_ONLY_TABLES` and out of the dev log;
-      measurements, goals, intake and effort in backups.
+      measurements, goals, intake and effort in backups;
+    - (3, second user) starter plan per goal × days × session length: fits the time, kit-aware,
+      deterministic; Fuel targets per goal and sex (deficit for "lose fat", never below BMR; no goal = old
+      behaviour); the gym file round trip has equipment ids only; a scan finds no personal name or numbers
+      in data/copy outside the About credit;
+    - (4) `bodyFat` / `leanMass` per-day pick, off by default (old Health settings read them as off);
+    - trainer-kit settings read at runtime: the M12-q4 to-do decision step's value changes the sites, the
+      warm-up rule and the review period;
+    - follow-ups: the postpone reply never says a day moves twice; the iOS `MARKETING_VERSION` equals the
+      package.json version.
   - E2E (390×844): Easy / Good / Hard on the rest screen and skip; warm-up sets announced and logged, Summary
     volume unchanged by them; intake → Goal card on Today; "I have 30 min" → Proposal → Apply → shorter day →
     Undo; a measurement in Fuel; e1RM chart in exercise history; feel-today → "Lighter today?" card; a setup
     cue spoken before the first set; progress photo on → add (a fixture image) → compare → delete, with no
     network request and absent from a Back up file; a learn card from a coach reply; no new text box or tap
-    asked during a set.
+    asked during a set; a fresh profile → intake → starter plan Apply → Goal card (an existing profile is
+    not forced); Share my gym → import on a fresh profile; a tab switch scrolls the new tab to the top.
   - 390×844 screenshots: effort row, warm-up set, intake, Goal card, short-on-time proposal, measurements,
     e1RM chart, feel-today, progress photo compare (made-up image), a learn card, the cardio line.
   - Ends with reviewer + verifier like slice 1; his gym feedback on it folds into Checkpoint J.
@@ -1754,6 +1800,9 @@ type DayFeel = { date: string; energy?: 1 | 2 | 3 | 4 | 5; sore?: BodyArea[] };
   scheduled locally (plugin test with a fake scheduler: times, missed-day nudge once, Sunday recap; turning
   one off cancels it; notification permission asked only when he turns the first one on; no body or Health
   data in the text); the weekly check-in asks 3 questions once a week and its answers show in the recap.
+  Plus: every Apple unavailability reason → rules with its plain note shown once; the Apple context never
+  contains Health numbers, body fat / lean mass, measurements, progress photos, check-in answers or notes,
+  and contains the card reasons only while `coach.appleCardReasons` isn't false (unit test).
   🧍 **Checkpoint J (after slice 2):** on his iPhone he uses the mic and the
   Apple brain for a few days and reports wrong answers, wrong actions and how the voice felt.
 - **Slice 3:** the M10 phase C Accept, plus: request-body test that turns with `usedHealth` are dropped and

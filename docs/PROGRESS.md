@@ -6,7 +6,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 - **Live:** b2c532e on main, deployed 2026-11-15 (CI: 2582 unit, 135 e2e passed): everything above plus the polish batch and **M7 Fuel** (Fuel tab, targets + weekly check, weigh-ins, 47 Thai dishes, offline USDA search, recipes, coach food ideas, opt-in barcode scan). First CI run (e01600c) failed on the short-phone set-up card under Linux text rendering; fixed in b2c532e (reproduced in the Playwright Linux container).
 - **In progress:** cloud sessions during Wongsaton's flight (2026-11-15), per `docs/cloud-briefs.md`. Open follow-up: the 10 s Undo toast covers a Fuel sheet's main button until you scroll (verifier note; in cloud session 2).
-- **Next step:** check the M7 deploy is live. During Wongsaton's flight: cloud sessions per `docs/cloud-briefs.md` (M7b local food vision; camera e2e stability). Gym checkpoints E and F1 still open.
+- **Next step (2026-11-17):** build **M12 slice 1b "Trainer kit"** on `m12-coach-tab` (plan under "Current milestone plan → M12 — slice 1b"; first parallel group: 1b tasks 1 [main] ∥ 2 [core] ∥ 3 [ios] ∥ 4 [main], plus slice 2 tasks 1 and 10 [ios] early), then **slice 2** (Apple brain + mic + reminders + check-in; plan under "→ M12 — slice 2") → 🧍 Checkpoint J. His go-ahead 2026-11-17: "Go ahead slice 2 and 1b". Slices 1 + 1c are verified (745a143) and on his iPhone, not merged; merge/push stays his call. Older gym checkpoints (E, F1, …) are his to-dos in the app.
+- **M12 slices 1b + 2: planned 2026-11-17** (Decision "M12 slices 1b + 2"). Defaults taken for M12-q1 and M12-q4 (planner calls he can correct in the to-do decision steps). Apple Intelligence is on and downloaded on his iPhone (his words 2026-11-17: "It finished"). Nothing blocks on him until Checkpoint J.
 - **Build monitor (live dashboard):** https://claude.ai/artifact/RYCFcmrpxgDCtXd6Gts78i — Claude uploads new data as helpers start/finish and deploys complete.
 - **M12 Coach tab, slice 1: planned 2026-11-16** on `m12-coach-tab` (design approved; he said "start slice 1" alongside his Checkpoint H week). Plan under "Current milestone plan → M12 — slice 1"; contract SPEC M12 + Decision "M12 plan". Nothing in it blocks on him.
 - **M12 slice 1c (What's New tour + To-do guides + Copy report): planned 2026-11-16** (his yes), on `m12-coach-tab` after slice 1's verifier PASS; plan under "Current milestone plan → M12 — slice 1c"; Decision "M12 slice 1c". Not blocking on him (M12-q5 has a default).
@@ -48,9 +49,356 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M10 AI trainer: phase A (plan actions + coach chat, web) → 🧍 Checkpoint E; phase B (on-device Foundation Models brain) with M9; phase C (optional Claude brain). **Planned 2026-11-14, below; waiting on the M10-q questions**
 - [ ] M10e Equipment-aware swaps (follow-up to M10 phase A): **planned 2026-11-15** on `m10-equipment` (gym profile, kit needs as data, the coach proposes a swap for kit his gym lacks, e.g. Leg Press) → extends 🧍 Checkpoint E
 - [ ] M11 Health data (Apple Health + WHOOP, native app only): **built 2026-11-16 on `m11-build` (read-only, route A); reviewer PASS, verifier PASS on the Mac; waiting on the iPhone test (task 13)** → 🧍 Checkpoint H
-- [ ] M12 Coach tab: chat, focus blocks, calendar, motion (approved 2026-11-16). **Slice 1 planned 2026-11-16** on `m12-coach-tab` (Coach centre tab + chat + history, rules brain behind a router, focus blocks, Calendar replaces History with completion + scores + Share month, motion) → 🧍 Checkpoint I; **slice 1c "What's New + To-dos" planned 2026-11-16** (tour per release, to-do guides for his open checkpoints + decisions, one Copy report; ships with slice 1 by default); slice 1b "Trainer kit" (outlined: effort, warm-ups, intake/goal, measurements + e1RM, short on time, next block, progress photos, feel today, setup cues, cardio line, nudges + learn cards); slice 2 (Apple brain + on-device mic, iPhone) → 🧍 Checkpoint J; slice 3 (Claude brain, his key)
+- [ ] M12 Coach tab: chat, focus blocks, calendar, motion (approved 2026-11-16). **Slice 1 planned 2026-11-16** on `m12-coach-tab` (Coach centre tab + chat + history, rules brain behind a router, focus blocks, Calendar replaces History with completion + scores + Share month, motion) → 🧍 Checkpoint I; **slice 1c "What's New + To-dos" planned 2026-11-16** (tour per release, to-do guides for his open checkpoints + decisions, one Copy report; ships with slice 1 by default); **slice 1b "Trainer kit" planned 2026-11-17** (1.13.0: effort, warm-ups, intake/goal + starter plan for a second user, measurements + e1RM + body fat/lean mass, short on time, next block, progress photos, feel today, setup cues, cardio line, nudges + learn cards); **slice 2 planned 2026-11-17** (1.14.0: Apple brain + on-device mic + reminders + weekly check-in, iPhone) → 🧍 Checkpoint J; slice 3 (Claude brain, his key)
 
 ## Current milestone plan
+
+### M12 — slice 2: Apple on-device brain + mic + reminders + weekly check-in (planned 2026-11-17; release 1.14.0)
+**Contract:** SPEC M12 slice 2 (Goals 5, "Mic", "Brains", trainer-kit item 6, slice 2 Accept), M10 "Phase B" + its Accept, the design doc `docs/superpowers/specs/2026-11-16-coach-tab-chat-design.md`, and Decision "M12 slices 1b + 2" (2026-11-17), which wins where it is more specific. **No network request** (Apple's model, speech and notifications all run on the phone). All logic **tests first** (Vitest, made-up data only; the repo is public); Swift logic in a `…Core` Swift package with XCTests, like `ios/App/App/Plugins/GymHealth/GymHealthCore`. UI tasks: props in / callbacks out, render tests + 390×844 harness screenshots, tokens + motion helpers, text ≥ 20px, targets ≥ 56px, nothing new reachable during a set.
+
+**Why this slice matters most to him:** at Checkpoint I he said the coach "still cannot help much": free text only hits the rules brain's keyword matcher. Slice 2's Apple brain answers free text. **Apple Intelligence is on and fully downloaded on his iPhone** (his words, 2026-11-17: "It finished"), so Checkpoint J tests the real model. The rules fallback stays for any phone where it's unavailable (e.g. his wife's).
+
+**Branch:** `m12-coach-tab`, after slice 1b's verifier PASS (tasks 1 and 10 may start during 1b: docs + a separate Swift plugin, no shared files). Subagents never commit.
+
+**Fit with the current code:**
+- The router seam exists: `src/data/brain/router.ts` + `rules.ts`, interface `CoachBrain` / `BrainContext` / `BrainReply` in `src/core/types.ts`. Slice 2 adds `src/data/brain/apple.ts` and registers it in the native build only. M10 phase B tasks B1–B8 (plan under "M10 → Phase B") are re-planned here with today's owners: ios-engineer owns `ios/**`, `src/native/**` and `scripts/gen-trainer-tools.mjs`.
+- Native plugins live in `ios/App/App/Plugins/<Name>/` with a `<Name>Core` Swift package for testable logic (GymHealth pattern); e2e fakes them through `window.Capacitor.Plugins.<Name>` (e2e/health.spec.ts pattern). Deployment target is iOS 26.0, so Foundation Models and SpeechAnalyzer are available at build time; runtime availability is checked.
+- **Read-only tools without a JS round trip (planner call):** before each `respond`, the app computes `weekSummary`, `progressSummary`, `foodIdeas` and `exerciseInfo` (for today's + the next 7 days' exercises) and passes them in as `toolResults`; the Swift read-only tools return the matching text. `propose*` tools only record the call (M10 rule). If the docs (task 1) show a cheap JS round trip, ios-engineer notes it and main decides; the TS contract doesn't change.
+- Dexie is at **v10** after 1b; slice 2 adds `checkIns` in **v11** (backed up). Reminder + mic + brain-note state live in `settings` keys `'reminders'` and `'coach'`.
+- `coach.appleCardReasons` (set by the M12-q1 to-do decision step; default true) and `trainerKit` are read at runtime: changing the decision later changes the behaviour (test).
+
+**Order / parallel groups:**
+- **Early (during 1b):** 1 [ios] ∥ 10 [ios].
+- **G0 (after 1b PASS):** 2 [main].
+- **G1 (after 2):** 3 [core] → (4 ∥ 5) [core]; 9 ∥ 12 ∥ 13 [core]; 11 [ios]; 16 ∥ 18 [ui]; 17 [ui] after 16.
+- **G2:** 6 [ios] after 3 → 7 [ios] after 6; 8 [core] after 3, 4, 5; 14 [core] after 8; 15 [core] after 13.
+- **G3:** 19 [main] → 20 [main] wiring after 7–18.
+- **G4:** 21 [ui] e2e ∥ 22 [ios] simulator + XCTests, after 20.
+- **G5:** 23 reviewer → 24 verifier → 25 main merge + ask → 26 🧍 Checkpoint J.
+
+- [ ] 1. [ios-engineer] **Look up current Apple docs first** (CLAUDE.md rule 8; APIs may differ from memory).
+  - Files: docs/ios-setup.md (new section "Slice 2 API notes").
+  - Check and write down, with links and the iOS version each needs: FoundationModels `SystemLanguageModel.default.availability` (every unavailable reason case: device not eligible, Apple Intelligence not enabled, model not ready, …), `LanguageModelSession(tools:instructions:)`, `respond(to:)` / streaming, the `Tool` protocol (`name`, `description`, `Arguments: @Generable`, `call(arguments:)` return type), `@Generable` / `@Guide`, context-window size, error types (guardrail violation, exceeded context window, unsupported language), session prewarm; on-device speech: `SpeechAnalyzer` + `SpeechTranscriber` (iOS 26; locale `en`, asset install, volatile/partial results) vs `SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`, which one guarantees no server use, permission APIs and Info.plist keys; local notifications: `@capacitor/local-notifications` for Capacitor 8 (version, schedule/cancel/permission API, pending list) vs `UNUserNotificationCenter` directly. Recommend one per area.
+  - Done when: the section lists the exact signatures the plan uses, the availability → `BrainUnavailableReason` mapping, the speech choice that never uses Apple servers (or "none guaranteed" → the mic stays off and main is told), and the notifications choice; main reviews it before task 2 is finalised.
+  - Deps: none (runs during slice 1b).
+- [ ] 2. [main] Shared types, dependency, no behaviour change.
+  - Files: src/core/types.ts, package.json (`@capacitor/local-notifications` matching Capacitor 8.6.2, if task 1 picks it), `npx cap sync ios`.
+  - Adds: `BrainUnavailableReason` (`'deviceNotEligible' | 'appleIntelligenceNotEnabled' | 'modelNotReady' | 'unsupported' | 'notNative'`), `BrainErrorCode` (`'guardrail' | 'contextTooLong' | 'unsupportedLanguage' | 'timeout' | 'other'`), `ToolCall = { name: string; args: Record<string, unknown> }`, `ReadToolName` (`'weekSummary' | 'progressSummary' | 'exerciseInfo' | 'foodIdeas'`), `GymBrainRequest` / `GymBrainResponse` (`{ text; toolCalls; latencyMs }`), `ChatMessage.viaMic?: true`, `CoachSettings` gains `speakReplies?: 'mic' | 'always' | 'off'` (default `'mic'`), `brainNotes?: Partial<Record<BrainUnavailableReason, number>>` (when each plain note was shown), `ReminderKind` (`'session' | 'missedDay' | 'sundayRecap'`), `ReminderSettings = { session: { on: boolean; time: string /* HH:MM */ }; missedDay: { on: boolean }; sundayRecap: { on: boolean }; askedPermission?: boolean }`, `CheckIn = { weekStart: string; energy?: 1|2|3|4|5; sleep?: 1|2|3|4|5; soreness?: 1|2|3|4|5; at: number }`, `ChatCard` kind `'checkIn'`, `TodoDetectorId` + `'appleAnswers' | 'micUses' | 'reminderOn' | 'checkInDone'`, `AppRoute` + `'settings/coach' | 'settings/reminders'`.
+  - Done when: `npm run check` passes; no runtime change; iOS project still builds (`npx cap sync ios`).
+  - Deps: slice 1b task 40 (verifier PASS; the 1b merge is his call and not needed) and task 1.
+- [ ] 3. [core-engineer] Tool definitions, the single source (M10 B1), **tests first**.
+  - Files: src/core/trainer/tools.ts(+test), src/core/trainer/tools.contract.json.
+  - One `propose*` tool per `ProposalAction` (postponeSession, avoidBodyArea, lighterToday, deloadWeek, swapExercise, adjustStalledExercise, suggestFood, proposeFocusBlock **params only** `{ group, weeks, weekdays }`, shortOnTime `{ minutes }` from 1b, setEasyOn `{ add?, remove? }` from 1b) with JSON-schema args (enums from data: areas, catalog ids, dates `YYYY-MM-DD`, 20/30/45) and `toProposal(args, ctx)`; an explicit, tested exception list (`starterPlan`: intake only). Read-only tools `weekSummary`, `progressSummary`, `exerciseInfo { exerciseId }`, `foodIdeas` (no args except exerciseId) flagged `readOnly: true`.
+  - Done when tests cover: 1:1 with `ProposalAction` minus the exception list; invalid args rejected with a short reason (unknown exercise, past date, bad group, weeks out of 2–6); a tool call returns a Proposal, never a state; `proposeFocusBlock` goes through `buildFocusBlock` (the model never sends days); `tools.contract.json` regenerated by the test equals the committed file.
+  - Deps: 2.
+- [ ] 4. [core-engineer] Instructions, context, output filter (M10 B2), **tests first**.
+  - Files: src/core/trainer/brain/instructions.ts, context.ts, sanitize.ts (+tests).
+  - Instructions: M10 Safety + M12 "Brains" (free answers from the context allowed, facts via read-only tools, every change via a `propose*` tool and his tap, ≤ 4 short sentences, `say` ≤ 12 words / ≤ 8 mid-workout, referral line verbatim, no medical content, no promises, English only; a Drill-sergeant style line for `say` when that voice is on).
+  - `serializeContext(input, { brain: 'apple', appleCardReasons })`: today's plan, next 7 days, 4 weeks of top sets (warm-ups excluded), active overrides + focus block + easy-on list, week/month scores, today's Fuel totals vs targets, goal text + lift-goal progress, the last 8 turns; the "Lighter today?" **reason sentences only when `appleCardReasons !== false`** (sets `usedHealth: true`). **Never:** Health numbers, weekly load, cardio minutes, body fat / lean mass, measurements, weigh-in values, progress photos, check-in answers, notes, the dev log. Budget constant (from task 1's context size; provisional ≤ 6,000 chars).
+  - `sanitizeReply(text, safety)`: banned/diagnosis words → the fixed safe line; referral line on discomfort; cap 4 sentences; `say` capped.
+  - Done when tests cover: budget on a heavy made-up 4-week history; a never-contains test (seed Health values, body fat, measurements, a photo, a check-in, a note → none in the text); reasons present with `appleCardReasons` true/undefined and absent with false (the M12-q1 decision step's setting); sanitize on a list of bad replies.
+  - Deps: 3.
+- [ ] 5. [core-engineer] Read-only tool results + facts eval, **tests first**.
+  - Files: src/core/trainer/brain/readTools.ts(+test), src/core/trainer/evals/facts.json, src/core/trainer/evals/facts.test.ts.
+  - `readToolResults(input)` → `Record<ReadToolName, string>` (+ `exerciseInfo` per id): week/progress text from the slice 1 scores (same numbers as the rule answers), how-to + cues + muscles from the catalog, food ideas from the M10 food suggestion. Same never-contains rules as task 4.
+  - Done when: numbers equal `periodScore` / rule replies (test); facts eval set ≥ 20 made-up items, each with the numbers a correct answer must quote; a checker `factsMatch(reply, item)` used by task 14.
+  - Deps: 3.
+- [ ] 6. [ios-engineer] Swift tool codegen + contract check (M10 B3).
+  - Files: scripts/gen-trainer-tools.mjs(+test), ios/App/App/Plugins/GymBrain/TrainerTools.generated.swift.
+  - Generates `@Generable` arg structs with `@Guide` descriptions (enums as Swift enums/`anyOf`) and `Tool` conformances per task 1's API notes: `propose*` tools record `{ name, args }` and return "Proposed; the app will ask the user to confirm."; read-only tools return the passed `toolResults` entry (unknown id → "Not in your plan this week.").
+  - Done when: `npm run check` fails on a stale generated file (diff test); the script test covers each arg type; the Swift compiles in task 7's package.
+  - Deps: 1, 3.
+- [ ] 7. [ios-engineer] `GymBrain` Capacitor plugin (M10 B4).
+  - Files: ios/App/App/Plugins/GymBrain/GymBrainPlugin.swift, ios/App/App/Plugins/GymBrain/GymBrainCore/** (availability mapping, error mapping, tool-call recorder, session wrapper behind a protocol) + XCTests, ios/App/App.xcodeproj (plugin registration), src/native/gymBrain.ts(+test) (typed bridge, `createGymBrain(bridge)` with junk-reply guards, like src/native/health.ts).
+  - `availability()` → `{ available: true } | { available: false; reason: BrainUnavailableReason }`; `respond({ instructions, context, messages, toolResults })` → `{ text, toolCalls, latencyMs }`; errors → `BrainErrorCode`; a timeout (data, provisional 15 s); prewarm on Coach-tab open if the docs recommend it. Nothing leaves the phone.
+  - Done when: XCTests with a fake session cover every availability case, every error code, tool-call recording, read-only results; the TS bridge test covers junk replies → unavailable; a simulator build passes. (The real-model check is part of task 26 on his iPhone.)
+  - Deps: 6.
+- [ ] 8. [core-engineer] Apple brain adapter + router note (M10 B5), **tests first**.
+  - Files: src/data/brain/apple.ts(+test), src/data/brain/router.ts(+test), src/data/brain/notes.ts(+test).
+  - `appleBrain(bridge, deps)`: `status()` from `availability()`; `ask()` builds instructions + context + read-tool results, calls `respond`, runs `sanitizeReply`, turns the first valid tool call into a Proposal via task 3 (an invalid one → "I couldn't do that." + chips; a second one → a chip), sets `source: 'apple'`, `usedHealth`. Router: an unavailable Apple brain → rules, and the chat gets **one plain note per reason, once** (stored in `coach.brainNotes`), e.g. "Apple Intelligence is off, so I'm using quick replies. Turn it on in Settings > Apple Intelligence & Siri." / "Apple Intelligence is still downloading. Quick replies until it's ready." / "This iPhone can't run Apple Intelligence. Quick replies still work."; errors → rules + a one-line note every time. Copy as data, `checkCopy`.
+  - Done when tests cover: every availability reason → rules + its note once (second ask: no note); every error code → rules + note; tool call → Proposal; invalid → help + chips; two calls; chips bypass; sanitize always applied; `usedHealth` set only with reasons; no `fetch` anywhere (test stubs `fetch` to throw).
+  - Deps: 3, 4, 5.
+- [ ] 9. [core-engineer] Speak-replies + mic rules, **tests first**.
+  - Files: src/core/trainer/speakRules.ts(+test).
+  - `shouldSpeak({ speakReplies, viaMic, phase, inSet })` (default `'mic'`: speak only replies to mic-sent messages; never in a set); `micAllowed({ native, inSet, screen })` (iPhone app only, Coach tab or Pause sheet, never in a set or on the camera); `sayFor(reply, phase)` caps (12 / 8 words).
+  - Done when tests cover each combination and the caps.
+  - Deps: 2.
+- [ ] 10. [ios-engineer] `GymSpeech` plugin (on-device only).
+  - Files: ios/App/App/Plugins/GymSpeech/GymSpeechPlugin.swift, GymSpeechCore/** + XCTests (fake recognizer), ios/App/App/Info.plist (`NSMicrophoneUsageDescription` "Lets you talk to the coach. Audio stays on this phone.", `NSSpeechRecognitionUsageDescription` "Turns what you say to the coach into text on this phone."), src/native/speech.ts(+test).
+  - API per task 1: `availability()` (on-device only; else `{ available: false, reason }`), `start({ locale: 'en' })` → events `partial { text }`, `level { rms }`, `final { text }`, `error { code }`; `stop()`. Permissions requested on the first `start` only. No audio file written; the engine stops on stop / app background / a 60 s cap.
+  - Done when: XCTests cover partial → final, stop, permission denied, not-on-device → unavailable, background stop; TS bridge test with a fake; no permission prompt at launch (test that nothing calls request at init).
+  - Deps: 1 (may start during 1b; Info.plist is ios-engineer's).
+- [ ] 11. [ios-engineer] Local-notification bridge.
+  - Files: src/native/reminders.ts(+test) (wraps the task 1 choice: `permission()`, `request()`, `schedule(items)`, `cancel(ids)`, `pending()`; a fake for tests/e2e), ios/** only if task 1 picks a custom plugin.
+  - Done when: bridge tests with a fake scheduler (schedule, cancel by id, permission asked only by `request()`); no network; simulator build passes.
+  - Deps: 1, 2.
+- [ ] 12. [core-engineer] Reminder schedule rules, **tests first**.
+  - Files: src/core/reminders/schedule.ts(+test), src/core/reminders/copy.ts(+test).
+  - `reminderPlan(settings, state, sessions, now)` → notifications for the next 14 days with stable ids: session reminder at his time on projected training days (not on rest days, not once today's session is done), missed-day nudge the next day at 09:00 (data) once per missed planned day, Sunday recap at 19:00 (data); everything off by default; turning one off → its ids in `cancel`. Text as data, no body, Health, weight or food numbers (e.g. "Pull A today. Ready when you are.").
+  - Done when tests cover: all off → nothing; each on; times across DST; rest days; done today; missed-day once; off → cancel list; copy passes `checkCopy` + a no-numbers rule.
+  - Deps: 2.
+- [ ] 13. [core-engineer] Weekly check-in, Dexie **v11**, **tests first**.
+  - Files: src/core/checkIn/checkIn.ts(+test), src/data/db.ts(+test), src/data/checkIn/store.ts(+test), src/data/backup.ts(+test), src/core/progress/recap.ts(+test).
+  - `checkIns: 'weekStart'` (new table, no upgrade function, **backed up**). `checkInDue(today, checkIns)` → once per week (from Sunday, first Coach-tab open; skipped stays skipped for that week); 3 questions as data (energy, sleep, soreness, 1–5 chips); the week recap gains one line from it ("You rated energy 4, sleep 3, soreness 2."). Check-in answers stay out of every brain context (task 4 test).
+  - Done when tests cover: v10 → v11 keeps every row; due once; skip; recap line; backup table list; not in the dev log.
+  - Deps: 2.
+- [ ] 14. [core-engineer] On-device eval runner logic (M10 B8).
+  - Files: src/data/brain/evalRunner.ts(+test).
+  - Runs `evals/requests.json` + `evals/facts.json` through the Apple adapter with an injected bridge; report = ids, expected vs got action/args, pass/fail, safe yes/no, facts match, latency; **no message text**.
+  - Done when tests (fake bridge) cover scoring, report shape (no strings from replies), p50 latency.
+  - Deps: 8.
+- [ ] 15. [core-engineer] What's New 1.14.0 + Checkpoint J to-do.
+  - Files: src/data/whatsNew/pages.ts(+test), src/data/todos/topics.ts(+test), src/core/todo/detectors.ts(+test), src/data/todos/facts.ts(+test).
+  - Pages (`release: '1.14.0'`): chat freely (Apple's on-device coach), hold to talk, Speak replies, reminders (off until you turn them on), weekly check-in. New topic "Coach on your iPhone (Checkpoint J)", native, `since: '1.14.0'`: auto steps `appleAnswers` (≥ 5 replies with source apple), `micUses` (≥ 3 mic-sent messages), `reminderOn` (any reminder on), `checkInDone` (1); ask steps: wrong answers (note), a wrong action (note), the voice felt (right / too much / too little), the mic heard you (mostly / half / rarely), anything in the trainer kit that felt off (note; slice 1b feedback folds in here).
+  - Done when: slice 1c data tests still pass (ids, routes, copy, detectors known) plus boundary tests for the 4 new detectors; facts are counts only.
+  - Deps: 2, 13.
+- [ ] 16. [ui-engineer] Chat: mic, source badge, brain note, thinking.
+  - Files: src/ui/coach/micButton.ts(+test), src/ui/coach/chat.ts(+test), src/ui/coach/chat.css.
+  - Props add `mic: { state: 'hidden' | 'unavailable' | 'idle' | 'listening'; partial?: string; level?: number; reason?: string }`, callbacks `micDown`, `micUp`, `micCancel`. Hold-to-talk button ≥ 56px next to Send (pointer + keyboard: Space held); live partial text in the text box; level ring (transform/opacity, static under reduced motion); unavailable → a short line, typing still works; hidden in the PWA and during a set. Bubble source badge "On-device AI" / "Quick replies" (text, not colour alone); the brain note as a muted system line; "Thinking…" typing state.
+  - Done when: render tests (each mic state, keyboard hold, reduced motion, badges, note) + 390×844 screenshots (listening with partial text, a reply with the badge, the "Apple Intelligence is off" note).
+  - Deps: 2.
+- [ ] 17. [ui-engineer] Check-in card.
+  - Files: src/ui/coach/checkInCard.ts(+test), src/ui/coach/chat.ts (register the card kind; after 16).
+  - Three questions, 1–5 chips each (≥ 56px, labelled ends "Low" / "High", selection not colour alone), Skip this week, Done; then a summary state.
+  - Done when: render tests (keyboard, partial answers, skip) + 390×844 screenshot.
+  - Deps: 2, 16.
+- [ ] 18. [ui-engineer] Settings: Coach, Reminders, eval screen.
+  - Files: src/ui/screens/coachSettings.ts(+test) (which brain answers + why + how to turn on Apple Intelligence; Speak replies: Mic only / Always / Off), src/ui/screens/reminders.ts(+test) (3 switches, all off by default, session time picker ≥ 56px, "We'll ask iPhone for permission the first time you turn one on", denied state with how to allow it), src/ui/screens/brainEval.ts(+test) (dev-only, native build, behind the existing developer settings: Run, progress, report summary + Export report), src/ui/screens/settings.ts (rows).
+  - Done when: render tests + 390×844 screenshots (Coach status available / off, Reminders, eval report).
+  - Deps: 2.
+- [ ] 19. [main] Version 1.14.0.
+  - Files: package.json (`"version": "1.14.0"`), then the slice 1b version sync (task 3 of 1b) updates `MARKETING_VERSION`.
+  - Done when: `npm run check` (incl. the iOS version test) passes; `npm run build` contains `1.14.0`.
+  - Deps: 2.
+- [ ] 20. [main] Wiring.
+  - Files: src/ui/app.ts, src/main.ts.
+  - Native build only: register `appleBrain` before rules in the router; PWA unchanged (rules). Mic: `micAllowed` → `GymSpeech` start/stop → partials into the chat → release sends with `viaMic`; replies spoken via the existing voice when `shouldSpeak` (coach voice; never during a set, never over a count). Brain notes shown once. Reminders: on settings change and app open/foreground → `reminderPlan` → bridge schedule/cancel; permission requested on the first switch-on only. Check-in card when `checkInDue` on Coach-tab open. Routes `settings/coach`, `settings/reminders`, the eval screen. Dev log: brain id, intent/action ids, latency, mic used yes/no; never text.
+  - Done when: `npm run check` passes; manual run at 390×844 in the PWA shows no mic and no change; a simulator run with the real plugins answers a typed question (or shows the plain note where the simulator has no model); no network request.
+  - Deps: 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19.
+- [ ] 21. [ui-engineer] E2E with fake bridges (390×844).
+  - Files: e2e/coach-apple.spec.ts (fake `GymBrain` via `window.Capacitor.Plugins`: free text → Apple reply with badge; a tool call → proposal → Apply → Undo; read-only answer; each unavailable reason → rules + the note once; an error → rules + note; `appleCardReasons` false → the fake sees no reasons in its context), e2e/mic.spec.ts (fake `GymSpeech`: hold → live text → release sends → `say` spoken only per Speak replies (speech stubbed); no mic in the PWA, during a set or on the camera; permission asked only on first use), e2e/reminders.spec.ts (fake scheduler: all off by default; turn on → permission → scheduled; off → cancelled), e2e/check-in.spec.ts (due once a week; answers in the recap; survives reload). Every spec asserts no off-device request.
+  - Done when: each passes 3× in a row; full `npm run e2e` green.
+  - Deps: 20.
+- [ ] 22. [ios-engineer] Simulator build + XCTests + the Checkpoint J phone checklist.
+  - Files: docs/ios-setup.md ("Checkpoint J" checklist: install, Apple Intelligence check, mic permission, 3 test questions, the dev eval run, reminders).
+  - Done when: `xcodebuild` simulator build + all XCTests (GymHealth, GymBrain, GymSpeech) pass; checklist written.
+  - Deps: 20.
+- [ ] 23. [reviewer] Review the slice 2 diff: no network; the context never-contains rules (Health numbers, body comp, measurements, photos, check-ins, notes); `appleCardReasons` honoured; the model only proposes (every change through `propose*` + his tap); sanitize on every model reply; mic never in a set / the PWA, no audio stored; notifications off by default, no body data in text; copy rules; ownership; tests-first evidence; generated Swift up to date.
+  - Deps: 21, 22.
+- [ ] 24. [verifier] Verify milestone against SPEC acceptance criteria (M12 slice 2 + M10 phase B): `npm run check`, full `npm run e2e`, `npm run build` (contains `1.14.0`), simulator build + XCTests, contract/codegen diff; 390×844 screenshots (mic listening, Apple reply with badge, brain-off note, check-in card, Coach settings, Reminders, eval report) via `scripts/screenshots.mjs`; evidence into Verification evidence → M12 slice 2.
+  - Deps: 23.
+- [ ] 25. [main] merge + ask to push (his call; with slices 1, 1c, 1b if still unmerged). Install on his iPhone (push-notify him when the phone must be plugged in).
+  - Deps: 24.
+- [ ] 26. 🧍 **Checkpoint J (his iPhone, Apple Intelligence on):** a few days with the Apple brain and the mic (free questions, at least one proposal from free text, the mic between sets), the dev eval run once (report into PROGRESS: action + args ≥ 85%, 100% safe, 0 applied without a tap, p50 latency), a reminder on, a check-in, plus the slice 1b trainer kit at the gym. He reports wrong answers, wrong actions and how the voice felt (the Checkpoint J to-do + Copy report → `/feedback`).
+
+### M12 — slice 1b: Trainer kit (planned 2026-11-17; release 1.13.0)
+**Contract:** SPEC M12 "Trainer kit" items 1–5, 7–12 + slice 1b Accept, Decisions "M12 trainer kit (his picks, 2026-11-16)", "Second user: his wife", "Body fat + lean mass from Health" and "M12 slices 1b + 2" (2026-11-17; it wins where more specific). **Rule brain only, no network.** All logic **tests first** (Vitest, made-up data; the repo is public). UI tasks: props in / callbacks out, render tests + 390×844 harness screenshots, tokens + motion helpers, text ≥ 20px, targets ≥ 56px, **nothing new to tap or read during a set** (effort is on the rest screen, warm-ups are announced between sets).
+
+**Keep it tight:** slice 2 (free chat) is what he wants most. Tasks are split by file so several core-engineer and ui-engineer instances can run at once; the "conflicts" notes say which ones share a file and must run in order.
+
+**Branch:** `m12-coach-tab` (slices 1 + 1c verified at 745a143, on his iPhone, not merged). Subagents never commit.
+
+**Fit with the current code:**
+- Trainer-kit defaults exist as `TRAINER_KIT_DEFAULTS` in `src/data/todos/topics.ts` (site ids `leftArm`, `rightArm`, `chest`, `waist`, `hips`, `leftThigh`, `rightThigh`; `epley`; `firstHeavyLift`; `reviewWeeks: 5`) and the M12-q4 decision step writes `settings 'trainerKit'`. Task 5 moves the defaults to core and every 1b feature reads `getTrainerKit()` (defaults merged with the stored row), so a later change in the to-do changes the app.
+- Session flow: `src/core/session.ts` (`next(state, event)`), M5b advice `src/core/advice.ts` (`nextTimeAdvice`, `afterSetAdvice`), volume/streak `src/core/stats.ts`, bests `src/core/history.ts`, stalls `src/core/trainer/actions/stall.ts`, completion `src/core/progress/completion.ts`. Voice lines are triggered in `src/ui/app.ts` (main) through `src/ui/voice.ts`.
+- Readiness: `src/core/health/readiness.ts` (`readinessSignals`, `readinessCard`, two-signal rule), signals type `ReadinessSignal` in types.ts.
+- Health: `HealthType` has 6 types; `healthDays` is on `LOCAL_ONLY_TABLES` (re-read from Health after a restore). Native side `ios/App/App/Plugins/GymHealth/**` + `src/native/health.ts` (ios-engineer).
+- Nutrition: `src/core/nutrition/targets.ts` already does Mifflin per sex, but only a surplus (`SURPLUS_RANGE [0, 600]`); a "lose fat" goal needs a deficit and a loss band in the weekly check (`adjust.ts`).
+- Starting plan: `src/data/plan.ts` seeds the user plan from `src/data/program.json` (his program). For a second user the intake builds a starter plan from templates (task 9); his plan stays his.
+- Dexie is at **v9**; 1b adds **v10** (`measurements`, `goals`, `dayFeels`, `progressPhotos`). `SetLog.effort` / `warmup` are unindexed (no schema change).
+- iOS `MARKETING_VERSION = 1.0` in `ios/App/App.xcodeproj/project.pbxproj`; package.json is `1.12.0`.
+
+**Order / parallel groups:**
+- **G0 (now):** 1 [main] ∥ 2 [core] ∥ 3 [ios] ∥ 4 [main] (4 after 1 if main does them one at a time). Slice 2 tasks 1 and 10 [ios] may also start now.
+- **G1 (after 1), core in parallel by file:** 5, 6, 8, 10, 13, 14, 15, 17, 18, 19, 20 [core]; 16 [ios]. Then 7 after 6 (session.ts); 9 after 8; 11 after 10; 12 after 8 + 9 + 17; 21 after 12; 22 after 5 + 15.
+- **G1 ui (after 1), in parallel by file:** 23, 24, 25, 27, 28, 29 [ui]; 26 after 25; 30 after 26; 31 after 25; 32 after 31; 33 after 27 + 29.
+- **G2:** 34 [main] version → 35 [main] wiring A (workout) → 36 [main] wiring B (the rest).
+- **G3:** 37 ∥ 38 [ui] e2e after 36.
+- **G4:** 39 reviewer → 40 verifier → 41 main merge + ask → 42 (no checkpoint of its own; feedback folds into Checkpoint J).
+
+- [ ] 1. [main] Shared types (no behaviour change).
+  - Files: src/core/types.ts.
+  - Adds per SPEC "// Slice 1b" (as edited 2026-11-17): `SetLog.effort?: 'easy' | 'good' | 'hard'`, `SetLog.warmup?: true`; `GoalKind = 'muscle' | 'fat' | 'strength' | 'general'`; `Goal`; `Intake = { goalKind; goalText?; days; sessionMin: 30|45|60|75; experience: 'new'|'some'|'years'; easyOn: BodyArea[]; at }`; `TrainerState.easyOn?: BodyArea[]`; `Measurement = { date; site; cm }`; `ProgressPhoto`; `DayFeel`; `ReadinessSignal` + `'feltLow' | 'sore'`; `HealthType` + `'bodyFat' | 'leanMass'` (and `HEALTH_TYPES`, `HealthDay.bodyFatPct?`, `leanMassKg?`); `ProposalAction` + `'shortOnTime' | 'starterPlan' | 'easyOn'`; `PlannedExercise.pairWith?: string` (paired accessory, shorter rest) ; `LearnCard = { id; title; body; why? }`; `ChatMessage.learnId?: string`; `NutritionSettings.goalKind?: GoalKind`; `GymFile = { format: 'gym-clean-gym'; version: 1; equipment: string[] }`; `AppRoute` + `'intake' | 'settings/goal' | 'settings/progressPhotos' | 'fuel/measurements'`; `TodoDetectorId` + `'effortSets' | 'warmupSession' | 'intakeDone' | 'measurementLogged' | 'bodyCompDays'`. Placeholder cases for exhaustive switches, noted for the owning task.
+  - Done when: `npm run check` passes; no runtime change.
+  - Deps: none.
+- [ ] 2. [core-engineer] Follow-up: postpone wording, **tests first**.
+  - Files: src/core/trainer/actions/postpone.ts(+test).
+  - Bug (slice 1 verifier): "Push A moves to Saturday and the rest follow. Push A moves to next week." (line ~141: the spill list can name the moved day again when the rotation repeats it in the 7-day window). Fix so a day is never said to move twice: name a different spilled day, or "The next Push A moves to next week."
+  - Done when: a test reproduces the old sentence from a made-up schedule and now gets one clear sentence per moved day; all postpone tests and `checkCopy` pass.
+  - Deps: none.
+- [ ] 3. [ios-engineer] Follow-up: the iOS version follows package.json.
+  - Files: scripts/sync-ios-version.mjs(+test) (planner call: ios-engineer owns it, like gen-trainer-tools.mjs), ios/App/App.xcodeproj/project.pbxproj (`MARKETING_VERSION` = package.json version, `CURRENT_PROJECT_VERSION` = a build number that only grows, e.g. git commit count), ios/App/App/Info.plist (`CFBundleShortVersionString` = `$(MARKETING_VERSION)`, `CFBundleVersion` = `$(CURRENT_PROJECT_VERSION)`), docs/ios-setup.md (one line). Main adds the npm script hook (e.g. run before `cap sync`) in task 34.
+  - Done when: a Vitest test fails if `MARKETING_VERSION` ≠ package.json `version`; the script is idempotent; simulator build shows 1.12.0 now (1.13.0 after task 34).
+  - Deps: none.
+- [ ] 4. [main] Follow-up: a tab switch resets scroll to the top.
+  - Files: src/ui/app.ts.
+  - Switching tabs (tab bar) scrolls the new screen to the top; Back inside a tab keeps its current behaviour. Test in task 38.
+  - Done when: manual run at 390×844 (scroll Calendar, tap Coach, tap Calendar → top); e2e in task 38.
+  - Deps: none.
+- [ ] 5. [core-engineer] Trainer-kit settings + Dexie **v10** + stores, **tests first**.
+  - Files: src/core/trainerKit/defaults.ts(+test) (moved `TRAINER_KIT_DEFAULTS`, `mergeTrainerKit(row)`), src/data/todos/topics.ts (import only), src/data/db.ts(+test), src/data/trainerKit/store.ts(+test) (`getTrainerKit`, intake in `settings 'intake'`, goals, measurements, day feels), src/data/progressPhotos/store.ts(+test), src/data/backup.ts(+test).
+  - v10: `measurements: '[date+site], date'`, `goals: 'id, createdAt'`, `dayFeels: 'date'`, `progressPhotos: 'id, date, createdAt'` (new tables, no upgrade function). `progressPhotos` on `LOCAL_ONLY_TABLES`; the others backed up; none in the dev log. Photo store: add (Blob already downscaled by the UI), list, get, delete one, delete all.
+  - Done when tests cover: v9 → v10 keeps every row; round trips; `getTrainerKit` returns defaults without a row and the stored values after the M12-q4 decision step writes one; backup table lists (photos absent from a backup file, restore leaves photos alone); dev-log export has none.
+  - Deps: 1.
+- [ ] 6. [core-engineer] Effort → M5b, **tests first** (item 1).
+  - Files: src/core/session.ts(+test) (event `SET_EFFORT { setIndex, effort }`, only for the last logged set, during rest), src/core/trainer/effortRules.ts (data), src/core/advice.ts(+test).
+  - Easy → step up sooner (the next-set / next-session suggestion steps up even if reps are at the bottom of the range, as data), Hard → hold (no step up), Good / none → today's rule unchanged.
+  - Done when tests cover: effort stored on the set; each effort changes the recommendation as in the data; no answer = identical output to today (snapshot); effort never asked during a set (only valid in phase `rest`).
+  - Deps: 1.
+- [ ] 7. [core-engineer] Warm-up sets, **tests first** (item 2).
+  - Files: src/core/warmup.ts(+test), src/core/warmupRules.ts (data), src/core/session.ts(+test), src/core/stats.ts(+test), src/core/history.ts(+test), src/core/trainer/actions/stall.ts(+test), src/core/progress/completion.ts(+test).
+  - Rule (M12-q4 default, `trainerKit.warmups`): only before the day's **first** barbell / smith / heavy-dumbbell lift (heavy = working weight ≥ 12 kg per dumbbell, data); ramp 50% × 8 then 70% × 4, snapped **down** to his kit step (gym profile dumbbell steps; barbell plate pairs; kg and lb); a step at or below the empty bar → bar × 8 once; none for bodyweight. `'off'` → none. Session: warm-up sets run before set 1 with `SKIP_WARMUPS`; logged with `warmup: true`; a voice line for each (text from core, e.g. "Warm-up: 20 kilos for 8.", ≤ 8 words). Excluded from volume, bests, stall detection, e1RM (task 10 uses the flag) and completion %.
+  - Done when tests cover: kg + lb snapping, light and bodyweight first lifts → none, only the first heavy lift, skip, exclusions in each module, setting off.
+  - Deps: 6 (both edit session.ts).
+- [ ] 8. [core-engineer] Time estimate + "short on time", **tests first** (item 5).
+  - Files: src/core/trainer/timeRules.ts (data: seconds per rep, set-up per exercise, rest from the plan, pair rest 45 s), src/core/trainer/estimate.ts(+test) (`estimateMinutes(day)`), src/core/trainer/actions/shortOnTime.ts(+test), src/core/trainer/intents.ts(+test), src/core/trainer/phrases.json, src/core/trainer/coach.ts(+test), src/core/trainer/evals/requests.json.
+  - `proposeShortOnTime(ctx, minutes)` (20 / 30 / 45; free text "I have 25 min" → nearest lower option): keeps the main lifts (first 1–2 compound exercises, data), **pairs accessories** (`pairWith`, back-to-back with the pair rest; planner call: true alternating supersets wait, see Decision), then trims accessory sets (min 2), then drops the last accessories until `estimateMinutes ≤ minutes`; today only, Apply / Undo. Intent `shortOnTime` + chip "Short on time".
+  - Done when tests cover 20/30/45 on each program day (estimate ≤ limit, main lifts kept), a day already short enough → "Your day already fits.", Apply/Undo round trip, eval items ≥ 5 new, `checkCopy`.
+  - Deps: 1.
+- [ ] 9. [core-engineer] Starter plan from templates (item 3, second user), **tests first**.
+  - Files: src/data/templates/starterTemplates.json (as data: full body 2–3 days, upper/lower 4 days, push/pull/legs 5–6 days; slots by movement pattern and muscle; sets/reps/rest per `GoalKind` × experience), src/core/trainer/starterPlan.ts(+test), src/core/trainer/actions/starterPlan.ts(+test).
+  - `buildStarterPlan(intake, catalog, gym)` → `UserPlan` + `Schedule`, deterministic: template by `days`, picks from the catalog doable with the gym profile (`canDo`), easy-on areas lightened like the avoid-area action, sets trimmed so `estimateMinutes ≤ sessionMin`. `proposeStarterPlan(ctx, intake)` → Proposal `starterPlan`, scope `plan`, Apply / Undo (his current plan is never replaced without Apply).
+  - Done when tests cover: each goal × days 2–6 × 30/75 min fits the time; every pick doable with the default and a minimal gym profile; same input → same plan; easy-on honoured; Apply/Undo; no exercise name or text hard-coded to one person (copy from data).
+  - Deps: 8 (estimate).
+- [ ] 10. [core-engineer] e1RM + measurement series (item 4), **tests first**.
+  - Files: src/core/progress/e1rm.ts(+test), src/core/progress/measurements.ts(+test).
+  - Epley (`w × (1 + r/30)`, r = 1 → w; sets above 12 reps not charted, data); per session the best e1RM of non-warm-up sets; lighter/deload sessions marked; series per lift. Measurements: per-site series, "measure again" due after 28 days (data), cm ↔ in by his unit, sites from `trainerKit.measurementSites`.
+  - Done when tests cover known values, warm-ups excluded, top set per session, units, due rule, sites from settings.
+  - Deps: 1.
+- [ ] 11. [core-engineer] Goals, intake mapping, review (item 3), **tests first**.
+  - Files: src/core/trainerKit/goals.ts(+test), src/core/trainerKit/intake.ts(+test), src/core/trainerKit/review.ts(+test), src/core/trainerKit/goalRules.ts (data).
+  - `suggestGoals(intake, history)` → 1–2 measurable targets + a date (lift: e1RM-based, e.g. "Bench 60 kg × 8 by 2027-02-01"; measurement; weight), all as data; `goalProgress(goal, sets, measurements, weighIns, today)` → % + on track / behind; `intakeToChanges(intake, current)` → which proposals to offer (starter plan for a fresh install or "Build a new plan from my answers", the easy-on proposal, Fuel goal targets); `reviewDue(goals, lastReviewAt, trainerKit.reviewWeeks, today)` → once per period, with a recap text + an offer (focus block or goal edit).
+  - Done when tests cover each goal kind, progress from made-up data, review every 5 weeks once (and every 4/6 when the setting says so), `checkCopy` on every string.
+  - Deps: 10.
+- [ ] 12. [core-engineer] Standing "go easy on" list, **tests first** (item 3).
+  - Files: src/core/trainer/plan.ts(+test), src/core/trainer/actions/easyOn.ts(+test), src/core/trainer/actions/*.ts (swap, focusBlock, shortOnTime, stall, lighter checks), src/core/trainer/focusBlock.ts(+test), src/core/trainer/starterPlan.ts.
+  - `TrainerState.easyOn` changed only by a Proposal (`easyOn`, scope `plan`, Apply / Undo, Plan changes). `effectiveDay` applies the avoid-area treatment for each listed area on every projected day (computed, so removing the area restores the plan). Every `propose*` and the focus-block builder never add or increase load on a listed area (swap candidates excluded; a focus block on a listed group → "Remove shoulders from your go-easy list first?" with that proposal).
+  - Done when tests cover: add → every future day lightened/swapped; remove → restored; each action + the builder honour it; Undo; feel-today soreness (task 17) only offers today's avoid-area, never the standing list.
+  - Deps: 8, 9 (same files), 17 (only for the last test).
+- [ ] 13. [core-engineer] Nutrition targets follow goal and sex (second user), **tests first**.
+  - Files: src/core/nutrition/goalTargets.ts(+test) (data per `GoalKind`: muscle +300 kcal / protein 1.8 g/kg / weekly band +0.25–0.5%; strength +200 / 1.8 / +0.1–0.35%; general 0 / 1.6 / −0.25–+0.25%; fat −400 / 2.0 / −0.25–−0.75%), src/core/nutrition/targets.ts(+test) (signed delta, range −600…+600; kcal never below BMR, data), src/core/nutrition/adjust.ts(+test) (weekly check per goal band, loss direction).
+  - Planner call: no goal set = today's behaviour (muscle); changing the goal shows "Fuel targets: 2,650 → 2,250 kcal" and changes nothing until he taps Apply.
+  - Done when tests cover each goal × male/female (Mifflin) × made-up bodies, the BMR floor, the weekly check moving the delta in the right direction for loss and gain, no-goal = old snapshot.
+  - Deps: 1.
+- [ ] 14. [core-engineer] "Share my gym" file + nothing hard-coded to him, **tests first**.
+  - Files: src/data/gymFile.ts(+test) (`exportGymFile(profile)` → JSON with equipment ids only — no `kept`, no name, no dates; `parseGymFile(text)` validates format/version/known ids → `{ ok, equipment, unknown[] } | { ok: false, reason }`), src/core/noPersonal.test.ts (scans src/data/**/*.json and core copy for his name outside `CREDIT`, fixed personal goals or body numbers; voice default Calm; Health/WHOOP optional).
+  - Done when tests cover round trip, unknown ids reported, junk rejected, file has no personal fields, the scan passes.
+  - Deps: 1.
+- [ ] 15. [core-engineer] Body fat + lean mass (core side), **tests first**.
+  - Files: src/core/health/days.ts(+test) (per-day pick like weight: morning reading, Health wins), src/core/health/sync.ts(+test), src/data/health/store.ts(+test), src/data/health/sync.ts(+test), src/core/health/bodyComp.ts(+test) (trends next to weight).
+  - New types default **off**; an old `'health'` row without the keys reads them as off (no prompt on update). Stored in `healthDays` (local-only, re-read after a restore; planner call per the Decision's "main decides"), never in `weighIns`, never in any coach/brain context (slice 2 task 4 enforces), never in the dev log.
+  - Done when tests cover the pick, sync with the switches off/on, old settings rows, trend math, no new backed-up field.
+  - Deps: 1.
+- [ ] 16. [ios-engineer] GymHealth reads body fat % + lean body mass.
+  - Files: ios/App/App/Plugins/GymHealth/GymHealthPlugin.swift, GymHealthCore/Sources/**/GymHealthMapping.swift + Tests, src/native/health.ts(+test).
+  - `HKQuantityTypeIdentifier.bodyFatPercentage` (as %), `.leanBodyMass` (kg); read-only; requested **only when he turns that switch on** (the Health sheet then lists 8 types); source names kept for the per-day pick.
+  - Done when: XCTests for the mapping (units, empty), TS bridge tests, simulator build.
+  - Deps: 1.
+- [ ] 17. [core-engineer] Feel today → readiness, **tests first** (item 9).
+  - Files: src/core/health/readiness.ts(+test), src/core/health/rules.ts (data), src/core/health/copy.ts(+test).
+  - Signals `feltLow` (energy ≤ 2) and `sore` (any area) from `DayFeel`; the two-signal rule unchanged, so both together show the card without Health; one alone + one Health signal shows it. Reasons "You said your energy is low today." / "You said your shoulders are sore."; a sore area adds an offer "Go easy on shoulders today?" (today's avoid-area proposal), never medical wording.
+  - Done when tests cover each combination with/without Health, reasons pass `checkCopy` + the M11 banned list.
+  - Deps: 1.
+- [ ] 18. [core-engineer] Setup cues (item 10), **tests first**.
+  - Files: src/data/setupCues.json, src/core/setupCues.ts(+test).
+  - 2–3 cues per program exercise (and catalog swap pool) the camera can't judge, ≤ 8 words each; `setupCuesFor(exerciseId, session)` → lines once before the first working set (after warm-ups), none if already said this session.
+  - Done when tests cover: every such exercise has 2–3 cues ≤ 8 words passing `checkCopy`; said once.
+  - Deps: 1.
+- [ ] 19. [core-engineer] Cardio minutes (item 11), **tests first**.
+  - Files: src/core/health/cardio.ts(+test).
+  - `weeklyCardioMinutes(healthDays, sessions, weekStart)`: Health workouts outside gym sessions (reuse `overlapsGymSession`), activity kinds as data, Mon–Sun week (`weekStartOf`); null without Health.
+  - Done when tests cover overlap (no double count), week edges, DST, no Health → null.
+  - Deps: 1.
+- [ ] 20. [core-engineer] Next block + deload suggestion (item 7), **tests first**.
+  - Files: src/core/trainer/nextBlock.ts(+test), src/core/progress/recap.ts(+test).
+  - At a block's end: the recap offers a lighter week (7 days, the deload rule) then a next block (same group or the next in an order as data). `deloadSuggested(sessions, state, today, lastOfferAt)`: after 6 hard weeks in a row (all planned sessions done, no lighter/deload days) or ≥ 2 exercises stalled at once (M10 stall rule) → once, then not again for 4 weeks (data). Proposals only.
+  - Done when tests cover both triggers, once, the recap offer, Apply/Undo.
+  - Deps: 1.
+- [ ] 21. [core-engineer] Protein nudge, post-workout idea, learn cards (item 12), **tests first**.
+  - Files: src/core/nutrition/nudges.ts(+test) (a logged meal ≥ 250 kcal with protein < 60% of his per-meal share (daily protein / 4 meals, data) → one nudge per meal), src/data/learnCards.ts(+test) (~10: progressive overload, effort, warm-ups, protein, sleep, deloads, focus blocks, short sessions, measurements, consistency), src/core/trainer/coach.ts (`learnId` on replies where a card fits; data map intent → card), src/core/trainer/replies.ts.
+  - Done when tests cover nudge thresholds and once-per-meal, every card and link passing `checkCopy`, links point to existing ids. The post-workout idea reuses the M10 food suggestion (no new logic; a test that Summary's input gets it).
+  - Deps: 12 (coach.ts after 8/12).
+- [ ] 22. [core-engineer] What's New 1.13.0 + trainer-kit to-dos.
+  - Files: src/data/whatsNew/pages.ts(+test), src/data/todos/topics.ts(+test), src/core/todo/detectors.ts(+test), src/data/todos/facts.ts(+test).
+  - Pages (`release: '1.13.0'`, ≈ 8): effort after a set, warm-ups, your goal + intake, short on time, measurements + e1RM (+ body fat / lean mass in the iPhone app), how you feel today, progress photos (off until you turn them on), learn cards. Topic "Trainer kit at the gym" (both, `since: '1.13.0'`; feeds Checkpoint J): auto `effortSets` (≥ 6 sets with effort), `warmupSession` (1), `intakeDone`, `measurementLogged`; asks: warm-up weights right (right / too light / too heavy), effort helped the next weight, short on time used + fit, setup cues (helpful / too many / not needed), anything off (note). VeSync topic gains a native auto step `bodyCompDays` (≥ 1 day with body fat or lean mass).
+  - Done when: the 1c data tests still pass plus boundary tests for the new detectors; facts counts only.
+  - Deps: 5, 15.
+- [ ] 23. [ui-engineer] Effort row on the rest screen (item 1).
+  - Files: src/ui/screens/rest.ts(+test).
+  - "How was that set?" Easy / Good / Hard (≥ 56px each, labels + "3+ left / 2 left / 0–1 left", selection not colour alone), optional, never blocks the timer or Next; a "Why?" link to the effort learn card.
+  - Done when: render tests (select, change, keyboard, absent outside rest) + 390×844 screenshot.
+  - Deps: 1.
+- [ ] 24. [ui-engineer] Warm-up set display (item 2).
+  - Files: src/ui/screens/exercise.ts(+test), src/ui/screens/rest.ts (label only; after 23).
+  - "Warm-up 1 of 2 · 20 kg × 8" label (text, ≥ 20px), Skip warm-ups (≥ 56px) before set 1; no new motion (`data-motion="off"` stays).
+  - Done when: render tests + 390×844 screenshot.
+  - Deps: 1, 23 (rest.ts).
+- [ ] 25. [ui-engineer] Intake flow + Goal card (item 3, second user).
+  - Files: src/ui/intake/intake.ts(+test) (one question per screen: goal kind (build muscle / lose fat / get stronger / general fitness) + optional own words, training days 2–6, session length 30/45/60/75, experience, areas to go easy on; Back / Next / Skip for now; the last screen shows what will change: starter plan or "Build a new plan from my answers", easy-on list, Fuel targets before → after, each with Apply), src/ui/screens/goalCard.ts(+test) (1–2 goals with progress + due date; "Set your goal" prompt when none; ≥ 56px), src/ui/intake/intake.css.
+  - Done when: render tests (each step, keyboard, skip, summary) + 390×844 screenshots (intake step, summary, Goal card, prompt).
+  - Deps: 1.
+- [ ] 26. [ui-engineer] Settings rows + Share my gym.
+  - Files: src/ui/screens/settings.ts(+test) (Your goal & intake → re-run; Go easy on list with Remove (each removal is a proposal via callback); Progress photos switch row, off by default), src/ui/screens/myGym.ts(+test) (Share my gym → file via share sheet / download; Import a gym file → preview "Adds 12 items, 1 unknown" → Apply).
+  - Done when: render tests + 390×844 screenshots (Settings rows, My gym import preview).
+  - Deps: 25 (intake props reused), 1.
+- [ ] 27. [ui-engineer] Measurements + body composition in Fuel; Health switches (item 4).
+  - Files: src/ui/fuel/measurements.ts(+test) (log sheet: sites from settings, cm/in by unit, "Measure again" after 28 days), src/ui/fuel/weighIn.ts(+test) (body fat % + lean mass trends next to weight when present), src/ui/screens/fuel.ts(+test) (entry row), src/ui/screens/healthSettings.ts(+test) (two new switches, off, "iPhone app only").
+  - Done when: render tests + 390×844 screenshots (measurements sheet, trends with body comp, Health settings with 8 switches).
+  - Deps: 1.
+- [ ] 28. [ui-engineer] e1RM chart in exercise history (item 4).
+  - Files: src/ui/screens/history.ts(+test), src/ui/charts/e1rmChart.ts(+test).
+  - Simple SVG line (original art), points labelled, a text summary for screen readers ("Best estimate 72 kg on 12 Nov"), lighter sessions marked.
+  - Done when: render tests (empty, one point, many) + 390×844 screenshot.
+  - Deps: 1.
+- [ ] 29. [ui-engineer] Short-on-time chip + pair lines (item 5).
+  - Files: src/ui/coach/proposalCard.ts(+test) (paired lines "Curl + Triceps: back to back, 45 s rest"), src/ui/screens/preview.ts(+test) (pair label on the day preview), src/ui/coach/chat.ts (chip registration only).
+  - Done when: render tests + 390×844 screenshot of the proposal.
+  - Deps: 1.
+- [ ] 30. [ui-engineer] Progress photos (item 8, opt-in).
+  - Files: src/ui/photos/progressPhotos.ts(+test) (list by date, add via take/pick (`input type=file accept=image/*`), downscale to 1080 px long edge on a canvas (drops EXIF), compare two dates side by side, delete one (two taps) / delete all (two taps), privacy line "Stays on this phone. Not in backups."), src/ui/photos/photos.css.
+  - Done when: render tests (off state, add, compare, delete confirm) + 390×844 screenshot with made-up images.
+  - Deps: 26.
+- [ ] 31. [ui-engineer] Feel today on Today + readiness card offer (item 9).
+  - Files: src/ui/screens/today.ts(+test) (collapsed "How do you feel today?" row below Start → energy 1–5 + sore-area chips, optional, once per day), src/ui/screens/readinessCard.ts(+test) ("Go easy on shoulders today?" button when a sore area is a reason).
+  - Done when: render tests + 390×844 screenshots (feel-today open, card with the sore offer).
+  - Deps: 25 (today.ts: Goal card slot).
+- [ ] 32. [ui-engineer] Cardio line (item 11).
+  - Files: src/ui/screens/today.ts(+test) (week strip line "Cardio this week: 95 min", hidden when null), src/ui/screens/calendar.ts(+test) (week score line).
+  - Done when: render tests (shown/hidden) + 390×844 screenshot.
+  - Deps: 31 (today.ts).
+- [ ] 33. [ui-engineer] Protein nudge, post-workout idea, learn cards (item 12).
+  - Files: src/ui/fuel/proteinNudge.ts(+test), src/ui/screens/fuel.ts (slot; after 27), src/ui/screens/summary.ts(+test) (post-workout meal idea with Log), src/ui/coach/learnCard.ts(+test) (sheet), src/ui/coach/chat.ts ("Why?" link on a bubble with `learnId`; after 29).
+  - Done when: render tests + 390×844 screenshots (nudge, Summary idea, a learn card).
+  - Deps: 27, 29.
+- [ ] 34. [main] Version 1.13.0.
+  - Files: package.json (`"version": "1.13.0"` + the `sync-ios-version` hook from task 3).
+  - Done when: `npm run check` (incl. the iOS version test) passes; `npm run build` contains `1.13.0`.
+  - Deps: 3, 22.
+- [ ] 35. [main] Wiring A: the workout.
+  - Files: src/ui/app.ts.
+  - Effort → `SET_EFFORT` + saved on the set; warm-ups from `trainerKit` + gym profile → session; warm-up lines and setup cues spoken between sets through the existing voice (kind `cue`, never over a count, never during a set); Summary gets the post-workout idea and excludes warm-ups.
+  - Done when: `npm run check`; manual run at 390×844 through a seeded Push A day (warm-ups, effort, Summary).
+  - Deps: 6, 7, 18, 21, 23, 24.
+- [ ] 36. [main] Wiring B: the rest.
+  - Files: src/ui/app.ts, src/main.ts.
+  - First run: fresh install (no sessions) → intake before the first Today (Skip for now); existing installs are never forced (Today shows "Set your goal"; the 1.13.0 tour links to it). Intake → stores → proposals (starter plan / easy-on / Fuel targets) through changes.ts. Goal card props; review messages in the chat (once, like recaps); next block + deload offers; short-on-time chip; feel-today → readiness; measurements + body comp + e1RM screens; Health switches → sync; progress photos route (only when on); cardio line; nudges + learn-card sheet; Share/import gym file; routes `intake`, `settings/goal`, `settings/progressPhotos`, `fuel/measurements`. Dev log: ids/numbers only, nothing from photos, measurements or body comp.
+  - Done when: `npm run check`; manual 390×844 run with seeded data shows each item; no network request.
+  - Deps: 35 (same file), 4, 5, 8–22, 25–34.
+- [ ] 37. [ui-engineer] Update existing e2e specs + helpers.
+  - Files: e2e/app.helpers.ts, e2e/workout.helpers.ts (seed option: intake done / skipped by default, like the tour; warm-ups off by default for specs that count sets unless they opt in), any spec whose selectors changed (rest, Today, Fuel, Settings, history).
+  - Done when: each changed spec passes 3× in a row; full `npm run e2e` green.
+  - Deps: 36.
+- [ ] 38. [ui-engineer] New e2e specs (390×844, slice 1b Accept).
+  - Files: e2e/trainer-kit.spec.ts (effort row + skip; warm-ups announced (speech stubbed) and logged, Summary volume unchanged; "I have 30 min" → Proposal → Apply → shorter day → Undo; feel-today → "Lighter today?" card; setup cue spoken once before the first set; a learn card from a coach reply; nothing new during a set), e2e/intake.spec.ts (fresh profile → intake → starter plan Apply → Today + Goal card; existing profile not forced; re-run from Settings; goal "lose fat" shows the Fuel before → after and changes nothing until Apply; Share my gym file → import on a fresh profile), e2e/body.spec.ts (measurement in Fuel survives reload; e1RM chart in exercise history; progress photos on → add a fixture image → compare → delete; absent from a Back up file; no network request), e2e/tab-scroll.spec.ts (tab switch resets scroll). Every spec asserts no off-device request.
+  - Done when: each passes 3× in a row; full e2e green.
+  - Deps: 36.
+- [ ] 39. [reviewer] Review the slice 1b diff: no network; progress photos local-only (not in backups, dev log or any context); body comp in `healthDays` only; nothing hard-coded to him (the scan test); every plan change a Proposal with Undo; copy rules (`checkCopy`, no medical words; soreness only coaching); data-not-branches (templates, warm-up rules, time rules, goal targets, learn cards); nothing new mid-set; ownership; tests-first evidence; motion via helpers.
+  - Deps: 37, 38.
+- [ ] 40. [verifier] Verify milestone against SPEC acceptance criteria (M12 slice 1b): `npm run check`, full `npm run e2e`, `npm run build` (contains `1.13.0`), iOS simulator build (shows 1.13.0); 390×844 screenshots listed in SPEC (effort row, warm-up set, intake, Goal card, short-on-time proposal, measurements, e1RM chart, feel-today, progress photo compare (made-up image), a learn card, the cardio line) + the 1.13.0 tour page via `scripts/screenshots.mjs`; evidence into Verification evidence → M12 slice 1b.
+  - Deps: 39.
+- [ ] 41. [main] merge + ask to push (his call; slices 1 + 1c + 1b may go together). Install the build on his iPhone if he wants it before slice 2.
+  - Deps: 40.
+- [ ] 42. No 🧍 checkpoint of its own: his gym feedback on the trainer kit folds into Checkpoint J (the "Trainer kit at the gym" to-do).
 
 ### M12 — slice 1c: What's New tour + To-do guides + one copy report (planned 2026-11-16)
 **Contract:** SPEC "M12" → "What's New tour + To-do guides (slice 1c)" + slice 1c Accept, the approved section "Slice 1c" of `docs/superpowers/specs/2026-11-16-coach-tab-chat-design.md`, and Decision "M12 slice 1c (his yes, 2026-11-16)", which wins where it is more specific. **No network** (the report leaves only through the clipboard on his tap), no new plugin, no new permission. All logic is **tests first** (Vitest, made-up data only; the repo is public). UI tasks are props in / callbacks out with render tests + 390×844 harness screenshots, tokens + motion helpers from slice 1 task 8, text ≥ 20px, targets ≥ 56px, nothing shown or spoken during a set.
@@ -271,23 +619,11 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Deps: 20.
 - [ ] 22. 🧍 **Checkpoint I:** he uses the Coach tab and the Calendar for a few days (at least one question, one proposal applied or undone, a focus block looked at or applied, the Calendar after training). He reports what felt off, including the motion. Runs alongside / after Checkpoint H.
 
-**Slice 1b "Trainer kit" (outline only; planned in detail when slice 1 is verified).** Contract: SPEC M12 "Trainer kit" + slice 1b Accept; Decision "M12 trainer kit (his picks, 2026-11-16)". Rule brain only, no network. Logic tests first. One Dexie bump for the new tables (v10 now that slice 1c takes v9, or folded into v9 if 1c hasn't shipped; Decision "M12 slice 1c"), core-engineer. Item 6 is in slice 2.
-- K1 (item 1, effort): [main] `SetLog.effort` type; [core-engineer] effort → M5b load rule (`src/core/…` recommendation + tests); [ui-engineer] Easy / Good / Hard row on the rest screen.
-- K2 (item 2, warm-ups): [core-engineer] warm-up ramp math (% and reps as data, kit-step snapping, kg/lb) + session state machine warm-up sets + exclusion from volume / bests / stalls / e1RM / completion; [ui-engineer] warm-up set display and spoken announce on the rest/exercise screens (no new motion mid-set).
-- K3 (item 3, intake + Goal + review): [core-engineer] intake/goal storage, goal progress math, standing easy-on list honoured by every `propose*` and the focus-block builder, review-due rule; [ui-engineer] intake screens, Goal card on Today, Settings → re-run intake / easy-on list; [main] `TrainerState.easyOn` + `Goal` / `Intake` types, first-run routing.
-- K4 (item 4, measurements + e1RM): [core-engineer] e1RM formula + per-lift series, measurement store; [ui-engineer] measurements in Fuel, e1RM chart in exercise history.
-- K5 (item 5, short on time): [core-engineer] short-on-time builder (time estimate as data, supersets, trims) as a `propose*` action + intent "I have N min"; [ui-engineer] the chip and the proposal's superset lines in the chat card.
-- K7 (item 7, plan beyond a month): [core-engineer] next-block + lighter-week proposal at block end, deload-after-6-hard-weeks / stalls rule, recap hook; [ui-engineer] only if the card needs a new layout.
-- K8 (item 8, progress photos, opt-in): [core-engineer] `progressPhotos` table on `LOCAL_ONLY_TABLES`, never in dev log / any brain context (test); [ui-engineer] Settings switch (off by default), add / compare / delete screens, privacy line "Stays on this phone. Not in backups."
-- K9 (item 9, feel today): [core-engineer] `DayFeel` store + `feltLow` signal in `src/core/health/readiness.ts` (works without Health; rule as data); [ui-engineer] optional energy + sore-area tap before Start; [main] `ReadinessSignal` type.
-- K10 (item 10, setup cues): [core-engineer] cue data per exercise in `src/core/exercises/*` / catalog + copy tests; [ui-engineer] speak once before the first working set (existing voice kinds, never over a count).
-- K11 (item 11, cardio minutes): [core-engineer] weekly cardio minutes from `healthDays`; [ui-engineer] line on the week strip + Calendar week score (hidden without Health).
-- K12 (item 12, nudges + learn cards): [core-engineer] protein-per-meal rule + ~10 learn cards as data (copy-checked); [ui-engineer] Fuel nudge, Summary post-workout idea, learn-card sheet linked from coach replies.
-- K-close: [main] wiring in app.ts → [ui-engineer] e2e specs (slice 1b Accept) → [reviewer] → [verifier] → [main] merge + ask to push. His feedback folds into Checkpoint J.
+**Slices 1b and 2 are planned in detail above** ("M12 — slice 1b", "M12 — slice 2", 2026-11-17); the old K1–K12 outline is superseded and removed.
 
-**Later slices (outline; planned in detail after Checkpoint I):**
-- **Slice 2 (iPhone):** M10 phase B tasks B1–B8 (tools gain read-only `weekSummary`, `progressSummary`, `exerciseInfo`, `foodIdeas` and `proposeFocusBlock` params-only; context adds scores, focus block, Fuel totals, last 8 turns, card reasons per the open item), owners per the CLAUDE.md table (`ios/**` + `src/native/**` = ios-engineer, codegen script = ios-engineer); plus the mic: `GymSpeech` plugin (on-device only, `en`, live partials; check current Speech / SpeechAnalyzer docs), Info.plist Microphone + Speech Recognition strings, chat mic button with level ring, "Speak replies" setting, `say` spoken in the coach voice, fake bridges for e2e; plus **trainer kit item 6**: local-notification reminders (session, missed-day nudge, Sunday recap; each off by default; ios-engineer for the native plugin / Capacitor local notifications, core-engineer for the schedule rules, ui-engineer for Settings) and the weekly 3-question check-in in the chat (core-engineer + ui-engineer) → 🧍 Checkpoint J.
-- **Slice 3:** M10 phase C tasks C1–C4 plus the `usedHealth` drop and "Ask Claude instead".
+**Later slice (outline):**
+- **Slice 3:** M10 phase C tasks C1–C4 plus the `usedHealth` drop and "Ask Claude instead" (needs his key; nothing calls Anthropic before).
+
 
 ### M11 — Health data: Apple Health + WHOOP (planned 2026-11-16; ANSWERED 2026-11-16, building on `m11-build`)
 **Contract:** SPEC M11 (a PROPOSAL until M11-q1 is yes) and the Decision "M11 health data plan" (2026-11-16). Nothing below starts until he answers M11-q1–q8 (or says "go with the defaults"). Logic is **tests first** with made-up fixtures. 🧍 = needs his Mac / Xcode / iPhone / WHOOP app.
@@ -2474,6 +2810,20 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-17: **M12 slices 1b + 2 (his go-ahead, 2026-11-17: "Go ahead slice 2 and 1b").** After using slices 1 + 1c on his iPhone he said the coach "still cannot help much" (free text only reaches the rule matcher), so slice 2's Apple brain is what he wants most; 1b stays tight and split for parallel owners. Order per SPEC: 1b (release **1.13.0**) then 2 (release **1.14.0**), both on `m12-coach-tab`; merge/push stays his call. Plans under "Current milestone plan → M12 — slice 1b / slice 2". **Apple Intelligence is on and fully downloaded on his iPhone** (his words 2026-11-17: "It finished"), so Checkpoint J tests the real model; the rules fallback stays for phones without it (e.g. his wife's). **Planner calls he can correct (his go-ahead 2026-11-17):**
+  - **M12-q1 = default:** Apple's on-device coach may see the "Lighter today?" card's **reason sentences only**, never numbers; Claude never. Read at runtime from `coach.appleCardReasons` (the to-do decision step); "no" there removes them from Apple's context (tested).
+  - **M12-q4 = defaults:** measurement sites left/right arm, chest, waist, hips, left/right thigh; Epley e1RM on each session's top set (warm-ups excluded, sets over 12 reps not charted); warm-ups only before the day's first barbell / smith / heavy-dumbbell lift (heavy = ≥ 12 kg per dumbbell, data); review every 5 weeks. Read at runtime from `settings 'trainerKit'` (defaults merged), so the to-do decision step or a later change takes effect.
+  - **Second user (his wife) in 1b:** intake asks goal kind (build muscle / lose fat / get stronger / general fitness, plus optional own words), days 2–6, session length 30/45/60/75, experience, easy-on areas. A **starter plan** is built deterministically from templates as data (full body / upper-lower / push-pull-legs by days; sets/reps by goal × experience; kit-aware; fits the session length) and offered as a Proposal; his own plan is never replaced without Apply. Fresh installs see the intake before the first Today (skippable); existing installs are never forced (a "Set your goal" card + the 1.13.0 tour). **Fuel targets follow goal and sex** (Mifflin already per sex): muscle +300 kcal / 1.8 g/kg protein, strength +200 / 1.8, general 0 / 1.6, fat −400 / 2.0 (range −600…+600, never below BMR), weekly-check bands per goal; no goal = today's behaviour; a goal change shows before → after and changes nothing until Apply. **"Share my gym"** = a JSON file with equipment ids only (no `kept`, no personal data) via the share sheet / download, imported in My gym with a preview. A scan test keeps his name (except the About credit) and personal goals/numbers out of data and copy.
+  - **Body fat + lean mass:** `bodyFat` / `leanMass` HealthTypes default off (old `'health'` rows read them as off; asked only when switched on); stored in `healthDays` (local-only, re-read from Health after a restore, like other Health values), never in `weighIns`, any coach/brain context or the dev log. ios-engineer adds the HealthKit reads.
+  - **Easy-on list:** `TrainerState.easyOn`, changed only by a Proposal (`easyOn`, Apply / Undo); `effectiveDay` applies the avoid-area treatment for each listed area on every projected day (computed, so removal restores); every `propose*`, the focus-block builder and the starter plan never add load there. Feel-today soreness only offers **today's** avoid-area.
+  - **Short on time "supersets":** accessories are **paired back to back with a 45 s pair rest** (`pairWith`), shown as pairs; true alternating supersets (A1/B1/A2/B2 in the session machine) are deferred — he can ask for them at Checkpoint J.
+  - **Feel today:** two signals `feltLow` (energy ≤ 2) and `sore` (any area), so both together show the card without Health (SPEC data model edited; it listed one signal).
+  - **Effort by voice** ("one word" in the SPEC) is not in slice 2: the mic is chat-only and never in a workout screen; effort stays a tap on the rest screen.
+  - **Dexie:** v10 = `measurements`, `goals`, `dayFeels` (backed up), `progressPhotos` (`LOCAL_ONLY_TABLES`); intake in `settings 'intake'`; v11 (slice 2) = `checkIns` (backed up). Check-in answers stay out of every brain context.
+  - **Slice 2 shape:** read-only tool results are computed by the app before each `respond` and passed in (no JS round trip; ios-engineer may propose one after the docs check). An unavailable Apple brain → rules plus **one plain note per reason, once** ("Apple Intelligence is off, so I'm using quick replies. Turn it on in Settings > Apple Intelligence & Siri."). Speak replies default "Mic only". Reminders via local notifications (choice after the docs check: `@capacitor/local-notifications` or a small plugin), all off by default, permission asked on the first switch-on; session reminder at his time, missed-day nudge next day 09:00 once, Sunday recap 19:00; text has no numbers about body, Health, weight or food.
+  - **Follow-ups from the slice 1 verifier** are 1b tasks 2 (postpone wording), 3 (iOS `MARKETING_VERSION` follows package.json; ios-engineer owns `scripts/sync-ios-version.mjs`, main may add it to the CLAUDE.md table) and 4 (tab switch scrolls to top, main in app.ts).
+  - **To-dos:** 1.13.0 adds "Trainer kit at the gym" (feeds Checkpoint J) and a body-comp auto step in the VeSync topic; 1.14.0 adds "Coach on your iPhone (Checkpoint J)".
+
 - 2026-11-16: **M12 slice 1c (his yes, 2026-11-16).** Wongsaton: "Plan to add everything in the list to the app such as wizard that I need to do step by step on the app to finish each topic" · "Go with A, copy report but keep it in the app since I export it one time. I need it guide me as wizard same as when the other app publishes the new version." · "Yes, add it to the plan". New **slice 1c** (right after slice 1, before slice 1b): What's New tour per release, to-do guides (auto + ask + decision steps, as data), one in-app Copy report. SPEC M12 has the section "What's New tour + To-do guides (slice 1c)" + slice 1c Accept; plan under "Current milestone plan → M12 — slice 1c". **Planner calls he can correct:**
   - **Version = tour key** (his add, 2026-11-16: "don't forget to put version number and my name as copyright credit"): `package.json` version read at build time as `__APP_RELEASE__`, plus `__APP_BUILD__` (short git sha); shown as "Version 1.12.0 (build abc1234)" in a new **Settings → About** section at the bottom and on the tour's first page; the tour key is the semver part. About also shows **"© 2026 Wongsaton Kampusan"**. The copy report header has the version + build, not his name. `__APP_VERSION__` (sha + build time) stays the dev-log id and is the per-build id for the re-sign clock.
   - **Version policy:** MAJOR `1` (the app is live); **MINOR +1 per shipped milestone slice**, in ship order and not tied to the milestone number (M12 slice 1 + 1c = `1.12.0`, the next shipped slice `1.13.0`); **PATCH +1 for a fix-only deploy** with no tour pages. Main bumps it in the merge commit; tour pages always come with a new MINOR.
@@ -3333,6 +3683,7 @@ Verifier on `m12-coach-tab` at 9ecd50c (reviewer PASS: slice 1 after 85fb908, sl
 
 ## Blockers / questions for Wongsaton
 - **New (M12 Coach tab, planned 2026-11-16; not blocking slice 1. The defaults are what gets built):**
+  - ~~M12-q1~~ and ~~M12-q4~~: **defaults taken 2026-11-17** with his "Go ahead slice 2 and 1b" (Decision "M12 slices 1b + 2"); he can still change either in the to-do decision steps and the app follows. Kept below for the record.
   - **(M12-q1, before slice 2) Apple's coach and your Health card.** The design lets Apple's on-device coach see the "Lighter today?" reasons (e.g. "Sleep was shorter than usual"), never raw numbers, and never Claude. An earlier M11 build note kept every Health value out of the coach. **Default: Apple's on-device coach may see the card's reason sentences only; Claude never.** OK?
   - **(M12-q2, at Checkpoint I) Old Calendar days after a plan change.** If you later change the plan "from now on", should old missed days still show what was planned back then? **Default for slice 1: no snapshot; done days always show what you logged.** We'd add a daily snapshot if this bothers you.
   - **(M12-q3, at Checkpoint I) Focus-block size.** Default: the focus muscle gets about 40% more weekly sets and trains at least 2 days a week, the last week is lighter. Too much, too little?
