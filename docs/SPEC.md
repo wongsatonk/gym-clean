@@ -1008,6 +1008,10 @@ Settings → Plan changes. A model's text never changes data by itself.
 - **Check current docs before building** (CLAUDE.md rule 8): Foundation Models' API is new and changes.
 
 #### Phase C — Claude brain (optional)
+**Changed 2026-11-18 by M12 "Claude brain (slice 3)":** the key lives in the iPhone Keychain (not
+IndexedDB), the request is sent from a native plugin (not the browser; the CSP doesn't change), the PWA has
+no Claude, the default model is a cheaper tier than `claude-opus-5-5` (M12-s3-q3), and the eval runs on the
+phone. The rest of this section stands.
 - Settings → **Cloud coach (Claude)**, off by default. Before it turns on, it explains plainly: "Your
   messages, your plan and your recent workout numbers (exercises, sets, reps, weights, dates) are sent to
   Anthropic to answer. Your notes, camera and developer log are never sent." It takes his own API key,
@@ -1399,8 +1403,10 @@ the M10 phase B/C sections above stay the contract for those brains, with the ch
    (2026-11-17), so Checkpoint J tests the real model; when it is unavailable on a phone (off, still
    downloading, not eligible) free text goes to the rules and the chat says so **once per reason**, plainly,
    with how to turn it on.
-3. **Slice 3:** the Claude brain (M10 phase C). His "both" counts as the yes to build it (M10-q7); default
-   model `claude-opus-5-5`; nothing calls Anthropic until he pastes his own key in Settings.
+3. **Slice 3:** the Claude brain (M10 phase C). His "both" counts as the yes to build it (M10-q7);
+   nothing calls Anthropic until he pastes his own key in Settings. Planned 2026-11-18 (his "plan Claude
+   next"); details in "Claude brain (slice 3)" below, which changes the default model, where the key lives
+   and how the request is sent.
 
 #### What's New tour + To-do guides (slice 1c)
 Wongsaton (2026-11-16): "Plan to add everything in the list to the app such as wizard that I need to do step
@@ -1602,6 +1608,46 @@ number below is a default held as data and tuned at a checkpoint. Every change t
 - Eval adds a "facts" set: numbers quoted must match the context (100%), plus the M10 bars (≥ 85% right
   action, 100% safe).
 
+#### Claude brain (slice 3; planned 2026-11-18)
+Wongsaton at Checkpoint J: the coach should "talk naturally, as human"; 2026-11-18: "plan Claude next".
+Planner calls are in Decision "M12 slice 3 plan" and the open ones are M12-s3-q1…q8 (defaults below). This
+section wins over M10 phase C where they differ.
+- **Opt-in, off by default, every user.** Settings → Coach → **Claude coach**. Turning it on first shows a
+  **"What is sent"** explainer with **I understand**. Each phone uses its own key (his wife can add hers).
+- **iPhone app only** (M12-s3-q2). The PWA shows "Claude coach is in the iPhone app." and never contacts
+  Anthropic.
+- **The key:** pasted once into a password field, handed to a native `GymClaude` plugin and stored in the
+  **iOS Keychain** (this device only, not synced to iCloud Keychain). It is **never read back into the web
+  view**, never in IndexedDB, backups, the dev log, the copy report, tests or the repo. Test key (costs no
+  tokens), Remove key (two taps).
+- **The request:** built in TypeScript (pure, tested), sent **from Swift** to one fixed URL,
+  `https://api.anthropic.com/v1/messages`, with the key added as a header in Swift. The web view's CSP is
+  unchanged (`api.anthropic.com` is not added; a test checks). No streaming; one request per question;
+  timeout 15 s; `max_tokens` 500.
+- **Sent (one data source, `CLAUDE_SENDS`, used by the explainer, Settings, About and the landing page):** the
+  new message and the last 8 turns (minus any turn that used Health), today's plan and the next 7 days,
+  4 weeks of top sets (exercise, weight, reps, dates), plan changes and the focus block, week/month scores,
+  today's food totals vs targets, goal kind and lift goals, the read-only tool results (week, progress,
+  exercise info, food ideas). **Never:** Health data (including the "Lighter today?" reasons), body weight,
+  body fat, lean mass, measurements, progress photos, check-in answers, how-you-feel-today, notes, the
+  intake's own-words goal text (M12-s3-q5), the camera, the dev log.
+- **Same tools and validation:** the `propose*` tools from `src/core/trainer/tools.ts` as Messages-API tools;
+  a tool call becomes a Proposal through `runToolCall`; nothing changes without his tap; `sanitizeReply` on
+  every reply; red flags never reach Claude. Instructions: the M10 safety lines verbatim plus a human-trainer
+  persona (warm, plain, one clarifying question when something is missing, never promise a change in text).
+- **Order (M12-s3-q1):** with Claude on, free text goes Claude → Apple → quick replies (setting: Apple first,
+  with **Ask Claude instead** under Apple / quick-reply answers). Chips always use the rules.
+- **Fallbacks, each with a one-line note:** no internet (no request is made), key not working (401/403),
+  busy / rate-limited / server error / timeout, no key yet (once), daily limit used up (once a day).
+- **Cost guard:** model picker (default the current Sonnet tier, M12-s3-q3; also Haiku and Opus 5.5), daily
+  limit 10 / 30 / 60 questions (default 30, M12-s3-q4), and usage today and this month (questions, tokens,
+  "about US$x" from a price table kept as data with its check date).
+- **Model ids and prices are checked in the current Anthropic docs before building** (CLAUDE.md rule 8).
+- **About + landing page:** the privacy promise lists two opt-in exceptions: the barcode lookup and the
+  Claude coach, with what Claude gets and never gets.
+- **Eval:** the owner eval screen runs the eval set against Claude on the phone after a cost confirm (the key
+  never leaves the phone; no Mac script with the key).
+
 #### Non-goals
 Applying anything without his tap; the model writing data or free-writing workouts (focus blocks are built
 by the app); medical advice, diagnosis or injury talk beyond the M10 lines; audio recording or upload;
@@ -1616,7 +1662,8 @@ delays a tap or hides state.
   thread, focus blocks and completion stay in IndexedDB. Share month makes the image on the phone and only
   the system share sheet / a download moves it, on his tap.
 - Slice 3 sends only what the M10 phase C explainer lists (now: messages, plan, workout numbers, focus
-  block, scores, Fuel totals), only while it's on, never Health data.
+  block, scores, Fuel totals), only while it's on, never Health data. Exact lists: "Claude brain (slice 3)"
+  above. The key stays in the iPhone Keychain; the PWA never contacts Anthropic.
 - Dev log: ids and numbers only (intent, action, card outcome, brain, latency); never message text.
 - **Progress photos (slice 1b):** phone only (IndexedDB), on `LOCAL_ONLY_TABLES` (never in Back up files),
   never in the dev log, never in the Apple model's context, never sent to Claude, never uploaded; delete one
@@ -1682,6 +1729,16 @@ type ReminderSettings = { session: { on: boolean; time: string }; missedDay: { o
 type CheckIn = { weekStart: string; energy?: 1|2|3|4|5; sleep?: 1|2|3|4|5; soreness?: 1|2|3|4|5; at: number };
 // Dexie v11: checkIns 'weekStart' (backed up; never in a brain context). ChatCard gains kind 'checkIn'.
 // coach settings gain: speakReplies?: 'mic' | 'always' | 'off' (default 'mic'); brainNotes? (reason → shown at)
+// Slice 3 (Claude; no Dexie change; no key field anywhere in JS data)
+type ClaudeSettings = { on: boolean; model: ClaudeModelId; dailyCap: 10 | 30 | 60;
+  order: 'claudeFirst' | 'appleFirst'; explainerOkAt?: number };          // coach settings gain: claude?
+type ClaudeUsageDay = { requests: number; inputTokens: number; outputTokens: number;
+  cacheReadTokens: number; cacheWriteTokens: number };
+type ClaudeUsage = { days: Record<string /* YYYY-MM-DD */, ClaudeUsageDay> }; // settings 'claudeUsage' (counts only)
+type ClaudeUnavailableReason = 'off' | 'notNative' | 'noKey' | 'offline' | 'capReached';
+// BrainErrorCode gains 'auth' | 'rateLimited' | 'busy' | 'offline'
+// GymClaude plugin: hasKey() → { hasKey, savedAt? } (never the key), setKey, removeKey, testKey,
+//   send(body, timeoutMs) → { status, body, requestId? }  (Swift adds the key header; fixed URL)
 ```
 
 #### Accept
@@ -1807,7 +1864,26 @@ type CheckIn = { weekStart: string; energy?: 1|2|3|4|5; sleep?: 1|2|3|4|5; soren
   🧍 **Checkpoint J (after slice 2):** on his iPhone he uses the mic and the
   Apple brain for a few days and reports wrong answers, wrong actions and how the voice felt.
 - **Slice 3:** the M10 phase C Accept, plus: request-body test that turns with `usedHealth` are dropped and
-  no Health context is sent; Ask Claude instead; setting off → 0 requests.
+  no Health context is sent; Ask Claude instead; setting off → 0 requests. Detail (2026-11-18):
+  - Unit tests, written first (made-up data, fake keys only): the request body has exactly the allowed
+    top-level fields and none of the seeded sentinels (Health values, card reasons, a `usedHealth` turn, body
+    fat, lean mass, weigh-ins, measurements, a photo, a check-in, a day-feel, a note, the own-words goal, a
+    key-like string); every emitted section maps to a `CLAUDE_SENDS` item; response parsing for every status;
+    cost math, the daily limit and the local-day rollover; router order both ways, each reason's note policy,
+    red flags never sent; no `fetch`/XHR/WebSocket/`sendBeacon` in the adapter; `index.html` CSP has no
+    Anthropic host; About lists both exceptions.
+  - XCTests (fake Keychain + fake session): the key round trip, never returned to JS, only the fixed URL
+    requested, the key only in the header, every status / offline / timeout mapping, no request without a key.
+  - E2E (390×844, fake `GymClaude`): off → no send; explainer before on; a pasted key is absent from
+    IndexedDB, localStorage, the DOM, a Back up file and the dev-log export; a Claude reply with its badge; a
+    tool call → Apply → Undo; 401 / 529 / timeout / offline / limit → answered on the phone with a note; Ask
+    Claude instead; PWA: no Claude screen and 0 requests to api.anthropic.com.
+  - 390×844 screenshots: Claude settings (off with What is sent, explainer, key saved + usage, PWA line), a
+    Claude reply, a fallback note, Ask Claude instead, the eval cost confirm, About with both exceptions.
+  - 🧍 **Checkpoint N (after slice 3):** with his own key on his iPhone for a few days (free questions, one
+    proposal from free text, one question offline, the owner eval run once: ≥ 85% right action, 100% safe,
+    0 changes without a tap, p50 latency, tokens and cost). He reports whether it talks like a person, wrong
+    actions and whether the cost feels fine.
 
 ### M13 — Published look (approved 2026-11-17; builds after M12 slices 1b and 2; release 1.15.0)
 Wongsaton (2026-11-17): "Help me think about the app, how to approve or make it ready to use as a public
