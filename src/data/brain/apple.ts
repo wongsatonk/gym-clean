@@ -171,8 +171,8 @@ const CALL_CHIP: Record<string, (a: Record<string, unknown>) => CoachChip | null
     const exerciseId = str(a.exerciseId);
     const option = a.option === 'lighter' || a.option === 'addSet' ? a.option : undefined;
     return exerciseId && option
-      ? { id: 'stallFix', label: 'Fix the stalled lift', args: { exerciseId, option } }
-      : { id: 'adjustPlan', label: 'Fix a stalled lift' };
+      ? { id: 'stallFix', label: 'Get past this plateau', args: { exerciseId, option } }
+      : { id: 'adjustPlan', label: 'Get past a plateau' };
   },
   suggestFood: () => ({ id: 'food', label: 'Food ideas' }),
   proposeFocusBlock: (a) => {

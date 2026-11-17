@@ -8,6 +8,8 @@ import {
   type StallSession,
 } from './stall';
 import { applyProposal } from '../changes';
+import { NO_STALLS } from '../coach';
+import { checkCopy, proposalReply } from '../replies';
 import { effectiveDay, seedPlan } from '../plan';
 import { ADVICE_BANNED_WORDS, nextTimeAdvice, wordCount } from '../../advice';
 import type { SessionState } from '../../session';
@@ -544,5 +546,58 @@ describe('warm-up sets are excluded (M12 1b)', () => {
       [20, 10],
     ]);
     expect(stalls(warm(base, 0, 30, 8))).toEqual([]);
+  });
+});
+
+// M13 task 9: the shown wording is "plateau", never "stalled" or "fell short"; ids, types and
+// the rule keep the name `stall`.
+describe('wording: plateau, never "stalled" / "fell short" (M13)', () => {
+  const NOT_SHOWN = /stall|fell short/i;
+  const expectShown = (text: string) => {
+    expect(text, text).not.toMatch(NOT_SHOWN);
+    expect(checkCopy(text).hits, text).toEqual([]);
+  };
+  const shownOf = (r: StallFixResult): string[] => {
+    if (!r.ok) return [r.reply];
+    const p = r.proposal;
+    return [p.title, p.why, p.say ?? '', ...p.lines.flatMap((l) => [l.before, l.after])];
+  };
+
+  it('every line the stall rule builds', () => {
+    const state = st();
+    const opts = { unit: 'kg' as const, name };
+    const results = [
+      proposeStallFix(state, [], MON, stallOf('legcurl', 20), 'lighter', opts),
+      proposeStallFix(state, [], MON, stallOf('legcurl', 20), 'addSet', opts),
+      proposeStallFix(state, [], MON, stallOf('bench', 2.5), 'lighter', opts),
+      proposeStallFix(state, [], MON, stallOf('pushup', 0, 15), 'lighter', opts),
+      proposeStallFix(state, [], MON, stallOf('nope', 20), 'lighter', opts),
+      proposeStallFix(state, [], MON, stallOf('press', 15), 'addSet', opts),
+    ];
+    expect(results.map((r) => (r.ok ? 'ok' : r.reason))).toEqual([
+      'ok',
+      'ok',
+      'tooLight',
+      'bodyweight',
+      'notInPlan',
+      'maxSets',
+    ]);
+    const lines = [stallLine(stallOf('legcurl', 20), name), ...results.flatMap(shownOf)];
+    for (const t of lines) expectShown(t);
+  });
+
+  it('the stall card fallback title and the "none right now" reply say plateau', () => {
+    const fallback = proposalReply({
+      action: 'stall',
+      scope: 'plan',
+      title: '',
+      lines: [],
+      why: '',
+      next: st(),
+      baseVersion: 1,
+    });
+    for (const t of [fallback.title, fallback.why, fallback.say, NO_STALLS]) expectShown(t);
+    expect(fallback.title).toMatch(/plateau/i);
+    expect(NO_STALLS).toMatch(/plateau/i);
   });
 });

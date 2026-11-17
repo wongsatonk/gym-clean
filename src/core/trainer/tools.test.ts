@@ -395,7 +395,8 @@ describe('runToolCall: a call returns a Proposal, never a state', () => {
 
   it('adjustStalledExercise finds no stall without history, and proposes a fix with one', () => {
     const none = runToolCall({ name: 'adjustStalledExercise', args: {} }, ctxFor('push-a'));
-    expect(none.ok).toBe(false);
+    // M13: shown wording is "plateau", never "stalled".
+    expect(none).toEqual({ ok: false, reason: 'No plateaus right now.' });
     // Three finished sessions of Push A with the same top set: a stall on the bench press.
     const sessions: StallSession[] = [];
     const sets: SetLog[] = [];

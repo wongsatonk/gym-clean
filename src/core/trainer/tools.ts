@@ -327,7 +327,7 @@ const adjustStalledExercise: ProposeTool = {
     const stall = id === undefined ? all[0] : all.find((s) => s.exerciseId === id);
     if (!stall)
       return fail(
-        id === undefined ? 'No stalled lifts right now.' : `${nameOf(ctx, id)} is still moving.`,
+        id === undefined ? 'No plateaus right now.' : `${nameOf(ctx, id)} is still moving.`,
       );
     const easy = easyOnArea(stall.exerciseId, ctx.state.easyOn ?? [], ctx.catalog);
     const options = easy ? stall.options.filter((o) => o !== 'addSet') : [...stall.options];

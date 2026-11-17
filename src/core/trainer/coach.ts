@@ -287,7 +287,7 @@ export const ASK_EXERCISE = 'Which exercise?';
 export const ASK_DAY = 'Which day?';
 /** How many target dates the "Move X to which day?" question offers. */
 const MOVE_CHIPS = 3;
-export const NO_STALLS = 'No stalled lifts right now. A deload week or a swap from now on?';
+export const NO_STALLS = 'No plateaus right now. A deload week or a swap from now on?';
 export const ASK_GROUP = 'Which area should the block build?';
 export const ASK_WEEKS = 'For how many weeks?';
 export const ASK_DAYS = 'How many days a week?';

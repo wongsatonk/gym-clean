@@ -145,7 +145,7 @@ const FALLBACK: Record<ProposalAction, { title: string; why: string; say: string
     say: 'Done. Exercise swapped.',
   },
   stall: {
-    title: 'Adjust a stalled lift',
+    title: 'Get past a plateau',
     why: 'A small change to get the lift moving again.',
     say: 'Done. Plan updated.',
   },

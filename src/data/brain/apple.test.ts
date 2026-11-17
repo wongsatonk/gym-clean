@@ -334,6 +334,18 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
     expect(r.chips).toEqual([{ id: 'chest', label: 'Go easy on chest' }]);
   });
 
+  it('a second plateau call is a chip worded "plateau", never "stalled" (M13)', async () => {
+    const r = await appleBrain(
+      says('Two ideas.', [
+        { name: 'lighterToday', args: {} },
+        { name: 'adjustStalledExercise', args: {} },
+      ]),
+    ).ask('lighter, and my bench is stuck', ctx());
+    expect(r.proposal?.action).toBe('lighter');
+    const labels = r.chips.map((c) => c.label);
+    expect(labels).toEqual(['Get past a plateau']);
+  });
+
   it('a second call that fails validation is not offered', async () => {
     const r = await appleBrain(
       says('Two ideas.', [

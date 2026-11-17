@@ -65,6 +65,9 @@ function stripComments(code: string): string {
 
 const NAME = /wongsaton|kampusan/i;
 
+/** The made-up demo profile for the store screenshots (M13 task 34). */
+const DEMO_PROFILE = 'data/demo/demoBackup.ts';
+
 /** Literal body stats or a fixed goal text assigned in code. */
 const BODY_LITERAL =
   /\b(heightCm|birthYear|bodyFatPct|leanMassKg|bodyWeightKg|bodyKg|weighInKg|goalText|goalWeightKg|targetWeightKg)\s*:\s*['"`\d-]|\bsex\s*:\s*'(male|female)'\s*[,}\n]/;
@@ -184,6 +187,7 @@ describe('the scanners catch planted samples (made up)', () => {
 describe('no personal data in what ships (src/core, src/data)', () => {
   it('finds the files to scan', () => {
     expect(SOURCES.length).toBeGreaterThan(50);
+    expect(SOURCES.map(posix)).toContain(DEMO_PROFILE);
     const names = DATA_JSON.map(posix);
     for (const f of [
       'data/program.json',
@@ -213,7 +217,12 @@ describe('no personal data in what ships (src/core, src/data)', () => {
   });
 
   it('no fixed body numbers or goal text in code', () => {
-    const hits = SOURCES.filter((p) => BODY_LITERAL.test(stripComments(readFileSync(p, 'utf8'))));
+    // The M13 store-screenshot demo (task 34) is a fictional profile on purpose: its made-up body
+    // numbers are the point of the file. It is never imported by the app (its own test checks);
+    // the name and gendered-wording scans still cover it.
+    const hits = SOURCES.filter(
+      (p) => posix(p) !== DEMO_PROFILE && BODY_LITERAL.test(stripComments(readFileSync(p, 'utf8'))),
+    );
     expect(hits.map(posix)).toEqual([]);
   });
 
@@ -245,6 +254,148 @@ describe('no personal data in what ships (src/core, src/data)', () => {
     expect(Object.keys(file).sort()).toEqual(['equipment', 'format', 'version']);
     expect(defaultGymProfile().kept).toEqual([]);
     expect(JSON.stringify(file)).not.toMatch(NAME);
+  });
+});
+
+/*
+ * M13 task 8, "works for anyone" (SPEC M13 goal 2): nothing in shown copy or data assumes a man.
+ * Every string literal in what ships (comments aside) and every shown JSON string (maintainer
+ * notes and food names aside) is checked for gendered wording; each hit is listed as file:line.
+ * src/core + src/data must be clean; the src/ui list is printed for main (tasks 13 and 21).
+ */
+
+/** Gendered words, plus wording that offers male voices only. Ids like 'male' alone are fine. */
+const GENDERED =
+  /\b(he|him|his|himself|she|her|hers|herself|man|men|guy|guys|bro|bros|dude|dudes|lads?|boys?|girls?|gentlemen|ladies)\b|\bmale\s+(voices?|coach|names?)\b|\bmen'?s\b/i;
+
+type Literal = { line: number; text: string };
+
+/** String literals in TypeScript with their starting line; comments are skipped. */
+function stringLiterals(code: string): Literal[] {
+  const out: Literal[] = [];
+  let line = 1;
+  for (let i = 0; i < code.length; i++) {
+    const c = code[i] ?? '';
+    const two = code.slice(i, i + 2);
+    if (c === '\n') line++;
+    else if (two === '//') {
+      while (i + 1 < code.length && code[i + 1] !== '\n') i++;
+    } else if (two === '/*') {
+      const end = code.indexOf('*/', i + 2);
+      const stop = end === -1 ? code.length : end + 2;
+      line += code.slice(i, stop).split('\n').length - 1;
+      i = stop - 1;
+    } else if (c === "'" || c === '"' || c === '`') {
+      const start = line;
+      let text = '';
+      i++;
+      while (i < code.length && code[i] !== c) {
+        if (code[i] === '\\') {
+          text += code.slice(i, i + 2);
+          i += 2;
+          continue;
+        }
+        if (code[i] === '\n') line++;
+        text += code[i];
+        i++;
+      }
+      out.push({ line: start, text });
+    }
+  }
+  return out;
+}
+
+/** `file:line: text` for every gendered string literal in a TypeScript source. */
+function genderedInCode(file: string, code: string): string[] {
+  return stringLiterals(code)
+    .filter((l) => GENDERED.test(l.text))
+    .map((l) => `${file}:${l.line}: ${l.text.slice(0, 80)}`);
+}
+
+/** `file $.path: text` for every gendered shown string in a JSON value (notes aside). */
+function genderedInJson(file: string, v: unknown): string[] {
+  return scanJson(v)
+    .strings.filter((s) => GENDERED.test(s.value))
+    .map((s) => `${file} ${s.path}: ${s.value.slice(0, 80)}`);
+}
+
+function genderedHits(files: readonly string[]): string[] {
+  const hits: string[] = [];
+  for (const p of files) {
+    const file = posix(p);
+    if (p.endsWith('.ts')) hits.push(...genderedInCode(file, readFileSync(p, 'utf8')));
+    // Food names (USDA descriptions such as "HUNGRY MAN", dishes such as "Khao man gai") are
+    // names, not copy.
+    else if (p.endsWith('.json') && !file.startsWith('data/nutrition/')) {
+      hits.push(...genderedInJson(file, JSON.parse(readFileSync(p, 'utf8')) as unknown));
+    }
+  }
+  return hits;
+}
+
+describe('the gendered-wording scanner catches planted samples (made up)', () => {
+  it('words and male-only voice wording, not ids or look-alike words', () => {
+    for (const bad of [
+      'Nice work, bro.',
+      'Push it, guys!',
+      'He lifts on Mondays.',
+      'Keep his elbows in.',
+      'Be a man about it.',
+      'No male voice on this phone.',
+      'Pick a male coach.',
+      "Men's sizes only.",
+      'Ask her about it.',
+    ]) {
+      expect(GENDERED.test(bad), bad).toBe(true);
+    }
+    for (const fine of [
+      'male',
+      'female',
+      'Male',
+      'Romanian deadlift',
+      'Shoulder press: the hero of the day',
+      'Then lower the bar',
+      'Manage your rest',
+      'the theme',
+      'Superman hold',
+      'Any English voice',
+    ]) {
+      expect(GENDERED.test(fine), fine).toBe(false);
+    }
+  });
+
+  it('string literals keep their line; comments are not copy', () => {
+    const code = [
+      '/** He asked for this. */',
+      "const a = 'Keep going';",
+      '// his note',
+      'const b = `two',
+      'lines, bro`;',
+      "const c = 'it\\'s his set';",
+    ].join('\n');
+    expect(genderedInCode('x.ts', code)).toEqual([
+      'x.ts:4: two\nlines, bro',
+      "x.ts:6: it\\'s his set",
+    ]);
+  });
+
+  it('JSON: shown strings are checked, notes are not', () => {
+    const sample = { note: 'His gym.', cues: [{ text: 'Brace like a man.' }, { text: 'Brace.' }] };
+    expect(genderedInJson('s.json', sample)).toEqual(['s.json $.cues[0].text: Brace like a man.']);
+  });
+});
+
+describe('no gendered wording in shown copy and data', () => {
+  it('src/core and src/data are clean (each hit as file:line)', () => {
+    expect(genderedHits([...SOURCES, ...DATA_JSON])).toEqual([]);
+  });
+
+  it('lists the src/ui hits for main (tasks 13 and 21 empty it)', () => {
+    const ui = walk(join(SRC, 'ui')).filter((p) => p.endsWith('.ts') && !isTestOnly(p));
+    expect(ui.length).toBeGreaterThan(20);
+    const hits = genderedHits(ui);
+    // Not a gate yet: printed so main can hand the list on.
+    console.info(`M13 task 8, gendered wording in src/ui (${hits.length}):\n${hits.join('\n')}`);
   });
 });
 
