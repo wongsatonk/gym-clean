@@ -161,11 +161,6 @@ export const voice = {
     return listEnglishVoices(getVoices(s));
   },
 
-  /** @deprecated Old name kept until app.ts calls `englishVoices()` (M13 task 30). */
-  maleVoices(): EnglishVoice[] {
-    return this.englishVoices();
-  },
-
   /** Calls `cb` when the browser's voice list changes (iOS loads it late). Returns unsubscribe. */
   onVoicesChanged(cb: () => void): () => void {
     const s = synth();

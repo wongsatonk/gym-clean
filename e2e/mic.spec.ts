@@ -286,9 +286,9 @@ test('permission denied → a plain line, typing still works', async ({ page }, 
 });
 
 // Checkpoint J: on his iPhone the speech model was never offered ("isn't on this iPhone yet").
-// FIXME(main): remove `.fixme` once app.ts wires `micInstall` (set mic 'downloading', await
-// GymSpeech.installModel(), then re-check availability → idle, or unavailable 'installFailed').
-test.fixme('speech model not on the phone → Download speech for the mic → downloading → Talk', async ({
+// app.ts wires `micInstall`: mic 'downloading' → GymSpeech.installModel() → re-check availability
+// → idle, or unavailable 'installFailed'.
+test('speech model not on the phone → Download speech for the mic → downloading → Talk', async ({
   page,
 }, testInfo) => {
   const offsite = await guardNetwork(page);

@@ -37,7 +37,21 @@ import type {
   SetLog,
   TrainerKitSettings,
   TrainerState,
+  OnboardingStep,
+  OwnerMode,
+  ShareLead,
 } from '../core/types';
+// M13: owner mode, About / credits, first launch, Story share.
+import { isVisible, versionLine } from '../core/ownerMode';
+import { resolveOwnerMode, setOwnerMode } from '../data/ownerMode';
+import { aboutScreen } from './screens/about';
+import { licensesView } from './screens/licenses';
+import { onboardingSteps, shouldOnboard, type OnboardingPermission } from '../core/onboarding';
+import { INTAKE_SKIPPED_KEY, loadOnboardingFacts, markOnboarding } from '../data/onboarding';
+import { onboardingScreen, type OnboardingScreen } from './onboarding/welcome';
+import { leadOptions, pickLead, shareStats } from '../core/progress/shareStats';
+import { sharePreview } from './sharePreview';
+import { doneMark } from './backButton';
 import { isWarmup, warmupLabel, warmupLifts, warmupLine, workingSets } from '../core/warmup';
 import { setupCuesFor } from '../core/setupCues';
 import { mergeTrainerKit } from '../core/trainerKit/defaults';
@@ -245,7 +259,13 @@ import {
 } from './coach/chat';
 import { calendarScreen, dayLong, shiftMonth } from './screens/calendar';
 import { calendarDayScreen } from './screens/calendarDay';
-import { renderShareMonth, shareMonth, shareMonthLayout } from './shareMonth';
+import {
+  renderShareMonth,
+  shareMonth,
+  shareMonthLayout,
+  shareStoryLayout,
+  type ShareSize,
+} from './shareMonth';
 import { enterScreen, reducedMotion, type EnterDir } from './motion';
 import { undoToast, type UndoToast } from './coach/undoToast';
 import { planChangesScreen } from './screens/planChanges';
@@ -365,6 +385,10 @@ type View =
   | { screen: 'coachSettings' }
   | { screen: 'reminders' }
   | { screen: 'brainEval' }
+  // M13: Settings → About and its open-source credits; the first-launch flow.
+  | { screen: 'about' }
+  | { screen: 'licenses' }
+  | { screen: 'welcome' }
   | { screen: 'coach' }
   // M12 slice 1c: the to-do list and one topic's guide (`from` = the tab that opened them).
   | { screen: 'todos'; from: 'today' | 'settings' }
@@ -397,6 +421,11 @@ export function mountApp(root: HTMLElement): void {
   let handsFree = true;
   let accent: Accent = 'orange';
   let coachVoice: CoachVoice = { ...COACH_VOICE_DEFAULT };
+  /** M13: owner mode (null until resolved at start; off until then). */
+  let ownerMode: OwnerMode | null = null;
+  const ownerOn = (): boolean => ownerMode?.on === true;
+  /** M13: Today's "N things to sort" row kept open across re-renders. */
+  let noticesOpen = false;
   let lastCueElapsedMs = 0;
   let ticker: number | undefined;
 
@@ -740,7 +769,8 @@ export function mountApp(root: HTMLElement): void {
     history: SetLog[];
   } | null = null;
   // M4e Rest: the mounted Rest screen's cheap per-tick updater (clock + ring).
-  let restView: { update(remainingMs: number, targetMs: number): void } | null = null;
+  let restView: { update(remainingMs: number, targetMs: number): void; dispose(): void } | null =
+    null;
   // Hands-free (M5c): the exercise the open camera counts, and the pre-roll for the next set.
   let cameraExerciseId: string | null = null;
   // The hands-free setting the open camera was created with (Settings can't change it mid-camera).
@@ -915,6 +945,17 @@ export function mountApp(root: HTMLElement): void {
       photosView = null;
     }
     if (view.screen !== 'intake') intakeEl = null;
+    // M13: leaving the Calendar drops an open share preview (and its image URL).
+    if (view.screen !== 'calendar' && sharePrev) {
+      if (sharePrev.url) URL.revokeObjectURL(sharePrev.url);
+      sharePrev = null;
+      shareSeq++;
+    }
+    // M13: leaving the workout stops the Rest card's 3D watcher.
+    if (view.screen !== 'session' && restView) {
+      restView.dispose();
+      restView = null;
+    }
     // M12 slice 1c: the What's New tour never stays over a workout, its preview or the camera.
     if (tour && (view.screen === 'session' || view.screen === 'preview' || camera)) closeTour();
     const screen = screenFor(view);
@@ -975,6 +1016,12 @@ export function mountApp(root: HTMLElement): void {
         return remindersView();
       case 'brainEval':
         return brainEvalView();
+      case 'about':
+        return aboutView();
+      case 'licenses':
+        return licensesScreenView();
+      case 'welcome':
+        return welcomeView();
       case 'intake':
         return intakeView(v);
       case 'progressPhotos':
@@ -1010,6 +1057,8 @@ export function mountApp(root: HTMLElement): void {
       case 'coachSettings':
       case 'reminders':
       case 'brainEval':
+      case 'about':
+      case 'licenses':
         return 'settings';
       case 'intake':
         return v.from === 'settings' ? 'settings' : v.from === 'today' ? 'today' : null;
@@ -1189,7 +1238,8 @@ export function mountApp(root: HTMLElement): void {
         missedDay: trainer && upNextDayId !== null ? missedPrompt : null,
         missedAction: missedActionOf(missedPrompt),
         motion: todayMotion,
-        todo: todos.cardProps(),
+        todo: isVisible('todos', ownerOn()) ? todos.cardProps() : null,
+        noticesOpen,
         // M12 1b
         feel: feels.find((f) => f.date === todayDate()) ?? null,
         feelOffers: todaysFeelOffers(feels, todayDate()),
@@ -1209,7 +1259,9 @@ export function mountApp(root: HTMLElement): void {
         onStart: (day) => void openPreview(day),
         onOpenDay: (day) => void openPreview(day),
         onTab: (tab) => goTab(tab),
-        onCoach: trainer ? () => void openCoach('today') : undefined,
+        onNoticesToggle: (open) => {
+          noticesOpen = open;
+        },
         onUndoAdjust: () => void undoNewest('banner'),
         onTrainAnyway: (day) => trainAnyway(day),
         onUseNewProgram: () => void resetPlan(),
@@ -2322,6 +2374,8 @@ export function mountApp(root: HTMLElement): void {
         dispatch({ type: 'FINISH', now: now() });
       },
       micDown: () => micDown(),
+      // 1.15.0 (Checkpoint J): Apple's English speech model, downloaded once on his tap.
+      micInstall: () => void installSpeech(),
       onInputFocus: () => {
         // Text-box focus is a strong signal a question follows (same instructions as the ask).
         if (gymBrain)
@@ -2540,9 +2594,26 @@ export function mountApp(root: HTMLElement): void {
     // The chat is only up on the Coach tab or the Pause sheet (paused: no set running).
     if (!micAllowed({ native, inSet: false, screen: sheet ? 'pause' : 'coach' }))
       return { state: 'hidden' };
+    if (micInstalling) return { state: 'downloading' };
     if (!micAvail.available) return { state: 'unavailable', reason: micAvail.reason };
     if (micRun) return { state: 'listening', partial: micRun.partial, level: micRun.level };
     return { state: 'idle' };
+  }
+
+  /** True while iOS downloads the speech model (his tap on "Download speech for the mic"). */
+  let micInstalling = false;
+  async function installSpeech(): Promise<void> {
+    const sp = speech;
+    if (!sp || micInstalling) return;
+    micInstalling = true;
+    renderCoachViews();
+    const ok = await sp.installModel().catch(() => false);
+    micInstalling = false;
+    if (ok) await refreshMic();
+    else {
+      micAvail = { available: false, reason: 'installFailed' };
+      renderCoachViews();
+    }
   }
 
   async function refreshMic(): Promise<void> {
@@ -2860,7 +2931,170 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
+  // ----- M13: first launch (welcome → intake → permission pages) -----
+
+  type OnboardingRun = {
+    steps: OnboardingStep[];
+    index: number;
+    dir?: 'next' | 'prev' | undefined;
+    granted: Partial<Record<OnboardingPermission, boolean>>;
+  };
+  let onboarding: OnboardingRun | null = null;
+  let onboardingEl: OnboardingScreen | null = null;
+
+  /**
+   * A fresh install (shouldOnboard) runs the flow before Today; `rerun` (route 'welcome', e.g.
+   * the Published look to-do's Try it) shows it again without the intake on a used install.
+   * Returns whether the flow opened.
+   */
+  async function startOnboarding(rerun: boolean): Promise<boolean> {
+    try {
+      const f = await loadOnboardingFacts(db);
+      if (!rerun && !shouldOnboard(f)) return false;
+      const steps = onboardingSteps({
+        platform: native ? 'native' : 'web',
+        fresh: f.sessions === 0 && !rerun,
+        intakeDone: f.intakeDone,
+        has: { health: native, mic: native, notifications: native },
+      });
+      onboarding = { steps, index: 0, granted: {} };
+      showOnboardingStep();
+      return true;
+    } catch (err) {
+      logDbError(err);
+      return false;
+    }
+  }
+
+  function showOnboardingStep(): void {
+    const run = onboarding;
+    if (!run) return;
+    if (run.steps[run.index]?.kind === 'intake') {
+      openIntake('first');
+      return;
+    }
+    view = { screen: 'welcome' };
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function onboardingGo(delta: 1 | -1): void {
+    const run = onboarding;
+    if (!run) return;
+    const next = run.index + delta;
+    if (next >= run.steps.length) {
+      finishOnboarding('done');
+      return;
+    }
+    run.index = Math.max(0, next);
+    run.dir = delta > 0 ? 'next' : 'prev';
+    showOnboardingStep();
+  }
+
+  function finishOnboarding(how: 'done' | 'skipped'): void {
+    onboarding = null;
+    onboardingEl?.dispose();
+    onboardingEl = null;
+    void markOnboarding(db, how, now()).catch(logDbError);
+    goToday();
+  }
+
+  /** The permission page's action: ask (or connect / switch on), then show it as allowed. */
+  async function onboardingAllow(p: OnboardingPermission): Promise<void> {
+    let ok = false;
+    try {
+      if (p === 'camera') {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        for (const t of stream.getTracks()) t.stop(); // asked only: nothing is kept
+        ok = true;
+      } else if (p === 'health') {
+        await health.connect();
+        ok = true;
+      } else if (p === 'notifications') {
+        await toggleReminder('session', true); // the switch asks iOS the first time
+        ok = notifPermission === 'granted';
+      }
+    } catch (err) {
+      console.warn('Permission not given', err);
+    }
+    const run = onboarding;
+    if (!run) return;
+    if (ok) run.granted = { ...run.granted, [p]: true };
+    if (ok) {
+      run.dir = undefined;
+      if (view.screen === 'welcome') render();
+    } else onboardingGo(1);
+  }
+
+  function welcomeView(): HTMLElement {
+    const run = onboarding;
+    if (!run) {
+      // Not in a flow (e.g. a stale render): Today.
+      return todayScreen(null, null);
+    }
+    onboardingEl?.dispose();
+    const ob = onboardingScreen(
+      { steps: run.steps, index: run.index, granted: run.granted, dir: run.dir },
+      {
+        onNext: () => onboardingGo(1),
+        onBack: () => onboardingGo(-1),
+        onSkipAll: () => finishOnboarding('skipped'),
+        onDone: () => finishOnboarding('done'),
+        onAllow: (p) => void onboardingAllow(p),
+        onNotNow: () => onboardingGo(1),
+      },
+    );
+    onboardingEl = ob;
+    return ob.el;
+  }
+
+  // ----- M13: About, open-source credits, owner tools -----
+
+  function openAbout(): void {
+    rememberSettingsScroll();
+    view = { screen: 'about' };
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function aboutView(): HTMLElement {
+    return aboutScreen(
+      { version: versionLine(ownerOn()), owner: ownerOn(), now: () => now() },
+      {
+        onBack: backToSettings,
+        onLicenses: () => openLicenses(),
+        onOwnerChange: (on) => {
+          void setOwnerMode(db, on, now())
+            .then((m) => {
+              ownerMode = m;
+              void todos.refresh();
+              if (view.screen === 'about') render();
+            })
+            .catch(logDbError);
+        },
+      },
+    );
+  }
+
+  /** The credits list loads once per visit (a dynamic import); re-renders keep it. */
+  let licensesEl: HTMLElement | null = null;
+  function openLicenses(): void {
+    licensesEl = null;
+    view = { screen: 'licenses' };
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  function licensesScreenView(): HTMLElement {
+    licensesEl ??= licensesView({ onBack: () => openAbout() });
+    return licensesEl;
+  }
+
   function openBrainEval(): void {
+    if (!isVisible('evalScreen', ownerOn())) {
+      goTab('settings');
+      return;
+    }
     rememberSettingsScroll();
     view = { screen: 'brainEval' };
     render();
@@ -2963,6 +3197,7 @@ export function mountApp(root: HTMLElement): void {
         render();
     },
     logError: (err) => logDbError(err),
+    owner: () => ownerOn(),
   });
   let tour: WhatsNewTour | null = null;
   let tourChecking = false;
@@ -3032,7 +3267,9 @@ export function mountApp(root: HTMLElement): void {
         openSettingsAt('food-photos');
         return;
       case 'settings/devlog':
-        openSettingsAt('devlog');
+        // M13: owner tools only; off → plain Settings.
+        if (isVisible('devlog', ownerOn())) openSettingsAt('devlog');
+        else goTab('settings');
         return;
       case 'todos':
         openTodos(tabOf(view) === 'settings' ? 'settings' : 'today');
@@ -3059,9 +3296,15 @@ export function mountApp(root: HTMLElement): void {
         return;
       // M13: the welcome / About / Licenses screens land in tasks 30–31; Settings until then.
       case 'welcome':
+        void startOnboarding(true);
+        return;
       case 'settings/about':
+        setEnter('settings');
+        openAbout();
+        return;
       case 'settings/licenses':
-        goTab('settings');
+        setEnter('settings');
+        openLicenses();
         return;
       // M12 slice 2.
       case 'settings/coach':
@@ -3090,6 +3333,11 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function openTodos(from: 'today' | 'settings'): void {
+    // M13: the to-dos are owner tools; off → where they came from.
+    if (!isVisible('todos', ownerOn())) {
+      goTab(from);
+      return;
+    }
     setEnter(from);
     view = { screen: 'todos', from };
     render();
@@ -3179,6 +3427,7 @@ export function mountApp(root: HTMLElement): void {
   function calendarView(v: Extract<View, { screen: 'calendar' }>): HTMLElement {
     const tabs = tabBar('calendar', (t) => goTab(t));
     const d = v.data !== null && v.data !== 'error' ? v.data : null;
+    if (d && sharePrev) return sharePreviewView(v.month, d);
     if (d && v.exerciseId) {
       return renderHistory(
         {
@@ -3329,22 +3578,118 @@ export function mountApp(root: HTMLElement): void {
     if (day) void openPreview(day);
   }
 
-  async function shareCalendarMonth(): Promise<void> {
-    if (view.screen !== 'calendar' || view.data === null || view.data === 'error') return;
+  // ----- Calendar → Share: the preview (Post / Story size, lead), then the share sheet -----
+
+  type SharePrev = {
+    size: ShareSize;
+    wanted?: ShareLead | undefined;
+    png: Blob | null;
+    url: string | null;
+    busy: boolean;
+  };
+  let sharePrev: SharePrev | null = null;
+  let shareSeq = 0;
+
+  function shareStatsFor(month: string, d: CalendarData) {
+    const stats = shareStats(month, d.finished, d.sets, d.t);
+    return { stats, leads: leadOptions(stats), lead: pickLead(stats, sharePrev?.wanted) };
+  }
+
+  /** Builds the image for the current size / lead; a newer request wins. */
+  async function makeSharePng(): Promise<void> {
+    const prev = sharePrev;
+    if (!prev || view.screen !== 'calendar' || view.data === null || view.data === 'error') return;
     const d = view.data;
     const month = view.month;
-    const input = completionInput(d);
+    const seq = ++shareSeq;
     try {
-      const layout = shareMonthLayout(month, monthCompletion(input, month), {
-        month: monthScore(input, month),
-        streakWeeks: weeklyStreak(d.finished, d.t, STREAK_MIN_PER_WEEK),
-      });
-      const result = await shareMonth(await renderShareMonth(layout), month);
-      if (result === 'downloaded') showNotice('Image saved.');
+      const input = completionInput(d);
+      const completion = monthCompletion(input, month);
+      const { stats, lead } = shareStatsFor(month, d);
+      const layout =
+        prev.size === 'story'
+          ? shareStoryLayout(month, completion, { stats, lead, unit })
+          : shareMonthLayout(month, completion, {
+              month: monthScore(input, month),
+              streakWeeks: weeklyStreak(d.finished, d.t, STREAK_MIN_PER_WEEK),
+            });
+      const png = await renderShareMonth(layout);
+      if (seq !== shareSeq || sharePrev !== prev) return;
+      if (prev.url) URL.revokeObjectURL(prev.url);
+      prev.png = png;
+      prev.url = URL.createObjectURL(png);
+      prev.busy = false;
     } catch (err) {
       console.warn('Could not make the month image', err);
+      closeSharePreview();
       showNotice("Couldn't make the image.");
+      return;
     }
+    if (view.screen === 'calendar') render();
+  }
+
+  function closeSharePreview(): void {
+    if (sharePrev?.url) URL.revokeObjectURL(sharePrev.url);
+    sharePrev = null;
+    shareSeq++;
+    if (view.screen === 'calendar') render();
+  }
+
+  async function shareCalendarMonth(): Promise<void> {
+    if (view.screen !== 'calendar' || view.data === null || view.data === 'error') return;
+    sharePrev = { size: 'post', png: null, url: null, busy: true };
+    render();
+    window.scrollTo(0, 0);
+    await makeSharePng();
+  }
+
+  function sharePreviewView(month: string, d: CalendarData): HTMLElement {
+    const prev = sharePrev as SharePrev;
+    const { leads, lead } = shareStatsFor(month, d);
+    const [y, m] = month.split('-').map(Number);
+    const monthLabel = new Date(y ?? 2000, (m ?? 1) - 1, 1).toLocaleDateString(undefined, {
+      month: 'long',
+      year: 'numeric',
+    });
+    const remake = () => {
+      prev.busy = true;
+      render();
+      void makeSharePng();
+    };
+    return sharePreview(
+      {
+        monthLabel,
+        size: prev.size,
+        leads,
+        lead,
+        ...(prev.url && !prev.busy ? { image: prev.url } : {}),
+        busy: prev.busy,
+      },
+      {
+        onSize: (size) => {
+          if (size === prev.size) return;
+          prev.size = size;
+          remake();
+        },
+        onLead: (l) => {
+          prev.wanted = l;
+          remake();
+        },
+        onShare: () => {
+          const png = prev.png;
+          if (!png || prev.busy) return;
+          void shareMonth(png, month, undefined, prev.size)
+            .then((result) => {
+              if (result === 'downloaded') showNotice('Image saved.');
+            })
+            .catch((err: unknown) => {
+              console.warn('Could not share the month image', err);
+              showNotice("Couldn't share the image.");
+            });
+        },
+        onClose: () => closeSharePreview(),
+      },
+    );
   }
 
   // ----- M12 Today prompts: missed day (once) and recaps posted into the chat (once) -----
@@ -3473,8 +3818,6 @@ export function mountApp(root: HTMLElement): void {
 
   // ---------- M12 slice 1b: trainer kit (intake, goals, feel today, photos, gym file) ----------
 
-  /** The settings key that records "Skip for now" on the first-run intake. */
-  const INTAKE_SKIPPED_KEY = 'intakeSkipped';
   /** The settings key of the Progress photos switch (off by default). */
   const PROGRESS_PHOTOS_KEY = 'progressPhotos';
 
@@ -3485,22 +3828,6 @@ export function mountApp(root: HTMLElement): void {
       progressPhotosOn = (await db.settings.get(PROGRESS_PHOTOS_KEY))?.value === true;
     } catch (err) {
       logDbError(err);
-    }
-  }
-
-  /**
-   * First run: a fresh install (no session, no intake, never skipped) opens the intake before
-   * Today. An install with any session is never forced (Today shows "Set your goal").
-   */
-  async function firstRunIntake(): Promise<boolean> {
-    try {
-      if (intake) return false;
-      if ((await db.sessions.count()) > 0) return false;
-      if ((await db.settings.get(INTAKE_SKIPPED_KEY)) !== undefined) return false;
-      return true;
-    } catch (err) {
-      logDbError(err);
-      return false;
     }
   }
 
@@ -3562,6 +3889,11 @@ export function mountApp(root: HTMLElement): void {
   function leaveIntake(from: 'first' | 'today' | 'settings'): void {
     intakeEl = null;
     intakeOffers.clear();
+    // M13: the intake is one step of the first-launch flow.
+    if (from === 'first' && onboarding) {
+      onboardingGo(1);
+      return;
+    }
     if (from === 'settings') {
       view = { screen: 'settings' };
       render();
@@ -4007,7 +4339,7 @@ export function mountApp(root: HTMLElement): void {
         unit,
         coachVoice: createCoachVoiceSettings({
           value: coachVoice,
-          voices: voice.maleVoices(),
+          voices: voice.englishVoices(),
           onChange: (v) => {
             coachVoice = { ...v };
             voice.configure(coachVoice);
@@ -4041,6 +4373,9 @@ export function mountApp(root: HTMLElement): void {
         intake,
         easyOn: trainer?.easyOn ?? [],
         progressPhotos: progressPhotosOn,
+        // M13: owner mode decides the owner sections; the version line follows it.
+        owner: ownerOn(),
+        version: versionLine(ownerOn()),
       },
       {
         onAccent: (a) => {
@@ -4099,7 +4434,10 @@ export function mountApp(root: HTMLElement): void {
         // M12 slice 2
         onCoachSettings: () => openCoachSettings(),
         onReminders: () => openReminders(),
-        ...(native ? { onBrainEval: () => openBrainEval() } : {}),
+        ...(native && isVisible('evalScreen', ownerOn())
+          ? { onBrainEval: () => openBrainEval() }
+          : {}),
+        onAbout: () => openAbout(),
       },
     );
   }
@@ -4190,6 +4528,8 @@ export function mountApp(root: HTMLElement): void {
   /** After a restore (or its Undo): every stored setting and the plan, read again. */
   async function reloadStored(): Promise<void> {
     try {
+      // M13: a restored 'ownerMode' row wins; a pre-1.15 file has none → decided from its data.
+      ownerMode = await resolveOwnerMode(db, now());
       unit = await getUnit(db);
       spokenCount = await getSpokenCount(db);
       coachTips = await getCoachTips(db);
@@ -4373,6 +4713,12 @@ export function mountApp(root: HTMLElement): void {
     const old = recorder;
     if (old) void old.dispose();
     recorder = null;
+    // M13: the developer log never records while owner mode is off (the saved switch is kept).
+    if (!isVisible('devlog', ownerOn())) {
+      recorderReady = Promise.resolve(null);
+      beginLoggedSet(s);
+      return;
+    }
     recorderReady = startDevLogSession(db, {
       id: s.sessionId,
       dayId,
@@ -4679,7 +5025,10 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function sessionScreen(s: SessionState, sheet: Sheet): HTMLElement {
-    if (s.phase !== 'rest') restView = null; // the tick only updates a live Rest screen
+    if (s.phase !== 'rest' && restView) {
+      restView.dispose(); // M13: stops the 3D watcher
+      restView = null; // the tick only updates a live Rest screen
+    }
     if (s.phase === 'summary') return summaryScreen(s);
     const body = s.phase === 'rest' ? restScreen(s) : exerciseScreen(s);
     if (s.paused) {
@@ -4810,6 +5159,7 @@ export function mountApp(root: HTMLElement): void {
         },
       },
     );
+    restView?.dispose(); // the previous Rest render (replaced by this one)
     restView = v;
     return v.el;
   }
@@ -4857,8 +5207,8 @@ export function mountApp(root: HTMLElement): void {
           const skipped = s.skipped.includes(p.exerciseId);
           const current = i === s.exIndex;
           const status = finished ? 'done' : current ? 'current' : skipped ? 'skipped' : 'todo';
-          const label = finished
-            ? '✓ done'
+          const label: string | HTMLElement = finished
+            ? doneMark()
             : current
               ? s.phase === 'rest'
                 ? 'up next'
@@ -5094,9 +5444,17 @@ export function mountApp(root: HTMLElement): void {
   }
 
   render();
+  // M13: owner mode first (fresh install → off; his existing data → on), before the What's New
+  // fresh-install marking and anything that could add a session or a to-do answer.
+  const ownerReady = resolveOwnerMode(db, now())
+    .then((m) => {
+      ownerMode = m;
+      if (view.screen === 'today' || view.screen === 'settings') render();
+    })
+    .catch(logDbError);
   // M12 slice 1c, first DB reads: the fresh-install rule (no session, no 'whatsNew' row → the
   // tour is marked seen without showing) runs before anything else can add a session.
-  const firstTour = todos.pendingTour();
+  const firstTour = ownerReady.then(() => todos.pendingTour());
   void getUnit(db)
     .then((u) => {
       unit = u;
@@ -5168,18 +5526,15 @@ export function mountApp(root: HTMLElement): void {
   const kitReady = loadTrainerKitState();
   // M11: the first Health sync once Today's plan and sessions are known.
   void kitReady
-    .then(() => firstRunIntake())
-    .then((first) => {
-      if (first && view.screen === 'today') openIntake('first');
-      return loadUpNext();
-    })
+    .then(() => (view.screen === 'today' ? startOnboarding(false) : false))
+    .then(() => loadUpNext())
     .then(() => {
       health.start();
       // M12 slice 1c: the What's New tour once Today is up (an update with unseen pages).
       void maybeShowTour(firstTour);
     });
   // M12 slice 1c: the build id (iPhone app, re-sign clock), facts and auto ticks.
-  void todos.start();
+  void ownerReady.then(() => todos.start());
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || view.screen === 'session') return;
     void todos.refresh();

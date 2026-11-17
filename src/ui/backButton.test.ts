@@ -59,8 +59,8 @@ describe('forwardContent / doneMark', () => {
 // ---------- scan: no typed "‹", "›", "✓" or "→" as a control in src/ui ----------
 
 const UI = __dirname;
-/** app.ts is left to M13 task 30 (main): it still has "✓ done" on the exercise list sheet. */
-const EXCLUDED = new Set(['app.ts']);
+/** Nothing excluded: app.ts uses doneMark() since M13 task 30. */
+const EXCLUDED = new Set<string>();
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -95,7 +95,7 @@ describe('no typed back / done / forward glyphs as controls', () => {
     expect(glyphHits('x.ts', "// '‹ Back' in a comment")).toEqual([]);
   });
 
-  it('src/ui has none (app.ts excluded until task 30)', () => {
+  it('src/ui has none (app.ts included)', () => {
     const hits = sources(UI)
       .filter((p) => !EXCLUDED.has(relative(UI, p)))
       .flatMap((p) => glyphHits(relative(UI, p), readFileSync(p, 'utf8')));

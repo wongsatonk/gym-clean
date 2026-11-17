@@ -21,7 +21,7 @@ import {
 } from './app.helpers';
 
 /** Topics for the web app (platform 'any'); the 4 iPhone-only ones don't count here. */
-const WEB_TOTAL = 9; // 1.13.0 adds "Trainer kit at the gym"
+const WEB_TOTAL = 10; // 1.13.0 adds "Trainer kit at the gym"; 1.15.0 "Published look"
 const NOW = at(16, 18);
 
 const card = (page: Page) => page.locator('[data-todo-card]');
@@ -356,6 +356,7 @@ test('nothing during a workout; the card hides when every web topic is done or s
     'apple-card',
     'trainer-kit',
     'claude',
+    'published-look', // 1.15.0
   ];
   await putRows(
     page,

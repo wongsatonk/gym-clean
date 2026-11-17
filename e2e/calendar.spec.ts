@@ -286,9 +286,12 @@ test('Share month: a 1080×1350 PNG made on the phone (download fallback), nothi
   await expect(cell(page, '2026-11-09')).toHaveAttribute('data-status', 'done');
   const before = requests.length;
 
+  // M13: Share opens a preview (Post size first); its Share button makes the file.
+  await page.locator('[data-share-month]').click();
+  await expect(page.locator('[data-share-image]')).toBeVisible();
   const [download] = await Promise.all([
     page.waitForEvent('download'),
-    page.locator('[data-share-month]').click(),
+    page.locator('[data-share-go]').click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/2026-11.*\.png$/);
   const path = testInfo.outputPath('m12-share-month.png');

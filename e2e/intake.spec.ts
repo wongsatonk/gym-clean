@@ -27,6 +27,18 @@ import {
 } from './app.helpers';
 
 const intake = (page: Page) => page.locator('main[data-screen="intake"]');
+
+/** M13: a fresh install opens the welcome pages first; Next through them to the intake. */
+async function throughWelcome(page: Page) {
+  const welcome = page.locator('[data-screen="welcome"]');
+  await expect(welcome).toBeVisible();
+  while (await welcome.isVisible()) await page.locator('[data-ob="primary"]').click();
+}
+
+/** M13: after the intake the first-launch flow shows the permission pages; skip them to Today. */
+async function finishWelcome(page: Page) {
+  await page.locator('[data-ob="skip"]').click();
+}
 const step = (page: Page, id: string) => expect(intake(page)).toHaveAttribute('data-step', id);
 
 /**
@@ -76,6 +88,7 @@ test.describe('fresh install', () => {
     await installMocks(page);
     await page.clock.install({ time: at(13, 18) });
     await page.goto('/');
+    await throughWelcome(page);
     await expect(intake(page)).toBeVisible();
     await expect(page.locator('[data-tabbar]')).toHaveCount(0);
     await expect(intake(page).locator('[data-intake-count]')).toHaveText('Question 1 of 5');
@@ -104,6 +117,7 @@ test.describe('fresh install', () => {
     await expect(toast).toHaveCount(0);
 
     await intake(page).locator('[data-intake-done]').click();
+    await finishWelcome(page);
     await expect(page.locator('[data-cal]').first()).toBeVisible();
     expect(await dayNames(page)).toContain('push-a'); // the plan as before
 
@@ -145,8 +159,10 @@ test.describe('fresh install', () => {
     await installMocks(page);
     await page.clock.install({ time: at(13, 18) });
     await page.goto('/');
+    await throughWelcome(page);
     await expect(intake(page)).toBeVisible();
     await intake(page).locator('[data-intake-skip]').click();
+    await finishWelcome(page);
     await expect(page.locator('[data-cal]').first()).toBeVisible();
     await expect.poll(() => getSetting(page, 'intakeSkipped')).toEqual(expect.any(Number));
     await page.reload();

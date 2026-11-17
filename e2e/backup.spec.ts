@@ -73,8 +73,9 @@ async function wipe(page: Page) {
       }),
   );
   await page.reload();
-  await expect(page.locator('main[data-screen="intake"]')).toBeVisible();
-  await page.locator('[data-intake-skip]').click();
+  // M13: a wiped (fresh) install opens the first-launch flow; Skip goes to Today.
+  await expect(page.locator('[data-screen="welcome"]')).toBeVisible();
+  await page.locator('[data-ob="skip"]').click();
   await expect(page.locator('[data-cal]').first()).toBeVisible();
 }
 

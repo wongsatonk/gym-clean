@@ -311,6 +311,8 @@ export function createHealthHost(deps: HealthHostDeps) {
   return {
     fuelHost,
     sync,
+    /** M13 first launch: the same Connect as Settings → Health (asks iOS; a no-op on the PWA). */
+    connect,
     /** App open: the first sync, then one each time the app comes back to the foreground. */
     start(): void {
       document.addEventListener('visibilitychange', () => {

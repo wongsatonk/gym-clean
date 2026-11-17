@@ -191,7 +191,6 @@ describe('voice.englishVoices and onVoicesChanged', () => {
     synth.loadVoices([v('Fred'), v('Samantha')]);
     expect(cb).toHaveBeenCalledTimes(1);
     expect(voice.englishVoices().map((m) => m.label)).toEqual(['Fred (US)', 'Samantha (US)']);
-    expect(voice.maleVoices()).toEqual(voice.englishVoices()); // old name until task 30
     off();
     synth.loadVoices([]);
     expect(cb).toHaveBeenCalledTimes(1);

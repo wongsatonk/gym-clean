@@ -21,7 +21,13 @@ import {
 } from '../../core/todo/progress';
 import { runDetector } from '../../core/todo/detectors';
 import { buildReport } from '../../core/todo/report';
-import { addedTopics, replayPages, tourReleases, tourToShow } from '../../core/todo/whatsNew';
+import {
+  addedTopics,
+  replayPages,
+  tourReleases,
+  tourToShow,
+  tourVersion,
+} from '../../core/todo/whatsNew';
 import type {
   AppRoute,
   DetectorResult,
@@ -30,7 +36,7 @@ import type {
   TodoTopic,
   WhatsNewPage,
 } from '../../core/types';
-import { APP_BUILD, APP_RELEASE, versionLabel } from '../../core/version';
+import { APP_BUILD, APP_RELEASE } from '../../core/version';
 import type { GymDb } from '../../data/db';
 import { gatherFacts } from '../../data/todos/facts';
 import {
@@ -66,6 +72,8 @@ export type TodoHostDeps = {
   build?: string | undefined;
   topics?: readonly TodoTopic[] | undefined;
   pages?: readonly WhatsNewPage[] | undefined;
+  /** M13: owner mode (read on every use; default on = the pre-M13 behaviour). */
+  owner?: (() => boolean) | undefined;
   /** Where the ready signal goes (default: `<html>`'s data attributes, see `ReadySignal`). */
   signal?: ((s: ReadySignal) => void) | undefined;
 };
@@ -123,6 +131,7 @@ export function createTodoHost(deps: TodoHostDeps) {
   const buildId = deps.buildId ?? __APP_VERSION__;
   const topics = deps.topics ?? topicsForRelease(release);
   const pages = deps.pages ?? WHATS_NEW_PAGES;
+  const owner = (): boolean => deps.owner?.() ?? true;
 
   let answers: TodoAnswer[] = [];
   let facts: TodoFacts | null = null;
@@ -151,7 +160,7 @@ export function createTodoHost(deps: TodoHostDeps) {
   async function refreshOnce(): Promise<void> {
     const f = await gatherFacts(db, platform, now(), platform === 'native' ? { buildId } : {});
     const stored = await listAnswers(db);
-    const ticks = pendingAutoTicks(topics, stored, f);
+    const ticks = pendingAutoTicks(topics, stored, f, owner());
     if (ticks.length) await recordAutoTicks(db, ticks, now(), release);
     facts = f;
     answers = ticks.length ? await listAnswers(db) : stored;
@@ -203,7 +212,7 @@ export function createTodoHost(deps: TodoHostDeps) {
   /** The Today card's props (null until facts are in, or when everything is done). */
   function cardProps(): TodoCardProps | null {
     if (!facts) return null;
-    const summary = todoSummary(topics, answers, facts);
+    const summary = todoSummary(topics, answers, facts, owner());
     const next = topics.find((t) => {
       if (t.platform === 'native' && platform !== 'native') return false;
       const s = topicStatus(t, answers, facts as TodoFacts);
@@ -212,7 +221,7 @@ export function createTodoHost(deps: TodoHostDeps) {
     return {
       ...summary,
       nextTitle: next?.title ?? null,
-      resignDaysLeft: platform === 'native' ? resignReminder(topics, facts) : null,
+      resignDaysLeft: platform === 'native' ? resignReminder(topics, facts, owner()) : null,
     };
   }
 
@@ -277,7 +286,7 @@ export function createTodoHost(deps: TodoHostDeps) {
       const s = statusOf(t);
       if (s) status[t.id] = s;
     }
-    const summary = facts ? todoSummary(topics, answers, facts) : { done: 0, total: 0 };
+    const summary = facts ? todoSummary(topics, answers, facts, owner()) : { done: 0, total: 0 };
     const el = todoListScreen(
       { topics, status, platform, summary },
       {
@@ -367,7 +376,7 @@ export function createTodoHost(deps: TodoHostDeps) {
   async function pendingTour(): Promise<WhatsNewPage[]> {
     try {
       const [state, sessions] = await Promise.all([getWhatsNew(db), db.sessions.count()]);
-      const r = tourToShow(pages, state, release, sessions > 0);
+      const r = tourToShow(pages, state, release, sessions > 0, owner());
       if (!Array.isArray(r)) {
         await markSeen(db, release);
         return [];
@@ -381,12 +390,12 @@ export function createTodoHost(deps: TodoHostDeps) {
 
   /** Settings → What's new: the running release's pages (or the latest release that has some). */
   function replay(): WhatsNewPage[] {
-    return replayPages(pages, release);
+    return replayPages(pages, release, owner());
   }
 
   /** The tour for `shown`; every way out marks this release seen and calls `nav.onClosed`. */
   function createTour(shown: readonly WhatsNewPage[], nav: TourNav): WhatsNewTour {
-    const added = addedTopics(topics, tourReleases(shown)).map((t) => ({
+    const added = addedTopics(topics, tourReleases(shown), owner()).map((t) => ({
       id: t.id,
       title: t.title,
       checkpoint: t.checkpoint,
@@ -401,8 +410,7 @@ export function createTodoHost(deps: TodoHostDeps) {
       then?.();
     };
     const tour = whatsNewTour(
-      // M13 task 30 swaps this for the owner-mode version line.
-      { pages: shown, addedTopics: added, version: versionLabel(release, build) },
+      { pages: shown, addedTopics: added, version: tourVersion(owner(), release, build) },
       {
         onSkip: () => close(),
         onDone: () => close(),
