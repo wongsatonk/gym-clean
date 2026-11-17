@@ -176,3 +176,24 @@ like M11's fake GymHealth).
 
 ## Open for him later (not blocking)
 - Claude key: he adds it himself in Settings when he wants Claude (paid Anthropic account).
+
+## Slice 1c: What's New tour + To-do guides + one report (approved 2026-11-16)
+His words: "Plan to add everything in the list to the app such as wizard that I need to do step by step on
+the app to finish each topic" · "Go with A, copy report but keep it in the app since I export it one time.
+I need it guide me as wizard same as when the other app publishes the new version." · "Yes, add it to the plan".
+- **What's New tour:** after an app update (version key), a full-screen swipe tour once: what changed + why,
+  a "Try it" button per page that deep-links to the feature, Skip always visible, replay from Settings. Pages
+  are data per version. Ends with "Added to your to-dos" for new tests.
+- **To-do guides:** a Today card ("6 of 12 done") → To-do list → each topic is a step-by-step guide.
+  Steps are **auto** (the app detects: model imported, Health connected, N sessions logged, N meals with photos,
+  days since install for re-sign) or **ask** (tap answers + optional note). Decisions are to-dos that set the
+  setting directly (trainer-kit defaults, Apple model may read Health card reasons, Claude key — the key
+  itself is entered on its own screen, never in a report). Topics/steps are data; future versions add to-dos
+  without new screens. Card hides when all done.
+- **Report:** answers kept in the app (IndexedDB, backed up like settings, no Health numbers/photos/keys in
+  them). One "Copy report" at the bottom of the list builds one text with every answer since the last copy;
+  preview before copying; copied answers marked as sent. Nothing is sent by the app.
+- Initial topics = his current to-do list: slice 1 check (Coach tab, Calendar, motion), Apple Health week,
+  iPhone app week, coach at the gym, hands-free sets, camera counting + form cues + learning exercises, food
+  photos (import model + a week of photos), VeSync types check, the three decisions, 7-day re-sign reminder.
+- Placement: **slice 1c**, right after slice 1, before slice 1b.
