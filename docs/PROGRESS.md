@@ -71,80 +71,80 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **G3:** 13 [ui] after 12 (and after slice 1 task 17's helper edits) → 14 [ui] after 13.
 - **G4:** 15 reviewer → 16 verifier → 17 main merge + ask to push → 18 (no 🧍 checkpoint of its own; his first pasted report goes through `/feedback`).
 
-- [ ] 1. [main] Shared types (no behaviour change).
+- [x] 1. [main] Shared types (no behaviour change).
   - Files: src/core/types.ts.
   - Adds per SPEC slice 1c data model: `AppRoute`, `TodoPlatform`, `TodoDetectorId`, `TodoOption`, `TodoStep`, `TodoTopic`, `TodoAnswer`, `TodoFacts`, `DetectorResult`, `WhatsNewPage`, and the settings shapes `WhatsNewState`, `TodoSettings`, `TodoSignals`, plus the decision-setting targets `coach.appleCardReasons?: boolean`, `coach.claudeWanted?: 'yes' | 'later' | 'no'`, `TrainerKitSettings` (measurement sites, e1RM formula, warm-up rule, review weeks; defaults from M12-q4), `signing?: 'free' | 'paid'`.
   - Done when: `npm run check` passes; no runtime change.
   - Deps: none.
-- [ ] 2. [main] Version in the build (= the tour key).
+- [x] 2. [main] Version in the build (= the tour key).
   - Files: package.json (`"version": "1.12.0"`), vite.config.ts (`define.__APP_RELEASE__` = package.json version read at build time, `define.__APP_BUILD__` = short git sha, `"unknown"` outside git; both also defined for Vitest), src/vite-env.d.ts, src/core/version.ts(+test) (`versionLabel(release, build)` → "Version 1.12.0 (build abc1234)", `CREDIT = '© 2026 Wongsaton Kampusan'`), **tests first** for `versionLabel`.
   - Done when: `npm run check` passes (incl. a test that `__APP_RELEASE__` equals package.json `version` and the label format); `npm run build` output contains `1.12.0`; `__APP_VERSION__` unchanged.
   - Deps: none.
-- [ ] 2b. [ui-engineer] Settings → About + version on the tour's first page.
+- [x] 2b. [ui-engineer] Settings → About + version on the tour's first page.
   - Files: src/ui/screens/settings.ts(+test) (small About section at the very bottom: "Gym Clean", the version label, the credit line "© 2026 Wongsaton Kampusan"; no links), src/ui/todo/whatsNewTour.ts (first page shows the version label; coordinate with task 8, same owner).
   - Done when: render tests (About shows label + credit, it is the last section; tour page 1 shows the label) + 390×844 screenshot of Settings → About.
   - Deps: 2 (and 8 for the tour part).
-- [ ] 3. [core-engineer] Topic + What's New page data, **tests first**.
+- [x] 3. [core-engineer] Topic + What's New page data, **tests first**.
   - Files: src/data/todos/topics.ts(+test), src/data/whatsNew/pages.ts(+test).
   - The 12 initial topics exactly as the SPEC table (ids, checkpoint names, platform, auto detectors + params as data: 3 native sessions, 7 Health days, 2 coach changes, 6 camera sets, 3 learning exercises, 7 photo-meal days, re-sign warn at ≤ 2 days), ask options, decision `setting` maps (topics 9–12), `since: '1.12.0'`. Pages for `1.12.0`: Coach tab (centre, chat), focus blocks, Calendar + scores + Share month, missed-day + recaps, motion, To-dos (≈ 6 pages, each `what` + `why` ≤ 2 short sentences, Try it route).
   - Done when tests cover: unique ids; every detector id is in `TodoDetectorId` and the task 4 registry; every Try it is a known `AppRoute`; every string passes `checkCopy`; the 12 topics ↔ checkpoints I, H, G, E, B3, C+F1, D + VeSync + M12-q1, M12-q4, Claude, re-sign; decision maps only touch their own setting key.
   - Deps: 1.
-- [ ] 4. [core-engineer] Detectors + topic progress, **tests first**.
+- [x] 4. [core-engineer] Detectors + topic progress, **tests first**.
   - Files: src/core/todo/detectors.ts(+test), src/core/todo/progress.ts(+test).
   - `detectors: Record<TodoDetectorId, (facts: TodoFacts, params) => DetectorResult>` (pure, counts/flags only); `topicStatus(topic, answers, facts)` → `{ done, skipped, stepsDone, steps, nextStepId }` (stored auto ticks stay ticked; recurring topics follow their detector); `todoSummary(topics, answers, facts)` → `{ done, total, visible }` with native-only topics excluded on `web`; `pendingAutoTicks(…)` → steps newly met (for the store to record).
   - Done when tests cover every detector at its boundary on web and native facts (incl. re-sign 3 vs 2 days across a DST change), progress (auto + ask, skip, recurring, platform filter), the "6 of 12" summary and the all-done hide.
   - Deps: 1.
-- [ ] 5. [core-engineer] Tour selection + re-sign clock, **tests first**.
+- [x] 5. [core-engineer] Tour selection + re-sign clock, **tests first**.
   - Files: src/core/todo/whatsNew.ts(+test).
   - `tourToShow(pages, state, current, hasData)` → pages (unseen releases, newest first) or `{ markSeen: true }` for a fresh install; `replayPages(pages, current)`; `addedTopics(topics, releases)` for the last page; `resignDaysLeft(buildFirstSeenAt, now)` (7-day window, local days).
   - Done when tests cover: unseen → pages; seen → none; fresh install → mark seen, none; two unseen releases → both newest first; release without pages → none; replay; re-sign math incl. DST.
   - Deps: 1.
-- [ ] 6. [core-engineer] Report builder, **tests first**.
+- [x] 6. [core-engineer] Report builder, **tests first**.
   - Files: src/core/todo/report.ts(+test).
   - `buildReport({ topics, answers, facts, release, build, platform, now, all? })` → `{ text, answerIds }`: plain text, header (app, "Version 1.12.0 (build abc1234)", PWA / iPhone app, date; **not** his name), one block per topic with checkpoint name, ask answers as option labels + notes, auto ticks as "done (date)" or counts ("Health data on 7 of 7 days"), skipped topics; only unsent unless `all`. `redactNote(note)` replaces key-like strings (`sk-ant-…`, long base64/hex tokens) with "[key removed]".
   - Done when tests cover: since-last-copy filtering; `all`; grouping/format snapshot; skipped topics; and the **never-contains** test: seeded facts/answers holding Health values, a photo data URL, a key in a note, chat message text and food/body numbers → none appear in `text` (search the output).
   - Deps: 1.
-- [ ] 7. [core-engineer] Store, Dexie **version 9**, facts gatherer, **tests first**.
+- [x] 7. [core-engineer] Store, Dexie **version 9**, facts gatherer, **tests first**.
   - Files: src/data/db.ts(+test), src/data/todos/store.ts(+test), src/data/todos/facts.ts(+test), src/data/backup.ts(+test).
   - `todoAnswers: 'id, topicId, at, sentAt'` (new table, no upgrade function; backed up). Store: `saveAnswer`, `recordAutoTicks`, `skipTopic`, `listAnswers`, `markSent(ids, at)`, `applyDecision(step, optionId)` (writes only the mapped `settings` key/path), `getWhatsNew` / `markSeen(release)`, `noteBuildSeen(buildId, now)` (first time only), `noteSignal('calendarAfterSession', now)` (only when a finished session exists that day). `gatherFacts(db, platform, now)` → `TodoFacts` with counts/flags only (chat user messages, proposal outcomes, coach changes by action, Health connected + days with data in the last 7, sessions since the native first launch, camera sets per session, learning-exercise camera sets, Legs B swap session, food model present, photo-meal days, build first-seen); hands-free marker per "Fit" note.
   - Done when tests cover: v8 → v9 keeps every row; round trips; mark sent; `applyDecision` touches only its setting; `todoAnswers` in the backup table list and a restore round trip; nothing from it in the dev-log export; `noteBuildSeen` once per id; `gatherFacts` on a made-up db returns no raw values (shape test: numbers are counts, no strings from rows).
   - Deps: 1.
-- [ ] 8. [ui-engineer] What's New tour.
+- [x] 8. [ui-engineer] What's New tour.
   - Files: src/ui/todo/whatsNewTour.ts(+test), src/ui/todo/todo.css.
   - Props: `pages`, `addedTopics`, callbacks `onTryIt(route)`, `onSkip`, `onDone`, `onOpenTodos`. Full-screen dialog (`role="dialog"`, focus trapped, Esc = Skip), Skip always visible, Back / Next ≥ 56px, swipe as a shortcut, page dots + "2 of 6" text, last page "Added to your to-dos" with the topic list + Open to-dos. Page change = transform/opacity slide via the motion helpers; instant under reduced motion. Original icons only.
   - Done when: render tests (keyboard Next/Back/Esc, Skip on every page, last page, Try it callback, reduced motion → no animation class) + 390×844 screenshots (a page, the last page) in the 3 accents.
   - Deps: 1.
-- [ ] 9. [ui-engineer] Today to-do card, to-do list, Settings rows.
+- [x] 9. [ui-engineer] Today to-do card, to-do list, Settings rows.
   - Files: src/ui/todo/todoCard.ts(+test), src/ui/todo/todoList.ts(+test), src/ui/screens/today.ts(+test) (slot below the Start card), src/ui/screens/settings.ts(+test) ("What's new" + "To-dos" rows).
   - Card: "To-dos: 6 of 12 done" + the next topic title + a re-sign line when ≤ 2 days left; ≥ 56px; absent when `summary.visible` is false. List: rows per topic (title, checkpoint, "3 of 5" / Done / Skipped; native-only labelled "In the iPhone app" on web), the Copy report button at the bottom.
   - Done when: render tests (counts, hidden when all done, native label, re-sign line, Settings rows) + 390×844 screenshots (Today with the card, the list).
   - Deps: 1.
-- [ ] 10. [ui-engineer] Topic guide (one step per screen).
+- [x] 10. [ui-engineer] Topic guide (one step per screen).
   - Files: src/ui/todo/todoGuide.ts(+test).
   - Props: topic, status, answers, detector results; callbacks answer(stepId, optionIds, note), tryIt(route), skipTopic, back/next/close. Auto step: ticked / "2 of 3 sessions" + Try it; ask step: option buttons (radio or checkbox semantics, ≥ 56px, selection not colour alone) + optional note (≤ 500 chars, counter); decision step shows what the setting will be; "Step 2 of 5"; Skip this topic (two taps).
   - Done when: render tests (each step kind, multi-select, note limit, decision preview, skip confirm, keyboard) + 390×844 screenshots (auto ticked and not, ask with a note, decision).
   - Deps: 1.
-- [ ] 11. [ui-engineer] Report preview + copy.
+- [x] 11. [ui-engineer] Report preview + copy.
   - Files: src/ui/todo/reportSheet.ts(+test), src/ui/todo/clipboard.ts(+test).
   - Sheet with the report text (scrollable, ≥ 20px), Copy (≥ 56px), "Nothing new since your last copy" + Copy all again, success line "Copied. Paste it where you want."; `copyText` uses `navigator.clipboard.writeText`, fallback a selected read-only textarea + "Select all and copy". No network.
   - Done when: render tests (preview, empty state, success, fallback with a stubbed clipboard failure) + 390×844 screenshot of the preview.
   - Deps: 1.
-- [ ] 12. [main] Wiring.
+- [x] 12. [main] Wiring.
   - Files: src/ui/app.ts, src/main.ts.
   - Screens `todos` and `todoTopic`; the tour overlay on app open/foreground on Today only (never in a session or on the camera) via `tourToShow` (fresh install → `markSeen`); Settings → What's new → replay; Try it → route (closing the tour/guide); facts gathered on open, foreground and on entering To-dos (`gatherFacts` → `pendingAutoTicks` → `recordAutoTicks`); ask/decision answers through the store (`applyDecision` then re-render); Copy report → `buildReport` → sheet → on success `markSent`; Calendar open records `noteSignal`; main.ts calls `noteBuildSeen(__APP_VERSION__)` in the native app; Today gets the card props. Dev log: nothing from to-dos.
   - Done when: `npm run check` passes; manual run at 390×844 with seeded data shows the tour once, the card, a guide and the report preview; no network request.
   - Deps: 2, 3, 4, 5, 6, 7, 8, 9, 10, 11.
-- [ ] 13. [ui-engineer] E2E helpers: mark the tour seen by default.
+- [x] 13. [ui-engineer] E2E helpers: mark the tour seen by default.
   - Files: e2e/app.helpers.ts (+ e2e/workout.helpers.ts if it seeds separately). A `whatsNewSeen` seed option, default = current release; existing specs unchanged otherwise.
   - Done when: full `npm run e2e` green with the 1c build (the Today card below Start moves nothing the existing specs assert).
   - Deps: 12, and slice 1 task 17 landed (another agent is editing these helpers now).
-- [ ] 14. [ui-engineer] New e2e specs (390×844).
+- [x] 14. [ui-engineer] New e2e specs (390×844).
   - Files: e2e/whats-new.spec.ts (tour once per release with an older `seenRelease` + a session, Next/Back, Try it, reload → none, Skip → none, Settings replay, fresh profile → none, `reducedMotion: 'reduce'` → no animation, first page shows the package.json version; Settings → About shows the same version label and "© 2026 Wongsaton Kampusan"), e2e/todos.spec.ts (card → list → topic; auto tick after seeding a chat question; ask steps + note survive reload; a decision step changes its setting; Copy report → preview → copy with clipboard permissions, text read back has the answers and the version in its header, and no seeded Health value / key / his name; marked sent → next report only newer; native-only label on web; card hides when all done; nothing during a set). Every spec asserts no off-device request.
   - Done when: each passes 3× in a row; full e2e green.
   - Deps: 13.
-- [ ] 15. [reviewer] Review the slice 1c diff: privacy (no network; report never has Health values, photos, keys, chat text; nothing in the dev log; `todoAnswers` backed up, nothing local-only leaked), copy rules (`checkCopy`), data-not-branches (topics/pages/detector params as data), ownership, tests-first evidence, motion via helpers and off under reduced motion, nothing new mid-set.
+- [x] 15. [reviewer] Review the slice 1c diff: privacy (no network; report never has Health values, photos, keys, chat text; nothing in the dev log; `todoAnswers` backed up, nothing local-only leaked), copy rules (`checkCopy`), data-not-branches (topics/pages/detector params as data), ownership, tests-first evidence, motion via helpers and off under reduced motion, nothing new mid-set.
   - Deps: 14.
-- [ ] 16. [verifier] Verify milestone against SPEC acceptance criteria (M12 slice 1c): `npm run check`, full `npm run e2e`, `npm run build` (contains `1.12.0`); 390×844 screenshots listed in SPEC (tour first page with the version, "Added to your to-dos", Today card, list, auto step ticked/not, ask with note, decision, report preview, Settings → About with version + "© 2026 Wongsaton Kampusan") via `scripts/screenshots.mjs`; evidence into Verification evidence → M12 slice 1c.
+- [x] 16. [verifier] Verify milestone against SPEC acceptance criteria (M12 slice 1c): `npm run check`, full `npm run e2e`, `npm run build` (contains `1.12.0`); 390×844 screenshots listed in SPEC (tour first page with the version, "Added to your to-dos", Today card, list, auto step ticked/not, ask with note, decision, report preview, Settings → About with version + "© 2026 Wongsaton Kampusan") via `scripts/screenshots.mjs`; evidence into Verification evidence → M12 slice 1c.
   - Deps: 15.
 - [ ] 17. [main] merge + ask to push (slice 1 + 1c together if he agrees, M12-q5; after M11 per slice 1 task 21).
   - Deps: 16.
@@ -173,99 +173,99 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **G6:** 17 ∥ 18 [ui] after 16.
 - **G7:** 19 reviewer → 20 verifier → 21 main merge + ask to push → 22 🧍 Checkpoint I.
 
-- [ ] 1. [main] Shared types and the brain interface (no behaviour change).
+- [x] 1. [main] Shared types and the brain interface (no behaviour change).
   - Files: src/core/types.ts.
   - Adds (shapes per SPEC M12 "Data model"): `FocusGroup`, `FocusBlock`, `FocusBlockParams` (`{ group; weeks; weekdays; startDate }`), `TrainerState.blocks?: FocusBlock[]`, `ProposalAction` + `'focusBlock'`, `ChatCardStatus`, `ChatCard`, `ChatMessage`, `DayStatus`, `DayCompletion`, `PeriodScore`, `BrainSource` (`'chip' | 'rules' | 'apple' | 'claude'`), and the seam `CoachBrain = { id: BrainSource; status(): Promise<{ available: boolean; reason?: string }>; ask(text: string, ctx: BrainContext): Promise<BrainReply> }` with `BrainReply` = the `handle()` result plus `source`, `note?`, `usedHealth?`. `BrainContext` wraps the existing `CoachContext` + the last 8 turns.
   - If adding `'focusBlock'` breaks an exhaustive switch (e.g. Plan changes labels), main adds a placeholder case and notes it for the owning task.
   - Done when: `npm run check` passes; no runtime change.
   - Deps: none.
-- [ ] 2. [core-engineer] Focus-block builder, **tests first**.
+- [x] 2. [core-engineer] Focus-block builder, **tests first**.
   - Files: src/core/trainer/focusRules.ts (data: weekly-set increase 1.3–1.5× with the default 1.4, min focus days/week 2, per-session set cap, lighter last week = the M10 lighter rule, weeks 2–6, weekday counts 3–6), src/core/trainer/focusBlock.ts(+test).
   - `buildFocusBlock(state, catalog: TrainerCatalog, params)` → `FocusBlock`: his rotation days cycled over the chosen weekdays; focus-group exercises +1 set (up to the cap) and, if the group trains on < 2 days/week, a focus exercise added to the lightest days (catalog pick, primary muscle in the group, doable with the gym profile via M10e `catalog.canDo`, not already in the day, sets/reps/rest copied from the most similar exercise in his plan); other groups unchanged; last week lighter. `reviseFocusBlock(block, edit, …)` for `{ swap: { date | weekday, exerciseId, toId? } }`, `{ daysPerWeek: n }`, `{ weeks: n }`.
   - Done when tests cover: focus weekly sets within +30–50% and on ≥ 2 days/week for chest, back, arms, legs; other groups' weekly sets unchanged; last week lighter; 2 and 6 weeks; 3–6 weekdays; a mid-week start; no exercise the default gym profile can't do; each revision; same input → identical block.
   - Deps: 1.
-- [ ] 3. [core-engineer] Focus blocks in the plan + the proposal, **tests first**.
+- [x] 3. [core-engineer] Focus blocks in the plan + the proposal, **tests first**.
   - Files: src/core/trainer/plan.ts(+test), src/core/trainer/actions/focusBlock.ts(+test), src/core/trainer/actions/postpone.ts(+test) (only if block days need it), src/core/trainer/changes.test.ts.
   - `project()` uses a block's dated day on its dates (rest on its non-training dates); dated overrides still win on a block date (lighter / not today / swap apply to the block day); the rotation pointer is frozen during the block and resumes after its last date from the last finished non-block session (Decision "M12 plan" call). `proposeFocusBlock(ctx, params | block)` → Proposal `action 'focusBlock'`, `scope 'dated'`, lines one per week ("Week 1: 5 days, chest 14 → 20 sets"), why, `say` ≤ 8 words; replaces an overlapping block. Not offered mid-workout.
   - Done when tests cover: Apply → `calendar()`/`effectiveDay()`/`upNext()` show block days → Undo (LIFO) restores; the rotation after the block; Not today and Lighter on a block day; a block starting today with today already done; stale `baseVersion` rejected; every reply passes `checkCopy`.
   - Deps: 2.
-- [ ] 4. [core-engineer] Completion, scores, missed day, recaps, **tests first**.
+- [x] 4. [core-engineer] Completion, scores, missed day, recaps, **tests first**.
   - Files: src/core/progress/completion.ts(+test), src/core/progress/recap.ts(+test), src/core/progress/fixtures/*.json (made-up).
   - `dayCompletion(state, sessions, sets, date)` → `DayCompletion` (planned = the projected day for that date incl. block + adjust override; done = sets logged in finished sessions that started that local date; per exercise done / partial / missed against planned sets; a session on a rest date → `extra`; future → `planned`); `monthCompletion(…, month)`; `periodScore(…, from, to)` → `PeriodScore` incl. focus sets vs `targetSetsPerWeek`; `missedDay(…, today, answered)` → the most recent missed planned date in the last 7 days not yet answered, or null; `recapDue(…, today, lastRecap)` → a week recap (after the week ends) and a block recap (after a block's last date), each with text that passes `checkCopy`.
   - Done when tests cover the SPEC slice 1 completion bullets (done / partial / missed / rest / extra; week + month scores; focus sets; a session past midnight counts on its start date; lighter / deload days use the adjusted planned sets; DST weeks; empty history) and the recap/missed-day rules (once each).
   - Deps: 3.
-- [ ] 5. [core-engineer] Chat store, Dexie **version 8**, **tests first**.
+- [x] 5. [core-engineer] Chat store, Dexie **version 8**, **tests first**.
   - Files: src/data/db.ts(+test), src/data/chat/store.ts(+test), src/data/backup.ts(+test).
   - `chatMessages: '++id, createdAt'` (new table, no upgrade function). `addMessage`, `updateCard(id, patch)`, `listThread(now)` (last 30 days, oldest first), `pruneChat(now)`, `clearChat()`. `chatMessages` goes on `LOCAL_ONLY_TABLES` (not in backups; a restore leaves it alone). Coach UI state (missed-day answered dates, last recap) lives in `settings` key `'coach'` (backed up; no message text).
   - Done when tests cover: v7 → v8 keeps every row; round trip; 30-day pruning; Clear chat; the backup table-list test; no `chatMessages` in the dev-log export.
   - Deps: 1.
-- [ ] 6. [core-engineer] Rule answers and intents, **tests first**.
+- [x] 6. [core-engineer] Rule answers and intents, **tests first**.
   - Files: src/core/trainer/phrases.json, src/core/trainer/intents.ts(+test), src/core/trainer/coach.ts(+test), src/core/trainer/replies.ts(+test), src/core/trainer/evals/requests.json (+ the eval test).
   - New intents: `week` ("how's my week", "this week"), `progress` ("how am I doing", "am I on track"), `focusBlock` (slots: group from body-area words, weeks: number or "this month" = 4, weekdays count), `focusEdit` ("swap Thursday's flyes", "only 4 days a week"); food free text incl. "tonight". `handle()` answers: week → this week's sessions done / planned + % sets + the next training day (gym sessions only; no Health values, M11 Decision (8)); progress → week + month scores, streak, focus-block progress; focus block → asks only what's missing with chips (group → weeks 2–6 → "Keep my days" / 3 / 4 / 5 / 6 days) then the task 3 proposal; focus edits → a revised proposal. New quick chip `focusBlock` ("Build a focus block") and the starter ids.
   - Done when: eval set gains ≥ 20 made-up items for these intents; rule-supported items ≥ 90% right and 100% safety flags still; every new reply passes `checkCopy`; numbers in week/progress replies equal task 4's scores (test).
   - Deps: 3, 4.
-- [ ] 7. [core-engineer] The brain router (the seam slices 2/3 plug into), **tests first**.
+- [x] 7. [core-engineer] The brain router (the seam slices 2/3 plug into), **tests first**.
   - Files: src/data/brain/router.ts(+test), src/data/brain/rules.ts(+test).
   - `rulesBrain` wraps `handle()`; `createRouter(brains: CoachBrain[])` → `ask(input, ctx)`: chips → rules always; free text → the first brain whose `status()` is available, falling to the next on error/timeout with a one-line `note`, ending at rules; `status()` lists each brain + reason for Settings. Slice 1 registers rules only. (Owner note: the router lives in `src/data/brain/**`, core-engineer's area and where M10 B5 put it; main owns the interface in task 1 and the wiring in task 15.)
   - Done when tests cover: chips bypass; rules-only free text; a fake failing brain → rules + note; a fake unavailable brain → skipped with reason; replies keep `source`.
   - Deps: 1.
-- [ ] 8. [ui-engineer] Motion tokens + helpers, app-wide.
+- [x] 8. [ui-engineer] Motion tokens + helpers, app-wide.
   - Files: src/styles.css, src/ui/motion.ts(+test), src/ui/tokens.ts(+test) (if tokens are mirrored there), src/ui/coach/undoToast.ts, src/ui/coach/coach.css.
   - Tokens `--dur-fast 120ms`, `--dur-base 220ms`, `--dur-slow 320ms`, `--ease-standard`, `--ease-spring`; one global `@media (prefers-reduced-motion: reduce)` that zeroes durations/animations; press scale 0.97 + highlight on buttons/chips; sheets slide up + backdrop fade; Undo toast slides up. `motion.ts`: `reducedMotion()`, `enterScreen(el, dir)` (fade + 8px slide), `staggerIn(els)`, `countUp(el, to)`, `checkMorph(btn)`, `ringFill(el, pct)` — each a no-op / final value under reduced motion. Transform/opacity only. Screens marked `data-motion="off"` (Exercise, camera) get none of the new motion.
   - Done when: unit tests for each helper with reduced motion on/off (fake timers, stubbed `matchMedia`); render tests show no new animation class on the Exercise screen; existing reduced-motion rules folded into the global one.
   - Deps: none.
-- [ ] 9. [ui-engineer] Tab bar: 5 tabs with a centre Coach.
+- [x] 9. [ui-engineer] Tab bar: 5 tabs with a centre Coach.
   - Files: src/ui/tabBar.ts(+test), src/ui/icons.ts(+test) (a chat icon, a calendar icon if missing; original art), src/styles.css.
   - `TabId = 'today' | 'fuel' | 'coach' | 'calendar' | 'settings'` in that order; Coach raised/filled, still ≥ 56px with a visible label; active = indicator + `aria-current` (not colour alone); the indicator slides with `--dur-base` (instant under reduced motion). At 390px every tab ≥ 56px wide.
   - Main applies the `'history'` → `'calendar'` rename in app.ts when integrating this task so `npm run check` stays green.
   - Done when: render tests (order, labels, aria-current, widths) + 390×844 screenshot in the 3 accents.
   - Deps: 1, 8.
-- [ ] 10. [ui-engineer] Chat component (tab + compact sheet variants).
+- [x] 10. [ui-engineer] Chat component (tab + compact sheet variants).
   - Files: src/ui/coach/chat.ts(+test), src/ui/coach/chat.css; reuses proposalCard.ts / foodCard.ts (edit only to add the applied/undone/expired states and the check morph).
   - Props: `messages: ChatMessage[]`, `variant: 'tab' | 'sheet'`, `typing`, `chips`, `followUps`, `showAreas`, `allowTyping`, `inWorkout`; callbacks: send text, chip, area, apply / dismiss / undo / ask-again by message id, log food, clear chat (two taps), close (sheet). Renders bubbles (≥ 20px, his right / coach left, `sr-only` speaker), cards by `card.kind`, a status line per old proposal, the starters on an empty thread, a typing indicator (3 dots, static under reduced motion), quick chips above the input, text box "Ask the coach" + Send, the privacy line "Stays on this phone.", auto-scroll to the newest; bubbles rise + fade in. Red flag → no chips/text box except its buttons (M10 rule). The e2e hooks of the old sheet are kept (`data-coach-chip`, `data-coach-area`, `data-coach-followup`, "Ask the coach", "Send").
   - Done when: render tests (each card kind and status, starters, red flag, sheet variant has a Close and the same thread) + 390×844 screenshots (empty, thread with proposal, applied with Undo, sheet variant).
   - Deps: 1, 8.
-- [ ] 11. [ui-engineer] Focus-block card.
+- [x] 11. [ui-engineer] Focus-block card.
   - Files: src/ui/coach/focusBlockCard.ts(+test), src/ui/coach/chat.css (its section only, coordinate with 10).
   - Week-by-week list (each a ≥ 56px expandable row: "Week 2 · 5 days · chest 20 sets"), a week expands to days, a day to exercises (sets × reps; focus exercises marked with a label, not colour alone; the lighter week labelled); Apply / Not now; then Applied + Undo; outcome states as task 10.
   - Done when: render tests (expand/collapse with keyboard, aria-expanded, statuses) + 390×844 screenshots collapsed and expanded.
   - Deps: 1, 8.
-- [ ] 12. [ui-engineer] Calendar tab screen + day detail.
+- [x] 12. [ui-engineer] Calendar tab screen + day detail.
   - Files: src/ui/screens/calendar.ts(+test), src/ui/screens/calendarDay.ts(+test), src/ui/screens/calendar.css.
   - Month grid (7 columns, Monday first like the week strip; prev / next month ≥ 56px), each day a ring by status (filled / partial arc / hollow / dim / outlined today; focus-block days with a mark) plus an accessible label ("Tue 18: done, 18 of 18 sets"); week + month score cards ("This week: 4 of 5 sessions, 92% of planned sets", focus sets vs target during a block, streak); "Share month" button. Day detail: per-exercise rows done / partly / missed with sets × reps done vs planned, actions Start (today) / Move / Do it today, and "History" per exercise (opens the existing exercise history). Numbers count up on first show (motion helper).
   - Done when: render tests for every day status and score, keyboard reachability, ≥ 56px targets + 390×844 screenshots (month, a day, scores).
   - Deps: 1, 8.
-- [ ] 13. [ui-engineer] Share month image (made on the phone).
+- [x] 13. [ui-engineer] Share month image (made on the phone).
   - Files: src/ui/shareMonth.ts(+test).
   - `shareMonthLayout(month, completion, scores)` (pure: rects, rings, text; no weights, no body or Health data) + `renderShareMonth()` to a canvas → PNG Blob; `shareMonth()` uses `navigator.share({ files })` when `canShare` allows, else a download link. No `fetch`, no new origin.
   - Done when: layout tests (content list has no weight/body fields) + an exported PNG at 1080×1350 saved under the screenshots folder by the harness.
   - Deps: 12.
-- [ ] 14. [ui-engineer] Today + rest screen updates.
+- [x] 14. [ui-engineer] Today + rest screen updates.
   - Files: src/ui/screens/today.ts(+test), src/ui/screens/readinessCard.ts, src/ui/screens/rest.ts(+test), src/styles.css.
   - Missed-day card ("You missed Push A on Tue." + **Move it** / **Skip it**, ≥ 56px; shown once; not on rest/exercise/camera); cards stagger in on first load; streak and kcal count up; readiness card slides in; Set done → a quick ring fill on the rest screen's set progress. The rep counter is unchanged.
   - Done when: render tests (missed card props in/out, reduced motion → final numbers) + 390×844 screenshot with the missed-day card.
   - Deps: 1, 8.
-- [ ] 15. [main] Wiring A: the Coach tab.
+- [x] 15. [main] Wiring A: the Coach tab.
   - Files: src/ui/app.ts, src/main.ts (only if the router is created there).
   - The `coach` screen renders task 10 from `listThread`; text/chips go through the router (task 7) with the context; replies, cards and outcomes are saved (task 5); live Proposals are kept in memory by message id and Apply/Undo use changes.ts (Plan changes lines, `source` = chip/rules); a stored pending proposal whose `baseVersion` no longer matches shows "expired" + Ask again. `openCoach(phase, first?)` now switches to the Coach tab and sends `first` (Today Coach button, preview Coach button, readiness card, M10e gym prompt, Summary stall card). The Pause sheet renders the `sheet` variant on the same thread (workout chips only). Tab switches call `enterScreen` with the travel direction. Dev log: ids/numbers only.
   - Done when: `npm run check` + the existing coach/trainer e2e (with task 17's selector updates if already done, else run and list failures for 17) pass; no network request.
   - Deps: 5, 6, 7, 9, 10, 11.
-- [ ] 16. [main] Wiring B: Calendar, Today prompts, recaps.
+- [x] 16. [main] Wiring B: Calendar, Today prompts, recaps.
   - Files: src/ui/app.ts.
   - The `calendar` tab replaces the `history` route (exercise history stays reachable from the day detail); data from task 4; day actions open the Coach tab with the matching chip (Move → notToday/move; Do it today → a dated override proposal through postpone "Move to"); Share month calls task 13. On app open/foreground: `missedDay` → Today's card once (answer stored in settings `'coach'`), `recapDue` → a coach message in the thread (once).
   - Done when: `npm run check` passes; manual run at 390×844 shows the Calendar and the missed-day card with seeded data.
   - Deps: 4, 12, 13, 14, 15.
-- [ ] 17. [ui-engineer] Update existing e2e specs for the new tab bar, Coach tab and Calendar.
+- [x] 17. [ui-engineer] Update existing e2e specs for the new tab bar, Coach tab and Calendar.
   - Files: e2e/coach.spec.ts, e2e/trainer.spec.ts, e2e/equipment.spec.ts, e2e/health.spec.ts (coach dialog → Coach tab region; Pause sheet keeps the compact chat), e2e/history.spec.ts, e2e/history-flow.spec.ts, e2e/backup.spec.ts, e2e/fuel.spec.ts, e2e/food-photo.spec.ts, e2e/barcode.spec.ts, e2e/settings.spec.ts (History tab → Calendar → exercise history; tab count 4 → 5), e2e/layout-dock.spec.ts, e2e/m4e-theme.spec.ts (tab bar shape), e2e/workout.helpers.ts. Only selectors/flows change, never what a test proves.
   - Done when: each listed spec passes 3× in a row; full `npm run e2e` green.
   - Deps: 16.
-- [ ] 18. [ui-engineer] New e2e specs (390×844).
+- [x] 18. [ui-engineer] New e2e specs (390×844).
   - Files: e2e/coach-tab.spec.ts (5 tabs, centre Coach, starters → reply, Not today → Apply → Undo in thread, reload keeps thread, Clear chat, Today Coach button + readiness card open the tab with the chip sent, Pause-sheet chat, red flag, no text box during a set), e2e/focus-block.spec.ts ("This month I want to build my chest" → questions → card → expand → Apply → Calendar marks block days → Undo), e2e/calendar.spec.ts (seeded sessions → month rings → day detail per-exercise → exercise history; scores; missed-day card once; Share month makes a PNG via the download fallback), e2e/motion.spec.ts (`reducedMotion: 'reduce'` → no running animations/transitions on tab switch, sheet, chat; no new motion on the Exercise screen). Every spec asserts no off-device request.
   - Done when: each passes 3× in a row; full e2e green.
   - Deps: 16.
-- [ ] 19. [reviewer] Review the slice 1 diff: privacy (no network, no message text in dev log/backup, share image has no body data), copy rules (`checkCopy`, no medical words), ownership, tests-first evidence, motion only transform/opacity and off under reduced motion, nothing new mid-set.
+- [x] 19. [reviewer] Review the slice 1 diff: privacy (no network, no message text in dev log/backup, share image has no body data), copy rules (`checkCopy`, no medical words), ownership, tests-first evidence, motion only transform/opacity and off under reduced motion, nothing new mid-set.
   - Deps: 17, 18.
-- [ ] 20. [verifier] Verify milestone against SPEC acceptance criteria (M12 slice 1): `npm run check`, full `npm run e2e`, `npm run build`; 390×844 screenshots listed in SPEC (Coach empty / proposal / applied + Undo, focus card collapsed + expanded, Calendar month, day, scores, share image, Today missed-day card, Pause-sheet chat) via `scripts/screenshots.mjs`; evidence into Verification evidence → M12 slice 1.
+- [x] 20. [verifier] Verify milestone against SPEC acceptance criteria (M12 slice 1): `npm run check`, full `npm run e2e`, `npm run build`; 390×844 screenshots listed in SPEC (Coach empty / proposal / applied + Undo, focus card collapsed + expanded, Calendar month, day, scores, share image, Today missed-day card, Pause-sheet chat) via `scripts/screenshots.mjs`; evidence into Verification evidence → M12 slice 1.
   - Deps: 19.
 - [ ] 21. [main] merge + ask to push (after M11 merges, or ask him to merge both).
   - Deps: 20.
@@ -3319,6 +3319,17 @@ Verifier on `m11-build` at 424cafd (reviewer PASS on the same commit). **Verdict
 - Screenshots 390×844 (DPR 2) from the wired app with a fake `window.Capacitor` GymHealth bridge (made-up data, same as e2e/health.spec), `node scripts/screenshots.mjs m11`: `docs/screenshots/m11-verify-health-settings-connect.png`, `m11-verify-health-settings.png`, `m11-verify-health-settings-bottom.png`, `m11-verify-health-settings-confirm.png`, `m11-verify-today-card.png`, `m11-verify-fuel-weigh-in.png`, `m11-verify-health-pwa.png`. Every one **scrollWidth 390, 0 console errors/warnings, 0 page errors, 0 off-site requests**; nothing spoken. Connect asked iOS for exactly the six types; all six switch rows 60px. Card: "Lighter today?" with "Sleep was about 1 h 50 m shorter than usual." and "Resting heart rate is about 7 bpm higher than usual.", buttons Lighter today / Not today / Train as planned all 56px; week line "This week: 0 gym sessions, 1 other workout (run 40 min)". Fuel: Weigh-in 70.4 kg + "from Health" tag. No visible button under 56px; body text ≥ 20px; 18px only on short labels (tab labels, muscle chips, the Weigh-in chip value and its tag), as allowed by the M4e `--fs-label` decision (same as M7).
 - 🧍 Pending (Wongsaton, task 13): the Health sheet lists only the six types on his iPhone, WHOOP data appears, a Health weigh-in shows in Fuel, Safari Web Inspector shows no network request. Then Checkpoint H.
 - Doc gaps for main (not blocking): the M11 task checkboxes in "Current milestone plan" are all still `[ ]`, the Milestone checklist line still says "waiting on the M11-q answers, no build", and SPEC M11's heading still says "PROPOSED … no build".
+
+### M12 slices 1 + 1c (2026-11-17)
+Verifier on `m12-coach-tab` at 9ecd50c (reviewer PASS: slice 1 after 85fb908, slice 1c at 32e5c5e + nits 3ae8142 / 9ecd50c). **Verdict: PASS** for slice 1 task 20 and slice 1c task 16; 🧍 Checkpoint I (his iPhone, a few days) is pending, not a failure.
+- `npm run check`: typecheck + lint clean, Vitest **157 files / 3765 tests passed**, script tests **56/56**. M12 unit tests present and green: `src/core/trainer/focusBlock.test.ts` (+ `actions/focusBlock.test.ts`; deterministic, 2/6 weeks, revisions), `src/core/progress/completion.test.ts` (midnight, DST), `src/data/chat/store.test.ts`, `src/data/db.test.ts` ("GymDb v8 … upgrades a v7 database keeping every existing row", "GymDb v9 … upgrades a v8 database keeping every existing row"), `src/data/brain/{router,rules}.test.ts`, `src/core/trainer/intents.test.ts` (eval set 128 items incl. week/progress/focusBlock/focusEdit/doToday, score ≥ 0.9), `src/ui/motion{,.render}.test.ts`, `src/core/todo/{detectors,progress,whatsNew,report}.test.ts` (re-sign 3 vs 2 days left; DST spring/fall in `whatsNew.test.ts`; `sk-ant-…` → "[key removed]"), `src/data/todos/{topics,store,facts}.test.ts`, `src/data/whatsNew/pages.test.ts`, `src/core/version.test.ts` (label, release = package.json version, credit), `src/ui/todo/*.test.ts`, `src/ui/{shareMonth,focusSummary}.test.ts`, `src/ui/screens/calendar{,Day}.test.ts`.
+- `E2E_PORT=5391 E2E_PWA_PORT=6391 npm run e2e` (all phases, one run): **190 passed, 1 skipped** (opt-in `HISTORY_SHOTS`), 19.0 min, no flakes (clip specs passed first time). M12 specs: calendar 7/7, coach-tab 4/4, focus-block 1/1, motion 2/2, today-m12 6/6, todos 4/4, whats-new 6/6; trainer 12/12. Flakiness: those 7 specs `--repeat-each=5` (project mobile): **150/150 passed** (44.9 s).
+- `npm run build`: OK, precache 30 entries (25561.79 KiB). Main `index-DU21ETdU.js` **799.19 kB (244.61 kB gzip)** (M11 was 680.74 kB): contains `1.12.0` (2 matches), **0 matches for `GymHealth` / `registerPlugin`**; lazy: health 3.64 kB, three.module 535.59 kB, vision_bundle 154.07 kB, scene 38.65 kB, reader 37.72 kB.
+- Native: `npx vite build --mode native && npx cap sync ios` OK (no tracked file changed). `xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -destination id=3BA81E3F-3EDA-4B9C-89CA-29F80BA63B0B ("GymClean iPhone 17 Pro") CODE_SIGNING_ALLOWED=NO build`: **BUILD SUCCEEDED** (only the usual appintentsmetadataprocessor note); the bundled `public/assets/index-*.js` contains `1.12.0`. (The iOS bundle's `CFBundleShortVersionString` is still `1.0`; nothing in SPEC requires it to follow package.json.)
+- Screenshots 390×844 (DPR 2) from the wired app, clock Fri 13 Nov 2026 18:00 (tour/to-dos Mon 16), made-up sessions as e2e/calendar.spec, `node scripts/screenshots.mjs m12`: `docs/screenshots/m12-verify-today.png` (+ `-full`; to-do card "To-dos: 0 of 8 done · Next: Coach tab and Calendar" below Start, missed card "You missed Legs A on Thu." Start it / Skip it), `m12-verify-coach-empty.png` (5 tabs 78×72, Coach centre raised, 4 starters), `m12-verify-coach-proposal.png`, `m12-verify-coach-applied.png` (Applied. + Undo on the card), `m12-verify-focus-collapsed.png` (Chest focus 4 weeks, 26/26/25/20 sets, week 4 "lighter week"), `m12-verify-focus-expanded.png` (+ `-full`; Focus labels in words), `m12-verify-pause-chat.png` (during the set: 0 inputs, 0 to-do card, 0 tour, 0 tab bar), `m12-verify-calendar-month.png`, `m12-verify-calendar-scores.png` ("43% · 2 of 6 sessions, 43% of planned sets"; month "15% · 3 of 25 sessions"), `m12-verify-calendar-day.png` (+ `-full`; Pull A partly: row 1 partial, 4 missed), `m12-verify-share-month.png` (the 1080×1350 PNG itself, download fallback "Image saved.", 0 requests after the tap), `m12-verify-tour-first.png` ("1 of 7", "Meet the Coach tab", "Version 1.12.0 (build 9ecd50c)"), `m12-verify-tour-last.png` ("Added to your to-dos", 12 topics), `m12-verify-todo-list.png` (+ `-full`; "0 of 8 done"), `m12-verify-guide-auto.png` (Step 1 of 8, Not yet 0 of 1, Try it), `m12-verify-guide-ask-note.png` (Step 4 of 8, note 31/500), `m12-verify-guide-decision.png` ("Setting after this: Yes"), `m12-verify-report-preview.png` (header "Version 1.12.0 (build 9ecd50c)", "App: PWA", no name), `m12-verify-settings-about.png` ("Version 1.12.0 (build 9ecd50c)", "© 2026 Wongsaton Kampusan"). Every page **scrollWidth 390, 0 console errors, 0 page errors, 0 off-site requests** (route-aborted and recorded), nothing spoken; the only console lines are 2 Chromium WebGL "GPU stall due to ReadPixels" performance warnings on the Exercise screen behind the Pause chat (3D body, pre-existing). Smallest visible button 56px on every screen; body text ≥ 20px, 18px only on labels (tab labels, weekday heads, muscle chips, tour "WHAT'S NEW") per the M4e `--fs-label` decision. Calendar day cells 55.7 × 64px (accepted exception, Decision "M12 slice 1 review calls" (2)).
+- Reduced motion (`reducedMotion: 'reduce'`, matchMedia true): running finite animations after Today load, Calendar tab, Coach starter + reply, tour open, tour Next: **0 each**.
+- Observations for Checkpoint I (not failures): (a) with no fixed rest days, the first week of this made-up history (one session Mon 2) shows Wed 4 – Sun 8 as five "missed, Pull A" days (the rule in Decision "M12 slice 1 review calls" (1)); worth his look; (b) the Not today proposal's why reads "Push A moves to Saturday and the rest follow. Push A moves to next week." (two different Push A days, M10 postpone copy) — reads like a contradiction; (c) the score numbers count up on open, so a quick glance can catch a mid-count value (shown final under reduced motion).
+- 🧍 Pending: Checkpoint I on his iPhone (slice 1 task 22); slice 1 task 21 / 1c task 17 merge (M12-q5).
 
 ## Blockers / questions for Wongsaton
 - **New (M12 Coach tab, planned 2026-11-16; not blocking slice 1. The defaults are what gets built):**

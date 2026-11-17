@@ -26,6 +26,10 @@
 //   node scripts/screenshots.mjs m5c-hold    # M5c breaks inside a set: body-line hold, Continue →
 //                                            #   one set; last-set hold (Save set); dev-log export
 //                                            #   to test-results/verify-m5c-hold/
+//   node scripts/screenshots.mjs m12         # M12 slices 1 + 1c in the wired app (clock mocked):
+//                                            #   Today to-do + missed cards, Coach, focus block,
+//                                            #   Pause chat, Calendar, Share month, tour, to-dos,
+//                                            #   report, About; reduced-motion animation counts
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -2975,6 +2979,374 @@ async function m11(browser) {
   await w.ctx.close();
 }
 
+// ---------------------------------------------------------------------------------------------
+// M12 slices 1 + 1c (verifier, 2026-11-17): the wired app at 390×844 with the clock installed on
+// Fri 13 Nov 2026 18:00 (made-up sessions seeded into IndexedDB, as e2e/calendar.spec.ts):
+// Today (to-do card + missed-day card), Coach (empty, proposal, applied), focus-block card
+// (collapsed, expanded), Pause-sheet chat, Calendar (month, scores, day), Share month PNG, What's
+// New tour (page 1 + last), To-do list, guide steps, report preview, Settings → About; and a
+// reduced-motion pass that counts running animations. Every request off localhost is aborted and
+// recorded. Writes docs/screenshots/m12-verify-*.png.
+const M12_MIN = 60_000;
+const m12At = (day, hour) => new Date(2026, 10, day, hour, 0).getTime();
+
+async function m12Phone(browser, { time = m12At(13, 18), reducedMotion = 'no-preference', share = false } = {}) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    ignoreHTTPSErrors: true,
+    reducedMotion,
+    acceptDownloads: true,
+  });
+  const offsite = [];
+  await ctx.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'localhost') return route.continue();
+    offsite.push(url.href);
+    return route.abort();
+  });
+  const page = await ctx.newPage();
+  const log = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => log.push(`pageerror: ${e.message}`));
+  await page.addInitScript((share) => {
+    window.__spoken = [];
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => window.__spoken.push(u.text), cancel: () => {}, pause: () => {},
+        resume: () => {}, getVoices: () => [], addEventListener: () => {},
+        speaking: false, pending: false, paused: false,
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => {}, release: async () => {} }) },
+    });
+    if (!share)
+      for (const k of ['share', 'canShare'])
+        Object.defineProperty(navigator, k, { configurable: true, value: undefined });
+  }, share);
+  await page.clock.install({ time });
+  await page.goto(BASE + '/');
+  await page.locator('[data-cal]').first().waitFor();
+  return { ctx, page, log, offsite };
+}
+
+async function m12Settle(page) {
+  await page.waitForFunction(() =>
+    document.getAnimations().every(
+      (a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity,
+    ),
+  );
+}
+
+/** Smallest visible text font size and smallest visible button height on screen. */
+async function m12Metrics(page, scope = 'body') {
+  return page.evaluate((scope) => {
+    const root = document.querySelector(scope) ?? document.body;
+    let minFont = Infinity;
+    let minFontText = '';
+    for (const el of root.querySelectorAll('*')) {
+      if (el.closest('svg')) continue;
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      if (!own || el.getClientRects().length === 0) continue;
+      const r = el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > innerHeight) continue;
+      const fs = parseFloat(getComputedStyle(el).fontSize);
+      if (fs < minFont) { minFont = fs; minFontText = el.textContent.trim().slice(0, 40); }
+    }
+    const btns = [...root.querySelectorAll('button')]
+      .filter((b) => b.getClientRects().length > 0)
+      .map((b) => ({ t: b.textContent.trim().slice(0, 30), h: Math.round(b.getBoundingClientRect().height * 10) / 10 }));
+    const minBtn = btns.reduce((m, b) => (b.h < m.h ? b : m), { t: '', h: Infinity });
+    return { minFont, minFontText, minButton: minBtn, buttons: btns.length };
+  }, scope);
+}
+
+async function m12Shot(p, name, extra = {}, opts = {}) {
+  if (!opts.noSettle) await m12Settle(p.page);
+  const metrics = await m12Metrics(p.page, opts.scope);
+  await shot(p.page, p.log, `m12-verify-${name}`, { metrics, ...extra });
+  if (opts.fullPage) await p.page.screenshot({ path: `${OUT}/m12-verify-${name}-full.png`, fullPage: true });
+}
+
+async function m12Seed(page, sessions, sets, seen) {
+  for (let i = 0; i < 60; i++) {
+    const ok = await page.evaluate(({ sessions, sets, seen }) => new Promise((resolve) => {
+      const open = indexedDB.open('gym-clean');
+      open.onerror = () => resolve(false);
+      open.onsuccess = () => {
+        const d = open.result;
+        if (!d.objectStoreNames.contains('sessions')) { d.close(); return resolve(false); }
+        const tx = d.transaction(['sessions', 'sets', 'settings'], 'readwrite');
+        const st = tx.objectStore('settings');
+        const get = st.get('whatsNew');
+        get.onsuccess = () => st.put({ key: 'whatsNew', value: { ...(get.result?.value ?? {}), seenRelease: seen } });
+        for (const s of sessions)
+          tx.objectStore('sessions').put({ ...s, setsDone: sets.filter((l) => l.sessionId === s.sessionId).length,
+            totalVolumeKg: 0, restOverruns: 0 });
+        for (const l of sets) tx.objectStore('sets').put({ ...l, restTakenSec: 90, endedAt: l.startedAt + 40_000 });
+        tx.oncomplete = () => { d.close(); resolve(true); };
+        tx.onerror = () => resolve(false);
+      };
+    }), { sessions, sets, seen });
+    if (ok) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  await page.reload();
+  await page.locator('[data-cal]').first().waitFor();
+}
+
+function m12Program() {
+  return JSON.parse(execFileSync('cat', ['src/data/program.json'], { encoding: 'utf8' }));
+}
+
+function m12AllSets(sessionId, day, start) {
+  let t = start;
+  return day.exercises.flatMap((e) => Array.from({ length: e.sets }, (_, setIndex) => {
+    t += 2 * M12_MIN;
+    return { sessionId, exerciseId: e.exerciseId, setIndex, reps: 10, weightKg: 20, startedAt: t };
+  }));
+}
+
+/** Last week one session; this week Push A in full Mon, Pull A partly Tue, nothing Wed/Thu. */
+async function m12SeedWeek(page, release) {
+  const prog = m12Program();
+  const push = prog.days.find((d) => d.id === 'push-a');
+  const pull = prog.days.find((d) => d.id === 'pull-a');
+  await m12Seed(page, [
+    { sessionId: 'w-prev', dayId: 'push-a', startedAt: m12At(2, 18), endedAt: m12At(2, 18) + 40 * M12_MIN },
+    { sessionId: 'w-mon', dayId: 'push-a', startedAt: m12At(9, 18), endedAt: m12At(9, 18) + 70 * M12_MIN },
+    { sessionId: 'w-tue', dayId: 'pull-a', startedAt: m12At(10, 18), endedAt: m12At(10, 18) + 20 * M12_MIN },
+  ], [
+    { sessionId: 'w-prev', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 10, weightKg: 20, startedAt: m12At(2, 18) + M12_MIN },
+    ...m12AllSets('w-mon', push, m12At(9, 18)),
+    { sessionId: 'w-tue', exerciseId: pull.exercises[0].exerciseId, setIndex: 0, reps: 9, weightKg: 22.5, startedAt: m12At(10, 18) + M12_MIN },
+  ], release);
+}
+
+async function m12Animations(page) {
+  return page.evaluate(() => document.getAnimations()
+    .filter((a) => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity)
+    .map((a) => `${a.effect?.target?.className || a.effect?.target?.tagName || '?'}:${a.animationName ?? a.transitionProperty ?? 'web'}`));
+}
+
+async function m12(browser) {
+  const release = JSON.parse(execFileSync('cat', ['package.json'], { encoding: 'utf8' })).version;
+  const tab = (p, t) => p.page.locator(`[data-tab="${t}"]`).click();
+  const coach = (p) => p.page.locator('[data-screen="coach"]');
+
+  // 1. Today: to-do card + missed-day card; Calendar month / scores / day; Share month.
+  {
+    const p = await m12Phone(browser);
+    await m12SeedWeek(p.page, release);
+    await p.page.locator('[data-missed-day]').waitFor();
+    await p.page.locator('[data-todo-card]').waitFor();
+    const missed = (await p.page.locator('[data-missed-day] .missed-text').textContent())?.trim();
+    const todo = (await p.page.locator('[data-todo-card]').textContent())?.replace(/\s+/g, ' ').trim();
+    const startY = (await p.page.locator('[data-start]').first().boundingBox())?.y;
+    const cardY = (await p.page.locator('[data-todo-card]').boundingBox())?.y;
+    await m12Shot(p, 'today', { missed, todo, startY, cardY }, { fullPage: true });
+
+    await tab(p, 'calendar');
+    const month = p.page.locator('main[data-screen="calendar"]');
+    await month.waitFor();
+    await p.page.locator('[data-cal-day="2026-11-09"]').waitFor();
+    const cells = await p.page.locator('[data-cal-day]').evaluateAll((els) => {
+      const r = els[0].getBoundingClientRect();
+      return { n: els.length, w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10,
+        statuses: Object.fromEntries(els.filter((e) => /2026-11-(0[2-9]|1[0-3])/.test(e.getAttribute('data-cal-day')))
+          .map((e) => [e.getAttribute('data-cal-day'), `${e.getAttribute('data-status')} | ${e.getAttribute('aria-label')}`])) };
+    });
+    await m12Shot(p, 'calendar-month', { cells });
+    // The score numbers count up (JS, not WAAPI): wait until the big number equals the line's %.
+    await p.page.waitForFunction(() => {
+      const s = document.querySelector('[data-score="week"]');
+      const pct = /(\d+)%/.exec(s?.querySelector('[data-score-line]')?.textContent ?? '')?.[1];
+      return pct !== undefined && s?.querySelector('.cal-score-num')?.textContent === `${pct}%`;
+    });
+    await p.page.waitForTimeout(600);
+    const week = (await p.page.locator('[data-score="week"]').textContent())?.replace(/\s+/g, ' ').trim();
+    const monthScore = (await p.page.locator('[data-score="month"]').textContent().catch(() => null))?.replace(/\s+/g, ' ').trim();
+    await p.page.locator('[data-score="week"]').scrollIntoViewIfNeeded();
+    await m12Shot(p, 'calendar-scores', { week, monthScore });
+
+    // Share month (download fallback: no Web Share in this context).
+    const before = [];
+    p.page.on('request', (r) => before.push(r.url()));
+    const [dl] = await Promise.all([p.page.waitForEvent('download'), p.page.locator('[data-share-month]').click()]);
+    await dl.saveAs(`${OUT}/m12-verify-share-month.png`);
+    const notice = await p.page.locator('[data-notice]').textContent();
+    results.push({ file: `${OUT}/m12-verify-share-month.png`, flow: 'share-month', filename: dl.suggestedFilename(),
+      notice, requestsAfterTap: before.filter((u) => !/^(blob|data):/.test(u)) });
+
+    await p.page.locator('[data-cal-day="2026-11-10"]').click();
+    const day = p.page.locator('main[data-screen="calendar-day"]');
+    await day.waitFor();
+    const rows = await day.locator('[data-cal-ex]').evaluateAll((els) =>
+      els.map((e) => `${e.getAttribute('data-cal-ex')}=${e.getAttribute('data-row-status') ?? e.querySelector('[data-row-status]')?.getAttribute('data-row-status')}`));
+    await m12Shot(p, 'calendar-day', { sub: await day.locator('[data-day-sub]').textContent(), rows }, { fullPage: true });
+    results.push({ flow: 'm12-today-calendar', offsite: p.offsite, spoken: await p.page.evaluate(() => window.__spoken) });
+    await p.ctx.close();
+  }
+
+  // 2. Coach tab: empty with starters → Not today proposal → Apply (Undo on the card).
+  {
+    const p = await m12Phone(browser);
+    await tab(p, 'coach');
+    await coach(p).waitFor();
+    const tabs = await p.page.locator('[data-tab]').evaluateAll((els) => els.map((e) => {
+      const r = e.getBoundingClientRect();
+      return `${e.getAttribute('data-tab')} ${Math.round(r.width)}x${Math.round(r.height)} "${e.textContent.trim()}"`;
+    }));
+    await m12Shot(p, 'coach-empty', { tabs });
+    await coach(p).locator('[data-coach-chip="notToday"]').click();
+    await coach(p).locator('[data-proposal]').waitFor();
+    await m12Shot(p, 'coach-proposal');
+    await coach(p).locator('[data-proposal]').getByRole('button', { name: 'Apply' }).click();
+    await coach(p).locator('[data-card-status="applied"]').waitFor();
+    await m12Shot(p, 'coach-applied', { undo: await coach(p).getByRole('button', { name: 'Undo' }).count() });
+    results.push({ flow: 'm12-coach', offsite: p.offsite, spoken: await p.page.evaluate(() => window.__spoken) });
+    await p.ctx.close();
+  }
+
+  // 3. Focus block: "This month I want to build my chest" → 5 days → card collapsed → expanded.
+  {
+    const p = await m12Phone(browser);
+    await tab(p, 'coach');
+    await coach(p).getByLabel('Ask the coach').fill('This month I want to build my chest');
+    await coach(p).getByRole('button', { name: 'Send' }).click();
+    await coach(p).locator('[data-coach-followup]').filter({ hasText: '5 days' }).click();
+    const card = coach(p).locator('[data-focus-block-card]').last();
+    await card.waitFor();
+    await card.scrollIntoViewIfNeeded();
+    await m12Shot(p, 'focus-collapsed', { weeks: await card.locator('[data-fb-week]').allTextContents() });
+    await card.locator('[data-fb-week]').first().click();
+    await card.locator('[data-fb-day]').first().click();
+    await card.locator('[data-fb-ex]').first().waitFor();
+    await card.locator('[data-fb-week]').first().scrollIntoViewIfNeeded();
+    await m12Shot(p, 'focus-expanded', {}, { fullPage: true });
+    results.push({ flow: 'm12-focus', offsite: p.offsite });
+    await p.ctx.close();
+  }
+
+  // 4. Pause-sheet compact chat.
+  {
+    const p = await m12Phone(browser);
+    await p.page.locator('[data-hero="push-a"] [data-start]').click();
+    await p.page.getByRole('button', { name: 'Start workout' }).click();
+    await p.page.locator('[data-screen="exercise"]').waitFor();
+    const duringSet = {
+      inputs: await p.page.locator('input, textarea').count(),
+      todoCard: await p.page.locator('[data-todo-card]').count(),
+      tour: await p.page.locator('[data-tour="whats-new"]').count(),
+      tabbar: await p.page.locator('[data-tabbar]').count(),
+    };
+    await p.page.getByRole('button', { name: 'Pause', exact: true }).click();
+    await p.page.locator('[data-pause="coach"]').click();
+    await p.page.locator('[data-coach-sheet]').waitFor();
+    await m12Shot(p, 'pause-chat', { duringSet });
+    await p.ctx.close();
+  }
+
+  // 5. What's New tour: an update from 1.11.0 → page 1 (version) … last page.
+  {
+    const p = await m12Phone(browser, { time: m12At(16, 18) });
+    await m12Seed(p.page, [{ sessionId: 's1', dayId: 'push-a', startedAt: m12At(13, 18), endedAt: m12At(13, 18) + 40 * M12_MIN }],
+      [{ sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 10, weightKg: 20, startedAt: m12At(13, 18) + M12_MIN }], '1.11.0');
+    const tour = p.page.locator('[data-tour="whats-new"]');
+    await tour.waitFor();
+    const wn = (part) => tour.locator(`[data-wn="${part}"]`);
+    await m12Shot(p, 'tour-first', { count: await wn('count').textContent(), title: await wn('title').textContent(),
+      version: await wn('version').textContent() }, { scope: '[data-tour="whats-new"]' });
+    const titles = [await wn('title').textContent()];
+    for (let i = 0; i < 12 && (await wn('next').getAttribute('data-last')) !== 'true'; i++) {
+      await wn('next').click();
+      titles.push(await wn('title').textContent());
+    }
+    await m12Shot(p, 'tour-last', { count: await wn('count').textContent(), titles,
+      topics: await wn('topics').textContent() }, { scope: '[data-tour="whats-new"]' });
+    results.push({ flow: 'm12-tour', offsite: p.offsite, spoken: await p.page.evaluate(() => window.__spoken) });
+    await p.ctx.close();
+  }
+
+  // 6. To-dos: list, auto step, ask with note, decision, report preview; Settings → About.
+  {
+    const p = await m12Phone(browser, { time: m12At(16, 18) });
+    await p.ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
+    const list = p.page.locator('main[data-screen="todos"]');
+    const guide = p.page.locator('main[data-screen="todo-guide"]');
+    const open = async (id) => { await list.locator(`li[data-todo-topic="${id}"] button`).click(); await guide.waitFor(); };
+    await p.page.locator('[data-todo-card]').click();
+    await list.waitFor();
+    await m12Shot(p, 'todo-list', { summary: await list.locator('[data-todo-summary]').textContent() }, { fullPage: true });
+    await open('coach-calendar');
+    await m12Shot(p, 'guide-auto', { step: await guide.locator('[data-step-count]').textContent(),
+      auto: await guide.locator('[data-auto-state]').getAttribute('data-auto-state') });
+    for (let i = 0; i < 3; i++) await guide.locator('[data-guide-next]').click();
+    await guide.locator('[data-option="something"]').click();
+    await guide.locator('[data-note]').fill('The ring felt slow on rest days');
+    await m12Shot(p, 'guide-ask-note', { step: await guide.locator('[data-step-count]').textContent() });
+    await guide.locator('[data-guide-next]').click();
+    await guide.getByRole('button', { name: '‹ To-dos' }).click();
+    await open('apple-card');
+    await guide.locator('[data-option="yes"]').click();
+    await guide.locator('[data-decision]').waitFor();
+    await m12Shot(p, 'guide-decision', { decision: await guide.locator('[data-decision]').textContent() });
+    await guide.getByRole('button', { name: '‹ To-dos' }).click();
+    await list.locator('[data-copy-report]').click();
+    const sheet = p.page.locator('[data-report-sheet]');
+    await sheet.locator('[data-report-text]').waitFor();
+    const reportText = await sheet.locator('[data-report-text]').textContent();
+    await m12Shot(p, 'report-preview', { hasName: /Wongsaton|Kampusan/.test(reportText ?? ''),
+      header: reportText?.split('\n').slice(0, 3) }, { scope: '[data-report-sheet]' });
+    await sheet.locator('[data-report-close]').click();
+    const listBack = await list.locator('button').evaluateAll((els) => els.slice(0, 3).map((e) => e.textContent.trim()));
+    results.push({ flow: 'm12-todo-list-top-buttons', listBack, tabbarOnList: await p.page.locator('[data-tabbar]').count() });
+
+    await p.page.reload();
+    await p.page.locator('[data-cal]').first().waitFor();
+    await tab(p, 'settings');
+    const about = p.page.locator('[data-about="version"]');
+    await about.scrollIntoViewIfNeeded();
+    await p.page.locator('[data-about="credit"]').scrollIntoViewIfNeeded();
+    await m12Shot(p, 'settings-about', { version: await about.textContent(),
+      credit: await p.page.locator('[data-about="credit"]').textContent() });
+    results.push({ flow: 'm12-todos', offsite: p.offsite, spoken: await p.page.evaluate(() => window.__spoken) });
+    await p.ctx.close();
+  }
+
+  // 7. Reduced motion: running finite animations after each change (expect none).
+  {
+    const p = await m12Phone(browser, { reducedMotion: 'reduce' });
+    const rm = {};
+    rm.matches = await p.page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches);
+    rm.todayLoad = await m12Animations(p.page);
+    await tab(p, 'calendar');
+    rm.calendar = await m12Animations(p.page);
+    await tab(p, 'coach');
+    await coach(p).locator('[data-coach-starter="week"]').click();
+    rm.coachStarter = await m12Animations(p.page);
+    await coach(p).locator('.cs-msg-coach').first().waitFor();
+    rm.coachReply = await m12Animations(p.page);
+    await p.ctx.close();
+    const q = await m12Phone(browser, { time: m12At(16, 18), reducedMotion: 'reduce' });
+    await m12Seed(q.page, [{ sessionId: 's1', dayId: 'push-a', startedAt: m12At(13, 18), endedAt: m12At(13, 18) + 40 * M12_MIN }],
+      [{ sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 10, weightKg: 20, startedAt: m12At(13, 18) + M12_MIN }], '1.11.0');
+    await q.page.locator('[data-tour="whats-new"]').waitFor();
+    rm.tourOpen = await m12Animations(q.page);
+    await q.page.locator('[data-wn="next"]').click();
+    rm.tourNext = await m12Animations(q.page);
+    results.push({ flow: 'm12-reduced-motion', rm, console: [...p.log, ...q.log], offsite: [...p.offsite, ...q.offsite] });
+    await q.ctx.close();
+  }
+}
+
 const milestone = process.argv[2] ?? 'm4';
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -3011,6 +3383,7 @@ try {
   else if (milestone === 'm10e') await m10e(browser);
   else if (milestone === 'cam-verify') await camVerify(browser);
   else if (milestone === 'm11') await m11(browser);
+  else if (milestone === 'm12') await m12(browser);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));
