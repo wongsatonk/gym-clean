@@ -216,6 +216,11 @@ import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { createFuel } from './fuel/fuelController';
 import { createFoodVisionHost } from './fuel/foodVisionHost';
 import { createHealthHost } from './healthHost';
+import { isAppRoute } from '../core/todo/routes';
+import type { AppRoute, WhatsNewPage } from '../core/types';
+import { noteSignal } from '../data/todos/store';
+import { createTodoHost, nativeShell } from './todo/todoHost';
+import type { WhatsNewTour } from './todo/whatsNewTour';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
 
@@ -259,6 +264,9 @@ type View =
   | { screen: 'myGym' }
   | { screen: 'healthSettings' }
   | { screen: 'coach' }
+  // M12 slice 1c: the to-do list and one topic's guide (`from` = the tab that opened them).
+  | { screen: 'todos'; from: 'today' | 'settings' }
+  | { screen: 'todoTopic'; from: 'today' | 'settings'; topicId: string; stepIndex: number }
   | {
       screen: 'calendar';
       /** 'YYYY-MM' shown. */
@@ -741,15 +749,21 @@ export function mountApp(root: HTMLElement): void {
     // Left Settings by any route (a tab, Nutrition setup, Plan changes): stop the audio test's
     // camera and beep context. A no-op when there is no live panel.
     if (view.screen !== 'settings') disposeAudioTest();
+    // M12 slice 1c: the What's New tour never stays over a workout, its preview or the camera.
+    if (tour && (view.screen === 'session' || view.screen === 'preview' || camera)) closeTour();
     const screen = screenFor(view);
-    if (camera && camera.el.parentNode === root) {
-      // Camera sheet open: swap only the screen under it, so the sheet keeps focus and scroll.
-      for (const el of [...root.children]) if (el !== camera.el) el.remove();
+    const overlays = [camera?.el, tour?.el].filter(
+      (el): el is HTMLElement => el !== undefined && el.parentNode === root,
+    );
+    if (overlays.length) {
+      // Camera sheet / tour open: swap only the screen under it, so it keeps focus and scroll.
+      for (const el of [...root.children]) if (!overlays.includes(el as HTMLElement)) el.remove();
       root.prepend(screen);
     } else {
       root.replaceChildren(screen);
       if (camera) root.append(camera.el);
     }
+    if (tour && tour.el.parentNode !== root) root.append(tour.el);
     if (view.screen === 'session') {
       ensureBody3d();
       placeBody3d();
@@ -795,6 +809,10 @@ export function mountApp(root: HTMLElement): void {
         );
       case 'coach':
         return coachTabView();
+      case 'todos':
+        return todoListView(v);
+      case 'todoTopic':
+        return todoTopicView(v);
       case 'calendar':
         return calendarView(v);
       case 'preview':
@@ -817,6 +835,9 @@ export function mountApp(root: HTMLElement): void {
       case 'myGym':
       case 'healthSettings':
         return 'settings';
+      case 'todos':
+      case 'todoTopic':
+        return v.from;
       default:
         return null;
     }
@@ -982,6 +1003,7 @@ export function mountApp(root: HTMLElement): void {
         missedDay: trainer && upNextDayId !== null ? missedPrompt : null,
         missedAction: missedActionOf(missedPrompt),
         motion: todayMotion,
+        todo: todos.cardProps(),
       },
       {
         ...health.readinessActions((chip) => void openCoach('today', { chip })),
@@ -1006,6 +1028,7 @@ export function mountApp(root: HTMLElement): void {
         // A rotation miss is carried forward (usually today's workout): its preview.
         onStartMissed: (m) => void answerMissed(m).then(() => startMissed(m.dayId)),
         onSkipMissed: (m) => void answerMissed(m).then(() => render()),
+        onOpenTodos: () => openTodos('today'),
       },
     );
   }
@@ -2101,9 +2124,148 @@ export function mountApp(root: HTMLElement): void {
     refocusInput = false;
   }
 
+  // ---------- M12 slice 1c: What's New tour + to-dos (todo/todoHost.ts) ----------
+  // Facts + auto ticks on open, foreground and entering To-dos; the tour only over Today on open
+  // / foreground (or Settings → What's new), never over a workout, its preview or the camera.
+  const todos = createTodoHost({
+    db,
+    now: () => now(),
+    platform: nativeShell() ? 'native' : 'web',
+    onChange: () => {
+      if (view.screen === 'today' || view.screen === 'todos' || view.screen === 'todoTopic')
+        render();
+    },
+    logError: (err) => logDbError(err),
+  });
+  let tour: WhatsNewTour | null = null;
+  let tourChecking = false;
+
+  /** Removes the tour without marking it seen (forced: a workout or the camera took over). */
+  function closeTour(): void {
+    const t = tour;
+    tour = null;
+    if (!t) return;
+    t.dispose();
+    t.el.remove();
+  }
+
+  function showTour(pages: readonly WhatsNewPage[]): void {
+    if (tour || pages.length === 0 || camera) return;
+    if (view.screen === 'session' || view.screen === 'preview') return;
+    const t = todos.createTour(pages, {
+      onClosed: () => {
+        if (tour !== t) return;
+        tour = null;
+        t.el.remove();
+      },
+      onTryIt: (route) => goRoute(route),
+      onOpenTodos: () => goRoute('todos'),
+    });
+    tour = t;
+    root.append(t.el);
+  }
+
+  /** On open / foreground: the unseen release's tour, over Today only. */
+  async function maybeShowTour(found?: Promise<WhatsNewPage[]>): Promise<void> {
+    if (tour || tourChecking) return;
+    tourChecking = true;
+    try {
+      const pages = await (found ?? todos.pendingTour());
+      if (view.screen === 'today' && !camera) showTour(pages);
+    } finally {
+      tourChecking = false;
+    }
+  }
+
+  /** A Try it deep link (tour page or to-do step). */
+  function goRoute(route: AppRoute | string): void {
+    if (!isAppRoute(route)) return;
+    switch (route) {
+      case 'today':
+      case 'fuel':
+      case 'coach':
+      case 'calendar':
+      case 'settings':
+        goTab(route);
+        return;
+      case 'settings/health':
+        setEnter('settings');
+        view = { screen: 'healthSettings' };
+        render();
+        window.scrollTo(0, 0);
+        return;
+      case 'settings/myGym':
+        setEnter('settings');
+        view = { screen: 'myGym' };
+        render();
+        window.scrollTo(0, 0);
+        return;
+      case 'settings/foodPhotos':
+        openSettingsAt('food-photos');
+        return;
+      case 'settings/devlog':
+        openSettingsAt('devlog');
+        return;
+      case 'todos':
+        openTodos(tabOf(view) === 'settings' ? 'settings' : 'today');
+        return;
+      default: {
+        const unhandled: never = route;
+        throw new Error(`Unhandled route: ${String(unhandled)}`);
+      }
+    }
+  }
+
+  /** Settings scrolled to one section (its top; the page top when it isn't shown). */
+  function openSettingsAt(section: string): void {
+    setEnter('settings');
+    view = { screen: 'settings' };
+    render();
+    const el = root.querySelector(`[data-section="${section}"]`);
+    if (el) el.scrollIntoView({ block: 'start' });
+    else window.scrollTo(0, 0);
+  }
+
+  function openTodos(from: 'today' | 'settings'): void {
+    setEnter(from);
+    view = { screen: 'todos', from };
+    render();
+    window.scrollTo(0, 0);
+    void todos.refresh();
+  }
+
+  function todoListView(v: Extract<View, { screen: 'todos' }>): HTMLElement {
+    return todos.listScreen({
+      onBack: () => (v.from === 'settings' ? goTab('settings') : goToday()),
+      onOpenTopic: (topicId, stepIndex) => {
+        view = { screen: 'todoTopic', from: v.from, topicId, stepIndex };
+        render();
+        window.scrollTo(0, 0);
+      },
+    });
+  }
+
+  function todoTopicView(v: Extract<View, { screen: 'todoTopic' }>): HTMLElement {
+    const list = { screen: 'todos', from: v.from } as const;
+    return (
+      todos.guideScreen(v.topicId, v.stepIndex, {
+        onTryIt: (route) => goRoute(route),
+        onStep: (i) => {
+          if (view.screen !== 'todoTopic' || view.topicId !== v.topicId) return;
+          view = { ...view, stepIndex: i };
+          render();
+          window.scrollTo(0, 0);
+        },
+        onClose: () => openTodos(v.from),
+      }) ?? todoListView(list)
+    );
+  }
+
   // ----- M12 Calendar (replaces History; per-exercise history is one tap deeper) -----
 
   function openCalendar(): void {
+    // M12 slice 1c: "Calendar opened after a training day" (to-do topic 1).
+    void noteSignal(db, 'calendarAfterSession', now()).catch(logDbError);
     view = {
       screen: 'calendar',
       month: todayDate().slice(0, 7),
@@ -2523,6 +2685,8 @@ export function mountApp(root: HTMLElement): void {
           // Settings' scroll position on the iPhone, 2026-11-16).
           window.scrollTo(0, 0);
         },
+        onTodos: () => openTodos('settings'),
+        onWhatsNew: () => showTour(todos.replay()),
       },
     );
   }
@@ -3372,6 +3536,9 @@ export function mountApp(root: HTMLElement): void {
   }
 
   render();
+  // M12 slice 1c, first DB reads: the fresh-install rule (no session, no 'whatsNew' row → the
+  // tour is marked seen without showing) runs before anything else can add a session.
+  const firstTour = todos.pendingTour();
   void getUnit(db)
     .then((u) => {
       unit = u;
@@ -3434,7 +3601,18 @@ export function mountApp(root: HTMLElement): void {
       .catch(logDbError);
   });
   // M11: the first Health sync once Today's plan and sessions are known.
-  void loadUpNext().then(() => health.start());
+  void loadUpNext().then(() => {
+    health.start();
+    // M12 slice 1c: the What's New tour once Today is up (an update with unseen pages).
+    void maybeShowTour(firstTour);
+  });
+  // M12 slice 1c: the build id (iPhone app, re-sign clock), facts and auto ticks.
+  void todos.start();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || view.screen === 'session') return;
+    void todos.refresh();
+    if (view.screen === 'today') void maybeShowTour();
+  });
   // M7: targets / today's totals for the Today nudge (no seeding until Fuel is opened).
   void fuel.refresh().then(() => {
     if (view.screen === 'today' || view.screen === 'settings') render();

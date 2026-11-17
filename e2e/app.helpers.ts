@@ -1,6 +1,8 @@
 // Shared by the M10e equipment and M9 backup specs (not a spec itself). Copied from
 // trainer.spec.ts (left unchanged): speech + wake-lock mocks, request/error recording, the
 // IndexedDB seed, and the 56px tap-target check.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 declare global {
@@ -74,6 +76,19 @@ export function offDevice(requests: readonly string[], baseURL: string | undefin
   });
 }
 
+/** M12 slice 1c: package.json `version` (the What's New tour key, `__APP_RELEASE__`). */
+export const APP_RELEASE: string = (
+  JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as { version: string }
+).version;
+
+export type SeedOptions = {
+  /**
+   * M12 slice 1c: the release whose What's New tour counts as seen (settings 'whatsNew'). Default
+   * the current release, so seeded sessions never bring up the tour; `null` leaves the row as is.
+   */
+  whatsNewSeen?: string | null;
+};
+
 export type SessionSeed = { sessionId: string; dayId: string; startedAt: number; endedAt?: number };
 export type SetSeed = {
   sessionId: string;
@@ -84,12 +99,21 @@ export type SetSeed = {
   startedAt: number;
 };
 
-/** Writes sessions and sets into the app's IndexedDB once Dexie has created it, then reloads. */
-export async function seed(page: Page, sessions: SessionSeed[], sets: SetSeed[]) {
+/**
+ * Writes sessions and sets into the app's IndexedDB once Dexie has created it, then reloads. The
+ * What's New tour is marked seen for the current release unless `opts.whatsNewSeen` says otherwise.
+ */
+export async function seed(
+  page: Page,
+  sessions: SessionSeed[],
+  sets: SetSeed[],
+  opts: SeedOptions = {},
+) {
+  const seen = opts.whatsNewSeen === undefined ? APP_RELEASE : opts.whatsNewSeen;
   await expect
     .poll(() =>
       page.evaluate(
-        ({ sessions, sets }) =>
+        ({ sessions, sets, seen }) =>
           new Promise<boolean>((resolve) => {
             void indexedDB.databases().then((dbs) => {
               if (!dbs.some((d) => d.name === 'gym-clean')) return resolve(false);
@@ -101,7 +125,16 @@ export async function seed(page: Page, sessions: SessionSeed[], sets: SetSeed[])
                   d.close();
                   return resolve(false);
                 }
-                const tx = d.transaction(['sessions', 'sets'], 'readwrite');
+                const tx = d.transaction(['sessions', 'sets', 'settings'], 'readwrite');
+                if (seen !== null) {
+                  const store = tx.objectStore('settings');
+                  const get = store.get('whatsNew');
+                  get.onsuccess = () => {
+                    const prev = (get.result as { value?: Record<string, unknown> } | undefined)
+                      ?.value;
+                    store.put({ key: 'whatsNew', value: { ...(prev ?? {}), seenRelease: seen } });
+                  };
+                }
                 for (const s of sessions)
                   tx.objectStore('sessions').put({
                     ...s,
@@ -123,11 +156,71 @@ export async function seed(page: Page, sessions: SessionSeed[], sets: SetSeed[])
               };
             });
           }),
-        { sessions, sets },
+        { sessions, sets, seen },
       ),
     )
     .toBe(true);
   await page.reload();
+}
+
+/**
+ * Puts one `settings` row (key → value) into the app's IndexedDB once Dexie has created it.
+ * No reload: the caller reloads when the app must read it at start.
+ */
+export async function putSetting(page: Page, key: string, value: unknown) {
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ key, value }) =>
+          new Promise<boolean>((resolve) => {
+            void indexedDB.databases().then((dbs) => {
+              if (!dbs.some((d) => d.name === 'gym-clean')) return resolve(false);
+              const open = indexedDB.open('gym-clean');
+              open.onerror = () => resolve(false);
+              open.onsuccess = () => {
+                const d = open.result;
+                if (!d.objectStoreNames.contains('settings')) {
+                  d.close();
+                  return resolve(false);
+                }
+                const tx = d.transaction('settings', 'readwrite');
+                tx.objectStore('settings').put({ key, value });
+                tx.oncomplete = () => {
+                  d.close();
+                  resolve(true);
+                };
+                tx.onerror = () => resolve(false);
+              };
+            });
+          }),
+        { key, value },
+      ),
+    )
+    .toBe(true);
+}
+
+/** Reads one `settings` row's value (undefined when missing). */
+export async function getSetting(page: Page, key: string): Promise<unknown> {
+  return page.evaluate(
+    (key) =>
+      new Promise<unknown>((resolve) => {
+        const open = indexedDB.open('gym-clean');
+        open.onerror = () => resolve(undefined);
+        open.onsuccess = () => {
+          const d = open.result;
+          const req = d.transaction('settings', 'readonly').objectStore('settings').get(key);
+          req.onsuccess = () => {
+            d.close();
+            resolve((req.result as { value?: unknown } | undefined)?.value);
+          };
+          req.onerror = () => {
+            d.close();
+            resolve(undefined);
+          };
+        };
+      }),
+    key,
+  );
 }
 
 /** Every visible button in `scope` is at least 56px tall (gym rule). */
