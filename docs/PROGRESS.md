@@ -12,7 +12,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - **M12 Coach tab, slice 1: planned 2026-11-16** on `m12-coach-tab` (design approved; he said "start slice 1" alongside his Checkpoint H week). Plan under "Current milestone plan → M12 — slice 1"; contract SPEC M12 + Decision "M12 plan". Nothing in it blocks on him.
 - **M12 slice 1c (What's New tour + To-do guides + Copy report): planned 2026-11-16** (his yes), on `m12-coach-tab` after slice 1's verifier PASS; plan under "Current milestone plan → M12 — slice 1c"; Decision "M12 slice 1c". Not blocking on him (M12-q5 has a default).
 - **M13 "Published look": planned 2026-11-17** (his yes; Decision "M13 Published look"; owner mode = option A). Starts only after M12 slices 1b and 2 are verified; plan under "Current milestone plan → M13" (below the M12 slice 1b plan). M13-q1 answered: keep the name "Gym Clean" (his words 2026-11-17: "Keep it Gym Clean").
-- **M14 "Wrist and ears" (Apple Watch app + AirPods head motion): planned 2026-11-17** (his words: "Add it and I need apple watch app too"; Decision "M14 Wrist and ears"). Starts after M13 is verified; plan under "Current milestone plan → M14" (below M13). M14 tasks 1–2 (facts + a scratch watch spike on his devices) may run any time; they decide M14-q1 (paid Apple account needed for the watch? his call only if yes).
+- **M14 "Wrist and ears" (Apple Watch app + AirPods head motion): planned 2026-11-17** (his words: "Add it and I need apple watch app too"; Decision "M14 Wrist and ears"). Starts after M13 is verified; plan under "Current milestone plan → M14" (below M13). M14 tasks 1–2 (facts + a scratch watch spike on his devices) may run any time. **M14-q1 and M14-q2 answered 2026-11-17:** free Personal Team first ("let's try the free version, and I will decide the pay in the future"); his devices are an **Apple Watch Series 9** and **AirPods Pro 2** ("I got series 9 and pro 2"). If task 2 shows the free team can't run the watch app, the watch-only tasks pause and we ask him again.
+- **M15 "Best-rep clips": planned 2026-11-17** (his words: "it can record in the app while i'm working out … to be good of public via instagram"; "you can change that but need to save only on my phone not on cloud"; Decision "M15 Best-rep clips"). Builds **after M14** on `m15-best-rep-clips` (release 1.17.0); plan under "Current milestone plan → M15" (below M14). M15 tasks 1–2 (facts, paper/scratch) may run any time → 🧍 Checkpoint M.
 - **Waiting on Wongsaton:**
   - **M11 Health data (Apple Health + WHOOP): built 2026-11-16 on `m11-build`** (read-only, route A, defaults). Reviewer PASS (424cafd), verifier PASS on the Mac (check 3157, full e2e 159/1 skipped, simulator build + 19 XCTests). Next: 🧍 task 13 on his iPhone (`ios/` checklist in docs/ios-setup.md), then merge; 🧍 task 2: 2026-11-16 he says WHOOP writes "a lot of things" into Health (exact list not given); the iPhone test (task 13) confirms which of the six arrive.
   - Deploy OK for m4e-redesign.
@@ -53,7 +54,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] M11 Health data (Apple Health + WHOOP, native app only): **built 2026-11-16 on `m11-build` (read-only, route A); reviewer PASS, verifier PASS on the Mac; waiting on the iPhone test (task 13)** → 🧍 Checkpoint H
 - [ ] M12 Coach tab: chat, focus blocks, calendar, motion (approved 2026-11-16). **Slice 1 planned 2026-11-16** on `m12-coach-tab` (Coach centre tab + chat + history, rules brain behind a router, focus blocks, Calendar replaces History with completion + scores + Share month, motion) → 🧍 Checkpoint I; **slice 1c "What's New + To-dos" planned 2026-11-16** (tour per release, to-do guides for his open checkpoints + decisions, one Copy report; ships with slice 1 by default); **slice 1b "Trainer kit" planned 2026-11-17** (1.13.0: effort, warm-ups, intake/goal + starter plan for a second user, measurements + e1RM + body fat/lean mass, short on time, next block, progress photos, feel today, setup cues, cardio line, nudges + learn cards); **slice 2 planned 2026-11-17** (1.14.0: Apple brain + on-device mic + reminders + weekly check-in, iPhone) → 🧍 Checkpoint J; slice 3 (Claude brain, his key)
 - [ ] M13 Published look (approved 2026-11-17; **planned 2026-11-17**, builds after M12 slices 1b and 2 on `m13-published-look`; release 1.15.0: first-launch welcome + permission pages, owner mode (off on fresh installs), brand + launch screen, polish from the UX review, About + privacy + licenses, Story-size share + store screenshots + landing page, "her phone" checklist) → 🧍 Checkpoint K
-- [ ] M14 Wrist and ears (approved 2026-11-17: "Add it and I need apple watch app too"; **planned 2026-11-17**, builds after M13 on `m14-wrist-ears`; release 1.16.0: Apple Watch remote + live heart rate + opt-in Save to Health, AirPods head-still / neck hints + head-counted calf raises and shrugs). Watch track waits on M14-q1 only if the free Apple ID can't run a watch app → 🧍 Checkpoint L
+- [ ] M14 Wrist and ears (approved 2026-11-17: "Add it and I need apple watch app too"; **planned 2026-11-17**, builds after M13 on `m14-wrist-ears`; release 1.16.0: Apple Watch remote + live heart rate + opt-in Save to Health, AirPods head-still / neck hints + head-counted calf raises and shrugs). Free Personal Team first (M14-q1 answered 2026-11-17); if it can't run the watch app the watch track pauses and he is asked again. His devices: Apple Watch Series 9, AirPods Pro 2 → 🧍 Checkpoint L
+- [ ] M15 Best-rep clips (approved 2026-11-17: "you can change that but need to save only on my phone not on cloud"; **planned 2026-11-17**, builds after M14 on `m15-best-rep-clips`; release 1.17.0: opt-in per workout, rolling in-memory buffer, auto-kept best reps (top form / new best / hard last rep) + "Save last rep", others blurred, no sound by default, phone-only storage excluded from iCloud backup, 7-day auto-delete unless starred, 9:16 Story export + Clips screen, share only via the share sheet) → 🧍 Checkpoint M
 
 ## Current milestone plan
 
@@ -629,7 +631,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 **Branch:** `m14-wrist-ears`, cut from the M13 result (`m13-published-look` after verify, or `main` if he has merged by then). Subagents never commit.
 
-**Blocking:** **M14-q1** (paid Apple Developer Program, his call) blocks tasks 14–19, 27 and the watch half of 24 **only if** tasks 1–2 find the free Personal Team can't install/run the watch app. The AirPods track (4, 8–10, 12, 22, 25) runs on the free account either way. If he says "pause the watch", 1.16.0 ships the AirPods track plus tasks 5–7 dormant, and the watch tasks wait.
+**Blocking:** **M14-q1 answered 2026-11-17: "let's try the free version, and I will decide the pay in the future".** Build with the free Personal Team; task 2's spike decides. If the free team can't install/run the watch app, tasks 14–19, 27 and the watch half of 24 **pause** and main asks him again with the facts and the US$99/year cost; the AirPods track (4, 8–10, 12, 22, 25) and the core watch logic (5–7, 20, 21) proceed, and 1.16.0 ships the AirPods track plus 5–7 dormant. **M14-q2 answered 2026-11-17 ("I got series 9 and pro 2"):** target devices are an **Apple Watch Series 9** (current watchOS, `HKWorkoutSession` heart rate) and **AirPods Pro 2** (head tracking supported by `CMHeadphoneMotionManager`); no "unknown model" fallbacks are needed beyond the generic unsupported/disconnected states.
 
 **Fit with the current code (skimmed 2026-11-17; re-check when M14 starts, M12/M13 are moving these files):**
 - Session reducer `src/core/session.ts`: `SessionEvent` already has `SET_DONE` (backdatable `now`), `START_SET`, `EXTEND_REST`, `PAUSE`, `RESUME`, `SKIP_EXERCISE` → watch events map onto them; **no reducer change**. `SessionState` has `phase`, `exIndex`, `setIndex`, `restTargetSec`, `restAccumMs` / `restRunningSince`, `paused`, `warmups` → the snapshot is computed from it.
@@ -639,22 +641,22 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - M13 gives: owner mode (`isVisible(surface)`), the permission page component (`src/ui/onboarding/permissionPage.ts`), the What's New / to-do data files. M11 gives Health workout reads (dedupe by source).
 
 **Order / parallel groups:**
-- **Any time:** 1 [ios] facts → 2 🧍 spike on his devices → M14-q1 verdict.
+- **Any time:** 1 [ios] facts → 2 🧍 spike on his Series 9 + iPhone → free-team verdict (works → go; fails → watch tasks pause, ask him again).
 - **G0 (after M13 verify):** 3 [main] types; 13 [main] watch icon output.
 - **G1 core (after 3), in parallel by file:** 5, 6, 7, 11; 4 [ios] fixtures; then 8 ∥ 9 (after 4), then 10.
-- **G1 ios:** 12 (after 1, 3); watch track 14 (after 2, 13, M14-q1) → 15 → 16 ∥ 17; 18 (after 14); 19 (after 14).
+- **G1 ios:** 12 (after 1, 3); watch track 14 (after 2 shows the free team works, 13) → 15 → 16 ∥ 17; 18 (after 14); 19 (after 14).
 - **G1 ui (after 3):** 21; 20 after 6; 22 after 12.
 - **G2:** 23 [main] version → 24 [main] wiring A (watch) → 25 [main] wiring B (AirPods).
 - **G3:** 26 [ui] e2e ∥ 27 [ios] simulator round trip; 28 🧍 clips (any time after 25 is on his phone) → 29 [core] tune (doesn't gate 30–32 if the clips aren't in yet).
 - **G4:** 30 reviewer → 31 verifier → 32 main merge + ask → 33 🧍 Checkpoint L.
 
 - [ ] 1. [ios-engineer] Facts check against current Apple docs (paper; no repo files; findings to main for Decision "M14 Wrist and ears").
-  - Check and link: (a) a **free Personal Team** building, installing and running a **watchOS companion** (single-target watch app embedded in the iOS app), the 7-day expiry for the watch app, App ID count per 7 days, the 3-device limit (does the watch count?), watch Developer Mode; capabilities a Personal Team can't use on watchOS (HealthKit, background mode `workout-processing`); (b) `HKWorkoutSession` + `HKLiveWorkoutBuilder` on watchOS: which authorisation is needed just to **run** a session and read heart rate vs to **save** it, and that `discardWorkout()` leaves nothing in Health; (c) **mirrored workout sessions** to the iPhone (iOS 17+ `startMirroringToCompanionDevice`): does the iPhone app get background time, and does a **WKWebView** keep running JS (events, speech) with the phone locked; (d) WatchConnectivity semantics: `sendMessage` (reachable only), `transferUserInfo` (queued FIFO), `updateApplicationContext` (latest only), delivery when the iPhone app is suspended; (e) `CMHeadphoneMotionManager`: supported AirPods models (Pro 1/2, 3, 4, Max), sample rate, `NSMotionUsageDescription`, authorisation states, foreground/background, iOS floor; (f) current Xcode / watchOS SDK and the oldest watchOS we can target.
-  - Done when: each item is marked VERIFIED (doc link or Xcode result) or NOT VERIFIED, with a one-line verdict for M14-q1 (free works / needs paid / unknown until task 2).
+  - Check and link: (a) a **free Personal Team** building, installing and running a **watchOS companion** (single-target watch app embedded in the iOS app), the 7-day expiry for the watch app, App ID count per 7 days, the 3-device limit (does the watch count?), watch Developer Mode; capabilities a Personal Team can't use on watchOS (HealthKit, background mode `workout-processing`); (b) `HKWorkoutSession` + `HKLiveWorkoutBuilder` on watchOS: which authorisation is needed just to **run** a session and read heart rate vs to **save** it, and that `discardWorkout()` leaves nothing in Health; (c) **mirrored workout sessions** to the iPhone (iOS 17+ `startMirroringToCompanionDevice`): does the iPhone app get background time, and does a **WKWebView** keep running JS (events, speech) with the phone locked; (d) WatchConnectivity semantics: `sendMessage` (reachable only), `transferUserInfo` (queued FIFO), `updateApplicationContext` (latest only), delivery when the iPhone app is suspended; (e) `CMHeadphoneMotionManager`: supported AirPods models (Pro 1/2, 3, 4, Max), sample rate, `NSMotionUsageDescription`, authorisation states, foreground/background, iOS floor; (f) current Xcode / watchOS SDK, that the current watchOS runs on his **Apple Watch Series 9**, and the deployment target we set (current watchOS is fine: his is the only watch); confirm **AirPods Pro 2** in the `CMHeadphoneMotionManager` support list.
+  - Done when: each item is marked VERIFIED (doc link or Xcode result) or NOT VERIFIED, with a one-line verdict for the free-team path (free works / needs paid / unknown until task 2). M14-q1 is answered (try free first); M14-q2 is answered (Series 9, AirPods Pro 2).
   - Deps: none (may run now).
 - [ ] 2. 🧍 [ios-engineer + Wongsaton] Free-team watch spike on his devices (needs his iPhone plugged into the Mac; notify him).
   - A **scratch** Xcode project outside the repo: blank iOS app + watch app, Personal Team signing, HealthKit + workout-processing on the watch target, a button that starts an `HKWorkoutSession` and shows heart rate. Install on his iPhone + watch.
-  - Done when: it installs and shows live heart rate on his watch (→ M14-q1 resolved, free works), or the exact Xcode/device error is recorded (→ M14-q1 goes to him with the facts and the US$99/year cost). His watch model + watchOS and AirPods model noted (M14-q2).
+  - Done when: it installs and shows live heart rate on his Series 9 (→ free works, watch track goes ahead), or the exact Xcode/device error is recorded (→ watch-only tasks 14–19, 27 and the watch half of 24 pause; main asks him again with the facts and the US$99/year cost, per his 2026-11-17 answer "I will decide the pay in the future"). His watchOS version and the AirPods Pro 2 firmware noted.
   - Deps: 1.
 - [ ] 3. [main] Shared types (no behaviour change).
   - Files: src/core/types.ts.
@@ -711,7 +713,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [ ] 14. [ios-engineer] Watch target skeleton.
   - Files: ios/App/GymWatch Watch App/** (SwiftUI app, idle screen "Start on your iPhone" + day name), ios/App/App.xcodeproj (target embedded in the iOS app; bundle id `<ios id>.watchkitapp` from the gitignored local signing config + `.example`), the icon from task 13, scripts/sync-ios-version.mjs(+test) (watch target follows package.json).
   - Done when: paired iPhone + watch simulator build succeeds; the idle screen screenshot; sync script test covers both targets; `npm run check` and existing XCTests pass.
-  - Deps: 2 (+ M14-q1 if paid is needed), 13.
+  - Deps: 2 (free team works; else paused until he decides on paying), 13.
 - [ ] 15. [ios-engineer] `GymWatchCore` package (watch-side logic). Tests first (XCTest).
   - Files: ios/App/GymWatch Watch App/GymWatchCore/**.
   - Snapshot decode (v1, unknown fields ignored), offline rest countdown from `rest.endsAt`, offline Set done → `next` lookahead + "will sync", **persisted** event queue until acked (survives app relaunch), haptic schedule (10 s left, 0 s, Set done confirm), HR sample buffer (batched every ~5 s when reachable, kept in memory for the session only), link state.
@@ -791,6 +793,138 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Deps: 32.
 
 **Later, not in M14:** starting a workout from the watch, a complication / Smart Stack widget, head-motion use during rest, more head-counted moves (after Checkpoint L data).
+
+### M15 — Best-rep clips (planned 2026-11-17; release 1.17.0; builds AFTER M14)
+**Contract:** SPEC "M15 — Best-rep clips" (Goals, Changes to earlier contracts, Privacy, Data model, Accept), CLAUDE.md Privacy hard rule (as updated 2026-11-17) and Decision "M15 Best-rep clips" (2026-11-17), which wins where it is more specific. **No network request.** Nothing unblurred is ever written to storage; the ring buffer is memory only. All logic **tests first** (Vitest, made-up data; the repo is public, so **no real clip or frame of him is ever committed**; e2e uses the synthetic fake-camera clip). UI tasks: props in / callbacks out, render tests + 390×844 harness screenshots, text ≥ 20px, targets ≥ 56px; nothing new spoken or shown mid-set except the recording dot.
+
+**Do not start before** M14's verifier task (M14 task 31) has passed, except tasks 1 and 2 (paper / scratch page, no repo files), which may run any time. (M15-q1: he may ask for it in parallel with M14's watch track; then main re-plans the version numbers.)
+
+**Branch:** `m15-best-rep-clips`, cut from the M14 result. Subagents never commit.
+
+**Fit with the current code (skimmed 2026-11-17; re-check when M15 starts):** camera + MediaPipe in `src/pose/{camera,landmarker}.ts`; rep events from `src/core/repCounter.ts`, cues from the M5 focus/form modules (`src/core/focusScore.ts`, tempo T1); e1RM in `src/core/progress/e1rm.ts` (slice 1b); effort on `src/ui/screens/rest.ts`; camera switch on `src/ui/screens/preview.ts`; Summary `src/ui/screens/summary.ts`; local-only blobs precedent `src/data/progressPhotos/store.ts` + `LOCAL_ONLY_TABLES` in `src/data/backup.ts`; share precedent `src/ui/shareMonth.ts` (Web Share files / download) and M13's native share path; native bridge pattern `src/native/{health,speech}.ts` + `ios/App/App/Plugins/*`.
+
+**Order / parallel groups:**
+- **Any time:** 1 [pose] encoder/blur facts + spike ∥ 2 [ios] storage/share facts.
+- **G0 (after M14 verify):** 3 [main] types; 4 [main] deps + gitignore + agent-file line (after 1, 2).
+- **G1 (after 3), in parallel by owner:** core 5 → 6, 7 (∥ 5), 8; pose 9 → 10 → 11 (after 4, 5); ui 12, 13, 14, 15 (14 after 7); ios 16 (after 2, 3), 17 only if task 1 says so.
+- **G2:** 18 [main] version 1.17.0 → 19 [main] wiring (after 6, 8, 11, 12–16).
+- **G3:** 20 [ui] e2e ∥ 21 [ios] device/simulator evidence ∥ 22 [pose] fps evidence.
+- **G4:** 23 reviewer → 24 verifier → 25 main merge + ask → 26 🧍 Checkpoint M → 27 [social-media] Story pack → 28 [core] tune triggers.
+
+- [ ] 1. [pose-engineer] Facts + scratch spike: encoder path and blur cost (paper + a scratch page outside the repo; findings to main for the Decision).
+  - Check against current docs and measure: (a) **WebCodecs** `VideoEncoder`/`VideoDecoder` (H.264, keyframe control) and **MediaRecorder** (mp4/H.264, timeslices) in iOS Safari and in **WKWebView** (Capacitor app) on his iOS version; (b) a keyframe-aligned **ring buffer** of `EncodedVideoChunk`s (~8 s, keyframe every 1 s) vs MediaRecorder timeslices (can a slice be cut out and played on its own?); (c) an MP4 muxer library (licence, size, no network) for the export; (d) `PoseLandmarker` `outputSegmentationMasks` cost with `numPoses: 1` vs the separate selfie/multiclass `ImageSegmenter`, mask quality around arms and dumbbells; (e) pose-loop fps with the buffer armed, desktop Chromium + his iPhone (PWA) at 720p and 540p; (f) export time for a 6 s 1080×1920 clip with blur + overlay on his iPhone.
+  - Done when: each item VERIFIED (doc link or measurement) or NOT VERIFIED, with a verdict: **path A** WebCodecs ring buffer / **path B** MediaRecorder / **path C** native encoder needed in the iPhone app (→ task 17), the chosen muxer, mask source, buffer resolution.
+  - Deps: none (may run now).
+- [ ] 2. [ios-engineer] Facts: phone-only storage + share (paper; no repo files).
+  - Check and link: where WKWebView keeps IndexedDB and whether it is in an iCloud device backup; `Application Support` + `URLResourceValues.isExcludedFromBackup`; `@capacitor/filesystem` vs a small `GymClips` plugin (exclusion flag, large-file writes without base64 round trips); sharing an MP4 file URL via `UIActivityViewController` (Instagram Stories / "Save Video" appear?); file protection class; storage-pressure behaviour.
+  - Done when: each item VERIFIED / NOT VERIFIED with the chosen storage path for the iPhone app.
+  - Deps: none (may run now).
+- [ ] 3. [main] Shared types (no behaviour change).
+  - Files: src/core/types.ts.
+  - Per SPEC M15 data model: `ClipTrigger`, `ClipOverlay`, `ClipMeta`, `ClipSettings`, `ClipRules`, `RepWindow`, `ClipCandidate`; `AppRoute` + `'clips' | 'clip' | 'settings/clips'`.
+  - Done when: `npm run check` passes; no runtime change.
+  - Deps: M14 verified.
+- [ ] 4. [main] Dependencies, gitignore, agent-file line.
+  - Files: package.json (muxer per task 1; `@capacitor/filesystem` only if task 2 picks it), .gitignore (`story/clips/` for the Story pack's real clips), .claude/agents/pose-engineer.md ("Never record, store or upload frames" → the M15 exception, per CLAUDE.md Privacy).
+  - Done when: `npm run check` + `npm run build` pass; `git check-ignore story/clips/x.mp4` matches.
+  - Deps: 1, 2.
+- [ ] 5. [core-engineer] Trigger rules as data + decider. Tests first.
+  - Files: src/core/clips/rules.ts (data: lead-in ~1.5 s, tail ~0.5 s, clip 4–6 s, max 5 automatic per workout, priority `best` > `hard` > `form`, tempo bands from the M5 T1 numbers, buffer 8 s, fallback 540p/24 fps), src/core/clips/triggers.ts(+test).
+  - `repWindow(repEvent)` → `RepWindow` clamped to 4–6 s; `isCleanRep(rep, cuesFired, rule)` (no cue, no partial, reached far threshold, tempo in band); `betterForm(a, b)`; `decideSet({ candidates, setLog, bests, effort?, manual? }, kept, rules)` → keep / replace / drop with trigger; cap + replacement; manual never counted toward the cap; warm-ups never trigger `best`.
+  - Done when: tests cover each trigger, none firing, two triggers on one set (one clip, highest priority), cap full + higher priority replaces lowest, cap full + lower priority dropped, Hard tapped after the set, manual over cap, warm-up set; `npm run check`.
+  - Deps: 3.
+- [ ] 6. [core-engineer] Clip store + retention (Dexie). Tests first.
+  - Files: src/data/db.ts (next version: `clips` meta + `clipBlobs`), src/data/backup.ts (both in `LOCAL_ONLY_TABLES`), src/data/clips/store.ts(+test) (`addClip(meta, blob | fileRef)`, `listClips`, `star`, `deleteClip`, `deleteAll`, `purgeExpired(now)` = 7 days unless starred, storage-backend interface so the iPhone app passes the native store from task 16).
+  - Done when: round-trip tests (fake-indexeddb), purge edges (6 d 23 h kept, 7 d deleted, starred kept), backup export has no clip rows, restore leaves clips alone, delete removes blob/file via the backend; `npm run check`.
+  - Deps: 3.
+- [ ] 7. [core-engineer] Overlay layout + copy. Tests first.
+  - Files: src/core/clips/overlay.ts(+test), src/core/clips/copy.ts(+test).
+  - `overlayLayout(meta, unit, settings)` → text boxes for 1080×1920 inside the safe margins (data: top 250, bottom 340, sides 64); lines: exercise name, "40 kg × 8" (or none with Show weight off), "New best" / "Clean rep" / "Hard set" / nothing for manual, the mark. Copy for the Clips screen and Settings, incl. "Clips stay on this phone. Share sends a copy only where you pick. Choosing Save Video puts it in Photos, which may sync to iCloud." Every string passes `checkCopy`; no body/Health/HR/food numbers.
+  - Done when: layout tests (all boxes inside the margins, long names wrap, lb unit) + copy tests; `npm run check`.
+  - Deps: 3.
+- [ ] 8. [core-engineer] Privacy exclusions + What's New 1.17.0 + to-do topic. Tests first.
+  - Files: scan tests next to the brain-context builders (rules, Apple, Claude), src/core/todo/report.ts, the devlog writer, share stats (+tests) proving no clip field or id reaches them; src/data/whatsNew/pages.ts, src/data/todos/topics.ts (+ data tests).
+  - Pages: Best-rep clips (opt-in, the dot), Blur + silent, Clips screen + Share to Story, "Stays on this phone". Topic "Best-rep clips (Checkpoint M)": ask steps per the SPEC checkpoint list.
+  - Done when: exclusion tests + data tests (unique ids, valid routes, `checkCopy`) pass.
+  - Deps: 3, 6.
+- [ ] 9. [pose-engineer] Ring buffer + live encoder on the existing camera stream. Tests first where pure.
+  - Files: src/pose/clips/ringBuffer.ts(+test), src/pose/clips/recorder.ts(+test with a fake encoder).
+  - `arm(stream|video, rules)` / `disarm()`; encodes the camera frames the pose loop already gets (no second `getUserMedia`), keyframe every 1 s, keeps ~8 s; `snapshot(window)` → `ClipCandidate` (chunks from the keyframe before `start` to `end`, in memory); drop everything on disarm / hidden / leave; falls back to 540p/24 fps per rules when fps < 24.
+  - Done when: unit tests (eviction at 8 s, keyframe-aligned snapshot, snapshot after eviction → null, disarm clears, nothing touches storage APIs) pass; `npm run check`.
+  - Deps: 1, 3, 4, 5 (rules data).
+- [ ] 10. [pose-engineer] Person blur (fail closed).
+  - Files: src/pose/clips/blur.ts(+test), src/pose/landmarker.ts (mask option behind a flag, only while armed or exporting, per task 1).
+  - `blurFrame(frame, mask | null, strength)` → canvas frame: tracked person sharp, rest blurred (Light/Medium/Strong radii as data from task 5's rules); **no mask → whole frame blurred**; mask edges feathered.
+  - Done when: unit test for the fail-closed path; harness screenshot of a synthetic two-figure frame at each strength (second figure unreadable at Light); `npm run check`.
+  - Deps: 1, 5, 9.
+- [ ] 11. [pose-engineer] Export pipeline (runs during rest, off the pose loop).
+  - Files: src/pose/clips/export.ts(+test).
+  - `exportClip(candidate, { strength, sound, drawOverlay })` → MP4 `Blob` 1080×1920 H.264: decode → mask (re-run segmentation on the decoded frames or masks kept with the chunks, per task 1) → blur → `drawOverlay(ctx)` (from task 12) → encode → mux; cancellable when the next set starts; yields so the UI stays responsive.
+  - Done when: a test exports a synthetic candidate to a playable 1080×1920 MP4 (duration within 4–6 s, no audio track by default); `npm run check`.
+  - Deps: 9, 10.
+- [ ] 12. [ui-engineer] Overlay painter.
+  - Files: src/ui/clips/overlayPainter.ts(+test).
+  - Draws task 7's layout on a 1080×1920 canvas: tokens, the brand mark (original, from M13), text with a dark scrim for legibility.
+  - Done when: render test + a 1080×1920 PNG of the overlay on a grey frame (screenshot), boxes inside the margins.
+  - Deps: 7.
+- [ ] 13. [ui-engineer] Arm switch, recording dot, "Save last rep".
+  - Files: src/ui/screens/preview.ts(+test) ("Record best reps" switch, off each workout, one line "Clips stay on this phone. Others are blurred."), the camera screen module under src/ui (dot + "Clips" text while armed, top corner, not over the count), src/ui/screens/rest.ts(+test) ("Save last rep" ≥ 56px, "Saved" state; shown only when armed and a candidate exists).
+  - Done when: render tests (off by default, dot only when armed, Save last rep hidden when not armed); 390×844 screenshots of preview, camera with the dot, Rest with the button.
+  - Deps: 3.
+- [ ] 14. [ui-engineer] Clips screen + clip detail + Summary card.
+  - Files: src/ui/screens/clips.ts(+test), src/ui/screens/clip.ts(+test), src/ui/screens/summary.ts(+test), a css file.
+  - List newest first (thumbnail, exercise, date, trigger label, star, "Deletes in N days" unless starred); detail: player (muted, loop), Star, Delete (confirm), **Share**, the Save Video / iCloud Photos line; empty state; Summary card "2 clips saved" → Clips.
+  - Done when: render tests (empty, list, starred, expiring); 390×844 screenshots of list, detail, Summary card.
+  - Deps: 3, 7.
+- [ ] 15. [ui-engineer] Settings → Clips.
+  - Files: src/ui/screens/clipSettings.ts(+test).
+  - Blur Light / Medium / Strong (no off), Sound (off; first on → `onRequestMic`), Show weight (on), what is kept and for how long, "Delete all clips" (confirm).
+  - Done when: render tests per state; 390×844 screenshot.
+  - Deps: 3.
+- [ ] 16. [ios-engineer] Native clip storage + share.
+  - Files: per task 2: ios/App/App/Plugins/GymClips/** (+ `GymClipsCore` XCTests) or `@capacitor/filesystem` use, src/native/clips.ts(+test) implementing task 6's backend (write to `Application Support/Clips` with `isExcludedFromBackup`, read URL for playback, delete, list, `share(fileRef)` via `UIActivityViewController`). Behind `isNative()` + plugin check; errors → "Couldn't save the clip." and nothing kept.
+  - Done when: XCTests (exclusion flag set on every written file, delete removes the file) + bridge tests with a fake; simulator build.
+  - Deps: 2, 3, 6.
+- [ ] 17. [ios-engineer] (Only if task 1 says path C) Native encoder fed by the web view.
+  - Files: ios/App/App/Plugins/GymClipEncoder/**, src/native/clipEncoder.ts(+test); same `recorder.ts` interface so wiring doesn't change.
+  - Done when: XCTests + simulator run at ≥ 24 fps pose loop on the fake stream; else marked "not needed" with task 1's verdict.
+  - Deps: 1, 9.
+- [ ] 18. [main] Version 1.17.0.
+  - Files: package.json (`version`), via `scripts/sync-ios-version.mjs` for iOS + watch targets.
+  - Done when: `npm run build` shows 1.17.0; the sync script reports 1.17.0.
+  - Deps: 8.
+- [ ] 19. [main] Wiring.
+  - Files: src/ui/app.ts, src/main.ts.
+  - Arm switch → `recorder.arm` on the pose stream; rep events → `repWindow` → last-rep / best-form candidates; SET_DONE + bests → `decideSet`; effort Hard on Rest → re-decide; "Save last rep" → manual; kept → `exportClip` during rest → store (Dexie or native backend) → Summary count; next set / Finish / hidden → drop candidates + cancel export; `purgeExpired` on launch and on opening Clips; routes `clips`, `clip`, `settings/clips`; share via the M13 share helper with the MP4 file.
+  - Done when: `npm run check`; manual 390×844 run with the fake camera: arm → reps → a clip appears on Clips and plays; disarmed run creates nothing.
+  - Deps: 5, 6, 8, 11, 12, 13, 14, 15, 16 (17 if built).
+- [ ] 20. [ui-engineer] E2E with the fake camera.
+  - Files: e2e/clips.spec.ts, e2e helpers (fake native `GymClips`, stubbed `navigator.share`), any existing spec whose preview/Rest selectors moved.
+  - Covers the SPEC M15 E2E list; every spec asserts no off-device request.
+  - Done when: passes 3× in a row; full `npm run e2e` green.
+  - Deps: 19.
+- [ ] 21. [ios-engineer] Simulator / device evidence: a kept clip's file is in Application Support/Clips with the backup-exclusion flag, plays in the app, Share opens the share sheet with the MP4; nothing written to Photos. Notes + screenshots for the verifier.
+  - Deps: 19.
+- [ ] 22. [pose-engineer] fps evidence: pose-loop fps with the recorder armed vs off on the fake-camera run, and on his iPhone (PWA or app, installed by main; notify him if the phone must be plugged in); export time per clip. Numbers into the PR notes.
+  - Done when: armed ≥ 24 fps on both, or the 540p fallback is shown to restore it.
+  - Deps: 19.
+- [ ] 23. [reviewer] Review the M15 diff: off by default every workout; dot + text while armed; one camera stream; ring buffer memory-only and dropped on disarm/hidden/leave; nothing unblurred written; blur fails closed, no zero strength; no audio unless switched on; clips only in `LOCAL_ONLY_TABLES` / excluded native files; absent from backup, dev log, copy report, brain/Claude contexts, share stats; no network request; no Photos write by the app; triggers + thresholds as data; ownership; tests-first evidence; no real clip or frame in the repo.
+  - Deps: 20, 21, 22.
+- [ ] 24. [verifier] Verify milestone against SPEC acceptance criteria (M15): `npm run check`, full `npm run e2e`, `npm run build` (1.17.0), iOS simulator build + XCTests, tasks 21–22 evidence, the 390×844 screenshots and the 1080×1920 export frame listed in SPEC, the 1.17.0 tour; evidence into Verification evidence → M15.
+  - Deps: 23.
+- [ ] 25. [main] merge + ask to push (his call). Install on his iPhone (notify him when the phone must be plugged in).
+  - Deps: 24.
+- [ ] 26. 🧍 **Checkpoint M** (gym): per SPEC M15 Accept: a workout with clips on, blur checked on the people behind him, one clip shared to a private Story or Close Friends. Feedback through the "Best-rep clips" to-do or `/feedback`.
+  - Deps: 25.
+- [ ] 27. [social-media] Story pack template from clips **he picks** (nothing posted).
+  - Output: a Story sequence (order, captions, cover frame, text inside the safe margins) using his clips copied by him into the gitignored `story/clips/`; only the template/captions may be committed, never a clip or a frame of him. Main dispatches the user-level `social-media` agent.
+  - Done when: he has the pack on his Mac and says whether he'd post it.
+  - Deps: 26.
+- [ ] 28. [core-engineer] Tune trigger rules from Checkpoint M feedback (too many / too few / wrong reps). Tests first (new cases from his dev-log numbers, never clips).
+  - Files: src/core/clips/rules.ts(+tests). Thresholds change as data only; Decision line with before/after.
+  - Deps: 26.
+
+**Later, not in M15:** a spoken "save that" during sets (needs the mic in workouts, M15-q2), trimming/editing clips in the app, multi-clip Reels, music, saving to Photos by the app.
 
 ### M12 — slice 1c: What's New tour + To-do guides + one copy report (planned 2026-11-16)
 **Contract:** SPEC "M12" → "What's New tour + To-do guides (slice 1c)" + slice 1c Accept, the approved section "Slice 1c" of `docs/superpowers/specs/2026-11-16-coach-tab-chat-design.md`, and Decision "M12 slice 1c (his yes, 2026-11-16)", which wins where it is more specific. **No network** (the report leaves only through the clipboard on his tap), no new plugin, no new permission. All logic is **tests first** (Vitest, made-up data only; the repo is public). UI tasks are props in / callbacks out with render tests + 390×844 harness screenshots, tokens + motion helpers from slice 1 task 8, text ≥ 20px, targets ≥ 56px, nothing shown or spoken during a set.
@@ -3202,6 +3336,22 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-17: **M15 Best-rep clips (his words, 2026-11-17: "Don't forget about social engineer job, it can record in the app while i'm working out, randomize record of the perfect lift up weight or anything to be good of public via instagram"; on the no-recording rule: "you can change that but need to save only on my phone not on cloud").** CLAUDE.md's Privacy hard rule was updated by main the same day to allow exactly this (opt-in, visible dot, others blurred, phone-only storage excluded from iCloud backup, shared only by him via the share sheet). New milestone **M15** in SPEC (after M14), release **1.17.0**, branch `m15-best-rep-clips` cut from the M14 result, ends at 🧍 **Checkpoint M**. SPEC §6 "recording/saving video" is changed (noted there and in M15 "Changes to earlier contracts"). Plan under "Current milestone plan → M15". **Planner calls he can correct:**
+  - **Order: after M14** (default). Running it in parallel with M14's watch track is possible (M15-q1) but not planned.
+  - **Opt-in per workout, every workout:** the "Record best reps" switch on the camera preview / Start screen starts **off every workout** (not remembered), so filming is always a fresh choice. While armed a red dot **plus the word "Clips"** shows on the camera screen (not colour alone). Clips need the camera running for that set (rep events drive everything); camera-off sets never record.
+  - **One camera:** the recorder reads the same `MediaStream` / video element the pose loop uses. The **ring buffer (~8 s) lives in memory only**, never written anywhere, dropped on disarm, leave, Finish and `visibilitychange` hidden.
+  - **Window per rep:** the clip is cut around a **counted rep event** (rep start − ~1.5 s lead-in … rep end + ~0.5 s, clamped to 4–6 s; data), not "the last 8 s at Set done", so walking to the phone never ends up in a clip. During a set the app holds two in-memory candidates: the **last rep** and the **best-form rep** so far.
+  - **Triggers (data in `src/core/clips/rules.ts`, provisional until Checkpoint M):** `form` = a rep with no cue fired, full range (reached the far threshold, no partial), tempo inside the exercise's tempo band (the M5 T1 numbers) — the best such rep of the set; `best` = the set beats his best weight or e1RM for that exercise (slice 1b e1RM; warm-ups excluded) → the last rep; `hard` = he taps effort **Hard** on Rest → the last rep (decided after the set, so the candidate is held until the next set starts or the workout ends); `manual` = **"Save last rep"** on the Rest screen. **At most one automatic clip per set; at most 5 automatic clips per workout** (data); when full, a higher-priority trigger (`best` > `hard` > `form`) replaces the lowest-priority one of this workout. Manual saves are always kept and don't count toward the 5. "Randomize" in his words = whichever reps qualify; no random sampling.
+  - **No voice "save that":** the slice 2 mic is chat-only and never in a workout screen (Decision "M12 slices 1b + 2"), which wins over the brief; the Rest button replaces it (M15-q2).
+  - **Blur fails closed:** everyone except the tracked person is blurred using the **pose landmarker's own segmentation mask** for the one tracked pose (no second model unless task 1 shows the mask is too costly or too coarse, then MediaPipe's selfie/multiclass segmenter); a frame with no mask is **fully blurred**. Strength Light / Medium (default) / Strong; **no zero** (M15-q5). The blur, overlay and encode run on the **kept clip only, during rest**, so the pose loop pays only for the raw ring-buffer encode; **no unblurred frame is ever written to storage**.
+  - **Silent by default:** no audio track; a "Sound" switch (off) in Settings → Clips asks for the microphone on first switch-on (M15-q4).
+  - **Storage only on the phone:** PWA = Dexie (next version after slice 2's v11, i.e. v12 unless taken) `clips` (metadata) + `clipBlobs` (video), both in `LOCAL_ONLY_TABLES`. iPhone app = the video as a file in **Application Support/Clips with `isExcludedFromBackup`** (WKWebView's IndexedDB lives under Library and would go into an iCloud device backup), metadata in Dexie. Never in Back up files, the dev log, the copy report, any coach/brain/Claude context or share stats; never uploaded by the app. **Auto-delete after 7 days unless starred** (on launch and on opening Clips). The app **never saves to the Photos app** (iCloud Photos may sync it); the clip screen says he can still pick "Save Video" in the share sheet himself.
+  - **Export:** H.264 MP4, **1080×1920 (9:16)**, overlay = exercise name, weight × reps in his unit ("Show weight" on by default, M15-q3), "New best" or a form line ("Clean rep"), the Gym Clean mark; Instagram safe margins (top ~250 px, bottom ~340 px kept clear; data). No numbers about body, Health, heart rate or food. Share only on his tap (native share sheet in the iPhone app, Web Share with a file in the PWA, download fallback).
+  - **Clips screen for every user** (not owner-only): it is opt-in and each phone keeps its own clips (his wife's phone shows only hers). Reached from the workout Summary ("2 clips saved") and Settings → Clips; play, star, delete, share, "Delete all clips".
+  - **Performance:** the pose loop must stay **≥ 24 fps** with the recorder armed (measured on the fake-camera run and on his iPhone); if not, the buffer drops to 540p / 24 fps (data) before anything else changes. Task 1 picks the encoder path (WebCodecs ring buffer, MediaRecorder timeslices, or a native encoder fed by the web view if WKWebView has neither).
+  - **Ownership:** recorder, buffer and blur live in **`src/pose/clips/**`** (pose-engineer's existing `src/pose/**`, so the CLAUDE.md table needs no change). `.claude/agents/pose-engineer.md` still says "Never record, store or upload frames": main updates that line to the M15 exception (config, main's call) before task 8.
+  - **Story pack:** the user-level `social-media` agent builds a Story pack template from clips **he picks** after Checkpoint M; **nothing is posted** and his clips are **never committed** (the repo is public): they go in a gitignored folder on his Mac.
+
 - 2026-11-17: **M14 Wrist and ears (his words, 2026-11-17: "Add it and I need apple watch app too").** After being told AirPods head motion and an Apple Watch app were parked / out of scope, he asked for both. New milestone **M14** in SPEC (after M13), release **1.16.0**, branch `m14-wrist-ears` from the M13 result, ends at 🧍 **Checkpoint L** (gym, watch + AirPods). SPEC §6, M9 "Later" and M11 "What stays out" are changed (noted in each and in M14 "Changes to earlier contracts"). Plan under "Current milestone plan → M14". **iPhone app only.** **Planner calls he can correct:**
   - **The phone stays the brain.** The watch is a remote: it sends `SET_DONE` / `START_SET` (Start now) / `EXTEND_REST` (+30 s) / `PAUSE` / `RESUME` / `SKIP_EXERCISE` (with a confirm) and shows phone snapshots. These are existing reducer events, so **no session reducer change**. Events carry an id + the snapshot rev; the phone dedupes and drops stale ones (a Set done tapped on both counts once). Workouts **start on the phone only**; starting from the watch, complications and standalone watch use are later.
   - **Link drops:** the watch keeps the rest countdown, shows a one-step lookahead after an offline Set done, and keeps a **persisted** event queue until the phone acks; the next snapshot wins. Locked-phone handling (mirrored workout session keeping the iPhone app and its WebView alive) is only promised if the facts task proves it; until then the supported setup is the phone unlocked with the screen kept on (M9), in a pocket or face down.
@@ -3213,6 +3363,7 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
   - **Motion permission** asked on first switch-on in Settings after a why page; **not** added to the M13 first-launch flow (keeps first launch short).
   - **Fixtures:** head frames are never stored; the **only** raw export is the owner-mode clip recorder (in memory → a JSON file via the share sheet on his tap). Synthetic clips first (ios-engineer, `fixtures/headmotion/synthetic/`), his clips per the SPEC guide at Checkpoint L or earlier (task 28); thresholds are provisional until then, like M4 on synthetic fixtures.
   - **Paid account:** if the free Personal Team can't install/run the watch app, the watch tasks wait for **M14-q1** (US$99/year, his call); the AirPods track and the core watch logic still build. No Dexie version change (optional `SetLog` fields + settings rows `'watch'`, `'headMotion'`).
+  - **Answered 2026-11-17.** **M14-q1:** "let's try the free version, and I will decide the pay in the future" → build with the free Personal Team; task 2's spike decides. If the free team can't run the watch app, the watch-only tasks (14–19, 27, watch half of 24) pause and main asks him again with the facts; the AirPods track and the core watch logic (5–7, 20, 21) proceed. **M14-q2:** "I got series 9 and pro 2" → **Apple Watch Series 9** (runs current watchOS; `HKWorkoutSession` heart rate) and **AirPods Pro 2** (head tracking supported). Task 1 confirms both against Apple's docs; we target his devices only (no older-model fallbacks).
 
 - 2026-11-17: **M13 Published look (his yes, 2026-11-17).** Wongsaton: "Help me think about the app, how to approve or make it ready to use as a public app (not public right now but just need the app look like startup and published app on app store)". Audience: "my friends seeing it on my instagram and my wife using it daily". Approval: "Yes, plan it and give me options to turn on owner mode". New milestone **M13** in SPEC; plan under "Current milestone plan → M13". It builds **after M12 slices 1b and 2** on its own branch `m13-published-look` from the M12 result; release **1.15.0** with tour pages; ends at 🧍 **Checkpoint K** (he and his wife try a fresh install; he posts if he wants). The app is not being published: no paid Apple account, TestFlight, App Review, store labels, accounts, sync or analytics.
   - **Owner mode = option A (his pick, 2026-11-17: "Go with option A").** Tap the version line in Settings → About **7 times** to show an "Owner tools" switch. **Fresh installs start off; installs from before 1.15.0 (sessions or to-do answers already there, i.e. his phone) start on**, decided once on the first launch without a `settings 'ownerMode'` row; the row is local and backed up. Off hides: the To-dos card / list / guides / Copy report, the re-sign reminder, the Developer log section, the build hash (About and tour), the tour's "Added to your to-dos" page and the slice 2 dev eval screen; a user sees "Version 1.15". On = everything exactly as before M13. Options B (a visible switch at the bottom of Settings) and C (long-press the logo on Today) were not chosen.
@@ -4102,8 +4253,14 @@ Verifier on `m12-coach-tab` at 9ecd50c (reviewer PASS: slice 1 after 85fb908, sl
 
 ## Blockers / questions for Wongsaton
 - **New (M14 Wrist and ears, planned 2026-11-17):**
-  - **(M14-q1, BLOCKING for the watch tasks only, and only if needed) Paid Apple account for the watch app?** M14 tasks 1–2 check (Apple's docs + a blank watch app on your iPhone and watch) whether your free Apple ID can install and run a watch app, and how the 7-day re-sign applies. If it can't: pay **US$99/year** for the Apple Developer Program, or pause the watch part? **Default: pause the watch part and ask you again with the facts.** The AirPods part works on the free account either way.
-  - **(M14-q2, not blocking; needed for task 2) Your devices.** Which Apple Watch model and watchOS version, and which AirPods (Pro 2, 3, 4, Max)? Head tracking needs a model with spatial audio head tracking. **Default:** we target the oldest watchOS current Xcode supports and check on your devices in task 2.
+  - ~~(M14-q1) Paid Apple account for the watch app?~~ **Answered 2026-11-17: "let's try the free version, and I will decide the pay in the future".** We build with the free Personal Team; M14 task 2 (a blank watch app on your iPhone + Series 9) decides. If the free team can't run the watch app, the watch part pauses and we ask you again with the facts and the US$99/year cost; the AirPods part goes ahead.
+  - ~~(M14-q2) Your devices?~~ **Answered 2026-11-17: "I got series 9 and pro 2"** → Apple Watch Series 9 and AirPods Pro 2 (head tracking supported).
+- **New (M15 Best-rep clips, planned 2026-11-17; none blocking, defaults get built):**
+  - **(M15-q1) When?** Default: **after M14** (Checkpoint L first). If you want clips sooner, M15 can run in parallel with M14's watch track (different files; only the version number and the What's New list collide), but it then delays the AirPods/watch fixes.
+  - **(M15-q2) "Save that!" by voice?** Not in M15: the slice 2 mic is chat-only and never listens during a workout (Decision "M12 slices 1b + 2"). M15 gives a **"Save last rep" button on the Rest screen** instead. A spoken "save that" would mean the mic listening during sets; say if you want that later.
+  - **(M15-q3) Weight on the clip?** Default: the Story overlay shows **weight × reps** (you asked for "the perfect lift up weight"), with a "Show weight" switch per clip and in Settings → Clips (on by default). Say if it should start off.
+  - **(M15-q4) Gym sound?** Default: clips are **silent**; a "Sound" switch in Settings → Clips (off) adds the mic track and asks for the microphone then. Gym music in a clip can get muted by Instagram. Say if you'd rather we leave sound out entirely.
+  - **(M15-q5) Blur can't go to zero.** Blur strength is Light / Medium (default) / Strong; there is no "off", because other people in the gym didn't agree to be filmed. Say if you need a "no blur" option for an empty gym (it would still default to Medium each workout).
 - **New (M13 Published look, planned 2026-11-17; not blocking):**
   - ~~(M13-q1) Keep the name "Gym Clean"?~~ **Answered 2026-11-17: keep it** ("Keep it Gym Clean"). The name stays behind one constant anyway.
   - Owner mode: **answered 2026-11-17, option A** (7 taps on the version line; Decision "M13 Published look").

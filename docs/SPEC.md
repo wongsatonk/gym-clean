@@ -1985,7 +1985,10 @@ ears" (2026-11-17) and can be corrected. Branch `m14-wrist-ears`, cut from the M
 **Blocking for the watch part only (M14-q1):** whether a free Personal Team Apple ID can install and run a
 watchOS companion (and with which limits) is checked first against current Apple docs and a blank-target test
 on his devices. If it needs the paid Apple Developer Program (US$99/year), the watch tasks wait for his call;
-the AirPods part runs on the free account either way.
+the AirPods part runs on the free account either way. **Answered 2026-11-17:** "let's try the free version, and I
+will decide the pay in the future" → build with the free Personal Team; if the spike shows it can't run the watch
+app, the watch-only work pauses and he is asked again. **His devices** ("I got series 9 and pro 2"): **Apple Watch
+Series 9** (current watchOS, workout-session heart rate) and **AirPods Pro 2** (head tracking supported).
 
 #### Goals — Apple Watch app
 1. **A remote on the wrist; the phone stays the brain.** A watchOS companion (SwiftUI, single-target watch
@@ -2174,6 +2177,121 @@ Recovery rule (data, `src/core/watch/hrRules.ts`, tuned at Checkpoint L): after 
   when he looks around and stay quiet when still; calf raise / shrug counts; head-motion clips recorded per the
   guide. He reports through the "Wrist and ears" to-do or `/feedback`.
 
+### M15 — Best-rep clips (approved 2026-11-17; builds after M14; release 1.17.0)
+Wongsaton (2026-11-17): **"Don't forget about social engineer job, it can record in the app while i'm working out,
+randomize record of the perfect lift up weight or anything to be good of public via instagram"**, and on the
+no-recording rule: **"you can change that but need to save only on my phone not on cloud"**. CLAUDE.md's Privacy
+hard rule was changed the same day to allow exactly this feature. Planner calls are in Decision "M15 Best-rep
+clips" (2026-11-17) and can be corrected. Branch `m15-best-rep-clips`, cut from the M14 result (default order:
+after M14; M15-q1). Works in the PWA and the iPhone app; each phone keeps its own clips.
+
+#### Goals
+1. **Opt-in per workout.** A **"Record best reps"** switch on the camera preview / Start screen, **off at the
+   start of every workout**. While armed, the camera screen shows a **red dot and the word "Clips"** (not colour
+   alone). Clips are made only on sets where the camera is running. The recorder uses the **same camera stream**
+   as the rep counter; no second camera, no extra permission (except Sound, goal 4).
+2. **Rolling buffer, kept only on a trigger.** The last **~8 s** of video are held **in memory only** and dropped
+   on disarm, leaving the camera, Finish or the app going to the background. A clip (**4–6 s: the rep plus a
+   ~1.5 s lead-in**, cut around the counted rep, data) is kept only when a trigger fires:
+   - **Clean rep** (`form`): no form/focus cue fired, full range (far threshold reached, no partial), tempo inside
+     the exercise's tempo band; the best such rep of the set;
+   - **New best** (`best`): the set beats his best weight or e1RM for that exercise (warm-ups excluded) → the
+     set's last rep;
+   - **Hard set** (`hard`): he marks the set's effort **Hard** on the Rest screen → the set's last rep;
+   - **Save last rep** (`manual`): a button on the Rest screen keeps the last rep of the set just done.
+   At most **one automatic clip per set** and **5 automatic clips per workout** (data); when full, `best` >
+   `hard` > `form` replaces the lowest of this workout. Manual saves are always kept. Triggers and thresholds are
+   data in `src/core/clips/rules.ts`, tuned after Checkpoint M. (A spoken "save that" is not in M15: the slice 2
+   mic never listens during a workout.)
+3. **Others blurred, always.** Everyone except the tracked person is blurred (person segmentation of the tracked
+   pose; the rest of the frame blurred). Strength **Light / Medium (default) / Strong**; there is **no off**. A
+   frame without a person mask is **blurred entirely**. Blur, overlay and encoding run on the kept clip during
+   rest; **no unblurred frame is ever written to storage**.
+4. **Silent by default.** No audio track. Settings → Clips → **Sound** (off) adds the microphone track; the
+   microphone permission is asked on first switch-on.
+5. **Story-ready export.** H.264 MP4, **1080×1920 (9:16)**, with an overlay inside Instagram's safe margins
+   (top ~250 px and bottom ~340 px kept clear; data): exercise name, **weight × reps** in his unit ("Show weight",
+   on by default, per clip and in Settings), **"New best"** / **"Clean rep"** / **"Hard set"** (nothing for a
+   manual save), and the Gym Clean mark. No body, Health, heart-rate or food numbers.
+6. **Clips screen** (every user; opt-in, so not owner-only): from the workout **Summary** ("2 clips saved") and
+   **Settings → Clips**. List newest first with trigger, date and "Deletes in N days"; a clip opens to **play**
+   (muted, looping), **star**, **delete**, **Share**. Settings → Clips: blur strength, Sound, Show weight, what is
+   kept and for how long, **Delete all clips**.
+7. **Sharing is his tap only.** Share hands the MP4 to the native share sheet (iPhone app) or Web Share with a
+   file (PWA), download as the fallback, so he can pick Instagram (Story, Close Friends). The app **never saves
+   to the Photos app** because iCloud Photos may sync it; the clip screen says so: "Clips stay on this phone.
+   Share sends a copy only where you pick. Choosing Save Video puts it in Photos, which may sync to iCloud."
+8. **Performance.** With the recorder armed the pose loop stays **≥ 24 fps**; if not, the buffer drops to 540p /
+   24 fps (data). Encoder path (WebCodecs ring buffer, MediaRecorder, or a native encoder in the iPhone app if
+   WKWebView has neither) is decided by the facts task against current docs.
+9. **Story pack.** After Checkpoint M the `social-media` agent builds a Story pack template from clips he picks;
+   nothing is posted, and no clip or frame of him is committed (the repo is public).
+10. **What's New 1.17.0:** Best-rep clips, blur + silent, Clips screen + Share, "stays on this phone".
+
+#### Changes to earlier contracts
+- **§6** "recording/saving video": opt-in best-rep clips are in scope (see "Changed by M15" there).
+- **CLAUDE.md Privacy** (changed by main 2026-11-17) allows this feature only, as described here.
+- **M3 / pose-engineer rule** "never record, store or upload frames": the recorder in `src/pose/clips/` may hold
+  frames in memory and write **blurred** clips to local storage; still never upload.
+- **M13 share images** ("no per-lift weights"): a clip may show weight × reps because he asked for it and shares
+  it himself; Share month is unchanged.
+- **M12 slice 2 mic**: unchanged (chat only); no voice trigger in workouts.
+
+#### Non-goals
+Recording whole sets or workouts; any upload, sync or cloud storage; saving to Photos by the app; posting to
+Instagram or any API integration; editing/trimming, music or multi-clip Reels in the app; clips of other people;
+clips in backups, the dev log, the copy report or any coach/brain/Claude context; a voice "save that".
+
+#### Privacy
+- Off by default every workout; visible dot + "Clips" while armed; the ring buffer is memory only.
+- Others blurred (fails closed); no audio unless he turns Sound on.
+- PWA: IndexedDB tables `clips` + `clipBlobs`, both local-only (never in Back up files; a restore leaves them).
+  iPhone app: the video file in **Application Support/Clips, excluded from iCloud backup**; metadata in IndexedDB.
+- Never uploaded, synced or saved to Photos by the app; never in the dev log, copy report, share stats or any
+  coach/brain/Claude context. **Auto-deleted after 7 days unless starred.** No network request.
+
+#### Data model (adds to §4; final shape in `src/core/types.ts`)
+```ts
+type ClipTrigger = 'form' | 'best' | 'hard' | 'manual';
+type ClipOverlay = { exerciseName: string; weightKg?: number; reps: number; label?: 'New best' | 'Clean rep' | 'Hard set' };
+type ClipMeta = { id: string; sessionId: string; exerciseId: string; setIndex: number; createdAt: number;
+  trigger: ClipTrigger; durationMs: number; width: 1080; height: 1920; hasAudio: boolean; starred: boolean;
+  overlay: ClipOverlay; storage: { kind: 'idb' } | { kind: 'file'; ref: string } };   // Dexie 'clips'
+// Dexie 'clipBlobs': { id: string; blob: Blob }  (PWA only). Both in LOCAL_ONLY_TABLES; next Dexie version.
+type ClipSettings = { blur: 'light' | 'medium' | 'strong'; sound: boolean; showWeight: boolean }; // settings 'clips'
+type RepWindow = { start: number; end: number; repIndex: number };   // stream ms, 4–6 s
+type ClipCandidate = { window: RepWindow; kind: 'last' | 'bestForm'; score?: number };  // memory only
+type ClipRules = { bufferMs: number; leadInMs: number; tailMs: number; minMs: number; maxMs: number;
+  maxAutoPerWorkout: number; priority: ClipTrigger[]; retentionDays: number;
+  blurPx: Record<ClipSettings['blur'], number>; safeMargins: { top: number; bottom: number; side: number };
+  fallback: { height: number; fps: number } };
+// AppRoute gains: 'clips' | 'clip' | 'settings/clips'
+```
+
+#### Accept
+- Facts task first: encoder path in iOS Safari + WKWebView, muxer choice, mask source and its fps cost; iOS
+  storage location and backup exclusion; share of an MP4 file to Instagram via the share sheet.
+- Unit tests, written first (made-up data): rep window clamping; each trigger, none, two on one set (one clip,
+  highest priority), cap + replacement, manual over the cap, Hard after the set, warm-ups never `best`; ring
+  buffer eviction and keyframe-aligned snapshots, disarm clears, no storage API touched; blur fails closed;
+  overlay boxes inside the safe margins (kg and lb, long names); retention (7 days, starred kept); clip tables
+  absent from backups and untouched by restore; no clip field in any brain context, dev log, copy report or
+  share stats; copy passes `checkCopy`.
+- Swift (iPhone app): every written clip file has the backup-exclusion flag; delete removes the file.
+- E2E (390×844, fake camera with the synthetic clip, no off-device request): the switch is off on a new workout
+  and nothing is recorded; armed → dot + "Clips" visible; counted reps → after the set a clip appears on Clips
+  and plays (1080×1920, no audio track); "Save last rep" keeps one; star, delete and Delete all work; Share calls
+  the share path with an MP4 file; a backup file contains no clip; a clip older than 7 days is gone on launch
+  and a starred one stays; the next workout starts with the switch off.
+- Performance: pose loop ≥ 24 fps armed vs off on the fake-camera run and on his iPhone (or the fallback shown
+  to restore it); export time per clip noted.
+- 390×844 screenshots: preview with the switch, camera with the dot, Rest with "Save last rep", Clips list, clip
+  detail, Settings → Clips, Summary card; one 1080×1920 export frame (synthetic figures, blur visible). Version
+  1.17.0 with What's New pages.
+- 🧍 **Checkpoint M** (gym): he records a workout with clips on, checks the blur on the people behind him, and
+  shares one clip to a private Story or Close Friends. He reports how many clips were kept and whether they
+  were the right reps, through the "Best-rep clips" to-do or `/feedback`.
+
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).
@@ -2318,6 +2436,13 @@ session, with live heart rate from a watch workout session), per-set heart-rate 
 of gym sessions to Apple Health (off by default), and **AirPods head motion** (head-still / neck cues and
 head-counted reps) are in M14. Still out: a standalone watch app, heart-rate zones or any health score,
 medical wording, other Health writes, and all of it in the PWA.
+
+**Changed by M15 (approved 2026-11-17: "you can change that but need to save only on my phone not on cloud"):**
+"recording/saving video" now allows exactly one thing: opt-in **best-rep clips** (M15), short, with other people
+blurred, silent by default, stored only in the app's storage on the phone (excluded from iCloud backup), deleted
+after 7 days unless starred, and shared only by him through the system share sheet. Still out: recording whole
+sets or workouts, any upload or sync by the app, saving to the Photos app by the app, clips in backups, the dev
+log or any coach context. The M4c developer log still stores pose numbers only.
 
 **PROPOSED change (M11, 2026-11-16; applies only if Wongsaton approves M11-q1):** reading a listed set of
 Apple Health types in the native app (body mass, workouts, active energy, sleep, resting HR, HRV — including
