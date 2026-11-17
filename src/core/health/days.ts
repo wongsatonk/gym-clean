@@ -13,12 +13,17 @@
 import { localDate } from '../trainer/plan';
 import type { HealthDay, HealthWorkout } from '../types';
 import { HEALTH_RULES, type HealthRules } from './rules';
+import { WEIGH_IN_CUTOFF_HOUR } from './weighIns';
 
 /** One sample at an instant (epoch ms). */
 type Point = { start: number; source: string; bundleId?: string };
 export type HealthMassPoint = Point & { kg: number };
 export type HealthRestingHrPoint = Point & { bpm: number };
 export type HealthHrvPoint = Point & { ms: number };
+/** M12 1b: one body-fat sample in percent (0–100, e.g. 22.4), not HealthKit's 0–1 fraction. */
+export type HealthBodyFatPoint = Point & { pct: number };
+/** M12 1b: one lean-body-mass sample in kg. */
+export type HealthLeanMassPoint = Point & { kg: number };
 /** Active energy of one local day (HealthKit's de-duplicated daily sum across sources). */
 export type HealthEnergyDayRead = { date: string; start: number; kcal: number };
 /** One sleep session from one source: asleep stages summed by the plugin. */
@@ -41,12 +46,17 @@ export type HealthRead = {
   sleep?: readonly HealthSleepRead[];
   restingHr?: readonly HealthRestingHrPoint[];
   hrv?: readonly HealthHrvPoint[];
+  /** M12 1b; only present when its switch is on. */
+  bodyFat?: readonly HealthBodyFatPoint[];
+  /** M12 1b; only present when its switch is on. */
+  leanMass?: readonly HealthLeanMassPoint[];
 };
 
 const MIN = 60_000;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ok = (n: number): boolean => Number.isFinite(n);
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /**
  * Wake-up date → minutes asleep of that date's main night. Sessions of one source closer than
@@ -193,6 +203,34 @@ function workoutsByDate(list: readonly HealthWorkout[]): Map<string, HealthWorko
   return out;
 }
 
+/**
+ * Date → the day's pick of a scale value, by the weigh-in rule (weighIns.ts `dailyWeighIns`): the
+ * earliest valid reading before noon, else the earliest of that local date. Two readings at the
+ * same instant: code-unit order of the source name, so the pick never depends on input order.
+ */
+function morningPickByDate<T extends Point>(
+  points: readonly T[],
+  value: (p: T) => number,
+  valid: (v: number) => boolean,
+): Map<string, number> {
+  const best = new Map<string, T>();
+  const morning = (p: T): boolean => new Date(p.start).getHours() < WEIGH_IN_CUTOFF_HOUR;
+  const better = (a: T, b: T): boolean => {
+    const am = morning(a);
+    if (am !== morning(b)) return am;
+    if (a.start !== b.start) return a.start < b.start;
+    return byCode(a.source, b.source) < 0;
+  };
+  for (const p of points) {
+    const v = value(p);
+    if (!ok(p.start) || !ok(v) || !valid(v)) continue;
+    const date = localDate(p.start);
+    const cur = best.get(date);
+    if (!cur || better(p, cur)) best.set(date, p);
+  }
+  return new Map([...best].map(([date, p]) => [date, value(p)]));
+}
+
 /** What the stored rows tell this read (see `preferredHrvSource`). */
 export type HealthDaysContext = { hrvSource?: string };
 
@@ -215,5 +253,9 @@ export function healthDays(
     Object.assign(row(date), { hrvMs: h.ms, hrvSource: h.source });
   for (const [date, kcal] of energyByDate(read.activeEnergy ?? [])) row(date).activeKcal = kcal;
   for (const [date, list] of workoutsByDate(read.workouts ?? [])) row(date).workouts = list;
+  const fat = morningPickByDate(read.bodyFat ?? [], (p) => p.pct, (v) => v > 0 && v < 100);
+  for (const [date, pct] of fat) row(date).bodyFatPct = round1(pct);
+  const lean = morningPickByDate(read.leanMass ?? [], (p) => p.kg, (v) => v > 0);
+  for (const [date, kg] of lean) row(date).leanMassKg = round2(kg);
   return [...rows.values()].sort((a, b) => a.date.localeCompare(b.date));
 }

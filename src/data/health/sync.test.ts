@@ -142,6 +142,67 @@ describe('healthSyncStore (Dexie glue for core syncHealth)', () => {
     expect(days.find((d) => d.date === TODAY)?.restingHr).toBe(63);
   });
 
+  it('M12 1b: body fat + lean mass are read only with their switch on, land in healthDays, never in weighIns', async () => {
+    const data: HealthRead = { ...read(), bodyFat: [], leanMass: [] };
+    const fat = [];
+    const lean = [];
+    for (let k = 0; k <= 5; k++) {
+      const wake = Date.parse(`${addDate(TODAY, -k)}T06:30:00+07:00`);
+      fat.push({ start: wake + 10 * 60_000, pct: 22 + k / 10, source: 'Scale' });
+      lean.push({ start: wake + 10 * 60_000, kg: 53 + k / 10, source: 'Scale' });
+    }
+    data.bodyFat = fat;
+    data.leanMass = lean;
+    const asked: HealthType[][] = [];
+    const base = plugin(data);
+    const spy: HealthSyncSource = {
+      isAvailable: base.isAvailable,
+      read: async (o) => {
+        asked.push([...o.types]);
+        return base.read(o);
+      },
+    };
+    const store = healthSyncStore(db);
+    const compOf = async () =>
+      (await db.healthDays.toArray()).filter(
+        (d) => d.bodyFatPct !== undefined || d.leanMassKg !== undefined,
+      );
+
+    // After Connect (the six): not asked for, nothing stored.
+    await saveHealthSettings(db, { ...HEALTH_SETTINGS_DEFAULT, enabled: on });
+    await syncHealth({ health: spy, store, now: NOW, today: TODAY });
+    expect(asked[0]).not.toContain('bodyFat');
+    expect(asked[0]).not.toContain('leanMass');
+    expect(await compOf()).toEqual([]);
+    const weighInsBefore = await listWeighIns(db);
+
+    // He turns body fat on: the next sync goes 35 days back and stores it; lean mass stays out.
+    await setHealthTypeEnabled(db, 'bodyFat', true);
+    await syncHealth({ health: spy, store, now: NOW + HOUR, today: TODAY });
+    expect(asked[1]).toContain('bodyFat');
+    expect(asked[1]).not.toContain('leanMass');
+    expect((await db.healthDays.get(TODAY))?.bodyFatPct).toBe(22);
+    expect((await db.healthDays.get(addDate(TODAY, -5)))?.bodyFatPct).toBe(22.5);
+    expect((await compOf()).every((d) => d.leanMassKg === undefined)).toBe(true);
+
+    await setHealthTypeEnabled(db, 'leanMass', true);
+    await syncHealth({ health: spy, store, now: NOW + 2 * HOUR, today: TODAY });
+    expect(await db.healthDays.get(addDate(TODAY, -1))).toMatchObject({
+      sleepMin: 420,
+      restingHr: 55,
+      bodyFatPct: 22.1,
+      leanMassKg: 53.1,
+    });
+    // Weigh-ins are exactly what the weight read made them.
+    expect(await listWeighIns(db)).toEqual(weighInsBefore);
+
+    // Off again: deleted from the phone, the other values stay.
+    await setHealthTypeEnabled(db, 'bodyFat', false);
+    await setHealthTypeEnabled(db, 'leanMass', false);
+    expect(await compOf()).toEqual([]);
+    expect((await db.healthDays.get(addDate(TODAY, -1)))?.sleepMin).toBe(420);
+  });
+
   it('catch-up: an install from before Health wins re-reads 35 days once; Health replaces older typed weigh-ins', async () => {
     // Stored by the old build: lastReadAt a day ago, no weigh-in rule marker.
     const lastReadAt = NOW - 24 * HOUR;

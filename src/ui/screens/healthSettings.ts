@@ -77,6 +77,14 @@ export const HEALTH_TYPE_COPY: Record<HealthType, { label: string; explainer: st
     label: 'Heart rate variability',
     explainer: 'Lower than your usual can suggest a lighter day.',
   },
+  bodyFat: {
+    label: 'Body fat',
+    explainer: 'Shows your body fat trend next to your weight in Fuel.',
+  },
+  leanMass: {
+    label: 'Lean mass',
+    explainer: 'Shows your lean mass trend next to your weight in Fuel.',
+  },
 };
 
 const p2 = (n: number) => String(n).padStart(2, '0');

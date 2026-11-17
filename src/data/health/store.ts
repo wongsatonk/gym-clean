@@ -31,7 +31,11 @@ export const HEALTH_SETTINGS_KEY = 'health';
 export const HEALTH_WEIGH_IN_RULE = 2;
 const WEIGH_IN_RULE_FIELD = 'weighInRule';
 
-/** Nothing is read until he turns a type on (Settings → Health → Connect). */
+/**
+ * Nothing is read until a type is turned on (Settings → Health → Connect turns on the six
+ * `HEALTH_CONNECT_TYPES`; body fat and lean mass have their own switches). A stored row from
+ * before a type existed has no key for it and reads it as off (`parseHealthSettings`).
+ */
 export const HEALTH_SETTINGS_DEFAULT: Readonly<HealthSettings> = Object.freeze({
   enabled: Object.freeze({
     bodyMass: false,
@@ -40,12 +44,17 @@ export const HEALTH_SETTINGS_DEFAULT: Readonly<HealthSettings> = Object.freeze({
     sleep: false,
     restingHr: false,
     hrv: false,
+    bodyFat: false,
+    leanMass: false,
   }),
   route: 'apple',
   deletedHealthWeighIns: Object.freeze([]) as unknown as string[],
 });
 
-/** The `HealthDay` fields each type owns (bodyMass lives in `weighIns`, source 'health'). */
+/**
+ * The `HealthDay` fields each type owns (bodyMass lives in `weighIns`, source 'health'; body fat
+ * and lean mass live here only, never in `weighIns`).
+ */
 export const HEALTH_DAY_FIELDS: Record<HealthType, readonly (keyof HealthDay)[]> = {
   bodyMass: [],
   workouts: ['workouts'],
@@ -53,6 +62,8 @@ export const HEALTH_DAY_FIELDS: Record<HealthType, readonly (keyof HealthDay)[]>
   sleep: ['sleepMin'],
   restingHr: ['restingHr'],
   hrv: ['hrvMs', 'hrvSource'],
+  bodyFat: ['bodyFatPct'],
+  leanMass: ['leanMassKg'],
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

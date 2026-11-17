@@ -42,6 +42,8 @@ const allOn: HealthSettings = {
     sleep: true,
     restingHr: true,
     hrv: true,
+    bodyFat: true,
+    leanMass: true,
   },
 };
 
@@ -66,10 +68,59 @@ describe('health settings (settings key "health")', () => {
         sleep: false,
         restingHr: false,
         hrv: false,
+        bodyFat: false,
+        leanMass: false,
       },
       route: 'apple',
       deletedHealthWeighIns: [],
     });
+  });
+
+  it('M12 1b: a row saved before body fat / lean mass existed reads both as off, the rest unchanged', async () => {
+    // Exactly what 1.12.0 stored after Connect: six switches, no bodyFat / leanMass keys.
+    await db.settings.put({
+      key: HEALTH_SETTINGS_KEY,
+      value: {
+        enabled: {
+          bodyMass: true,
+          workouts: true,
+          activeEnergy: true,
+          sleep: true,
+          restingHr: true,
+          hrv: true,
+        },
+        route: 'apple',
+        deletedHealthWeighIns: ['2030-01-03'],
+        lastReadAt: 1234,
+        weighInRule: HEALTH_WEIGH_IN_RULE,
+      },
+    });
+    const s = await getHealthSettings(db);
+    expect(s.enabled).toEqual({
+      bodyMass: true,
+      workouts: true,
+      activeEnergy: true,
+      sleep: true,
+      restingHr: true,
+      hrv: true,
+      bodyFat: false,
+      leanMass: false,
+    });
+    // No re-read and nothing else reset by the update.
+    expect(s.lastReadAt).toBe(1234);
+    expect(s.deletedHealthWeighIns).toEqual(['2030-01-03']);
+  });
+
+  it('M12 1b: only a real `true` turns body fat / lean mass on', async () => {
+    await db.settings.put({
+      key: HEALTH_SETTINGS_KEY,
+      value: { enabled: { bodyFat: 'yes', leanMass: 1 } },
+    });
+    const s = await getHealthSettings(db);
+    expect(s.enabled.bodyFat).toBe(false);
+    expect(s.enabled.leanMass).toBe(false);
+    await saveHealthSettings(db, { ...s, enabled: { ...s.enabled, bodyFat: true } });
+    expect((await getHealthSettings(db)).enabled).toMatchObject({ bodyFat: true, leanMass: false });
   });
 
   it('round-trips and repairs a damaged row field by field', async () => {
@@ -237,6 +288,66 @@ describe('clearHealthType', () => {
     expect(d?.sleepMin).toBe(410);
     // Weigh-ins are his backed-up data; only clearHealthType('bodyMass') removes them.
     expect(await listWeighIns(db)).toHaveLength(1);
+  });
+});
+
+describe('body fat + lean mass (M12 1b)', () => {
+  const comp = (date: string): HealthDay => ({ date, sleepMin: 410, bodyFatPct: 22.1, leanMassKg: 53.4 });
+
+  it('are stored in healthDays and merge per field like the other values', async () => {
+    await mergeHealthDays(db, [{ date: '2030-01-07', sleepMin: 410 }]);
+    await mergeHealthDays(db, [{ date: '2030-01-07', bodyFatPct: 22.1, leanMassKg: 53.4 }]);
+    await mergeHealthDays(db, [{ date: '2030-01-07', bodyFatPct: 21.8 }]);
+    expect(await listHealthDays(db)).toEqual([
+      { date: '2030-01-07', sleepMin: 410, bodyFatPct: 21.8, leanMassKg: 53.4 },
+    ]);
+  });
+
+  it('turning one switch off deletes only that value; a row left empty is removed', async () => {
+    await saveHealthSettings(db, allOn);
+    await mergeHealthDays(db, [comp('2030-01-07'), { date: '2030-01-08', bodyFatPct: 22 }]);
+    await setHealthTypeEnabled(db, 'bodyFat', false);
+    expect((await getHealthSettings(db)).enabled).toMatchObject({ bodyFat: false, leanMass: true });
+    expect(await listHealthDays(db)).toEqual([
+      { date: '2030-01-07', sleepMin: 410, leanMassKg: 53.4 },
+    ]);
+    await clearHealthType(db, 'leanMass');
+    expect(await listHealthDays(db)).toEqual([{ date: '2030-01-07', sleepMin: 410 }]);
+  });
+
+  it('turning a switch on forgets lastReadAt, so its history is read (35 days)', async () => {
+    await saveHealthSettings(db, {
+      ...allOn,
+      enabled: { ...allOn.enabled, bodyFat: false, leanMass: false },
+      lastReadAt: 123,
+    });
+    await setHealthTypeEnabled(db, 'leanMass', true);
+    const s = await getHealthSettings(db);
+    expect(s.enabled).toMatchObject({ bodyFat: false, leanMass: true });
+    expect(s.lastReadAt).toBeUndefined();
+  });
+
+  it('never touch weigh-ins: clearing them leaves typed and imported weights alone', async () => {
+    await saveWeighIn(db, { date: '2030-01-07', kg: 70.1 });
+    await saveWeighIn(db, { date: '2030-01-08', kg: 70.2, source: 'health' });
+    await mergeHealthDays(db, [comp('2030-01-07')]);
+    expect(await listWeighIns(db)).toHaveLength(2);
+    await clearHealthType(db, 'bodyFat');
+    await clearHealthType(db, 'leanMass');
+    expect(await listWeighIns(db)).toEqual([
+      { date: '2030-01-07', kg: 70.1 },
+      { date: '2030-01-08', kg: 70.2, source: 'health' },
+    ]);
+  });
+
+  it('clearDisabledHealthTypes (after a restore) removes both when their switches are off', async () => {
+    await saveHealthSettings(db, {
+      ...allOn,
+      enabled: { ...allOn.enabled, bodyFat: false, leanMass: false },
+    });
+    await mergeHealthDays(db, [comp('2030-01-07')]);
+    await clearDisabledHealthTypes(db);
+    expect(await listHealthDays(db)).toEqual([{ date: '2030-01-07', sleepMin: 410 }]);
   });
 });
 

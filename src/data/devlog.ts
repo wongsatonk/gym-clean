@@ -89,10 +89,11 @@ export async function setDevLogEnabled(db: GymDb, on: boolean): Promise<void> {
 
 /**
  * M11: Health data never enters the developer log. M12: nor does the coach chat. Settings keys
- * that could carry either (`health*`, `readiness*`, `chat*`, `coach`) are dropped from the
- * session's settings snapshot. (The chat itself lives in `chatMessages`, which no export reads.)
+ * that could carry either (`health*`, `readiness*`, `chat*`, `coach`, and M12 1b's body fat /
+ * lean mass: `bodyFat*`, `leanMass*`, `bodyComp*`) are dropped from the session's settings
+ * snapshot. (The chat itself lives in `chatMessages`, which no export reads.)
  */
-const PRIVATE_KEY_RE = /^(health|readiness|chat|coach$)/i;
+const PRIVATE_KEY_RE = /^(health|readiness|chat|coach$|bodyFat|leanMass|bodyComp)/i;
 
 function withoutPrivate(settings: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(settings).filter(([k]) => !PRIVATE_KEY_RE.test(k)));

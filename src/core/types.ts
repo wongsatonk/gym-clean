@@ -340,8 +340,16 @@ export type FoodSuggestion = {
 
 // ---- M11 Health data (Apple Health, read-only; SPEC M11) ----
 
-// M12 1b adds 'bodyFat' | 'leanMass' with task 15 (core) + 16 (native), in one step with their readers.
-export type HealthType = 'bodyMass' | 'workouts' | 'activeEnergy' | 'sleep' | 'restingHr' | 'hrv';
+/** 'bodyFat' | 'leanMass' (M12 1b): off by default, each with its own switch (not part of Connect). */
+export type HealthType =
+  | 'bodyMass'
+  | 'workouts'
+  | 'activeEnergy'
+  | 'sleep'
+  | 'restingHr'
+  | 'hrv'
+  | 'bodyFat'
+  | 'leanMass';
 
 export const HEALTH_TYPES: readonly HealthType[] = [
   'bodyMass',
@@ -350,6 +358,8 @@ export const HEALTH_TYPES: readonly HealthType[] = [
   'sleep',
   'restingHr',
   'hrv',
+  'bodyFat',
+  'leanMass',
 ];
 
 /** The types Connect turns on (SPEC M11 default list). Body fat / lean mass have their own switches. */

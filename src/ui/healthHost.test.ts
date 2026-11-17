@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HealthRead } from '../core/health/days';
 import { addDate } from '../core/trainer/plan';
-import { HEALTH_TYPES, type HealthType } from '../core/types';
+import { HEALTH_CONNECT_TYPES, HEALTH_TYPES, type HealthType } from '../core/types';
 import { GymDb } from '../data/db';
 import { HEALTH_SETTINGS_KEY, getHealthSettings, listHealthDays } from '../data/health/store';
 import { listWeighIns, saveWeighIn } from '../data/nutrition/store';
@@ -125,9 +125,12 @@ describe('healthHost', () => {
     const { api, calls } = fakeApi();
     const { h } = host(api);
     await connect(h);
-    expect(calls.requestRead).toEqual([[...HEALTH_TYPES]]);
+    expect(calls.requestRead).toEqual([[...HEALTH_CONNECT_TYPES]]);
     const s = await getHealthSettings(db);
-    expect(HEALTH_TYPES.every((t) => s.enabled[t])).toBe(true);
+    expect(HEALTH_CONNECT_TYPES.every((t) => s.enabled[t])).toBe(true);
+    // M12 1b: body fat and lean mass have their own switches; Connect leaves them off.
+    expect(s.enabled.bodyFat).toBe(false);
+    expect(s.enabled.leanMass).toBe(false);
     const card = h.todayProps().readiness;
     expect(card?.signals.sort()).toEqual(['restingHrHigh', 'sleepShort']);
     expect(card?.reasons).toHaveLength(2);

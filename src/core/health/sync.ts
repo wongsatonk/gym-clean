@@ -21,6 +21,9 @@
  * 4. Merge per-day summaries, import weigh-ins (Health wins, see weighIns.ts), save `lastReadAt`
  *    (only after an 'ok' read; a locked phone or failed read is skipped quietly and retried
  *    next time).
+ *    Body fat % / lean mass (M12 1b, own switches, off by default) go through the same steps:
+ *    asked for only when on, the day's pick stored in `healthDays` (days.ts), never a weigh-in,
+ *    never a readiness signal.
  * 5. Today's `ReadinessCard` from the stored days and `settings.readiness`; a new card is saved as
  *    `lastCard` (+ `lastDeloadOfferDate` when it offers a deload), so it shows once per day.
  * Never throws: any error ends as status 'failed' with no card.

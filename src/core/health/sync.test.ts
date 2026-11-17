@@ -36,6 +36,8 @@ const ALL_ON: Record<HealthType, boolean> = {
   sleep: true,
   restingHr: true,
   hrv: true,
+  bodyFat: true,
+  leanMass: true,
 };
 const ALL_OFF: Record<HealthType, boolean> = {
   bodyMass: false,
@@ -44,6 +46,8 @@ const ALL_OFF: Record<HealthType, boolean> = {
   sleep: false,
   restingHr: false,
   hrv: false,
+  bodyFat: false,
+  leanMass: false,
 };
 
 /** In-memory store with the same rules as src/data/health/store.ts (merge by field). */
@@ -119,6 +123,8 @@ function usualRead(date = TODAY, n = 28): HealthRead {
     sleep: [],
     restingHr: [],
     hrv: [],
+    bodyFat: [],
+    leanMass: [],
   };
   for (let k = 1; k <= n; k++) {
     const d = addDate(date, -k);
@@ -301,6 +307,130 @@ describe('syncHealth', () => {
     const health = new FakeHealth(usualRead());
     await run(health, store, { now: NOW + HOUR });
     expect(health.calls[0]?.types).not.toContain('restingHr');
+  });
+
+  describe('body fat + lean mass (M12 1b)', () => {
+    const SIX = { ...ALL_ON, bodyFat: false, leanMass: false };
+    const YESTERDAY = addDate(TODAY, -1);
+    /** A scale reading on each of the 3 days before today: morning, plus a later one to ignore. */
+    function scaleRead(): HealthRead {
+      const base = usualRead();
+      const bodyFat = [];
+      const leanMass = [];
+      for (let k = 1; k <= 3; k++) {
+        const wake = Date.parse(`${addDate(TODAY, -k)}T06:30:00+07:00`);
+        bodyFat.push({ start: wake + 12 * HOUR, pct: 30, source: 'Scale' });
+        bodyFat.push({ start: wake + HOUR / 2, pct: 22 + k / 10, source: 'Scale' });
+        leanMass.push({ start: wake + HOUR / 2, kg: 53 + k / 10, source: 'Scale' });
+      }
+      return { ...base, bodyFat, leanMass };
+    }
+
+    it('switches off (the default after Connect): never asked for, never stored, even if sent', async () => {
+      const store = new FakeStore({ enabled: SIX });
+      const health = new FakeHealth(scaleRead());
+      // A plugin that sends them anyway must not get them stored.
+      const send = health.read;
+      health.read = async (o) => ({ ...(await send(o)), ...scaleRead(), status: 'ok' });
+      const res = await run(health, store);
+      expect(res.status).toBe('ok');
+      expect(health.calls[0]?.types).not.toContain('bodyFat');
+      expect(health.calls[0]?.types).not.toContain('leanMass');
+      for (const d of store.days.values()) {
+        expect(d).not.toHaveProperty('bodyFatPct');
+        expect(d).not.toHaveProperty('leanMassKg');
+      }
+    });
+
+    it('switches on: asked for, the morning pick lands in the day row next to the other values', async () => {
+      const store = new FakeStore();
+      const health = new FakeHealth(scaleRead());
+      const res = await run(health, store);
+      expect(res.status).toBe('ok');
+      expect(health.calls[0]?.types).toEqual(expect.arrayContaining(['bodyFat', 'leanMass']));
+      expect(store.days.get(YESTERDAY)).toEqual({
+        date: YESTERDAY,
+        sleepMin: 420,
+        restingHr: 55,
+        hrvMs: 60,
+        hrvSource: 'WHOOP',
+        activeKcal: 450,
+        bodyFatPct: 22.1,
+        leanMassKg: 53.1,
+      });
+      expect(store.days.get(addDate(TODAY, -4))).not.toHaveProperty('bodyFatPct');
+    });
+
+    it('one switch on: only that value is asked for and stored', async () => {
+      const store = new FakeStore({ enabled: { ...ALL_OFF, bodyFat: true } });
+      const health = new FakeHealth(scaleRead());
+      await run(health, store);
+      expect(health.calls[0]?.types).toEqual(['bodyFat']);
+      expect(store.days.get(YESTERDAY)).toEqual({ date: YESTERDAY, bodyFatPct: 22.1 });
+      expect(store.days.size).toBe(3);
+    });
+
+    it('never becomes a weigh-in: lean mass (kg) and body fat stay out of weighIns', async () => {
+      const store = new FakeStore({ enabled: { ...ALL_OFF, bodyFat: true, leanMass: true } });
+      const res = await run(new FakeHealth(scaleRead()), store);
+      expect(res.daysMerged).toBe(3);
+      expect(res.weighIns).toEqual([]);
+      expect(store.weighIns).toEqual([]);
+    });
+
+    it('with weight on too, weigh-ins hold the weight only', async () => {
+      const store = new FakeStore();
+      await run(new FakeHealth(scaleRead()), store);
+      expect(store.weighIns.find((w) => w.date === YESTERDAY)).toEqual({
+        date: YESTERDAY,
+        kg: 70.1,
+        source: 'health',
+      });
+      for (const w of store.weighIns) expect(Object.keys(w).sort()).toEqual(['date', 'kg', 'source']);
+    });
+
+    it('a switch turned off while the read runs: that value is dropped', async () => {
+      const store = new FakeStore();
+      const health = new FakeHealth(scaleRead());
+      health.afterRead = async () => {
+        store.settings = {
+          ...store.settings,
+          enabled: { ...store.settings.enabled, bodyFat: false },
+        };
+      };
+      await run(health, store);
+      expect(store.days.get(YESTERDAY)).not.toHaveProperty('bodyFatPct');
+      expect(store.days.get(YESTERDAY)?.leanMassKg).toBe(53.1);
+    });
+
+    it('a later read moves the day to the morning reading that arrived late', async () => {
+      const store = new FakeStore({ enabled: { ...ALL_OFF, bodyFat: true } });
+      const noon = Date.parse(`${TODAY}T13:00:00+07:00`);
+      const evening = { start: noon - 30 * 60_000, pct: 23.5, source: 'Scale' };
+      await run(new FakeHealth({ bodyFat: [evening] }), store, { now: noon });
+      expect(store.days.get(TODAY)?.bodyFatPct).toBe(23.5);
+      const morning = { start: Date.parse(`${TODAY}T06:45:00+07:00`), pct: 22.4, source: 'Scale' };
+      await run(new FakeHealth({ bodyFat: [evening, morning] }), store, { now: noon + HOUR });
+      expect(store.days.get(TODAY)?.bodyFatPct).toBe(22.4);
+    });
+
+    it('a reading before the read window (a cut-off day) is not merged', async () => {
+      const store = new FakeStore({
+        enabled: { ...ALL_OFF, bodyFat: true },
+        lastReadAt: NOW - HOUR,
+      });
+      const old = { start: Date.parse(`${addDate(TODAY, -2)}T20:00:00+07:00`), pct: 25, source: 'Scale' };
+      const res = await run(new FakeHealth({ bodyFat: [old] }), store);
+      expect(res.daysMerged).toBe(0);
+      expect(store.days.size).toBe(0);
+    });
+
+    it('never makes or changes a readiness card', async () => {
+      const store = new FakeStore({ enabled: { ...ALL_OFF, bodyFat: true, leanMass: true } });
+      const res = await run(new FakeHealth(scaleRead()), store, { trainingDay: true });
+      expect(res.card).toBeNull();
+      expect(store.settings.readiness).toBeUndefined();
+    });
   });
 
   it('nothing enabled: no read, no writes, no card', async () => {

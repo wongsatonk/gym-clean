@@ -278,6 +278,104 @@ describe('healthDays: heart, energy, workouts', () => {
   });
 });
 
+describe('healthDays: body fat + lean mass (M12 1b; the day’s pick like weight)', () => {
+  useTz('Asia/Bangkok');
+  const fat = (iso: string, pct: number, source = 'Scale') => ({ start: t(iso), pct, source });
+  const lean = (iso: string, kg: number, source = 'Scale') => ({ start: t(iso), kg, source });
+
+  it('the earliest reading before noon wins, whatever order the samples come in', () => {
+    const read: HealthRead = {
+      bodyFat: [
+        fat('2026-06-10T19:00:00+07:00', 23.4),
+        fat('2026-06-10T08:10:00+07:00', 22.6),
+        fat('2026-06-10T06:40:00+07:00', 22.1),
+      ],
+      leanMass: [
+        lean('2026-06-10T19:00:00+07:00', 52.9),
+        lean('2026-06-10T06:40:00+07:00', 53.4),
+      ],
+    };
+    expect(healthDays(read)).toEqual([{ date: '2026-06-10', bodyFatPct: 22.1, leanMassKg: 53.4 }]);
+  });
+
+  it('a date with no reading before noon uses its earliest reading', () => {
+    const read: HealthRead = {
+      bodyFat: [fat('2026-06-10T21:00:00+07:00', 23), fat('2026-06-10T13:30:00+07:00', 22.8)],
+      leanMass: [lean('2026-06-10T13:30:00+07:00', 53.1)],
+    };
+    expect(day(read, '2026-06-10')).toEqual({
+      date: '2026-06-10',
+      bodyFatPct: 22.8,
+      leanMassKg: 53.1,
+    });
+  });
+
+  it('an afternoon reading never beats a morning one, even an earlier-listed one', () => {
+    const read: HealthRead = {
+      bodyFat: [fat('2026-06-10T12:00:00+07:00', 24), fat('2026-06-10T11:59:00+07:00', 22)],
+    };
+    expect(day(read, '2026-06-10')?.bodyFatPct).toBe(22);
+  });
+
+  it('each local date gets its own pick; the two values are independent', () => {
+    const read: HealthRead = {
+      bodyFat: [fat('2026-06-10T06:40:00+07:00', 22.1), fat('2026-06-12T06:45:00+07:00', 21.9)],
+      leanMass: [lean('2026-06-11T06:50:00+07:00', 53.6)],
+    };
+    expect(healthDays(read)).toEqual([
+      { date: '2026-06-10', bodyFatPct: 22.1 },
+      { date: '2026-06-11', leanMassKg: 53.6 },
+      { date: '2026-06-12', bodyFatPct: 21.9 },
+    ]);
+  });
+
+  it('two sources at the same instant: the same one every time (code-unit order of the name)', () => {
+    const a = fat('2026-06-10T06:40:00+07:00', 22.1, 'Alpha Scale');
+    const b = fat('2026-06-10T06:40:00+07:00', 25.5, 'Beta Scale');
+    expect(day({ bodyFat: [a, b] }, '2026-06-10')?.bodyFatPct).toBe(22.1);
+    expect(day({ bodyFat: [b, a] }, '2026-06-10')?.bodyFatPct).toBe(22.1);
+  });
+
+  it('rounds body fat to 0.1 % and lean mass to 0.01 kg', () => {
+    const read: HealthRead = {
+      bodyFat: [fat('2026-06-10T06:40:00+07:00', 22.149)],
+      leanMass: [lean('2026-06-10T06:40:00+07:00', 53.4567)],
+    };
+    expect(day(read, '2026-06-10')).toEqual({
+      date: '2026-06-10',
+      bodyFatPct: 22.1,
+      leanMassKg: 53.46,
+    });
+  });
+
+  it('drops readings that cannot be real (not finite, zero or less, 100 % or more)', () => {
+    const at = '2026-06-10T06:40:00+07:00';
+    const read: HealthRead = {
+      bodyFat: [
+        fat(at, Number.NaN),
+        fat(at, 0),
+        fat(at, -3),
+        fat(at, 100),
+        { start: Number.NaN, pct: 20, source: 'Scale' },
+      ],
+      leanMass: [
+        lean(at, 0),
+        lean(at, Number.POSITIVE_INFINITY),
+        { start: Number.NaN, kg: 50, source: 'Scale' },
+      ],
+    };
+    expect(healthDays(read)).toEqual([]);
+  });
+
+  it('sits in the same row as the other Health values of that date', () => {
+    const read: HealthRead = {
+      restingHr: [{ start: t('2026-06-10T06:00:00+07:00'), bpm: 56, source: 'WHOOP' }],
+      bodyFat: [fat('2026-06-10T06:40:00+07:00', 22.1)],
+    };
+    expect(healthDays(read)).toEqual([{ date: '2026-06-10', restingHr: 56, bodyFatPct: 22.1 }]);
+  });
+});
+
 describe('healthDays: plugin shape', () => {
   it('takes the GymHealth read result as is', () => {
     const result: HealthReadResult = {
