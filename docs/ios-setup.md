@@ -179,6 +179,62 @@ from another app in your AirPods while you do it.
 7. If the mic says the speech model isn't installed, tell me; the app can ask iOS to download it.
 8. Settings → Privacy & Security → Microphone shows Gym Clean; Speech Recognition does not.
 
+## Checkpoint J (M12 slice 2, your iPhone)
+
+Over a few days, with Apple Intelligence on. Report each line as pass / fail plus anything odd. Never
+paste your own numbers or chat text into the report; the eval numbers and token counts are fine.
+
+**Install**
+1. `npm run ios:sync`, Run ▶ from Xcode onto the iPhone. Settings → About shows version 1.14.0.
+
+**Apple Intelligence**
+2. iPhone Settings → Apple Intelligence & Siri is on (and finished downloading).
+3. Gym Clean → Settings → Coach says **On-device AI** with a tick. If it shows a reason instead
+   (off, still downloading, not this iPhone), write down which.
+
+**Mic** (AirPods in, music playing from another app)
+4. Hold the mic button the first time: **one** prompt, for the Microphone. Allow.
+5. Speech line: no "Speech Recognition" prompt appears, now or later. If one does, tell me.
+6. While you hold, your music keeps playing at normal quality (if it turns thin and quiet, like a
+   phone call, the AirPods mic was used instead of the iPhone mic: tell me). Music comes back to
+   full after you let go.
+7. The words appear while you talk; letting go sends them.
+
+**Three questions** (type or mic; a small "On-device AI" badge should be on each reply)
+8. "What's on today?" → a plain answer, no card.
+9. "What does the face pull work?" (or any exercise in your plan) → a short answer about it.
+10. "My knee's sore, can we take it easy on legs today?" → a card with **Apply**. Nothing changes
+    until you tap Apply; Undo puts it back.
+
+**Coach eval** (Settings → Developer log → Coach eval → Run, once, on Wi-Fi and charging, with the
+phone plugged into the Mac and the app started from Xcode ▶ so the Xcode console is open)
+11. Copy the four numbers: **Actions** (target 85% or more), **Safe** (must be 100%), **Facts**,
+    **Median time**. Also check in the chat that no change ever applied without your tap.
+12. Copy the small token line ("Instructions … · tools … · prompt … of … tokens"). The plan was
+    about 300 instructions, about 1,580 tools, context at most 1,070. No token line = tell me
+    which iOS version you're on.
+13. Export report and send me the file (ids and scores only). The app shows these failures only
+    as "error", so also type `unsupported` into the Xcode console's filter box: any line there
+    (Apple's own log) means a tool's rules were too strict for the model. Tell me how many.
+
+**Reminders** (Settings → Reminders)
+14. Turn one on: iOS asks for notifications **once**. Turning a second one on doesn't ask again.
+15. Session reminder on a training day, time set a few minutes ahead: it arrives on the phone, and
+    on the Watch when the phone is locked. The text has no weights, food or body numbers.
+16. Turn it off before it fires: nothing arrives.
+17. Close and reopen the app: no old reminder fires.
+18. Airplane Mode on, repeat 15: no difference.
+
+**Weekly check-in**
+19. After a session this week, open the Coach tab: the **Weekly check-in** card shows once. Answer
+    it; it doesn't come back this week, and the week recap gets one line from it.
+
+**Slow answers**
+20. If a reply ever falls back with "Apple Intelligence didn't answer, so quick replies did", ask
+    again straight away. The second one should answer normally. Two fallbacks in a row right
+    after a slow one = tell me (that's the case we're watching for). If the phone is on Xcode at
+    the time, filter the console for `concurrent`: any line = tell me.
+
 ## On-device checklist (task 3)
 
 Report each line as pass / fail plus anything odd:
@@ -203,7 +259,7 @@ Health plugin unit tests (unit mapping and sleep-stage summing; pure Swift, no H
 
 ```
 cd ios/App/App/Plugins/GymHealth/GymHealthCore
-xcodebuild -scheme GymHealthCore -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+xcodebuild -scheme GymHealthCore -destination 'platform=iOS Simulator,name=iPhone 17' test
 # or on the Mac itself: swift test
 ```
 
@@ -211,7 +267,7 @@ Speech plugin unit tests (session rules with a fake recognizer; no microphone ne
 
 ```
 cd ios/App/App/Plugins/GymSpeech/GymSpeechCore
-xcodebuild -scheme GymSpeechCore -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+xcodebuild -scheme GymSpeechCore -destination 'platform=iOS Simulator,name=iPhone 17' test
 # or on the Mac itself: swift test
 ```
 
@@ -221,11 +277,23 @@ iOS 27 error family is only tested on an iOS 27 simulator (on a macOS 26 Mac `sw
 
 ```
 cd ios/App/App/Plugins/GymBrain/GymBrainCore
-xcodebuild -scheme GymBrainCore -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+xcodebuild -scheme GymBrainCore -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
 The brain's tools are generated: after `src/core/trainer/tools.contract.json` changes, run
 `node scripts/gen-trainer-tools.mjs` (`npm run check` fails while the Swift file is stale).
+
+Any iPhone simulator works for `-destination`; `xcrun simctl list devices available` lists them
+(use `id=<UDID>` if the name is custom).
+
+What the simulator can and can't show (checked 2026-11-17, iOS 27.2 simulator on this Mac):
+- Apple brain: `availability()` says available, but every `respond` fails inside Apple's framework
+  ("Simulator is not supported"), so each question falls back to quick replies with "Apple
+  Intelligence didn't answer, so quick replies did." Settings → Coach still shows On-device AI.
+  Real answers, token counts and latency only on the iPhone.
+- Mic: shows "This iPhone can't do speech to text on the phone. Type instead." (no on-device
+  transcriber in the simulator).
+- Reminders: the notification prompt appears once, on the first switch.
 
 Notes:
 - Local plugins: `ios/App/App/AppViewController.swift` (a `CAPBridgeViewController` subclass) registers
