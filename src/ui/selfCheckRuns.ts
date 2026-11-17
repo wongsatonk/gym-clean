@@ -330,8 +330,14 @@ async function installedVoices(): Promise<readonly { lang: string; name: string 
   const now = synth.getVoices();
   if (now.length > 0) return now;
   await new Promise<void>((resolve) => {
-    const t = setTimeout(resolve, 2000);
-    synth.addEventListener?.('voiceschanged', () => (clearTimeout(t), resolve()), { once: true });
+    // Whichever comes first (voiceschanged or 2 s) clears the other: no listener or timer left.
+    const done = (): void => {
+      clearTimeout(t);
+      synth.removeEventListener?.('voiceschanged', done);
+      resolve();
+    };
+    const t = setTimeout(done, 2000);
+    synth.addEventListener?.('voiceschanged', done, { once: true });
   });
   return synth.getVoices();
 }

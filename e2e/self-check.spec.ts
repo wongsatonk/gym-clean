@@ -1,9 +1,11 @@
 import { expect, test, type Page } from './fixtures';
 import {
+  at,
   expectTapTargets,
   getSetting,
   guardNetwork,
   noHorizontalOverflow,
+  installMocks,
   record,
 } from './app.helpers';
 
@@ -15,6 +17,9 @@ import {
  *   permission, nothing is spoken and no request leaves the device.
  * - iPhone app with fake plugins: all ready, and two failing with their one-line fixes; "Copy
  *   results" puts plain text on the clipboard.
+ * - The wired screen in the real app (Settings → Self-check, route settings/selfcheck), owner off
+ *   (a fresh install) and on: the build hash shows only with owner mode on — in the version row,
+ *   the header line and the copied text.
  * SELFCHECK_SHOTS=<dir> also saves the 390×844 screenshots there.
  */
 
@@ -23,6 +28,7 @@ declare global {
     __spoken: string[];
     __asked: string[];
     __mountSelfCheck: (mode: 'web' | 'native-ok' | 'native-two-fail') => void;
+    __copied: string[];
   }
 }
 
@@ -235,4 +241,111 @@ test('iPhone app, two failing: fixes shown, Run again, Copy results is plain tex
   await page.locator('[data-selfcheck-again]').click();
   await expect(summary(page)).toHaveText('2 need attention');
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+});
+
+/** The real app: Settings → Self-check row → the wired screen. Prompts and the clipboard mocked. */
+async function openWired(page: Page): Promise<void> {
+  await installMocks(page); // first: the script below patches its speechSynthesis
+  await page.addInitScript(() => {
+    window.__asked = [];
+    window.__copied = [];
+    // installMocks' speechSynthesis has no voices; give it one English voice (and Thai).
+    const synth = window.speechSynthesis as unknown as { getVoices: () => unknown[] };
+    synth.getVoices = () => [
+      { name: 'Daniel', lang: 'en-GB', default: true, localService: true, voiceURI: 'Daniel' },
+      { name: 'Kanya', lang: 'th-TH', default: false, localService: true, voiceURI: 'Kanya' },
+    ];
+    const md = navigator.mediaDevices;
+    if (md) {
+      md.getUserMedia = () => {
+        window.__asked.push('getUserMedia');
+        return Promise.reject(new Error('not in the self-check'));
+      };
+    }
+    if ('Notification' in window) {
+      Notification.requestPermission = () => {
+        window.__asked.push('Notification.requestPermission');
+        return Promise.resolve('default');
+      };
+    }
+    if (navigator.storage) {
+      navigator.storage.persist = () => {
+        window.__asked.push('storage.persist');
+        return Promise.resolve(false);
+      };
+      navigator.storage.persisted = () => Promise.resolve(true);
+    }
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: (t: string) => (window.__copied.push(t), Promise.resolve()),
+        readText: () => Promise.resolve(window.__copied.at(-1) ?? ''),
+      },
+    });
+  });
+  await page.clock.install({ time: at(16, 18) });
+  await page.goto('/');
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+  await page.locator('[data-tab="settings"]').click();
+  await expect(page.locator('main[data-screen="settings"]')).toBeVisible();
+  await page.locator('[data-selfcheck-open]').scrollIntoViewIfNeeded();
+  await page.locator('[data-selfcheck-open]').click();
+  await expect(screen(page)).toBeVisible();
+  await expect(summary(page)).toHaveText(/^All \d+ ready$|need/, { timeout: 75_000 });
+}
+
+/** Finishes a wired run: the shared privacy + readability checks, returns the copied text. */
+async function wiredCommon(page: Page, offsite: string[], errors: string[]): Promise<string> {
+  await expect(row(page, 'pose')).toHaveAttribute('data-state', 'ok');
+  await expect(row(page, 'voice')).toContainText('1 English voice');
+  await expect(summary(page)).toHaveText('All 8 ready');
+  await page.locator('[data-selfcheck-copy]').click();
+  await expect(page.locator('[data-selfcheck-copied]')).toBeVisible();
+  const copied = await page.evaluate(() => window.__copied);
+  expect(copied).toHaveLength(1);
+  expect(await page.evaluate(() => window.__asked)).toEqual([]);
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offsite).toEqual([]);
+  const USAGE_LOG = 'https://odml.pa.googleapis.com/v1/log';
+  expect(errors.filter((e) => !e.includes(USAGE_LOG))).toEqual([]);
+  await readable(page);
+  return copied[0] ?? '';
+}
+
+test.describe('wired in the app, owner off (a fresh install)', () => {
+  test.use({ owner: 'off' });
+
+  test('Settings → Self-check: no build hash on the screen or in the copy; version 1.15.0', async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await openWired(page);
+    await expect.poll(() => getSetting(page, 'ownerMode')).toMatchObject({ on: false });
+    await expect(row(page, 'version')).toContainText('1.15.0, web app');
+    const text = await wiredCommon(page, offsite, errors);
+    await expect(screen(page)).not.toContainText('(build');
+    expect(text).not.toContain('(build');
+    expect(text).toContain('App version: Info. 1.15.0, web app');
+    await shot(page, 'selfcheck-wired-owner-off', (n) => testInfo.outputPath(n));
+  });
+});
+
+test.describe('wired in the app, owner on', () => {
+  test.use({ owner: 'on' });
+
+  test('Settings → Self-check: the build shows in the version row, the header and the copy', async ({
+    page,
+  }, testInfo) => {
+    test.setTimeout(90_000);
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await openWired(page);
+    await expect(row(page, 'version')).toContainText(/1\.15\.0 \(build \w+\), web app/);
+    const text = await wiredCommon(page, offsite, errors);
+    expect(text).toMatch(/Version 1\.15\.0 \(build \w+\)/);
+    expect(text).toMatch(/App version: Info\. 1\.15\.0 \(build \w+\), web app/);
+    await shot(page, 'selfcheck-wired-owner-on', (n) => testInfo.outputPath(n));
+  });
 });

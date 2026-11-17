@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SelfCheck } from './screens/selfCheck';
-import { SELF_CHECK_IDS, selfCheckRuns, type SelfCheckDeps } from './selfCheckRuns';
+import {
+  SELF_CHECK_IDS,
+  defaultSelfCheckDeps,
+  selfCheckRuns,
+  type SelfCheckDeps,
+} from './selfCheckRuns';
+import type { GymDb } from '../data/db';
 
 // Fakes only: nothing here touches a real permission, the camera or the network.
 function deps(over: Partial<SelfCheckDeps> = {}): SelfCheckDeps {
@@ -280,6 +286,59 @@ describe('selfCheckRuns', () => {
       expect((await run(deps({ voices: () => Promise.resolve(null) }), 'voice')).state).toBe(
         'fail',
       );
+    });
+  });
+  describe('installed voices (real wiring)', () => {
+    type Listener = () => void;
+    function fakeSynth(later: { lang: string; name: string }[]) {
+      const listeners = new Set<Listener>();
+      let voices: { lang: string; name: string }[] = [];
+      const synth = {
+        getVoices: () => voices,
+        addEventListener: vi.fn((type: string, fn: Listener) => {
+          if (type === 'voiceschanged') listeners.add(fn);
+        }),
+        removeEventListener: vi.fn((type: string, fn: Listener) => {
+          if (type === 'voiceschanged') listeners.delete(fn);
+        }),
+      };
+      const fire = () => {
+        voices = later;
+        for (const fn of [...listeners]) fn();
+      };
+      return { synth, listeners, fire };
+    }
+    const env = { release: '1.15.0', build: '', native: false };
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it('no voiceschanged within 2 s: answers with what is there and removes its listener', async () => {
+      vi.useFakeTimers();
+      const f = fakeSynth([]);
+      vi.stubGlobal('speechSynthesis', f.synth);
+      const p = defaultSelfCheckDeps({} as GymDb, env).voices();
+      expect(f.listeners.size).toBe(1);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await p).toEqual([]);
+      expect(f.listeners.size).toBe(0);
+      expect(f.synth.removeEventListener).toHaveBeenCalledWith(
+        'voiceschanged',
+        f.synth.addEventListener.mock.calls[0]?.[1],
+      );
+    });
+
+    it('voiceschanged before 2 s: answers the new voices, no listener or timer left', async () => {
+      vi.useFakeTimers();
+      const f = fakeSynth([{ lang: 'en-GB', name: 'Daniel' }]);
+      vi.stubGlobal('speechSynthesis', f.synth);
+      const p = defaultSelfCheckDeps({} as GymDb, env).voices();
+      f.fire();
+      expect(await p).toEqual([{ lang: 'en-GB', name: 'Daniel' }]);
+      expect(f.listeners.size).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
     });
   });
 });
