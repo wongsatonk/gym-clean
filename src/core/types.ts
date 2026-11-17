@@ -129,6 +129,16 @@ export type DayAdjust = {
    * to pairing rows by likeness (src/core/trainer/rows.ts).
    */
   replaced?: { fromId: string; toId: string | null }[];
+  /**
+   * M12 1b: only on a 'shortOnTime' adjust — the change that was on the day before it was made
+   * shorter (e.g. go easy on arms), so asking again rebuilds from it instead of the plan day.
+   */
+  base?: {
+    kind: Exclude<DayAdjust['kind'], 'shortOnTime'>;
+    area?: BodyArea;
+    exercises: PlannedExercise[];
+    replaced?: { fromId: string; toId: string | null }[];
+  };
 };
 
 /** `date` is local YYYY-MM-DD. */
@@ -191,7 +201,8 @@ export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack' | 'post-workou
 
 export type NutritionMode = 'quick' | 'full';
 
-export type FoodSource = 'usda' | 'thai-estimate' | 'custom' | 'openfoodfacts' | 'photo-local' | 'photo-ai';
+export type FoodSource =
+  'usda' | 'thai-estimate' | 'custom' | 'openfoodfacts' | 'photo-local' | 'photo-ai';
 
 export type Food = MacroSet & {
   id: string;
@@ -342,14 +353,7 @@ export type FoodSuggestion = {
 
 /** 'bodyFat' | 'leanMass' (M12 1b): off by default, each with its own switch (not part of Connect). */
 export type HealthType =
-  | 'bodyMass'
-  | 'workouts'
-  | 'activeEnergy'
-  | 'sleep'
-  | 'restingHr'
-  | 'hrv'
-  | 'bodyFat'
-  | 'leanMass';
+  'bodyMass' | 'workouts' | 'activeEnergy' | 'sleep' | 'restingHr' | 'hrv' | 'bodyFat' | 'leanMass';
 
 export const HEALTH_TYPES: readonly HealthType[] = [
   'bodyMass',
