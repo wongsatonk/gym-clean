@@ -1408,6 +1408,10 @@ number below is a default held as data and tuned at a checkpoint. Every change t
    focus block honours until he removes an area. A coach **review every 4–6 weeks** in the chat: progress
    on the goal, then an offer to adjust (a Proposal or a new focus block).
 4. **Measurements + e1RM:** monthly tape measurements (arms, chest, waist, thighs, … as data) logged in Fuel
+   **+ Body fat % and lean body mass from Apple Health** (his VeSync scale writes them; added 2026-11-16): two more
+   read-only M11 Health types (`bodyFat`, `leanMass`), each with its own switch, same per-day summary rules as
+   weight (morning pick, Health wins); shown as trends next to weight in Fuel; stay out of every coach/Claude
+   context like other Health data; not sent anywhere.
    next to weigh-ins; an **estimated one-rep-max** chart per lift (a standard formula, top set per session,
    warm-ups excluded) in the exercise history.
 5. **Short on time:** "I have 20 / 30 / 45 min" (chip or text) → a Proposal for today that keeps the main
