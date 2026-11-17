@@ -119,7 +119,7 @@ export type UserPlan = { days: ProgramDay[]; seededFrom: string; edited: boolean
 export type Schedule = { rotation: string[]; restWeekdays: number[] };
 
 export type DayAdjust = {
-  kind: 'avoidArea' | 'lighter' | 'deload' | 'swap';
+  kind: 'avoidArea' | 'lighter' | 'deload' | 'swap' | 'shortOnTime';
   area?: BodyArea;
   /** The day as it will run. */
   exercises: PlannedExercise[];
