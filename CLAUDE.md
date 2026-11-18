@@ -50,6 +50,8 @@ push or switch branches.**
 | `anatomy-3d-engineer` | `src/ui/body3d/**`, `src/ui/bodyMap.ts`, `src/ui/skeleton3d.ts`, `src/ui/demo3d/**` |
 | `ml-engineer` | `ml/**` (Python training pipeline for the M7b food classifier), `src/food-vision/**` (classifier + Claude-backup client in the app) |
 | `ios-engineer` | `ios/**`, `capacitor.config.ts`, `src/native/**` (Capacitor shell, native plugins, TS bridge), `fixtures/headmotion/**`, `docs/ios-setup.md`, `scripts/gen-trainer-tools.mjs` (M10 phase B), `scripts/check-native-bundle.mjs` + `scripts/ios-install.mjs` (the install gate) |
+| `ui-engineer` (M8) | also `server/**` (the optional M8.4 push sender, only after Wongsaton approves it) and `docs/watch-shortcut.md` |
+| `social-media` | `marketing/**` (Instagram Story packs: templates, capture scripts, captions, shot lists; output in `marketing/out/`, gitignored). Run with `/story`. |
 | `reviewer` | Read-only review of diffs against these rules |
 | `verifier` | Read-only on app code; runs check/e2e/build, owns `scripts/screenshots.mjs`, `docs/screenshots/**` |
 | main session | `src/core/types.ts` changes others consume, `src/ui/app.ts` routing, `src/main.ts`, configs, `package.json`, git |

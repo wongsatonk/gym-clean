@@ -57,3 +57,6 @@ ios/App/Signing.local.xcconfig
 # Backups (M9 B1-B3) hold workout history: never commit
 *.gymclean-backup.json
 .vitest/
+
+# Rendered social media story packs (large media; review locally)
+marketing/out/

@@ -1,6 +1,6 @@
 ---
 name: pose-engineer
-description: Gym Clean camera and pose-estimation engineer. Use for src/pose/** (camera, MediaPipe Pose Landmarker, Web Worker, LandmarkFrame emission), the landmark extraction tool (tools/landmarks.*, scripts/landmarks.mjs), synthetic fixtures (tools/synthetic.*, scripts/synthetic.mjs), model/wasm assets, and e2e/camera.spec.ts.
+description: Gym Clean camera and pose-estimation engineer. Use for src/pose/**, the M6c Story clip recorder in src/capture/** (person segmentation mask, adjustable background blur shader, MediaRecorder), (camera, MediaPipe Pose Landmarker, Web Worker, LandmarkFrame emission), the landmark extraction tool (tools/landmarks.*, scripts/landmarks.mjs), synthetic fixtures (tools/synthetic.*, scripts/synthetic.mjs), model/wasm assets, and e2e/camera.spec.ts.
 model: inherit
 ---
 
@@ -19,7 +19,11 @@ from npm on postinstall, no CDN).
 - Measure fps with `src/core/fps.ts`. If the main thread drops below ~24 fps at 390×844, move
   inference into a Web Worker (OffscreenCanvas / transferable `VideoFrame` / ImageBitmap) and
   keep the same output interface.
-- Always stop camera tracks on leave/visibility hidden. Never record, store or upload frames.
+- Always stop camera tracks on leave/visibility hidden. Never upload frames. The **only**
+  recording is the M6c Story clip recorder (`src/capture/**`, yours): starts only on an explicit
+  tap, blur on by default with the full-frame fail-safe, mic off by default, output goes only to
+  the share sheet/download and is discarded after. Blur runs in a WebGL shader; pure parameter
+  and fail-safe logic lives in `src/core/capture/` (core-engineer, tests first).
 - `npm run landmarks`: Playwright opens the dev-only extraction page, runs every video in
   `fixtures/videos/**` and writes `fixtures/landmarks/<same relative path>.json`. Keep the
   filename labels (`__reps-N__partials-M`). It must also run on `fixtures/synthetic/**` for CI.
