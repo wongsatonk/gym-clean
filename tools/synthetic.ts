@@ -1,10 +1,14 @@
-// Dev-only: renders an original articulated mannequin doing one of the six pose-tracked exercises
-// (SPEC §2 M4 table, in its SPEC view) and records it to WebM, for exercising the landmark pipeline
+// Dev-only: renders an original articulated mannequin doing one of the pose-tracked exercises
+// (SPEC §2 M4 table and the SPEC M4f wave 1 table, each in its SPEC view) and records it to WebM, for exercising the landmark pipeline
 // and the rep counter without filming anyone. Driven by scripts/synthetic.mjs.
 //
 // Each exercise is a pose function of the tracked joint angle (degrees, the same angle the rep
 // counter measures). A clip is a keyframe schedule of that angle: full reps go >= 10 deg past both
 // SPEC thresholds, partials turn around near mid-range, every phase lasts >= 400 ms.
+//
+// synthetic-03-<flaw> clips (M5 task 9) add one deliberate form mistake on reps 5-8 of an 8-rep set,
+// as positive fixtures for the focus/form rules. The flaw is a per-rep weight `w` (0 = clean) that
+// each exercise's pose function reads through `PoseExtra`.
 import {
   BoxGeometry,
   CapsuleGeometry,
@@ -23,7 +27,24 @@ import {
   WebGLRenderer,
 } from 'three';
 
-export type ClipSpec = { folder: string; name: string; reps: number; partials: number };
+/** Ground truth of a flaw clip, written to fixtures/synthetic/flaws.json by scripts/synthetic.mjs. */
+export type FlawSpec = {
+  /** Short id of the mistake, as in the file name (synthetic-03-<flaw>). */
+  flaw: string;
+  /** What the clip does, in the renderer's own (pre-detection) degrees and seconds. */
+  description: string;
+  /** 1-based rep numbers that carry the flaw. */
+  flawReps: number[];
+  /** Per rep, the rendered parameters (angle at the turnaround, lift and lowering seconds, weight). */
+  reps: { turn: number; upSec: number; downSec: number; w: number }[];
+};
+export type ClipSpec = {
+  folder: string;
+  name: string;
+  reps: number;
+  partials: number;
+  flaw?: FlawSpec;
+};
 
 declare global {
   interface Window {
@@ -54,6 +75,13 @@ type Pose = {
   l: Side;
   bells: { pos: Vector3; axis: Vector3 }[];
 };
+/**
+ * Flaw inputs for one frame. `flaw` is the clip's flaw id (a pose only applies its own), `w` the
+ * flaw weight of the rep in progress (0 = clean, stepwise per rep), `ws` the same weight eased
+ * between reps (for flaws that persist between reps), `turn` the rep's turnaround angle.
+ */
+type PoseExtra = { flaw: string | null; w: number; ws: number; turn: number };
+const CLEAN_X: PoseExtra = { flaw: null, w: 0, ws: 0, turn: 0 };
 
 const U = 0.3; // upper arm
 const F = 0.26; // forearm
@@ -61,6 +89,13 @@ const THIGH = 0.42;
 const SHIN = 0.41;
 const SPINE = 0.5;
 const HINGE = 70; // row: torso tilt from vertical
+// MediaPipe's world landmarks read these flaws at roughly half their rendered size, so they are
+// rendered larger than what the focus rules should measure.
+const CURL_LEAN = 28; // curl elbow swing: torso leans back this far at the top of the lift
+const CURL_DRIFT = 45; // ... and the upper arm swings this far forward of the torso line
+const PUSHUP_SAG = 50; // push-up hip sag: shoulder-hip-ankle bends to 180 - this (rendered)
+const RAISE_LAG = 15; // lateral raise: the left arm trails the right by this mid-rep ...
+const RAISE_LEFT_SCALE = 0.65; // ... on top of covering only this share of the right arm's range
 const rad = (d: number) => (d * Math.PI) / 180;
 const v = (x: number, y: number, z = 0) => new Vector3(x, y, z);
 /** Unit vector in the sagittal (x, y) plane at `deg` from +x, counter-clockwise. */
@@ -102,15 +137,68 @@ type Exercise = {
   start: number; // angle at rest (start position)
   full: number; // turnaround angle of a full rep
   partial: number; // turnaround angle of a partial rep (mid-range)
-  pose: (theta: number) => Pose;
+  pose: (theta: number, x: PoseExtra) => Pose;
   props?: (scene: Group) => void;
 };
 
-const box = (g: Group, c: [number, number, number], s: [number, number, number]) => {
+const box = (
+  g: Group,
+  c: [number, number, number],
+  s: [number, number, number],
+  tiltDeg = 0, // rotation about the figure's z axis (sagittal tilt; + = top leans toward -x)
+) => {
   const m = new Mesh(new BoxGeometry(...s), new MeshStandardMaterial({ color: 0x5a4a3c }));
   m.position.set(...c);
+  m.rotation.z = rad(tiltDeg);
   g.add(m);
 };
+
+/**
+ * Wrist position for elbow angle `theta` (between elbow->shoulder and elbow->wrist): the forearm
+ * starts as the upper arm's straight continuation (theta 180) and folds toward `toward` (any
+ * direction not parallel to the upper arm), in the plane the two span. Works off the sagittal plane.
+ */
+function foldForearm(s: Vector3, e: Vector3, theta: number, toward: Vector3): Vector3 {
+  const b = s.clone().sub(e).normalize();
+  const p = toward.clone().addScaledVector(b, -toward.dot(b)).normalize();
+  return e
+    .clone()
+    .addScaledVector(b, F * Math.cos(rad(theta)))
+    .addScaledVector(p, F * Math.sin(rad(theta)));
+}
+
+/**
+ * Seated DB press, front view: forearms vertical, upper arms raised alpha above horizontal, so
+ * cos(theta) = -sin(alpha); wrists stay above the shoulders. Shared by `shoulder-press` (stool)
+ * and `db-shoulder-press` (bench with a back pad, M4f).
+ */
+const seatedPress = (theta: number): Pose => {
+  const hip = v(0, 0.56);
+  const neck = v(0, 1.06);
+  const alpha = Math.asin(-Math.cos(rad(theta)));
+  const { r, l } = sides((sg) => {
+    const s = at(neck, 0.2 * sg);
+    const e = s.clone().add(v(0, U * Math.sin(alpha), U * Math.cos(alpha) * sg));
+    const w = e.clone().add(v(0, F, 0));
+    return {
+      s,
+      e,
+      w,
+      h: w.clone().add(v(0, 0.04, 0)),
+      k: v(0.42, 0.52, 0.13 * sg),
+      a: v(0.45, 0.09, 0.15 * sg),
+      toe: v(0.62, 0.03, 0.15 * sg),
+    };
+  });
+  return { hip, neck, face: v(1, 0), r, l, bells: [r, l].map(bellAtHand(v(0, 0, 1))) };
+};
+
+/** Seated with thighs forward and feet on the floor (bench exercises, M4f). */
+const seatedLegs = (sgn: number, spread = 0.13) => ({
+  k: v(0.42, 0.52, spread * sgn),
+  a: v(0.45, 0.09, (spread + 0.02) * sgn),
+  toe: v(0.62, 0.03, (spread + 0.02) * sgn),
+});
 
 const EX: Record<string, Exercise> = {
   // Elbow angle, side view. Thresholds > 150 / < 55.
@@ -121,16 +209,29 @@ const EX: Record<string, Exercise> = {
     start: 180,
     full: 22,
     partial: 90,
-    pose: (theta) => {
+    pose: (theta, x) => {
+      // Flaw (elbow swing): with the lift's progress, the torso leans back up to CURL_LEAN and the
+      // upper arm swings forward of the torso line by up to CURL_DRIFT. The elbow angle stays theta.
+      const prog = Math.min(1, Math.max(0, (180 - theta) / (180 - 22)));
+      // Both start 35% of the way up (so the pose the rule measures from, just as the lift
+      // begins, is clean). The lean is full from 80% of the way up. The drift is full from 60%
+      // to 85% of the way up; by the top the upper arm is back to half the lean forward of
+      // vertical in the world (behind the leaning torso line), so the elbow angle MediaPipe reads at the top stays deep enough
+      // to count (an upper arm pointing forward reads shallower).
+      const k = x.flaw === 'elbow-swing' ? x.w : 0;
+      const ramp = (a: number, b: number) => Math.min(1, Math.max(0, (prog - a) / (b - a)));
+      const lean = CURL_LEAN * k * ramp(0.35, 0.8);
+      const drift =
+        k * (CURL_DRIFT * (ramp(0.35, 0.6) - ramp(0.85, 1)) - 0.5 * lean * ramp(0.85, 1));
       const hip = v(0, 0.92);
-      const neck = v(0, 1.42);
+      const neck = hip.clone().addScaledVector(v(-Math.sin(rad(lean)), Math.cos(rad(lean))), SPINE);
       const { r, l } = sides((sg) => {
         const s = at(neck, 0.2 * sg);
-        const e = s.clone().addScaledVector(dir(-94), U);
+        const e = s.clone().addScaledVector(dir(-94 + lean + drift), U);
         const w = e.clone().addScaledVector(dir(ang2(s.clone().sub(e)) - theta), F);
         return { s, e, w, h: w.clone(), ...standLegs(sg) };
       });
-      return { hip, neck, face: v(1, 0), r, l, bells: [r, l].map(bellAtHand(v(0, 0, 1))) };
+      return { hip, neck, face: dir(lean), r, l, bells: [r, l].map(bellAtHand(v(0, 0, 1))) };
     },
   },
   // Elbow angle, side view, horizontal body. Thresholds > 155 / < 95.
@@ -141,7 +242,7 @@ const EX: Record<string, Exercise> = {
     start: 180,
     full: 40,
     partial: 115,
-    pose: (theta) => {
+    pose: (theta, x) => {
       const ankle = v(-0.85, 0.1);
       const wrist = v(0.38, 0.05);
       const d = Math.sqrt(U * U + F * F - 2 * U * F * Math.cos(rad(theta)));
@@ -157,14 +258,39 @@ const EX: Record<string, Exercise> = {
       const beta = (lo + hi) / 2;
       const u = dir(beta);
       const neck = ankle.clone().addScaledVector(u, 1.33);
-      const hip = ankle.clone().addScaledVector(u, 0.83);
+      // Flaw (hip sag): feet, shoulders and arms stay exactly where the clean rep has them (so the
+      // elbow reads the same); only the hip drops below the ankle-shoulder line, by `drop`, so the
+      // shoulder-hip-ankle angle is 180 - sag. Near the bottom the drop is capped to keep the hip
+      // >= 0.05 off the floor (the pelvis touches it), so the sag shrinks to ~30 deg there.
+      // The sag is zero near the top (a sagging plank with nearly straight arms makes MediaPipe
+      // swap the left/right labels or drop the near arm's visibility, which the counter can't
+      // follow): it ramps in between elbow angles ~131 and ~103 deg and stays until the arms
+      // pass those angles again on the way up.
+      const prog = Math.min(1, Math.max(0, (180 - theta) / (180 - 40)));
+      const sag =
+        x.flaw === 'hip-sag'
+          ? PUSHUP_SAG * x.ws * Math.min(1, Math.max(0, (prog - 0.35) / 0.2))
+          : 0;
+      const bend = (h: number) => (Math.atan2(h, 0.83) + Math.atan2(h, 0.5)) * (180 / Math.PI);
+      let dLo = 0;
+      let dHi = 0.5;
+      for (let i = 0; i < 40; i++) {
+        const mid = (dLo + dHi) / 2;
+        if (bend(mid) < sag) dLo = mid;
+        else dHi = mid;
+      }
+      const down = dir(beta - 90);
+      const line = ankle.clone().addScaledVector(u, 0.83);
+      const drop = Math.max(0, Math.min(dLo, (line.y - 0.05) / -down.y));
+      const hip = line.addScaledVector(down, drop);
+      const knee = ankle.clone().lerp(hip, 0.41 / 0.83);
       const e2 = joint(neck, U, wrist, F, (p) => -p.x + 0.3 * p.y);
       const { r, l } = sides((sg) => ({
         s: at(neck, 0.2 * sg),
         e: at(e2, 0.23 * sg),
         w: at(wrist, 0.25 * sg),
         h: v(wrist.x + 0.07, 0.03, 0.25 * sg),
-        k: at(ankle.clone().addScaledVector(u, 0.41), 0.1 * sg),
+        k: at(knee, 0.1 * sg),
         a: at(ankle, 0.1 * sg),
         toe: v(ankle.x + 0.05, 0.01, 0.1 * sg),
       }));
@@ -179,27 +305,7 @@ const EX: Record<string, Exercise> = {
     start: 35,
     full: 180,
     partial: 100,
-    pose: (theta) => {
-      const hip = v(0, 0.56);
-      const neck = v(0, 1.06);
-      // Forearm vertical, upper arm raised alpha above horizontal: cos(theta) = -sin(alpha).
-      const alpha = Math.asin(-Math.cos(rad(theta)));
-      const { r, l } = sides((sg) => {
-        const s = at(neck, 0.2 * sg);
-        const e = s.clone().add(v(0, U * Math.sin(alpha), U * Math.cos(alpha) * sg));
-        const w = e.clone().add(v(0, F, 0));
-        return {
-          s,
-          e,
-          w,
-          h: w.clone().add(v(0, 0.04, 0)),
-          k: v(0.42, 0.52, 0.13 * sg),
-          a: v(0.45, 0.09, 0.15 * sg),
-          toe: v(0.62, 0.03, 0.15 * sg),
-        };
-      });
-      return { hip, neck, face: v(1, 0), r, l, bells: [r, l].map(bellAtHand(v(0, 0, 1))) };
-    },
+    pose: seatedPress,
     props: (g) => box(g, [-0.02, 0.24, 0], [0.46, 0.48, 0.42]),
   },
   // Rowing (near, right) arm elbow angle, side view, torso hinged ~70 deg. Thresholds > 150 / < 90.
@@ -298,13 +404,23 @@ const EX: Record<string, Exercise> = {
     start: 8,
     full: 100,
     partial: 50,
-    pose: (theta) => {
+    pose: (theta, x) => {
       const hip = v(0, 0.92);
       const neck = v(0, 1.42);
       // Narrow shoulders over wide hips, so the arm can hang close to the hip line.
       const off = (Math.atan2(0.17 - 0.12, SPINE) * 180) / Math.PI;
-      const a = rad(Math.max(0, theta - off));
       const { r, l } = sides((sg) => {
+        // Flaw (arms out of sync): the left arm (sg = -1) covers only RAISE_LEFT_SCALE of the
+        // right arm's range (stops ~35 deg lower at the top) and trails it by RAISE_LAG more over
+        // the middle of the movement.
+        const p = Math.min(1, Math.max(0, (theta - 8) / (x.turn - 8 || 1)));
+        const own =
+          x.flaw === 'arms-out-of-sync' && sg < 0 && x.w > 0
+            ? 8 +
+              (theta - 8) * RAISE_LEFT_SCALE -
+              RAISE_LAG * Math.min(1, 3 * Math.sin(Math.PI * p))
+            : theta;
+        const a = rad(Math.max(0, own - off));
         const s = at(neck, 0.17 * sg);
         const d = v(0, -Math.cos(a), Math.sin(a) * sg);
         const e = s.clone().addScaledVector(d, U);
@@ -322,6 +438,198 @@ const EX: Record<string, Exercise> = {
       };
     },
   },
+
+  // ----- M4f wave 1 (SPEC M4f table). Same keyframe schedules; original poses. -----
+
+  // Elbow angle, side view, both arms together, neutral grip. Thresholds > 150 / < 70.
+  'hammer-curl': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [0.3, 1.0, 4.1], look: [0.1, 0.95, 0], fov: 32 },
+    start: 180,
+    full: 22,
+    partial: 92,
+    pose: (theta) => {
+      const hip = v(0, 0.92);
+      const neck = hip.clone().add(v(0, SPINE));
+      const { r, l } = sides((sg) => {
+        const s = at(neck, 0.2 * sg);
+        const e = s.clone().addScaledVector(dir(-93), U);
+        const w = e.clone().addScaledVector(dir(ang2(s.clone().sub(e)) - theta), F);
+        return { s, e, w, h: w.clone(), ...standLegs(sg) };
+      });
+      // Thumbs up: the handle lies in the sagittal plane, across the forearm.
+      const bells = [r, l].map((sd) => {
+        const f = sd.w.clone().sub(sd.e).normalize();
+        return { pos: sd.h.clone().addScaledVector(f, 0.03), axis: v(-f.y, f.x) };
+      });
+      return { hip, neck, face: v(1, 0), r, l, bells };
+    },
+  },
+  // Right (working, near) elbow, seated, leaning forward, upper arm braced on the inner thigh;
+  // camera ~35 deg round from the working side toward the front. Thresholds > 145 / < 70.
+  'concentration-curl': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [2.15, 0.78, 3.1], look: [0.22, 0.62, 0], fov: 32 },
+    start: 180,
+    full: 15,
+    partial: 95,
+    pose: (theta) => {
+      const lean = 35;
+      const hip = v(0, 0.55);
+      const u = v(Math.sin(rad(lean)), Math.cos(rad(lean)));
+      const neck = hip.clone().addScaledVector(u, SPINE);
+      const sR = at(neck, 0.2);
+      const eR = sR.clone().addScaledVector(v(0.04, -0.29, -0.08).normalize(), U);
+      // Folds forward and a little across the body (toward the other shoulder).
+      const wR = foldForearm(sR, eR, theta, v(1, 0, -0.2));
+      const sL = at(neck, -0.2);
+      // Left forearm rests on the left thigh.
+      const eL = sL.clone().addScaledVector(v(0.15, -0.95, -0.12).normalize(), U);
+      const wL = eL.clone().addScaledVector(v(0.95, -0.2, -0.05).normalize(), F);
+      const r: Side = { s: sR, e: eR, w: wR, h: wR.clone(), ...seatedLegs(1, 0.24) };
+      const l: Side = { s: sL, e: eL, w: wL, h: wL.clone(), ...seatedLegs(-1, 0.24) };
+      return {
+        hip,
+        neck,
+        face: v(Math.cos(rad(lean + 15)), -Math.sin(rad(lean + 15))),
+        hipW: 0.11,
+        r,
+        l,
+        bells: [r].map(bellAtHand(v(0, 0, 1))),
+      };
+    },
+    props: (g) => box(g, [-0.05, 0.24, 0], [0.42, 0.48, 0.36]),
+  },
+  // Elbow angle, side view, torso reclined 45 deg on an incline bench, upper arms hanging straight
+  // down behind the torso line. Thresholds > 150 / < 70.
+  'incline-curl': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [0.05, 0.72, 3.7], look: [0.05, 0.62, 0], fov: 32 },
+    start: 180,
+    full: 22,
+    partial: 92,
+    pose: (theta) => {
+      const recline = 45;
+      const hip = v(0, 0.55);
+      const u = v(-Math.sin(rad(recline)), Math.cos(rad(recline)));
+      const neck = hip.clone().addScaledVector(u, SPINE);
+      const { r, l } = sides((sg) => {
+        const s = at(neck, 0.2 * sg);
+        const e = s.clone().addScaledVector(dir(-90), U);
+        const w = e.clone().addScaledVector(dir(ang2(s.clone().sub(e)) - theta), F);
+        return { s, e, w, h: w.clone(), ...seatedLegs(sg) };
+      });
+      return {
+        hip,
+        neck,
+        face: v(Math.cos(rad(recline)), Math.sin(rad(recline))),
+        r,
+        l,
+        bells: [r, l].map(bellAtHand(v(0, 0, 1))),
+      };
+    },
+    props: (g) => {
+      box(g, [0.02, 0.24, 0], [0.42, 0.48, 0.3]); // seat
+      // Back pad along the torso, just behind it (narrower than the shoulders).
+      box(g, [-0.3, 0.62, 0], [0.06, 0.75, 0.28], 45);
+    },
+  },
+  // Seated DB press on a bench with a back pad: the seated-press pose (front view, elbow angle in
+  // the image plane). Thresholds > 143 / < 80; wrists above the shoulders throughout.
+  'db-shoulder-press': {
+    view: 'front',
+    size: [720, 960],
+    cam: { pos: [0, 0.92, 3.8], look: [0, 0.86, 0], fov: 32 },
+    start: 35,
+    full: 180,
+    partial: 88,
+    pose: seatedPress,
+    props: (g) => {
+      box(g, [-0.02, 0.24, 0], [0.46, 0.48, 0.42]); // seat
+      box(g, [-0.22, 0.85, 0], [0.06, 0.75, 0.34]); // upright back pad
+    },
+  },
+  // Near (right) elbow, side view, both arms rowing, torso hinged 55 deg, knees soft, no bench.
+  // The upper arm swings back 0.8 x the elbow flexion; the forearm folds toward the shoulder.
+  // Thresholds > 145 / < 90.
+  'bent-over-row': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [0.25, 0.8, 3.7], look: [0.25, 0.72, 0], fov: 32 },
+    start: 180,
+    full: 40,
+    partial: 82,
+    pose: (theta) => {
+      const hinge = 55;
+      const hip = v(0, 0.84);
+      const u = v(Math.sin(rad(hinge)), Math.cos(rad(hinge)));
+      const neck = hip.clone().addScaledVector(u, SPINE);
+      const gamma = 0.8 * (180 - theta);
+      const { r, l } = sides((sg) => {
+        const s = at(neck, 0.2 * sg);
+        const e = s.clone().addScaledVector(dir(-90 - gamma), U);
+        const w = e.clone().addScaledVector(dir(ang2(s.clone().sub(e)) - theta), F);
+        return {
+          s,
+          e,
+          w,
+          h: w.clone(),
+          k: v(0.1, 0.48, 0.1 * sg),
+          a: v(-0.02, 0.09, 0.1 * sg),
+          toe: v(0.17, 0.03, 0.1 * sg),
+        };
+      });
+      return {
+        hip,
+        neck,
+        face: v(Math.cos(rad(hinge)), -Math.sin(rad(hinge))),
+        r,
+        l,
+        bells: [r, l].map(bellAtHand(v(0, 0, 1))),
+      };
+    },
+  },
+  // Near (right) elbow, standing; both hands hold one dumbbell overhead, upper arms near
+  // vertical, the forearms fold down behind the head. Thresholds > 150 / < 80, extended gate:
+  // wrist above shoulder (true throughout). The camera sits ~40 deg round from the side toward
+  // the front: square side-on, the near upper arm covers this mannequin's face and MediaPipe
+  // loses 25-65% of frames. MediaPipe still reads the bent end ~55 deg shallow (rendered 15 ->
+  // ~70-76) and straight overhead arms at ~155-160, so these clips miscount (PROGRESS M4f task 6).
+  // Concentration curl (above): rendered 15 reads ~61-72 in its 3/4 view.
+  'triceps-extension': {
+    view: 'side',
+    size: [720, 960],
+    cam: { pos: [2.75, 1.12, 3.3], look: [0, 1.12, 0], fov: 32 },
+    start: 180,
+    full: 15,
+    partial: 112,
+    pose: (theta) => {
+      const hip = v(0, 0.92);
+      const neck = hip.clone().add(v(0, SPINE));
+      const { r, l } = sides((sg) => {
+        const s = at(neck, 0.2 * sg);
+        const e2 = s.clone().addScaledVector(dir(96), U);
+        const w2 = e2.clone().addScaledVector(dir(ang2(s.clone().sub(e2)) - theta), F);
+        // The arms converge on the one dumbbell between the hands.
+        const e = at(e2, 0.17 * sg);
+        const w = at(w2, 0.09 * sg);
+        return { s, e, w, h: w.clone(), ...standLegs(sg) };
+      });
+      const hands = r.w.clone().lerp(l.w, 0.5);
+      const f = r.w.clone().sub(r.e).normalize();
+      return {
+        hip,
+        neck,
+        face: v(1, 0),
+        r,
+        l,
+        bells: [{ pos: hands.addScaledVector(f, 0.05), axis: f }],
+      };
+    },
+  },
 };
 
 function bellAtHand(axis: Vector3) {
@@ -336,53 +644,183 @@ function bellAtHand(axis: Vector3) {
 // ---------------------------------------------------------------------------------------------
 
 type Move = 'full' | 'fast' | 'partial';
-type Plan = { name: string; moves: Move[] };
+/** One rep of a schedule: turnaround angle, lift/lowering seconds, flaw weight. */
+type Rep = { kind: 'full' | 'partial'; turn: number; up: number; down: number; w: number };
+type Plan = { name: string; moves: (Move | Rep)[]; flaw?: Omit<FlawSpec, 'reps' | 'flawReps'> };
 const CLEAN: Plan = { name: 'synthetic-01', moves: ['full', 'full', 'full', 'full'] };
 const MESSY: Plan = { name: 'synthetic-02', moves: ['full', 'partial', 'fast', 'partial', 'fast'] };
+
+/** 8 full reps; reps 5-8 (1-based) take `bad`, reps 1-4 `good`. */
+const eight = (good: Partial<Rep>, bad: Partial<Rep>): Partial<Rep>[] =>
+  Array.from({ length: 8 }, (_, i) => (i < 4 ? good : { w: 1, ...bad }));
+const full = (o: Partial<Rep>): Rep => ({
+  kind: 'full',
+  turn: NaN,
+  up: 1.0,
+  down: 1.2,
+  w: 0,
+  ...o,
+});
+
+// M5 task 9: one deliberate mistake per clip, on reps 5-8 of 8 full reps, in the SPEC view.
+const FLAWS: Record<string, Plan[]> = {
+  'lateral-raise': [
+    {
+      name: 'synthetic-03-arms-out-of-sync',
+      // Reps 1-4: both arms to 90. Reps 5-8: the right arm to 110, the left only to ~74 and
+      // trailing mid-rep, so the arms are > 30 deg apart (rendered) from mid-lift through the top
+      // hold to mid-lowering. The two-arm mean still clears the 75 deg threshold. Slow reps
+      // (lift 1.6 s, lower 1.8 s).
+      moves: [90, 90, 90, 90, 110, 110, 110, 110].map((turn, i) =>
+        full({ turn, up: 1.6, down: 1.8, w: i < 4 ? 0 : 1 }),
+      ),
+      flaw: {
+        flaw: 'arms-out-of-sync',
+        description: `reps 5-8: right arm to 110 deg, left arm covers ${RAISE_LEFT_SCALE} of its range (to ~74 deg) and trails a further ${RAISE_LAG} deg mid-rep; reps 1-4 both arms to 90; lift 1.6 s, lower 1.8 s`,
+      },
+    },
+    {
+      name: 'synthetic-03-raise-too-high',
+      // Reps 1-4 stop at 90, reps 5-8 go to 148 (rendered; MediaPipe reads high raises
+      // lower: rendered 116 / 138 / 165 read ~108 / ~121 / ~150). Arms in sync. Reps 5-8 lift in 1.4 s and
+      // lower in 1.7 s so the bigger range doesn't also read as a rushed lowering.
+      moves: [90, 90, 90, 90, 148, 148, 148, 148].map((turn, i) =>
+        full(i < 4 ? { turn } : { turn, up: 1.4, down: 1.7, w: 1 }),
+      ),
+      flaw: {
+        flaw: 'raise-too-high',
+        description:
+          'both arms raise to 90 deg on reps 1-4 and to 148 deg on reps 5-8 (lift 1.4 s, lower 1.7 s)',
+      },
+    },
+  ],
+  curl: [
+    {
+      name: 'synthetic-03-elbow-swing',
+      // Reps 5-8 lift in 1.6 s so the drift holds well past 0.2 s, and curl to 16 deg (the
+      // swung pose reads shallower at the top).
+      moves: eight({ turn: 22 }, { up: 1.6, turn: 16 }).map(full),
+      flaw: {
+        flaw: 'elbow-swing',
+        description: `reps 5-8 (lift 1.6 s, curl to 16 deg): from 35% of the way up, the upper arm swings ${CURL_DRIFT} deg forward of the torso (held from 60% to 85% of the lift; back near vertical at the top) and the torso leans back ${CURL_LEAN} deg (full from 80%); rendered degrees`,
+      },
+    },
+    {
+      name: 'synthetic-03-rushed-lowering',
+      moves: eight({ down: 2.0 }, { down: 0.6 }).map((o) => full({ turn: 22, ...o })),
+      flaw: {
+        flaw: 'rushed-lowering',
+        description:
+          'lowering takes 2.0 s on reps 1-4 and 0.6 s on reps 5-8 (lift 1.0 s throughout)',
+      },
+    },
+  ],
+  'push-up': [
+    {
+      name: 'synthetic-03-hip-sag',
+      moves: eight({}, {}).map((o) => full({ turn: 40, ...o })),
+      flaw: {
+        flaw: 'hip-sag',
+        description: `reps 5-8: hips drop below the ankle-shoulder line by up to ${PUSHUP_SAG} deg (shoulder-hip-ankle ${180 - PUSHUP_SAG} deg rendered), zero near the top, ramping in between elbow angles 131 and 103 deg, ~30 deg at the bottom where the hips touch the floor; arms and shoulders move exactly as in a clean rep`,
+      },
+    },
+  ],
+  'goblet-squat': [
+    {
+      name: 'synthetic-03-short-range',
+      // Rendered depth 45 deg on reps 1-4 and 83 on reps 5-8. MediaPipe reads deep knee angles
+      // shallower (rendered 45 / 80 measured ~72 / ~94), so this keeps reps 5-8 under the 100 deg
+      // threshold while their measured range is under 80% of reps 1-4.
+      moves: eight({ turn: 45 }, { turn: 83 }).map(full),
+      flaw: {
+        flaw: 'short-range',
+        description:
+          'knee bends to 45 deg on reps 1-4 and only to 83 deg on reps 5-8 (rendered range 135 vs 97 deg)',
+      },
+    },
+  ],
+};
+
 // curl/synthetic-01 predates this renderer (3 full + 1 partial) and is kept byte-identical because
 // the e2e fake camera plays it; scripts/synthetic.mjs never re-renders an existing copy.
-const plansFor = (folder: string): Plan[] =>
-  folder === 'curl'
-    ? [{ name: 'synthetic-01', moves: ['full', 'full', 'full', 'partial'] }, MESSY]
-    : [CLEAN, MESSY];
+const plansFor = (folder: string): Plan[] => [
+  ...(folder === 'curl'
+    ? [{ name: 'synthetic-01', moves: ['full', 'full', 'full', 'partial'] } as Plan, MESSY]
+    : [CLEAN, MESSY]),
+  ...(FLAWS[folder] ?? []),
+];
 const HOLD_START = 1.0;
 const TAIL = 0.8;
 
-type Key = { t: number; angle: number };
-function keyframes(ex: Exercise, moves: Move[]): Key[] {
-  const keys: Key[] = [{ t: 0, angle: ex.start }];
+function toRep(ex: Exercise, m: Move | Rep): Rep {
+  if (typeof m !== 'string') return Number.isNaN(m.turn) ? { ...m, turn: ex.full } : m;
+  return {
+    kind: m === 'partial' ? 'partial' : 'full',
+    turn: m === 'partial' ? ex.partial : ex.full,
+    up: m === 'partial' ? 0.7 : 1.0,
+    down: m === 'fast' ? 0.45 : m === 'partial' ? 0.8 : 1.2,
+    w: 0,
+  };
+}
+
+/** `w` is the flaw weight of the segment that ends at this key. */
+type Key = { t: number; angle: number; w: number; turn: number };
+function keyframes(ex: Exercise, reps: Rep[]): Key[] {
+  const keys: Key[] = [{ t: 0, angle: ex.start, w: 0, turn: ex.full }];
   let t = HOLD_START;
-  keys.push({ t, angle: ex.start });
-  for (const m of moves) {
-    const turn = m === 'partial' ? ex.partial : ex.full;
-    const up = m === 'partial' ? 0.7 : 1.0;
-    const down = m === 'fast' ? 0.45 : m === 'partial' ? 0.8 : 1.2;
-    keys.push({ t: (t += up), angle: turn });
-    keys.push({ t: (t += 0.4), angle: turn });
-    keys.push({ t: (t += down), angle: ex.start });
-    keys.push({ t: (t += 0.5), angle: ex.start });
+  keys.push({ t, angle: ex.start, w: 0, turn: ex.full });
+  for (const { turn, up, down, w } of reps) {
+    keys.push({ t: (t += up), angle: turn, w, turn });
+    keys.push({ t: (t += 0.4), angle: turn, w, turn });
+    keys.push({ t: (t += down), angle: ex.start, w, turn });
+    keys.push({ t: (t += 0.5), angle: ex.start, w, turn });
   }
-  keys.push({ t: t + TAIL, angle: ex.start });
+  keys.push({ t: t + TAIL, angle: ex.start, w: 0, turn: ex.full });
   return keys;
 }
-function angleAt(keys: Key[], t: number): number {
+const ease = (u: number) => 0.5 - 0.5 * Math.cos(Math.PI * u);
+/** Eased value of `get` at time t, plus the stepwise weight of the segment t is in. */
+function sample(keys: Key[], t: number, get: (k: Key) => number): number {
   let prev: Key | undefined;
   for (const b of keys) {
     if (prev && t <= b.t) {
       const u = b.t > prev.t ? (t - prev.t) / (b.t - prev.t) : 1;
-      return prev.angle + (b.angle - prev.angle) * (0.5 - 0.5 * Math.cos(Math.PI * u));
+      return get(prev) + (get(b) - get(prev)) * ease(u);
     }
     prev = b;
   }
-  return prev?.angle ?? 0;
+  return prev ? get(prev) : 0;
+}
+const angleAt = (keys: Key[], t: number) => sample(keys, t, (k) => k.angle);
+/** The key that ends the segment t is in (stepwise per-rep values). */
+function segment(keys: Key[], t: number): Key | undefined {
+  return keys.find((k) => t <= k.t) ?? keys.at(-1);
+}
+function extraAt(keys: Key[], t: number, flaw: string | null): PoseExtra {
+  const seg = segment(keys, t);
+  return { flaw, w: seg?.w ?? 0, ws: sample(keys, t, (k) => k.w), turn: seg?.turn ?? 0 };
 }
 
 window.__clips = () =>
-  Object.keys(EX).flatMap((folder) =>
+  Object.entries(EX).flatMap(([folder, ex]) =>
     plansFor(folder).map((p) => {
-      const reps = p.moves.filter((m) => m !== 'partial').length;
-      const partials = p.moves.length - reps;
-      return { folder, name: `${p.name}__reps-${reps}__partials-${partials}`, reps, partials };
+      const reps = p.moves.map((m) => toRep(ex, m));
+      const full = reps.filter((r) => r.kind === 'full').length;
+      const partials = reps.length - full;
+      const spec: ClipSpec = {
+        folder,
+        name: `${p.name}__reps-${full}__partials-${partials}`,
+        reps: full,
+        partials,
+      };
+      if (p.flaw) {
+        spec.flaw = {
+          ...p.flaw,
+          flawReps: reps.flatMap((r, i) => (r.w > 0 ? [i + 1] : [])),
+          reps: reps.map((r) => ({ turn: r.turn, upSec: r.up, downSec: r.down, w: r.w })),
+        };
+      }
+      return spec;
     }),
   );
 
@@ -471,7 +909,7 @@ function buildFigure(fig: Group) {
 
 window.__render = async ({ folder, name }) => {
   const ex = EX[folder];
-  const plan = plansFor(folder).find((p) => name.startsWith(p.name));
+  const plan = plansFor(folder).find((p) => name.startsWith(`${p.name}__`));
   if (!ex || !plan) throw new Error(`unknown clip ${folder}/${name}`);
   const [W, H] = ex.size;
   const renderer = new WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -497,7 +935,10 @@ window.__render = async ({ folder, name }) => {
   scene.add(fig);
   ex.props?.(fig);
   const update = buildFigure(fig);
-  const keys = keyframes(ex, plan.moves);
+  const keys = keyframes(
+    ex,
+    plan.moves.map((m) => toRep(ex, m)),
+  );
   const total = keys.at(-1)?.t ?? 0;
 
   const stream = renderer.domElement.captureStream(30);
@@ -508,7 +949,7 @@ window.__render = async ({ folder, name }) => {
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => chunks.push(e.data);
   const done = new Promise<void>((r) => (rec.onstop = () => r()));
-  update(ex.pose(ex.start));
+  update(ex.pose(ex.start, CLEAN_X));
   renderer.render(scene, camera);
   rec.start(250);
 
@@ -516,7 +957,8 @@ window.__render = async ({ folder, name }) => {
   await new Promise<void>((resolve) => {
     const frame = () => {
       const t = (performance.now() - t0) / 1000;
-      update(ex.pose(angleAt(keys, t)));
+      const theta = angleAt(keys, t);
+      update(ex.pose(theta, extraAt(keys, t, plan.flaw?.flaw ?? null)));
       renderer.render(scene, camera);
       if (t < total) requestAnimationFrame(frame);
       else resolve();

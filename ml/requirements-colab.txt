@@ -1,0 +1,4 @@
+# Colab: keep Colab's preinstalled TensorFlow (it is set up for the GPU) and its numpy / Pillow /
+# PyYAML / pyarrow. Only add what Colab doesn't have, pinned like requirements.txt.
+mediapipe==1.2.3
+pytest==9.2.0

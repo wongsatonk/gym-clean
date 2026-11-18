@@ -1,0 +1,482 @@
+/* M12 slice 1c tasks 9–11: Today to-do card, To-do list, topic guide, report sheet.
+   Tokens only (src/styles.css). Text ≥ --fs-body except --fs-label next to an icon; every button
+   ≥ --tap-min. State is carried by words + icons, never colour alone. No motion of its own: the
+   global press feedback and the one reduced-motion rule in styles.css cover these buttons. */
+
+/* ---------- Today card ---------- */
+.todo-card {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  padding: 12px 14px;
+  text-align: left;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.todo-card-warn {
+  border-left: 4px solid var(--warn);
+}
+
+.todo-card-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+}
+
+.todo-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todo-card-count {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.todo-card-next,
+.todo-card-resign {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.todo-card-resign {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.todo-card-go {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-2);
+}
+
+/* ---------- To-do list ---------- */
+.todos .todo-summary {
+  font-size: var(--fs-lead);
+  font-weight: 700;
+}
+
+.todo-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 6px;
+}
+
+.todo-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.todo-row-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  padding: 10px 14px;
+  text-align: left;
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.todo-row-txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todo-row-title {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.todo-row-cp {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.todo-row-state {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 45%;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  text-align: right;
+}
+
+.todo-done .todo-row-state,
+.todo-skipped .todo-row-state,
+.todo-native .todo-row-state {
+  color: var(--text-2);
+}
+
+.todo-done .todo-row-state .ic {
+  color: var(--success);
+}
+
+.todo-report-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.todo-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap-cta);
+  padding: 0 18px;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+.todo-copy-btn.ghost {
+  min-height: var(--tap-bar);
+  font-size: var(--fs-body);
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+/* ---------- Topic guide ---------- */
+.todo-guide-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.todo-guide-topic {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.todo-native-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: var(--fs-body);
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+}
+
+.todo-step-count {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.todo-bar {
+  display: flex;
+  gap: 6px;
+}
+
+.todo-seg {
+  flex: 1;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--line);
+}
+
+.todo-seg.done {
+  background: var(--text-2);
+}
+
+.todo-seg.now {
+  background: var(--text);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 4px var(--cta);
+}
+
+.todo-step {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.todo-step-title {
+  margin: 0;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.todo-why,
+.todo-hint {
+  font-size: var(--fs-body);
+}
+
+.todo-auto {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  font-size: var(--fs-body);
+}
+
+.todo-auto.done {
+  border-color: var(--success);
+}
+
+.todo-auto.done .todo-auto-mark {
+  color: var(--success);
+}
+
+.todo-auto-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.todo-auto-txt strong {
+  font-size: var(--fs-cue);
+}
+
+.todo-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.todo-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  padding: 8px 14px;
+  text-align: left;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  background: var(--surface-2);
+}
+
+.todo-opt-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--text-2);
+}
+
+.todo-opt[role='checkbox'] .todo-opt-mark {
+  border-radius: 8px;
+}
+
+.todo-opt.on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.todo-opt.on .todo-opt-mark {
+  border-color: var(--on-selected);
+  background: var(--on-selected);
+  color: var(--selected);
+}
+
+.todo-opt-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.todo-decision {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  border-radius: var(--r-btn);
+  border: 2px dashed var(--line);
+}
+
+.todo-note-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.todo-note-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.todo-note-count {
+  font-weight: 400;
+  color: var(--text-2);
+}
+
+.todo-note {
+  font-size: var(--fs-body);
+  resize: vertical;
+}
+
+.todo-try {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.todo-nav {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.todo-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-cta);
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.todo-nav-next {
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+.todo-skip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.todo-skip[data-armed] {
+  background: var(--danger);
+  color: var(--on-danger);
+  border-color: var(--danger);
+}
+
+/* ---------- Report sheet ---------- */
+.todo-report {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  width: 100%;
+}
+
+.todo-report-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.todo-report-text {
+  margin: 0;
+  max-height: 52dvh;
+  overflow: auto;
+  padding: 14px;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  user-select: text;
+}
+
+.todo-report-text:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.todo-report-fallback {
+  font-size: var(--fs-body);
+  min-height: 40dvh;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.todo-report-empty,
+.todo-report-status {
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.todo-report-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todo-report-status:empty {
+  display: none;
+}
+
+.todo-report-status .ic {
+  color: var(--success);
+}

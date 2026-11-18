@@ -5,7 +5,9 @@
 // Covered elsewhere (not duplicated here): a manual exercise has no Camera button and so no
 // counter, in camera.spec.ts "pose-tracked exercises offer the camera; manual ones do not"; the
 // Settings camera test has no counter, in rep-panel.spec.ts.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
+import { leaveSettings } from './workout.helpers';
+import { seedHandsFreeOff } from './hands-free.helpers';
 
 declare global {
   interface Window {
@@ -53,7 +55,7 @@ async function installMocks(page: Page): Promise<void> {
       configurable: true,
       value: {
         speak: (u: FakeUtterance) => {
-          if (u.text) window.__spoken.push(u.text);
+          if (u.text && (u as { volume?: number }).volume !== 0) window.__spoken.push(u.text); // skip the silent iOS unlock
         },
         cancel: () => undefined,
         getVoices: () => [],
@@ -111,7 +113,10 @@ async function readSets(page: Page) {
 
 /** Pull A → jump to Dumbbell Bicep Curl via the exercise list → open its camera. */
 async function openCurlCamera(page: Page) {
-  await page.getByRole('button', { name: /Pull A/ }).click();
+  await page
+    .getByRole('button', { name: /Pull A/ })
+    .first()
+    .click();
   await page.getByRole('button', { name: 'Start workout' }).click();
   await expect(page.getByRole('heading', { name: 'One-Arm Dumbbell Row' })).toBeVisible();
   await page.getByRole('button', { name: 'Exercise list' }).click();
@@ -183,6 +188,8 @@ test('live camera counts curls, speaks the count and logs it on Set done', async
 
   await installMocks(page);
   await page.goto('/');
+  // M4 per-set camera (Set done closes the sheet): hands-free off.
+  await seedHandsFreeOff(page);
   const cam = await openCurlCamera(page);
   await waitForCounts(cam);
 
@@ -226,7 +233,7 @@ test('with "Count reps out loud" off, the live count is silent', async ({ page }
   const sw = page.getByRole('switch', { name: /Count reps out loud/ });
   await sw.click();
   await expect(sw).toHaveAttribute('aria-checked', 'false');
-  await page.getByRole('button', { name: '‹ Back' }).click();
+  await leaveSettings(page);
 
   const cam = await openCurlCamera(page);
   await waitForCounts(cam);

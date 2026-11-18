@@ -1,0 +1,50 @@
+/* M7 task 21: the barcode scanner sheet (barcodeScan.ts). Tokens only; no motion. */
+
+.scan-view {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  max-height: 40vh;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--black);
+}
+
+.scan-view[hidden],
+.fuel-sheet .fuel-secondary[hidden] {
+  display: none;
+}
+
+.scan-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Aiming guide: a wide white box where a package barcode fits. */
+.scan-frame {
+  position: absolute;
+  inset: 26% 10%;
+  border: 3px solid var(--text);
+  border-radius: var(--r-btn);
+  box-shadow: 0 0 0 999px var(--scrim-soft);
+  pointer-events: none;
+}
+
+.scan-cam {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.scan-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scan-result .scan-msg {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}

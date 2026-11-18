@@ -1,8 +1,8 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 
 async function startDay(page: Page, day: RegExp) {
   await page.goto('/');
-  await page.getByRole('button', { name: day }).click();
+  await page.getByRole('button', { name: day }).first().click();
   await page.getByRole('button', { name: 'Start workout' }).click();
 }
 
@@ -38,6 +38,21 @@ for (const c of cases) {
     await expect(sheet).toBeVisible();
     await expect(sheet.locator('.body3d')).toHaveAttribute('data-interactive', 'true');
     await expect(sheet.locator('.legend')).toContainText(c.primary);
+    // Nothing from the screen paints over the sheet (the stage's set count, legend and How to
+    // once showed through): the top element at each one's centre belongs to the sheet.
+    const onTop = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-set-counter], [data-legend], [data-howto-open]')]
+        .filter((e) => !e.closest('[role="dialog"]'))
+        .map((e) => {
+          const r = e.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+          return hit?.closest('[aria-label="Target muscles"]')
+            ? 'sheet'
+            : `${hit?.tagName ?? 'none'}.${hit?.getAttribute('class') ?? ''}`;
+        }),
+    );
+    expect(onTop.length).toBeGreaterThan(0);
+    expect(onTop).toEqual(onTop.map(() => 'sheet'));
     const canvas = sheet.locator('canvas');
     const box = await canvas.boundingBox();
     if (!box) throw new Error('no canvas box');

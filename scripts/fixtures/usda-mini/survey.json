@@ -1,0 +1,34 @@
+{
+  "SurveyFoods": [
+    {
+      "description": "Testcurry with rice",
+      "fdcId": 2700001,
+      "foodCode": "99990010",
+      "dataType": "Survey (FNDDS)",
+      "wweiaFoodCategory": { "wweiaFoodCategoryDescription": "Rice mixed dishes" },
+      "foodNutrients": [
+        { "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" }, "amount": 150 },
+        { "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" }, "amount": 7.56 },
+        { "nutrient": { "id": 1004, "name": "Total lipid (fat)", "unitName": "g" }, "amount": 5.04 },
+        { "nutrient": { "id": 1005, "name": "Carbohydrate, by difference", "unitName": "g" }, "amount": 18.96 }
+      ],
+      "foodPortions": [
+        { "id": 22, "measureUnit": { "name": "undetermined" }, "modifier": "90000", "portionDescription": "Quantity not specified", "gramWeight": 300, "sequenceNumber": 2 },
+        { "id": 21, "measureUnit": { "name": "undetermined" }, "modifier": "10205", "portionDescription": "1 cup", "gramWeight": 245, "sequenceNumber": 1 },
+        { "id": 23, "measureUnit": { "name": "undetermined" }, "modifier": "10000", "portionDescription": "1 plate", "gramWeight": 0, "sequenceNumber": 3 }
+      ]
+    },
+    {
+      "description": "Testformula, ready-to-feed",
+      "fdcId": 2700002,
+      "foodCode": "99990020",
+      "dataType": "Survey (FNDDS)",
+      "wweiaFoodCategory": { "wweiaFoodCategoryDescription": "Formula, ready-to-feed" },
+      "foodNutrients": [
+        { "nutrient": { "id": 1008, "name": "Energy", "unitName": "kcal" }, "amount": 67 },
+        { "nutrient": { "id": 1003, "name": "Protein", "unitName": "g" }, "amount": 1.4 }
+      ],
+      "foodPortions": []
+    }
+  ]
+}

@@ -7,11 +7,15 @@ export const shoulderPress: ExerciseRule = {
   ...COUNTER_DEFAULTS,
   exerciseId: 'Seated_Dumbbell_Press',
   folder: 'shoulder-press',
+  status: 'tuned',
   view: 'front',
   limb: 'arm',
   triplets: ELBOW,
-  extended: 155,
-  contracted: 100,
+  // Image-plane angles (see angleSpace): real reps top out at 147–161° smoothed and sit at
+  // 51–65° at the shoulders (Push A log, 2026-11-13); synthetic partials turn at 136–139°.
+  angleSpace: 'image',
+  extended: 143,
+  contracted: 80,
   direction: 'decreasing',
   start: 'contracted',
   eccentric: 'toContracted',
@@ -19,5 +23,28 @@ export const shoulderPress: ExerciseRule = {
   extendedGate: {
     upper: { left: L.LEFT_WRIST, right: L.RIGHT_WRIST },
     lower: { left: L.LEFT_SHOULDER, right: L.RIGHT_SHOULDER },
+  },
+  // Shrinking range, arms out of sync: off until press fixtures are committed (M5
+  // Decision: real image-plane ranges ~83–111° straddle 85% of a baseline).
+  focus: {
+    rushedLowering: true,
+    shrinkingRange: false,
+    stalled: true,
+    outOfFrame: true,
+    lowFps: true,
+    armsOutOfSync: false,
+  },
+  hints: { far: 'Press all the way up.', start: 'Lower the weights to your shoulders.' },
+  placement: {
+    view: 'front',
+    facing: 'Facing the phone',
+    distanceM: [2, 3],
+    heightHint: 'Chest height',
+    lines: [
+      'Phone in front of you, chest height',
+      'Both arms and hips in frame',
+      'Leave room above your hands',
+    ],
+    spoken: 'Face the phone at chest height, 2 to 3 metres away, with room above your hands.',
   },
 };

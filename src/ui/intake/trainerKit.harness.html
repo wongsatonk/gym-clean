@@ -1,0 +1,219 @@
+<!doctype html>
+<!-- Dev-only visual check for M12 slice 1b tasks 25, 26 and 30 (intake, Goal card, Settings
+     rows, My gym share / import, Progress photos), with made-up data. Not part of the build or
+     the app. Open on the dev server:
+     /src/ui/intake/trainerKit.harness.html?view=intake | intake-days | intake-easy | summary
+     | goal-card | goal-prompt | settings | gym-import | photos | photos-compare | photos-off -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Trainer kit harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { equipmentItems } from '../../data/catalog.ts';
+      import { h } from '../dom.ts';
+      import { goalCard } from '../screens/goalCard.ts';
+      import { myGymScreen } from '../screens/myGym.ts';
+      import { settingsScreen } from '../screens/settings.ts';
+      import { createProgressPhotos } from '../photos/progressPhotos.ts';
+      import { EASY_ON_TITLE, FUEL_TITLE, PLAN_TITLE_STARTER, intakeScreen } from './intake.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'intake';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+
+      const INTAKE = {
+        goalKind: 'fat',
+        goalText: 'Feel strong on the stairs',
+        days: 4,
+        sessionMin: 45,
+        experience: 'some',
+        easyOn: ['shoulders'],
+        at: 1,
+      };
+      const CHANGES = [
+        {
+          id: 'plan',
+          title: PLAN_TITLE_STARTER,
+          lines: ['Upper / lower, 4 days a week', 'About 45 min a session'],
+        },
+        { id: 'easyOn', title: EASY_ON_TITLE, lines: ['Shoulders'] },
+        {
+          id: 'fuel',
+          title: FUEL_TITLE,
+          before: '2,100 kcal · 110 g protein',
+          after: '1,700 kcal · 130 g protein',
+        },
+      ];
+      const intake = (over = {}) =>
+        intakeScreen(
+          { changes: () => CHANGES, ...over },
+          {
+            onSave: () => log('save'),
+            onApply: (id) => log('apply', id),
+            onDone: () => log('done'),
+            onSkip: () => log('skip'),
+          },
+        );
+
+      const goal = (id, text, due) => ({
+        id,
+        text,
+        target: { kind: 'lift', value: 20, reps: 8 },
+        due,
+        createdAt: 1,
+      });
+      const card = (goals) =>
+        h(
+          'main',
+          { class: 'screen mood-energy' },
+          h('h1', { class: 'page-title' }, 'Today'),
+          goalCard(
+            { goals, today: '2026-11-17' },
+            { onSetGoal: () => log('set'), onOpen: () => log('open') },
+          ),
+        );
+
+      // Made-up "photos": a plain figure drawn on a canvas, tinted per photo.
+      const fakePhoto = (hue, lean) =>
+        new Promise((res) => {
+          const c = document.createElement('canvas');
+          c.width = 300;
+          c.height = 400;
+          const x = c.getContext('2d');
+          const bg = x.createLinearGradient(0, 0, 0, 400);
+          bg.addColorStop(0, `hsl(${hue} 30% 34%)`);
+          bg.addColorStop(1, `hsl(${hue} 30% 16%)`);
+          x.fillStyle = bg;
+          x.fillRect(0, 0, 300, 400);
+          x.fillStyle = `hsl(${hue} 25% 70%)`;
+          x.beginPath();
+          x.arc(150, 95, 34, 0, Math.PI * 2);
+          x.fill();
+          x.beginPath();
+          x.roundRect(150 - lean, 140, lean * 2, 150, 26);
+          x.fill();
+          x.fillRect(150 - lean + 6, 280, lean - 12, 120);
+          x.fillRect(156, 280, lean - 12, 120);
+          c.toBlob((b) => res(b), 'image/jpeg', 0.8);
+        });
+      const photos = async () => [
+        {
+          id: 'a',
+          date: '2026-10-03',
+          createdAt: 1,
+          pose: 'front',
+          blob: await fakePhoto(210, 58),
+        },
+        {
+          id: 'b',
+          date: '2026-11-14',
+          createdAt: 2,
+          pose: 'front',
+          blob: await fakePhoto(160, 50),
+        },
+        { id: 'c', date: '2026-11-14', createdAt: 3, pose: 'side', blob: await fakePhoto(30, 40) },
+      ];
+      const photoView = async (enabled, list) =>
+        createProgressPhotos(
+          { enabled, photos: list ?? (await photos()), today: '2026-11-17' },
+          {
+            onBack: () => log('back'),
+            onEnable: () => log('enable'),
+            onAdd: (p) => log('add', p.blob.size, p.blob.type, p.date, p.pose),
+            onDelete: (id) => log('delete', id),
+            onDeleteAll: () => log('deleteAll'),
+          },
+        ).el;
+
+      const slot = (text) => h('p', { class: 'muted set-note' }, text);
+      let el;
+      if (view === 'intake') el = intake();
+      else if (view === 'intake-days')
+        el = intake({ initial: { goalKind: 'muscle', days: 3 }, startStep: 'days' });
+      else if (view === 'intake-easy') el = intake({ initial: INTAKE, startStep: 'easyOn' });
+      else if (view === 'summary') el = intake({ initial: INTAKE, startStep: 'summary' });
+      else if (view === 'goal-prompt') el = card([]);
+      else if (view === 'goal-card')
+        el = card([
+          {
+            goal: goal('g1', 'Goblet squat 20 kg × 8', '2027-02-01'),
+            pct: 62,
+            status: 'onTrack',
+            now: 'Now: 16 kg × 8',
+          },
+          { goal: goal('g2', 'Waist 78 cm', '2026-12-08'), pct: 30, status: 'behind' },
+        ]);
+      else if (view === 'settings')
+        el = settingsScreen(
+          {
+            accent: 'orange',
+            spokenCount: true,
+            coachTips: true,
+            handsFree: false,
+            unit: 'kg',
+            coachVoice: slot('(coach voice)'),
+            speakerCheck: slot('(speaker check)'),
+            audioTest: slot('(audio test)'),
+            devLog: slot('(developer log)'),
+            intake: INTAKE,
+            easyOn: ['shoulders', 'back'],
+            progressPhotos: q.get('photos') === 'on',
+          },
+          {
+            onAccent: () => {},
+            onSpokenCount: () => {},
+            onCoachTips: () => {},
+            onHandsFree: () => {},
+            onUnit: () => {},
+            onCameraTest: () => {},
+            onTab: () => {},
+            onIntake: () => log('intake'),
+            onEasyOnRemove: (a) => log('remove', a),
+            onProgressPhotos: (on) => log('photos', on),
+            onProgressPhotosOpen: () => log('photos-open'),
+          },
+        );
+      else if (view === 'gym-import')
+        el = myGymScreen(
+          {
+            items: equipmentItems(),
+            equipment: ['dumbbells'],
+            importPreview: {
+              adds: equipmentItems()
+                .filter((i) => i.id !== 'dumbbells')
+                .slice(0, 12)
+                .map((i) => i.label),
+              unknown: 1,
+            },
+          },
+          {
+            onBack: () => log('back'),
+            onChange: () => log('change'),
+            onShare: () => log('share'),
+            onImportText: (t) => log('import', t.length),
+            onImportApply: () => log('apply'),
+            onImportCancel: () => log('cancel'),
+          },
+        );
+      else if (view === 'photos-off') el = await photoView(false, []);
+      else el = await photoView(true);
+      app.replaceChildren(el);
+      if (view === 'photos-compare') {
+        el.querySelector('[data-photo="a"]').click();
+        el.querySelector('[data-photo="b"]').click();
+      }
+      if (q.get('scroll')) document.querySelector(q.get('scroll'))?.scrollIntoView();
+      window.harnessReady = true;
+    </script>
+  </body>
+</html>

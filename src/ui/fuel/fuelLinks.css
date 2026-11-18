@@ -1,0 +1,118 @@
+/* M7 task 16: Fuel pieces on other screens (src/ui/fuel/links.ts): the Summary protein line
+   (Energy mood) and the Today nudge banner. Tokens only. Body ≥ 20px, the protein number ≥ 64px,
+   taps ≥ 56px. The bar fills in the action colour ("where you are now", like the Rest ring) and
+   turns green once the target is reached (achieved). Nothing here is an orange fill button. */
+
+.fp {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.fp-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fp-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.fp-nums {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.fp-value {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.fp-of {
+  color: var(--text-2);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.fp-bar {
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: var(--line);
+  overflow: hidden;
+}
+
+.fp-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--cta);
+}
+
+.fp-done .fp-fill {
+  background: var(--success);
+}
+
+.fp-hint {
+  font-size: var(--fs-body);
+  line-height: 1.35;
+}
+
+/* ---------- Today nudge ---------- */
+
+.fuel-nudge {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.fuel-nudge-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.fuel-nudge-text .ic {
+  flex: none;
+}
+
+.fuel-nudge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fuel-nudge-btn {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-min);
+  padding: 0 16px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}

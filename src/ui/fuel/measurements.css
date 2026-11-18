@@ -1,0 +1,163 @@
+/* M12 slice 1b task 27: tape measurements (src/ui/fuel/measurements.ts). Tokens only, Pro mood.
+   Text ≥ 20px, every tap ≥ 56px, the value being typed is the ≥ 64px number field. Colour
+   roles: Save is the one orange fill; "Measure again" is attention (warn top line + icon +
+   words), never a judgement on the numbers. */
+
+/* ---------- Fuel tab entry row ---------- */
+
+.ms-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap-cta);
+  padding: 10px 14px;
+  background: var(--surface);
+  text-align: left;
+}
+
+.ms-entry[data-due='true'] {
+  border-top: 4px solid var(--warn);
+}
+
+.ms-entry-txt {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.ms-entry-name {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.ms-entry-sub {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+
+.ms-entry-go {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-2);
+  transform: scaleX(-1);
+}
+
+/* ---------- Status card ---------- */
+
+.ms-status {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.ms-status-due {
+  border-top: 4px solid var(--warn);
+}
+
+.ms-status-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.ms-status-body {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+/* ---------- Sites ---------- */
+
+.ms-sites {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ms-site {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.ms-site-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap-cta);
+  padding: 10px 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.ms-site-txt {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.ms-site-name {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.ms-site-last {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.ms-site-state {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.ms-site-btn[aria-expanded='true'] .ms-site-state {
+  color: var(--text);
+}
+
+.ms-edit {
+  padding: 4px 14px 14px;
+  border-top: var(--line-w) solid var(--line);
+}
+
+.ms-edit[hidden] {
+  display: none;
+}
+
+.ms-bottom .ms-save {
+  margin-top: 0;
+}

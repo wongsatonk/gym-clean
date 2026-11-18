@@ -1,0 +1,126 @@
+<!doctype html>
+<!-- Dev-only visual check for the M12 slice 1c to-do screens (tasks 9–11), with made-up data from
+     todoFixture.ts. Not part of the build or the app. Open on the dev server:
+     /src/ui/todo/todo.harness.html?view=today | list | auto | autodone | ask | multi | decision
+     | report | empty | fallback -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>To-do harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { program } from '../../data/catalog.ts';
+      import { todayScreen } from '../screens/today.ts';
+      import { todoListScreen } from './todoList.ts';
+      import { todoGuideScreen } from './todoGuide.ts';
+      import { reportSheet } from './reportSheet.ts';
+      import {
+        FIX_ANSWERS,
+        FIX_NOW,
+        FIX_REPORT,
+        FIX_RESULTS,
+        FIX_STATUS,
+        FIX_TOPICS,
+      } from './todoFixture.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'today';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      const guide = (stepIndex, over = {}) =>
+        todoGuideScreen(
+          {
+            topic: FIX_TOPICS[0],
+            status: FIX_STATUS['coach-week'],
+            stepIndex,
+            answers: FIX_ANSWERS,
+            results: FIX_RESULTS,
+            platform: 'web',
+            decisionPreview: (_s, id) =>
+              `The on-device coach may read card reasons: ${id === 'yes' ? 'On' : 'Off'}`,
+            ...over,
+          },
+          {
+            onAnswer: (id, opts, note) => log('answer', id, opts.join(','), note ?? ''),
+            onTryIt: (r) => log('try', r),
+            onSkipTopic: () => log('skip'),
+            onBack: () => log('back'),
+            onNext: () => log('next'),
+            onClose: () => log('close'),
+          },
+        );
+      const sheet = (over = {}) =>
+        reportSheet(
+          { text: FIX_REPORT, nothingNew: false, ...over },
+          {
+            onClose: () => log('close'),
+            onCopied: () => log('copied'),
+            onCopyAll: () => log('all'),
+          },
+        );
+      const dot = (i) => ({
+        dayStart: new Date(2026, 10, 16 + i).getTime(),
+        state: i === 0 ? 'today' : 'future',
+      });
+
+      let el;
+      if (view === 'today') {
+        el = todayScreen(
+          {
+            now: FIX_NOW,
+            days: program.days,
+            upNextDayId: program.days[0].id,
+            streakWeeks: 3,
+            weekDots: [0, 1, 2, 3, 4, 5, 6].map(dot),
+            last: null,
+            unit: 'kg',
+            todo: {
+              done: 6,
+              total: 12,
+              visible: true,
+              nextTitle: 'Coach tab + Calendar',
+              resignDaysLeft: q.get('resign') ? Number(q.get('resign')) : null,
+            },
+          },
+          {
+            onStart: () => log('start'),
+            onOpenDay: () => log('day'),
+            onTab: () => log('tab'),
+            onOpenTodos: () => log('todos'),
+          },
+        );
+      } else if (view === 'list') {
+        el = todoListScreen(
+          {
+            topics: FIX_TOPICS,
+            status: FIX_STATUS,
+            platform: 'web',
+            summary: { done: 2, total: 3 },
+          },
+          {
+            onBack: () => log('back'),
+            onOpenTopic: (id) => log('open', id),
+            onCopyReport: () => log('copy'),
+          },
+        );
+      } else if (view === 'auto') el = guide(1);
+      else if (view === 'autodone') el = guide(0);
+      else if (view === 'ask') el = guide(2);
+      else if (view === 'multi') el = guide(3);
+      else if (view === 'decision') el = guide(4);
+      else if (view === 'report') el = sheet();
+      else if (view === 'empty') el = sheet({ nothingNew: true, text: '' });
+      else if (view === 'fallback') el = sheet({ copy: async () => false });
+      app.replaceChildren(el);
+      window.harnessReady = true;
+    </script>
+  </body>
+</html>

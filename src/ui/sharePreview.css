@@ -1,0 +1,59 @@
+/* M13 task 25: Share month preview (sharePreview.ts). Pro mood; reuses .segmented / .seg-btn and
+   the CTA button. Tokens only, no motion. The image keeps its aspect ratio and never makes the
+   page wider than the phone. */
+
+.share-frame {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.share-image {
+  display: block;
+  max-width: 100%;
+  max-height: 42vh;
+  height: auto;
+  border-radius: var(--r-card);
+  border: var(--line-w) solid var(--line);
+  background: var(--bg);
+}
+
+.share-post {
+  aspect-ratio: 1080 / 1350;
+}
+
+.share-story {
+  aspect-ratio: 1080 / 1920;
+}
+
+/* While the image is being made: a placeholder the same shape, with the status line. */
+.share-busy {
+  margin: 0;
+  height: 42vh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  text-align: center;
+}
+
+.share-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.share-leads.seg-3 {
+  grid-template-columns: 1fr;
+}
+
+.share-preview .seg-btn {
+  min-height: 56px;
+  font-size: var(--fs-cue);
+}
+
+.share-go {
+  width: 100%;
+}

@@ -1,0 +1,39 @@
+{
+  "note": "Made-up history for completion tests (no personal data). Times are local 'YYYY-MM-DD HH:MM'. Program: days a, b, c (2 exercises x 3 sets each), rest on Tue, Thu, Sun. Week of Mon 2026-11-09: Mon a all sets, Wed b 4 of 6 sets, Fri c missed, Sat c all sets, Sun a extra (Train anyway, 3 sets). Mon 2026-11-16 is today. One unfinished session on Thu (ignored).",
+  "program": {
+    "name": "Made-up ABC",
+    "weightUnit": "kg",
+    "days": [
+      { "id": "a", "name": "Day A", "exercises": [
+        { "exerciseId": "press", "sets": 3, "targetReps": [8, 12], "restSec": 90, "tracking": "manual" },
+        { "exerciseId": "squat", "sets": 3, "targetReps": [8, 12], "restSec": 90, "tracking": "manual" }
+      ] },
+      { "id": "b", "name": "Day B", "exercises": [
+        { "exerciseId": "row", "sets": 3, "targetReps": [8, 12], "restSec": 90, "tracking": "manual" },
+        { "exerciseId": "curl", "sets": 3, "targetReps": [10, 15], "restSec": 60, "tracking": "manual" }
+      ] },
+      { "id": "c", "name": "Day C", "exercises": [
+        { "exerciseId": "fly", "sets": 3, "targetReps": [10, 15], "restSec": 60, "tracking": "manual" },
+        { "exerciseId": "lunge", "sets": 3, "targetReps": [10, 12], "restSec": 90, "tracking": "manual" }
+      ] }
+    ]
+  },
+  "restWeekdays": [0, 2, 4],
+  "sessions": [
+    { "sessionId": "s1", "dayId": "a", "start": "2026-11-09 18:00", "end": "2026-11-09 19:00" },
+    { "sessionId": "s2", "dayId": "b", "start": "2026-11-11 18:00", "end": "2026-11-11 19:00" },
+    { "sessionId": "s3", "dayId": "c", "start": "2026-11-12 18:00" },
+    { "sessionId": "s4", "dayId": "c", "start": "2026-11-14 10:00", "end": "2026-11-14 11:00" },
+    { "sessionId": "s5", "dayId": "a", "start": "2026-11-15 17:00", "end": "2026-11-15 17:40" }
+  ],
+  "sets": [
+    ["s1", "press", 10], ["s1", "press", 9], ["s1", "press", 8],
+    ["s1", "squat", 12], ["s1", "squat", 11], ["s1", "squat", 10],
+    ["s2", "row", 10], ["s2", "row", 10], ["s2", "row", 9],
+    ["s2", "curl", 12],
+    ["s3", "fly", 12],
+    ["s4", "fly", 15], ["s4", "fly", 14], ["s4", "fly", 12],
+    ["s4", "lunge", 12], ["s4", "lunge", 12], ["s4", "lunge", 11],
+    ["s5", "press", 10], ["s5", "press", 10], ["s5", "press", 9]
+  ]
+}

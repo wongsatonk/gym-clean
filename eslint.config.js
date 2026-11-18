@@ -4,7 +4,7 @@ import globals from 'globals';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'playwright-report', 'test-results', 'node_modules', 'public/mediapipe'] },
+  { ignores: ['docs/design/**', 'dist', 'coverage', 'playwright-report', 'test-results', 'node_modules', 'public/mediapipe', 'ml/.venv', 'ml/data', 'ml/runs', 'ml/models', 'ios'] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {
@@ -21,6 +21,28 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         { patterns: ['@mediapipe/*', '../ui/*', '../pose/*', 'dexie'] },
+      ],
+    },
+  },
+  {
+    // Test helpers (src/core/testkit) never reach app code. Repeats the core patterns because a
+    // later block replaces the rule's options for the files it matches.
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/core/testkit/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['**/testkit/*', './testkit/*'] },
+      ],
+    },
+  },
+  {
+    files: ['src/core/**/*.ts'],
+    ignores: ['src/**/*.test.ts', 'src/core/testkit/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['@mediapipe/*', '../ui/*', '../pose/*', 'dexie', '**/testkit/*', './testkit/*'] },
       ],
     },
   },

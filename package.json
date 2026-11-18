@@ -1,23 +1,37 @@
 {
   "name": "gym-clean",
-  "version": "0.0.0",
+  "version": "1.15.0",
   "description": "Phone-first workout focus app",
   "scripts": {
     "dev": "vite",
-    "build": "npm run typecheck && vite build",
+    "build": "npm run typecheck && node scripts/copy-mediapipe-wasm.mjs --strict && vite build",
+    "build:native": "npm run typecheck && node scripts/copy-mediapipe-wasm.mjs --strict && vite build --mode native",
+    "cap:telemetry-off": "cap telemetry off",
+    "ios:sync": "npm run ios:version && npm run build:native && npm run cap:telemetry-off && cap sync ios && npm run ios:check",
+    "ios:check": "node scripts/check-native-bundle.mjs",
+    "ios:install": "node scripts/ios-install.mjs",
+    "ios:open": "npm run cap:telemetry-off && cap open ios",
+    "ios:run": "npm run ios:sync && cap run ios",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm run test",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run test:scripts",
     "e2e": "playwright test",
     "landmarks": "node scripts/landmarks.mjs",
     "postinstall": "node scripts/copy-mediapipe-wasm.mjs",
-    "synthetic": "node scripts/synthetic.mjs"
+    "synthetic": "node scripts/synthetic.mjs",
+    "devlog": "node scripts/devlog.mjs",
+    "icons": "node scripts/icons.mjs",
+    "licenses": "node scripts/gen-licenses.mjs",
+    "build-foods": "node scripts/build-foods.mjs",
+    "ios:version": "node scripts/sync-ios-version.mjs"
   },
   "type": "module",
   "devDependencies": {
+    "@capacitor/cli": "8.6.2",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.65.0",
     "@types/node": "^26.6.6",
@@ -27,10 +41,12 @@
     "eslint-config-prettier": "^10.1.8",
     "fake-indexeddb": "^6.2.8",
     "globals": "^17.14.0",
+    "lighthouse": "^13.6.0",
     "prettier": "^3.10.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.2",
     "vite": "^8.3.8",
+    "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.1.0"
   },
   "private": true,
@@ -38,8 +54,15 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@capacitor/core": "8.6.2",
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/ios": "8.6.2",
+    "@capacitor/local-notifications": "8.3.1",
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
     "@mediapipe/tasks-vision": "^1.2.3",
     "dexie": "^4.4.7",
-    "three": "^0.187.0"
+    "three": "^0.187.0",
+    "zxing-wasm": "^3.1.6"
   }
 }

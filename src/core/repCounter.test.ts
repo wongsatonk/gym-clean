@@ -1,16 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { Side, Triplet } from './angles';
 import { ruleFor, type ExerciseRule } from './exercises';
-import { LANDMARK_COUNT } from './poseTopology';
 import { createRepCounter } from './repCounter';
+import { DT, curve, curveAt, makeFrame, sample, segsOf, withHip } from './testkit/frames';
 import type { LandmarkFrame, RepEvent } from './types';
 
-// ---------------------------------------------------------------------------------------------
-// Frame builders: place the rule's joint triplet so the joint angle is exactly the target.
-// ---------------------------------------------------------------------------------------------
-
-const FPS = 30;
-const DT = 1000 / FPS;
+// Frame builders (joint triplet placement, angle curves, push-up hips): ./testkit/frames.ts.
 
 function mustRule(id: string): ExerciseRule {
   const r = ruleFor(id);
@@ -20,134 +14,6 @@ function mustRule(id: string): ExerciseRule {
 const CURL = mustRule('Dumbbell_Bicep_Curl');
 const RAISE = mustRule('Side_Lateral_Raise');
 const PRESS = mustRule('Seated_Dumbbell_Press');
-
-type SideSpec = {
-  angle: number;
-  visibility?: number | undefined;
-  /**
-   * Where the first triplet point sits relative to the joint: `above` (curl: shoulder above the
-   * elbow, so 180° = arm hanging) or `below` (press/raise: shoulder/hip below the joint, so
-   * 180° = pointing up for the press, 0° = arm down for the raise).
-   */
-  anchor?: 'above' | 'below' | undefined;
-};
-
-type FrameSpec = {
-  t: number;
-  left?: SideSpec;
-  right?: SideSpec;
-  /** Omit world landmarks so the 2D fallback is used. */
-  noWorld?: boolean | undefined;
-};
-
-const SEG = 0.12;
-
-function place(
-  pts: { x: number; y: number }[],
-  vis: number[],
-  triplet: Triplet,
-  spec: SideSpec,
-  cx: number,
-) {
-  const [ia, ib, ic] = triplet;
-  const by = 0.45;
-  const sign = spec.anchor === 'below' ? 1 : -1;
-  const th = (spec.angle * Math.PI) / 180;
-  // a = b + (0, -sign·SEG)… i.e. directly above (sign -1) or below (sign +1) the joint.
-  // c - b is the (a - b) direction rotated by the target angle.
-  pts[ib] = { x: cx, y: by };
-  pts[ia] = { x: cx, y: by + sign * SEG };
-  pts[ic] = { x: cx + Math.sin(th) * SEG, y: by + sign * Math.cos(th) * SEG };
-  const v = spec.visibility ?? 0.95;
-  vis[ia] = v;
-  vis[ib] = v;
-  vis[ic] = v;
-}
-
-function makeFrame(rule: ExerciseRule, spec: FrameSpec): LandmarkFrame {
-  const pts = Array.from({ length: LANDMARK_COUNT }, () => ({ x: 0.5, y: 0.5 }));
-  const vis = Array.from({ length: LANDMARK_COUNT }, () => 0.9);
-  // Place the left side first so a shared landmark (none today) would be overwritten predictably.
-  if (spec.left) place(pts, vis, rule.triplets.left, spec.left, 0.65);
-  if (spec.right) place(pts, vis, rule.triplets.right, spec.right, 0.35);
-  const landmarks = pts.map((p, i) => ({ x: p.x, y: p.y, z: 0, visibility: vis[i] ?? 0 }));
-  const frame: LandmarkFrame = { t: spec.t, landmarks };
-  if (!spec.noWorld) frame.world = pts.map((p) => ({ x: p.x - 0.5, y: p.y - 0.5, z: 0 }));
-  return frame;
-}
-
-/** Keyframes [ms, angle] → angle at time t by linear interpolation (held past the ends). */
-type Keys = readonly (readonly [number, number])[];
-function curveAt(keys: Keys, t: number): number {
-  const first = keys[0];
-  const last = keys[keys.length - 1];
-  if (!first || !last) throw new Error('empty curve');
-  if (t <= first[0]) return first[1];
-  for (let i = 1; i < keys.length; i++) {
-    const k0 = keys[i - 1];
-    const k1 = keys[i];
-    if (!k0 || !k1) continue;
-    if (t <= k1[0]) return k0[1] + ((k1[1] - k0[1]) * (t - k0[0])) / (k1[0] - k0[0]);
-  }
-  return last[1];
-}
-
-/** Build a curve from segments: [durationMs, targetAngle], starting at `start`. */
-function curve(start: number, segs: readonly (readonly [number, number])[]): Keys {
-  const keys: [number, number][] = [[0, start]];
-  let t = 0;
-  for (const [d, a] of segs) {
-    t += d;
-    keys.push([t, a]);
-  }
-  return keys;
-}
-
-function duration(keys: Keys): number {
-  return keys[keys.length - 1]?.[0] ?? 0;
-}
-
-/** The segments of a curve (durations between keyframes), to splice it into another curve. */
-function segsOf(keys: Keys): [number, number][] {
-  const out: [number, number][] = [];
-  for (let i = 1; i < keys.length; i++) {
-    const k0 = keys[i - 1];
-    const k1 = keys[i];
-    if (k0 && k1) out.push([k1[0] - k0[0], k1[1]]);
-  }
-  return out;
-}
-
-type SampleOpts = {
-  sides?: readonly Side[];
-  anchor?: 'above' | 'below';
-  /** Added to the angle per frame (frame index, t) → degrees. */
-  noise?: (i: number, t: number) => number;
-  /** Per-frame visibility override for both used sides. */
-  visibility?: (t: number) => number;
-  /** Fixed angle/visibility for a side that is not following the curve. */
-  other?: Partial<Record<Side, SideSpec>>;
-  noWorld?: boolean;
-};
-
-function sample(rule: ExerciseRule, keys: Keys, opts: SampleOpts = {}): LandmarkFrame[] {
-  const sides = opts.sides ?? ['left', 'right'];
-  const frames: LandmarkFrame[] = [];
-  const end = duration(keys);
-  for (let i = 0; i * DT <= end + 1e-9; i++) {
-    const t = i * DT;
-    const angle = curveAt(keys, t) + (opts.noise?.(i, t) ?? 0);
-    const spec: FrameSpec = { t: Math.round(t * 1000) / 1000, noWorld: opts.noWorld };
-    for (const side of ['left', 'right'] as const) {
-      const fixed = opts.other?.[side];
-      if (fixed) spec[side] = { anchor: opts.anchor, ...fixed };
-      else if (sides.includes(side))
-        spec[side] = { angle, anchor: opts.anchor, visibility: opts.visibility?.(t) };
-    }
-    frames.push(makeFrame(rule, spec));
-  }
-  return frames;
-}
 
 function runAll(rule: ExerciseRule, frames: readonly LandmarkFrame[]) {
   const counter = createRepCounter(rule);
@@ -226,36 +92,36 @@ describe('createRepCounter: clean reps', () => {
   });
 
   it('counts a shoulder press that starts contracted, with the wrist above the shoulder', () => {
-    const keys = curve(80, [
-      [600, 80],
+    const keys = curve(55, [
+      [600, 55],
       [900, 175],
       [300, 175],
-      [1300, 80],
-      [500, 80],
+      [1300, 55],
+      [500, 55],
       [900, 175],
       [300, 175],
-      [1300, 80],
-      [500, 80],
+      [1300, 55],
+      [500, 55],
     ]);
     const { counter, events } = runAll(PRESS, sample(PRESS, keys, { anchor: 'below' }));
     expect(counter.reps).toBe(2);
     expect(counter.partials).toBe(0);
     // Eccentric = lowering back to the shoulders (toward contracted, 1300 ms) — timed
-    // threshold to threshold (155° → 100° = 55/95 of each leg).
+    // threshold to threshold (143° → 80° = 63/120 of each leg, ~680 ms).
     const first = events[0];
     expect(first?.eccentricMs).toBeGreaterThan(first?.concentricMs ?? Infinity);
-    expect(first?.eccentricMs).toBeGreaterThan(700);
-    expect(first?.eccentricMs).toBeLessThan(1100);
+    expect(first?.eccentricMs).toBeGreaterThan(550);
+    expect(first?.eccentricMs).toBeLessThan(900);
   });
 
   it('never treats straight arms hanging below the shoulders as a pressed-out rep', () => {
     // Same angles as a press, but the wrist ends up below the shoulder (extended gate fails).
-    const keys = curve(80, [
-      [600, 80],
+    const keys = curve(55, [
+      [600, 55],
       [900, 175],
       [300, 175],
-      [1300, 80],
-      [500, 80],
+      [1300, 55],
+      [500, 55],
     ]);
     // Bent part keeps the press pose; straight arms point down (anchor above = wrist low).
     const frames = sample(PRESS, keys, { anchor: 'below' }).map((f) => {
@@ -949,3 +815,1011 @@ describe('createRepCounter: events', () => {
     expect(counter.reps).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// M4c: partial reasons, shortByDeg, the `start` partial and the coaching getters.
+// ---------------------------------------------------------------------------------------------
+
+describe('createRepCounter: partial reasons (M4c)', () => {
+  it('a turnaround before the far threshold is reason far, shortByDeg = smoothed degrees short', () => {
+    const keys = curve(170, [
+      [600, 170],
+      [600, 100], // contracted is 70°: ~30° short
+      [700, 170],
+      [500, 170],
+    ]);
+    const { events } = runAll(CURL, sample(CURL, keys));
+    expect(events).toHaveLength(1);
+    const p = events[0];
+    expect(p?.type).toBe('partial');
+    expect(p?.reason).toBe('far');
+    expect(p?.shortByDeg).toBeCloseTo((p?.minAngle ?? 0) - CURL.contracted, 0);
+    expect(p?.shortByDeg).toBeGreaterThan(28);
+    expect(p?.shortByDeg).toBeLessThan(38); // EMA lag: the smoothed turn is a few degrees above 100°
+  });
+
+  it('far reason on an inverted lateral raise: shortByDeg below the contracted threshold', () => {
+    const keys = curve(10, [
+      [600, 10],
+      [700, 55],
+      [800, 10],
+      [500, 10],
+    ]);
+    const { events } = runAll(RAISE, sample(RAISE, keys, { anchor: 'below' }));
+    expect(events.map((e) => e.reason)).toEqual(['far']);
+    const p = events[0];
+    expect(p?.shortByDeg).toBeCloseTo(RAISE.contracted - (p?.maxAngle ?? 0), 0);
+    expect(p?.shortByDeg).toBeGreaterThan(18);
+    expect(p?.shortByDeg).toBeLessThan(23);
+  });
+
+  it('counted reps carry no reason or shortByDeg', () => {
+    const { events } = runAll(CURL, sample(CURL, curlReps(2)));
+    expect(events).toHaveLength(2);
+    for (const e of events) {
+      expect(e.reason).toBeUndefined();
+      expect(e.shortByDeg).toBeUndefined();
+    }
+  });
+});
+
+describe('createRepCounter: start partial (incomplete return, M4c)', () => {
+  /** Curl rep down to 35°, back only to `back`, down to 35° again, then a full return. */
+  const incompleteCurl = (back: number, upMs = 900, againMs = 800) =>
+    curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [upMs, back], // doesn't straighten (extended threshold is 150°)
+      [200, back],
+      [againMs, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+    ]);
+
+  it('reports a start partial, then counts the next rep in progress', () => {
+    const { counter, events } = runAll(CURL, sample(CURL, incompleteCurl(120)));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['partial:start', 'rep:']);
+    expect(counter.reps).toBe(1);
+    expect(counter.partials).toBe(1);
+    const p = events[0];
+    // Turned at ~120° smoothed: ~30° short of the 150° extended threshold.
+    expect(p?.shortByDeg).toBeGreaterThan(27);
+    expect(p?.shortByDeg).toBeLessThan(33);
+    expect(p?.index).toBe(1);
+    expect(p?.minAngle).toBeLessThan(40); // it did reach the far end
+    expect(p?.eccentricMs).toBeGreaterThan(0);
+    expect(p?.concentricMs).toBeGreaterThan(0);
+    // The rep after it is timed from the turnaround, not from the original start.
+    const rep = events[1];
+    expect(rep?.concentricMs).toBeGreaterThan(150);
+    expect(rep?.concentricMs).toBeLessThan(700);
+  });
+
+  it('several incomplete returns in a row: one start partial each, no rep until a full return', () => {
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [900, 115],
+      [800, 35],
+      [300, 35],
+      [900, 115],
+      [800, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+    ]);
+    const { events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual([
+      'partial:start',
+      'partial:start',
+      'rep:',
+    ]);
+  });
+
+  it('start partial on a press (starts contracted): dumbbells not back to the shoulders', () => {
+    const keys = curve(55, [
+      [600, 55],
+      [900, 175],
+      [300, 175],
+      [900, 105], // contracted (start) threshold is 80°
+      [200, 105],
+      [800, 175],
+      [300, 175],
+      [1300, 55],
+      [500, 55],
+    ]);
+    const { counter, events } = runAll(PRESS, sample(PRESS, keys, { anchor: 'below' }));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['partial:start', 'rep:']);
+    expect(counter.reps).toBe(1);
+    expect(events[0]?.shortByDeg).toBeGreaterThan(22);
+    expect(events[0]?.shortByDeg).toBeLessThan(28);
+  });
+
+  it('start partial on an inverted lateral raise: arms not lowered fully', () => {
+    const keys = curve(10, [
+      [600, 10],
+      [800, 90],
+      [300, 90],
+      [900, 50], // extended (start) threshold is 25°
+      [200, 50],
+      [800, 90],
+      [300, 90],
+      [1200, 10],
+      [500, 10],
+    ]);
+    const { events } = runAll(RAISE, sample(RAISE, keys, { anchor: 'below' }));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['partial:start', 'rep:']);
+    expect(events[0]?.shortByDeg).toBeGreaterThan(22);
+    expect(events[0]?.shortByDeg).toBeLessThan(28);
+  });
+
+  it('no start partial from ±8° jitter at the far end (centred on, and just inside, the threshold)', () => {
+    for (const centre of [CURL.contracted, CURL.contracted - 5, CURL.contracted + 5]) {
+      const keys = curve(170, [
+        [600, 170],
+        [800, centre],
+        [3000, centre],
+        [1200, 170],
+        [500, 170],
+      ]);
+      const noise = (i: number) => (Math.floor(i / 3) % 2 === 0 ? 8 : -8);
+      const { counter, events } = runAll(CURL, sample(CURL, keys, { noise }));
+      expect(
+        events.map((e) => e.type),
+        `centre ${String(centre)}`,
+      ).toEqual(['rep']);
+      expect(counter.partials).toBe(0);
+    }
+  });
+
+  it('a slow wobble near the far end (less than the partial depth back) is not a start partial', () => {
+    // Up to contracted + hysteresis + 3 (out of the far band, but under minPartialDepth back).
+    const wobble = CURL.contracted + CURL.hysteresisDeg + 3;
+    expect(wobble - CURL.contracted).toBeLessThan(CURL.minPartialDepthDeg);
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [900, wobble],
+      [200, wobble],
+      [800, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => e.type)).toEqual(['rep']);
+    expect(counter.partials).toBe(0);
+  });
+
+  it('a rushed bob at the far end is not a start partial and keeps the rep timing', () => {
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [100, 110], // fast bob up and down (~100 ms each way)
+      [100, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => e.type)).toEqual(['rep']);
+    expect(counter.partials).toBe(0);
+    // Out leg still measured from the start (concentric = curling up, 800 ms → ~475 ms).
+    expect(events[0]?.concentricMs).toBeGreaterThan(380);
+  });
+
+  it('one attempt gives at most one partial: a sag after the start partial is not also a far partial', () => {
+    // Down to 35°, back only to 100°, sags toward the far end (held 300 ms), then straightens.
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [700, 100],
+      [200, 100],
+      [200, 80],
+      [300, 80],
+      [800, 170],
+      [500, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['partial:start']);
+    expect(counter.partials).toBe(1);
+    expect(counter.lastMiss).toBe('start');
+  });
+
+  it('after a start partial, the next attempt that reaches far and returns is a rep', () => {
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [700, 100],
+      [200, 100],
+      [200, 80],
+      [300, 80],
+      [800, 170],
+      [500, 170],
+      [800, 35],
+      [300, 35],
+      [1200, 170],
+      [500, 170],
+      [600, 100], // a genuine far miss later still reports far
+      [700, 170],
+      [500, 170],
+    ]);
+    const { events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual([
+      'partial:start',
+      'rep:',
+      'partial:far',
+    ]);
+  });
+
+  it('a glitch spike toward the far end during the return (under one minimum leg) is ignored', () => {
+    // Pose glitch while lowering (seen in the shoulder-press-02 / lateral-raise-01 clips): the
+    // raw angle jumps back toward the far end for 2 frames (~67 ms), then the return continues.
+    const keys = curve(170, [
+      [600, 170],
+      [800, 35],
+      [300, 35],
+      [500, 100],
+      [33, 60], // spike: raw angle 40° the wrong way for two frames
+      [33, 60],
+      [33, 100],
+      [600, 170],
+      [500, 170],
+    ]);
+    const { counter, events } = runAll(CURL, sample(CURL, keys));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['rep:']);
+    expect(counter.partials).toBe(0);
+  });
+
+  it('a returning arm that reaches the start band is a rep, never a start partial', () => {
+    const { events } = runAll(CURL, sample(CURL, curlReps(3)));
+    expect(events.map((e) => `${e.type}:${e.reason ?? ''}`)).toEqual(['rep:', 'rep:', 'rep:']);
+  });
+});
+
+describe('createRepCounter: coaching getters (M4c)', () => {
+  it('exposes the rule it counts with (thresholds and hints for the UI)', () => {
+    const counter = createRepCounter(CURL);
+    expect(counter.rule).toBe(CURL);
+  });
+
+  it('reachedFar: false at the start, true from the far band until the rep ends', () => {
+    const counter = createRepCounter(CURL);
+    const seen: { t: number; phase: string; reachedFar: boolean }[] = [];
+    for (const f of sample(CURL, curlReps(1))) {
+      counter.push(f);
+      seen.push({ t: f.t, phase: counter.phase, reachedFar: counter.reachedFar });
+    }
+    for (const s of seen) {
+      expect(s.reachedFar, `${s.phase} @${String(s.t)}`).toBe(
+        s.phase === 'bottom' || s.phase === 'up',
+      );
+    }
+    expect(seen.some((s) => s.reachedFar)).toBe(true);
+    expect(counter.reachedFar).toBe(false); // back at the top after the rep
+  });
+
+  it('lastMiss / lastPartial follow the latest event; a clean rep clears lastMiss', () => {
+    const counter = createRepCounter(CURL);
+    expect(counter.lastMiss).toBeNull();
+    expect(counter.lastPartial).toBeNull();
+    const keys = curve(170, [
+      [600, 170],
+      [600, 100], // far partial
+      [700, 170],
+      [500, 170],
+      [800, 35],
+      [300, 35],
+      [900, 120], // start partial
+      [200, 120],
+      [800, 35],
+      [300, 35],
+      [1200, 170], // rep
+      [500, 170],
+    ]);
+    const log: (string | null)[] = [];
+    for (const f of sample(CURL, keys)) {
+      for (const e of counter.push(f)) {
+        log.push(counter.lastMiss);
+        if (e.type === 'partial') expect(counter.lastPartial).toBe(e);
+      }
+    }
+    expect(log).toEqual(['far', 'start', null]);
+    expect(counter.lastPartial?.reason).toBe('start'); // kept after the rep
+    counter.reset();
+    expect(counter.lastMiss).toBeNull();
+    expect(counter.lastPartial).toBeNull();
+    expect(counter.reachedFar).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Real-data fixes (Push A dev log, 2026-11-13): image-plane angles for the press, and a torso
+// posture gate for the lateral raise.
+// ---------------------------------------------------------------------------------------------
+
+/** Tilt the forearm (wrist) toward the camera in world only: the 3D angle shrinks, 2D doesn't. */
+function tiltWristInWorld(rule: ExerciseRule, f: LandmarkFrame, dz: number): LandmarkFrame {
+  const world = f.world?.map((p) => ({ ...p }));
+  if (!world) return f;
+  for (const side of ['left', 'right'] as const) {
+    const wrist = world[rule.triplets[side][2]];
+    if (wrist) wrist.z = dz;
+  }
+  return { ...f, world };
+}
+
+/** Stretch normalized x as a W/H video does (world stays metric). */
+function stretchX(f: LandmarkFrame, aspect: number): LandmarkFrame {
+  return { ...f, landmarks: f.landmarks.map((p) => ({ ...p, x: 0.5 + (p.x - 0.5) / aspect })) };
+}
+
+/** Rotate the whole world body about the x axis (toward the camera): joint angles unchanged. */
+function leanWorld(f: LandmarkFrame, deg: number): LandmarkFrame {
+  const th = (deg * Math.PI) / 180;
+  const world = f.world?.map((p) => ({
+    x: p.x,
+    y: p.y * Math.cos(th) - p.z * Math.sin(th),
+    z: p.y * Math.sin(th) + p.z * Math.cos(th),
+  }));
+  return world ? { ...f, world } : f;
+}
+
+describe('createRepCounter: image-plane angles (rule.angleSpace image)', () => {
+  const pressKeys = curve(55, [
+    [600, 55],
+    [900, 175],
+    [300, 175],
+    [1300, 55],
+    [500, 55],
+    [900, 175],
+    [300, 175],
+    [1300, 55],
+    [500, 55],
+  ]);
+
+  it('the press measures in the image plane', () => {
+    expect(PRESS.angleSpace).toBe('image');
+  });
+
+  it('counts presses the world model compresses (forearm tilted toward the camera in 3D)', () => {
+    const frames = sample(PRESS, pressKeys, { anchor: 'below' }).map((f) =>
+      tiltWristInWorld(PRESS, f, -0.1),
+    );
+    const image = runAll(PRESS, frames);
+    expect(image.counter.reps).toBe(2);
+    expect(image.counter.partials).toBe(0);
+    // The same frames measured in world 3D never reach the extended threshold.
+    const world = runAll({ ...PRESS, angleSpace: 'world' }, frames);
+    expect(world.counter.reps).toBe(0);
+  });
+
+  it('corrects for the video aspect estimated from the pose (3:4 portrait)', () => {
+    const still = curve(120, [[1000, 120]]);
+    for (const aspect of [0.75, 16 / 9]) {
+      const frames = sample(PRESS, still, { anchor: 'below' }).map((f) => stretchX(f, aspect));
+      const { counter } = runAll(PRESS, frames);
+      expect(counter.angle).toBeCloseTo(120, 4);
+    }
+  });
+
+  it('uses raw normalized x/y (aspect 1) when frames have no world landmarks', () => {
+    const { counter } = runAll(PRESS, sample(PRESS, pressKeys, { anchor: 'below', noWorld: true }));
+    expect(counter.reps).toBe(2);
+  });
+});
+
+describe('createRepCounter: torso posture gate (rule.maxTorsoLeanDeg)', () => {
+  // Settle with arms down, bend over (arms hang: the shoulder angle opens to ~85°), stand up,
+  // then one real raise. Without the gate the bend reads as a raise.
+  const bendKeys = curve(10, [
+    [800, 10],
+    [400, 85], // bending down to pick up the dumbbells
+    [1000, 85],
+    [400, 10], // standing up
+    [800, 10],
+    [900, 95], // the real raise
+    [300, 95],
+    [1200, 10],
+    [600, 10],
+  ]);
+  const bendStart = 800;
+  const bendEnd = 2600;
+  /** Lean (deg) of the torso over time: 0 upright, up to 90 during the bend. */
+  const leanAt = (t: number) =>
+    t <= bendStart || t >= bendEnd
+      ? 0
+      : 90 * Math.min(1, (t - bendStart) / 400, (bendEnd - t) / 400);
+
+  function bendFrames(base = 0): LandmarkFrame[] {
+    return sample(RAISE, bendKeys, { anchor: 'below' }).map((f) =>
+      leanWorld(f, base + leanAt(f.t)),
+    );
+  }
+
+  it('the lateral raise has the gate', () => {
+    expect(RAISE.maxTorsoLeanDeg).toBeGreaterThan(20);
+    expect(RAISE.maxTorsoLeanDeg).toBeLessThan(60);
+  });
+
+  it('bending over to pick up the dumbbells is not a rep (and not a partial)', () => {
+    const { counter } = runAll(RAISE, bendFrames());
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 1, partials: 0 });
+  });
+
+  it('without the gate the same bend counts as a phantom rep (what the Push A log showed)', () => {
+    const ungated: ExerciseRule = { ...RAISE };
+    delete ungated.maxTorsoLeanDeg;
+    const { counter } = runAll(ungated, bendFrames());
+    expect(counter.reps).toBe(2);
+  });
+
+  it('measures the lean from the posture at settle, so a pitched phone does not matter', () => {
+    const { counter } = runAll(RAISE, bendFrames(35));
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 1, partials: 0 });
+  });
+
+  it('an attempt cut short by the lean is dropped: arms already half up before the gate trips', () => {
+    // The arms open to ~50° while the lean is still under the gate (reaching down), then the
+    // bend passes the gate. On standing up the attempt is gone: no `far` partial.
+    const keys = curve(10, [
+      [800, 10],
+      [600, 50],
+      [400, 85],
+      [800, 85],
+      [400, 10],
+      [800, 10],
+      [900, 95],
+      [300, 95],
+      [1200, 10],
+      [600, 10],
+    ]);
+    const lean = (t: number) =>
+      t <= 800
+        ? 0
+        : t <= 1400
+          ? (30 * (t - 800)) / 600
+          : t <= 1800
+            ? 30 + (60 * (t - 1400)) / 400
+            : t <= 2600
+              ? 90
+              : t <= 3000
+                ? 90 - (90 * (t - 2600)) / 400
+                : 0;
+    const frames = sample(RAISE, keys, { anchor: 'below' }).map((f) => leanWorld(f, lean(f.t)));
+    const { counter } = runAll(RAISE, frames);
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 1, partials: 0 });
+  });
+
+  it('reports not tracking while leaning past the gate', () => {
+    const counter = createRepCounter(RAISE);
+    let trackedDuringBend = false;
+    for (const f of bendFrames()) {
+      counter.push(f);
+      if (leanAt(f.t) > (RAISE.maxTorsoLeanDeg ?? 0) + 1 && counter.tracking)
+        trackedDuringBend = true;
+    }
+    expect(trackedDuringBend).toBe(false);
+  });
+
+  it('untracked reads posture while leaning past the gate, null once upright again (M5)', () => {
+    const counter = createRepCounter(RAISE);
+    const seen = new Set<string | null>();
+    for (const f of bendFrames()) {
+      counter.push(f);
+      if (leanAt(f.t) > (RAISE.maxTorsoLeanDeg ?? 0) + 1) expect(counter.untracked).toBe('posture');
+      seen.add(counter.untracked);
+    }
+    expect(seen).toEqual(new Set(['posture', null]));
+    expect(counter.untracked).toBeNull();
+    expect(counter.reps).toBe(1);
+  });
+
+  it('a stream restart takes a new reference posture at the next settle', () => {
+    const first = sample(RAISE, curve(10, [[800, 10]]), { anchor: 'below' });
+    // Second segment (t restarts at 0) is filmed 40° pitched: still counts its rep.
+    const second = sample(RAISE, curve(10, segsOf(bendKeys).slice(4)), { anchor: 'below' }).map(
+      (f) => leanWorld(f, 40),
+    );
+    const { counter } = runAll(RAISE, [...first, ...second]);
+    expect(counter.reps).toBe(1);
+  });
+
+  it('frames without world landmarks skip the gate', () => {
+    const frames = sample(RAISE, curve(10, segsOf(bendKeys).slice(4)), {
+      anchor: 'below',
+      noWorld: true,
+    });
+    expect(runAll(RAISE, frames).counter.reps).toBe(1);
+  });
+
+  it('a permanent lean shift (phone knocked) re-takes the reference once the arms hold the start band', () => {
+    const raise: [number, number][] = [
+      [900, 95],
+      [300, 95],
+      [1200, 10],
+      [600, 10],
+    ];
+    const keys = curve(10, [[800, 10], ...raise, [800, 10], ...raise, ...raise]);
+    const shiftAt = 3800; // after the first rep, arms down
+    const frames = sample(RAISE, keys, { anchor: 'below' }).map((f) =>
+      leanWorld(f, f.t >= shiftAt ? 40 : 0),
+    );
+    const { counter } = runAll(RAISE, frames);
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 3, partials: 0 });
+  });
+
+  it('after ~3 s of the gate failing, the reference is re-taken anywhere (arms not at the start)', () => {
+    const keys = curve(10, [
+      [800, 10],
+      [200, 50],
+      [5000, 50],
+    ]);
+    const shiftAt = 1000;
+    const counter = createRepCounter(RAISE);
+    const trackedAt: [number, boolean][] = [];
+    for (const f of sample(RAISE, keys, { anchor: 'below' })) {
+      counter.push(leanWorld(f, f.t >= shiftAt ? 40 : 0));
+      trackedAt.push([f.t, counter.tracking]);
+    }
+    const at = (t: number) => trackedAt.find(([ft]) => ft >= t)?.[1];
+    expect(at(shiftAt + 100)).toBe(false);
+    expect(at(shiftAt + 2700)).toBe(false);
+    expect(at(shiftAt + 3300)).toBe(true);
+  });
+});
+
+describe('createRepCounter: camera view variant (rule.otherView, push-up filmed head-on)', () => {
+  const PUSHUP = mustRule('Pushups');
+
+  /** Turn the world body 90° about the vertical axis: the shoulder line runs toward the camera. */
+  function sideOn(f: LandmarkFrame): LandmarkFrame {
+    const world = f.world?.map((p) => ({ x: -p.z, y: p.y, z: p.x }));
+    return world ? { ...f, world } : f;
+  }
+
+  // Push-ups that bottom out at 110° (what a head-on camera measures for a full push-up).
+  const keys = curve(165, [
+    [600, 165],
+    [700, 110],
+    [200, 110],
+    [700, 165],
+    [500, 165],
+    [700, 110],
+    [200, 110],
+    [700, 165],
+    [500, 165],
+  ]);
+
+  it('the push-up rule has a front-view variant: both arms, a shallower contracted threshold', () => {
+    expect(PUSHUP.view).toBe('side');
+    expect(PUSHUP.otherView).toMatchObject({ view: 'front', sideMode: 'both' });
+    expect(PUSHUP.otherView?.contracted).toBeGreaterThan(PUSHUP.contracted);
+  });
+
+  it('head-on (shoulder line across the image): counts with the front thresholds', () => {
+    const { counter } = runAll(PUSHUP, sample(PUSHUP, keys));
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 0 });
+    expect(counter.rule.view).toBe('front');
+    expect(counter.rule.contracted).toBe(PUSHUP.otherView?.contracted);
+    expect(counter.side).toBe('both');
+    // Hints and placement stay the exercise's own.
+    expect(counter.rule.hints).toBe(PUSHUP.hints);
+    expect(counter.rule.placement).toBe(PUSHUP.placement);
+  });
+
+  it('side-on (shoulder line toward the camera): keeps the side thresholds', () => {
+    const { counter } = runAll(PUSHUP, sample(PUSHUP, keys).map(sideOn));
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 0, partials: 2 });
+    expect(counter.rule).toBe(PUSHUP);
+  });
+
+  it('without world landmarks the view cannot be judged: the rule as written', () => {
+    const { counter } = runAll(PUSHUP, sample(PUSHUP, keys, { noWorld: true }));
+    expect(counter.rule).toBe(PUSHUP);
+  });
+
+  it('the view is locked at the settle and re-judged after a stream restart', () => {
+    const headOn = sample(PUSHUP, keys);
+    const side = sample(PUSHUP, keys).map(sideOn);
+    const counter = createRepCounter(PUSHUP);
+    for (const f of headOn) counter.push(f);
+    expect(counter.rule.view).toBe('front');
+    for (const f of side) counter.push(f); // t restarts at 0
+    expect(counter.rule).toBe(PUSHUP);
+    expect(counter.reps).toBe(2); // counts kept
+    counter.reset();
+    expect(counter.rule).toBe(PUSHUP);
+  });
+
+  /** Turn the world body about the vertical axis so the shoulder line has this yaw. */
+  function yawed(f: LandmarkFrame, deg: number): LandmarkFrame {
+    const th = (deg * Math.PI) / 180;
+    const world = f.world?.map((p) => ({
+      x: p.x * Math.cos(th) - p.z * Math.sin(th),
+      y: p.y,
+      z: p.x * Math.sin(th) + p.z * Math.cos(th),
+    }));
+    return world ? { ...f, world } : f;
+  }
+
+  it('view cut-offs are rule data with a dead band: front below 40°, side above 50°', () => {
+    expect(PUSHUP.viewYawDeg).toEqual({ frontBelow: 40, sideAbove: 50 });
+  });
+
+  it('a yaw inside the dead band keeps the view already chosen while settling', () => {
+    // Head-on while getting into position (arms bent, not yet at the start), then the body
+    // reads 47° (inside the band) for the rest of the setup and the set.
+    const setupKeys = curve(120, [[1000, 120], [1000, 120], [300, 165], ...segsOf(keys)]);
+    const frames = sample(PUSHUP, setupKeys).map((f) => (f.t < 1000 ? f : yawed(f, 47)));
+    const { counter } = runAll(PUSHUP, frames);
+    expect(counter.rule.view).toBe('front');
+    expect(counter.reps).toBe(2);
+    // Starting inside the band from the beginning: the rule as written (side).
+    const fromStart = runAll(
+      PUSHUP,
+      sample(PUSHUP, setupKeys).map((f) => yawed(f, 47)),
+    );
+    expect(fromStart.counter.rule).toBe(PUSHUP);
+  });
+
+  it('turning from head-on to side-on mid-set keeps the front thresholds until the next settle', () => {
+    const turnAt = 2600; // after the first push-up, at the top
+    const frames = sample(PUSHUP, keys).map((f) => (f.t < turnAt ? f : sideOn(f)));
+    const counter = createRepCounter(PUSHUP);
+    for (const f of frames) {
+      counter.push(f);
+      if (f.t >= turnAt) expect(counter.rule.view).toBe('front');
+    }
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 0 });
+  });
+
+  it('the front variant needs a straight body line (hip angle) while counting', () => {
+    expect(PUSHUP.otherView?.minHipAngleDeg).toBeGreaterThan(125);
+    expect(PUSHUP.otherView?.minHipAngleDeg).toBeLessThan(155);
+    expect(PUSHUP.minHipAngleDeg).toBeUndefined(); // side view: the rule as tuned on synthetic
+  });
+
+  it('head-on: elbow bends while sitting or getting up (hip bent) are neither reps nor partials', () => {
+    const sitAt = 2600; // after the first push-up
+    const more = curve(165, [
+      [600, 165],
+      [700, 130], // would be a far partial
+      [700, 165],
+      [500, 165],
+      [700, 110], // would be a rep
+      [200, 110],
+      [700, 165],
+      [500, 165],
+    ]);
+    const frames = [
+      ...sample(PUSHUP, keys).filter((f) => f.t < sitAt),
+      ...sample(PUSHUP, more).map((f) => ({ ...f, t: f.t + sitAt })),
+    ].map((f) => withHip(f, f.t < sitAt ? 175 : 45));
+    const { counter } = runAll(PUSHUP, frames);
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 1, partials: 0 });
+    // The same frames in a plank count both attempts.
+    const plank = runAll(
+      PUSHUP,
+      frames.map((f) => withHip(f, 175)),
+    );
+    expect({ reps: plank.counter.reps, partials: plank.counter.partials }).toEqual({
+      reps: 2,
+      partials: 1,
+    });
+  });
+
+  it('untracked reads bodyLine while sitting on the front variant, null back in the plank (M5)', () => {
+    const sitAt = 2600;
+    const frames = sample(PUSHUP, keys).map((f) => withHip(f, f.t < sitAt ? 175 : 45));
+    const counter = createRepCounter(PUSHUP);
+    for (const f of frames) {
+      counter.push(f);
+      if (f.t < sitAt) expect(counter.untracked).toBeNull();
+      else expect(counter.untracked).toBe('bodyLine');
+    }
+    expect(counter.tracking).toBe(false);
+    const last = frames[frames.length - 1];
+    if (!last) throw new Error('no frames');
+    counter.push(withHip(last, 175));
+    expect(counter.untracked).toBeNull();
+    expect(counter.tracking).toBe(true);
+  });
+
+  it('hidden knees (head-on, legs cropped or behind the torso) leave the body line unknown: counts', () => {
+    // World knees guessed bent at 45°, but the knees are at visibility 0.2 in the image.
+    const sitAt = 2600;
+    const more = curve(165, [
+      [600, 165],
+      [700, 130],
+      [700, 165],
+      [500, 165],
+      [700, 110],
+      [200, 110],
+      [700, 165],
+      [500, 165],
+    ]);
+    const frames = [
+      ...sample(PUSHUP, keys).filter((f) => f.t < sitAt),
+      ...sample(PUSHUP, more).map((f) => ({ ...f, t: f.t + sitAt })),
+    ].map((f) => withHip(f, 45, 0.2));
+    const { counter } = runAll(PUSHUP, frames);
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 1 });
+    expect(counter.tracking).toBe(true);
+  });
+
+  it('side view ignores the hip angle', () => {
+    const { counter } = runAll(
+      PUSHUP,
+      sample(PUSHUP, keys).map((f) => sideOn(withHip(f, 45))),
+    );
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 0, partials: 2 });
+  });
+
+  it('rules without a variant never switch', () => {
+    const { counter } = runAll(CURL, sample(CURL, curlReps(1)));
+    expect(counter.rule).toBe(CURL);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// M5 getters for the focus tracker: why a frame wasn't tracked, and per-side raw angles.
+// ---------------------------------------------------------------------------------------------
+
+describe('createRepCounter: untracked reason (M5)', () => {
+  it('is null before any frame and while tracking', () => {
+    const counter = createRepCounter(CURL);
+    expect(counter.untracked).toBeNull();
+    counter.push(makeFrame(CURL, { t: 0, left: { angle: 170 }, right: { angle: 170 } }));
+    expect(counter.tracking).toBe(true);
+    expect(counter.untracked).toBeNull();
+  });
+
+  it('a hidden wrist reads visibility', () => {
+    const counter = createRepCounter(RAISE);
+    const raise = (t: number, v: number) =>
+      makeFrame(RAISE, {
+        t,
+        left: { angle: 10, anchor: 'below', visibility: v },
+        right: { angle: 10, anchor: 'below', visibility: v },
+      });
+    counter.push(raise(0, 0.95));
+    expect(counter.untracked).toBeNull();
+    // Hide just the wrists (third triplet point) on both sides.
+    const f = raise(DT, 0.95);
+    const hidden = f.landmarks.map((p, i) =>
+      i === RAISE.triplets.left[2] || i === RAISE.triplets.right[2] ? { ...p, visibility: 0.1 } : p,
+    );
+    counter.push({ ...f, landmarks: hidden });
+    expect(counter.tracking).toBe(false);
+    expect(counter.untracked).toBe('visibility');
+    counter.push(raise(2 * DT, 0.95));
+    expect(counter.untracked).toBeNull();
+  });
+
+  it('a frame with no landmarks reads visibility', () => {
+    const counter = createRepCounter(CURL);
+    counter.push({ t: 0, landmarks: [] });
+    expect(counter.untracked).toBe('visibility');
+  });
+
+  it('reset() clears it', () => {
+    const counter = createRepCounter(CURL);
+    counter.push({ t: 0, landmarks: [] });
+    counter.reset();
+    expect(counter.untracked).toBeNull();
+  });
+});
+
+describe('createRepCounter: per-side angles (M5 sideAngles)', () => {
+  it("both-arms rule in world space: this frame's raw angles per side, before the EMA", () => {
+    const counter = createRepCounter(RAISE);
+    expect(counter.sideAngles).toBeNull();
+    counter.push(
+      makeFrame(RAISE, {
+        t: 0,
+        left: { angle: 10, anchor: 'below' },
+        right: { angle: 10, anchor: 'below' },
+      }),
+    );
+    counter.push(
+      makeFrame(RAISE, {
+        t: DT,
+        left: { angle: 30, anchor: 'below' },
+        right: { angle: 60, anchor: 'below' },
+      }),
+    );
+    const s = counter.sideAngles;
+    expect(s?.left).toBeCloseTo(30, 4);
+    expect(s?.right).toBeCloseTo(60, 4);
+    // The smoothed angle lags behind the raw mean (45°).
+    expect(counter.angle).toBeLessThan(40);
+  });
+
+  it('a hidden side reads null, the visible side keeps its angle', () => {
+    const counter = createRepCounter(RAISE);
+    counter.push(
+      makeFrame(RAISE, {
+        t: 0,
+        left: { angle: 20, anchor: 'below', visibility: 0.1 },
+        right: { angle: 50, anchor: 'below' },
+      }),
+    );
+    expect(counter.sideAngles?.left).toBeNull();
+    expect(counter.sideAngles?.right).toBeCloseTo(50, 4);
+    counter.push({ t: DT, landmarks: [] });
+    expect(counter.sideAngles).toEqual({ left: null, right: null });
+  });
+
+  it('both-arms rule in image space (press): the image-plane angles, not the world ones', () => {
+    expect(PRESS.angleSpace).toBe('image');
+    const f = tiltWristInWorld(
+      PRESS,
+      makeFrame(PRESS, {
+        t: 0,
+        left: { angle: 150, anchor: 'below' },
+        right: { angle: 120, anchor: 'below' },
+      }),
+      -0.1,
+    );
+    const image = createRepCounter(PRESS);
+    image.push(f);
+    expect(image.sideAngles?.left).toBeCloseTo(150, 4);
+    expect(image.sideAngles?.right).toBeCloseTo(120, 4);
+    // The world model reads the tilted forearms differently.
+    const world = createRepCounter({ ...PRESS, angleSpace: 'world' });
+    world.push(f);
+    expect(Math.abs((world.sideAngles?.left ?? 0) - 150)).toBeGreaterThan(5);
+  });
+
+  it('is null for one-side rules (best side mode)', () => {
+    const counter = createRepCounter(CURL);
+    counter.push(makeFrame(CURL, { t: 0, left: { angle: 170 }, right: { angle: 170 } }));
+    expect(counter.sideAngles).toBeNull();
+  });
+
+  it('reset() clears it', () => {
+    const counter = createRepCounter(RAISE);
+    counter.push(makeFrame(RAISE, { t: 0, left: { angle: 10, anchor: 'below' } }));
+    counter.reset();
+    expect(counter.sideAngles).toBeNull();
+  });
+
+  it('getters never change counting (same events with or without reading them)', () => {
+    const frames = sample(
+      RAISE,
+      curve(10, [
+        [600, 10],
+        [900, 95],
+        [300, 95],
+        [1200, 10],
+        [500, 10],
+      ]),
+      {
+        anchor: 'below',
+      },
+    );
+    const plain = runAll(RAISE, frames).events;
+    const counter = createRepCounter(RAISE);
+    const read: RepEvent[] = [];
+    for (const f of frames) {
+      read.push(...counter.push(f));
+      void counter.sideAngles;
+      void counter.untracked;
+    }
+    expect(read).toEqual(plain);
+  });
+});
+
+// SPEC M4f wave 1: every new rule counts through the same generic counter. Built angle curves
+// per rule, read from the rule's own data (start/far thresholds, direction), never hard-coded.
+describe.each([
+  ['Hammer_Curls', 'above'],
+  ['Concentration_Curls', 'above'],
+  ['Incline_Dumbbell_Curl', 'above'],
+  ['Dumbbell_Shoulder_Press', 'below'],
+  ['Bent_Over_Two-Dumbbell_Row', 'above'],
+  ['Standing_Dumbbell_Triceps_Extension', 'below'],
+] as const)('createRepCounter: M4f wave 1 rule %s', (id, anchor) => {
+  const rule = mustRule(id);
+  // Toward the far end = the sign that moves the angle from the start threshold to the far one.
+  const startThr = rule[rule.start];
+  const farThr = rule.start === 'extended' ? rule.contracted : rule.extended;
+  const sign = Math.sign(farThr - startThr);
+  /** Well inside the start band and well past the far threshold. */
+  const home = startThr - sign * 25;
+  const far = farThr + sign * 25;
+  /** A turnaround past the start band by more than the partial depth, short of the far end. */
+  const turn = startThr + sign * (rule.minPartialDepthDeg + 5);
+  const toFarMs =
+    rule.eccentric === (rule.start === 'extended' ? 'toContracted' : 'toExtended') ? 1200 : 800;
+  const backMs = toFarMs === 1200 ? 800 : 1200;
+  const rep: [number, number][] = [
+    [toFarMs, far],
+    [300, far],
+    [backMs, home],
+    [500, home],
+  ];
+  const settle: [number, number][] = [[600, home]];
+
+  it('is a learning rule', () => {
+    expect(rule.status).toBe('learning');
+    expect(Math.abs(turn - farThr)).toBeGreaterThanOrEqual(10);
+  });
+
+  it('counts 4 clean reps, no partials', () => {
+    const keys = curve(home, [...settle, ...rep, ...rep, ...rep, ...rep]);
+    const { counter, events } = runAll(rule, sample(rule, keys, { anchor }));
+    expect(reps(events)).toHaveLength(4);
+    expect(partials(events)).toHaveLength(0);
+    expect(counter.reps).toBe(4);
+    // Lowering is the slow leg (1200 ms) in every curve here.
+    const first = reps(events)[0];
+    expect(first?.eccentricMs).toBeGreaterThan(first?.concentricMs ?? Infinity);
+  });
+
+  it('a turn past the start band but short of the far end is one far partial', () => {
+    const keys = curve(home, [
+      ...settle,
+      ...rep,
+      [700, turn],
+      [200, turn],
+      [700, home],
+      [500, home],
+      ...rep,
+    ]);
+    const { counter, events } = runAll(rule, sample(rule, keys, { anchor }));
+    expect(events.map((e) => e.type)).toEqual(['rep', 'partial', 'rep']);
+    expect(events[1]?.reason).toBe('far');
+    expect(counter.reps).toBe(2);
+    expect(counter.partials).toBe(1);
+  });
+
+  it('±8° jitter in the start band makes nothing', () => {
+    const keys = curve(home, [[6000, home]]);
+    const noise = (i: number) => (i % 2 === 0 ? 8 : -8);
+    const { counter, events } = runAll(rule, sample(rule, keys, { anchor, noise }));
+    expect(events).toHaveLength(0);
+    expect(counter.reps).toBe(0);
+    expect(counter.partials).toBe(0);
+  });
+});
+
+// SPEC M4f gates: for the DB press and the triceps extension the extended end only counts with
+// the wrist above the shoulder, so curling the dumbbells up from hanging arms is never a rep.
+describe.each(['Dumbbell_Shoulder_Press', 'Standing_Dumbbell_Triceps_Extension'] as const)(
+  'createRepCounter: %s extended gate',
+  (id) => {
+    const rule = mustRule(id);
+    // Arms hanging (anchor above: wrist below the shoulder), curled up to the bent end and back,
+    // as if lifting the dumbbells into place. Same angles as clean reps.
+    const keys = curve(175, [
+      [600, 175],
+      [900, 45],
+      [300, 45],
+      [1200, 175],
+      [500, 175],
+      [900, 45],
+      [300, 45],
+      [1200, 175],
+      [500, 175],
+    ]);
+
+    it('hanging arms curled up to the start and back count 0 reps', () => {
+      const { counter, events } = runAll(rule, sample(rule, keys, { anchor: 'above' }));
+      expect(reps(events)).toHaveLength(0);
+      expect(counter.reps).toBe(0);
+    });
+
+    it('the same angles overhead (wrist above the shoulder) count', () => {
+      const { counter } = runAll(rule, sample(rule, keys, { anchor: 'below' }));
+      expect(counter.reps).toBeGreaterThan(0);
+    });
+  },
+);

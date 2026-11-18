@@ -1,0 +1,546 @@
+/* ---------- M7 Fuel (src/ui/screens/fuel.ts, src/ui/fuel/**), Pro mood ----------
+   Tokens only (tokens.test.ts). Gym rules: main numbers ≥ 64px (--fs-num-sm), body ≥ 20px,
+   taps ≥ 56px. Orange stays the one action (Log food, Log, Save) and the "where you are" ring;
+   a reached target turns the ring --success; selected chips are the white --selected fill.
+   Class names shared with fuelForms.css (.fuel-head, .fuel-back, .fuel-note) are scoped here
+   (.screen.fuel / .fuel-sheet) so the Weigh-in and Setup screens keep fuelForms.css's look. */
+
+/* ---- Fuel tab ---- */
+
+.screen.fuel > .fuel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.fuel-head-txt {
+  min-width: 0;
+}
+
+.fuel-weigh-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  min-height: var(--tap-min);
+  background: var(--surface-2);
+  font-weight: 700;
+}
+
+.fuel-weigh-txt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.fuel-weigh-last {
+  font-size: var(--fs-label);
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.fuel-rings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fuel-ring {
+  display: grid;
+  grid-template-columns: 104px 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.fuel-ring-dial {
+  position: relative;
+  width: 104px;
+  height: 104px;
+}
+
+.fuel-ring-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.fuel-ring-bg,
+.fuel-ring-fg {
+  fill: none;
+  stroke-width: 10;
+}
+
+.fuel-ring-bg {
+  stroke: var(--line);
+}
+
+.fuel-ring-fg {
+  stroke: var(--cta);
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--dur-slow) var(--ease-standard);
+}
+
+.fuel-ring-fg.done {
+  stroke: var(--success);
+}
+
+.fuel-ring-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.fuel-ring-txt {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fuel-left-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.fuel-ring.done .fuel-left-num {
+  color: var(--success);
+}
+
+.fuel-left-unit {
+  font-weight: 700;
+}
+
+.fuel-ring-of {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.fuel-tag {
+  display: inline-block;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  border: var(--line-w) solid var(--line);
+  color: var(--text-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.fuel-setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.fuel-setup-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.primary-btn.fuel-log-btn {
+  margin-top: 4px;
+}
+
+.fuel-h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+}
+
+.fuel-slot-sum {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fuel-entries,
+.fuel-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fuel-list,
+.log-list,
+.rx-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fuel-entry {
+  display: block;
+}
+
+.fuel-entry-main,
+.log-item {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 14px;
+  text-align: left;
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+/* M13 task 24: the whole row is one button (no Delete block); the sheet has Edit and Delete.
+   A quiet pencil in the corner says the row opens. */
+.fuel-entry-main {
+  position: relative;
+  padding-right: 48px;
+}
+
+.fuel-entry-go {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  color: var(--text-2);
+}
+
+.fuel-entry-name,
+.log-item-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.fuel-entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+
+.fuel-entry-macros,
+.log-item-sub,
+.log-item-th {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.fuel-empty {
+  padding: 4px 0;
+}
+
+/* Neutral second action (Set up targets, New recipe, Edit, Delete entry). */
+.fuel-secondary {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  background: var(--surface-2);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+/* ---- Sheets (log sheet, entry editor, recipe and food editors) ---- */
+
+.fuel-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+}
+
+/* A toast over a sheet (an Undo toast for 10 s, or a notice): app.ts measures the room it takes
+   into --toast-space. The sheet scrolls everything clear of it, and its main button (Look up, Log,
+   Save) sticks just above it, so it is never under the toast and needs no scroll to reach. */
+body:has(> .undo-toast) .fuel-sheet {
+  padding-bottom: calc(var(--toast-space, 248px) + 16px);
+  /* Focus / scrollIntoView keep a field clear of the toast and of the sticky button. */
+  scroll-padding-bottom: calc(var(--toast-space, 248px) + 96px);
+}
+
+/* Sticky edges are measured inside the sheet's padding, which already holds the toast's room. */
+body:has(> .undo-toast) .fuel-sheet .cta-btn {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  box-shadow: 0 0 0 8px var(--bg);
+}
+
+.fuel-sheet > * {
+  width: 100%;
+  max-width: 560px;
+  margin-inline: auto;
+}
+
+.fuel-sheet-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.fuel-sheet .fuel-sheet-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-title);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.fuel-close,
+.fuel-sheet .fuel-back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  padding: 0 14px;
+  background: var(--surface-2);
+  font-weight: 700;
+}
+
+.fuel-sheet .fuel-back {
+  align-self: flex-start;
+}
+
+.fuel-sheet-body,
+.log-panel,
+.log-section,
+.log-detail,
+.log-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.log-secs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.log-secs[hidden],
+.mf-serving[hidden] {
+  display: none;
+}
+
+.log-sec-btn {
+  min-width: 0;
+  padding: 0 6px;
+  background: var(--surface-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.log-sec-btn.on,
+.fuel-chip.on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.log-detail-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.log-detail-name:focus {
+  outline: none;
+}
+
+.fuel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fuel-chip {
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fuel-stepper {
+  display: grid;
+  grid-template-columns: 72px 1fr 72px;
+  align-items: center;
+  gap: 8px;
+}
+
+.fuel-step-btn {
+  min-height: var(--tap-cta);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+}
+
+.fuel-step-btn:disabled {
+  opacity: 0.45;
+}
+
+.fuel-step-out {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.fuel-step-unit {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.fuel-preview,
+.rx-preview-num {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rx-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.fuel-field,
+.mf-serving {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fuel-label {
+  font-weight: 700;
+}
+
+.fuel-hint {
+  color: var(--text-2);
+}
+
+.fuel-input {
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 10px 14px;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--r-btn);
+}
+
+.fuel-input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.fuel-error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.fuel-error:empty {
+  display: none;
+}
+
+/* Something to do before going on (label numbers, offline food list). */
+.fuel-sheet .fuel-note {
+  padding: 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: 2px solid var(--warn);
+  font-weight: 600;
+}
+
+.rx-ing {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.fuel-secondary.rx-remove {
+  width: auto;
+  min-width: 96px;
+  font-size: var(--fs-body);
+}
+
+/* The ingredient's label spans the row; Remove sits beside the grams input, the error below. */
+.rx-ing .fuel-field {
+  display: contents;
+}
+
+.rx-ing .fuel-label,
+.rx-ing .fuel-error {
+  grid-column: 1 / -1;
+}
+
+.rx-ing .fuel-input {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.rx-ing .rx-remove {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.fuel-sheet .primary-btn.cta-btn {
+  margin-top: 4px;
+}

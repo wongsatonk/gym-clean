@@ -1,7 +1,9 @@
-// npm run landmarks [-- <dir>] [--force]  (default dir: fixtures/videos)
+// npm run landmarks [-- <dir>] [--force] [--out=<dir>]  (default dir: fixtures/videos)
 // Extracts pose landmarks from every video under <dir> into
 // fixtures/landmarks/<path relative to fixtures/videos or fixtures/synthetic>.json, so
 // `npm run landmarks -- fixtures/videos/curl` writes fixtures/landmarks/curl/<clip>.json.
+// --out=<dir> writes under <dir> instead of fixtures/landmarks (staging clips whose exercise
+// rule doesn't exist yet: the fixture suite fails on a landmarks folder without a rule).
 // Clips whose JSON already exists are skipped unless --force.
 // Raw videos never leave this machine; only the landmark JSON is committed (CLAUDE.md).
 import { execFileSync } from 'node:child_process';
@@ -16,7 +18,8 @@ const root = process.cwd();
 const args = process.argv.slice(2);
 const force = args.includes('--force');
 const inputDir = resolve(args.find((a) => !a.startsWith('--')) ?? 'fixtures/videos');
-const outDir = resolve('fixtures/landmarks');
+const outArg = args.find((a) => a.startsWith('--out='));
+const outDir = resolve(outArg ? outArg.slice('--out='.length) : 'fixtures/landmarks');
 const SOURCE_ROOTS = ['fixtures/videos', 'fixtures/synthetic'].map((d) => resolve(d));
 
 /** Path of `file` relative to the fixtures/videos or fixtures/synthetic folder that holds it. */

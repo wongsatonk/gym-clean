@@ -1,0 +1,362 @@
+{
+  "note": "Generated from src/core/trainer/tools.ts by tools.test.ts (UPDATE_CONTRACT=1). Do not edit. scripts/gen-trainer-tools.mjs builds the Swift tools from it.",
+  "exceptions": {
+    "starterPlan": "Built from the intake answers only, never from chat."
+  },
+  "tools": [
+    {
+      "name": "postponeSession",
+      "description": "Move a planned session. Default: today's, to this week's rest day.",
+      "readOnly": false,
+      "action": "postpone",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "description": "useRestDay: train on a rest day; pushWeek: slide the week",
+            "enum": [
+              "useRestDay",
+              "pushWeek"
+            ]
+          },
+          "from": {
+            "type": "string",
+            "description": "Planned date to move, YYYY-MM-DD; default today",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "to": {
+            "type": "string",
+            "description": "Date to move it to, YYYY-MM-DD",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "doDayToday",
+      "description": "Run another plan day today.",
+      "readOnly": false,
+      "action": "doToday",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "Plan day name",
+            "pattern": "^[^\\n]{1,40}$"
+          }
+        },
+        "required": [
+          "day"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "avoidBodyArea",
+      "description": "Go easy on a body area today: swap or remove what loads it.",
+      "readOnly": false,
+      "action": "avoidArea",
+      "midWorkout": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "area": {
+            "type": "string",
+            "description": "Body area",
+            "enum": [
+              "arms",
+              "shoulders",
+              "chest",
+              "back",
+              "legs",
+              "core"
+            ]
+          }
+        },
+        "required": [
+          "area"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "lighterToday",
+      "description": "Make today's workout lighter: fewer sets, less weight.",
+      "readOnly": false,
+      "action": "lighter",
+      "midWorkout": true,
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "deloadWeek",
+      "description": "A lighter week from today: half the sets, less weight.",
+      "readOnly": false,
+      "action": "deload",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "swapExercise",
+      "description": "Swap an exercise for one that works the same muscles.",
+      "readOnly": false,
+      "action": "swap",
+      "midWorkout": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "exerciseId": {
+            "type": "string",
+            "description": "Exercise id to swap out",
+            "pattern": "^[A-Za-z0-9_-]{1,60}$"
+          },
+          "toId": {
+            "type": "string",
+            "description": "Exercise id to swap in; omit for the best",
+            "pattern": "^[A-Za-z0-9_-]{1,60}$"
+          },
+          "scope": {
+            "type": "string",
+            "description": "today, or plan for from now on",
+            "enum": [
+              "today",
+              "plan"
+            ]
+          }
+        },
+        "required": [
+          "exerciseId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "adjustStalledExercise",
+      "description": "Fix a lift on a plateau: lighter and build up, or one more set.",
+      "readOnly": false,
+      "action": "stall",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "exerciseId": {
+            "type": "string",
+            "description": "Exercise id; omit for the first",
+            "pattern": "^[A-Za-z0-9_-]{1,60}$"
+          },
+          "option": {
+            "type": "string",
+            "description": "lighter: -10% and build up; addSet: one more set",
+            "enum": [
+              "lighter",
+              "addSet"
+            ]
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "suggestFood",
+      "description": "Show food ideas that fit what's left of today's targets, each with Log.",
+      "readOnly": false,
+      "action": "food",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "proposeFocusBlock",
+      "description": "Plan 2-6 weeks that build one area. The app builds the days.",
+      "readOnly": false,
+      "action": "focusBlock",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "description": "Area to build",
+            "enum": [
+              "arms",
+              "shoulders",
+              "chest",
+              "back",
+              "legs",
+              "core"
+            ]
+          },
+          "weeks": {
+            "type": "integer",
+            "description": "Weeks, 2 to 6 (a month is 4)",
+            "minimum": 2,
+            "maximum": 6
+          },
+          "weekdays": {
+            "type": "array",
+            "description": "Training weekdays, 0 = Sunday",
+            "items": {
+              "type": "integer",
+              "description": "Weekday 0-6",
+              "minimum": 0,
+              "maximum": 6
+            },
+            "minItems": 3,
+            "maxItems": 6,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "group",
+          "weeks",
+          "weekdays"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "shortOnTime",
+      "description": "Fit today's workout into less time.",
+      "readOnly": false,
+      "action": "shortOnTime",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "minutes": {
+            "type": "integer",
+            "description": "Minutes available: 20, 30, 45",
+            "minimum": 20,
+            "maximum": 45
+          }
+        },
+        "required": [
+          "minutes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "setEasyOn",
+      "description": "Change the go-easy list: areas every plan goes lighter on.",
+      "readOnly": false,
+      "action": "easyOn",
+      "midWorkout": false,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "add": {
+            "type": "array",
+            "description": "Areas to add",
+            "items": {
+              "type": "string",
+              "description": "Body area",
+              "enum": [
+                "arms",
+                "shoulders",
+                "chest",
+                "back",
+                "legs",
+                "core"
+              ]
+            },
+            "maxItems": 6,
+            "uniqueItems": true
+          },
+          "remove": {
+            "type": "array",
+            "description": "Areas to remove",
+            "items": {
+              "type": "string",
+              "description": "Body area",
+              "enum": [
+                "arms",
+                "shoulders",
+                "chest",
+                "back",
+                "legs",
+                "core"
+              ]
+            },
+            "maxItems": 6,
+            "uniqueItems": true
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "weekSummary",
+      "description": "This week's sessions and sets, done vs planned.",
+      "readOnly": true,
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "progressSummary",
+      "description": "Week and month scores, streak and focus block progress.",
+      "readOnly": true,
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "exerciseInfo",
+      "description": "How to do an exercise: steps, cue, muscles.",
+      "readOnly": true,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "exerciseId": {
+            "type": "string",
+            "description": "Exercise id from the context",
+            "pattern": "^[A-Za-z0-9_-]{1,60}$"
+          }
+        },
+        "required": [
+          "exerciseId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "foodIdeas",
+      "description": "What's left of today's food targets, and ideas that fit.",
+      "readOnly": true,
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

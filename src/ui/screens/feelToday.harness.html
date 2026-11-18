@@ -1,0 +1,116 @@
+<!doctype html>
+<!-- Dev-only visual check for M12 1b tasks 31 + 32 (feel today, "Go easy on" offers, cardio line)
+     with made-up data. Not part of the build or the app. Open on the dev server:
+     /src/ui/screens/feelToday.harness.html?view=open | ?view=card | ?view=row | ?view=done
+     | ?view=calendar -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Feel today harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { todayScreen, ymd } from './today.ts';
+      import { calendarScreen } from './calendar.ts';
+      import { program } from '../../data/catalog.ts';
+      import { todaysFeelOffers, readinessCard as coreCard } from '../../core/health/readiness.ts';
+      import {
+        FIX_MONTH,
+        FIX_MONTH_SCORE,
+        FIX_TODAY,
+        FIX_WEEK,
+        fixName,
+        fixtureMonth,
+      } from './calendarFixture.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'open';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      const NOW = new Date(2026, 10, 17, 8, 0).getTime();
+      const TODAY = ymd(NOW);
+      const dayAt = (i) => new Date(2026, 10, 16 + i).getTime();
+      const dots = [0, 1, 2, 3, 4, 5, 6].map((i) => ({
+        dayStart: dayAt(i),
+        state: i === 0 ? 'done' : i === 1 ? 'today' : 'future',
+      }));
+
+      if (view === 'calendar') {
+        app.replaceChildren(
+          calendarScreen(
+            {
+              month: FIX_MONTH,
+              today: FIX_TODAY,
+              days: fixtureMonth(),
+              week: FIX_WEEK,
+              monthScore: FIX_MONTH_SCORE,
+              streakWeeks: 6,
+              dayName: fixName,
+              cardioMinutes: 95,
+            },
+            { onPrevMonth() {}, onNextMonth() {}, onOpenDay() {}, onShare() {} },
+          ),
+        );
+      } else {
+        // Made-up answers: low energy + sore shoulders → the card shows with the offer ("card");
+        // sore legs only → no card, the offer is on the feel row ("row").
+        const feel =
+          view === 'card'
+            ? { date: TODAY, energy: 2, sore: ['shoulders'] }
+            : view === 'row'
+              ? { date: TODAY, energy: 4, sore: ['legs'] }
+              : view === 'done'
+                ? { date: TODAY, energy: 4 }
+                : null;
+        const feels = feel ? [feel] : [];
+        const card = coreCard({ date: TODAY, now: NOW, days: [], trainingDay: true, feels });
+        const render = () =>
+          app.replaceChildren(
+            todayScreen(
+              {
+                now: NOW,
+                days: program.days,
+                upNextDayId: program.days[1].id,
+                streakWeeks: 4,
+                weekDots: dots,
+                last: null,
+                unit: 'kg',
+                readiness: card,
+                feel,
+                feelOffers: todaysFeelOffers(feels, TODAY),
+                feelOpen: view === 'open',
+                cardioMinutes: 95,
+                weekLoad: { gymSessions: 1, outside: [{ kind: 'running', minutes: 40 }] },
+              },
+              {
+                onStart: () => log('start'),
+                onOpenDay: () => log('open'),
+                onTab: () => {},
+                onLighterToday: () => log('lighter'),
+                onNotToday: () => log('notToday'),
+                onTrainAsPlanned: () => log('keep'),
+                onEasyOn: (a) => log('easyOn', a),
+                onSaveFeel: (f) => log('save', JSON.stringify(f)),
+              },
+            ),
+          );
+        render();
+        if (view === 'open') {
+          // Show a picked state: energy 2 and sore shoulders.
+          document.querySelector('[data-feel-energy="2"]')?.click();
+          document.querySelector('[data-feel-sore="shoulders"]')?.click();
+        }
+        if (q.get('scroll')) {
+          document.querySelector(q.get('scroll'))?.scrollIntoView({ block: 'start' });
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -3,20 +3,70 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0d10" />
+    <meta name="theme-color" content="#0d0f12" />
     <meta name="color-scheme" content="dark" />
     <!-- Privacy: the page may only talk to its own origin. This also blocks MediaPipe's built-in
-         usage logging (odml.pa.googleapis.com), which has no off switch. -->
-    <meta http-equiv="Content-Security-Policy" content="connect-src 'self' blob: data:" />
+         usage logging (odml.pa.googleapis.com), which has no off switch. The one exception is the
+         optional M7 barcode lookup (off by default), which sends only the barcode number. -->
+    <meta http-equiv="Content-Security-Policy" content="connect-src 'self' blob: data: https://world.openfoodfacts.org" />
     <title>Gym Clean</title>
-    <link
-      rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0d10'/%3E%3Crect x='10' y='26' width='8' height='12' rx='2' fill='%234ade80'/%3E%3Crect x='46' y='26' width='8' height='12' rx='2' fill='%234ade80'/%3E%3Crect x='18' y='30' width='28' height='4' fill='%234ade80'/%3E%3C/svg%3E"
-    />
+    <meta name="description" content="Your pocket strength coach." />
+    <!-- M6 install: the web manifest link is added at build time by vite-plugin-pwa. iOS reads
+         these tags instead; the dark page runs under the status bar (safe-area insets apply). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Gym Clean" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!-- M13 task 11: the favicon is the real app icon (scripts/icons.mjs, same logo path). -->
+    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="stylesheet" href="/src/styles.css" />
+    <!-- M13 task 11: the pre-boot mark's own few rules, so it shows before (or without) the app's
+         CSS and script. Static: no animation, nothing to reduce. -->
+    <style>
+      html {
+        background: #0d0f12;
+      }
+      .boot-mark {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #0d0f12;
+      }
+      .boot-mark svg {
+        width: 112px;
+        height: 112px;
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- M13 task 11: static pre-boot mark (the logo path from ICON_PATHS.logo on #0d0f12). No
+           script; the app removes it when it mounts (its first render replaces #app's children). -->
+      <div class="boot-mark" data-boot-mark aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#ff7a1a"
+          stroke-width="2.25"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          focusable="false"
+        >
+          <path d="M2.5 9.5v5M5.5 7v10M18.5 7v10M21.5 9.5v5M5.5 12h4l1.5-3 2 6 1.5-3h3.5" />
+        </svg>
+      </div>
+    </div>
+    <script>
+      // M4e: apply the saved accent before first paint (IndexedDB is async; this mirror isn't).
+      try {
+        var a = localStorage.getItem('gc-accent');
+        if (a === 'volt' || a === 'yellow') document.documentElement.dataset.accent = a;
+      } catch (e) {}
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

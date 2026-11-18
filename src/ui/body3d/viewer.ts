@@ -18,22 +18,22 @@ import {
   WebGLRenderer,
   type BufferGeometry,
 } from 'three';
+import { figurePalette, stageBackground } from './palette';
 import { BODY_SEGMENTS, MUSCLE_PARTS, facingAngle, type BodySegment } from './parts';
+import { addRim } from './rim';
 
 export type Body3D = {
   /** Wrapper element (div > canvas); size it with CSS. */
   readonly el: HTMLDivElement;
   setMuscles(primary: readonly string[], secondary: readonly string[]): void;
   setInteractive(on: boolean): void;
+  /**
+   * Paint the lit stage behind the figure. 'auto' (default) paints it only in the interactive
+   * full viewer: the inline (Exercise) and Rest slots sit on a stage their screen already draws,
+   * so there the canvas stays transparent.
+   */
+  setStage(on: boolean | 'auto'): void;
   dispose(): void;
-};
-
-const COLORS = {
-  body: 0x252c35,
-  muscle: 0x56636f,
-  secondary: 0x2f9e5c,
-  primary: 0x4ade80,
-  primaryGlow: 0x166534,
 };
 
 const TARGET_Y = 0.9;
@@ -73,12 +73,26 @@ export function webglAvailable(): boolean {
 export function createBody3D(opts: { reducedMotion: boolean }): Body3D {
   const el = document.createElement('div');
   el.className = 'body3d';
+  // Token colours, read once now (M4e A7): body, rim, stage, cyan muscle.
+  const C = figurePalette();
+  const paintStage = (on: boolean) => {
+    el.dataset.stage = String(on);
+    el.style.background = on ? stageBackground() : '';
+    el.style.borderRadius = on ? 'var(--r-btn, 12px)' : '';
+    el.style.overflow = on ? 'hidden' : '';
+  };
+  let stageMode: boolean | 'auto' = 'auto';
+  const applyStage = () =>
+    paintStage(stageMode === 'auto' ? el.dataset.interactive === 'true' : stageMode);
+  applyStage();
   const renderer = new WebGLRenderer({
     antialias: true,
     alpha: true,
     powerPreference: 'low-power',
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // Clear to fully transparent: off the full viewer, the screen's own stage shows through.
+  renderer.setClearAlpha(0);
   el.append(renderer.domElement);
 
   const scene = new Scene();
@@ -86,22 +100,27 @@ export function createBody3D(opts: { reducedMotion: boolean }): Body3D {
   camera.position.set(0, 1.0, 3.7);
   camera.lookAt(0, TARGET_Y, 0);
 
-  scene.add(new HemisphereLight(0xdfe7f0, 0x0b0d10, 1.3));
-  const key = new DirectionalLight(0xffffff, 1.8);
+  scene.add(new HemisphereLight(C.skyLight, C.groundLight, 1.3));
+  const key = new DirectionalLight(C.keyLight, 1.8);
   key.position.set(1.6, 2.6, 3);
   scene.add(key);
-  const rim = new DirectionalLight(0x4ade80, 0.5);
+  const rim = new DirectionalLight(C.rimLight, 0.8);
   rim.position.set(-2, 1.5, -2.5);
   scene.add(rim);
 
   const sphere = new SphereGeometry(1, 28, 18);
-  const bodyMat = new MeshStandardMaterial({ color: COLORS.body, roughness: 0.8, metalness: 0.05 });
+  const bodyMat = addRim(
+    new MeshStandardMaterial({ color: C.body, roughness: 0.8, metalness: 0.05 }),
+    { color: C.edge },
+  );
   const mats = {
-    muscle: new MeshStandardMaterial({ color: COLORS.muscle, roughness: 0.6 }),
-    secondary: new MeshStandardMaterial({ color: COLORS.secondary, roughness: 0.55 }),
+    muscle: addRim(new MeshStandardMaterial({ color: C.idleMuscle, roughness: 0.6 }), {
+      color: C.edge,
+    }),
+    secondary: new MeshStandardMaterial({ color: C.secondary, roughness: 0.55 }),
     primary: new MeshStandardMaterial({
-      color: COLORS.primary,
-      emissive: new Color(COLORS.primaryGlow),
+      color: C.muscle,
+      emissive: new Color(C.muscleGlow),
       emissiveIntensity: 0.7,
       roughness: 0.45,
     }),
@@ -205,6 +224,11 @@ export function createBody3D(opts: { reducedMotion: boolean }): Body3D {
     setInteractive(on) {
       el.dataset.interactive = String(on);
       canvas.style.touchAction = on ? 'none' : 'auto';
+      applyStage();
+    },
+    setStage(on) {
+      stageMode = on;
+      applyStage();
     },
     dispose() {
       disposed = true;

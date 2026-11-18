@@ -49,3 +49,25 @@ describe('restCueText', () => {
     expect(restCueText('nudge', next)).toBe('Rest is over. Incline Dumbbell Press, set 2.');
   });
 });
+
+describe('restCuesBetween after +30 s (M4e EXTEND_REST)', () => {
+  it('fires ten-seconds again at the new target − 10 when it has not been passed', () => {
+    // 60 s rest: ten-seconds fired at 50, then +30 s at 55 → new target 90.
+    expect(kinds(60, 49, 55)).toEqual(['tenSeconds']);
+    expect(kinds(90, 55, 79.9)).toEqual([]);
+    expect(kinds(90, 79.9, 80)).toEqual(['tenSeconds']);
+    expect(kinds(90, 80, 90)).toEqual(['go']);
+    expect(kinds(90, 90, 120)).toEqual(['nudge']);
+  });
+
+  it('moves go and nudges when extended after go already fired', () => {
+    // go at 60, +30 s at 70 → ten-seconds at 80, go at 90, first nudge at 120.
+    expect(kinds(90, 70, 119)).toEqual(['tenSeconds', 'go']);
+    expect(kinds(90, 119, 120)).toEqual(['nudge']);
+  });
+
+  it('extending before ten-seconds simply delays it by 30 s', () => {
+    expect(kinds(90, 20, 50)).toEqual([]);
+    expect(kinds(90, 50, 80)).toEqual(['tenSeconds']);
+  });
+});

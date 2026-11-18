@@ -1,0 +1,342 @@
+{
+  "note": "M12 slice 2 facts eval. A made-up scenario (no personal data, no real body stats) on the repo's default program, and questions whose correct answers must quote the listed facts. 'source' says where the facts are: 'context' (serializeContext) or a read tool. facts.test.ts checks every fact really is in that source for this scenario; the on-device eval runner checks replies with factsMatch.",
+  "scenario": {
+    "today": "2026-11-11",
+    "unit": "kg",
+    "restWeekdays": [0],
+    "sessions": [
+      {
+        "id": "f01",
+        "dayId": "push-a",
+        "date": "2026-10-19",
+        "weights": {
+          "Dumbbell_Bench_Press": 20,
+          "Incline_Dumbbell_Press": 14,
+          "Seated_Dumbbell_Press": 12
+        }
+      },
+      {
+        "id": "f02",
+        "dayId": "pull-a",
+        "date": "2026-10-20",
+        "weights": {
+          "One-Arm_Dumbbell_Row": 22,
+          "Wide-Grip_Lat_Pulldown": 40
+        }
+      },
+      {
+        "id": "f03",
+        "dayId": "legs-a",
+        "date": "2026-10-21",
+        "weights": {
+          "Goblet_Squat": 20,
+          "Stiff-Legged_Dumbbell_Deadlift": 18
+        }
+      },
+      {
+        "id": "f04",
+        "dayId": "push-b",
+        "date": "2026-10-22",
+        "weights": {
+          "Incline_Dumbbell_Press": 14
+        }
+      },
+      {
+        "id": "f05",
+        "dayId": "pull-b",
+        "date": "2026-10-23",
+        "weights": {
+          "Seated_Cable_Rows": 35
+        }
+      },
+      {
+        "id": "f06",
+        "dayId": "legs-b",
+        "date": "2026-10-24",
+        "weights": {
+          "Dumbbell_Step_Ups": 10
+        }
+      },
+      {
+        "id": "f07",
+        "dayId": "push-a",
+        "date": "2026-10-26",
+        "weights": {
+          "Dumbbell_Bench_Press": 20,
+          "Incline_Dumbbell_Press": 14,
+          "Seated_Dumbbell_Press": 12
+        }
+      },
+      {
+        "id": "f08",
+        "dayId": "pull-a",
+        "date": "2026-10-27",
+        "weights": {
+          "One-Arm_Dumbbell_Row": 24,
+          "Wide-Grip_Lat_Pulldown": 40
+        }
+      },
+      {
+        "id": "f09",
+        "dayId": "legs-a",
+        "date": "2026-10-29",
+        "weights": {
+          "Goblet_Squat": 22,
+          "Stiff-Legged_Dumbbell_Deadlift": 18
+        }
+      },
+      {
+        "id": "f10",
+        "dayId": "push-b",
+        "date": "2026-10-30",
+        "weights": {
+          "Incline_Dumbbell_Press": 16
+        }
+      },
+      {
+        "id": "f11",
+        "dayId": "pull-b",
+        "date": "2026-10-31",
+        "weights": {
+          "Seated_Cable_Rows": 35
+        }
+      },
+      {
+        "id": "f12",
+        "dayId": "legs-b",
+        "date": "2026-11-02",
+        "weights": {
+          "Dumbbell_Step_Ups": 10
+        }
+      },
+      {
+        "id": "f13",
+        "dayId": "push-a",
+        "date": "2026-11-03",
+        "weights": {
+          "Dumbbell_Bench_Press": 22.5,
+          "Incline_Dumbbell_Press": 16,
+          "Seated_Dumbbell_Press": 12
+        }
+      },
+      {
+        "id": "f14",
+        "dayId": "pull-a",
+        "date": "2026-11-04",
+        "weights": {
+          "One-Arm_Dumbbell_Row": 24,
+          "Wide-Grip_Lat_Pulldown": 45
+        }
+      },
+      {
+        "id": "f15",
+        "dayId": "legs-a",
+        "date": "2026-11-06",
+        "weights": {
+          "Goblet_Squat": 24,
+          "Stiff-Legged_Dumbbell_Deadlift": 20
+        }
+      },
+      {
+        "id": "f16",
+        "dayId": "push-b",
+        "date": "2026-11-07",
+        "weights": {
+          "Incline_Dumbbell_Press": 16
+        }
+      },
+      {
+        "id": "f17",
+        "dayId": "pull-b",
+        "date": "2026-11-09",
+        "weights": {
+          "Seated_Cable_Rows": 40
+        }
+      },
+      {
+        "id": "f18",
+        "dayId": "legs-b",
+        "date": "2026-11-10",
+        "weights": {
+          "Dumbbell_Step_Ups": 12
+        },
+        "skip": ["Leg_Press"]
+      }
+    ],
+    "fuel": {
+      "totals": {
+        "kcal": 1450,
+        "proteinG": 92,
+        "carbsG": 160,
+        "fatG": 45
+      },
+      "targets": {
+        "kcal": 2400,
+        "proteinG": 140,
+        "carbsG": 280,
+        "fatG": 70
+      }
+    },
+    "goal": {
+      "kind": "strength",
+      "text": "Press heavier dumbbells by spring"
+    },
+    "liftGoals": [
+      {
+        "id": "g1",
+        "text": "Dumbbell bench 30 kg for 5",
+        "exerciseId": "Dumbbell_Bench_Press",
+        "kg": 30,
+        "reps": 5,
+        "due": "2027-01-31",
+        "created": "2026-10-15"
+      }
+    ]
+  },
+  "items": [
+    {
+      "id": "weekSessions",
+      "text": "How many sessions have I done this week?",
+      "source": "weekSummary",
+      "facts": ["2", "6"]
+    },
+    {
+      "id": "weekSets",
+      "text": "How much of this week's planned sets have I done?",
+      "source": "weekSummary",
+      "facts": ["87%"]
+    },
+    {
+      "id": "weekNext",
+      "text": "What's my next workout?",
+      "source": "weekSummary",
+      "facts": ["Push A"]
+    },
+    {
+      "id": "monthSessions",
+      "text": "How's my month going?",
+      "source": "progressSummary",
+      "facts": ["7", "25", "85%"]
+    },
+    {
+      "id": "streak",
+      "text": "How long is my streak?",
+      "source": "progressSummary",
+      "facts": ["3"]
+    },
+    {
+      "id": "todayDay",
+      "text": "What am I training today?",
+      "source": "context",
+      "facts": ["Push A"]
+    },
+    {
+      "id": "todayBenchWeight",
+      "text": "What weight should I use on the bench press today?",
+      "source": "context",
+      "facts": ["22.5"]
+    },
+    {
+      "id": "todayBenchSets",
+      "text": "How many sets and reps of bench press today?",
+      "source": "context",
+      "facts": ["4", "8"]
+    },
+    {
+      "id": "tomorrow",
+      "text": "What's on tomorrow?",
+      "source": "context",
+      "facts": ["Pull A"]
+    },
+    {
+      "id": "restDay",
+      "text": "Which day is my rest day this week?",
+      "source": "context",
+      "facts": ["Sun"]
+    },
+    {
+      "id": "benchBest",
+      "text": "What was my best bench press set lately?",
+      "source": "context",
+      "facts": ["22.5", "8"]
+    },
+    {
+      "id": "squatLast",
+      "text": "What did I goblet squat last time?",
+      "source": "context",
+      "facts": ["24", "12"]
+    },
+    {
+      "id": "rowTrend",
+      "text": "Has my seated cable row gone up?",
+      "source": "context",
+      "facts": ["35", "40"]
+    },
+    {
+      "id": "pulldownBest",
+      "text": "What's my best lat pulldown this month?",
+      "source": "context",
+      "facts": ["45"]
+    },
+    {
+      "id": "stepUpsLast",
+      "text": "What weight did I use for step ups last time?",
+      "source": "context",
+      "facts": ["12"]
+    },
+    {
+      "id": "kcalEaten",
+      "text": "How many calories have I eaten today?",
+      "source": "context",
+      "facts": ["1450"]
+    },
+    {
+      "id": "proteinTarget",
+      "text": "What's my protein target today?",
+      "source": "context",
+      "facts": ["140"]
+    },
+    {
+      "id": "kcalLeft",
+      "text": "How many calories do I have left today?",
+      "source": "foodIdeas",
+      "facts": ["950"]
+    },
+    {
+      "id": "proteinLeft",
+      "text": "How much protein do I still need today?",
+      "source": "foodIdeas",
+      "facts": ["48"]
+    },
+    {
+      "id": "goalProgress",
+      "text": "How close am I to my bench goal?",
+      "source": "context",
+      "facts": ["33%"]
+    },
+    {
+      "id": "goalTarget",
+      "text": "What's my bench goal?",
+      "source": "context",
+      "facts": ["30", "5"]
+    },
+    {
+      "id": "benchMuscles",
+      "text": "What does the dumbbell bench press work?",
+      "source": "exerciseInfo:Dumbbell_Bench_Press",
+      "facts": ["chest"]
+    },
+    {
+      "id": "gobletMuscles",
+      "text": "Which muscles does the goblet squat train?",
+      "source": "exerciseInfo:Goblet_Squat",
+      "facts": ["quadriceps"]
+    },
+    {
+      "id": "rowCue",
+      "text": "Any tip for the one-arm dumbbell row?",
+      "source": "exerciseInfo:One-Arm_Dumbbell_Row",
+      "facts": ["elbow"]
+    }
+  ]
+}

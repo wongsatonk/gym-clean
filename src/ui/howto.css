@@ -1,0 +1,179 @@
+/* M4b "How to" sheet and exercise badges. Uses the tokens from src/styles.css; the muscle map
+   colours (.body-map .muscle.primary/secondary) come from there too. */
+
+/* ---------- Badges ---------- */
+
+.ex-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ex-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* Every kind looks the same (neutral): the icon and the word tell them apart. */
+.ex-badge .ic {
+  flex: none;
+  color: var(--text-2);
+}
+
+/* ---------- How to sheet ---------- */
+
+.howto-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: max(12px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+}
+
+.howto-sheet > * {
+  max-width: 560px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.howto-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.howto-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.howto-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.howto-close {
+  flex: none;
+  min-width: 96px;
+  min-height: var(--tap-min);
+  padding: 0 18px;
+  font-weight: 700;
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.howto-stage {
+  flex: none;
+  height: min(44dvh, 420px);
+  min-height: 260px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  background: radial-gradient(ellipse at 50% 40%, var(--stage-1), var(--stage-2) 70%);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The player's element holds the canvas stage plus its Front/Side/Play bar. */
+.howto-stage[data-mode='3d'] {
+  height: min(52dvh, 480px);
+  border: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.howto-stage .demo3d-stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r-btn);
+}
+
+.howto-stage .body-map {
+  height: 100%;
+  width: auto;
+  max-width: 100%;
+}
+
+.howto-loading {
+  color: var(--text-2);
+}
+
+.howto-phase {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.1;
+  min-height: 1.1em;
+  color: var(--text); /* shown, not spoken */
+}
+
+.howto-phase[hidden],
+.howto-note[hidden] {
+  display: none;
+}
+
+.howto-note {
+  color: var(--text-2);
+}
+
+.howto-tempo {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.howto-lines {
+  margin: 0;
+  padding-left: 1.3em;
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-cue);
+  line-height: 1.35;
+}
+
+/* Plain text; the cyan dot beside it is the muscle colour (cyan is for muscles only). */
+.howto-focus {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.howto-focus .swatch-dot {
+  transform: translateY(1px);
+}
+
+/* The cue (.howto-cue) uses the shared .cue-panel from styles.css: lavender bar + speaker icon. */
+
+/* Selected Front / Side view in the demo player: filled + thicker border (not colour alone). */
+.howto-stage .demo3d-btn[aria-pressed='true'] {
+  background: var(--selected);
+  color: var(--on-selected);
+  border: 3px solid var(--selected);
+}

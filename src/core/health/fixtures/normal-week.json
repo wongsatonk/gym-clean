@@ -1,0 +1,400 @@
+{
+  "date": "2026-06-30",
+  "now": "2026-06-30T07:30:00+07:00",
+  "timeZone": "Asia/Bangkok",
+  "trainingDay": true,
+  "note": "Made-up numbers. A usual month and a usual morning: no signal, no card.",
+  "expect": {
+    "signals": [],
+    "offer": null
+  },
+  "days": [
+    {
+      "date": "2026-05-26",
+      "sleepMin": 410,
+      "restingHr": 54,
+      "hrvMs": 59,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-05-27",
+      "sleepMin": 425,
+      "restingHr": 55,
+      "hrvMs": 61,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530
+    },
+    {
+      "date": "2026-05-28",
+      "sleepMin": 435,
+      "restingHr": 52,
+      "hrvMs": 63,
+      "hrvSource": "WHOOP",
+      "activeKcal": 500,
+      "workouts": [
+        {
+          "start": 1779966000000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-05-29",
+      "sleepMin": 420,
+      "restingHr": 54,
+      "hrvMs": 60,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-05-30",
+      "sleepMin": 445,
+      "restingHr": 56,
+      "hrvMs": 66,
+      "hrvSource": "WHOOP",
+      "activeKcal": 540
+    },
+    {
+      "date": "2026-05-31",
+      "sleepMin": 430,
+      "restingHr": 53,
+      "hrvMs": 62,
+      "hrvSource": "WHOOP",
+      "activeKcal": 510,
+      "workouts": [
+        {
+          "start": 1780225200000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-01",
+      "sleepMin": 440,
+      "restingHr": 55,
+      "hrvMs": 64,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530
+    },
+    {
+      "date": "2026-06-02",
+      "sleepMin": 410,
+      "restingHr": 54,
+      "hrvMs": 59,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-06-03",
+      "sleepMin": 425,
+      "restingHr": 55,
+      "hrvMs": 61,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530,
+      "workouts": [
+        {
+          "start": 1780484400000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-04",
+      "sleepMin": 435,
+      "restingHr": 52,
+      "hrvMs": 63,
+      "hrvSource": "WHOOP",
+      "activeKcal": 500
+    },
+    {
+      "date": "2026-06-05",
+      "sleepMin": 420,
+      "restingHr": 54,
+      "hrvMs": 60,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-06-06",
+      "sleepMin": 445,
+      "restingHr": 56,
+      "hrvMs": 66,
+      "hrvSource": "WHOOP",
+      "activeKcal": 540,
+      "workouts": [
+        {
+          "start": 1780743600000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-07",
+      "sleepMin": 430,
+      "restingHr": 53,
+      "hrvMs": 62,
+      "hrvSource": "WHOOP",
+      "activeKcal": 510
+    },
+    {
+      "date": "2026-06-08",
+      "sleepMin": 440,
+      "restingHr": 55,
+      "hrvMs": 64,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530
+    },
+    {
+      "date": "2026-06-09",
+      "sleepMin": 410,
+      "restingHr": 54,
+      "hrvMs": 59,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520,
+      "workouts": [
+        {
+          "start": 1781002800000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-10",
+      "sleepMin": 425,
+      "restingHr": 55,
+      "hrvMs": 61,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530
+    },
+    {
+      "date": "2026-06-11",
+      "sleepMin": 435,
+      "restingHr": 52,
+      "hrvMs": 63,
+      "hrvSource": "WHOOP",
+      "activeKcal": 500
+    },
+    {
+      "date": "2026-06-12",
+      "sleepMin": 420,
+      "restingHr": 54,
+      "hrvMs": 60,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520,
+      "workouts": [
+        {
+          "start": 1781262000000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-13",
+      "sleepMin": 445,
+      "restingHr": 56,
+      "hrvMs": 66,
+      "hrvSource": "WHOOP",
+      "activeKcal": 540
+    },
+    {
+      "date": "2026-06-14",
+      "sleepMin": 430,
+      "restingHr": 53,
+      "hrvMs": 62,
+      "hrvSource": "WHOOP",
+      "activeKcal": 510
+    },
+    {
+      "date": "2026-06-15",
+      "sleepMin": 440,
+      "restingHr": 55,
+      "hrvMs": 64,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530,
+      "workouts": [
+        {
+          "start": 1781521200000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-16",
+      "sleepMin": 410,
+      "restingHr": 54,
+      "hrvMs": 59,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-06-17",
+      "sleepMin": 425,
+      "restingHr": 55,
+      "hrvMs": 61,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530
+    },
+    {
+      "date": "2026-06-18",
+      "sleepMin": 435,
+      "restingHr": 52,
+      "hrvMs": 63,
+      "hrvSource": "WHOOP",
+      "activeKcal": 500,
+      "workouts": [
+        {
+          "start": 1781780400000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-19",
+      "sleepMin": 420,
+      "restingHr": 54,
+      "hrvMs": 60,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-06-20",
+      "sleepMin": 445,
+      "restingHr": 56,
+      "hrvMs": 66,
+      "hrvSource": "WHOOP",
+      "activeKcal": 540
+    },
+    {
+      "date": "2026-06-21",
+      "sleepMin": 430,
+      "restingHr": 53,
+      "hrvMs": 62,
+      "hrvSource": "WHOOP",
+      "activeKcal": 510,
+      "workouts": [
+        {
+          "start": 1782039600000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-22",
+      "sleepMin": 440,
+      "restingHr": 55,
+      "hrvMs": 64,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530
+    },
+    {
+      "date": "2026-06-23",
+      "sleepMin": 410,
+      "restingHr": 54,
+      "hrvMs": 59,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-06-24",
+      "sleepMin": 425,
+      "restingHr": 55,
+      "hrvMs": 61,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530,
+      "workouts": [
+        {
+          "start": 1782298800000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-25",
+      "sleepMin": 435,
+      "restingHr": 52,
+      "hrvMs": 63,
+      "hrvSource": "WHOOP",
+      "activeKcal": 500
+    },
+    {
+      "date": "2026-06-26",
+      "sleepMin": 420,
+      "restingHr": 54,
+      "hrvMs": 60,
+      "hrvSource": "WHOOP",
+      "activeKcal": 520
+    },
+    {
+      "date": "2026-06-27",
+      "sleepMin": 445,
+      "restingHr": 56,
+      "hrvMs": 66,
+      "hrvSource": "WHOOP",
+      "activeKcal": 540,
+      "workouts": [
+        {
+          "start": 1782558000000,
+          "minutes": 35,
+          "kind": "running",
+          "kcal": 380,
+          "source": "WHOOP"
+        }
+      ]
+    },
+    {
+      "date": "2026-06-28",
+      "sleepMin": 430,
+      "restingHr": 53,
+      "hrvMs": 62,
+      "hrvSource": "WHOOP",
+      "activeKcal": 510
+    },
+    {
+      "date": "2026-06-29",
+      "sleepMin": 440,
+      "restingHr": 55,
+      "hrvMs": 64,
+      "hrvSource": "WHOOP",
+      "activeKcal": 530
+    },
+    {
+      "date": "2026-06-30",
+      "sleepMin": 410,
+      "restingHr": 56,
+      "hrvMs": 57,
+      "hrvSource": "WHOOP",
+      "activeKcal": 500
+    }
+  ]
+}

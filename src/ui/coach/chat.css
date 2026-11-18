@@ -1,0 +1,741 @@
+/* M12 coach chat (src/ui/coach/chat.ts) and its focus-block card (focusBlockCard.ts).
+   Builds on coach.css (bubbles, chips, text box, proposal / red-flag cards). Tokens only; Pro
+   mood. Gym rules: text ≥ 20px, taps ≥ 56px, icon + words, never colour alone. Motion: bubbles
+   rise with the global motion-rise keyframes; the typing dots are the only local animation
+   (opacity/transform); the global reduced-motion rule in styles.css stops both. */
+
+/* ---------- Coach tab frame ---------- */
+
+/* The tab screen is exactly one viewport tall: the thread scrolls, the dock and tab bar stay. */
+.screen.coach-screen {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-tab {
+  flex: 1 1 auto;
+}
+
+.chat-head {
+  min-height: var(--tap-min);
+}
+
+.chat-head-end {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-clear {
+  font-size: var(--fs-body);
+  padding: 0 14px;
+}
+
+/* Second tap needed: a confirmation, so danger with words (M4e). */
+.chat-clear[data-armed='true'] {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.chat-scroll {
+  /* The items' offset parent, so chat.ts pinNewest reads their tops without transforms. */
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* ---------- Thread ---------- */
+
+.chat-list {
+  gap: 14px;
+  padding-bottom: 4px;
+}
+
+.chat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-item-coach {
+  align-items: flex-start;
+}
+
+.chat-item-user {
+  align-items: flex-end;
+}
+
+.chat-card {
+  align-self: stretch;
+}
+
+.chat-rise {
+  animation: motion-rise var(--dur-base) var(--ease-standard);
+}
+
+/* M12 slice 2: the brain note, a muted system line (icon + words) under the reply. */
+.chat-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.chat-note .ic {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* M12 slice 2: who answered, in words under a coach bubble ("On-device AI" / "Quick replies"). */
+.chat-source {
+  margin: 0;
+  padding: 0 4px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.chat-source[data-chat-source='apple']::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border: 2px solid currentColor;
+  border-radius: var(--r-pill);
+  vertical-align: 1px;
+}
+
+.chat-thinking {
+  margin-left: 6px;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+/* Typing: three dots that pulse in turn; static (full) under reduced motion. */
+.chat-typing {
+  align-items: flex-start;
+}
+
+.chat-dots {
+  display: inline-flex;
+  gap: 8px;
+  padding: 18px 20px;
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+}
+
+.chat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--text-2);
+  animation: chat-dot 900ms var(--ease-standard) infinite;
+}
+
+.chat-dot:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.chat-dot:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@keyframes chat-dot {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: none;
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateY(-4px);
+  }
+}
+
+/* Empty thread. */
+/* M13 task 22: the shared empty-state card (emptyState.css); the starters fill its width. */
+.chat-empty {
+  margin: 8px 0 12px;
+}
+
+.chat-empty .chat-starters {
+  align-self: stretch;
+}
+
+.chat-empty-line {
+  font-size: var(--fs-cue);
+  color: var(--text-2);
+  line-height: 1.3;
+}
+
+.chat-starters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-starter {
+  width: 100%;
+  border-radius: var(--r-btn);
+  font-size: var(--fs-cue);
+}
+
+/* Recap (a coach message with its period). */
+.chat-recap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.chat-recap-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.chat-recap-dates {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.chat-recap-text {
+  font-size: var(--fs-body);
+  line-height: 1.35;
+}
+
+/* ---------- Dock: follow-ups, quick chips, text box, privacy ---------- */
+
+.chat-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* One row that scrolls sideways inside itself (the page never scrolls sideways). Doubled class:
+   the app's bundle can load coach.css after this file, and `.cs-chips` (wrap) would then win,
+   stacking the chips six rows deep over the thread (seen on the iPhone). */
+.cs-chips.chat-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin: 0 -16px;
+  padding: 0 16px;
+  scrollbar-width: none;
+}
+
+.cs-chips.chat-row > .cs-chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.chat .cs-input::placeholder {
+  color: var(--text-2);
+}
+
+.chat-privacy {
+  margin: 0;
+  padding-bottom: 6px;
+}
+
+/* ---------- Compact sheet (Pause sheet, between sets) ---------- */
+
+.chat-sheet .cs-panel {
+  max-height: 88dvh;
+}
+
+/* ---------- Answered cards (proposalCard.ts buildCardOutcome) ---------- */
+
+.proposal-answered {
+  gap: 10px;
+}
+
+.card-outcome-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-outcome {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.card-outcome-icon {
+  flex: 0 0 auto;
+}
+
+.card-applied .card-outcome-icon {
+  color: var(--success);
+}
+
+.card-dismissed,
+.card-undone {
+  color: var(--text-2);
+}
+
+.card-expired .card-outcome-icon {
+  color: var(--warn);
+}
+
+.card-outcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card-outcome-actions .cs-btn {
+  width: 100%;
+}
+
+/* ---------- Focus-block card (focusBlockCard.ts) ---------- */
+
+.fb-dates {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.fb-weeks,
+.fb-days,
+.fb-exs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fb-week-item,
+.fb-day-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.fb-row {
+  width: 100%;
+  min-height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  text-align: left;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-btn);
+}
+
+.fb-row-text {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  overflow-wrap: anywhere;
+}
+
+.fb-week-text {
+  display: inline;
+}
+
+.fb-seg {
+  white-space: nowrap;
+}
+
+.fb-chev {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  transform: rotate(-90deg);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.fb-row[aria-expanded='true'] .fb-chev {
+  transform: rotate(90deg);
+}
+
+.fb-week-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+
+.fb-week-panel[hidden],
+.fb-exs[hidden] {
+  display: none;
+}
+
+.fb-day {
+  background: var(--bg);
+}
+
+.fb-day-date {
+  color: var(--text-2);
+}
+
+.fb-exs {
+  padding: 0 4px 4px 12px;
+  gap: 6px;
+}
+
+.fb-ex {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+}
+
+.fb-ex-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fb-ex-meta {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fb-ex-sets {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Focus": a word in an outlined pill, never colour alone. */
+.fb-tag {
+  padding: 0 10px;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  border: 2px solid var(--text);
+  border-radius: var(--r-pill);
+}
+
+.fb-lighter,
+.fb-rest {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+/* A lead-in reply's own options ("I can help with:"), right under its bubble in the thread. The
+   rows still scroll sideways inside themselves, within the thread's width. */
+.chat-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
+}
+
+.chat-offers .cs-chips.chat-row {
+  margin: 0;
+  padding: 0;
+}
+
+/* ---------- M12 slice 2: hold-to-talk mic (micButton.ts) ---------- */
+
+.mic {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+}
+
+.mic-btn {
+  position: relative;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  gap: 6px;
+  font-size: var(--fs-body);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.mic-btn > .ic,
+.mic-label {
+  position: relative;
+}
+
+/* Listening: a filled button (white with dark text) plus the word "Listening": not colour alone. */
+.mic-btn[aria-pressed='true'] {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+/* Level ring: transform + opacity only; growth is off under reduced motion (micButton.ts sets a
+   fixed scale), and the global rule stops the transition. */
+.mic-ring {
+  position: absolute;
+  inset: -4px;
+  border: 3px solid var(--cta);
+  border-radius: var(--r-btn);
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform var(--dur-fast) linear,
+    opacity var(--dur-fast) linear;
+}
+
+/* Checkpoint J: the speech model isn't on the phone yet: a full-width download button and its
+   one-line note, under the text row. */
+.mic-install-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mic-install {
+  width: 100%;
+  min-height: var(--tap-min);
+  font-size: var(--fs-body);
+}
+
+.mic-hint,
+.mic-unavailable {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+.mic-hint {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mic-hint[hidden] {
+  display: none;
+}
+
+/* The live words while listening: whole and wrapping, up to three lines with the newest at the
+   bottom (older lines clip off the top). Above the row, so the held button never moves. */
+.mic-live {
+  margin: 0;
+  max-height: calc(3 * 1.3em);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.mic-live[hidden] {
+  display: none;
+}
+
+.cs-input[readonly] {
+  border-color: var(--cta);
+}
+
+/* Listening: Send is disabled and out of sight, but keeps its space. With display: none the mic
+   button would slide right into Send's place under the held finger, and letting go where it went
+   down would land off the button (= cancel, nothing sent). */
+.cs-send[hidden] {
+  display: inline-flex;
+  visibility: hidden;
+}
+
+/* ---------- M12 slice 2: weekly check-in card (checkInCard.ts) ---------- */
+
+.checkin-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  min-width: 0;
+}
+
+.checkin-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+}
+
+.checkin-intro {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+.checkin-intro .ic {
+  flex: none;
+  margin-top: 2px;
+}
+
+.checkin-q {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkin-label {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.checkin-chips {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.checkin-chip {
+  min-height: var(--tap-min);
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-btn);
+}
+
+/* Picked: white fill + a check mark + aria-checked (never colour alone). */
+.checkin-chip.on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.checkin-chip .ic {
+  width: 18px;
+  height: 18px;
+}
+
+.checkin-chip:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.checkin-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.checkin-need {
+  margin: 0;
+  font-size: var(--fs-body);
+}
+
+.checkin-need[hidden] {
+  display: none;
+}
+
+.checkin-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.checkin-body[hidden] {
+  display: none;
+}
+
+/* Collapsed (Checkpoint J): Answer + Skip side by side under the one-line title; opened: Answer
+   goes, Skip fills the row under Done. Wraps to two rows if the words ever don't fit. */
+.checkin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkin-card[data-card-status='pending'] .checkin-title {
+  font-size: var(--fs-cue);
+}
+
+.checkin-card .checkin-answer {
+  flex: 2 1 0;
+  min-height: var(--tap-min);
+  margin-top: 0;
+  padding: 0 18px;
+  font-size: var(--fs-cue);
+  border-radius: var(--r-btn);
+}
+
+.checkin-card .checkin-answer[hidden] {
+  display: none;
+}
+
+.checkin-skip {
+  flex: 1 1 0;
+}
+
+.checkin-summary {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.checkin-summary .ic {
+  flex: none;
+  margin-top: 2px;
+}

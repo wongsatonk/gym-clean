@@ -1,0 +1,105 @@
+/* M7b Settings → Food photos (src/ui/screens/foodPhotos.ts, Pro). Neutral actions (surface-2,
+   .set-action), the two-tap Delete reuses .plan-reset (danger outline, filled once armed: icon +
+   words, never colour alone). The "Turn on" in the explainer is the selected white fill. Errors use
+   the warn colour plus plain words. Tokens only. */
+
+.food-photos,
+.food-model,
+.food-save,
+.food-photos-list,
+.food-explainer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.food-photos {
+  gap: 16px;
+}
+
+.food-model-card {
+  padding: 12px 16px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+  min-width: 0;
+}
+
+.food-model-card p {
+  margin: 0;
+}
+
+.food-model-name {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.food-model-file {
+  display: none;
+}
+
+.food-sub {
+  margin: 4px 0 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.food-explainer {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.food-explainer p {
+  margin: 0;
+}
+
+.food-explainer-q {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.food-explainer-q svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.settings .food-save-on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.food-photo-count {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.food-status {
+  margin: 0;
+}
+
+.food-status.error {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.settings .food-photos .set-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: var(--tap-bar);
+}
+
+.food-photos-dl {
+  display: none;
+}

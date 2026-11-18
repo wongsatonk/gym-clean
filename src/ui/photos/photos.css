@@ -1,0 +1,292 @@
+/* M12 slice 1b task 30: Settings → Progress photos (./progressPhotos.ts, Pro mood).
+   Tokens from src/styles.css only. Text ≥ --fs-body (20px), targets ≥ --tap-min (56px).
+   A picked photo carries a check badge + outline (never colour alone). Delete is neutral until
+   armed, then the danger fill with the words "Tap again". */
+
+.progress-photos.mood-pro {
+  gap: 14px;
+}
+
+.photos-privacy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+}
+
+.photos-privacy .ic {
+  flex: none;
+}
+
+.photos-note {
+  font-size: var(--fs-body);
+}
+
+.photos-enable {
+  width: 100%;
+  min-height: var(--tap-cta);
+  padding: 0 18px;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+.photos-add-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.photos-add {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-cta);
+  padding: 8px 10px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  border-radius: var(--r-btn);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.photos-add.primary {
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+.photos-add:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The file input stays focusable but unseen; the label is the target. */
+.photos-file {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.photos-pose-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.photos-pose-label {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.photos-poses {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.photos-pose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 0 6px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.photos-pose.on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.photos-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.photos-status:empty {
+  display: none;
+}
+
+.photos-status .ic {
+  color: var(--warn);
+}
+
+.photos-head {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+/* ---------- compare ---------- */
+.photos-compare {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.photos-compare[data-compare='pair'] {
+  padding: 12px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.photos-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.photos-side {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.photos-side img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+}
+
+.photos-side figcaption {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-body);
+  line-height: 1.2;
+}
+
+.photos-clear {
+  width: 100%;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+/* ---------- list ---------- */
+.photos-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.photo-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 10px;
+}
+
+.photo-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.photo-tile {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid var(--line);
+  background: var(--surface-2);
+}
+
+.photo-tile img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+}
+
+.photo-tile.on {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected);
+}
+
+.photo-tile-mark {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--text);
+  background: var(--scrim-soft);
+  color: var(--on-selected);
+}
+
+.photo-tile.on .photo-tile-mark {
+  background: var(--selected);
+  border-color: var(--selected);
+}
+
+.photo-pose {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.photo-delete,
+.photos-delete-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 4px 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.1;
+  background: var(--surface-2);
+}
+
+.photos-delete-all {
+  margin-top: 8px;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.photo-delete[data-armed],
+.photos-delete-all[data-armed] {
+  background: var(--danger);
+  color: var(--on-danger);
+  border-color: var(--danger);
+}

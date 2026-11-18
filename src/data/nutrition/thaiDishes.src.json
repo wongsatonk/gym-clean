@@ -1,0 +1,963 @@
+{
+  "format": "gym-clean-thai-dish-recipes",
+  "version": 1,
+  "note": "Our own reference recipes for a typical plate of each dish: ingredient grams as served (cooked weight for cooked rows, unless \"raw weight\" or \"dry\" says otherwise), each mapped to a USDA FoodData Central row in usda-foods.json. scripts/build-foods.mjs computes thaiDishes.json from them. Values are estimates; nothing here is copied from apps or third-party nutrition tables.",
+  "dishes": [
+    {
+      "id": "thai:pad-kra-pao-moo-rice-egg",
+      "name": "Pad kra pao with minced pork, rice and fried egg",
+      "nameTh": "ข้าวผัดกะเพราหมูสับไข่ดาว",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:169192", "g": 100, "as": "minced pork, cooked"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 8, "as": "garlic"},
+        {"food": "usda:170106", "g": 6, "as": "red chili"},
+        {"food": "usda:172232", "g": 10, "as": "holy basil (basil row)"},
+        {"food": "usda:2346400", "g": 20, "as": "green beans"},
+        {"food": "usda:2707150", "g": 10, "as": "oyster sauce"},
+        {"food": "usda:2706457", "g": 8, "as": "fish sauce"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"},
+        {"food": "usda:2707158", "g": 55, "as": "fried egg (in oil)"}
+      ]
+    },
+    {
+      "id": "thai:pad-kra-pao-gai-rice-egg",
+      "name": "Pad kra pao with minced chicken, rice and fried egg",
+      "nameTh": "ข้าวผัดกะเพราไก่ไข่ดาว",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:171117", "g": 100, "as": "minced chicken, cooked"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 8, "as": "garlic"},
+        {"food": "usda:170106", "g": 6, "as": "red chili"},
+        {"food": "usda:172232", "g": 10, "as": "holy basil (basil row)"},
+        {"food": "usda:2346400", "g": 20, "as": "green beans"},
+        {"food": "usda:2707150", "g": 10, "as": "oyster sauce"},
+        {"food": "usda:2706457", "g": 8, "as": "fish sauce"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"},
+        {"food": "usda:2707158", "g": 55, "as": "fried egg (in oil)"}
+      ]
+    },
+    {
+      "id": "thai:pad-kra-pao-moo-rice",
+      "name": "Pad kra pao with minced pork and rice",
+      "nameTh": "ข้าวผัดกะเพราหมูสับ",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:169192", "g": 100, "as": "minced pork, cooked"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 8, "as": "garlic"},
+        {"food": "usda:170106", "g": 6, "as": "red chili"},
+        {"food": "usda:172232", "g": 10, "as": "holy basil (basil row)"},
+        {"food": "usda:2346400", "g": 20, "as": "green beans"},
+        {"food": "usda:2707150", "g": 10, "as": "oyster sauce"},
+        {"food": "usda:2706457", "g": 8, "as": "fish sauce"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:pad-kra-pao-goong-rice-egg",
+      "name": "Pad kra pao with shrimp, rice and fried egg",
+      "nameTh": "ข้าวผัดกะเพรากุ้งไข่ดาว",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:175180", "g": 100, "as": "shrimp, cooked"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 8, "as": "garlic"},
+        {"food": "usda:170106", "g": 6, "as": "red chili"},
+        {"food": "usda:172232", "g": 10, "as": "holy basil (basil row)"},
+        {"food": "usda:2346400", "g": 20, "as": "green beans"},
+        {"food": "usda:2707150", "g": 10, "as": "oyster sauce"},
+        {"food": "usda:2706457", "g": 8, "as": "fish sauce"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"},
+        {"food": "usda:2707158", "g": 55, "as": "fried egg (in oil)"}
+      ]
+    },
+    {
+      "id": "thai:khao-man-gai",
+      "name": "Khao man gai (Hainanese chicken rice)",
+      "nameTh": "ข้าวมันไก่",
+      "serving": "1 plate",
+      "note": "Rice cooked with chicken fat; served with soybean-ginger sauce and a bowl of broth.",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:173564", "g": 12, "as": "chicken fat"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:171450", "g": 100, "as": "chicken with skin, cooked"},
+        {"food": "usda:172442", "g": 10, "as": "fermented soybean paste (miso row)"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 5, "as": "sugar"},
+        {"food": "usda:169231", "g": 3, "as": "ginger"},
+        {"food": "usda:170106", "g": 2, "as": "red chili"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"},
+        {"food": "usda:174536", "g": 200, "as": "chicken broth"}
+      ]
+    },
+    {
+      "id": "thai:khao-man-gai-tod",
+      "name": "Khao man gai tod (fried chicken rice)",
+      "nameTh": "ข้าวมันไก่ทอด",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:173564", "g": 12, "as": "chicken fat"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:173624", "g": 120, "as": "fried chicken thigh with skin"},
+        {"food": "usda:2710296", "g": 20, "as": "sweet dipping sauce"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"},
+        {"food": "usda:174536", "g": 200, "as": "chicken broth"}
+      ]
+    },
+    {
+      "id": "thai:pad-thai-goong",
+      "name": "Pad thai with shrimp",
+      "nameTh": "ผัดไทยกุ้ง",
+      "serving": "1 plate",
+      "note": "Built on the USDA FNDDS pad thai dish.",
+      "ingredients": [
+        {"food": "usda:2708807", "g": 350, "as": "pad thai with seafood (FNDDS dish)"},
+        {"food": "usda:169957", "g": 30, "as": "bean sprouts"},
+        {"food": "usda:173806", "g": 5, "as": "roasted peanuts"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"}
+      ]
+    },
+    {
+      "id": "thai:pad-thai-gai",
+      "name": "Pad thai with chicken",
+      "nameTh": "ผัดไทยไก่",
+      "serving": "1 plate",
+      "note": "Built on the USDA FNDDS pad thai dish.",
+      "ingredients": [
+        {"food": "usda:2708806", "g": 350, "as": "pad thai with chicken (FNDDS dish)"},
+        {"food": "usda:169957", "g": 30, "as": "bean sprouts"},
+        {"food": "usda:173806", "g": 5, "as": "roasted peanuts"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"}
+      ]
+    },
+    {
+      "id": "thai:pad-see-ew-moo",
+      "name": "Pad see ew with pork",
+      "nameTh": "ผัดซีอิ๊วหมู",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168914", "g": 250, "as": "rice noodles, cooked"},
+        {"food": "usda:167906", "g": 80, "as": "sliced pork, cooked"},
+        {"food": "usda:2707152", "g": 50, "as": "egg"},
+        {"food": "usda:169392", "g": 60, "as": "Chinese broccoli, cooked"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:2707442", "g": 15, "as": "soy sauce"},
+        {"food": "usda:2707150", "g": 8, "as": "oyster sauce"},
+        {"food": "usda:746784", "g": 6, "as": "sugar"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"}
+      ]
+    },
+    {
+      "id": "thai:pad-see-ew-gai",
+      "name": "Pad see ew with chicken",
+      "nameTh": "ผัดซีอิ๊วไก่",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168914", "g": 250, "as": "rice noodles, cooked"},
+        {"food": "usda:171477", "g": 80, "as": "chicken breast, cooked"},
+        {"food": "usda:2707152", "g": 50, "as": "egg"},
+        {"food": "usda:169392", "g": 60, "as": "Chinese broccoli, cooked"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:2707442", "g": 15, "as": "soy sauce"},
+        {"food": "usda:2707150", "g": 8, "as": "oyster sauce"},
+        {"food": "usda:746784", "g": 6, "as": "sugar"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"}
+      ]
+    },
+    {
+      "id": "thai:rad-na-moo",
+      "name": "Rad na with pork (noodles in gravy)",
+      "nameTh": "ราดหน้าหมู",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168914", "g": 250, "as": "rice noodles, cooked"},
+        {"food": "usda:171411", "g": 13, "as": "vegetable oil"},
+        {"food": "usda:167906", "g": 80, "as": "sliced pork, cooked"},
+        {"food": "usda:169392", "g": 80, "as": "Chinese broccoli, cooked"},
+        {"food": "usda:174536", "g": 200, "as": "chicken broth"},
+        {"food": "usda:169698", "g": 10, "as": "cornstarch"},
+        {"food": "usda:2707150", "g": 10, "as": "oyster sauce"},
+        {"food": "usda:2707442", "g": 10, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 5, "as": "sugar"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"}
+      ]
+    },
+    {
+      "id": "thai:pad-kee-mao-gai",
+      "name": "Pad kee mao with chicken (drunken noodles)",
+      "nameTh": "ผัดขี้เมาไก่",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168914", "g": 250, "as": "rice noodles, cooked"},
+        {"food": "usda:171477", "g": 90, "as": "chicken breast, cooked"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:172232", "g": 8, "as": "holy basil (basil row)"},
+        {"food": "usda:170106", "g": 8, "as": "red chili"},
+        {"food": "usda:1104647", "g": 8, "as": "garlic"},
+        {"food": "usda:170457", "g": 30, "as": "tomato"},
+        {"food": "usda:170000", "g": 20, "as": "onion"},
+        {"food": "usda:2707150", "g": 10, "as": "oyster sauce"},
+        {"food": "usda:2707442", "g": 8, "as": "soy sauce"},
+        {"food": "usda:2706457", "g": 5, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:khao-pad-moo",
+      "name": "Khao pad with pork (fried rice)",
+      "nameTh": "ข้าวผัดหมู",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 250, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:167906", "g": 80, "as": "sliced pork, cooked"},
+        {"food": "usda:2707152", "g": 50, "as": "egg"},
+        {"food": "usda:170000", "g": 30, "as": "onion"},
+        {"food": "usda:170457", "g": 30, "as": "tomato"},
+        {"food": "usda:170005", "g": 10, "as": "spring onion"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:2707442", "g": 8, "as": "soy sauce"},
+        {"food": "usda:2706457", "g": 6, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"}
+      ]
+    },
+    {
+      "id": "thai:khao-pad-goong",
+      "name": "Khao pad with shrimp (fried rice)",
+      "nameTh": "ข้าวผัดกุ้ง",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 250, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:175180", "g": 90, "as": "shrimp, cooked"},
+        {"food": "usda:2707152", "g": 50, "as": "egg"},
+        {"food": "usda:170000", "g": 30, "as": "onion"},
+        {"food": "usda:170457", "g": 30, "as": "tomato"},
+        {"food": "usda:170005", "g": 10, "as": "spring onion"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:2707442", "g": 8, "as": "soy sauce"},
+        {"food": "usda:2706457", "g": 6, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"}
+      ]
+    },
+    {
+      "id": "thai:khao-pad-gai",
+      "name": "Khao pad with chicken (fried rice)",
+      "nameTh": "ข้าวผัดไก่",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 250, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:171477", "g": 90, "as": "chicken breast, cooked"},
+        {"food": "usda:2707152", "g": 50, "as": "egg"},
+        {"food": "usda:170000", "g": 30, "as": "onion"},
+        {"food": "usda:170457", "g": 30, "as": "tomato"},
+        {"food": "usda:170005", "g": 10, "as": "spring onion"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:2707442", "g": 8, "as": "soy sauce"},
+        {"food": "usda:2706457", "g": 6, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"}
+      ]
+    },
+    {
+      "id": "thai:tom-yum-goong",
+      "name": "Tom yum goong (clear hot and sour shrimp soup)",
+      "nameTh": "ต้มยำกุ้งน้ำใส",
+      "serving": "1 bowl",
+      "note": "Soup only; log rice separately.",
+      "ingredients": [
+        {"food": "usda:175180", "g": 90, "as": "shrimp, cooked"},
+        {"food": "usda:168582", "g": 60, "as": "straw mushrooms"},
+        {"food": "usda:174536", "g": 350, "as": "chicken broth"},
+        {"food": "usda:168573", "g": 10, "as": "lemongrass"},
+        {"food": "usda:169231", "g": 8, "as": "galangal (ginger row)"},
+        {"food": "usda:170106", "g": 5, "as": "red chili"},
+        {"food": "usda:168156", "g": 15, "as": "lime juice"},
+        {"food": "usda:2706457", "g": 15, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:tom-kha-gai",
+      "name": "Tom kha gai (chicken coconut soup)",
+      "nameTh": "ต้มข่าไก่",
+      "serving": "1 bowl",
+      "note": "Soup only; log rice separately.",
+      "ingredients": [
+        {"food": "usda:171477", "g": 100, "as": "chicken breast, cooked"},
+        {"food": "usda:170173", "g": 150, "as": "coconut milk"},
+        {"food": "usda:174536", "g": 150, "as": "chicken broth"},
+        {"food": "usda:168582", "g": 40, "as": "straw mushrooms"},
+        {"food": "usda:169231", "g": 10, "as": "galangal (ginger row)"},
+        {"food": "usda:168573", "g": 8, "as": "lemongrass"},
+        {"food": "usda:168156", "g": 10, "as": "lime juice"},
+        {"food": "usda:2706457", "g": 12, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"},
+        {"food": "usda:170106", "g": 3, "as": "red chili"}
+      ]
+    },
+    {
+      "id": "thai:kaeng-khiao-wan-gai-rice",
+      "name": "Green curry with chicken and rice",
+      "nameTh": "ข้าวแกงเขียวหวานไก่",
+      "serving": "1 plate",
+      "note": "Curry paste counted as its main fresh ingredients.",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:172388", "g": 100, "as": "chicken thigh, cooked"},
+        {"food": "usda:170173", "g": 120, "as": "coconut milk"},
+        {"food": "usda:2685577", "g": 50, "as": "Thai eggplant (eggplant row)"},
+        {"food": "usda:172232", "g": 5, "as": "holy basil (basil row)"},
+        {"food": "usda:170497", "g": 10, "as": "green chili"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"},
+        {"food": "usda:170499", "g": 8, "as": "shallots"},
+        {"food": "usda:168573", "g": 5, "as": "lemongrass"},
+        {"food": "usda:171411", "g": 8, "as": "vegetable oil"},
+        {"food": "usda:2706457", "g": 10, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 6, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:kaeng-phet-moo-rice",
+      "name": "Red curry with pork and rice",
+      "nameTh": "ข้าวแกงเผ็ดหมู",
+      "serving": "1 plate",
+      "note": "Curry paste counted as its main fresh ingredients.",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:167906", "g": 90, "as": "sliced pork, cooked"},
+        {"food": "usda:170173", "g": 120, "as": "coconut milk"},
+        {"food": "usda:169211", "g": 50, "as": "bamboo shoots, cooked"},
+        {"food": "usda:172232", "g": 5, "as": "holy basil (basil row)"},
+        {"food": "usda:170106", "g": 10, "as": "red chili"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"},
+        {"food": "usda:170499", "g": 8, "as": "shallots"},
+        {"food": "usda:168573", "g": 5, "as": "lemongrass"},
+        {"food": "usda:171411", "g": 8, "as": "vegetable oil"},
+        {"food": "usda:2706457", "g": 10, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 5, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:panang-gai-rice",
+      "name": "Panang curry with chicken and rice",
+      "nameTh": "ข้าวพะแนงไก่",
+      "serving": "1 plate",
+      "note": "Curry paste counted as its main fresh ingredients.",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:172388", "g": 110, "as": "chicken thigh, cooked"},
+        {"food": "usda:170173", "g": 100, "as": "coconut milk"},
+        {"food": "usda:173806", "g": 5, "as": "roasted peanuts"},
+        {"food": "usda:170106", "g": 8, "as": "red chili"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"},
+        {"food": "usda:170499", "g": 8, "as": "shallots"},
+        {"food": "usda:168573", "g": 5, "as": "lemongrass"},
+        {"food": "usda:171411", "g": 8, "as": "vegetable oil"},
+        {"food": "usda:2706457", "g": 10, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 8, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:massaman-gai-rice",
+      "name": "Massaman curry with chicken and rice",
+      "nameTh": "ข้าวแกงมัสมั่นไก่",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:173618", "g": 110, "as": "chicken leg with skin, simmered"},
+        {"food": "usda:170440", "g": 70, "as": "potato, boiled"},
+        {"food": "usda:170000", "g": 30, "as": "onion"},
+        {"food": "usda:173806", "g": 10, "as": "roasted peanuts"},
+        {"food": "usda:170173", "g": 120, "as": "coconut milk"},
+        {"food": "usda:170924", "g": 4, "as": "curry powder"},
+        {"food": "usda:168833", "g": 10, "as": "palm sugar (brown sugar row)"},
+        {"food": "usda:167763", "g": 8, "as": "tamarind"},
+        {"food": "usda:2706457", "g": 10, "as": "fish sauce"},
+        {"food": "usda:171411", "g": 8, "as": "vegetable oil"}
+      ]
+    },
+    {
+      "id": "thai:khao-soi-gai",
+      "name": "Khao soi with chicken (curry noodle soup)",
+      "nameTh": "ข้าวซอยไก่",
+      "serving": "1 bowl",
+      "ingredients": [
+        {"food": "usda:168919", "g": 150, "as": "egg noodles, cooked"},
+        {"food": "usda:168905", "g": 15, "as": "crispy fried egg noodles (chow mein noodle row)"},
+        {"food": "usda:173618", "g": 120, "as": "chicken leg with skin, simmered"},
+        {"food": "usda:170173", "g": 120, "as": "coconut milk"},
+        {"food": "usda:174536", "g": 180, "as": "chicken broth"},
+        {"food": "usda:170924", "g": 5, "as": "curry powder"},
+        {"food": "usda:171411", "g": 8, "as": "vegetable oil"},
+        {"food": "usda:746784", "g": 5, "as": "sugar"},
+        {"food": "usda:2706457", "g": 10, "as": "fish sauce"},
+        {"food": "usda:170499", "g": 15, "as": "shallots"},
+        {"food": "usda:2710075", "g": 20, "as": "pickled mustard greens (pickled cabbage row)"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"}
+      ]
+    },
+    {
+      "id": "thai:som-tum-thai",
+      "name": "Som tum Thai (green papaya salad)",
+      "nameTh": "ส้มตำไทย",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:169926", "g": 150, "as": "green papaya (papaya row)"},
+        {"food": "usda:170457", "g": 30, "as": "tomato"},
+        {"food": "usda:169222", "g": 20, "as": "yardlong beans"},
+        {"food": "usda:173806", "g": 15, "as": "roasted peanuts"},
+        {"food": "usda:2706366", "g": 8, "as": "dried shrimp"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"},
+        {"food": "usda:170106", "g": 4, "as": "red chili"},
+        {"food": "usda:168156", "g": 15, "as": "lime juice"},
+        {"food": "usda:2706457", "g": 12, "as": "fish sauce"},
+        {"food": "usda:168833", "g": 12, "as": "palm sugar (brown sugar row)"}
+      ]
+    },
+    {
+      "id": "thai:som-tum-gai-yang-khao-niao",
+      "name": "Som tum with grilled chicken and sticky rice",
+      "nameTh": "ส้มตำ ไก่ย่าง ข้าวเหนียว",
+      "serving": "1 set",
+      "ingredients": [
+        {"food": "usda:169926", "g": 150, "as": "green papaya (papaya row)"},
+        {"food": "usda:170457", "g": 30, "as": "tomato"},
+        {"food": "usda:169222", "g": 20, "as": "yardlong beans"},
+        {"food": "usda:173806", "g": 15, "as": "roasted peanuts"},
+        {"food": "usda:2706366", "g": 8, "as": "dried shrimp"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"},
+        {"food": "usda:170106", "g": 4, "as": "red chili"},
+        {"food": "usda:168156", "g": 15, "as": "lime juice"},
+        {"food": "usda:2706457", "g": 12, "as": "fish sauce"},
+        {"food": "usda:168833", "g": 12, "as": "palm sugar (brown sugar row)"},
+        {"food": "usda:173617", "g": 150, "as": "chicken leg with skin, grilled"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"},
+        {"food": "usda:2706457", "g": 4, "as": "fish sauce"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:2706457", "g": 5, "as": "fish sauce"},
+        {"food": "usda:170106", "g": 2, "as": "red chili"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"},
+        {"food": "usda:169711", "g": 150, "as": "sticky rice, cooked"}
+      ]
+    },
+    {
+      "id": "thai:gai-yang",
+      "name": "Gai yang (grilled chicken)",
+      "nameTh": "ไก่ย่าง",
+      "serving": "1 piece",
+      "note": "Chicken leg with skin, with dipping sauce; no rice.",
+      "ingredients": [
+        {"food": "usda:173617", "g": 150, "as": "chicken leg with skin, grilled"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"},
+        {"food": "usda:2706457", "g": 4, "as": "fish sauce"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:2706457", "g": 5, "as": "fish sauce"},
+        {"food": "usda:170106", "g": 2, "as": "red chili"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:khao-niao",
+      "name": "Sticky rice",
+      "nameTh": "ข้าวเหนียว",
+      "serving": "1 bag",
+      "ingredients": [
+        {"food": "usda:169711", "g": 150, "as": "sticky rice, cooked"}
+      ]
+    },
+    {
+      "id": "thai:khao-suay",
+      "name": "Steamed jasmine rice",
+      "nameTh": "ข้าวสวย",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"}
+      ]
+    },
+    {
+      "id": "thai:moo-ping-khao-niao",
+      "name": "Moo ping (grilled pork skewers) with sticky rice",
+      "nameTh": "หมูปิ้งข้าวเหนียว",
+      "serving": "3 skewers + rice",
+      "ingredients": [
+        {"food": "usda:168257", "g": 90, "as": "pork shoulder, grilled"},
+        {"food": "usda:170173", "g": 10, "as": "coconut milk"},
+        {"food": "usda:746784", "g": 8, "as": "sugar"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:171411", "g": 3, "as": "vegetable oil"},
+        {"food": "usda:169711", "g": 150, "as": "sticky rice, cooked"}
+      ]
+    },
+    {
+      "id": "thai:larb-moo",
+      "name": "Larb moo (spicy minced pork salad)",
+      "nameTh": "ลาบหมู",
+      "serving": "1 plate",
+      "note": "With raw vegetables; no rice.",
+      "ingredients": [
+        {"food": "usda:169192", "g": 120, "as": "minced pork, cooked"},
+        {"food": "usda:170499", "g": 20, "as": "shallots"},
+        {"food": "usda:170005", "g": 10, "as": "spring onion"},
+        {"food": "usda:173475", "g": 5, "as": "mint"},
+        {"food": "usda:169997", "g": 5, "as": "cilantro"},
+        {"food": "usda:168877", "g": 8, "as": "toasted ground rice (dry rice)"},
+        {"food": "usda:170106", "g": 3, "as": "red chili"},
+        {"food": "usda:168156", "g": 15, "as": "lime juice"},
+        {"food": "usda:2706457", "g": 12, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 2, "as": "sugar"},
+        {"food": "usda:2346407", "g": 50, "as": "cabbage"},
+        {"food": "usda:169222", "g": 30, "as": "yardlong beans"}
+      ]
+    },
+    {
+      "id": "thai:nam-tok-moo",
+      "name": "Nam tok moo (grilled pork salad)",
+      "nameTh": "น้ำตกหมู",
+      "serving": "1 plate",
+      "note": "With raw vegetables; no rice.",
+      "ingredients": [
+        {"food": "usda:168257", "g": 120, "as": "pork shoulder, grilled"},
+        {"food": "usda:170499", "g": 20, "as": "shallots"},
+        {"food": "usda:170005", "g": 10, "as": "spring onion"},
+        {"food": "usda:173475", "g": 5, "as": "mint"},
+        {"food": "usda:169997", "g": 5, "as": "cilantro"},
+        {"food": "usda:168877", "g": 8, "as": "toasted ground rice (dry rice)"},
+        {"food": "usda:170106", "g": 3, "as": "red chili"},
+        {"food": "usda:168156", "g": 15, "as": "lime juice"},
+        {"food": "usda:2706457", "g": 12, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 2, "as": "sugar"},
+        {"food": "usda:2346407", "g": 50, "as": "cabbage"},
+        {"food": "usda:169222", "g": 30, "as": "yardlong beans"}
+      ]
+    },
+    {
+      "id": "thai:kuay-teow-ruea",
+      "name": "Boat noodles with beef",
+      "nameTh": "ก๋วยเตี๋ยวเรือ",
+      "serving": "1 bowl",
+      "ingredients": [
+        {"food": "usda:168914", "g": 150, "as": "rice noodles, cooked"},
+        {"food": "usda:171815", "g": 50, "as": "beef, sliced, cooked"},
+        {"food": "usda:171538", "g": 300, "as": "beef broth"},
+        {"food": "usda:169957", "g": 20, "as": "bean sprouts"},
+        {"food": "usda:2709614", "g": 20, "as": "morning glory (spinach row)"},
+        {"food": "usda:2705902", "g": 5, "as": "pork cracklings"},
+        {"food": "usda:2707442", "g": 8, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"},
+        {"food": "usda:2706457", "g": 5, "as": "fish sauce"},
+        {"food": "usda:171411", "g": 5, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:172232", "g": 3, "as": "holy basil (basil row)"}
+      ]
+    },
+    {
+      "id": "thai:kuay-teow-moo-nam-sai",
+      "name": "Clear pork noodle soup",
+      "nameTh": "ก๋วยเตี๋ยวหมูน้ำใส",
+      "serving": "1 bowl",
+      "ingredients": [
+        {"food": "usda:168914", "g": 180, "as": "rice noodles, cooked"},
+        {"food": "usda:167908", "g": 60, "as": "lean pork, cooked"},
+        {"food": "usda:169192", "g": 30, "as": "minced pork, cooked"},
+        {"food": "usda:174536", "g": 350, "as": "chicken broth"},
+        {"food": "usda:169957", "g": 30, "as": "bean sprouts"},
+        {"food": "usda:170005", "g": 5, "as": "spring onion"},
+        {"food": "usda:171411", "g": 5, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:2706457", "g": 5, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:jok-moo",
+      "name": "Jok moo (rice porridge with pork and egg)",
+      "nameTh": "โจ๊กหมู",
+      "serving": "1 bowl",
+      "ingredients": [
+        {"food": "usda:168878", "g": 150, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:174536", "g": 200, "as": "chicken broth"},
+        {"food": "usda:169192", "g": 50, "as": "minced pork, cooked"},
+        {"food": "usda:2707152", "g": 50, "as": "egg"},
+        {"food": "usda:169231", "g": 5, "as": "ginger"},
+        {"food": "usda:170005", "g": 5, "as": "spring onion"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"}
+      ]
+    },
+    {
+      "id": "thai:khao-tom-moo",
+      "name": "Khao tom moo (rice soup with pork)",
+      "nameTh": "ข้าวต้มหมู",
+      "serving": "1 bowl",
+      "ingredients": [
+        {"food": "usda:168878", "g": 150, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:174536", "g": 300, "as": "chicken broth"},
+        {"food": "usda:169192", "g": 60, "as": "minced pork, cooked"},
+        {"food": "usda:171411", "g": 4, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:2709778", "g": 10, "as": "Chinese celery (celery row)"},
+        {"food": "usda:2706457", "g": 6, "as": "fish sauce"}
+      ]
+    },
+    {
+      "id": "thai:khao-kai-jeow",
+      "name": "Thai omelette on rice",
+      "nameTh": "ข้าวไข่เจียว",
+      "serving": "1 plate",
+      "note": "Two eggs; the oil is the part the omelette soaks up.",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:2707152", "g": 100, "as": "egg"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:2706457", "g": 5, "as": "fish sauce"}
+      ]
+    },
+    {
+      "id": "thai:khao-moo-daeng",
+      "name": "Khao moo daeng (red roast pork rice)",
+      "nameTh": "ข้าวหมูแดง",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:168250", "g": 90, "as": "pork tenderloin, roasted"},
+        {"food": "usda:172886", "g": 10, "as": "sweet red-pork glaze (hoisin row)"},
+        {"food": "usda:169698", "g": 6, "as": "cornstarch"},
+        {"food": "usda:746784", "g": 8, "as": "sugar"},
+        {"food": "usda:2707442", "g": 8, "as": "soy sauce"},
+        {"food": "usda:174536", "g": 40, "as": "chicken broth"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"},
+        {"food": "usda:173424", "g": 25, "as": "boiled egg"}
+      ]
+    },
+    {
+      "id": "thai:khao-moo-krob",
+      "name": "Khao moo krob (crispy pork belly rice)",
+      "nameTh": "ข้าวหมูกรอบ",
+      "serving": "1 plate",
+      "note": "Crispy pork counted as raw belly weight.",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:167812", "g": 90, "as": "pork belly (raw weight)"},
+        {"food": "usda:169698", "g": 6, "as": "cornstarch"},
+        {"food": "usda:746784", "g": 8, "as": "sugar"},
+        {"food": "usda:2707442", "g": 8, "as": "soy sauce"},
+        {"food": "usda:174536", "g": 40, "as": "chicken broth"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"}
+      ]
+    },
+    {
+      "id": "thai:khao-kha-moo",
+      "name": "Khao kha moo (braised pork leg rice)",
+      "nameTh": "ข้าวขาหมู",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:168223", "g": 110, "as": "pork leg, braised (roasted leg row)"},
+        {"food": "usda:173424", "g": 50, "as": "boiled egg"},
+        {"food": "usda:169257", "g": 40, "as": "mustard greens, cooked"},
+        {"food": "usda:2707442", "g": 10, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 8, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:gai-pad-med-mamuang-rice",
+      "name": "Cashew chicken stir-fry with rice",
+      "nameTh": "ข้าวไก่ผัดเม็ดมะม่วงหิมพานต์",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:171078", "g": 100, "as": "chicken breast, fried"},
+        {"food": "usda:170572", "g": 25, "as": "roasted cashews"},
+        {"food": "usda:170000", "g": 30, "as": "onion"},
+        {"food": "usda:2709801", "g": 20, "as": "sweet pepper"},
+        {"food": "usda:170106", "g": 2, "as": "red chili"},
+        {"food": "usda:170005", "g": 10, "as": "spring onion"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:2707150", "g": 10, "as": "oyster sauce"},
+        {"food": "usda:2707442", "g": 8, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 5, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:pad-pak-bung-fai-daeng",
+      "name": "Stir-fried morning glory",
+      "nameTh": "ผัดผักบุ้งไฟแดง",
+      "serving": "1 plate",
+      "note": "Side dish; no rice. USDA has no morning glory row, so spinach stands in.",
+      "ingredients": [
+        {"food": "usda:2709614", "g": 150, "as": "morning glory (spinach row)"},
+        {"food": "usda:1104647", "g": 8, "as": "garlic"},
+        {"food": "usda:170106", "g": 3, "as": "red chili"},
+        {"food": "usda:171411", "g": 12, "as": "vegetable oil"},
+        {"food": "usda:2707150", "g": 10, "as": "oyster sauce"},
+        {"food": "usda:172442", "g": 8, "as": "fermented soybean paste (miso row)"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:moo-tod-kratiem-rice",
+      "name": "Garlic pork with rice",
+      "nameTh": "ข้าวหมูทอดกระเทียม",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:168878", "g": 200, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:167906", "g": 100, "as": "sliced pork, cooked"},
+        {"food": "usda:1104647", "g": 15, "as": "garlic"},
+        {"food": "usda:171411", "g": 15, "as": "vegetable oil"},
+        {"food": "usda:2706457", "g": 6, "as": "fish sauce"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"}
+      ]
+    },
+    {
+      "id": "thai:yum-woon-sen",
+      "name": "Yum woon sen (glass noodle salad)",
+      "nameTh": "ยำวุ้นเส้น",
+      "serving": "1 plate",
+      "note": "Glass noodles counted as dry weight.",
+      "ingredients": [
+        {"food": "usda:174258", "g": 40, "as": "glass noodles, dry"},
+        {"food": "usda:175180", "g": 50, "as": "shrimp, cooked"},
+        {"food": "usda:169192", "g": 40, "as": "minced pork, cooked"},
+        {"food": "usda:174223", "g": 30, "as": "squid (raw weight)"},
+        {"food": "usda:170000", "g": 20, "as": "onion"},
+        {"food": "usda:170457", "g": 30, "as": "tomato"},
+        {"food": "usda:2709778", "g": 15, "as": "Chinese celery (celery row)"},
+        {"food": "usda:173806", "g": 5, "as": "roasted peanuts"},
+        {"food": "usda:170106", "g": 3, "as": "red chili"},
+        {"food": "usda:168156", "g": 15, "as": "lime juice"},
+        {"food": "usda:2706457", "g": 12, "as": "fish sauce"},
+        {"food": "usda:746784", "g": 8, "as": "sugar"}
+      ]
+    },
+    {
+      "id": "thai:tom-jued-tao-hoo-moo-sap",
+      "name": "Clear soup with tofu and minced pork",
+      "nameTh": "ต้มจืดเต้าหู้หมูสับ",
+      "serving": "1 bowl",
+      "note": "Soup only; log rice separately.",
+      "ingredients": [
+        {"food": "usda:172448", "g": 100, "as": "firm tofu"},
+        {"food": "usda:169192", "g": 60, "as": "minced pork, cooked"},
+        {"food": "usda:169979", "g": 60, "as": "napa cabbage"},
+        {"food": "usda:2709660", "g": 15, "as": "carrot"},
+        {"food": "usda:174536", "g": 300, "as": "chicken broth"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:171411", "g": 4, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:170005", "g": 5, "as": "spring onion"}
+      ]
+    },
+    {
+      "id": "thai:moo-satay",
+      "name": "Moo satay (pork skewers with peanut sauce)",
+      "nameTh": "หมูสะเต๊ะ",
+      "serving": "10 skewers",
+      "ingredients": [
+        {"food": "usda:168250", "g": 120, "as": "pork tenderloin, roasted"},
+        {"food": "usda:170173", "g": 20, "as": "coconut milk"},
+        {"food": "usda:170924", "g": 2, "as": "curry powder"},
+        {"food": "usda:746784", "g": 6, "as": "sugar"},
+        {"food": "usda:174070", "g": 40, "as": "peanut sauce"},
+        {"food": "usda:2346406", "g": 40, "as": "cucumber"},
+        {"food": "usda:170499", "g": 5, "as": "shallots"}
+      ]
+    },
+    {
+      "id": "thai:gai-tod",
+      "name": "Gai tod (Thai fried chicken)",
+      "nameTh": "ไก่ทอด",
+      "serving": "2 pieces",
+      "note": "No rice.",
+      "ingredients": [
+        {"food": "usda:173624", "g": 200, "as": "fried chicken thigh with skin"},
+        {"food": "usda:2710296", "g": 20, "as": "sweet dipping sauce"}
+      ]
+    },
+    {
+      "id": "thai:por-pia-tod",
+      "name": "Fried spring rolls",
+      "nameTh": "ปอเปี๊ยะทอด",
+      "serving": "4 rolls",
+      "note": "Built on the USDA FNDDS fried egg roll dish.",
+      "ingredients": [
+        {"food": "usda:2708700", "g": 120, "as": "fried spring rolls (FNDDS meatless egg roll)"},
+        {"food": "usda:2710296", "g": 20, "as": "sweet dipping sauce"}
+      ]
+    },
+    {
+      "id": "thai:khao-niao-mamuang",
+      "name": "Mango sticky rice",
+      "nameTh": "ข้าวเหนียวมะม่วง",
+      "serving": "1 plate",
+      "ingredients": [
+        {"food": "usda:169711", "g": 120, "as": "sticky rice, cooked"},
+        {"food": "usda:170173", "g": 50, "as": "coconut milk"},
+        {"food": "usda:746784", "g": 20, "as": "sugar"},
+        {"food": "usda:169910", "g": 150, "as": "ripe mango"}
+      ]
+    },
+    {
+      "id": "thai:pad-pak-ruam-mit",
+      "name": "Pad pak ruam mit (stir-fried mixed vegetables)",
+      "nameTh": "ผัดผักรวมมิตร",
+      "serving": "1 plate",
+      "note": "Side dish; no rice. USDA has no baby corn row, so canned sweet corn stands in.",
+      "ingredients": [
+        {"food": "usda:169979", "g": 50, "as": "napa cabbage"},
+        {"food": "usda:169967", "g": 50, "as": "broccoli, cooked"},
+        {"food": "usda:170397", "g": 40, "as": "cauliflower, cooked"},
+        {"food": "usda:2709660", "g": 30, "as": "carrot"},
+        {"food": "usda:169214", "g": 30, "as": "baby corn (canned sweet corn row)"},
+        {"food": "usda:169253", "g": 30, "as": "mushrooms, stir-fried (white mushroom row)"},
+        {"food": "usda:1104647", "g": 6, "as": "garlic"},
+        {"food": "usda:171411", "g": 12, "as": "vegetable oil"},
+        {"food": "usda:2707150", "g": 12, "as": "oyster sauce"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"},
+        {"food": "usda:174536", "g": 30, "as": "chicken broth"}
+      ]
+    },
+    {
+      "id": "thai:kor-moo-yang",
+      "name": "Kor moo yang (grilled pork neck)",
+      "nameTh": "คอหมูย่าง",
+      "serving": "1 plate",
+      "note": "With jaew dipping sauce; no rice. USDA has no pork neck row, so the shoulder blade (the cut next to the neck) stands in.",
+      "ingredients": [
+        {"food": "usda:167851", "g": 120, "as": "pork neck, grilled (shoulder blade steak row, lean and fat)"},
+        {"food": "usda:2707442", "g": 5, "as": "soy sauce"},
+        {"food": "usda:2707150", "g": 5, "as": "oyster sauce"},
+        {"food": "usda:746784", "g": 4, "as": "sugar"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:2706457", "g": 8, "as": "fish sauce"},
+        {"food": "usda:168156", "g": 8, "as": "lime juice"},
+        {"food": "usda:168833", "g": 4, "as": "palm sugar (brown sugar row)"},
+        {"food": "usda:168877", "g": 3, "as": "toasted ground rice (dry rice)"},
+        {"food": "usda:170106", "g": 2, "as": "red chili"},
+        {"food": "usda:170499", "g": 5, "as": "shallots"},
+        {"food": "usda:169997", "g": 2, "as": "cilantro"}
+      ]
+    },
+    {
+      "id": "thai:khao-mok-gai",
+      "name": "Khao mok gai (Thai chicken biryani rice)",
+      "nameTh": "ข้าวหมกไก่",
+      "serving": "1 plate",
+      "note": "Turmeric rice with a chicken leg, fried shallots, a mint-chili dipping sauce and a bowl of broth.",
+      "ingredients": [
+        {"food": "usda:168878", "g": 220, "as": "jasmine rice, cooked (long-grain white rice)"},
+        {"food": "usda:2710168", "g": 6, "as": "ghee"},
+        {"food": "usda:171411", "g": 10, "as": "vegetable oil (rice and fried shallots)"},
+        {"food": "usda:173618", "g": 130, "as": "chicken leg with skin, simmered"},
+        {"food": "usda:2259793", "g": 15, "as": "plain yogurt (marinade)"},
+        {"food": "usda:170924", "g": 3, "as": "curry powder"},
+        {"food": "usda:172231", "g": 1, "as": "turmeric"},
+        {"food": "usda:170499", "g": 10, "as": "shallots"},
+        {"food": "usda:746784", "g": 8, "as": "sugar"},
+        {"food": "usda:168156", "g": 8, "as": "lime juice"},
+        {"food": "usda:173475", "g": 3, "as": "mint"},
+        {"food": "usda:170497", "g": 3, "as": "green chili"},
+        {"food": "usda:2346406", "g": 30, "as": "cucumber"},
+        {"food": "usda:174536", "g": 200, "as": "chicken broth"}
+      ]
+    },
+    {
+      "id": "thai:suki-nam-moo",
+      "name": "Suki nam with pork (Thai sukiyaki soup)",
+      "nameTh": "สุกี้น้ำหมู",
+      "serving": "1 bowl",
+      "note": "Glass noodles counted as dry weight. No rice.",
+      "ingredients": [
+        {"food": "usda:174258", "g": 30, "as": "glass noodles, dry"},
+        {"food": "usda:167906", "g": 70, "as": "sliced pork, cooked"},
+        {"food": "usda:2707152", "g": 50, "as": "egg"},
+        {"food": "usda:169979", "g": 80, "as": "napa cabbage"},
+        {"food": "usda:2709614", "g": 40, "as": "morning glory (spinach row)"},
+        {"food": "usda:2709778", "g": 10, "as": "Chinese celery (celery row)"},
+        {"food": "usda:174536", "g": 300, "as": "chicken broth"},
+        {"food": "usda:171186", "g": 20, "as": "suki sauce base (sriracha row)"},
+        {"food": "usda:172442", "g": 5, "as": "fermented bean curd (miso row)"},
+        {"food": "usda:746784", "g": 5, "as": "sugar"},
+        {"food": "usda:171016", "g": 3, "as": "sesame oil"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:168156", "g": 5, "as": "lime juice"}
+      ]
+    },
+    {
+      "id": "thai:yentafo",
+      "name": "Yentafo (pink noodle soup)",
+      "nameTh": "เย็นตาโฟ",
+      "serving": "1 bowl",
+      "note": "Rice noodles with fish balls, fried tofu, squid and morning glory in a pink fermented bean curd sauce. USDA has no fish ball row, so surimi stands in.",
+      "ingredients": [
+        {"food": "usda:168914", "g": 170, "as": "rice noodles, cooked"},
+        {"food": "usda:173702", "g": 60, "as": "fish balls (surimi row)"},
+        {"food": "usda:172451", "g": 20, "as": "fried tofu"},
+        {"food": "usda:174223", "g": 30, "as": "squid (raw weight)"},
+        {"food": "usda:2709614", "g": 30, "as": "morning glory (spinach row)"},
+        {"food": "usda:174536", "g": 300, "as": "chicken broth"},
+        {"food": "usda:168556", "g": 15, "as": "pink sauce base (catsup row)"},
+        {"food": "usda:172442", "g": 8, "as": "red fermented bean curd (miso row)"},
+        {"food": "usda:746784", "g": 6, "as": "sugar"},
+        {"food": "usda:171411", "g": 5, "as": "vegetable oil"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"}
+      ]
+    },
+    {
+      "id": "thai:kuay-jab",
+      "name": "Kuay jab (rolled rice noodle soup with pork)",
+      "nameTh": "ก๋วยจั๊บ",
+      "serving": "1 bowl",
+      "note": "Peppery broth with crispy pork, offal and a boiled egg. Crispy pork counted as raw belly weight.",
+      "ingredients": [
+        {"food": "usda:168914", "g": 180, "as": "rolled rice noodles (rice noodles row)"},
+        {"food": "usda:167812", "g": 30, "as": "crispy pork belly (raw weight)"},
+        {"food": "usda:167856", "g": 30, "as": "pork intestine, simmered (chitterlings row)"},
+        {"food": "usda:167863", "g": 25, "as": "pork liver, braised"},
+        {"food": "usda:173424", "g": 50, "as": "boiled egg"},
+        {"food": "usda:174536", "g": 350, "as": "pork bone broth (chicken broth row)"},
+        {"food": "usda:2707442", "g": 10, "as": "soy sauce"},
+        {"food": "usda:746784", "g": 3, "as": "sugar"},
+        {"food": "usda:170931", "g": 1, "as": "black pepper"},
+        {"food": "usda:1104647", "g": 3, "as": "garlic"},
+        {"food": "usda:171411", "g": 3, "as": "garlic oil (vegetable oil)"},
+        {"food": "usda:170005", "g": 3, "as": "spring onion"}
+      ]
+    },
+    {
+      "id": "thai:goong-pao",
+      "name": "Goong pao (grilled river prawns)",
+      "nameTh": "กุ้งแม่น้ำเผา",
+      "serving": "2 prawns",
+      "note": "Edible meat of two large river prawns, with seafood dipping sauce; no rice. USDA has no river prawn row, so cooked shrimp stands in; the head fat isn't counted.",
+      "ingredients": [
+        {"food": "usda:175180", "g": 150, "as": "river prawn meat, grilled (shrimp row)"},
+        {"food": "usda:2706457", "g": 10, "as": "fish sauce"},
+        {"food": "usda:168156", "g": 12, "as": "lime juice"},
+        {"food": "usda:170497", "g": 5, "as": "green chili"},
+        {"food": "usda:1104647", "g": 5, "as": "garlic"},
+        {"food": "usda:746784", "g": 5, "as": "sugar"},
+        {"food": "usda:169997", "g": 2, "as": "cilantro"}
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
+import { openPause, skipExercise } from './workout.helpers';
 
 declare global {
   interface Window {
@@ -12,12 +13,14 @@ async function installMocks(page: Page) {
   await page.addInitScript(() => {
     window.__spoken = [];
     window.__wake = [];
-    class FakeUtterance {
+    // EventTarget: voice.ts listens for end/error on each utterance.
+    class FakeUtterance extends EventTarget {
       text: string;
       lang = '';
       rate = 1;
       volume = 1;
       constructor(text: string) {
+        super();
         this.text = text;
       }
     }
@@ -29,7 +32,7 @@ async function installMocks(page: Page) {
       configurable: true,
       value: {
         speak: (u: FakeUtterance) => {
-          if (u.text) window.__spoken.push(u.text);
+          if (u.text && (u as { volume?: number }).volume !== 0) window.__spoken.push(u.text); // skip the silent iOS unlock
         },
         cancel: () => undefined,
         getVoices: () => [],
@@ -52,8 +55,11 @@ async function installMocks(page: Page) {
   });
 }
 
+const COACH_TIP = 'Keep the weight. Aim for 8 reps.';
 const spoken = (page: Page) => page.evaluate(() => window.__spoken);
 const BENCH_CUE = 'Squeeze your chest, slow on the way down.';
+/** M12 1b: Dumbbell Bench Press's setup checks, said once as the workout starts (src/data/setupCues.json). */
+const BENCH_SETUP = ['Feet flat.', 'Shoulder blades back.', 'Wrists over elbows.'];
 const INCLINE_CUE = 'Upper chest drives it, slow lowering.';
 
 async function readSets(page: Page) {
@@ -91,24 +97,28 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await page.clock.pauseAt(new Date('2026-11-13T18:00:05Z'));
 
   // Today
-  await expect(page.locator('.day-btn')).toHaveCount(6);
-  await page.getByRole('button', { name: /Push A/ }).click();
+  // The dated week (M10): 7 days, no rest weekdays by default, so Push A is today and next week.
+  await expect(page.locator('.day-btn')).toHaveCount(7);
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
   await expect(page.locator('.ex-row')).toHaveCount(6);
   await page.getByRole('button', { name: 'Start workout' }).click();
 
-  // Exercise: set 1 of bench press, adjust reps 10 -> 8 and weight 20 -> 22.5
+  // Exercise: set 1 of bench press, adjust reps 8 -> 6 and weight 15 -> 17.5
   await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 4');
   await expect(page.getByText('Squeeze your chest, slow on the way down.')).toBeVisible();
   const reps = page.getByLabel('Reps', { exact: true });
   const kg = page.getByLabel('kg', { exact: true });
-  await expect(reps).toHaveText('10');
-  await expect(kg).toHaveText('20');
+  await expect(reps).toHaveText('8');
+  await expect(kg).toHaveText('15');
   await page.getByRole('button', { name: 'Reps minus' }).click();
   await page.getByRole('button', { name: 'Reps minus' }).click();
   await page.getByRole('button', { name: 'kg plus' }).click();
-  await expect(reps).toHaveText('8');
-  await expect(kg).toHaveText('22.5');
+  await expect(reps).toHaveText('6');
+  await expect(kg).toHaveText('17.5');
   expect(await page.evaluate(() => window.__wake)).toEqual(['request']);
 
   await page.clock.runFor(30_000);
@@ -119,12 +129,18 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   await expect(clock).toHaveText('2:00');
   await page.clock.runFor(109_000);
   await expect(clock).toHaveText('0:11');
-  expect(await spoken(page)).toEqual([BENCH_CUE]); // focus cue at set start
+  // focus cue at set start, then the after-set coach tip 2 s into rest (6 reps < 8)
+  expect(await spoken(page)).toEqual([BENCH_CUE, ...BENCH_SETUP, COACH_TIP]);
 
   await page.clock.runFor(1_000);
   await expect
     .poll(() => spoken(page))
-    .toEqual([BENCH_CUE, 'Ten seconds. Next: Dumbbell Bench Press, set 2.']);
+    .toEqual([
+      BENCH_CUE,
+      ...BENCH_SETUP,
+      COACH_TIP,
+      'Ten seconds. Next: Dumbbell Bench Press, set 2.',
+    ]);
 
   await page.clock.runFor(10_000);
   await expect.poll(() => spoken(page)).toContain('Go.');
@@ -151,31 +167,36 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
   // Set 2 starts with the focus cue and carries reps/weight forward
   await expect.poll(async () => (await spoken(page)).at(-1)).toBe(BENCH_CUE);
   await expect(page.locator('[data-set-counter]')).toHaveText('Set 2 of 4');
-  await expect(reps).toHaveText('8');
-  await expect(kg).toHaveText('22.5');
+  await expect(reps).toHaveText('6');
+  await expect(kg).toHaveText('17.5');
 
   // Skip the rest of bench press
-  await page.getByRole('button', { name: 'Skip exercise' }).click();
+  await skipExercise(page);
   await expect(page.getByRole('heading', { name: 'Incline Dumbbell Press' })).toBeVisible();
-  await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 3');
+  await expect(page.locator('[data-set-counter]')).toHaveText('Set 1 of 4');
   await expect.poll(async () => (await spoken(page)).at(-1)).toBe(INCLINE_CUE);
-  await expect(reps).toHaveText('12');
+  await expect(reps).toHaveText('7');
   await expect(kg).toHaveText('15');
 
   await page.clock.runFor(40_000);
   await page.getByRole('button', { name: 'Set done' }).click();
   await expect(clock).toBeVisible();
 
-  // End needs two taps
-  const end = page.getByRole('button', { name: 'End workout' });
+  // Skip and End are only in the Pause sheet (not on Exercise or Rest); End needs two taps
+  await expect(page.getByRole('button', { name: 'Skip exercise' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'End workout' })).toHaveCount(0);
+  await openPause(page);
+  const end = page
+    .getByRole('dialog', { name: 'Paused' })
+    .getByRole('button', { name: 'End workout' });
   await end.click();
   await expect(page.getByRole('button', { name: 'Tap again to end' })).toBeVisible();
   await page.getByRole('button', { name: 'Tap again to end' }).click();
 
-  // Summary: 8×22.5 + 12×15 = 360 kg, one overrun (155 s > 150 s)
+  // Summary: 6×17.5 + 7×15 = 210 kg, one overrun (155 s > 150 s)
   await expect(page.getByRole('heading', { name: 'Workout done' })).toBeVisible();
   await expect(page.locator('[data-stat="sets"] .stat-value')).toHaveText('2');
-  await expect(page.locator('[data-stat="volume"] .stat-value')).toHaveText('360');
+  await expect(page.locator('[data-stat="volume"] .stat-value')).toHaveText('210');
   await expect(page.locator('[data-stat="overruns"] .stat-value')).toHaveText('1');
   await expect(page.getByText('skipped')).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__wake)).toEqual(['request', 'release']);
@@ -192,13 +213,88 @@ test('runs a mini Push A session with rest cues, pause, skip and summary', async
       restTakenSec,
     })),
   ).toEqual([
-    { exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 8, weightKg: 22.5, restTakenSec: 0 },
-    { exerciseId: 'Incline_Dumbbell_Press', setIndex: 0, reps: 12, weightKg: 15, restTakenSec: 0 },
+    { exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 6, weightKg: 17.5, restTakenSec: 0 },
+    { exerciseId: 'Incline_Dumbbell_Press', setIndex: 0, reps: 7, weightKg: 15, restTakenSec: 0 },
   ]);
 
   // Back to Today, Pull A is suggested next
   await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.day-btn.up-next')).toContainText('Pull A');
+
+  expect(errors).toEqual([]);
+});
+
+test('Pause sheet while resting: Skip moves to the next exercise and stays in rest; Escape resumes', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
+  page.on('pageerror', (e) => errors.push(e.message));
+
+  await installMocks(page);
+  await page.clock.install({ time: new Date('2026-11-13T18:00:00Z') });
+  await page.goto('/');
+  await page.clock.pauseAt(new Date('2026-11-13T18:00:05Z'));
+
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await expect(page.getByRole('heading', { name: 'Dumbbell Bench Press' })).toBeVisible();
+  await page.clock.runFor(30_000);
+  await page.getByRole('button', { name: 'Set done' }).click();
+
+  // Rest before bench set 2.
+  const clock = page.locator('[data-rest-clock]');
+  const nextName = page.locator('.rest-next-name');
+  await expect(clock).toHaveText('2:00');
+  await expect(nextName).toHaveText('Dumbbell Bench Press');
+  await page.clock.runFor(20_000);
+  await expect(clock).toHaveText('1:40');
+
+  // The sheet names what Resume returns to; focus starts on Resume and Tab stays in the sheet.
+  await openPause(page);
+  const sheet = page.getByRole('dialog', { name: 'Paused' });
+  await expect(sheet.locator('.pause-context')).toHaveText('Resting · next Dumbbell Bench Press');
+  await expect(sheet.getByRole('button', { name: 'Resume' })).toBeFocused();
+  // M10: the Coach row sits under Resume.
+  await page.keyboard.press('Tab');
+  await expect(sheet.locator('[data-pause="coach"]')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.getByRole('button', { name: 'Skip exercise' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.getByRole('button', { name: 'End workout' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(sheet.getByRole('button', { name: 'Resume' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(sheet.getByRole('button', { name: 'End workout' })).toBeFocused();
+
+  // Skip: the upcoming exercise moves on, the screen stays Rest and the clock keeps running.
+  await sheet.getByRole('button', { name: 'Skip exercise' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.locator('[data-screen="rest"]')).toBeVisible();
+  await expect(nextName).toHaveText('Incline Dumbbell Press');
+  await expect(page.locator('.rest-eyebrow')).toHaveText('Next · Set 1 of 4');
+  await expect(clock).toHaveText('1:40');
+  await page.clock.runFor(10_000);
+  await expect(clock).toHaveText('1:30');
+
+  // Escape resumes: the sheet closes, the rest clock was frozen while paused, then runs on.
+  await openPause(page);
+  await expect(sheet.locator('.pause-context')).toHaveText('Resting · next Incline Dumbbell Press');
+  await page.clock.runFor(30_000);
+  await page.keyboard.press('Escape');
+  await expect(sheet).toHaveCount(0);
+  await expect(page.locator('[data-screen="rest"]')).toBeVisible();
+  await expect(clock).toHaveText('1:30');
+
+  // The voice follows the skip: the 10 s cue names the new exercise.
+  await page.clock.runFor(80_000);
+  await expect
+    .poll(async () => (await spoken(page)).at(-1))
+    .toBe('Ten seconds. Next: Incline Dumbbell Press, set 1.');
+  expect(await spoken(page)).not.toContain('Ten seconds. Next: Dumbbell Bench Press, set 2.');
 
   expect(errors).toEqual([]);
 });

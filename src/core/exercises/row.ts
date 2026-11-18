@@ -5,6 +5,7 @@ export const row: ExerciseRule = {
   ...COUNTER_DEFAULTS,
   exerciseId: 'One-Arm_Dumbbell_Row',
   folder: 'row',
+  status: 'tuned',
   view: 'side',
   limb: 'arm',
   triplets: ELBOW,
@@ -14,4 +15,26 @@ export const row: ExerciseRule = {
   start: 'extended',
   eccentric: 'toExtended',
   sideMode: 'best',
+  // Body swing: off until real row fixtures pass (M5 Decision).
+  focus: {
+    rushedLowering: true,
+    shrinkingRange: true,
+    stalled: true,
+    outOfFrame: true,
+    lowFps: true,
+    bodySwing: false,
+  },
+  hints: { far: 'Pull your elbow higher.', start: 'Let the arm hang straight.' },
+  placement: {
+    view: 'side',
+    facing: 'Side-on, rowing arm toward the phone',
+    distanceM: [2, 3],
+    heightHint: 'Bench height',
+    lines: [
+      'Phone at bench height, side-on',
+      'Rowing arm faces the phone',
+      'Shoulder to hand in frame, 2–3 m',
+    ],
+    spoken: 'Put the phone at bench height, 2 to 3 metres away, with your rowing arm facing it.',
+  },
 };

@@ -1,0 +1,73 @@
+/* M13 task 10: the brand lockup (src/ui/brand.ts). Tokens only; no motion. The mark tile uses the
+   page colour of the app icon and launch screen (--bg, #0d0f12) with the action colour stroke, so
+   it reads as the same mark the home screen shows. */
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.brand-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-btn);
+  background: var(--bg);
+  color: var(--cta);
+}
+
+.brand-sm .brand-mark {
+  width: 52px;
+  height: 52px;
+}
+
+.brand-lg .brand-mark {
+  width: 120px;
+  height: 120px;
+  border-radius: var(--r-card);
+}
+
+.brand-words {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.brand-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+}
+
+.brand-sm .brand-name {
+  font-size: var(--fs-lead);
+}
+
+.brand-lg {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.brand-lg .brand-name {
+  font-size: var(--fs-num);
+}
+
+.brand-tagline {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  line-height: 1.35;
+}
+
+.brand-lg .brand-tagline {
+  font-size: var(--fs-lead);
+}

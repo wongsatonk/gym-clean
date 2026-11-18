@@ -1,18 +1,242 @@
+/* ==========================================================================
+   Design tokens (M4e mix, docs/design/m4e-mix/README.md).
+   Raw colours live ONLY in the token blocks: `:root`, `.mood-*` and `[data-accent=…]`.
+   Everything else uses var(--…). src/ui/tokens.test.ts enforces this.
+   ========================================================================== */
 :root {
-  --bg: #0b0d10;
-  --surface: #161a20;
-  --surface-2: #1f252d;
-  --border: #2c343e;
-  --text: #f4f6f8;
-  --muted: #a9b2bd;
-  --accent: #4ade80;
-  --accent-ink: #052e14;
-  --warn: #fbbf24;
-  --danger: #f87171;
+  /* Colour roles: each token has one role. */
+  --bg: #0d0f12; /* page */
+  --surface: #16191e; /* cards */
+  --surface-2: #20242b; /* buttons */
+  --line: #323842; /* borders, inactive progress */
+  --text: #f2f4f7;
+  --text-2: #a9b1bc; /* secondary text */
+  --info: var(--text-2);
+  --cta: #ff7a1a; /* action: filled = press this; outline/dot/bar/ring = where you are now */
+  --on-cta: #1a0b00;
+  --success: #3be38b; /* achieved: streak, bests, target reached. Filled green is never a button. */
+  --on-success: #06210f;
+  --muscle: #35c8ff; /* muscle highlight only, always with a text legend */
+  --muscle-2: #2899c8; /* secondary muscles (dimmer cyan): 3.1:1 on --body, 1.7:1 under --muscle */
+  --body: #3a424d; /* figure fill */
+  --edge: #8d98a6; /* figure rim */
+  --stage-1: #2a313b; /* lit stage */
+  --stage-2: #16191e; /* stage */
+  --cue: #c5b3ff; /* spoken line */
+  --danger: #ff6b6b; /* confirmations only, with an icon and words */
+  --on-danger: #1b0606;
+  --warn: #fbbf24; /* attention, not action: overtime, skipped, hold, silent phone */
+  --black: #000000; /* camera / video backdrop, Track page */
+  --selected: var(--text); /* selected / on states: white fill, dark text (not orange) */
+  --on-selected: var(--bg);
+  --focus: var(--cta);
+  /* Translucent layers over the camera or the page. */
+  --scrim: rgb(0 0 0 / 0.8);
+  --scrim-soft: rgb(0 0 0 / 0.5);
+  --veil: rgb(13 15 18 / 0.94);
+  --veil-faint: rgb(13 15 18 / 0.2);
+  --glass-line: rgb(255 255 255 / 0.25);
+  --glass-track: rgb(255 255 255 / 0.14);
+  /* The accent picker's swatches: each theme's --cta, shown whatever the current accent is. */
+  --accent-orange: #ff7a1a;
+  --accent-volt: #c8f31d;
+  --accent-yellow: #ffd60a;
+
+  /* Type: one family, two widths (self-hosted, imported in main.ts). */
+  --font-display: 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* The type scale, smallest to largest. The mix README names eight steps; the five marked
+     "between steps" are permanent too: the camera, hands-free, coach, Summary and dev-log
+     layouts were sized on them and still use them. */
+  --fs-label: 18px; /* short labels next to an icon or number only */
+  --fs-body: 20px; /* body floor */
+  --fs-cue: 22px; /* spoken lines, list names */
+  --fs-lead: 26px; /* between steps: sub-heads, small sheet titles, secondary buttons */
+  --fs-head: 32px; /* between steps: exercise names in panels, large button words */
+  --fs-title: 34px; /* screen and sheet titles, the CTA */
+  --fs-display: 44px; /* between steps: page titles, the Summary hero title */
+  --fs-stepper: 54px; /* between steps: the documented stepper exception (hands-free) */
+  --fs-num-sm: 64px; /* between steps: the minimum for a main number (long values) */
+  --fs-num: 72px;
+  --fs-hero: 84px;
+  --fs-rep: 120px;
+  --fs-timer: 132px;
+
+  /* Shape. Moods override --r-card and --line-w. */
+  --r-btn: 14px;
+  --r-card: 20px;
+  --r-pill: 999px;
+  --line-w: 1px;
+
+  /* Icons and tap sizes. */
+  --ic-sm: 22px;
+  --ic-md: 28px;
+  --ic-lg: 32px;
   --tap-min: 56px;
-  --font-body: 20px;
-  --font-big: 64px;
+  --tap-bar: 60px; /* workout top bar, settings rows */
+  --tap-cta: 72px;
+  --tap-hero: 80px;
+  --tab-h: 72px;
+
+  /* Motion (M12): short, transform/opacity only. src/ui/motion.ts mirrors these (DUR, EASE). */
+  --dur-fast: 120ms; /* press feedback, small state changes */
+  --dur-base: 220ms; /* screens, sheets, toasts, tab indicator */
+  --dur-slow: 320ms; /* ring fills, count-ups, larger moves */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* decelerate into place */
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1); /* a small overshoot: check morph, chips */
+
   color-scheme: dark;
+}
+
+/* Accent themes swap only the action colour. Orange is the default (same as :root). */
+[data-accent='orange'] {
+  --cta: #ff7a1a;
+  --on-cta: #1a0b00;
+}
+
+/* Volt sits close to the success green, so success turns gold while Volt is on. */
+[data-accent='volt'] {
+  --cta: #c8f31d;
+  --on-cta: #12160a;
+  --success: #ffc94d;
+  --on-success: #221800;
+}
+
+[data-accent='yellow'] {
+  --cta: #ffd60a;
+  --on-cta: #000000;
+}
+
+/* Moods: set on each screen root. Pro is the default look. */
+.mood-energy {
+  --ember: #3d1c0a;
+  --ember-hi: #5a2a0e;
+  --r-card: 24px;
+  --line-w: 2px;
+}
+
+.mood-pro {
+  --r-card: 20px;
+  --line-w: 1px;
+}
+
+/* Track: pure black + 8px cards, for in-workout screens only (Exercise, Rest and the camera).
+   M13 task 18: Calendar and its day view moved to the standard surface (pro). */
+.mood-track {
+  --bg: #000000;
+  --line: #3a3a3a;
+  --r-card: 8px;
+  --line-w: 2px;
+}
+
+.mood-energy,
+.mood-pro,
+.mood-track {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ---------- Motion (M12 task 8, design "Motion") ----------
+   Transform/opacity only, tokens only. JS helpers: src/ui/motion.ts. Motion-off screens get none
+   of this (readability mid-set comes first): anything marked `data-motion="off"`, plus the
+   Exercise screen (`data-screen='exercise'`) and the camera sheet (`.camera-sheet`) by their
+   existing hooks. Same list as MOTION_OFF in motion.ts.
+   The ONE reduced-motion rule for the whole app is at the end of this block; don't add another. */
+
+/* Press: a 0.97 scale and a brighter fill while the finger is down. Zero specificity, so a
+   component that sets its own transform keeps it. */
+:where(button, [role='button'], .chip, .cs-chip) {
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+:where(button, [role='button'], .chip, .cs-chip):active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(1.15);
+}
+
+:where([data-motion='off'], [data-screen='exercise'], .camera-sheet)
+  :where(button, [role='button'], .chip, .cs-chip) {
+  transition: none;
+}
+
+:where([data-motion='off'], [data-screen='exercise'], .camera-sheet)
+  :where(button, [role='button'], .chip, .cs-chip):active {
+  transform: none;
+  filter: none;
+}
+
+/* Sheets: full-page sheets rise + fade in. A bottom sheet (the coach sheet) fades its veil with
+   motion-fade and slides its panel with motion-slide-up. The camera sheet is a motion-off screen. */
+.overlay.sheet:not(.camera-sheet),
+.pause-sheet,
+.fuel-sheet,
+.howto-sheet {
+  animation: motion-rise var(--dur-base) var(--ease-standard);
+}
+
+@keyframes motion-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@keyframes motion-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+/* Reduced motion: every duration to zero and no animation or transition anywhere, so screens,
+   sheets and toasts appear in place. Components needing a different static look go here too. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Hands-free auto-stop (handsfree.css): the numeric countdown only, no draining ring. */
+  .auto-stop-ring {
+    display: none;
+  }
+}
+
+/* Track's short caps labels (REST, LAST SET). Never on exercise names. */
+.caps {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Display width for titles, big numbers and the CTA. Body text stays Barlow. */
+.page-title,
+.summary-title,
+.exercise-name,
+.stepper-value,
+.rest-clock,
+.stat-value,
+.primary-btn,
+.rep-num,
+.rep-target,
+.auto-stop-num,
+.auto-stop-secs,
+.cam-rest-clock,
+.hold-clock {
+  font-family: var(--font-display);
 }
 
 * {
@@ -24,31 +248,32 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  font-size: var(--font-body);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
   line-height: 1.35;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* M12: a tab switch slides the screen 8px (motion.ts enterScreen); clip, so the page never
+   scrolls sideways mid-slide. `clip` (not hidden) keeps position: sticky working. */
+#app {
+  overflow-x: clip;
 }
 
 button {
   font: inherit;
   color: inherit;
   min-height: var(--tap-min);
-  border-radius: 14px;
-  border: 1px solid var(--border);
+  border-radius: var(--r-btn);
+  border: 1px solid var(--line);
   background: var(--surface);
   cursor: pointer;
   touch-action: manipulation;
 }
 
 button:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -58,7 +283,7 @@ h1 {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--text-2);
 }
 
 .screen {
@@ -71,60 +296,1612 @@ h1 {
   gap: 10px;
 }
 
-/* ---------- Today ---------- */
+/* ---------- Today (M4e Energy, src/ui/screens/today.ts) ---------- */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 .today {
+  gap: 10px;
+}
+
+/* A screen that ends with the tab bar: the bar carries the bottom safe area. */
+.screen.has-tabbar {
+  padding-bottom: 0;
+}
+
+.appbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-lead);
+}
+
+.brand .ic {
+  color: var(--cta);
+}
+
+.date {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.eyebrow {
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Hero: dark ember surface; the orange rings are decoration only, the orange fill is Start. */
+.hero,
+.preview-head {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: none;
+  background: radial-gradient(ellipse 70% 80% at 82% 30%, var(--ember-hi), var(--ember) 70%);
+}
+
+.preview-head {
+  gap: 8px;
+}
+
+.hero .eyebrow,
+.preview-head .eyebrow {
+  color: var(--text);
+}
+
+.hero-rings,
+.hero-rings::before,
+.hero-rings::after {
+  position: absolute;
+  border: 2px solid var(--cta);
+  border-radius: 50%;
+}
+
+.hero-rings {
+  right: -56px;
+  top: -40px;
+  width: 260px;
+  height: 260px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.hero-rings::before,
+.hero-rings::after {
+  content: '';
+}
+
+.hero-rings::before {
+  inset: 26px;
+}
+
+.hero-rings::after {
+  inset: 54px;
+}
+
+.hero-fig {
+  position: absolute;
+  z-index: 1;
+  right: 22px;
+  top: 18px;
+  height: 128px;
+}
+
+.hero-fig .body-map {
+  display: block;
+  height: 100%;
+  width: auto;
+}
+
+.hero-txt {
+  position: relative;
+  z-index: 1;
+}
+
+/* Eyebrow and day name stay clear of the figure; meta and chips run under it. */
+.hero-txt .eyebrow,
+.hero-txt .hero-title {
+  padding-right: 76px;
+}
+
+.hero-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-hero);
+  font-weight: 700;
+  line-height: 1;
+  margin: 4px 0 8px;
+  overflow-wrap: anywhere;
+}
+
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-weight: 600;
+}
+
+.hero-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.chips {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: var(--r-pill);
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+  color: var(--text);
+}
+
+/* The most-worked muscle wears the muscle colour, as on the figure. */
+.chip:first-child {
+  color: var(--muscle);
+  box-shadow: inset 0 0 0 2px var(--muscle);
+}
+
+.hero-cta {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: var(--tap-hero);
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.hero .silent-hint {
+  position: relative;
+  z-index: 1;
+}
+
+/* Streak + last time tiles. */
+.pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.app-title {
-  font-size: var(--font-big);
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-}
-
-.day-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.day-btn {
-  position: relative;
+.tile {
+  border-radius: var(--r-card);
+  padding: 10px 14px 12px;
+  min-height: 140px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 14px 18px;
-  text-align: left;
+  gap: 6px;
 }
 
-.day-btn.up-next {
-  border-color: var(--accent);
+.tile-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.tile.streak {
+  background: var(--success);
+  color: var(--on-success);
+}
+
+.tile.last {
   background: var(--surface-2);
 }
 
-.day-name {
-  font-size: 28px;
+.tile-num {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-num small {
+  font-family: var(--font-body);
+  font-size: var(--fs-cue);
   font-weight: 700;
 }
 
-.day-meta {
-  color: var(--muted);
-  font-size: 18px;
+.week {
+  list-style: none;
+  margin: auto 0 0;
+  padding: 0;
+  display: flex;
+  justify-content: space-between;
 }
 
-.badge {
+.wd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.wd .dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--on-success);
+  opacity: 0.5;
+}
+
+.wd .dot .ic {
+  width: 12px;
+  height: 12px;
+}
+
+.wd.done .dot {
+  opacity: 1;
+  background: var(--on-success);
+  color: var(--success);
+}
+
+.wd.today .dot {
+  opacity: 1;
+  border-width: 3px;
+}
+
+.wd .wl {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.last-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.last-meta {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.trend {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.trend.up {
+  color: var(--success);
+}
+
+/* Your week: day cards scroll inside their own row, never the page. */
+.days-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.days-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+}
+
+.days-head span {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.day-strip {
+  display: flex;
+  gap: 10px;
+  margin: 0 -16px;
+  padding: 4px 16px 16px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-padding-inline: 16px;
+  scrollbar-width: none;
+}
+
+.day-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.day-strip .day-btn,
+.day-strip .cal-card {
+  flex: none;
+  width: 112px;
+  min-height: 124px;
+  padding: 6px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+/* "Now" marker: an outline, not a fill. */
+.day-strip .day-btn.up-next {
+  border: 3px solid var(--cta);
+  background: var(--surface);
+}
+
+.day-fig {
+  height: 50px;
+  display: block;
+}
+
+.day-fig .body-map {
+  display: block;
+  height: 100%;
+  width: auto;
+}
+
+.day-strip .day-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.day-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.day-when.next {
+  color: var(--cta);
+}
+
+.day-when.done {
+  color: var(--success);
+}
+
+/* Tab bar (src/ui/tabBar.ts): same on every top-level screen. */
+.tabbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  margin: auto -16px 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface);
+  border-top: 2px solid var(--line);
+}
+
+.tab {
+  position: relative;
+  flex: 1;
+  min-height: var(--tab-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.tab.on {
+  color: var(--text);
+}
+
+.tab.on .ic {
+  color: var(--cta);
+}
+
+/* M12 task 9: five tabs (78px each at 390px, 72px at 360px). Labels stay on one line.
+   M13 task 17: labels in the condensed display face (18px, the label floor), so "Calendar"
+   and "Settings" never touch at 360 wide (Barlow 18px left 2px between them). */
+.tabbar-5 .tab {
+  min-width: 0;
+}
+
+.tab-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-label);
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* The active-tab bar: one element that slides between tabs (tabBar.ts animates its transform
+   from the previous tab, --dur-base; instant under reduced motion). One tab wide. */
+.tab-ind {
   position: absolute;
-  top: 14px;
-  right: 16px;
-  font-size: 16px;
+  top: -2px;
+  left: 0;
+  width: 20%;
+  height: 4px;
+  pointer-events: none;
+}
+
+.tab-ind::before {
+  content: '';
+  position: absolute;
+  inset: 0 28%;
+  border-radius: 0 0 4px 4px;
+  background: var(--cta);
+}
+
+/* Coach, the centre tab: a raised, filled round button over the bar's top edge. Active = a
+   thick action-colour ring + action-colour icon (shape and colour) + aria-current; the sliding
+   bar sits under the bubble there. */
+.tab-centre {
+  justify-content: flex-end;
+  padding-bottom: 8px;
+}
+
+.tab-bubble {
+  position: relative;
+  z-index: 1;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  margin-top: -26px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  border: 2px solid var(--line);
+  color: var(--text);
+}
+
+.tab-centre.on .tab-bubble {
+  border: 4px solid var(--cta);
+}
+
+/* ---------- M10 trainer on Today and the preview (today.ts, preview.ts) ---------- */
+
+.appbar-end {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Coach: a neutral button (orange stays Start's). */
+.coach-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  font-size: var(--fs-body);
   font-weight: 700;
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-radius: 999px;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.top-bar .coach-btn {
+  margin-left: auto;
+}
+
+/* "Adjusted today": attention (warn edge + icon + words), not an action colour. */
+.adjusted-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  border-left: 4px solid var(--warn);
+}
+
+.adjusted-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: var(--fs-body);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.adjusted-text .ic {
+  flex: none;
+  margin-top: 1px;
+  color: var(--warn);
+}
+
+/* M10-q11 prompt: the text on its own line, Use it / Keep mine side by side under it. */
+.program-prompt {
+  flex-wrap: wrap;
+}
+
+.program-prompt .adjusted-text {
+  flex-basis: 100%;
+}
+
+.program-prompt-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.adjusted-undo {
+  flex: none;
+  min-height: var(--tap-min);
+  min-width: 88px;
+  padding: 0 18px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+/* Rest day hero: the same ember card without rings or a figure. */
+.hero-rest .hero-txt .eyebrow,
+.hero-rest .hero-txt .hero-title {
+  padding-right: 0;
+}
+
+.hero-rest .rest-next {
+  font-size: var(--fs-cue);
+}
+
+/* Calendar week cards: a date line on top; moved days get a dashed edge and "Moved".
+   Positioned so each card's sr-only status stays inside the scrolling strip (no page overflow). */
+.day-strip .cal-card {
+  position: relative;
+}
+
+.cal-date {
+  font-size: var(--fs-label);
+  font-weight: 700;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.cal-card.today .cal-date {
+  color: var(--text);
+}
+
+.day-strip .cal-card.today:not(.up-next) {
+  border: 3px solid var(--text-2);
+}
+
+.day-strip .cal-card.moved {
+  border-style: dashed;
+}
+
+.cal-rest-mark {
+  height: 50px;
+  display: grid;
+  place-items: center;
+  color: var(--text-2);
+}
+
+.day-strip .cal-card.rest .day-name {
+  color: var(--text-2);
+}
+
+.day-when.moved,
+.day-when.adjusted {
+  color: var(--warn);
+}
+
+/* Preview: an "Adjusted" pill (icon + word) on changed rows; removed rows in their own list. */
+.adj-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 2px 10px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--warn);
+  color: var(--warn);
+  font-size: var(--fs-label);
+  font-weight: 700;
+}
+
+.ex-row.adjusted {
+  border-color: var(--warn);
+}
+
+.adj-note {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.removed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.removed-title {
+  margin: 4px 0 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.ex-row-removed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--r-btn);
+  border: 1px dashed var(--line);
+  color: var(--text-2);
+}
+
+/* ---------- M10 Settings → Plan changes (planChanges.ts, Pro) ---------- */
+
+.plan-changes.mood-pro {
+  gap: 18px;
+}
+
+.plan-change-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plan-change {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.plan-change-txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.plan-change-title {
+  font-size: var(--fs-cue);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.plan-change-when {
+  color: var(--text-2);
+}
+
+.plan-change.undone .plan-change-title {
+  color: var(--text-2);
+}
+
+.plan-undo {
+  flex: none;
+  min-height: var(--tap-min);
+  min-width: 88px;
+  padding: 0 18px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.plan-empty {
+  color: var(--text-2);
+}
+
+.plan-reset-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Confirmations only: danger with an icon and words, filled once armed (as End workout). */
+.plan-reset {
+  width: 100%;
+  min-height: var(--tap-bar);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--danger);
+  border: var(--line-w) solid var(--danger);
+}
+
+.plan-reset[data-armed] {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+/* Day preview rows on the Energy page. */
+.preview .ex-row-plan {
+  color: var(--text-2);
+}
+
+.hero-rings {
+  animation: hero-pulse 6s ease-in-out infinite alternate;
+}
+
+.hero-cta {
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.hero-cta:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@keyframes hero-pulse {
+  to {
+    transform: scale(1.05);
+    opacity: 0.25;
+  }
+}
+
+/* ---------- Workout top bar (src/ui/topBar.ts) ---------- */
+
+.workout-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wtb {
+  gap: 8px;
+}
+
+.wtb-btn {
+  min-height: var(--tap-bar);
+  min-width: 88px;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.wtb-btn .ic {
+  color: var(--text);
+}
+
+.wtb-lbl {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.wtb-list {
+  flex: 1;
+  min-width: 0;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 0 14px;
+}
+
+.wtb-txt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  line-height: 1.1;
+}
+
+.wtb-day {
+  font-size: var(--fs-cue);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.wtb-pos {
+  font-size: var(--fs-label);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.segs {
+  display: flex;
+  gap: 6px;
+}
+
+.segs i {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+}
+
+.segs i.past {
+  background: var(--edge);
+}
+
+/* "Now": a bar, not a button. */
+.segs i.cur {
+  background: var(--cta);
+}
+
+/* ---------- Exercise (M4e Pro, src/ui/screens/exercise.ts) ---------- */
+
+.exercise.mood-pro {
+  gap: 10px;
+}
+
+.exercise.mood-pro .exercise-name {
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.exercise.mood-pro .exercise-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  min-height: 0;
+}
+
+.ex-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  color: var(--text-2);
+}
+
+/* The lit stage: set count, legend, How to on the left, the figure on the right. */
+.stage {
+  position: relative;
+  height: 224px;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  border: var(--line-w) solid var(--line);
+  background: radial-gradient(ellipse 60% 75% at 66% 52%, var(--stage-1), var(--stage-2) 75%);
+}
+
+.stage-col {
+  position: absolute;
+  z-index: 1;
+  left: 14px;
+  top: 10px;
+  bottom: 12px;
+  max-width: calc(100% - 176px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.set-badge {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.set-lbl {
+  display: block;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.set-num {
+  font-size: var(--fs-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.set-of {
+  font-size: var(--fs-head);
+  color: var(--text-2);
+}
+
+.pips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pips i {
+  width: 22px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--line);
+}
+
+.pips i.past {
+  background: var(--edge);
+}
+
+.pips i.cur {
+  background: var(--cta);
+}
+
+.stage-legend {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.swatch-dot {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muscle);
+}
+
+.howto-btn {
+  align-self: flex-start;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.howto-btn .ic {
+  color: var(--info);
+}
+
+.stage-fig {
+  position: absolute;
+  right: 12px;
+  top: 8px;
+  bottom: 8px;
+  width: 156px;
+}
+
+.stage-fig .muscle-btn,
+.stage-fig .muscle-slot {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The spoken line: lavender bar + speaker icon (same panel on every screen). */
+.cue-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  border-left: 6px solid var(--cue);
+}
+
+.cue-panel .ic {
+  flex: none;
+  color: var(--cue);
+}
+
+.cue-text {
+  font-size: var(--fs-cue);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.st-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.st-label small {
+  font-size: var(--fs-label);
+  font-weight: 600;
+}
+
+.st-row {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: 12px;
+}
+
+.ex-stepper .step-btn {
+  min-height: 68px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+.ex-stepper .stepper-value {
+  font-size: var(--fs-num);
+  font-weight: 700;
+}
+
+.ex-stepper .stepper-value.long {
+  font-size: var(--fs-num-sm);
+}
+
+.notes-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* THE action button (mix): full width, 72px, orange, icon + words. */
+.primary-btn.cta-btn {
+  width: 100%;
+  min-height: var(--tap-cta);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+/* === M12 1b task 24: warm-up strip on the Exercise screen (exercise.ts) — start ===
+   Plain text and one neutral button on one row; no transition or animation (the screen is
+   motion-off). The label wraps to "Warm-up 1 of 2" / "20 kg × 8" beside Skip on a phone; the
+   " · " sits in the gap before the second part and is clipped when that part starts a line. */
+.warmup-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 6px 4px 12px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-left: 6px solid var(--warn);
+  border-radius: var(--r-btn);
+}
+
+.warmup-label {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.9em;
+  overflow: hidden;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.warmup-count,
+.warmup-load {
+  white-space: nowrap;
+}
+
+.warmup-load {
+  font-variant-numeric: tabular-nums;
+}
+
+.warmup-sep {
+  display: inline-block;
+  width: 0.9em;
+  margin-left: -0.9em;
+  text-align: center;
+  white-space: pre;
+}
+
+.warmup-skip {
+  flex: none;
+  min-height: var(--tap-min);
+  padding: 0 12px;
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+/* === M12 1b task 24 — end === */
+
+/* ---------- Rest (M4e Track, src/ui/screens/rest.ts) ---------- */
+
+.rest.mood-track {
+  gap: 12px;
+}
+
+.rest.mood-track .wtb-btn {
+  background: var(--bg);
+}
+
+/* Scoreboard: ruled lanes behind a dashed ring that drains in the action colour. */
+.rest-timer {
+  position: relative;
+  align-self: center;
+  flex: none;
+  /* Fits narrow phones: the lanes (::before) add ~29px each side. */
+  width: min(300px, calc(100% - 58px));
+  aspect-ratio: 1;
+  margin: 2px 0;
+}
+
+/* With a coach Apply up (or its "Applied" result, so nothing jumps after the tap), the ring and
+   clock step down one size so the tip ends clear of the sticky Start set on a 390x844 phone:
+   the two filled presses never touch. The clock stays a main number (120px, inside the ring). */
+.rest.mood-track:has(.coach-tip:not([hidden]) :is(.coach-apply, .coach-applied):not([hidden]))
+  .rest-timer {
+  /* 248px still holds the 120px "+0:15"; the tighter block margin keeps the margin above Start
+     set even where the coach text sets a line taller (Linux CI). */
+  width: min(248px, calc(100% - 58px));
+  margin-block: -8px;
+}
+
+.rest.mood-track:has(.coach-tip:not([hidden]) :is(.coach-apply, .coach-applied):not([hidden]))
+  .rest-clock {
+  font-size: var(--fs-rep);
+}
+
+/* Decorative lanes (no information), clipped to the screen's padding box. */
+.rest-timer::before {
+  content: '';
+  position: absolute;
+  inset: -4px -29px;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0 52px,
+    var(--line) 52px calc(52px + var(--line-w))
+  );
+  opacity: 0.6;
+}
+
+.rest-ring {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.rest-ring circle {
+  fill: none;
+  stroke-width: 14;
+}
+
+.rest-ring-bg {
+  stroke: var(--line);
+  stroke-dasharray: 4 8;
+}
+
+.rest-ring-fg {
+  stroke: var(--cta);
+  stroke-linecap: butt;
+}
+
+/* Over: the ring is drained; it steps aside so the wider "+0:12" reads clean. */
+.rest-timer[data-state='over'] .rest-ring {
+  visibility: hidden;
+}
+
+.rest-timer-txt {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.rest-lbl {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--text-2);
+}
+
+.rest.mood-track .rest-clock {
+  margin: 2px 0;
+  font-size: var(--fs-timer);
+  font-weight: 700;
+  line-height: 0.95;
+  white-space: nowrap;
+  color: var(--text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Over the target: amber clock and label, "+0:12" and "Over rest" (words, not colour alone). */
+.rest.mood-track .rest-clock.overtime,
+.rest-timer[data-state='over'] .rest-lbl {
+  color: var(--warn);
+}
+
+.rest-target {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.rest-extend {
+  align-self: center;
+  min-width: 200px;
+  min-height: var(--tap-bar);
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.rest-extend .ic {
+  color: var(--info);
+}
+
+/* Last set strip: caps label over the count, a neutral Fix (Start set is the only orange). */
+.rest.mood-track .lsc,
+.rest.mood-track .coach-tip {
+  border-width: var(--line-w);
+  border-radius: var(--r-card);
+}
+
+.rest.mood-track .lsc-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+}
+
+.rest.mood-track .lsc-prefix {
+  grid-column: 1;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.rest.mood-track .lsc-summary {
+  grid-column: 1;
+  font-size: var(--fs-cue);
+}
+
+.rest.mood-track .lsc-fix {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  border: var(--line-w) solid var(--line);
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+/* Next card: orange top rule marks "now", the figure on a lit stage. */
+.rest-card {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-top: 6px solid var(--cta);
+  border-radius: var(--r-card);
+}
+
+.rest-card-fig {
+  height: 150px;
+  border-radius: 4px;
+  background: radial-gradient(ellipse at 50% 50%, var(--stage-1), var(--stage-2));
+}
+
+.rest-card-fig .muscle-btn,
+.rest-card-fig .muscle-slot.rest {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.rest.mood-track .next-up {
+  margin: 0;
+  min-width: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rest-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.rest-next-name {
+  font-family: var(--font-display);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.rest-next-target {
+  font-size: var(--fs-cue);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.rest-next-target b {
+  font-size: var(--fs-lead);
+  color: var(--text);
+}
+
+.rest-next-cue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--cue);
+}
+
+.rest-next-cue .ic {
+  flex: none;
+}
+
+.rest-next-cue .focus-cue {
+  font-style: normal;
+}
+
+.rest-ring-fg {
+  transition: stroke-dashoffset var(--dur-base) linear;
+}
+
+/* M12: set-progress ring beside "Next · Set 3 of 4" (rest.ts). Filled by motion.ts ringFill. */
+.set-ring {
+  flex: none;
+  width: 28px;
+  height: 28px;
+}
+
+.set-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+
+.set-ring-bg {
+  stroke: var(--line);
+}
+
+.set-ring-fg {
+  stroke: var(--cta);
+  stroke-linecap: round;
+}
+
+/* === M12 1b task 23: effort row on the Rest screen (rest.ts effortRow) — start ===
+   Three radio tiles. Chosen = white fill + dark text + a check mark (never colour alone). */
+.effort {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.effort-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.effort-q {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.effort-why {
+  flex: none;
+  min-width: 96px;
+  min-height: var(--tap-min);
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+}
+
+.effort-why .ic {
+  color: var(--info);
+}
+
+.effort-opts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.effort-opt {
+  position: relative;
+  min-height: 76px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1.1;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+
+.effort-name {
+  font-size: var(--fs-lead);
+  font-weight: 700;
+}
+
+.effort-sub {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.effort-mark {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  line-height: 0;
+  display: none;
+}
+
+.effort-mark .ic {
+  width: 20px;
+  height: 20px;
+}
+
+.effort-opt[aria-checked='true'] {
+  background: var(--selected);
+  border-color: var(--selected);
+  color: var(--on-selected);
+}
+
+.effort-opt[aria-checked='true'] .effort-sub {
+  color: var(--on-selected);
+}
+
+.effort-opt[aria-checked='true'] .effort-mark {
+  display: block;
+}
+/* === M12 1b task 23 — end === */
+
+/* ---------- Pause sheet (src/ui/screens/pauseSheet.ts) ---------- */
+
+.overlay.pause-sheet {
+  z-index: 20; /* above the stage and the sticky Set done */
+  justify-content: flex-end;
+  padding: 0;
+  background: var(--veil);
+}
+
+.pause-panel {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 16px max(16px, env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: var(--line-w) solid var(--line);
+  border-radius: var(--r-card) var(--r-card) 0 0;
+}
+
+.pause-panel .overlay-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.pause-context {
+  text-align: center;
+}
+
+.pause-btn {
+  min-height: var(--tap-cta);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+/* Confirmations only: danger with an icon and words, filled once armed. */
+.pause-end {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.pause-end[data-armed] {
+  background: var(--danger);
+  color: var(--on-danger);
+}
+
+.cta-btn {
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.cta-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 /* ---------- Session ---------- */
@@ -146,43 +1923,25 @@ h1 {
 
 .ghost-btn[data-armed] {
   background: var(--danger);
-  color: #1b0606;
+  color: var(--on-danger);
   border-color: var(--danger);
   font-weight: 700;
 }
 
 .exercise-name {
-  font-size: 32px;
-  font-weight: 800;
+  font-size: var(--fs-head);
+  font-weight: 700;
   line-height: 1.1;
 }
 
-.set-counter {
-  font-size: var(--font-big);
-  font-weight: 800;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
 .focus-cue {
-  color: var(--accent);
+  color: var(--cue);
   font-style: italic;
-}
-
-.stepper {
-  display: grid;
-  grid-template-columns: 36px 64px minmax(0, 1fr) 64px;
-  align-items: center;
-  gap: 8px;
-}
-
-.stepper-label {
-  color: var(--muted);
 }
 
 .step-btn {
   min-height: 64px;
-  font-size: 36px;
+  font-size: var(--fs-title);
   font-weight: 700;
   background: var(--surface-2);
 }
@@ -191,64 +1950,34 @@ h1 {
   text-align: center;
   letter-spacing: -0.04em;
   white-space: nowrap;
-  font-size: var(--font-big);
-  font-weight: 800;
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-}
-
-.stepper-value.long {
-  font-size: 54px;
 }
 
 .primary-btn {
   min-height: 88px;
-  font-size: 30px;
-  font-weight: 800;
-  background: var(--accent);
-  color: var(--accent-ink);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  background: var(--cta);
+  color: var(--on-cta);
   border: none;
   margin-top: auto;
-}
-
-.footer-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-.rest-label {
-  margin-top: 24px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  text-align: center;
-}
-
-.rest-clock {
-  font-size: 120px;
-  font-weight: 800;
-  line-height: 1;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.rest-clock.overtime {
-  color: var(--warn);
-}
-
-.next-up {
-  text-align: center;
-  margin-top: 12px;
 }
 
 .stack {
   position: relative;
 }
 
+/* Layers: screen content ≤ 5 (stage text, tab bar), camera sheet 10, sheets and overlays 20
+   (body / list / notes sheets, Pause), How-to 50. Without a z-index here the Exercise stage's
+   z-index 1 text painted through the fixed sheets. */
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgb(11 13 16 / 0.96);
+  z-index: 20;
+  background: var(--veil);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -257,8 +1986,8 @@ h1 {
 }
 
 .overlay-title {
-  font-size: var(--font-big);
-  font-weight: 800;
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
   text-align: center;
 }
 
@@ -269,8 +1998,8 @@ h1 {
 /* ---------- Summary ---------- */
 
 .summary-title {
-  font-size: 44px;
-  font-weight: 800;
+  font-size: var(--fs-display);
+  font-weight: 700;
   margin-top: 16px;
 }
 
@@ -283,18 +2012,18 @@ h1 {
 
 .stat {
   background: var(--surface);
-  border-radius: 14px;
+  border-radius: var(--r-btn);
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  font-size: 16px;
+  font-size: var(--fs-label);
 }
 
 .stat-value {
-  font-size: 40px;
-  font-weight: 800;
+  font-size: var(--fs-display);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
@@ -309,47 +2038,288 @@ h1 {
 .set-list li {
   display: flex;
   flex-direction: column;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--line);
   padding-bottom: 8px;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
-    transition: none !important;
-  }
+/* ---------- Summary (M4e Energy, src/ui/screens/summary.ts) ---------- */
+
+.summary.mood-energy {
+  gap: 14px;
 }
 
-.nowrap {
-  white-space: nowrap;
+.sum-hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 8px;
+}
+
+/* Green trophy burst: achievement, never a button. */
+.sum-trophy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--success);
+  color: var(--on-success);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--success) 22%, transparent);
+}
+
+.sum-hero-txt {
+  min-width: 0;
+}
+
+.sum-hero .summary-title {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fs-display);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sum-eyebrow {
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--success);
+  margin-bottom: 4px;
+}
+
+.sum-day {
+  overflow-wrap: anywhere;
+}
+
+.sum-meta {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+/* Volume card on the ember surface. */
+.sum-volume {
+  border-radius: var(--r-card);
+  padding: 16px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: radial-gradient(ellipse 80% 90% at 90% 0%, var(--ember-hi), var(--ember) 75%);
+}
+
+.sum-volume-label {
+  font-weight: 700;
+  font-size: var(--fs-cue);
+}
+
+.sum-volume-num {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  line-height: 0.95;
+}
+
+.sum-volume-num .stat-value {
+  font-size: var(--fs-num);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sum-volume-unit {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.sum-volume-note {
+  color: var(--text);
+}
+
+.sum-vs {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  font-size: var(--fs-body);
+}
+
+.sum-vs-up {
+  background: var(--success);
+  color: var(--on-success);
+}
+
+/* Down or flat is information, not failure: a neutral pill, no red. */
+.sum-vs-flat,
+.sum-vs-down {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.sum-vs-down .ic {
+  transform: scaleY(-1);
+}
+
+.sum-bars {
+  display: grid;
+  gap: 8px;
+}
+
+.sum-bar {
+  display: grid;
+  grid-template-columns: 4.2em 1fr auto;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+}
+
+.sum-bar-track {
+  height: 14px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  overflow: hidden;
+}
+
+.sum-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--text-2);
+}
+
+.sum-bar-today .sum-bar-fill {
+  background: var(--success);
+}
+
+.sum-bar-value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* New bests: solid green blocks, full width so each 64px number fits. */
+.sum-bests-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.sum-bests-title .ic {
+  color: var(--success);
+}
+
+.sum-best-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.sum-best {
+  border-radius: var(--r-card);
+  padding: 12px 18px 14px;
+  background: var(--success);
+  color: var(--on-success);
+  min-width: 0;
+}
+
+.sum-best-name {
+  font-weight: 700;
+  font-size: var(--fs-cue);
+  overflow-wrap: anywhere;
+}
+
+.sum-best-now {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.sum-best-was {
+  font-weight: 600;
+}
+
+/* Sets / reps / exercises / long rests. */
+.sum-tiles {
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin: 0;
+}
+
+.sum-tiles[data-count='3'] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.sum-tile {
+  border-radius: var(--r-card);
+  padding: 10px 6px 12px;
+  min-width: 0;
+  font-size: var(--fs-body);
+}
+
+.sum-tile .stat-value {
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.sum-tile-label {
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.summary .section-title {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.summary .set-list li {
+  gap: 2px;
+}
+
+/* Coach and Focus on the Energy cards. Coach is the low-key "Next time", last before Done. */
+.summary .focus-item {
+  border-radius: var(--r-card);
+}
+
+.summary .coach-summary-title,
+.summary .focus-summary-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
 }
 
 /* ---------- M1b: lists, notes, settings ---------- */
 
-.top-bar.end {
-  justify-content: flex-end;
-}
-
-.list-btn {
-  font-weight: 600;
-}
-
 .page-title {
-  font-size: 40px;
-  font-weight: 800;
+  font-size: var(--fs-display);
+  font-weight: 700;
   line-height: 1.1;
 }
 
 .small-title {
-  font-size: 26px;
+  font-size: var(--fs-lead);
 }
 
 .small {
-  font-size: 18px;
+  font-size: var(--fs-body);
 }
 
 .field-label {
-  color: var(--muted);
+  color: var(--text-2);
   margin-top: 6px;
 }
 
@@ -361,14 +2331,14 @@ h1 {
 
 .seg-btn {
   min-height: 72px;
-  font-size: 30px;
-  font-weight: 800;
+  font-size: var(--fs-head);
+  font-weight: 700;
 }
 
 .seg-btn.active {
-  background: var(--accent);
-  color: var(--accent-ink);
-  border-color: var(--accent);
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
 }
 
 .ex-list {
@@ -386,7 +2356,7 @@ h1 {
   align-items: flex-start;
   gap: 2px;
   padding: 12px 14px;
-  border-radius: 14px;
+  border-radius: var(--r-btn);
   background: var(--surface);
   text-align: left;
   width: 100%;
@@ -398,7 +2368,7 @@ h1 {
 }
 
 .ex-row-btn.current {
-  border-color: var(--accent);
+  border-color: var(--cta);
 }
 
 .ex-row-btn.done {
@@ -409,17 +2379,21 @@ h1 {
   cursor: default;
 }
 
+/* Body size: these words stand alone (no icon), so they get the 20px floor, not --fs-label. */
 .status {
   position: absolute;
   right: 14px;
   top: 12px;
-  font-size: 16px;
+  font-size: var(--fs-body);
   font-weight: 700;
 }
 
-.status.done,
+.status.done {
+  color: var(--success); /* achieved */
+}
+
 .status.current {
-  color: var(--accent);
+  color: var(--cta); /* where you are now */
 }
 
 .status.skipped {
@@ -427,7 +2401,7 @@ h1 {
 }
 
 .machine {
-  color: var(--accent);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -441,13 +2415,13 @@ h1 {
 }
 
 .notes-tag {
-  color: var(--muted);
+  color: var(--text-2);
   white-space: nowrap;
 }
 
 .lasting-note {
   color: var(--text);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--text-2);
   padding-left: 10px;
   white-space: pre-wrap;
 }
@@ -461,6 +2435,8 @@ h1 {
   color: var(--text);
 }
 
+/* Sticky, not fixed: the dock keeps its own place at the end of the flow, so at full scroll
+   nothing sits under it (e2e/layout-dock.spec.ts). Only the first screenful runs under it. */
 .sticky-bottom {
   position: sticky;
   bottom: 0;
@@ -496,7 +2472,7 @@ textarea {
   font: inherit;
   color: var(--text);
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 12px;
   padding: 12px 14px;
   min-height: var(--tap-min);
@@ -505,7 +2481,7 @@ textarea {
 
 input:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -567,33 +2543,23 @@ textarea:focus-visible {
 }
 
 .body-map .body {
-  fill: #1f252d;
+  fill: var(--body);
+  stroke: var(--edge);
+  stroke-width: 1.5px;
 }
 
 .body-map .muscle {
-  fill: #3a4452;
+  fill: var(--body);
   stroke: var(--bg);
   stroke-width: 0.6;
 }
 
 .body-map .muscle.secondary {
-  fill: #2f9e5c;
+  fill: var(--muscle-2);
 }
 
 .body-map .muscle.primary {
-  fill: var(--accent);
-}
-
-.rest-next {
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  gap: 12px;
-  align-items: center;
-}
-
-.rest-next .next-up {
-  text-align: left;
-  margin-top: 0;
+  fill: var(--muscle);
 }
 
 .legend {
@@ -612,12 +2578,12 @@ textarea:focus-visible {
 }
 
 .swatch.primary {
-  background: var(--accent);
+  background: var(--muscle);
   margin-left: 0;
 }
 
 .swatch.secondary {
-  background: #2f9e5c;
+  background: var(--muscle-2);
 }
 
 /* ---------- M3: camera + 3D skeleton ---------- */
@@ -626,29 +2592,105 @@ textarea:focus-visible {
   width: 100%;
 }
 
+/* M4c camera-first layout: slim top band, the video fills the rest, slim bottom band. */
 .camera-sheet {
   z-index: 10;
+  max-width: none;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  /* M4e Pro: a solid page, never the translucent overlay veil. */
+  background: var(--bg);
+}
+
+.cam-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+/* The exercise name wraps beside the buttons instead of clipping ("Dumbbell Bicep Curl" never
+   becomes "Dumbbel…"). At --fs-lead most names take two lines, the height of the 56px buttons,
+   so the video keeps its size; a longer name grows the bar rather than losing letters. */
+.cam-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+}
+
+.sheet > .cam-top > .page-title.cam-title {
+  margin: 0;
+  font-size: var(--fs-lead);
+  line-height: 1.08;
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* M4f "Learning" chip: under the title in the first column (the buttons span both rows), so the
+   name keeps its width and the Close button never wraps. Neutral like the exercise badges:
+   static information, nothing to press or react to. */
+.cam-top.has-learning {
+  row-gap: 4px; /* the chip row costs the video (and the set-up card) as little as possible */
+}
+
+.cam-top.has-learning > :not(.cam-title, .cam-learning) {
+  grid-row: 1 / span 2;
+}
+
+.cam-learning {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px 2px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.cam-learning .ic {
+  flex: none;
+  color: var(--text-2);
+}
+
+.cam-3d-btn {
+  min-width: var(--tap-min);
+  font-weight: 700;
+}
+
+.cam-3d-btn[aria-expanded='true'] {
+  background: var(--surface-2);
+  border-color: var(--selected);
 }
 
 .cam-stage {
   position: relative;
-  height: 44dvh;
-  width: auto;
-  max-width: 100%;
-  margin: 0 auto;
-  aspect-ratio: 3 / 4;
-  background: #000;
-  border-radius: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  background: var(--black);
   overflow: hidden;
 }
 
+/* Same box + same cover crop for both, so the skeleton lines up with the person. */
 .cam-video,
 .cam-overlay {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .cam-stage[data-facing='user'] .cam-video,
@@ -656,26 +2698,432 @@ textarea:focus-visible {
   transform: scaleX(-1);
 }
 
-.cam-status {
+/* Count + target, top-left on the video. Right edge is left free for the ROM gauge. */
+.cam-hud {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 104px;
+  display: flex;
+  pointer-events: none;
+}
+
+/* Range-of-motion gauge column: right edge, clear of the count (left), the stage buttons
+   (bottom 8–64px) and the person (centre). */
+.cam-gauge-slot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  bottom: 80px;
+  /* Wide enough for 20px bold Start/Target labels in wider fonts too (Linux fallbacks). */
+  width: 88px;
+  pointer-events: none;
+}
+
+.cam-gauge-slot:empty,
+.cam-stage.setup-open .cam-gauge-slot {
+  display: none;
+}
+
+/* Vertical bar: target line at the top, start line at the bottom, for every exercise. M4e Pro:
+   a solid surface panel (never translucent), neutral fill, the target mark in --success. No
+   transitions: it follows the live angle. */
+.rom-gauge {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 4px;
+  border-radius: var(--r-card);
+  border: var(--line-w) solid var(--line);
+  background: var(--surface);
+}
+
+.rom-gauge[hidden] {
+  display: none;
+}
+
+.gauge-track {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Not clipped: the Start/Target labels sit outside the lines. The fill and marker stay inside
+     anyway (the position is clamped to the track's −0.25…1.25 scale). This margin plus the
+     track's own ±0.25 headroom keeps each label clear of the gauge edge on short phones. */
+  margin: 22px 0;
+}
+
+/* The empty channel the fill runs in. */
+.gauge-track::before {
+  content: '';
+  position: absolute;
+  inset: 0 12px;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+/* Box from the start line (bottom) to the target line (top): scale 1 = the full range. */
+.gauge-range {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+}
+
+.gauge-fill {
+  position: absolute;
+  inset: 0;
+  transform: scaleY(0);
+  transform-origin: bottom;
+  background: var(--text-2);
+  will-change: transform;
+}
+
+.rom-gauge[data-gauge-reached='true'] .gauge-fill {
+  background: var(--success);
+}
+
+/* Current position: a white cap at the end of the fill (the fill itself stays neutral). */
+.gauge-now {
+  position: absolute;
+  inset: 0 -6px;
+  transform: translateY(100%);
+  border-top: 5px solid var(--text);
+  will-change: transform;
+}
+
+.gauge-mark {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  background: var(--text-2);
+}
+
+/* The target is what the rep is going for: always marked in --success (and labelled). */
+.gauge-target {
+  background: var(--success);
+}
+
+.gauge-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 3px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.gauge-target .gauge-label {
+  bottom: calc(100% + 3px);
+  color: var(--success);
+}
+
+.gauge-start .gauge-label {
+  top: calc(100% + 3px);
+}
+
+/* Reached this rep: the fill turns green and the target line thicker (not colour alone). */
+.rom-gauge[data-gauge-reached='true'] .gauge-target {
+  height: 8px;
+  background: var(--success);
+}
+
+.rom-gauge[data-gauge-reached='true'] .gauge-target .gauge-label {
+  color: var(--success);
+}
+
+/* The mark the last partial missed: amber, thicker, dashed (not colour alone). Reaching the
+   target in the next rep turns that line green instead (rule above is more specific). */
+.gauge-mark[data-missed] {
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--warn) 0 10px, transparent 10px 14px);
+}
+
+.gauge-mark[data-missed] .gauge-label {
+  color: var(--warn);
+}
+
+.gauge-angle {
+  flex: 0 0 auto;
+  margin: 0;
+  text-align: center;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
-.cam-controls {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr 1fr;
+.cam-stage-bottom {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
   gap: 8px;
+  pointer-events: none;
+}
+
+.cam-stage-bottom > * {
+  pointer-events: auto;
+}
+
+.cam-icon-btn,
+.cam-chip {
+  min-height: var(--tap-min);
+  border-radius: var(--r-btn);
+  border: var(--line-w) solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.cam-icon-btn {
+  width: var(--tap-bar);
+  min-height: var(--tap-bar);
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.cam-switch {
+  margin-left: auto;
+}
+
+.cam-icon-btn .icon {
+  width: 32px;
+  height: 32px;
+}
+
+.cam-chip {
+  padding: 0 16px;
+  font-weight: 700;
+}
+
+.cam-chip[hidden] {
+  display: none;
+}
+
+/* "Set up your phone": low on the video, clear of the count, above the stage buttons.
+   "Got it" sits in the head row (top right), so it stays in view whatever the card's height:
+   a learning chip or a long exercise name makes the top band taller and the stage shorter. */
+.cam-setup {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 72px;
+  /* Never over the count: stage minus the HUD (measured, --hud-h) and the gaps around it. On a
+     short phone the floor keeps the head row with "Got it" (it may then cover the set line
+     under the count, never the count itself). */
+  max-height: max(80px, calc(100% - 72px - 16px - var(--hud-h, 200px)));
+  overflow-y: auto;
+  padding: 10px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: start;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+
+.cam-setup > * {
+  grid-column: 1 / -1;
+}
+
+.cam-setup[hidden] {
+  display: none;
+}
+
+.cam-setup > .setup-head {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.setup-title {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.setup-line {
+  margin: 0;
+  font-size: var(--fs-cue);
+  line-height: 1.2;
+}
+
+/* M4f: the learning note sits under the placement lines, secondary (it's not a placement step). */
+.setup-learning {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.cam-setup > .setup-hide {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  padding: 0 16px;
+}
+
+.setup-pic {
+  flex: 0 0 auto;
+  width: 84px;
+  height: 56px;
+}
+
+.setup-pic .pic-phone {
+  fill: var(--surface-2);
+  stroke: var(--text);
+  stroke-width: 2;
+}
+
+/* Neutral: on the camera screen only Set done is orange. */
+.setup-pic .pic-lens {
+  fill: var(--text);
+}
+
+.setup-pic .pic-sight {
+  stroke: var(--text-2);
+  stroke-width: 2;
+  stroke-dasharray: 4 4;
+}
+
+.setup-pic .pic-person {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Short phones (375x667, or Safari with its toolbars): the whole set-up card fits without an
+   inner scroll, for every rule and the tallest top band (long name + Learning chip). While it is
+   up (no person found yet) the camera gives it room nothing needs right then:
+   - the switch-camera button moves to the top right, where the ROM gauge goes (hidden while the
+     card is up), so the card can sit on the stage's bottom edge;
+   - under the count, the set line and the REPS label hide (the Exercise screen shows the set;
+     "0 / 12" still reads as the count), and the fps/status line under the video hides, unless
+     it carries an error (camera blocked, camera or pose-model failure: data-error on the sheet);
+   - the card's lines use the 20px body size and tighter spacing.
+   The count number and the frame hint stay, and the card never covers them. Everything is back
+   as soon as the card closes.
+   Always on a short phone, card up or not (no jump when it closes), the top band gives the
+   video more height: the exercise name drops to the list-name size (22px) and Close loses a
+   little side padding, so even "Standing Dumbbell Triceps Extension" takes two lines (four at
+   26px), and the bands sit 4px from the video instead of 12px. Before this the card had ~7px of
+   slack under that name, and one placement line wrapping in Linux's wider text rendering cut
+   the card's last line (CI). Now it keeps ~88px: two extra wrapped lines still fit. */
+@media (max-height: 740px) {
+  .sheet.camera-sheet {
+    gap: 4px;
+  }
+
+  .sheet > .cam-top > .page-title.cam-title {
+    font-size: var(--fs-cue);
+  }
+
+  .sheet > .cam-top > .cam-close {
+    padding: 0 10px;
+  }
+
+  .cam-stage.setup-open .cam-stage-bottom {
+    top: 8px;
+    bottom: auto;
+    left: auto;
+  }
+
+  .cam-stage.setup-open .rep-set,
+  .cam-stage.setup-open .rep-label,
+  .camera-sheet:not([data-error]):has(.cam-stage.setup-open) .cam-status {
+    display: none;
+  }
+
+  .cam-stage.setup-open .cam-setup {
+    bottom: 8px;
+    max-height: max(80px, calc(100% - 8px - 16px - var(--hud-h, 200px)));
+    padding: 8px 12px;
+    row-gap: 2px;
+  }
+
+  .cam-stage.setup-open .setup-line {
+    font-size: var(--fs-body);
+    line-height: 1.15;
+  }
+}
+
+/* 3D live skeleton: collapsed until "3D" is tapped; then it takes room from the video. */
+.cam-3d {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 0;
+}
+
+.cam-3d[hidden] {
+  display: none;
+}
+
+.cam-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cam-bottom {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+}
+
+.cam-bottom .primary-btn {
+  width: 100%;
+  margin-top: 0;
+}
+
+/* Set done keeps the mix CTA's 72px, a little taller here for the sweaty-thumb case. */
+.cam-bottom .cta-btn {
+  min-height: var(--tap-hero);
+}
+
+.cam-status,
+.cam-privacy {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cam-status {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .small-seg {
   min-height: var(--tap-min);
-  font-size: 20px;
+  font-size: var(--fs-body);
 }
 
 .skeleton-slot {
   width: 100%;
-  height: 230px;
+  height: 200px;
   background: var(--surface);
-  border-radius: 14px;
+  border-radius: var(--r-btn);
   overflow: hidden;
 }
 
@@ -686,40 +3134,69 @@ textarea:focus-visible {
   display: block;
 }
 
-/* ---------- M4: live rep counter + spoken-count switch ---------- */
+/* ---------- M4: live rep counter (on the video since M4c) ---------- */
 
+/* M4e Pro HUD: a solid --surface panel (never translucent), so contrast holds over any video. */
 .rep-panel {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 16px;
-  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+  padding: 8px 16px 12px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-card);
 }
 
+/* "7 / 12" on one line, the REPS label under it. */
 .rep-count {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  column-gap: 10px;
 }
 
 .rep-num {
   margin: 0;
   min-width: 1.2ch;
-  font-size: 96px;
-  font-weight: 800;
-  line-height: 1;
-  color: var(--accent);
+  font-size: var(--fs-rep);
+  font-weight: 700;
+  line-height: 0.95;
+  color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 
-.rep-label {
+/* The count is white; with a target it turns green once the target is reached. */
+
+.rep-panel.at-target .rep-num,
+.rep-panel.at-target .rep-target {
+  color: var(--success);
+}
+
+.rep-target {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--fs-display);
   font-weight: 700;
-  color: var(--muted);
+  line-height: 1;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rep-label {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.rep-set {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
 }
 
 .rep-info {
@@ -735,31 +3212,38 @@ textarea:focus-visible {
 }
 
 .rep-side {
-  font-size: 24px;
+  font-size: var(--fs-cue);
   font-weight: 700;
 }
 
-.rep-hint {
-  font-size: 22px;
+.rep-hint,
+.rep-coach {
+  font-size: var(--fs-cue);
   font-weight: 700;
   color: var(--warn);
 }
 
+/* The coach line is spoken: the mix cue style, a lavender left bar beside the words. */
+.rep-coach {
+  margin-top: 4px;
+  padding: 2px 0 2px 12px;
+  border-left: 6px solid var(--cue);
+  color: var(--text);
+}
+
 .rep-partials {
-  font-size: 20px;
-  color: var(--muted);
+  font-size: var(--fs-body);
+  color: var(--text-2);
 }
 
 .rep-side:empty,
 .rep-hint:empty,
+.rep-coach:empty,
 .rep-partials:empty {
   display: none;
 }
 
-.camera-sheet.counting .cam-stage {
-  height: 40dvh;
-}
-
+/* The rep counter keeps its pre-M12 bump (not a token: "unchanged mid-set"). */
 .rep-num.bump {
   animation: rep-bump 260ms ease-out;
 }
@@ -773,34 +3257,422 @@ textarea:focus-visible {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .rep-num.bump {
-    animation: none;
-  }
-}
-
+/* Switch row (Settings and the developer log): label, the state as a word, and a drawn track.
+   On = white track with a dark knob on the right; Off = dark track, grey knob on the left. The
+   word carries the state too, so it never rests on the knob or the fill alone. */
 .switch-btn {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: var(--tap-min);
-  padding: 0 18px;
+  min-height: var(--tap-bar);
+  padding: 8px 16px 8px 18px;
   text-align: left;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  background: var(--surface);
+  border-radius: var(--r-card);
+}
+
+.switch-label {
+  flex: 1;
+  min-width: 0;
 }
 
 .switch-state {
-  min-width: 64px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  text-align: center;
-  font-weight: 800;
-  background: var(--surface-2);
-  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.switch-state::after {
+  content: '';
+  flex: none;
+  width: 60px;
+  height: 34px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--edge);
+  background: radial-gradient(circle at 15px 50%, var(--text-2) 0 11px, transparent 12px)
+    var(--surface-2);
 }
 
 .switch-btn.on .switch-state {
-  background: var(--accent);
-  color: var(--accent-ink);
+  color: var(--text);
 }
+
+.switch-btn.on .switch-state::after {
+  border-color: var(--selected);
+  background: radial-gradient(circle at 41px 50%, var(--on-selected) 0 12px, transparent 13px)
+    var(--selected);
+}
+
+/* ---------- Settings (M4e Pro, src/ui/screens/settings.ts) ---------- */
+
+.settings.mood-pro {
+  gap: 18px;
+}
+
+.set-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.set-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.set-note {
+  font-size: var(--fs-body);
+}
+
+/* M12 slice 1c Settings → About (last section): the app name, version line, credit. */
+.settings .about-name {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+/* Neutral actions (Camera test, Speaker check): surface-2, never the action colour. */
+.settings .set-action,
+.settings .voice-test .ghost-btn {
+  width: 100%;
+  min-height: var(--tap-bar);
+  padding: 0 18px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.settings .voice-test {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* M9 B2 Settings → Backup (src/ui/screens/backupPanel.ts): neutral actions, the two-tap
+   Replace reuses .plan-reset (danger outline, filled once armed). Errors: warn colour (attention)
+   with plain words ("Nothing changed"), never colour alone. */
+.settings .backup-panel,
+.settings .backup-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings .backup-file {
+  display: none;
+}
+
+.settings .backup-q {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.settings .backup-status.error {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+/* Segmented choices (unit, coach voice): one outlined track, the chosen one a white fill + check. */
+.settings .segmented {
+  gap: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.settings .seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--tap-bar);
+  border: none;
+  border-radius: calc(var(--r-card) - 6px);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-title);
+  font-weight: 700;
+}
+
+.settings .seg-btn.active {
+  background: var(--selected);
+  color: var(--on-selected);
+}
+
+/* Accent picker (src/ui/accentPicker.ts). */
+.accent-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 8px;
+}
+
+.accent-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: var(--tap-bar);
+  padding: 0 6px;
+  border: 2px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.accent-opt.on {
+  background: var(--selected);
+  border-color: var(--selected);
+  color: var(--on-selected);
+}
+
+.accent-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-pill);
+  border: 2px solid var(--bg);
+}
+
+.accent-opt.on .accent-swatch {
+  border-color: var(--on-selected);
+}
+
+.accent-swatch-orange {
+  background: var(--accent-orange);
+}
+
+.accent-swatch-volt {
+  background: var(--accent-volt);
+}
+
+.accent-swatch-yellow {
+  background: var(--accent-yellow);
+}
+
+/* Dark on all three swatches (each pair >= 7:1, tokens.test.ts). */
+.accent-check {
+  color: var(--on-selected);
+  width: 18px;
+  height: 18px;
+}
+
+/* One word, never broken mid-word; narrow phones drop to two columns (auto-fit) instead. */
+.accent-name {
+  white-space: nowrap;
+}
+
+/* ---------- Overlays (M4e Pro): exercise list, notes and body sheets (app.ts) ----------
+   Graphite page, neutral Close/Cancel, cards at the Pro radius. The only orange: Save (a press)
+   and the current exercise's outline (where you are now). */
+
+.sheet {
+  gap: 12px;
+}
+
+.sheet > .top-bar {
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.sheet .page-title,
+.sheet .page-title.small-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.sheet > .top-bar .ghost-btn {
+  flex: none;
+  min-width: 96px;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+/* Camera: "3D" is a short word, so its button stays at the tap minimum and leaves the name room. */
+.sheet > .cam-top .cam-3d-btn {
+  min-width: var(--tap-min);
+  padding: 0 14px;
+}
+
+.sheet .ex-row-btn {
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: var(--r-card);
+}
+
+.sheet .ex-row-btn strong {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+/* Only the name line makes room for the status word, so the badges get the full width. */
+.sheet .ex-row-btn:has(.status) strong {
+  padding-right: 96px;
+}
+
+.sheet .ex-row-btn.current {
+  border: 2px solid var(--cta);
+}
+
+/* Finished rows step back by colour of the name, not opacity, so the ✓ done stays crisp. */
+.sheet .ex-row-btn.done {
+  opacity: 1;
+}
+
+.sheet .ex-row-btn.done strong {
+  color: var(--text-2);
+}
+
+.sheet .status {
+  top: 14px;
+  right: 16px;
+}
+
+.sheet .field-label {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+.sheet input[type='text'],
+.sheet textarea {
+  border-radius: var(--r-btn);
+  background: var(--surface);
+}
+
+.sheet > .primary-btn {
+  min-height: var(--tap-cta);
+  margin-top: 12px;
+  font-size: var(--fs-title);
+  font-weight: 700;
+  border-radius: var(--r-btn);
+}
+
+.body-sheet .muscle-slot.full {
+  border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  background: radial-gradient(ellipse at 50% 40%, var(--stage-1), var(--stage-2) 70%);
+}
+
+.body-sheet .legend {
+  font-weight: 600;
+}
+
+/* ---------- M12 missed-day card on Today (today.ts missedDayCard) ----------
+   Same card as the missing-kit prompt: amber edge for attention, icon + words (never colour
+   alone), Move it filled, Skip it outlined, both ≥ 56px. Shown, not spoken. */
+.missed-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 12px 14px;
+  border-radius: var(--r-card);
+  background: var(--surface-2);
+  border-left: 4px solid var(--warn);
+}
+
+.missed-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.missed-text .ic {
+  flex: none;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.missed-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.missed-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.missed-cta {
+  background: var(--cta);
+  color: var(--on-cta);
+  border-color: var(--cta);
+}
+
+/* ===== M12 slice 1b task 29 (ui-engineer): short-on-time pair lines — START =====
+   Used by src/ui/coach/proposalCard.ts (`.proposal-pair`, `.pair-tag`) and
+   src/ui/screens/preview.ts (`.pair-note`). A pair is said with an icon + the word "Pair" and a
+   sentence, never by colour: neutral text colours only. Text ≥ 20px. */
+
+.pair-tag {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px 2px 8px;
+  border: 2px solid var(--text-2);
+  border-radius: var(--r-pill);
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.proposal-row.proposal-pair {
+  gap: 6px;
+}
+
+.pair-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pair-note .ic {
+  flex: none;
+  color: var(--text-2);
+}
+
+.ex-row[data-pair] {
+  border-left: 4px solid var(--text-2);
+}
+/* ===== M12 slice 1b task 29 (ui-engineer): short-on-time pair lines — END ===== */

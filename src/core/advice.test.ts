@@ -1,0 +1,1111 @@
+import { describe, expect, it } from 'vitest';
+import {
+  ADVICE_BANNED_WORDS,
+  type Advice,
+  adviceSpeakDue,
+  adviceSpeakOnCommit,
+  afterSetAdvice,
+  coachSummary,
+  nextTimeAdvice,
+  wordCount,
+} from './advice';
+import type { SessionState } from './session';
+import { EFFORT_RULES } from './trainer/effortRules';
+import type { FocusCueId, ProgramDay, SetEffort, SetLog } from './types';
+import { fromUnit, toUnit, type Unit } from './units';
+
+// Made-up plan; numbers chosen to exercise the rules, not anyone's real training.
+const day: ProgramDay = {
+  id: 'test-day',
+  name: 'Test day',
+  exercises: [
+    { exerciseId: 'bench', sets: 3, targetReps: [8, 8], restSec: 90, tracking: 'manual' },
+    { exerciseId: 'curl', sets: 3, targetReps: [8, 12], restSec: 60, tracking: 'pose' },
+    { exerciseId: 'pushup', sets: 2, targetReps: [10, 15], restSec: 60, tracking: 'manual' },
+    { exerciseId: 'raise', sets: 3, targetReps: [12, 15], restSec: 45, tracking: 'pose' },
+    { exerciseId: 'press', sets: 5, targetReps: [8, 8], restSec: 90, tracking: 'manual' },
+  ],
+};
+
+const NAMES: Record<string, string> = {
+  bench: 'Dumbbell Bench Press',
+  curl: 'Dumbbell Bicep Curl',
+  pushup: 'Pushups',
+  raise: 'Side Lateral Raise',
+  press: 'Dumbbell Shoulder Press',
+};
+const name = (id: string) => NAMES[id] ?? id;
+const LONGEST = 'Dumbbell Seated One-Leg Calf Raise';
+const longName = () => LONGEST;
+
+const lb = (v: number) => fromUnit(v, 'lb');
+
+let t = 0;
+function lg(
+  exerciseId: string,
+  reps: number,
+  weightKg: number,
+  opts: {
+    partials?: number;
+    rest?: number;
+    target?: number;
+    cues?: FocusCueId[];
+    effort?: SetEffort;
+  } = {},
+): SetLog {
+  t += 100_000;
+  return {
+    sessionId: 's1',
+    exerciseId,
+    setIndex: 0,
+    reps,
+    ...(opts.partials ? { partials: opts.partials } : {}),
+    weightKg,
+    restTakenSec: opts.rest ?? 60,
+    ...(opts.target !== undefined ? { restTargetSec: opts.target } : {}),
+    ...(opts.cues ? { cues: opts.cues } : {}),
+    ...(opts.effort ? { effort: opts.effort } : {}),
+    startedAt: t,
+    endedAt: t + 30_000,
+  };
+}
+
+function state(logs: SetLog[], unit: Unit = 'kg'): SessionState {
+  // setIndex per exercise, as the reducer would log it.
+  const seen: Record<string, number> = {};
+  const fixed = logs.map((l) => {
+    const i = seen[l.exerciseId] ?? 0;
+    seen[l.exerciseId] = i + 1;
+    return { ...l, setIndex: i };
+  });
+  return {
+    sessionId: 's1',
+    day,
+    startedAt: 0,
+    endedAt: null,
+    phase: 'rest',
+    exIndex: 0,
+    setIndex: 0,
+    reps: 8,
+    partials: 0,
+    focusCues: null,
+    weightKg: 0,
+    setStartedAt: 0,
+    lastRestTakenSec: 0,
+    restTargetSec: 90,
+    restAccumMs: 0,
+    restRunningSince: 0,
+    paused: false,
+    logs: fixed,
+    skipped: [],
+    restOverruns: 0,
+    unit,
+    lastWeightKg: {},
+  };
+}
+
+const rule = (a: Advice | null) => a?.rule ?? null;
+
+describe('afterSetAdvice: no data', () => {
+  it('gives no advice with no logs', () => {
+    expect(afterSetAdvice(state([]), name)).toBeNull();
+  });
+
+  it('gives no advice for an exercise not in the day', () => {
+    expect(afterSetAdvice(state([lg('other', 8, 20)]), name)).toBeNull();
+  });
+
+  it('gives no advice for a plain set in range (otherwise)', () => {
+    expect(afterSetAdvice(state([lg('curl', 10, 10)]), name)).toBeNull();
+  });
+});
+
+describe('afterSetAdvice A1: partials ≥ 2 on this set', () => {
+  it('fires with 2 partials', () => {
+    const a = afterSetAdvice(state([lg('curl', 10, 10, { partials: 2 })]), name);
+    expect(rule(a)).toBe('A1');
+    expect(a?.text).toBe('Keep the weight. Focus on full range.');
+    expect(a?.apply).toBeUndefined();
+    expect(a?.exerciseId).toBe('curl');
+  });
+
+  it('does not fire with 1 partial', () => {
+    expect(rule(afterSetAdvice(state([lg('curl', 10, 10, { partials: 1 })]), name))).toBeNull();
+  });
+
+  it('only looks at this set, not earlier sets', () => {
+    const s = state([lg('curl', 10, 10, { partials: 3 }), lg('curl', 10, 10)]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('wins over A2 (below min with partials)', () => {
+    expect(rule(afterSetAdvice(state([lg('curl', 6, 10, { partials: 2 })]), name))).toBe('A1');
+  });
+
+  it('bodyweight drops the weight wording', () => {
+    const a = afterSetAdvice(state([lg('pushup', 12, 0, { partials: 2 })]), name);
+    expect(rule(a)).toBe('A1');
+    expect(a?.text).toBe('Focus on full range.');
+  });
+});
+
+describe('afterSetAdvice A2: reps < min', () => {
+  it('fires below min', () => {
+    const a = afterSetAdvice(state([lg('curl', 7, 10)]), name);
+    expect(rule(a)).toBe('A2');
+    expect(a?.text).toBe('Keep the weight. Aim for 8 reps.');
+    expect(a?.say).toBe('Keep the weight. Aim for 8 reps.');
+  });
+
+  it('does not fire at min', () => {
+    expect(rule(afterSetAdvice(state([lg('curl', 8, 10)]), name))).toBeNull();
+  });
+
+  it('wins over A5', () => {
+    const s = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 5, 4, { rest: 200 }),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBe('A2');
+  });
+
+  it('bodyweight: reps only', () => {
+    const a = afterSetAdvice(state([lg('pushup', 6, 0)]), name);
+    expect(a?.text).toBe('Aim for 10 reps.');
+  });
+});
+
+describe('afterSetAdvice A3: ≥ 2 clean sets at the top', () => {
+  it('needs at least 2 sets (one is the plan, not over-performance)', () => {
+    expect(rule(afterSetAdvice(state([lg('bench', 8, 20)]), name))).toBeNull();
+  });
+
+  it('fires on the second clean set at the top, kg step 2.5 with apply', () => {
+    const a = afterSetAdvice(state([lg('bench', 8, 20), lg('bench', 8, 20)]), name);
+    expect(rule(a)).toBe('A3');
+    expect(a?.text).toBe('Strong set. Try +2.5 kg next set.');
+    expect(a?.say).toBe('Strong set. Try plus 2.5 kilos next set.');
+    expect(a?.apply?.weightKg).toBeCloseTo(22.5, 9);
+    expect(a?.why).toContain('8, 8');
+  });
+
+  it('does not fire if any set was below max', () => {
+    const s = state([lg('curl', 11, 10), lg('curl', 12, 10)]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('does not fire if any set had a partial', () => {
+    const s = state([lg('bench', 8, 20, { partials: 1 }), lg('bench', 8, 20)]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('lb mode: 35 lb stored as odd kg → "+5 lb", apply is 40 lb exactly', () => {
+    const s = state([lg('bench', 8, lb(35)), lg('bench', 8, lb(35))], 'lb');
+    const a = afterSetAdvice(s, name);
+    expect(rule(a)).toBe('A3');
+    expect(a?.text).toBe('Strong set. Try +5 lb next set.');
+    expect(a?.say).toBe('Strong set. Try plus 5 pounds next set.');
+    expect(a?.apply?.weightKg).toBeCloseTo(lb(40), 9);
+    expect(toUnit(a?.apply?.weightKg ?? 0, 'lb')).toBeCloseTo(40, 9);
+  });
+
+  it('snaps an off-grid weight to the display step', () => {
+    const s = state([lg('bench', 8, 21), lg('bench', 8, 21)]);
+    // 21 + 2.5 = 23.5 → nearest 2.5 step is 22.5
+    expect(afterSetAdvice(s, name)?.apply?.weightKg).toBeCloseTo(22.5, 9);
+  });
+
+  it('only counts sets at the current weight: one set after Apply is not enough', () => {
+    // Verifier case: 8×35, 8×35 → Apply 40 → 8×40 must not suggest 45 yet.
+    const three = [lg('press', 8, lb(35)), lg('press', 8, lb(35)), lg('press', 8, lb(40))];
+    expect(rule(afterSetAdvice(state(three, 'lb'), name))).toBeNull();
+    // A second clean set at 40 lb earns the next step.
+    const four = state([...three, lg('press', 8, lb(40))], 'lb');
+    const a = afterSetAdvice(four, name);
+    expect(rule(a)).toBe('A3');
+    expect(a?.text).toBe('Strong set. Try +5 lb next set.');
+    expect(toUnit(a?.apply?.weightKg ?? 0, 'lb')).toBeCloseTo(45, 9);
+  });
+
+  it('earlier sets at another weight do not block A3 at the current weight', () => {
+    const s = state([
+      lg('press', 7, 20, { partials: 1 }),
+      lg('press', 8, 22.5),
+      lg('press', 8, 22.5),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBe('A3');
+  });
+
+  it('off-grid weight: the text names the real jump to the Apply weight', () => {
+    // 16 + 2.5 = 18.5 → snapped 17.5: the text must say +1.5 kg, not +2.5 kg.
+    const a = afterSetAdvice(state([lg('bench', 8, 16), lg('bench', 8, 16)]), name);
+    expect(a?.apply?.weightKg).toBeCloseTo(17.5, 9);
+    expect(a?.text).toBe('Strong set. Try +1.5 kg next set.');
+    expect(a?.say).toBe('Strong set. Try plus 1.5 kilos next set.');
+  });
+
+  it('off-grid weight in lb: text and Apply agree', () => {
+    // 33 lb + 5 = 38 → snapped 40 lb: +7 lb.
+    const a = afterSetAdvice(state([lg('bench', 8, lb(33)), lg('bench', 8, lb(33))], 'lb'), name);
+    expect(toUnit(a?.apply?.weightKg ?? 0, 'lb')).toBeCloseTo(40, 9);
+    expect(a?.text).toBe('Strong set. Try +7 lb next set.');
+  });
+
+  it('25% guard: 5 lb on 15 lb is too big a jump → no A3', () => {
+    const s = state([lg('raise', 15, lb(15)), lg('raise', 15, lb(15))], 'lb');
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('25% guard: 5 lb on 20 lb is exactly 25% → allowed', () => {
+    const s = state([lg('raise', 15, lb(20)), lg('raise', 15, lb(20))], 'lb');
+    const a = afterSetAdvice(s, name);
+    expect(rule(a)).toBe('A3');
+    expect(toUnit(a?.apply?.weightKg ?? 0, 'lb')).toBeCloseTo(25, 9);
+  });
+
+  it('25% guard in kg: 2.5 on 10 kg allowed, on 7.5 kg not', () => {
+    expect(rule(afterSetAdvice(state([lg('raise', 15, 10), lg('raise', 15, 10)]), name))).toBe(
+      'A3',
+    );
+    expect(
+      rule(afterSetAdvice(state([lg('raise', 15, 7.5), lg('raise', 15, 7.5)]), name)),
+    ).toBeNull();
+  });
+
+  it('wins over A5', () => {
+    const s = state([
+      lg('curl', 8, 10),
+      lg('bench', 8, 20, { rest: 200 }),
+      lg('bench', 8, 20, { rest: 200 }),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBe('A3');
+  });
+});
+
+describe('afterSetAdvice A4: bodyweight at the top', () => {
+  it('suggests one more rep, never an apply', () => {
+    // One set at the top is the plan, not over-performance.
+    const s = state([lg('pushup', 15, 0)]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+    const a = afterSetAdvice(state([lg('raise', 15, 0), lg('raise', 16, 0)]), name);
+    expect(rule(a)).toBe('A4');
+    expect(a?.text).toBe('Strong set. Try 17 reps next set.');
+    expect(a?.apply).toBeUndefined();
+  });
+});
+
+describe('afterSetAdvice A5: rest ran long', () => {
+  it('fires when this set and another overran (uses the previous log’s exercise restSec)', () => {
+    // bench rest 90: 121 > 120 overran. curl after bench: rest compared to bench's 90.
+    const s = state([
+      lg('bench', 8, 20),
+      lg('bench', 7, 20, { rest: 121 }),
+      lg('bench', 8, 20),
+      lg('curl', 10, 10, { rest: 121 }),
+    ]);
+    // bench set 2 is < min, but this set is curl; rule A2 not on this set.
+    const a = afterSetAdvice(s, name);
+    expect(rule(a)).toBe('A5');
+    expect(a?.text).toBe('Rest ran long. Start when the timer says go.');
+  });
+
+  it('uses the previous log’s exercise restSec, not this exercise’s', () => {
+    // raise restSec 45 → 91 would overrun against raise; previous log is bench (90) → 91 is fine.
+    const s = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('bench', 8, 20),
+      lg('raise', 13, 5, { rest: 91 }),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+    // …and 121 against bench's 90 does overrun.
+    const s2 = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('bench', 8, 20),
+      lg('raise', 13, 5, { rest: 121 }),
+    ]);
+    expect(rule(afterSetAdvice(s2, name))).toBe('A5');
+  });
+
+  it('prefers the logged rest target: a +30 s rest used in full is not an overrun (M4e A-q3)', () => {
+    // raise restSec 45; the rest before the last set was extended to 75 and ran 105 s = 75 + 30.
+    const extended = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 105, target: 75 }),
+    ]);
+    expect(rule(afterSetAdvice(extended, name))).toBeNull();
+    // Past the extended target + grace it still counts, and "why" shows the extended target.
+    const late = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 106, target: 75 }),
+    ]);
+    const a = afterSetAdvice(late, name);
+    expect(rule(a)).toBe('A5');
+    expect(a?.why).toContain('106 s vs 75 s target');
+  });
+
+  it('an extended earlier rest no longer counts toward the 2-overrun total', () => {
+    // curl rest 120 would overrun plan 60 + 30, but its target was extended to 90.
+    const s = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 120, target: 90 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 200 }),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('old rows without restTargetSec fall back to the plan (105 s vs 45 s overruns)', () => {
+    const s = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 105 }),
+    ]);
+    const a = afterSetAdvice(s, name);
+    expect(rule(a)).toBe('A5');
+    expect(a?.why).toContain('105 s vs 45 s target');
+  });
+
+  it('exactly target + 30 is not an overrun', () => {
+    const s = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 13, 5),
+      lg('raise', 13, 5, { rest: 75 }),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('needs ≥ 2 overruns including this one', () => {
+    const s = state([lg('curl', 10, 10), lg('curl', 10, 10, { rest: 200 })]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('does not fire when this set did not overrun', () => {
+    const s = state([
+      lg('curl', 10, 10),
+      lg('curl', 10, 10, { rest: 200 }),
+      lg('raise', 13, 5, { rest: 200 }),
+      lg('raise', 13, 5),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+
+  it('the first set of the workout never overran', () => {
+    const s = state([lg('curl', 10, 10, { rest: 999 }), lg('curl', 10, 10, { rest: 200 })]);
+    expect(rule(afterSetAdvice(s, name))).toBeNull();
+  });
+});
+
+describe('afterSetAdvice: final set gives the next-time rule', () => {
+  it('final planned set → N rule, not A3', () => {
+    const s = state([lg('bench', 8, 20), lg('bench', 8, 20), lg('bench', 8, 20)]);
+    const a = afterSetAdvice(s, name);
+    expect(rule(a)).toBe('N3');
+    expect(a?.text).toBe('Next time on Dumbbell Bench Press: +2.5 kg.');
+    expect(a?.apply).toBeUndefined();
+  });
+
+  it('final set with partials → N rule, not A1', () => {
+    const s = state([lg('pushup', 12, 0), lg('pushup', 12, 0, { partials: 2 })]);
+    expect(rule(afterSetAdvice(s, name))).toBe('N4');
+  });
+
+  it('uses last session sets for N1 when given', () => {
+    const s = state([lg('pushup', 12, 0), lg('pushup', 12, 0)]);
+    expect(rule(afterSetAdvice(s, name, {}))).toBe('N5');
+    const s2 = state([lg('curl', 10, 10), lg('curl', 10, 10), lg('curl', 7, 10)]);
+    const last = { curl: [lg('curl', 6, 10)] };
+    expect(rule(afterSetAdvice(s2, name, last))).toBe('N1');
+  });
+});
+
+describe('nextTimeAdvice', () => {
+  const nt = (
+    logs: SetLog[],
+    last: SetLog[] = [],
+    unit: Unit = 'kg',
+    id = logs[0]?.exerciseId ?? 'curl',
+  ) => nextTimeAdvice(state(logs, unit), id, last, name);
+
+  it('no sets today → null', () => {
+    expect(nt([], [], 'kg', 'curl')).toBeNull();
+  });
+
+  it('N1: below min twice running at ≥ this weight → drop a step', () => {
+    const a = nt([lg('curl', 10, 10), lg('curl', 7, 10)], [lg('curl', 6, 10)]);
+    expect(rule(a)).toBe('N1');
+    expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: drop to 7.5 kg.');
+    expect(a?.say).toBe('Next time on Dumbbell Bicep Curl: drop to 7.5 kilos.');
+    expect(a?.apply).toBeUndefined();
+  });
+
+  it('N1 false edges: last was at a lower weight, or last was fine → N2', () => {
+    expect(rule(nt([lg('curl', 7, 10)], [lg('curl', 6, 7.5)]))).toBe('N2');
+    expect(rule(nt([lg('curl', 7, 10)], [lg('curl', 8, 10)]))).toBe('N2');
+    expect(rule(nt([lg('curl', 7, 10)], []))).toBe('N2');
+  });
+
+  it('N1 false edge: w − step would be 0 → N2', () => {
+    expect(rule(nt([lg('curl', 7, 2.5)], [lg('curl', 6, 2.5)]))).toBe('N2');
+  });
+
+  it('N1 compares in the display unit (lb weights stored as odd kg)', () => {
+    const a = nt([lg('curl', 7, lb(25))], [lg('curl', 6, lb(25))], 'lb');
+    expect(rule(a)).toBe('N1');
+    expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: drop to 20 lb.');
+  });
+
+  it('N1 never for bodyweight', () => {
+    const a = nt([lg('pushup', 7, 0)], [lg('pushup', 6, 0)]);
+    expect(rule(a)).toBe('N2');
+    expect(a?.text).toBe('Next time on Pushups: aim for 10 reps.');
+  });
+
+  it('N2: some set below min → repeat the weight', () => {
+    const a = nt([lg('curl', 12, 10), lg('curl', 7, 12.5)]);
+    expect(rule(a)).toBe('N2');
+    expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: repeat 12.5 kg.');
+    expect(a?.say).toBe('Next time on Dumbbell Bicep Curl: repeat 12.5 kilos.');
+  });
+
+  it('N2 wins over N4 (partials)', () => {
+    expect(rule(nt([lg('curl', 7, 10, { partials: 3 })]))).toBe('N2');
+  });
+
+  it('N3: all planned sets at the top and clean → +step', () => {
+    const a = nt([lg('bench', 8, 20), lg('bench', 8, 20), lg('bench', 8, 20)]);
+    expect(rule(a)).toBe('N3');
+    expect(a?.say).toBe('Next time on Dumbbell Bench Press: plus 2.5 kilos.');
+  });
+
+  it('N3 lb', () => {
+    const a = nt(
+      [lg('bench', 8, lb(35)), lg('bench', 8, lb(35)), lg('bench', 8, lb(35))],
+      [],
+      'lb',
+    );
+    expect(a?.text).toBe('Next time on Dumbbell Bench Press: +5 lb.');
+    expect(a?.say).toBe('Next time on Dumbbell Bench Press: plus 5 pounds.');
+  });
+
+  it('N3 too big a jump → same weight, more reps', () => {
+    const logs = [lg('raise', 15, lb(15)), lg('raise', 15, lb(15)), lg('raise', 15, lb(15))];
+    const a = nt(logs, [], 'lb');
+    expect(rule(a)).toBe('N3');
+    expect(a?.text).toBe('Next time on Side Lateral Raise: 15 lb, more reps.');
+    expect(a?.say).toBe('Next time on Side Lateral Raise: 15 pounds, more reps.');
+  });
+
+  it('N3 exactly 25% → +5 lb', () => {
+    const logs = [lg('raise', 15, lb(20)), lg('raise', 15, lb(20)), lg('raise', 15, lb(20))];
+    expect(nt(logs, [], 'lb')?.text).toBe('Next time on Side Lateral Raise: +5 lb.');
+  });
+
+  it('N3 bodyweight → +1 rep per set', () => {
+    const a = nt([lg('pushup', 15, 0), lg('pushup', 15, 0)]);
+    expect(rule(a)).toBe('N3');
+    expect(a?.text).toBe('Next time on Pushups: +1 rep per set.');
+    expect(a?.say).toBe('Next time, Pushups: plus one rep per set.');
+    expect(a?.apply).toBeUndefined();
+  });
+
+  it('N3 false edge: one partial is not clean; < 2 partials skips N4 → N6', () => {
+    const a = nt([lg('bench', 8, 20), lg('bench', 8, 20, { partials: 1 }), lg('bench', 8, 20)]);
+    expect(rule(a)).toBe('N6');
+  });
+
+  it('N3 needs ≥ 2 clean top sets at the final weight; one set after a mid-workout jump → N6', () => {
+    const one = [lg('bench', 8, lb(35)), lg('bench', 8, lb(35)), lg('bench', 8, lb(40))];
+    const a = nt(one, [], 'lb');
+    expect(rule(a)).toBe('N6');
+    expect(a?.text).toBe('Next time on Dumbbell Bench Press: repeat 40 lb.');
+    const two = [lg('bench', 8, lb(35)), lg('bench', 8, lb(40)), lg('bench', 8, lb(40))];
+    const b = nt(two, [], 'lb');
+    expect(rule(b)).toBe('N3');
+    expect(b?.text).toBe('Next time on Dumbbell Bench Press: +5 lb.');
+  });
+
+  it('N3 still needs every planned set logged', () => {
+    const logs = [lg('press', 8, 20), lg('press', 8, 22.5), lg('press', 8, 22.5)];
+    expect(rule(nt(logs))).toBe('N6');
+  });
+
+  it('N4: total partials ≥ 2 across sets', () => {
+    const a = nt([lg('curl', 12, 10, { partials: 1 }), lg('curl', 12, 10, { partials: 1 })]);
+    expect(rule(a)).toBe('N4');
+    expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: same weight, full range.');
+  });
+
+  it('N5: some set below max', () => {
+    const a = nt([lg('curl', 12, 10), lg('curl', 10, 10), lg('curl', 9, 10)]);
+    expect(rule(a)).toBe('N5');
+    expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: same weight, 12 reps.');
+  });
+
+  it('N6: all at the top but sets were skipped', () => {
+    const a = nt([lg('bench', 8, 20), lg('bench', 8, 20)]);
+    expect(rule(a)).toBe('N6');
+    expect(a?.text).toBe('Next time on Dumbbell Bench Press: repeat 20 kg.');
+  });
+
+  it('uses the last set’s weight as w', () => {
+    const a = nt([lg('bench', 8, 20), lg('bench', 8, 20), lg('bench', 8, 22.5)]);
+    expect(a?.why).toContain('22.5');
+  });
+
+  it('bodyweight never has an apply in any rule', () => {
+    const cases = [
+      [lg('pushup', 6, 0)],
+      [lg('pushup', 15, 0), lg('pushup', 15, 0)],
+      [lg('pushup', 12, 0, { partials: 2 })],
+      [lg('pushup', 12, 0)],
+    ];
+    for (const c of cases) {
+      const a = nt(c);
+      expect(a).not.toBeNull();
+      expect(a?.apply).toBeUndefined();
+      expect(a?.text).not.toMatch(/kg|lb/);
+    }
+  });
+});
+
+describe('nextTimeAdvice T1: rushed lowering on ≥ 2 sets (M5)', () => {
+  const rushed: { cues: FocusCueId[] } = { cues: ['rushedLowering'] };
+  const nt = (logs: SetLog[], last: SetLog[] = [], id = logs[0]?.exerciseId ?? 'curl') =>
+    nextTimeAdvice(state(logs), id, last, name);
+
+  it('1 rushed set → no T1; 2 rushed sets → T1', () => {
+    expect(rule(nt([lg('curl', 10, 10, rushed), lg('curl', 10, 10), lg('curl', 10, 10)]))).toBe(
+      'N5',
+    );
+    const a = nt([lg('curl', 10, 10, rushed), lg('curl', 10, 10), lg('curl', 10, 10, rushed)]);
+    expect(rule(a)).toBe('T1');
+    expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: lower for 2 seconds.');
+    expect(a?.say).toBe('Next time on Dumbbell Bicep Curl: lower for two seconds.');
+    expect(a?.why).toBe('Slow the lowering: 2 of 3 sets');
+    expect(a?.apply).toBeUndefined();
+  });
+
+  it('counts sets, not detections: one set with two rushed cues is still 1 set', () => {
+    const twice: { cues: FocusCueId[] } = { cues: ['rushedLowering', 'rushedLowering'] };
+    expect(rule(nt([lg('curl', 10, 10, twice), lg('curl', 10, 10)]))).toBe('N5');
+  });
+
+  it('other cues never trigger T1', () => {
+    const other: { cues: FocusCueId[] } = { cues: ['shrinkingRange', 'stalled'] };
+    expect(rule(nt([lg('curl', 10, 10, other), lg('curl', 10, 10, other)]))).toBe('N5');
+  });
+
+  it('N1 and N2 still win (below-range problems first)', () => {
+    expect(rule(nt([lg('curl', 7, 10, rushed), lg('curl', 10, 10, rushed)]))).toBe('N2');
+    expect(
+      rule(nt([lg('curl', 7, 10, rushed), lg('curl', 10, 10, rushed)], [lg('curl', 6, 10)])),
+    ).toBe('N1');
+  });
+
+  it('T1 beats N3 (all top reps, clean, but rushed)', () => {
+    const top = [lg('curl', 12, 10, rushed), lg('curl', 12, 10, rushed), lg('curl', 12, 10)];
+    expect(rule(nt(top))).toBe('T1');
+    const plain = top.map((l) => ({ ...l, cues: [] }));
+    expect(rule(nt(plain))).toBe('N3');
+  });
+
+  it('T1 beats N4 (partials) too', () => {
+    const logs = [lg('curl', 10, 10, { partials: 2, ...rushed }), lg('curl', 10, 10, rushed)];
+    expect(rule(nt(logs))).toBe('T1');
+  });
+
+  it('bodyweight gets T1 as well (tempo needs no weight)', () => {
+    const a = nt([lg('pushup', 15, 0, rushed), lg('pushup', 15, 0, rushed)]);
+    expect(rule(a)).toBe('T1');
+    expect(a?.text).toBe('Next time on Pushups: lower for 2 seconds.');
+  });
+
+  it('old rows without cues never give T1', () => {
+    expect(rule(nt([lg('curl', 12, 10), lg('curl', 12, 10), lg('curl', 12, 10)]))).toBe('N3');
+  });
+
+  it('only today’s sets of this exercise count', () => {
+    const logs = [lg('bench', 8, 20, rushed), lg('curl', 10, 10, rushed), lg('curl', 10, 10)];
+    expect(rule(nt(logs, [], 'curl'))).toBe('N5');
+    // Last session's rushed sets don't count either.
+    const last = [lg('curl', 10, 10, rushed), lg('curl', 10, 10, rushed)];
+    expect(rule(nt([lg('curl', 10, 10, rushed), lg('curl', 10, 10)], last))).toBe('N5');
+  });
+
+  it('after the final set, afterSetAdvice gives T1', () => {
+    const s = state([
+      lg('curl', 12, 10, rushed),
+      lg('curl', 12, 10, rushed),
+      lg('curl', 12, 10, rushed),
+    ]);
+    expect(rule(afterSetAdvice(s, name))).toBe('T1');
+  });
+
+  it('mid-exercise A rules are unchanged by rushed cues', () => {
+    const s = state([lg('curl', 12, 10, rushed), lg('curl', 12, 10, rushed)]);
+    expect(rule(afterSetAdvice(s, name))).toBe('A3');
+  });
+
+  it('coachSummary shows T1', () => {
+    const s = state([lg('raise', 15, 5, rushed), lg('raise', 15, 5, rushed)]);
+    const [e] = coachSummary(s, {}, name);
+    expect(e?.next?.rule).toBe('T1');
+    expect(e?.next?.text).toBe('Next time on Side Lateral Raise: lower for 2 seconds.');
+  });
+
+  it('≤ 12 words with the longest name, no banned words', () => {
+    const a = nextTimeAdvice(
+      state([lg('curl', 10, 10, rushed), lg('curl', 10, 10, rushed)]),
+      'curl',
+      [],
+      longName,
+    );
+    expect(rule(a)).toBe('T1');
+    for (const str of [a?.text ?? '', a?.say ?? '']) {
+      expect(wordCount(str), str).toBeLessThanOrEqual(12);
+      expect(str).not.toMatch(/\b(pain|injur\w*|hurt\w*|damage\w*|safe\w*|risk\w*)\b/i);
+    }
+  });
+});
+
+describe('coachSummary', () => {
+  it('no logs → empty', () => {
+    expect(coachSummary(state([]), {}, name)).toEqual([]);
+  });
+
+  it('one entry per exercise with ≥ 1 set, in day order', () => {
+    const s = state([lg('curl', 10, 10), lg('bench', 8, 20), lg('curl', 10, 10)]);
+    const out = coachSummary(s, {}, name);
+    expect(out.map((e) => e.exerciseId)).toEqual(['bench', 'curl']);
+    expect(out[0]?.next?.exerciseId).toBe('bench');
+    expect(out.every((e) => e.progress === null)).toBe(true);
+  });
+
+  it('P1: heavier than last time', () => {
+    const s = state([lg('bench', 8, 22.5), lg('bench', 8, 22.5)]);
+    const [e] = coachSummary(s, { bench: [lg('bench', 8, 20)] }, name);
+    expect(e?.progress).toBe('Dumbbell Bench Press: 22.5 kg, up from 20 kg.');
+  });
+
+  it('P1 in lb: 35 lb up from 30 lb', () => {
+    const s = state([lg('bench', 8, lb(35))], 'lb');
+    const [e] = coachSummary(s, { bench: [lg('bench', 8, lb(30))] }, name);
+    expect(e?.progress).toBe('Dumbbell Bench Press: 35 lb, up from 30 lb.');
+  });
+
+  it('P1 needs ≥ half a step: tiny kg drift is not a gain', () => {
+    const s = state([lg('bench', 8, 20.5)]);
+    const [e] = coachSummary(s, { bench: [lg('bench', 8, 20)] }, name);
+    expect(e?.progress).toBeNull();
+  });
+
+  it('P2: same weight, more total reps', () => {
+    const s = state([lg('curl', 12, 10), lg('curl', 11, 10)]);
+    const [e] = coachSummary(s, { curl: [lg('curl', 10, 10), lg('curl', 10, 10)] }, name);
+    expect(e?.progress).toBe('Dumbbell Bicep Curl: +3 reps vs last time.');
+  });
+
+  it('P2 says "rep" for a gain of one', () => {
+    const s = state([lg('curl', 11, 10)]);
+    const [e] = coachSummary(s, { curl: [lg('curl', 10, 10)] }, name);
+    expect(e?.progress).toBe('Dumbbell Bicep Curl: +1 rep vs last time.');
+  });
+
+  it('P1 fires at exactly half a step, not just under', () => {
+    const at = state([lg('bench', 8, 21.25)]);
+    expect(coachSummary(at, { bench: [lg('bench', 8, 20)] }, name)[0]?.progress).toBe(
+      'Dumbbell Bench Press: 21.3 kg, up from 20 kg.',
+    );
+    const under = state([lg('bench', 8, 21.24)]);
+    expect(coachSummary(under, { bench: [lg('bench', 8, 20)] }, name)[0]?.progress).toBeNull();
+    // lb: half of 5 lb = 2.5 lb
+    const atLb = state([lg('bench', 8, lb(32.5))], 'lb');
+    expect(coachSummary(atLb, { bench: [lg('bench', 8, lb(30))] }, name)[0]?.progress).toBe(
+      'Dumbbell Bench Press: 32.5 lb, up from 30 lb.',
+    );
+    const underLb = state([lg('bench', 8, lb(32.4))], 'lb');
+    expect(
+      coachSummary(underLb, { bench: [lg('bench', 8, lb(30))] }, name)[0]?.progress,
+    ).toBeNull();
+  });
+
+  it('P2 false edges: lighter today, or no more reps', () => {
+    const lighter = state([lg('curl', 12, 7.5), lg('curl', 12, 7.5)]);
+    expect(coachSummary(lighter, { curl: [lg('curl', 10, 10)] }, name)[0]?.progress).toBeNull();
+    const same = state([lg('curl', 10, 10)]);
+    expect(coachSummary(same, { curl: [lg('curl', 10, 10)] }, name)[0]?.progress).toBeNull();
+  });
+
+  it('P1 wins over P2', () => {
+    const s = state([lg('curl', 12, 12.5), lg('curl', 12, 12.5)]);
+    const [e] = coachSummary(s, { curl: [lg('curl', 8, 10)] }, name);
+    expect(e?.progress).toBe('Dumbbell Bicep Curl: 12.5 kg, up from 10 kg.');
+  });
+
+  it('no last → no progress', () => {
+    const s = state([lg('curl', 12, 12.5)]);
+    expect(coachSummary(s, { curl: [] }, name)[0]?.progress).toBeNull();
+  });
+});
+
+describe('wording', () => {
+  const BANNED = /\b(pain|injur\w*|hurt\w*|damage\w*|safe\w*|risk\w*)\b/i;
+
+  it('exports the banned list', () => {
+    expect(ADVICE_BANNED_WORDS).toEqual(
+      expect.arrayContaining(['pain', 'hurt', 'damage', 'safe', 'risk']),
+    );
+  });
+
+  it('every text and say is ≤ 12 words with the longest name and has no banned word', () => {
+    const all: { text: string; say: string; why: string }[] = [];
+    const progress: string[] = [];
+    for (const unit of ['kg', 'lb'] as Unit[]) {
+      const w = unit === 'kg' ? 102.5 : lb(225);
+      const tiny = unit === 'kg' ? 7.5 : lb(15);
+      const scenarios: SetLog[][] = [
+        [lg('curl', 6, w, { partials: 2 })],
+        [lg('pushup', 6, 0, { partials: 2 })],
+        [lg('curl', 6, w)],
+        [lg('pushup', 6, 0)],
+        [lg('raise', 115, w), lg('raise', 115, w)],
+        [lg('raise', 115, 0), lg('raise', 115, 0)],
+        [lg('curl', 10, w), lg('curl', 10, w, { rest: 200 }), lg('raise', 13, w, { rest: 200 })],
+        [lg('curl', 10, w), lg('curl', 10, w), lg('curl', 7, w)],
+        [lg('curl', 12, w), lg('curl', 12, w), lg('curl', 12, w)],
+        [lg('curl', 12, tiny), lg('curl', 12, tiny), lg('curl', 12, tiny)],
+        [lg('pushup', 15, 0), lg('pushup', 15, 0)],
+        [lg('curl', 12, w, { partials: 2 }), lg('curl', 12, w), lg('curl', 12, w)],
+        [lg('curl', 9, w), lg('curl', 9, w), lg('curl', 9, w)],
+        [lg('pushup', 12, 0, { partials: 2 }), lg('pushup', 11, 0)],
+        [lg('pushup', 11, 0), lg('pushup', 11, 0)],
+        [lg('bench', 8, w), lg('bench', 8, w)],
+        [
+          lg('curl', 12, w, { cues: ['rushedLowering'] }),
+          lg('curl', 12, w, { cues: ['rushedLowering'] }),
+          lg('curl', 12, w),
+        ],
+      ];
+      const last = {
+        curl: [lg('curl', 5, w)],
+        raise: [lg('raise', 5, 1)],
+        bench: [lg('bench', 1, 1)],
+      };
+      const seen = new Set<string>();
+      for (const logs of scenarios) {
+        const s = state(logs, unit);
+        const a = afterSetAdvice(s, longName, last);
+        if (a) {
+          all.push(a);
+          seen.add(a.rule);
+        }
+        for (const e of coachSummary(s, last, longName)) {
+          if (e.next) {
+            all.push(e.next);
+            seen.add(e.next.rule);
+          }
+          if (e.progress) progress.push(e.progress);
+        }
+      }
+      // N6 via a skipped-set summary.
+      const n6 = nextTimeAdvice(
+        state([lg('bench', 8, w), lg('bench', 8, w)], unit),
+        'bench',
+        [],
+        longName,
+      );
+      if (n6) {
+        all.push(n6);
+        seen.add(n6.rule);
+      }
+      expect([...seen].sort()).toEqual(
+        ['A1', 'A2', 'A3', 'A4', 'A5', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'T1'].sort(),
+      );
+    }
+    expect(progress.length).toBeGreaterThan(0);
+    for (const a of all) {
+      expect(wordCount(a.text), a.text).toBeLessThanOrEqual(12);
+      expect(wordCount(a.say), a.say).toBeLessThanOrEqual(12);
+      expect(a.text).not.toMatch(BANNED);
+      expect(a.say).not.toMatch(BANNED);
+      expect(a.why).not.toMatch(BANNED);
+      expect(a.why.length).toBeGreaterThan(0);
+      expect(a.say).not.toMatch(/\b(kg|lb)\b|\+/);
+    }
+    for (const p of progress) {
+      expect(wordCount(p), p).toBeLessThanOrEqual(12);
+      expect(p).not.toMatch(BANNED);
+    }
+  });
+
+  it('wordCount splits on whitespace (hyphenated names are one word)', () => {
+    expect(wordCount(`Next time on ${LONGEST}: +5 lb.`)).toBe(10);
+  });
+});
+
+describe('adviceSpeakOnCommit (M5c: tip spoken at a hands-free save)', () => {
+  // The tip (~4 s) must end ≥ 5 s before "Ten seconds": target − 10 s − elapsed ≥ 9 s.
+  it('speaks when the backdated rest leaves room before the Ten seconds cue', () => {
+    expect(adviceSpeakOnCommit(11000, 60)).toBe(true);
+    expect(adviceSpeakOnCommit(11000, 30)).toBe(true); // exactly 9 s left
+  });
+
+  it('stays silent when the tip would run into the Ten seconds cue', () => {
+    expect(adviceSpeakOnCommit(11000, 25)).toBe(false);
+    expect(adviceSpeakOnCommit(11001, 30)).toBe(false);
+  });
+
+  it('stays silent when the rest is already past its target', () => {
+    expect(adviceSpeakOnCommit(95000, 90)).toBe(false);
+  });
+
+  it('treats non-finite input as silent', () => {
+    expect(adviceSpeakOnCommit(Number.NaN, 90)).toBe(false);
+    expect(adviceSpeakOnCommit(11000, Number.NaN)).toBe(false);
+  });
+});
+
+describe('adviceSpeakDue', () => {
+  it('fires when the rest clock crosses 2 s', () => {
+    expect(adviceSpeakDue(1900, 2000, 90)).toBe(true);
+    expect(adviceSpeakDue(0, 2500, 90)).toBe(true);
+  });
+
+  it('does not fire before 2 s or after it was already crossed', () => {
+    expect(adviceSpeakDue(1000, 1999, 90)).toBe(false);
+    expect(adviceSpeakDue(2000, 2250, 90)).toBe(false);
+  });
+
+  it('is skipped when the tab only notices after 6 s', () => {
+    expect(adviceSpeakDue(1500, 6000, 90)).toBe(true);
+    expect(adviceSpeakDue(1500, 6001, 90)).toBe(false);
+  });
+
+  it('is skipped when the rest target is < 17 s', () => {
+    expect(adviceSpeakDue(1900, 2100, 17)).toBe(true);
+    expect(adviceSpeakDue(1900, 2100, 16)).toBe(false);
+  });
+});
+
+describe('effort → advice (M12 1b)', () => {
+  const E = (effort: SetEffort) => ({ effort });
+
+  it('the rules are data: easy steps up sooner, hard holds, good is the default', () => {
+    expect(EFFORT_RULES.none).toEqual({ stepUp: true, repsFloor: 'top', minSetsAtWeight: 2 });
+    expect(EFFORT_RULES.good).toEqual(EFFORT_RULES.none);
+    expect(EFFORT_RULES.easy).toEqual({ stepUp: true, repsFloor: 'bottom', minSetsAtWeight: 1 });
+    expect(EFFORT_RULES.hard.stepUp).toBe(false);
+  });
+
+  describe('next set', () => {
+    it('easy: steps up after one clean set at the bottom of the range', () => {
+      const a = afterSetAdvice(state([lg('curl', 8, 10, E('easy'))]), name);
+      expect(rule(a)).toBe('A3');
+      expect(a?.text).toBe('Felt easy. Try +2.5 kg next set.');
+      expect(a?.say).toBe('Felt easy. Try plus 2.5 kilos next set.');
+      expect(a?.apply).toEqual({ weightKg: 12.5 });
+      expect(a?.why).toContain('felt easy');
+    });
+
+    it('easy in lb names the snapped jump', () => {
+      const a = afterSetAdvice(state([lg('curl', 9, lb(20), E('easy'))], 'lb'), name);
+      expect(a?.text).toBe('Felt easy. Try +5 lb next set.');
+      expect(toUnit(a?.apply?.weightKg ?? 0, 'lb')).toBeCloseTo(25, 6);
+    });
+
+    it('easy never beats a problem: below the range, partials, or too big a jump', () => {
+      expect(rule(afterSetAdvice(state([lg('curl', 7, 10, E('easy'))]), name))).toBe('A2');
+      const partials = lg('curl', 10, 10, { partials: 2, effort: 'easy' });
+      expect(rule(afterSetAdvice(state([partials]), name))).toBe('A1');
+      const onePartial = lg('curl', 10, 10, { partials: 1, effort: 'easy' });
+      expect(afterSetAdvice(state([onePartial]), name)).toBeNull();
+      expect(afterSetAdvice(state([lg('raise', 12, 5, E('easy'))]), name)).toBeNull();
+    });
+
+    it('easy on a bodyweight set asks for one more rep', () => {
+      const a = afterSetAdvice(state([lg('pushup', 10, 0, E('easy'))]), name);
+      expect(rule(a)).toBe('A4');
+      expect(a?.text).toBe('Felt easy. Try 11 reps next set.');
+    });
+
+    it('hard: holds where the plain rule would step up', () => {
+      const sets = (e?: SetEffort) => [lg('curl', 12, 10), lg('curl', 12, 10, e ? E(e) : {})];
+      expect(rule(afterSetAdvice(state(sets()), name))).toBe('A3');
+      expect(afterSetAdvice(state(sets('hard')), name)).toBeNull();
+      const bw = [lg('raise', 15, 0), lg('raise', 15, 0, E('hard'))];
+      expect(afterSetAdvice(state(bw), name)).toBeNull();
+    });
+
+    it('only the last set decides: an earlier easy set does not step up', () => {
+      expect(
+        afterSetAdvice(state([lg('curl', 8, 10, E('easy')), lg('curl', 8, 10)]), name),
+      ).toBeNull();
+    });
+
+    it('good and no answer give identical advice', () => {
+      const cases: [string, number, number, { partials?: number }?][][] = [
+        [['curl', 10, 10]],
+        [
+          ['curl', 12, 10],
+          ['curl', 12, 10],
+        ],
+        [['curl', 7, 10]],
+        [['curl', 10, 10, { partials: 2 }]],
+        [['pushup', 15, 0]],
+        [
+          ['curl', 12, 10],
+          ['curl', 12, 10],
+          ['curl', 12, 10],
+        ],
+        [
+          ['curl', 12, 10],
+          ['curl', 10, 10],
+          ['curl', 9, 10],
+        ],
+      ];
+      for (const c of cases) {
+        const plain = c.map(([id, r, w, o]) => lg(id, r, w, o));
+        const good = plain.map((l) => ({ ...l, effort: 'good' as const }));
+        expect(afterSetAdvice(state(good), name)).toEqual(afterSetAdvice(state(plain), name));
+      }
+    });
+  });
+
+  describe('next session', () => {
+    const three = (reps: number, e?: SetEffort) => [
+      lg('curl', reps, 10),
+      lg('curl', reps, 10),
+      lg('curl', reps, 10, e ? E(e) : {}),
+    ];
+
+    it('easy: steps up even with reps at the bottom of the range', () => {
+      expect(rule(nextTimeAdvice(state(three(8)), 'curl', [], name))).toBe('N5');
+      const a = nextTimeAdvice(state(three(8, 'easy')), 'curl', [], name);
+      expect(rule(a)).toBe('N3');
+      expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: +2.5 kg.');
+      expect(a?.why).toContain('felt easy');
+    });
+
+    it('easy still needs every planned set, in range and clean', () => {
+      const two = [lg('curl', 8, 10), lg('curl', 8, 10, E('easy'))];
+      expect(rule(nextTimeAdvice(state(two), 'curl', [], name))).toBe('N5');
+      const below = [lg('curl', 7, 10), lg('curl', 8, 10), lg('curl', 8, 10, E('easy'))];
+      expect(rule(nextTimeAdvice(state(below), 'curl', [], name))).toBe('N2');
+      const partial = [
+        lg('curl', 9, 10, { partials: 2 }),
+        lg('curl', 9, 10),
+        lg('curl', 9, 10, E('easy')),
+      ];
+      expect(rule(nextTimeAdvice(state(partial), 'curl', [], name))).toBe('N4');
+    });
+
+    it('hard: holds where the plain rule would step up', () => {
+      expect(rule(nextTimeAdvice(state(three(12)), 'curl', [], name))).toBe('N3');
+      const a = nextTimeAdvice(state(three(12, 'hard')), 'curl', [], name);
+      expect(rule(a)).toBe('N6');
+      expect(a?.text).toBe('Next time on Dumbbell Bicep Curl: repeat 10 kg.');
+      expect(a?.why).toContain('felt hard');
+    });
+
+    it('good and no answer are identical, and so is the Summary', () => {
+      for (const reps of [7, 8, 10, 12]) {
+        const plain = three(reps);
+        const good = plain.map((l) => ({ ...l, effort: 'good' as const }));
+        expect(nextTimeAdvice(state(good), 'curl', [], name)).toEqual(
+          nextTimeAdvice(state(plain), 'curl', [], name),
+        );
+        expect(coachSummary(state(good), {}, name)).toEqual(coachSummary(state(plain), {}, name));
+      }
+    });
+  });
+
+  it('no answer = the advice of before effort existed (snapshot)', () => {
+    const out = [
+      afterSetAdvice(state([lg('curl', 12, 10), lg('curl', 12, 10)]), name),
+      afterSetAdvice(state([lg('pushup', 15, 0)]), name),
+      afterSetAdvice(state([lg('curl', 12, 10), lg('curl', 12, 10), lg('curl', 12, 10)]), name),
+      afterSetAdvice(state([lg('curl', 9, 10), lg('curl', 9, 10), lg('curl', 9, 10)]), name),
+    ];
+    expect(out).toEqual([
+      {
+        exerciseId: 'curl',
+        rule: 'A3',
+        text: 'Strong set. Try +2.5 kg next set.',
+        say: 'Strong set. Try plus 2.5 kilos next set.',
+        why: 'Reps: 12, 12 · 10 kg · no partials · target 8–12',
+        apply: { weightKg: 12.5 },
+      },
+      null,
+      {
+        exerciseId: 'curl',
+        rule: 'N3',
+        text: 'Next time on Dumbbell Bicep Curl: +2.5 kg.',
+        say: 'Next time on Dumbbell Bicep Curl: plus 2.5 kilos.',
+        why: 'Reps: 12, 12, 12 · 10 kg · no partials · target 8–12',
+      },
+      {
+        exerciseId: 'curl',
+        rule: 'N5',
+        text: 'Next time on Dumbbell Bicep Curl: same weight, 12 reps.',
+        say: 'Next time on Dumbbell Bicep Curl: same weight, 12 reps.',
+        why: 'Reps: 9, 9, 9 · 10 kg · no partials · target 8–12',
+      },
+    ]);
+  });
+
+  it('effort wording stays short and coaching-only', () => {
+    const texts = [
+      afterSetAdvice(state([lg('curl', 8, 10, E('easy'))]), name),
+      afterSetAdvice(state([lg('pushup', 10, 0, E('easy'))]), name),
+    ];
+    for (const a of texts) {
+      expect(a).not.toBeNull();
+      expect(wordCount(a?.text ?? '')).toBeLessThanOrEqual(12);
+      expect(wordCount(a?.say ?? '')).toBeLessThanOrEqual(12);
+      for (const w of ADVICE_BANNED_WORDS) expect(a?.text.toLowerCase()).not.toContain(w);
+    }
+  });
+});
+
+describe('warm-up sets are invisible to the coach (M12 1b)', () => {
+  const warm = (reps: number, kg: number): SetLog => ({ ...lg('curl', reps, kg), warmup: true });
+
+  it('no advice right after a warm-up set', () => {
+    expect(afterSetAdvice(state([warm(8, 5)]), name)).toBeNull();
+    expect(afterSetAdvice(state([warm(4, 5), warm(4, 7.5)]), name)).toBeNull();
+    expect(afterSetAdvice(state([lg('bench', 8, 20), warm(8, 5)]), name)).toBeNull();
+  });
+
+  it('warm-ups change no advice, progress line or summary', () => {
+    const working = [lg('curl', 12, 10), lg('curl', 12, 10), lg('curl', 12, 10)];
+    const all = [warm(8, 5), warm(4, 7.5), ...working];
+    for (let n = 1; n <= 3; n++) {
+      const a = afterSetAdvice(state([warm(8, 5), warm(4, 7.5), ...working.slice(0, n)]), name);
+      expect(a).toEqual(afterSetAdvice(state(working.slice(0, n)), name));
+    }
+    expect(nextTimeAdvice(state(all), 'curl', [], name)).toEqual(
+      nextTimeAdvice(state(working), 'curl', [], name),
+    );
+    const last = { curl: [lg('curl', 10, 10), lg('curl', 10, 10), lg('curl', 10, 10)] };
+    expect(coachSummary(state(all), last, name)).toEqual(coachSummary(state(working), last, name));
+    // Warm-ups in last time's sets are ignored too.
+    const lastWarm = { curl: [warm(8, 20), ...last.curl] };
+    expect(coachSummary(state(all), lastWarm, name)).toEqual(
+      coachSummary(state(working), last, name),
+    );
+  });
+
+  it('an exercise with only warm-ups done has no summary entry', () => {
+    expect(coachSummary(state([warm(8, 5)]), {}, name)).toEqual([]);
+    expect(nextTimeAdvice(state([warm(8, 5)]), 'curl', [], name)).toBeNull();
+  });
+});

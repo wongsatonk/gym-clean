@@ -1,0 +1,148 @@
+/* M7b tasks 12–13: the Photo button (photoCapture.ts) and the photo confirm sheet
+   (photoSheet.ts). Tokens only (tokens.test.ts); no motion. Gym rules: body ≥ 20px, taps ≥ 56px.
+   The picked guess uses the white --selected fill, as the Fuel chips; orange stays Log. */
+
+/* The real file input is invisible but stays in the layout tree, so iOS opens it from the
+   button's click. It is never focused (tabindex -1, aria-hidden); the button is. */
+.photo-pick {
+  position: relative;
+}
+
+.photo-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.photo-panel,
+.photo-result {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.photo-thumb {
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.photo-thumb > canvas,
+.photo-thumb > img {
+  display: block;
+  max-width: 100%;
+  max-height: 128px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.photo-msg {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.photo-opts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.photo-opt {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--tap-min);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 10px 14px;
+  text-align: left;
+  border-radius: var(--r-card);
+  border: 2px solid var(--line);
+  background: var(--surface);
+}
+
+.photo-opt.on {
+  background: var(--selected);
+  color: var(--on-selected);
+  border-color: var(--selected);
+}
+
+.photo-opt.on .log-item-th {
+  color: var(--on-selected);
+}
+
+.photo-opt-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.photo-opt-name {
+  min-width: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* The confidence: a small number beside the name, never colour alone (M7b-q6). */
+.photo-pct {
+  flex: none;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Look-alike variants have long names: one per row, wrapping. */
+.photo-variants {
+  flex-direction: column;
+}
+
+.fuel-chip.photo-variant {
+  width: 100%;
+  padding: 8px 16px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-radius: var(--r-card);
+}
+
+.photo-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.fuel-sheet .primary-btn.cta-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Log stays in reach while the guesses and variants scroll (1 tap after the photo). */
+.fuel-sheet .primary-btn.photo-log:not(:disabled) {
+  position: sticky;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 1;
+}
+
+/* M7b task 15: the Photo row at the top of the log sheet (or the Settings hint, M7b-q4). */
+.log-photo[hidden],
+.log-photo-hint[hidden] {
+  display: none;
+}
+
+.log-photo-hint {
+  font-size: var(--fs-body);
+  line-height: 1.35;
+}

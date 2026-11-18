@@ -1,0 +1,25 @@
+{
+  "format": "gym-clean-thai-dish-recipes",
+  "version": 1,
+  "note": "Made-up test dishes over the usda-mini fixture rows.",
+  "dishes": [
+    {
+      "id": "thai:test-chicken-grain",
+      "name": "Test chicken with grain",
+      "nameTh": "ไก่ทดสอบ",
+      "serving": "1 plate",
+      "ingredients": [
+        { "food": "usda:900002", "g": 40, "as": "test grain, dry" },
+        { "food": "usda:170002", "g": 100, "as": "test chicken, cooked" }
+      ]
+    },
+    {
+      "id": "thai:test-curry",
+      "name": "Test curry with rice",
+      "nameTh": "แกงทดสอบ",
+      "serving": "1 bowl",
+      "note": "Uses the FNDDS test dish as is.",
+      "ingredients": [{ "food": "usda:2700001", "g": 300, "as": "test curry with rice" }]
+    }
+  ]
+}

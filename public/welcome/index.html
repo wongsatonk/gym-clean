@@ -1,0 +1,124 @@
+<!doctype html>
+<!--
+  M13 task 36: the landing page, served next to the app at <site>/welcome/.
+  Static on purpose: no script, no tracker, no request to any other server. Every path is
+  relative so it works under /<repo>/welcome/. The service worker leaves /welcome/ alone
+  (vite.config.ts navigateFallbackDenylist). The privacy promise repeats
+  src/ui/screens/about.ts (PRIVACY_POINTS, PRIVACY_EXCEPTION): change both together.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; script-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0d0f12" />
+    <meta
+      name="description"
+      content="Gym Clean. Your pocket strength coach. Everything stays on your phone."
+    />
+    <title>Gym Clean</title>
+    <link rel="stylesheet" href="welcome.css" />
+  </head>
+  <body>
+    <main>
+      <header class="hero">
+        <span class="mark" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            width="72"
+            height="72"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.25"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            focusable="false"
+          >
+            <path d="M2.5 9.5v5M5.5 7v10M18.5 7v10M21.5 9.5v5M5.5 12h4l1.5-3 2 6 1.5-3h3.5" />
+          </svg>
+        </span>
+        <h1 class="name">Gym Clean</h1>
+        <p class="tagline">Your pocket strength coach.</p>
+        <p class="lede">
+          A guided workout on your phone: the next lift, the muscles it trains, big numbers you can
+          read from across the room, and cues spoken out loud.
+        </p>
+        <a class="cta" href="../">Open the app</a>
+      </header>
+
+      <section class="shots" aria-labelledby="shots-title">
+        <h2 id="shots-title" class="section-title">A look inside</h2>
+        <ul class="shot-list">
+          <li>
+            <figure>
+              <img
+                src="shots/1-today.webp"
+                width="600"
+                height="1299"
+                alt="Today screen: the next workout, Full body B, with the target muscles lit on a body map and a Start workout button."
+              />
+              <figcaption>Today: your next workout and the muscles it trains.</figcaption>
+            </figure>
+          </li>
+          <li>
+            <figure>
+              <img
+                src="shots/2-set.webp"
+                width="600"
+                height="1299"
+                loading="lazy"
+                alt="A set in progress: set 1 of 4, a spoken cue, and large reps and weight numbers with plus and minus buttons."
+              />
+              <figcaption>During a set: big numbers and a spoken cue.</figcaption>
+            </figure>
+          </li>
+          <li>
+            <figure>
+              <img
+                src="shots/6-fuel.webp"
+                width="600"
+                height="1299"
+                loading="lazy"
+                alt="Fuel screen: calories, protein, carbs and fat left for the day, each with a ring."
+              />
+              <figcaption>Fuel: what is left to eat today, in plain numbers.</figcaption>
+            </figure>
+          </li>
+        </ul>
+      </section>
+
+      <section class="privacy" aria-labelledby="privacy-title">
+        <h2 id="privacy-title" class="section-title">Everything stays on your phone</h2>
+        <ul class="points">
+          <li>Camera: reps are counted on the phone. No video is saved or sent.</li>
+          <li>Your workouts, food and body numbers are stored only on your phone.</li>
+          <li>
+            Coach chat stays on your phone. Speech is turned into text on the phone and the audio is
+            never stored.
+          </li>
+          <li>Apple Health (iPhone app) is read-only and stays on your phone.</li>
+          <li>No account, no ads, no tracking. Backups are files you save yourself.</li>
+        </ul>
+        <div class="exception">
+          <h3 class="exception-head">The one exception</h3>
+          <p>
+            Barcode lookup (Settings, Nutrition) is off until you turn it on. Then it sends only the
+            barcode number to Open Food Facts to find the food, and only for a barcode not already
+            in My foods. Nothing else goes with it.
+          </p>
+        </div>
+        <p class="page-note">This page has no scripts and loads nothing from other sites.</p>
+      </section>
+
+      <footer class="foot">
+        <p class="medical">Coaching, not medical advice.</p>
+        <a class="cta" href="../">Open the app</a>
+      </footer>
+    </main>
+  </body>
+</html>

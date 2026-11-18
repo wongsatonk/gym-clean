@@ -15,6 +15,7 @@ import {
   WebGLRenderer,
 } from 'three';
 import { JOINTS, SKELETON } from '../core/poseTopology';
+import { figurePalette, stageBackground } from './body3d/palette';
 
 export type SkeletonPreset = 'front' | 'side';
 
@@ -33,6 +34,10 @@ const UP = new Vector3(0, 1, 0);
 export function createSkeleton3D(): Skeleton3D {
   const el = document.createElement('div');
   el.className = 'skeleton3d';
+  // Token colours (M4e A7), read once: rim-coloured bones and light joints on the lit stage.
+  // Cyan stays for muscles only, so the skeleton doesn't use it.
+  const C = figurePalette();
+  el.style.background = stageBackground();
   const renderer = new WebGLRenderer({
     antialias: true,
     alpha: true,
@@ -45,8 +50,8 @@ export function createSkeleton3D(): Skeleton3D {
   const camera = new PerspectiveCamera(35, 1, 0.05, 20);
   camera.position.set(0, 0.05, 2.5);
   camera.lookAt(0, 0, 0);
-  scene.add(new HemisphereLight(0xffffff, 0x0b0d10, 1.4));
-  const key = new DirectionalLight(0xffffff, 1.2);
+  scene.add(new HemisphereLight(C.skyLight, C.groundLight, 1.4));
+  const key = new DirectionalLight(C.keyLight, 1.2);
   key.position.set(1, 2, 3);
   scene.add(key);
 
@@ -54,7 +59,7 @@ export function createSkeleton3D(): Skeleton3D {
   scene.add(rig);
   const floor = new Mesh(
     new RingGeometry(0.35, 0.37, 48),
-    new MeshStandardMaterial({ color: 0x2c343e }),
+    new MeshStandardMaterial({ color: C.body }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -0.95;
@@ -62,8 +67,8 @@ export function createSkeleton3D(): Skeleton3D {
 
   const jointGeo = new SphereGeometry(0.028, 12, 8);
   const boneGeo = new CylinderGeometry(0.014, 0.014, 1, 8);
-  const jointMat = new MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.5 });
-  const boneMat = new MeshStandardMaterial({ color: 0x4ade80, roughness: 0.5 });
+  const jointMat = new MeshStandardMaterial({ color: C.text, roughness: 0.5 });
+  const boneMat = new MeshStandardMaterial({ color: C.edge, roughness: 0.5 });
   const joints = new Map(JOINTS.map((i) => [i, new Mesh(jointGeo, jointMat)]));
   const bones = SKELETON.map(() => new Mesh(boneGeo, boneMat));
   joints.forEach((m) => rig.add(m));

@@ -1,0 +1,61 @@
+<!doctype html>
+<!-- Dev-only visual check for M13 tasks 10 + 12 (brand lockup, welcome + permission pages). Not
+     part of the build or the app. Open on the dev server:
+     /src/ui/onboarding/onboarding.harness.html?platform=native|web&step=0..6[&granted=camera]
+     Buttons walk the flow; window.harnessLog records the callbacks. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Onboarding harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { onboardingSteps } from '../../core/onboarding.ts';
+      import { onboardingScreen } from './welcome.ts';
+
+      const q = new URLSearchParams(location.search);
+      const platform = q.get('platform') === 'web' ? 'web' : 'native';
+      const native = platform === 'native';
+      const steps = onboardingSteps({
+        platform,
+        fresh: true,
+        intakeDone: true,
+        has: { health: native, mic: native, notifications: native },
+      });
+      let index = Number(q.get('step') ?? 0);
+      const granted = {};
+      for (const p of (q.get('granted') ?? '').split(',').filter(Boolean)) granted[p] = true;
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      let screen;
+
+      function show(dir) {
+        screen?.dispose();
+        screen = onboardingScreen(
+          { steps, index, granted, dir },
+          {
+            onNext: () => (log('next'), index++, show('next')),
+            onBack: () => (log('back'), index--, show('prev')),
+            onSkipAll: () => log('skip'),
+            onDone: () => log('done'),
+            onAllow: (p) => (log('allow', p), (granted[p] = true), show()),
+            onNotNow: (p) => {
+              log('notNow', p);
+              if (index < steps.length - 1) (index++, show('next'));
+              else log('done');
+            },
+          },
+        );
+        app.replaceChildren(screen.el);
+      }
+      show();
+    </script>
+  </body>
+</html>

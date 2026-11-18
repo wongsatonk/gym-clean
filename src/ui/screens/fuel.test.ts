@@ -1,0 +1,343 @@
+import { describe, expect, it } from 'vitest';
+import type { FoodEntry, NutritionTargets } from '../../core/types';
+import { all, byAttr, expectCleanCopy } from '../fuel/fuelTestKit';
+import type { TabId } from '../tabBar';
+import { fuelScreen, groupBySlot, type FuelProps } from './fuel';
+import { FakeEl, asFake, useFakeDom } from './testDom';
+
+useFakeDom();
+
+// Made-up numbers only.
+const NOW = new Date(2026, 10, 14, 13, 0).getTime();
+const at = (hh: number, mm = 0) => new Date(2026, 10, 14, hh, mm).getTime();
+const TARGETS: NutritionTargets = {
+  kcal: { value: 2800, estimate: true },
+  proteinG: { value: 140, estimate: true },
+  carbsG: { value: 350, estimate: true },
+  fatG: { value: 80, estimate: false },
+};
+const ENTRIES: FoodEntry[] = [
+  {
+    id: 'e2',
+    date: '2026-11-14',
+    time: at(12, 30),
+    slot: 'lunch',
+    label: 'Pad kra pao with rice + fried egg',
+    amount: { servings: 1.4 },
+    estimate: true,
+    kcal: 900,
+    proteinG: 38,
+    carbsG: 95,
+    fatG: 36,
+  },
+  {
+    id: 'e1',
+    date: '2026-11-14',
+    time: at(7, 45),
+    slot: 'breakfast',
+    label: 'Protein shake',
+    amount: { servings: 1 },
+    estimate: false,
+    kcal: 200,
+    proteinG: 30,
+  },
+  {
+    id: 'e3',
+    date: '2026-11-14',
+    time: at(8, 10),
+    slot: 'breakfast',
+    label: 'Banana',
+    amount: { grams: 120 },
+    estimate: false,
+    kcal: 107,
+    proteinG: 1.3,
+  },
+];
+
+function props(over: Partial<FuelProps> = {}): FuelProps {
+  return {
+    now: NOW,
+    mode: 'quick',
+    targets: TARGETS,
+    totals: { kcal: 1207, proteinG: 69.3, carbsG: 95, fatG: 36 },
+    entries: ENTRIES,
+    unit: 'kg',
+    lastWeighInKg: 70.2,
+    ...over,
+  };
+}
+
+function render(over: Partial<FuelProps> = {}) {
+  const calls = {
+    log: 0,
+    edit: [] as string[],
+    weigh: 0,
+    setup: 0,
+    dismiss: 0,
+    tab: [] as TabId[],
+  };
+  const el = asFake(
+    fuelScreen(props(over), {
+      onLog: () => calls.log++,
+      onEditEntry: (e) => calls.edit.push(e.id),
+      onWeighIn: () => calls.weigh++,
+      onSetup: () => calls.setup++,
+      onDismissNudge: () => calls.dismiss++,
+      onTab: (t) => calls.tab.push(t),
+    }),
+  );
+  return { el, calls };
+}
+
+const left = (el: FakeEl, key: string) => byAttr(el, 'data-left', key).textContent;
+
+describe('fuelScreen', () => {
+  it('Quick: kcal + protein rings with the big "to go" numbers and estimate tags', () => {
+    const { el } = render();
+    expect(el.tag).toBe('main');
+    expect(el.classes).toEqual(
+      expect.arrayContaining(['screen', 'fuel', 'has-tabbar', 'mood-pro']),
+    );
+    expect(all(el, 'data-ring').map((r) => r.getAttribute('data-ring'))).toEqual([
+      'kcal',
+      'proteinG',
+    ]);
+    expect(left(el, 'kcal')).toBe('1,593');
+    expect(left(el, 'proteinG')).toBe('71');
+    expect(byAttr(el, 'data-ring', 'kcal').textContent).toContain('kcal to go');
+    expect(byAttr(el, 'data-ring', 'kcal').byClass('fuel-tag')[0]?.textContent).toBe('estimate');
+    // The left number is the main number class (≥ 64px in fuel.css).
+    expect(byAttr(el, 'data-left', 'kcal').classes).toContain('fuel-left-num');
+    expectCleanCopy(el);
+  });
+
+  it('Full: adds carbs + fat rings; entries show carbs/fat when known', () => {
+    const { el } = render({ mode: 'full' });
+    expect(all(el, 'data-ring')).toHaveLength(4);
+    expect(left(el, 'carbsG')).toBe('255');
+    expect(left(el, 'fatG')).toBe('44');
+    // Fat target is a hand override: no estimate tag on that row.
+    expect(byAttr(el, 'data-ring', 'fatG').byClass('fuel-tag')).toHaveLength(0);
+    expect(byAttr(el, 'data-entry', 'e2').textContent).toContain('95 g carbs · 36 g fat');
+    // Quick hides them, the data is untouched.
+    const quick = render().el;
+    expect(byAttr(quick, 'data-entry', 'e2').textContent).not.toContain('carbs');
+  });
+
+  it('over target: "+N … over target"', () => {
+    const { el } = render({ totals: { kcal: 2950, proteinG: 150 } });
+    expect(left(el, 'kcal')).toBe('+150');
+    expect(left(el, 'proteinG')).toBe('+10');
+    expect(byAttr(el, 'data-ring', 'proteinG').textContent).toContain('g protein over target');
+    expect(byAttr(el, 'data-ring', 'kcal').getAttribute('data-over')).toBe('true');
+  });
+
+  it('empty: no targets → "Set up your targets" card instead of rings; no entries line', () => {
+    const { el, calls } = render({ targets: null, entries: [], totals: { kcal: 0, proteinG: 0 } });
+    expect(all(el, 'data-ring')).toHaveLength(0);
+    expect(byAttr(el, 'data-setup-card').textContent).toContain('Set up your targets');
+    byAttr(el, 'data-setup').click();
+    expect(calls.setup).toBe(1);
+    expect(byAttr(el, 'data-entries', 'none').textContent).toContain('Nothing logged yet today.');
+    // Logging still works before setup.
+    byAttr(el, 'data-log-open').click();
+    expect(calls.log).toBe(1);
+    expectCleanCopy(el);
+  });
+
+  it('M13: until targets exist, "Set up targets" is the one filled button; Log food is outline', () => {
+    const { el } = render({ targets: null, entries: [], totals: { kcal: 0, proteinG: 0 } });
+    const filled = el.byClass('primary-btn');
+    expect(filled).toHaveLength(1);
+    expect(filled[0]?.hasAttribute('data-setup')).toBe(true);
+    expect(filled[0]?.textContent).toBe('Set up targets');
+    const log = byAttr(el, 'data-log-open');
+    expect(log.classes).not.toContain('primary-btn');
+    expect(log.textContent).toBe('Log food');
+  });
+
+  it('M13: with targets, Log food is the one filled button', () => {
+    for (const entries of [[], ENTRIES]) {
+      const { el } = render({ entries });
+      const filled = el.byClass('primary-btn');
+      expect(filled).toHaveLength(1);
+      expect(filled[0]?.hasAttribute('data-log-open')).toBe(true);
+    }
+  });
+
+  it('M13: an empty day is the empty state (plate icon, one line, Log food as its one action)', () => {
+    const { el, calls } = render({ entries: [], totals: { kcal: 0, proteinG: 0 } });
+    const empty = byAttr(el, 'data-empty-state', 'fuel-day');
+    expect(empty.oneByClass('empty-state-art').byTag('svg')[0]?.getAttribute('data-icon')).toBe(
+      'plate',
+    );
+    expect(empty.oneByClass('empty-state-line').textContent).toBe('Nothing logged yet today.');
+    const buttons = empty.byTag('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.hasAttribute('data-log-open')).toBe(true);
+    // Not a second Log food button elsewhere on the screen.
+    expect(all(el, 'data-log-open')).toHaveLength(1);
+    buttons[0]?.click();
+    expect(calls.log).toBe(1);
+    // With entries there is no empty state and Log food sits above the list.
+    expect(all(render().el, 'data-empty-state')).toHaveLength(0);
+  });
+
+  it('groups entries by slot (groups and rows in time order), with slot totals', () => {
+    const { el } = render();
+    const slots = all(el, 'data-slot');
+    expect(slots.map((s) => s.getAttribute('data-slot'))).toEqual(['breakfast', 'lunch']);
+    expect(all(slots[0] as FakeEl, 'data-entry').map((e) => e.getAttribute('data-entry'))).toEqual([
+      'e1',
+      'e3',
+    ]);
+    expect(slots[0]?.oneByClass('fuel-slot-sum').textContent).toBe('307 kcal · 31 g');
+    const banana = byAttr(el, 'data-entry', 'e3');
+    expect(banana.textContent).toContain('120 g');
+    const kraPao = byAttr(el, 'data-entry', 'e2');
+    expect(kraPao.textContent).toContain('1.4 servings');
+    expect(kraPao.byClass('fuel-tag')[0]?.textContent).toBe('estimate');
+  });
+
+  it('M13: a row is one button that opens the sheet (Edit / Delete); no Delete block on the row', () => {
+    const { el, calls } = render();
+    byAttr(el, 'data-entry-edit', 'e2').click();
+    expect(calls.edit).toEqual(['e2']);
+    for (const id of ['e1', 'e2', 'e3']) {
+      const row = byAttr(el, 'data-entry', id);
+      const buttons = row.byTag('button');
+      expect(buttons).toHaveLength(1);
+      expect(buttons[0]?.getAttribute('data-entry-edit')).toBe(id);
+      expect(row.textContent).not.toContain('Delete');
+      expect(row.oneByClass('sr-only').textContent).toBe(', edit or delete');
+      expect(row.oneByClass('fuel-entry-go').getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(el.find((e) => e.hasAttribute('data-entry-delete'))).toEqual([]);
+  });
+
+  it('weigh-in button shows the last weigh-in in the unit', () => {
+    const { el, calls } = render({ unit: 'lb', lastWeighInKg: 70 });
+    const btn = byAttr(el, 'data-weigh-in');
+    expect(btn.textContent).toContain('Weigh-in');
+    expect(btn.textContent).toMatch(/154(\.\d)? lb/);
+    btn.click();
+    expect(calls.weigh).toBe(1);
+    expect(byAttr(render({ lastWeighInKg: null }).el, 'data-weigh-in').textContent).toBe(
+      'Weigh-in',
+    );
+  });
+
+  it('nudge banner slot: status text + Dismiss', () => {
+    expect(all(render().el, 'data-fuel-nudge')).toHaveLength(0);
+    const { el, calls } = render({ nudge: '40 g protein to go today' });
+    // The one shared banner (links.ts): on the Fuel tab there is no "Log food" link in it.
+    const n = byAttr(el, 'data-fuel-nudge');
+    expect(all(n, 'data-nudge-open')).toHaveLength(0);
+    expect(n.getAttribute('role')).toBe('status');
+    expect(n.textContent).toContain('40 g protein to go today');
+    byAttr(el, 'data-nudge-dismiss').click();
+    expect(calls.dismiss).toBe(1);
+  });
+
+  it('the tab bar has the 5 M12 tabs with Fuel current', () => {
+    const { el, calls } = render();
+    const tabs = el.byClass('tab');
+    expect(tabs.map((t) => t.getAttribute('data-tab'))).toEqual([
+      'today',
+      'fuel',
+      'coach',
+      'calendar',
+      'settings',
+    ]);
+    expect(tabs[1]?.getAttribute('aria-current')).toBe('page');
+    tabs[1]?.click();
+    tabs[3]?.click();
+    expect(calls.tab).toEqual(['calendar']);
+  });
+});
+
+describe('groupBySlot', () => {
+  it('is empty for no entries', () => {
+    expect(groupBySlot([])).toEqual([]);
+  });
+});
+
+describe('M12 1b: Measurements row', () => {
+  const noop = () => undefined;
+  const base = {
+    onLog: noop,
+    onEditEntry: noop,
+    onWeighIn: noop,
+    onSetup: noop,
+    onTab: noop,
+  };
+  const order = (el: FakeEl) =>
+    el
+      .find(
+        (e) =>
+          e.attrs.has('data-measurements-open') ||
+          e.attrs.has('data-log-open') ||
+          e.classes.includes('fuel-entries'),
+      )
+      .map((e) =>
+        e.attrs.has('data-measurements-open')
+          ? 'measure'
+          : e.attrs.has('data-log-open')
+            ? 'log'
+            : 'entries',
+      );
+
+  it('is not there unless both the data and the callback are passed (old callers unchanged)', () => {
+    expect(all(render().el, 'data-measurements-open')).toHaveLength(0);
+    expect(
+      all(
+        render({ measurements: { lastDate: '2026-11-01', due: false } }).el,
+        'data-measurements-open',
+      ),
+    ).toHaveLength(0);
+    const el = asFake(fuelScreen(props(), { ...base, onMeasurements: noop }));
+    expect(all(el, 'data-measurements-open')).toHaveLength(0);
+  });
+
+  it('sits under today’s food and opens the screen', () => {
+    let opened = 0;
+    const el = asFake(
+      fuelScreen(props({ measurements: { lastDate: '2026-11-01', due: false } }), {
+        ...base,
+        onMeasurements: () => opened++,
+      }),
+    );
+    const row = byAttr(el, 'data-measurements-open');
+    expect(row.tag).toBe('button');
+    expect(row.textContent).toContain('Measurements');
+    expect(row.textContent).toContain('Last 1 Nov');
+    expect(order(el)).toEqual(['log', 'entries', 'measure']);
+    row.click();
+    expect(opened).toBe(1);
+    expectCleanCopy(row);
+  });
+
+  it('moves up under the header when it is time to measure again', () => {
+    const el = asFake(
+      fuelScreen(props({ measurements: { lastDate: '2026-10-12', due: true } }), {
+        ...base,
+        onMeasurements: noop,
+      }),
+    );
+    expect(all(el, 'data-measurements-open')).toHaveLength(1);
+    expect(byAttr(el, 'data-measurements-open').textContent).toContain('Measure again');
+    expect(order(el)).toEqual(['measure', 'log', 'entries']);
+  });
+
+  it('never measured: still offered, with a plain line', () => {
+    const el = asFake(
+      fuelScreen(props({ measurements: { lastDate: null, due: false } }), {
+        ...base,
+        onMeasurements: noop,
+      }),
+    );
+    expect(byAttr(el, 'data-measurements-open').textContent).toContain(
+      'Tape measure, once a month',
+    );
+  });
+});
