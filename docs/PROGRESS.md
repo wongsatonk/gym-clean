@@ -127,7 +127,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: `src/core/exercises/row.ts`, `src/core/exercises/concentrationCurl.ts` (`placement.lines`, `spoken`, `distanceM`, `heightHint`), their tests.
   - Done when: lines ≤ 8 words, sentence matches the lines, both work for either arm ("Working arm faces the phone"), tests updated; no change if task 2 finds the current spot fine (say so).
   - Deps: 2, 8 (same file).
-- [ ] 10. [core-engineer] Session: per-side sets, tests first.
+- [x] 10. [core-engineer] Session: per-side sets, tests first.
   - Files: `src/core/session.ts`(+test).
   - For a one-sided exercise a set starts on the right; new event `NEXT_SIDE { now }` keeps the right's counts and moves to the left; `SET_COUNTED`/`ADJUST` apply to the current side; `SET_DONE` logs **one** `SetLog` with `sides` and `reps` = lower side (if it arrives on the first side, e.g. from the Pause sheet, it logs the right only); the rest clock starts when the left ends; `CORRECT_LAST_SET` takes an optional side; `summarize()` keeps both sides.
   - Done when: tests cover the flow, the early end, Fix per side, rest timing; every existing session test passes unchanged (two-sided exercises identical).
@@ -254,7 +254,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Rules: the key is written with `WhenUnlockedThisDeviceOnly`, not synchronizable, and **never returned to JS** (`hasKey` gives a boolean + saved time only); `setKey` checks the shape (`sk-ant-` prefix, length bounds, no whitespace) and overwrites; `removeKey` deletes. `send` POSTs only to `https://api.anthropic.com/v1/messages` (fixed in Swift; JS passes the body, never a URL), headers `x-api-key` (from the Keychain), `anthropic-version` (task 1), `content-type`; no cookies, no cache (`ephemeral` session config); timeout from JS (default 15 s); returns status + body (≤ 64 KB) + request id; offline → `{ code: 'offline' }`, timeout → `'timeout'`. `testKey` = `GET /v1/models` (no tokens spent). Nothing about the key or body is ever printed or logged.
   - Done when XCTests (fake Keychain + fake session) cover: key round trip, never readable through the plugin API, remove, bad shape rejected, only the allowed URL is ever requested, the key only in the header (never in the body or URL), each status/offline/timeout mapping, no request when no key; TS bridge tests cover junk replies and the PWA path; simulator build passes.
   - Deps: 1, 2, 3.
-- [ ] 10. [core-engineer] Claude brain adapter, **tests first**.
+- [x] 10. [core-engineer] Claude brain adapter, **tests first**.
   - Files: src/data/brain/claude.ts(+test), src/data/brain/claudeUsageStore.ts(+test) (settings `'claudeUsage'` load/save/prune).
   - `claudeBrain(bridge, deps)`: `status()` → unavailable `off` (switch off or explainer not accepted), `notNative`, `noKey`, `offline` (injected `isOnline()`; no request), `capReached` (task 7), else available. `ask()`: build (4, 5) → `bridge.send` → parse (6) → record usage (7; also on errors that returned usage) → `modelReplyFor` (8) with `source: 'claude'`; red flags never reach it (router); `usedHealth` never set. Errors reject with `BrainError(code)`.
   - Done when tests (fake bridge) cover: each status reason; a 200 text reply; a tool call → Proposal; two calls; an invalid call → help + chips; each error code; usage recorded and the cap reached after N; **no `fetch`, XHR, WebSocket or `sendBeacon` anywhere** (stubs throw); the body handed to `send` passes task 4's never-contains check end to end with a fully seeded made-up profile.
@@ -958,7 +958,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Counter mirrors §3 on the vertical signal: EMA (time-constant from `t` deltas, not a per-frame alpha), hysteresis, min leg times, partials not counted as reps; emits `HeadEvent` reps.
   - Done when: exact counts on the synthetic clean clips at both rates, half reps not counted, data test (every id exists in the catalog, no exercise has both a camera `count` and a head `count` without the camera winning); `npm run check`.
   - Deps: 3, 4.
-- [ ] 10. [core-engineer] Head hint scheduler + per-set numbers. Tests first.
+- [x] 10. [core-engineer] Head hint scheduler + per-set numbers. Tests first.
   - Files: src/core/headmotion/hints.ts(+test), src/core/headmotion/copy.ts(+test).
   - Hold a drift until the next counted rep (camera or head), or speak at holdMs when nothing counts; at most one head hint per set; shares the camera hint cooldown; never cuts a count (voice queue kind `hint`). `setHead(frames…)` → `{ stillPct, hints, counted }`. Copy "Keep your head still." / "Keep your neck long, eyes ahead." passes `checkCopy`.
   - Done when: timing tests (between reps, once per set, cooldown shared, nothing during rest); `npm run check`.
