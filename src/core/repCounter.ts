@@ -22,6 +22,11 @@
 // first frame. The side is never picked, switched or unlocked by the counter (stream restarts,
 // view changes and reset() keep it); only setSide() changes it, which also zeroes the counts.
 // Without a side, the rule's sideMode applies as before.
+//
+// M13b task 8, both rule data: `maxHipAngleDeg` (hinge gate) tracks only while the hip is bent
+// (bent over / seated), so standing or walking in front of the phone counts nothing;
+// `trackingHoldMs` keeps reporting `tracking` through a short visibility dip (state only: hidden
+// frames are never counted or timed).
 import {
   angleBetweenDeg,
   frameAngle,
@@ -50,7 +55,8 @@ export type TrackedSide = Side | 'both';
 /**
  * Why the last frame wasn't tracked: `visibility` = the rule's joints failed the visibility gate
  * (or no pose); `posture` = the torso leaned past rule.maxTorsoLeanDeg; `bodyLine` = the hip
- * angle failed the active rule's minHipAngleDeg (push-up front variant: sitting, kneeling up).
+ * angle failed the active rule's minHipAngleDeg (push-up front variant: sitting, kneeling up) or
+ * the rule's maxHipAngleDeg (row / concentration curl: standing up, or hips/knees unreadable).
  */
 export type UntrackedReason = 'visibility' | 'posture' | 'bodyLine';
 
@@ -68,7 +74,10 @@ export type RepCounter = {
    * setSide) it is always that side, from before the first frame.
    */
   readonly side: TrackedSide | null;
-  /** False when the last frame failed the visibility gate ("Step into frame"). */
+  /**
+   * False when the last frame failed a gate ("Step into frame"). A visibility miss within
+   * rule.trackingHoldMs of the last tracked frame still reads true.
+   */
   readonly tracking: boolean;
   /** Smoothed joint angle in degrees; null before the first tracked frame. */
   readonly angle: number | null;
@@ -87,8 +96,10 @@ export type RepCounter = {
   /** The most recent partial event (kept across later reps); null before any. */
   readonly lastPartial: RepEvent | null;
   /**
-   * Why the last frame wasn't tracked; null when it was (and before any frame). The body-line
-   * gate is checked first, then posture, then visibility.
+   * Why the last frame wasn't tracked; null when it was, while a visibility miss is held
+   * (rule.trackingHoldMs), and before any frame. `bodyLine` covers both hip gates
+   * (minHipAngleDeg, maxHipAngleDeg). The body-line gates are checked first, then posture, then
+   * visibility.
    */
   readonly untracked: UntrackedReason | null;
   /**
@@ -122,6 +133,11 @@ const RESEED_GAP_MS = 500;
 const DEFAULT_VIEW_YAW = { frontBelow: 40, sideAbove: 50 } as const;
 /** After the posture gate has failed this long without a break, re-take the reference posture. */
 const LEAN_RELOCK_MS = 3000;
+/**
+ * Hinge gate (rule.maxHipAngleDeg): failing this long without a break drops the attempt in
+ * progress. Shorter failures (1–3 frame hip glitches on real clips) only skip those frames.
+ */
+const HINGE_DROP_MS = 300;
 
 type Reading = { angle: number; side: TrackedSide; gate: boolean };
 
@@ -222,6 +238,8 @@ export function createRepCounter(rule: ExerciseRule, options: RepCounterOptions 
   let leanStartSince: number | null = null;
   /** Recent shoulder-line yaws while settling, to judge the camera view (rule.otherView). */
   let yaws: number[] = [];
+  /** Since when (frame t) the hinge gate has failed without a break; null while it passes. */
+  let hingeFailSince: number | null = null;
 
   /** Forget the limb's position (back to setup, side unlocked unless fixed) but keep the counts. */
   function restartTracking(): void {
@@ -240,6 +258,7 @@ export function createRepCounter(rule: ExerciseRule, options: RepCounterOptions 
     leanFailSince = null;
     leanStartSince = null;
     yaws = [];
+    hingeFailSince = null;
     applyRule(rule);
   }
 
@@ -296,6 +315,13 @@ export function createRepCounter(rule: ExerciseRule, options: RepCounterOptions 
     return hip === null || hip >= active.minHipAngleDeg;
   }
 
+  /** False when the rule's hinge gate (maxHipAngleDeg) fails: hip too straight, or unreadable. */
+  function hingeOk(frame: LandmarkFrame): boolean {
+    if (rule.maxHipAngleDeg === undefined) return true;
+    const hip = hipAngleDeg(frame, rule.minVisibility);
+    return hip !== null && hip <= rule.maxHipAngleDeg;
+  }
+
   /** False when the torso has turned past rule.maxTorsoLeanDeg from its direction at settle. */
   function postureOk(frame: LandmarkFrame): boolean {
     if (rule.maxTorsoLeanDeg === undefined || refTorso === null) return true;
@@ -324,6 +350,16 @@ export function createRepCounter(rule: ExerciseRule, options: RepCounterOptions 
       untracked = 'bodyLine';
       return null;
     }
+    if (!hingeOk(frame)) {
+      // Standing or walking in front of the phone: skip the frame; once it lasts longer than a
+      // pose glitch, the attempt in progress is dropped too (back to setup, counts kept).
+      hingeFailSince ??= frame.t;
+      if (frame.t - hingeFailSince >= HINGE_DROP_MS) phase = 'setup';
+      settleSince = null;
+      untracked = 'bodyLine';
+      return null;
+    }
+    hingeFailSince = null;
     const r = readAngle(frame);
     untracked = r === null ? 'visibility' : null;
     if (postureOk(frame)) {
@@ -469,7 +505,10 @@ export function createRepCounter(rule: ExerciseRule, options: RepCounterOptions 
     lastFrameT = t;
     const r = read(frame);
     if (r === null) {
-      tracking = false;
+      // A short visibility miss keeps reporting the last tracked state (rule.trackingHoldMs).
+      const held = untracked === 'visibility' && t - lastTrackedT <= (rule.trackingHoldMs ?? 0);
+      if (held) untracked = null;
+      tracking = held;
       prevTracked = false;
       settleSince = null; // settling needs an unbroken run of tracked frames
       return [];

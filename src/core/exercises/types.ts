@@ -113,6 +113,21 @@ export type ExerciseRule = {
    */
   minHipAngleDeg?: number;
   /**
+   * Optional hinge gate (deg, M13b): the exercise is done bent over or seated, so frames where the
+   * shoulder–hip–knee angle (world 3D, sides passing minVisibility) is above this, or can't be
+   * read, are not tracked (untracked `bodyLine`). Standing, walking or fiddling in front of the
+   * phone then counts nothing. A failure longer than a pose glitch (HINGE_DROP_MS in the counter)
+   * also drops the attempt in progress. Row: bent over the bench read 90–115° (real clip 01, 686
+   * of 688 frames ≤ 140°); standing in front of the phone 152–171°.
+   */
+  maxHipAngleDeg?: number;
+  /**
+   * Optional (ms, M13b): after the last tracked frame, a visibility miss shorter than this still
+   * reads `tracking` true (untracked null), so a short dip doesn't flash "Step into frame". Only
+   * the reported state is held: hidden frames are never counted or timed. Default 0 (no hold).
+   */
+  trackingHoldMs?: number;
+  /**
    * View cut-offs for otherView (mean world shoulder-line yaw while settling, deg): front below
    * `frontBelow`, side above `sideAbove`, in between keep the current view. Default 40 / 50.
    * The Push A log read 0–10° head-on; the synthetic side clips 49–89°.

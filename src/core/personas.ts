@@ -516,20 +516,20 @@ const PLACEMENT: Template[] = [
   {
     id: 'placement.bench',
     match: re(
-      /^Put the phone at bench height, (?<dist>.+?) away, with your rowing arm facing it\.$/,
+      /^Put the phone at bench height, not on the floor, (?<dist>.+?) away, whole body in view\.$/,
     ),
     lines: {
       1: [
-        'Bench-high phone, {dist} out, rowing arm toward it. Move!',
-        'Phone at bench height, {dist} away, rowing arm facing it!',
+        'Bench-high phone, not the floor, {dist} out, whole body in view!',
+        'Not the floor! Bench height, {dist} out, whole body in view!',
       ],
       2: [
-        'Bench-high phone, {dist} out, rowing arm toward it. Damn, move!',
-        'Bench-high phone, {dist} out, rowing arm facing it. Hell yes!',
+        'Bench-high phone, not the damn floor, {dist} out, body in view!',
+        'Not the damn floor! Bench-high, {dist} out, whole body in view!',
       ],
       3: [
-        'Bench-high phone, {dist} out, rowing arm facing it. Fucking move!',
-        "Bench-high phone, {dist} out, rowing arm facing it, for fuck's sake!",
+        'Not the fucking floor! Bench-high, {dist} out, whole body in view!',
+        'Bench-high phone, not the fucking floor, {dist} out, body in view!',
       ],
     },
   },
