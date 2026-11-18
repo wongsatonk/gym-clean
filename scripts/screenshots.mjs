@@ -4570,7 +4570,7 @@ async function m1152Seed(page, seenRelease) {
     o.onsuccess = () => {
       const tx = o.result.transaction(['sessions', 'sets', 'settings'], 'readwrite');
       tx.objectStore('settings').put({ key: 'whatsNew', value: { seenRelease } });
-      tx.objectStore('settings').put({ key: 'permissionCatchUp', value: '1.15.2' });
+      tx.objectStore('settings').put({ key: 'permissionCatchUp', value: '1.16.1' });
       tx.objectStore('sessions').put({ sessionId: 's1', dayId: 'push-a', startedAt: t0, endedAt: t0 + 2_400_000, setsDone: 1, totalVolumeKg: 0, restOverruns: 0 });
       tx.objectStore('sets').put({ sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 10, weightKg: 20, startedAt: t0 + 60_000, endedAt: t0 + 90_000 });
       tx.oncomplete = () => { o.result.close(); res(true); };
@@ -4586,10 +4586,10 @@ async function m1152Coach(browser) {
   const flow = { flow: 'm1152-coach' };
   await page.clock.install({ time: new Date(2026, 10, 13, 18, 0, 0) });
   await page.goto(BASE + '/');
-  // Native first open shows the permission catch-up (seeded as 1.15.1); let the DB exist, then seed.
+  // Native first open shows the permission catch-up (seeded as the current release); let the DB exist, then seed.
   await page.locator('main').first().waitFor();
   await page.waitForTimeout(1500);
-  await m1152Seed(page, '1.15.2');
+  await m1152Seed(page, '1.16.1');
   await page.locator('[data-cal]').first().waitFor();
   flow.tourOpen = await page.locator('[data-tour="whats-new"]').count();
   await page.locator('[data-tab="coach"]').click();

@@ -734,6 +734,12 @@ describe('1.15.2 eval follow-ups', () => {
       expect([text, matchIntent(text, evalCtx).slots.exerciseId]).toEqual([text, undefined]);
       expect([text, namesExercise(text, evalCtx)]).toEqual([text, false]);
     }
+    // "ups" is as generic: "sit-ups" is not Step Ups (no sit-up in the catalog → the whole text).
+    expect(namesExercise('sit ups', evalCtx)).toBe(false);
+    expect(matchIntent('do crunches instead of sit-ups', evalCtx)).toMatchObject({
+      intent: 'swap',
+      slots: { exerciseId: 'Crunches' },
+    });
     expect(matchIntent('swap push ups', evalCtx).slots.exerciseId).toBe('Pushups');
     expect(matchIntent('swap step ups', evalCtx).slots.exerciseId).toBe('Dumbbell_Step_Ups');
   });

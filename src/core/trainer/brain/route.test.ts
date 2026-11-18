@@ -203,6 +203,31 @@ describe('routeMessage', () => {
       ]);
   });
 
+  // 1.16.0 M13c: asking for abs/core is a core focus block; questions about it are the model's.
+  it('an abs / core request is a rules core block; a question about it goes to the model', () => {
+    for (const [text, why] of [
+      ['add abs', 'action'],
+      ['six pack', 'action'],
+      ['ท้อง', 'thai'],
+    ] as const)
+      expect([text, routeMessage(text, coach)]).toMatchObject([
+        text,
+        { to: 'rules', why, call: { name: 'proposeFocusBlock', args: { group: 'core' } } },
+      ]);
+    for (const text of ["what's my core focus", 'how many abs exercises are there?']) {
+      const r = routeMessage(text, coach);
+      expect([text, r.to]).toEqual([text, 'model']);
+      expect(r).not.toHaveProperty('call');
+    }
+  });
+
+  it('"crunches instead of sit-ups" is a rules swap of Crunches, never Step Ups', () => {
+    expect(routeMessage('do crunches instead of sit-ups', coach)).toMatchObject({
+      to: 'rules',
+      call: { name: 'swapExercise', args: { exerciseId: 'Crunches' } },
+    });
+  });
+
   it('"X instead of Y" with an unclear Y never swaps X; it goes to the model', () => {
     const r = routeMessage('Can I do the leg press instead of rows?', coach);
     expect(r.match.slots.exerciseId).not.toBe('Leg_Press');
@@ -291,6 +316,7 @@ const REGRESSION_PARAPHRASES: readonly [string, 'rules' | 'model', string][] = [
   ['How much weight should I drop on bench, it stalled', 'rules', 'stall'],
   ["I'm stuck on the shoulder press", 'rules', 'stall'],
   ['my legs are wrecked', 'rules', 'avoidArea'],
+  ['do crunches instead of sit-ups', 'rules', 'swap'],
   // Known rules gap (pinned, not tuned): "push today's session" isn't a postpone phrase; the model
   // gets it.
   ["Could you push today's session to Saturday?", 'model', 'help'],

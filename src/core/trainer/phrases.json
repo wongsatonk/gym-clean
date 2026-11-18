@@ -834,8 +834,8 @@
     "grip"
   ],
   "exerciseHeadStopwords": {
-    "note": "Generic last name words that alone never name an exercise ('I am fed up', 'warm up' are not Incline Push-Up). A full name ('push ups', 'step ups') still matches.",
-    "words": ["up"]
+    "note": "Generic last name words that alone never name an exercise ('I am fed up', 'warm up' are not Incline Push-Up; 'sit-ups' is not Step Ups). A full name ('push ups', 'step ups') still matches.",
+    "words": ["up", "ups"]
   },
   "safety": {
     "discomfort": [

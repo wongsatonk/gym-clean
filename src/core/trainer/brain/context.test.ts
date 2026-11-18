@@ -626,6 +626,13 @@ describe('plan line (M13c task 6b: the coach knows the plan)', () => {
     expect(text.indexOf('Plan: ')).toBeLessThan(text.indexOf('Top sets'));
   });
 
+  it('kept on the heavy history with an 8,192-token window, within 6,000 characters', () => {
+    const { text } = serializeContext(input(), { brain: 'apple', windowTokens: 8192 });
+    expect(text.length).toBeLessThanOrEqual(6000);
+    expect(planLineOf(text)).toBeDefined();
+    expect(text.indexOf('Plan: ')).toBeLessThan(text.indexOf('Top sets'));
+  });
+
   it('dropped last: when even the fixed lines are over the budget, it goes before the hard cut', () => {
     const many: Goal[] = Array.from({ length: 60 }, (_, i) => ({
       ...LIFT_GOAL,
