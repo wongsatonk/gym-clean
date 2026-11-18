@@ -343,7 +343,16 @@ test.describe('set-up card on a short phone (375×667)', () => {
       page,
     }, testInfo) => {
       const cam = await openCameraOn(page, day, first, name);
-      const got = cam.locator('.cam-setup').getByRole('button', { name: 'Got it' });
+      // Since M13b the card closes itself 10 s after the camera starts; on a slow runner that can
+      // land mid-test. Reopen it with "Phone position", which holds it open for ≥ 8 s.
+      const card = cam.locator('.cam-setup');
+      if (await card.isVisible())
+        await card
+          .getByRole('button', { name: 'Got it' })
+          .click({ timeout: 2000 })
+          .catch(() => undefined);
+      await cam.getByRole('button', { name: 'Phone position' }).click();
+      const got = card.getByRole('button', { name: 'Got it' });
       await expect(got).toBeInViewport({ ratio: 1 });
       const line = cam.locator('[data-setup-learning]');
       if (learning) {
