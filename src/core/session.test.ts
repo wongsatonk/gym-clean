@@ -4,6 +4,7 @@ import {
   REST_OVERRUN_GRACE_SEC,
   currentPlanned,
   currentSide,
+  sideTurn,
   currentWarmup,
   lowerSide,
   next,
@@ -1794,6 +1795,14 @@ describe('one-sided sets (M13b): right, Next side, left, one SetLog', () => {
     expect(currentSide(two)).toBeNull();
     expect('side' in two).toBe(false);
     expect('doneSide' in two).toBe(false);
+  });
+
+  it('sideTurn: first before Next arm, second after, null for two-sided, on Rest and Summary', () => {
+    const s = one();
+    expect(sideTurn(s)).toBe('first');
+    expect(sideTurn(run(s, counted(5), nextSide(30)))).toBe('second');
+    expect(sideTurn(fresh())).toBeNull();
+    expect(sideTurn(run(s, counted(5), nextSide(30), counted(4), done(60)))).toBeNull();
   });
 
   it('NEXT_SIDE keeps the right count and moves to the left', () => {

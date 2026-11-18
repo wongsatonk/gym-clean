@@ -9,11 +9,12 @@ import {
   personInFrame,
   type AutoSet,
   type AutoSetAction,
+  type AutoSetSession,
 } from './autoSet';
 import { ruleFor } from './exercises';
 import { createRepCounter, type RepCounter } from './repCounter';
 import { curve, sample, withHip, type Keys } from './testkit/frames';
-import type { LandmarkFrame, RepEvent } from './types';
+import type { LandmarkFrame, RepEvent, WorkSide } from './types';
 
 const CLIPS = import.meta.glob<LandmarkFrame[]>(
   '../../fixtures/landmarks/lateral-raise/real-2026-11-13-s1-*.json',
@@ -351,5 +352,209 @@ describe('push-up rest-pause (synthetic front variant, real counter + autoSet)',
     const longer = run(timeline({ topMs: PAUSE_TOP_MS + 600 }).frames);
     expect(types(longer).slice(0, 2)).toEqual(['stopPending', 'stopCancelled']);
     expect(longer.log[0]?.action).toMatchObject({ reason: 'still', reps: 6 });
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// M13b one-arm row (task 11): his real row clips and the synthetic one-arm clips through the real
+// counter (side fixed by the session) and the hands-free machine, fed the way cameraView feeds
+// them (tracking, present, untracked, phase, angle, events).
+// ---------------------------------------------------------------------------------------------
+
+const ROW_FILES = import.meta.glob<LandmarkFrame[]>('../../fixtures/landmarks/row/*.json', {
+  eager: true,
+  import: 'default',
+});
+
+function rowClip(file: string): LandmarkFrame[] {
+  const hit = Object.entries(ROW_FILES).find(([p]) => p.endsWith(`/${file}`));
+  if (!hit) throw new Error(`no row fixture ${file}`);
+  return hit[1];
+}
+
+const realRow = Object.keys(ROW_FILES)
+  .map((p) => p.replace(/^.*\//, ''))
+  .filter((f) => f.startsWith('real-'))
+  .sort();
+
+type ArmRun = { log: Logged[]; counter: RepCounter; auto: AutoSet; t: number; low: number };
+
+function armRun(side: WorkSide): ArmRun {
+  const rule = ruleFor('One-Arm_Dumbbell_Row');
+  if (!rule) throw new Error('no row rule');
+  return {
+    log: [],
+    counter: createRepCounter(rule, { side }),
+    auto: createAutoSet(),
+    t: 0,
+    low: 0,
+  };
+}
+
+function session(run: ArmRun, s: AutoSetSession): void {
+  for (const action of run.auto.setSession(s, run.t)) run.log.push({ t: run.t, action });
+}
+
+/** Feed frames shifted by `offset` ms; counts must never go down while the side runs. */
+function feed(run: ArmRun, frames: readonly LandmarkFrame[], offset = 0): void {
+  for (const raw of frames) {
+    const f = offset ? { ...raw, t: raw.t + offset } : raw;
+    run.t = f.t;
+    const events = run.counter.push(f);
+    const actions = run.auto.push({
+      t: f.t,
+      tracking: run.counter.tracking,
+      present: personInFrame(f),
+      untracked: run.counter.untracked,
+      phase: run.counter.phase,
+      angle: run.counter.angle,
+      events,
+    });
+    for (const action of actions) run.log.push({ t: f.t, action });
+    const { reps: n } = run.auto.counts;
+    if (run.auto.state === 'set') {
+      expect(n).toBeGreaterThanOrEqual(run.low);
+      run.low = n;
+    }
+  }
+}
+
+/** `ms` of the clip's last frame re-posed standing (hips straight), from `after` on. */
+function standing(frames: readonly LandmarkFrame[], after: number, ms: number): LandmarkFrame[] {
+  const last = frames[frames.length - 1];
+  if (!last) throw new Error('empty clip');
+  const out: LandmarkFrame[] = [];
+  for (let dt = 1000 / 30; dt <= ms; dt += 1000 / 30)
+    out.push({ ...withHip(last, 170), t: after + dt });
+  return out;
+}
+
+/** `ms` of an empty scene from `after` on. */
+function empty(frames: readonly LandmarkFrame[], after: number, ms: number): LandmarkFrame[] {
+  const last = frames[frames.length - 1];
+  if (!last) throw new Error('empty clip');
+  const out: LandmarkFrame[] = [];
+  for (let dt = 1000 / 30; dt <= ms; dt += 1000 / 30)
+    out.push({ t: after + dt, landmarks: last.landmarks.map((l) => ({ ...l, visibility: 0 })) });
+  return out;
+}
+
+const sideOf = (file: string): WorkSide => (/-left__/.test(file) ? 'left' : 'right');
+const types = (run: ArmRun) => run.log.map((l) => l.action.type);
+const lastT = (frames: readonly LandmarkFrame[]) => frames[frames.length - 1]?.t ?? 0;
+
+describe('one-arm row, first side: nothing ends the set (M13b task 11, real clips)', () => {
+  it('finds the five real row clips', () => {
+    expect(realRow).toHaveLength(5);
+  });
+
+  for (const file of realRow) {
+    it(`${file}: no stop / hold / commit, counts never go down, through standing and leaving`, () => {
+      const frames = rowClip(file);
+      const run = armRun(sideOf(file));
+      run.t = frames[0]?.t ?? 0;
+      session(run, { phase: 'exercise', paused: false, restElapsedMs: 0, sideTurn: 'first' });
+      feed(run, frames);
+      const up = standing(frames, lastT(frames), 30_000);
+      feed(run, up);
+      feed(run, empty(frames, lastT(up), 30_000));
+      expect(types(run).filter((x) => x !== 'remindNextSide')).toEqual([]);
+      expect(run.auto.state).toBe('set');
+      expect(run.counter.side).toBe(sideOf(file));
+      // At most one reminder, and only after a counted rep.
+      expect(types(run).length).toBeLessThanOrEqual(run.auto.counts.reps >= 1 ? 1 : 0);
+    });
+  }
+});
+
+describe('rest with the camera on: setting the phone up starts nothing (M13b task 11)', () => {
+  // Set 3 of his row session began at 2: in rest the hands-free start counted two "reps" while he
+  // placed the phone. Every real row clip begins with that kind of set-up span.
+  for (const file of realRow) {
+    it(`${file} replayed as rest (armed): no start`, () => {
+      const frames = rowClip(file);
+      const run = armRun(sideOf(file));
+      run.t = frames[0]?.t ?? 0;
+      session(run, { phase: 'rest', paused: false, restElapsedMs: 60_000 });
+      feed(run, frames);
+      expect(types(run)).toEqual([]);
+    });
+  }
+
+  for (const [file, side] of [
+    ['synthetic-01__reps-4__partials-0.json', 'right'],
+    ['synthetic-03-left__reps-4__partials-0.json', 'left'],
+  ] as const) {
+    it(`${file}: arm cycles while standing (placing the phone) start nothing; bent over they do`, () => {
+      const frames = rowClip(file);
+      const standingRun = armRun(side);
+      session(standingRun, { phase: 'rest', paused: false, restElapsedMs: 60_000 });
+      feed(
+        standingRun,
+        frames.map((f) => withHip(f, 170)),
+      );
+      expect(types(standingRun)).toEqual([]);
+
+      const bentRun = armRun(side);
+      session(bentRun, { phase: 'rest', paused: false, restElapsedMs: 60_000 });
+      feed(bentRun, frames);
+      expect(types(bentRun)).toEqual(['start']);
+    });
+  }
+});
+
+describe('one-arm row set: right, stand up, Next arm, left (M13b task 11, synthetic)', () => {
+  const right = rowClip('synthetic-01__reps-4__partials-0.json');
+  const left = rowClip('synthetic-03-left__reps-4__partials-0.json');
+
+  function rightSide(): ArmRun {
+    const run = armRun('right');
+    session(run, { phase: 'exercise', paused: false, restElapsedMs: 0, sideTurn: 'first' });
+    feed(run, right);
+    return run;
+  }
+
+  it('right arm: 4 reps; standing up after it gives the Next arm reminder once, never a break', () => {
+    const run = rightSide();
+    expect(run.auto.counts).toEqual({ reps: 4, partials: 0 });
+    feed(run, standing(right, lastT(right), 20_000));
+    expect(types(run)).toEqual(['remindNextSide']);
+    expect(run.log[0]?.action).toEqual({ type: 'remindNextSide', reps: 4, partials: 0 });
+    expect(run.auto.state).toBe('set');
+  });
+
+  it('Next arm → left arm: 4 reps from 0; standing up after it is the M5c break with 4 reps', () => {
+    const run = rightSide();
+    const upEnd = lastT(right) + 10_000;
+    feed(run, standing(right, lastT(right), 10_000));
+    run.t = upEnd;
+    run.counter.setSide('left');
+    run.low = 0;
+    session(run, { phase: 'exercise', paused: false, restElapsedMs: 0, sideTurn: 'second' });
+    expect(run.auto.counts).toEqual({ reps: 0, partials: 0 });
+    const offset = upEnd + 1000;
+    feed(run, left, offset);
+    expect(run.auto.counts).toEqual({ reps: 4, partials: 0 });
+    expect(types(run)).toEqual(['remindNextSide']);
+    feed(run, standing(left, lastT(left) + offset, 8_000));
+    expect(types(run)).toEqual(['remindNextSide', 'hold']);
+    expect(run.log[1]?.action).toMatchObject({ type: 'hold', reason: 'bodyLine', reps: 4 });
+  });
+
+  it('Next arm → left arm, held still bent over: the still stop + Undo + commit with 4 reps', () => {
+    const run = rightSide();
+    run.counter.setSide('left');
+    run.low = 0;
+    session(run, { phase: 'exercise', paused: false, restElapsedMs: 0, sideTurn: 'second' });
+    const offset = lastT(right) + 2000;
+    feed(run, left, offset);
+    const hold: LandmarkFrame[] = [];
+    const last = left[left.length - 1];
+    if (!last) throw new Error('empty clip');
+    for (let dt = 1000 / 30; dt <= 15_000; dt += 1000 / 30)
+      hold.push({ ...last, t: lastT(left) + offset + dt });
+    feed(run, hold);
+    expect(types(run)).toEqual(['stopPending', 'commit']);
+    expect(run.log[1]?.action).toMatchObject({ type: 'commit', reps: 4 });
   });
 });

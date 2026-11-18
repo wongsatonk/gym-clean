@@ -1525,3 +1525,268 @@ describe('plain rest is unchanged around breaks', () => {
     expect(sim.types()).toEqual(['start']);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// M13b one-sided sets (SPEC M13b goal 4, Decision "One-arm sets" (c)): right arm, Next arm, left
+// arm in one set. On the first side hands-free never ends or holds the set; after ≥ 1 rep and
+// ~6 s without a rep it asks once for Next arm. On the second side the M5c stop / Undo / break
+// work as before.
+// ---------------------------------------------------------------------------------------------
+
+function sideSession(sim: Sim, sideTurn: 'first' | 'second', paused = false): void {
+  sim.record(sim.auto.setSession({ phase: 'exercise', paused, restElapsedMs: 0, sideTurn }, sim.t));
+}
+
+/** A one-sided set already running on its first side, counter at the start band. */
+function onFirstSide(opts: SimOpts = {}, config?: Partial<AutoSetConfig>): Sim {
+  const sim = new Sim(createAutoSet({ ...AUTO_SET_DEFAULTS, ...config }), opts);
+  sideSession(sim, 'first');
+  sim.hold('top', 1000);
+  return sim;
+}
+
+const OUT = { tracking: false, present: false } as const;
+
+describe('one-sided sets: first side (M13b)', () => {
+  it('defaults: the Next arm reminder comes after 6 s', () => {
+    expect(AUTO_SET_DEFAULTS.nextSideReminderSec).toBe(6);
+  });
+
+  it('still in the start band: no stop, one remindNextSide ~6 s after the last rep, counts kept', () => {
+    const sim = onFirstSide();
+    const last = nth(sim.reps_(3), 2);
+    sim.hold('top', 5900, { jitter: 2 });
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 200, { jitter: 2 });
+    const remind = nth(sim.of('remindNextSide'), 0);
+    expect(remind.action).toEqual({ type: 'remindNextSide', reps: 3, partials: 0 });
+    expect(remind.t).toBeGreaterThanOrEqual(last.t + 6000);
+    expect(remind.t).toBeLessThan(last.t + 6100);
+    sim.hold('top', 60000, { jitter: 2 });
+    expect(sim.types()).toEqual(['remindNextSide']);
+    expect(sim.auto.state).toBe('set');
+    expect(sim.auto.pendingUntil).toBeNull();
+    expect(sim.auto.counts).toEqual({ reps: 3, partials: 0 });
+  });
+
+  it('no rep yet: no reminder, no stop', () => {
+    const sim = onFirstSide();
+    sim.hold('top', 30000, { jitter: 2 });
+    expect(sim.log).toEqual([]);
+    expect(sim.auto.state).toBe('set');
+  });
+
+  it('a single rep is enough for the reminder (stopMinReps does not apply)', () => {
+    const sim = onFirstSide();
+    sim.rep();
+    sim.hold('top', 6100);
+    expect(sim.types()).toEqual(['remindNextSide']);
+  });
+
+  it('standing up after the arm (body-line gate) is no break and no stop: the reminder instead', () => {
+    const sim = onFirstSide();
+    const last = nth(sim.reps_(4), 3);
+    sim.hold('top', 300);
+    sim.hold('setup', 30000, SIT);
+    expect(sim.types()).toEqual(['remindNextSide']);
+    const remind = nth(sim.of('remindNextSide'), 0);
+    expect(remind.t).toBeGreaterThanOrEqual(last.t + 6000);
+    expect(remind.t).toBeLessThan(last.t + 6100);
+    expect(sim.auto.state).toBe('set');
+    expect(sim.auto.counts).toEqual({ reps: 4, partials: 0 });
+  });
+
+  it('a posture gate is no break either', () => {
+    const sim = onFirstSide();
+    sim.reps_(2);
+    sim.hold('setup', 20000, BEND);
+    expect(sim.types()).toEqual(['remindNextSide']);
+  });
+
+  it('out of frame: no away hold, counts kept, the reminder, and counting goes on from N', () => {
+    const sim = onFirstSide();
+    sim.reps_(3);
+    sim.hold('top', 30000, OUT);
+    expect(sim.types()).toEqual(['remindNextSide']);
+    expect(sim.auto.counts).toEqual({ reps: 3, partials: 0 });
+    sim.hold('top', 1000);
+    sim.reps_(2);
+    expect(sim.auto.counts).toEqual({ reps: 5, partials: 0 });
+    // Still only one reminder per side.
+    sim.hold('top', 20000);
+    expect(sim.types()).toEqual(['remindNextSide']);
+  });
+
+  it('stuck outside the start band: no stalled stop, the reminder after 6 s', () => {
+    const sim = onFirstSide();
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('down', 300, { angle: (f) => TOP - 60 * f });
+    sim.hold('bottom', 20000, { angle: BOTTOM, jitter: 2 });
+    expect(sim.types()).toEqual(['remindNextSide']);
+    expect(nth(sim.of('remindNextSide'), 0).t).toBeLessThan(last.t + 6400);
+  });
+
+  it('partials keep the reminder away like reps (activity), and are counted', () => {
+    const sim = onFirstSide();
+    sim.rep();
+    sim.hold('top', 4000);
+    const p = sim.partial();
+    sim.hold('top', 5900);
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 200);
+    expect(nth(sim.of('remindNextSide'), 0).t).toBeGreaterThanOrEqual(p.t + 6000);
+    expect(sim.auto.counts).toEqual({ reps: 1, partials: 1 });
+  });
+
+  it('a stream restart keeps the counts (never a reset mid-side)', () => {
+    const sim = onFirstSide({ t0: 50000 });
+    sim.reps_(3);
+    sim.hold('top', 2000);
+    sim.t = 0;
+    sim.hold('top', 1000);
+    expect(sim.auto.counts).toEqual({ reps: 3, partials: 0 });
+    sim.reps_(1);
+    expect(sim.auto.counts).toEqual({ reps: 4, partials: 0 });
+  });
+
+  it('paused: no reminder; after Resume the 6 s count from the resume', () => {
+    const sim = onFirstSide();
+    sim.reps_(2);
+    sideSession(sim, 'first', true);
+    sim.hold('top', 20000);
+    expect(sim.log).toEqual([]);
+    const resumed = sim.t;
+    sideSession(sim, 'first', false);
+    sim.hold('top', 5900);
+    expect(sim.log).toEqual([]);
+    sim.hold('top', 200);
+    expect(nth(sim.of('remindNextSide'), 0).t).toBeGreaterThanOrEqual(resumed + 6000);
+  });
+
+  it('confirm / undo / nextSet / continueSet do nothing on the first side', () => {
+    const sim = onFirstSide();
+    sim.reps_(2);
+    expect(sim.confirm()).toEqual([]);
+    expect(sim.undo()).toEqual([]);
+    expect(sim.nextSet()).toEqual([]);
+    expect(sim.continueSet()).toEqual([]);
+    expect(sim.auto.counts).toEqual({ reps: 2, partials: 0 });
+  });
+
+  it('idle close still applies (camera off after 180 s nobody), the set is not committed', () => {
+    const sim = onFirstSide();
+    sim.reps_(2);
+    sim.hold('top', 181000, OUT);
+    expect(sim.types()).toEqual(['remindNextSide', 'close']);
+    expect(sim.of('commit')).toEqual([]);
+  });
+});
+
+describe('one-sided sets: Next arm and the second side (M13b)', () => {
+  it('Next arm zeroes the counts; the second side stops on still with its own reps', () => {
+    const sim = onFirstSide();
+    sim.reps_(4);
+    sim.hold('top', 2000);
+    sideSession(sim, 'second');
+    expect(sim.auto.state).toBe('set');
+    expect(sim.auto.counts).toEqual({ reps: 0, partials: 0 });
+    sim.hold('top', 1500);
+    const last = nth(sim.reps_(3), 2);
+    sim.hold('top', 6100, { jitter: 2 });
+    const stop = nth(sim.of('stopPending'), 0);
+    expect(stop.action).toMatchObject({ reason: 'still', reps: 3, partials: 0, endedAt: last.t });
+    sim.hold('top', 5100);
+    expect(sim.types()).toEqual(['stopPending', 'commit']);
+    expect(nth(sim.of('commit'), 0).action).toMatchObject({ reps: 3, endedAt: last.t });
+    expect(sim.auto.state).toBe('rest');
+  });
+
+  it('the second side never reminds; a reminder already given on the first side is not repeated', () => {
+    const sim = onFirstSide();
+    sim.reps_(2);
+    sim.hold('top', 7000);
+    sideSession(sim, 'second');
+    sim.hold('top', 20000);
+    expect(sim.types()).toEqual(['remindNextSide']);
+  });
+
+  it('second side: Next arm with no rep yet does not stop on still (stopMinReps counts this side)', () => {
+    const sim = onFirstSide();
+    sim.reps_(5);
+    sideSession(sim, 'second');
+    sim.rep();
+    sim.hold('top', 20000);
+    expect(sim.log.filter((l) => l.action.type !== 'remindNextSide')).toEqual([]);
+  });
+
+  it('standing up after the second side: the M5c break (hold) as today', () => {
+    const sim = onFirstSide();
+    sim.reps_(3);
+    sideSession(sim, 'second');
+    sim.hold('top', 500);
+    const last = nth(sim.reps_(2), 1);
+    sim.hold('top', 300);
+    sim.hold('setup', 5200, SIT);
+    expect(sim.types()).toEqual(['hold']);
+    expect(nth(sim.of('hold'), 0).action).toEqual({
+      type: 'hold',
+      reason: 'bodyLine',
+      reps: 2,
+      partials: 0,
+      endedAt: last.t,
+    });
+  });
+
+  it('out of frame after the second side: the away hold as today', () => {
+    const sim = onFirstSide();
+    sim.reps_(3);
+    sideSession(sim, 'second');
+    sim.reps_(2);
+    sim.hold('top', 3200, OUT);
+    expect(nth(sim.of('hold'), 0).action).toMatchObject({ reason: 'away', reps: 2 });
+  });
+
+  it('the next set starts on the first side again: no stop, and a fresh reminder', () => {
+    const sim = onFirstSide();
+    sim.reps_(2);
+    sim.hold('top', 6500);
+    sideSession(sim, 'second');
+    sim.reps_(2);
+    sim.hold('top', 11500);
+    expect(sim.types()).toEqual(['remindNextSide', 'stopPending', 'commit']);
+    sim.record(sim.auto.setSession({ phase: 'rest', paused: false, restElapsedMs: 0 }, sim.t));
+    sim.hold('top', 3000);
+    sideSession(sim, 'first'); // manual Start set
+    sim.reps_(3);
+    sim.hold('top', 30000);
+    expect(sim.types()).toEqual(['remindNextSide', 'stopPending', 'commit', 'remindNextSide']);
+  });
+
+  it('an auto start from rest runs as the first side once the session says so', () => {
+    const sim = inRest(60000);
+    sim.reps_(2);
+    expect(sim.types()).toEqual(['start']);
+    sideSession(sim, 'first'); // the caller's START_SET → setSession
+    expect(sim.auto.counts).toEqual({ reps: 2, partials: 0 });
+    sim.reps_(1);
+    sim.hold('top', 30000, SIT);
+    expect(sim.types()).toEqual(['start', 'remindNextSide']);
+    expect(sim.auto.counts).toEqual({ reps: 3, partials: 0 });
+  });
+
+  it('two-sided (no sideTurn): no reminder, still stop as before', () => {
+    const sim = inSet();
+    sim.reps_(3);
+    sim.hold('top', 6100);
+    expect(sim.types()).toEqual(['stopPending']);
+  });
+
+  it('a second-side setSession repeated (every dispatch) does not reset the side again', () => {
+    const sim = onFirstSide();
+    sim.reps_(3);
+    sideSession(sim, 'second');
+    sim.reps_(2);
+    sideSession(sim, 'second');
+    expect(sim.auto.counts).toEqual({ reps: 2, partials: 0 });
+  });
+});

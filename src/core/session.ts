@@ -1,4 +1,5 @@
 // Workout session state machine (SPEC M1). Pure: every event carries its own timestamp.
+import type { SideTurn } from './autoSet';
 import { FIRST_SIDE, isOneSided, otherSide } from './exercises/oneSided';
 import { focusScore, isFocusCueId } from './focusScore';
 import { isSetEffort } from './trainer/effortRules';
@@ -214,6 +215,16 @@ export type SessionSummary = {
 };
 
 const roundKg = (kg: number) => Math.round(kg * 100) / 100;
+
+/**
+ * M13b: which side of a one-sided set is running, for hands-free (`AutoSetSession.sideTurn`):
+ * 'first' before Next arm, 'second' after it; null for a two-sided exercise and outside the
+ * exercise phase.
+ */
+export function sideTurn(s: SessionState): SideTurn | null {
+  if (s.phase !== 'exercise' || s.side === undefined) return null;
+  return s.doneSide ? 'second' : 'first';
+}
 
 /** M13b: the side being worked, null for a two-sided exercise (or on Summary). */
 export function currentSide(s: SessionState): WorkSide | null {

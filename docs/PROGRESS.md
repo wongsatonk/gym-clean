@@ -142,7 +142,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - For a one-sided exercise a set starts on the right; new event `NEXT_SIDE { now }` keeps the right's counts and moves to the left; `SET_COUNTED`/`ADJUST` apply to the current side; `SET_DONE` logs **one** `SetLog` with `sides` and `reps` = lower side (if it arrives on the first side, e.g. from the Pause sheet, it logs the right only); the rest clock starts when the left ends; `CORRECT_LAST_SET` takes an optional side; `summarize()` keeps both sides.
   - Done when: tests cover the flow, the early end, Fix per side, rest timing; every existing session test passes unchanged (two-sided exercises identical).
   - Deps: 4, 5.
-- [ ] 11. [core-engineer] Hands-free for one-sided sets, tests first.
+- [x] 11. [core-engineer] Hands-free for one-sided sets, tests first.
   - Files: `src/core/autoSet.ts`(+test, +replay test).
   - First side: idle never ends the set; after ≥ 1 rep and ~6 s idle, one "remind next side" action. Second side: today's auto Set done + Undo. Being out of frame / untracked never ends or restarts a set mid-side (the set-3 reset).
   - Done when: unit + replay tests on the real row clips pass; two-sided behaviour unchanged.
@@ -269,7 +269,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `claudeBrain(bridge, deps)`: `status()` → unavailable `off` (switch off or explainer not accepted), `notNative`, `noKey`, `offline` (injected `isOnline()`; no request), `capReached` (task 7), else available. `ask()`: build (4, 5) → `bridge.send` → parse (6) → record usage (7; also on errors that returned usage) → `modelReplyFor` (8) with `source: 'claude'`; red flags never reach it (router); `usedHealth` never set. Errors reject with `BrainError(code)`.
   - Done when tests (fake bridge) cover: each status reason; a 200 text reply; a tool call → Proposal; two calls; an invalid call → help + chips; each error code; usage recorded and the cap reached after N; **no `fetch`, XHR, WebSocket or `sendBeacon` anywhere** (stubs throw); the body handed to `send` passes task 4's never-contains check end to end with a fully seeded made-up profile.
   - Deps: 2, 4, 5, 6, 7, 8.
-- [ ] 11. [core-engineer] Router: order setting, Claude notes, "Ask Claude instead", **tests first**.
+- [x] 11. [core-engineer] Router: order setting, Claude notes, "Ask Claude instead", **tests first**.
   - Files: src/data/brain/router.ts(+test), src/data/brain/notes.ts(+test).
   - Order from settings: `claudeFirst` (default per M12-s3-q1) = claude → apple → rules; `appleFirst` = apple → claude → rules; Claude off = today's chain. `ask({ text, prefer: 'claude' })` for **Ask Claude instead** (skips Apple; still falls back on error). Notes: `off` → none; `noKey` → once ("Claude is on but has no key yet. Add it in Settings > Claude coach."); `capReached` → once per day ("Today's Claude limit is used up. Answering on the phone until tomorrow."); `offline` and errors → every time ("No internet, so I answered on the phone." / "Claude didn't answer, so I answered on the phone." / "Your Claude key isn't working. Check it in Settings > Claude coach."). "On the phone" names whichever brain answered (Apple or quick replies). Copy as data, `checkCopy`. Health guards and the red-flag skip unchanged (existing tests stay).
   - Done when tests cover: both orders; each reason → its note policy (once / once a day / every time); each error code → fallback + note; `prefer: 'claude'`; red flag never to Claude even with `prefer`; Claude never sees a `usedHealth` turn (existing test kept).
@@ -975,7 +975,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Hold a drift until the next counted rep (camera or head), or speak at holdMs when nothing counts; at most one head hint per set; shares the camera hint cooldown; never cuts a count (voice queue kind `hint`). `setHead(frames…)` → `{ stillPct, hints, counted }`. Copy "Keep your head still." / "Keep your neck long, eyes ahead." passes `checkCopy`.
   - Done when: timing tests (between reps, once per set, cooldown shared, nothing during rest); `npm run check`.
   - Deps: 8, 9.
-- [ ] 11. [core-engineer] What's New 1.16.0 + to-do topic.
+- [x] 11. [core-engineer] What's New 1.16.0 + to-do topic.
   - Files: src/data/whatsNew/pages.ts, src/data/todos/topics.ts (+ their data tests).
   - Pages: Apple Watch remote (phone unlocked, screen on; Health asks for access at the first watch workout), heart rate on Rest + recovery line, Save to Health (off by default; worded as in SPEC: saves a workout record when on, the session's heart rate and calories stay in Health either way), AirPods head hints + counting (iPhone-only pages labelled in the PWA). Topic "Wrist and ears (Checkpoint L)": ask steps per the SPEC checkpoint list (pocket vs floor, haptics, walking away, recovery line timing, Health save + WHOOP double count, head hints, counts, clips recorded), owner-only step "Record head clips".
   - Done when: data tests (unique ids, valid routes, `checkCopy`, owner flags) pass.
