@@ -393,7 +393,8 @@ mid-set.
   - **Bilateral curls and the bent-over row:** both arms move together, and a side view counts the
     near arm (M4f-q1).
   - **Concentration curls:** the camera counts the arm nearest the phone. Reps are per arm, as in the
-    plan (M4f-q2).
+    plan (M4f-q2). **Superseded by M13b (2026-11-17):** right arm, then a Next arm tap, then left arm,
+    both counted in one set.
   - **Dumbbell shoulder press:** the seated-press counting convention applies; the first press from the
     shoulders counts (Decision 2026-11-13, answer 2).
   - **Triceps extension:** one dumbbell held overhead with both hands, as in the how-to (M4f-q9).
@@ -2052,6 +2053,64 @@ type ShareStats = { sessionsDone: number; volumeKg: number; streakWeeks: number 
   it for a few days; he looks at the Story pack and posts it himself if he wants. They report what still
   looks home-made, anything that assumed him, and whether the first launch asked too much.
 
+### M13b — One-arm sets + row camera fixes (added 2026-11-17, gym feedback; release 1.15.1; builds after M13, before M12 slice 3 and M14)
+Wongsaton trained One-Arm Dumbbell Row (4 sets) with the web app in Safari and screen-recorded it. The
+camera lost him while bent over the bench, overcounted (14/12, 13, ~5 false partials a set), flipped from
+one arm to the other mid-set (and the count went back to 0), and the "Set up your phone" card stayed over
+the lower half of the view. His decision: **"Right then left but should have button or anything to go next
+arm avoid the error while lifting up".** Planner defaults are in PROGRESS Decision "One-arm sets"
+(2026-11-17). This supersedes M4f-q2 (near side only, other side not counted).
+
+#### Goals
+1. **One-sided exercises are data.** A list in `src/core/exercises/` names each one-sided exercise and its
+   limb: arms (One-Arm Dumbbell Row, Concentration Curls, Seated One-arm Cable Pulley Rows) and legs
+   (Dumbbell Step-Ups, Split Squat with Dumbbells, Single-Leg Glute Bridge, Seated One-Leg Calf Raise).
+   Alternating lunges stay one total (M4f-q6). No `if (exercise === …)` branches.
+2. **Right, then left, in one set.** A one-sided set starts on the **right** arm (leg). The screen names the
+   side ("Right arm", ≥ 20px) above the count (≥ 64px). The primary button on the first side is **Next arm**
+   (or Next leg; ≥ 56px, full width); Set done appears only on the second side. Tapping Next arm is spoken
+   ("Left arm. Turn so your left arm faces the phone."), cuts any count speech, and the count starts again
+   at 0 for the left arm. Manual (non-camera) one-sided exercises get the same flow with per-side reps.
+3. **The camera counts the set's arm only.** The rep counter takes the side from the session and locks it
+   from the first frame; it never picks or switches sides itself, and nothing the camera sees resets the
+   count mid-arm. If the locked arm isn't visible, the usual "Step into frame" applies.
+4. **Hands-free.** On the first side hands-free never ends the set; after ~6 s idle with ≥ 1 rep it says
+   "Tap Next arm when you're ready." once. On the second side the M5c auto Set done + Undo work as before.
+   The rest clock starts when the second side ends.
+5. **Per-arm records.** `SetLog.sides` holds `{ right, left }` (reps + partials); `SetLog.reps` is the lower
+   of the two (what both arms reached), so targets, bests, e1RM, stalls and volume stay comparable with older
+   sets. The set summary, Calendar day and History show both ("R 12 · L 11"); Fix corrects either side;
+   backups round-trip `sides`; the developer log records the switch time and per-side counts.
+6. **Row counting fixed on real data.** His recordings become landmark fixtures
+   (`fixtures/landmarks/row/real-*`, landmarks only, never video); the row counts each clip exactly (reps and
+   partials). The cause of each symptom is written down. Fixes go in the rule data (`row.ts`) first.
+7. **He stays in view while bent over.** The pose settings (confidence thresholds, or the model, if the
+   measurements justify it and the iPhone keeps ≥ 24 fps) are chosen from measured detection on his row
+   clips; the row's placement lines/sentence change if the clips show a better phone spot.
+8. **The set-up card gets out of the way.** The full "Set up your phone" card shows only before the set's
+   first rep and closes itself once he is tracked (1.5 s) or after 10 s. After that, losing him shows a
+   one-line "Step into frame" strip at the top of the view (and it is spoken), never the full card over the
+   lower half. "Phone position" still opens the card.
+9. **What's New** has a 1.15.1 page (Next arm); the To-dos gain the Checkpoint K2 guide.
+
+#### Accept
+- `npm run check` and `npm run e2e` green; `npm run build` contains 1.15.1; iOS version synced.
+- Fixture suite: every `fixtures/landmarks/row/real-*` clip counts its labelled reps and partials exactly;
+  all synthetic folders unchanged; new left-arm synthetic clips for row and concentration curl count with the
+  side locked to left and count 0 with it locked to right.
+- Unit: the counter never changes side or resets counts on its own (replay of the set-3 recording); session
+  logs one SetLog per one-sided set with both sides; two-sided exercises behave exactly as before.
+- Detection on the bent-over spans of his clips is reported (before/after) and does not get worse.
+- e2e: a manual one-sided exercise goes Right → Next arm → Left → Set done → Rest, and summary + Calendar day
+  show both arms; the fake-camera row counts 4 on the right and 4 on the left with one Next arm tap; after
+  the first rep, being out of frame shows the top strip, not the card.
+- 390×844 screenshots: right side, left side, camera view with the side label, the top strip, the summary
+  and Calendar day with both arms.
+- His iPhone: `npm run ios:install` passes the bundle check and Settings → Self-check is all ✓.
+- 🧍 **Checkpoint K2:** a one-arm row session at the gym (iPhone app). He reports: does it keep him in view
+  bent over, do the counts match each arm, is Next arm easy to hit with a dumbbell in hand, and does the
+  set-up card stay out of the way.
+
 ### M14 — Wrist and ears: Apple Watch app + AirPods head motion (approved 2026-11-17; builds after M13; release 1.16.0)
 Wongsaton (2026-11-17), after being told AirPods head motion and an Apple Watch app were parked / out of
 scope: **"Add it and I need apple watch app too."** Both are in. Planner calls are in Decision "M14 Wrist and
@@ -2458,7 +2517,9 @@ States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per e
   stopped short of the missed threshold, smoothed degrees) are set on partials only.
 - (M4c) Gauge: `position = (startThreshold − angle) / (startThreshold − farThreshold)` on the
   oriented scale, so 0 = start line and 1 = target line, clamped to [−0.25, 1.25] for display.
-- Use the side with higher average visibility (left vs right) for unilateral views.
+- Use the side with higher average visibility (left vs right) for unilateral views. **Exception (M13b):**
+  one-sided exercises lock the side the session names (right, then left after Next arm); the counter
+  never picks or switches it.
 
 ## 4. Data model
 
@@ -2482,6 +2543,8 @@ type SetLog = {
   reps: number; partials?: number; weightKg: number;
   restTakenSec: number; focusScore?: number; cues?: string[];
   startedAt: number; endedAt: number;
+  // M13b: one-sided exercises; `reps` is then the lower of the two sides
+  sides?: { right?: { reps: number; partials: number }; left?: { reps: number; partials: number } };
 };
 // M4c — developer log (on device only; numbers, never images)
 type DevLogSession = {
