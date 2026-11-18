@@ -762,9 +762,10 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Deps: 35.
 - [ ] 38. [reviewer] Review the M13 diff: no new network request; landing page has no script/tracker; owner mode off hides every `OwnerSurface` and on changes nothing; an existing install is never onboarded; permission rules from slice 2 intact (mic on first use, notifications on first switch-on); original art only; no medical claims; sizes; name only via `brand.ts`; demo data made-up; ownership; tests-first evidence; motion via helpers.
   - Deps: 32, 33, 36.
-- [ ] 39. [verifier] Verify milestone against SPEC acceptance criteria (M13): `npm run check`, full `npm run e2e`, `npm run build` (contains `1.15.0`, `welcome/index.html`), iOS simulator build (launch screen, 1.15.0); the 390×844 screenshots listed in SPEC + the 1.15.0 tour page; evidence into Verification evidence → M13.
+- [x] 39. [verifier] Verify milestone against SPEC acceptance criteria (M13): `npm run check`, full `npm run e2e`, `npm run build` (contains `1.15.0`, `welcome/index.html`), iOS simulator build (launch screen, 1.15.0); the 390×844 screenshots listed in SPEC + the 1.15.0 tour page; evidence into Verification evidence → M13.
   - Deps: 38.
 - [ ] 40. [main] merge + ask to push (his call). Install on his iPhone; her phone per docs/ios-setup.md "Her phone".
+  - 2026-11-17: verifier FAIL on 2 flaky self-check e2e items → fixed (3b77ccd), self-check spec 25/25 serial + 15/15 CI=1; full run 3 was 265 passed. Installed bb0bd3b (1.15.0 build 305) on his iPhone via `npm run ios:install` (both bundle gates pass); the permission catch-up asked only Microphone (1 of 1) → Allowed; Settings → Self-check **All 8 ready** (docs/screenshots/m13-iphone-selfcheck-all-ready.png). Left: merge to main + push (his call), her phone.
   - Deps: 39.
 - [ ] 41. 🧍 **Checkpoint K:** he and his wife each try a fresh install; she uses it for a few days; he checks the Rest "Next" card on the real phone, looks at the Story pack and posts it himself if he wants. Feedback through the "Published look" to-do (his phone, owner mode on) or `/feedback`.
   - Deps: 40.
@@ -4253,6 +4254,14 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Verification evidence
 
+
+### M13 (task 39, 2026-11-17, HEAD fc43a0c → fixes 3b77ccd, bb0bd3b)
+- npm run check: tsc + eslint clean; Vitest 238 files, 5625 passed / 1 skipped; node --test 138/138.
+- npm run e2e: full run 265 passed, 1 skipped (19.4m). Two flaky self-check items found and fixed (screenshot outage after the pose model: retry; storage 20 s budget + "slow" warn); self-check spec 25/25 serial, 15/15 CI=1.
+- npm run build: 1.15.0 in main chunk; dist/welcome/index.html (0 scripts); dist/mediapipe/wasm present; manifest "Gym Clean" / "Your pocket strength coach."; SW denylist /welcome/.
+- npm run ios:check + built-app check: 1.15.0 (build 305). Simulator (ad-hoc signed): mark on #0d0f12, no white flash, welcome "1 of 8".
+- Screenshots 390x844: docs/screenshots/m13-verify-*.png (welcome, camera page, Today, Settings/Self-check/About owner off+on, tour).
+- His iPhone: bb0bd3b installed via npm run ios:install; permission catch-up asked Microphone only → Allowed; Self-check "All 8 ready" (docs/screenshots/m13-iphone-selfcheck-all-ready.png).
 ### M0 (2026-11-13)
 - `npm run check`: typecheck OK (both projects), lint OK, Vitest **1 file / 2 tests passed**.
 - `npm run e2e`: **1 passed** (`[mobile] smoke.spec.ts`: title visible, h1 ≥ 64px, no console errors).
