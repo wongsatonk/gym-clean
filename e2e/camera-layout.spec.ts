@@ -129,8 +129,15 @@ test('curl camera: big video, "0 / 12" + set line, set-up card spoken once, 3D c
   const lines = said.filter((t) => t !== '<cancel>' && t !== 'Move closer to the light.');
   expect(lines).toHaveLength(1);
   expect(lines[0]).toMatch(/phone/i);
-  // "Got it" hides it; "Phone position" brings it back.
-  await card.getByRole('button', { name: 'Got it' }).click();
+  // "Got it" hides it; "Phone position" brings it back. Under a full parallel run the card may
+  // have closed itself already (10 s cap since M13b): then reopen it, which holds it ≥ 8 s.
+  try {
+    await card.getByRole('button', { name: 'Got it' }).click({ timeout: 2000 });
+  } catch {
+    await cam.getByRole('button', { name: 'Phone position' }).click();
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'Got it' }).click();
+  }
   await expect(card).toBeHidden();
   // Focus moves to the button that brings the card back.
   await expect(cam.getByRole('button', { name: 'Phone position' })).toBeFocused();
