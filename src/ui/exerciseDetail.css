@@ -1,0 +1,205 @@
+/* M13c exercise detail (src/ui/screens/exerciseDetail.ts). Tokens only (src/styles.css); the
+   map colours (.body-map .muscle.*), .swatch, .cue-panel and the tappable badges come from
+   styles.css / howto.css. Text ≥ 20px, the best set ≥ 64px, every target ≥ 56px. */
+
+.exercise-detail {
+  gap: 14px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+.detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.detail-title {
+  overflow-wrap: anywhere;
+}
+
+.detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.detail-h {
+  margin: 0;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+/* ---------- muscles ---------- */
+
+.detail-muscles {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+.detail-map .body-map {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.detail-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.detail-legend-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+
+.detail-legend-line .swatch {
+  margin-left: 0;
+}
+
+.detail-legend-key {
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.detail-howto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap-cta);
+  font-size: var(--fs-head);
+}
+
+/* ---------- how to ---------- */
+
+.detail-tempo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.detail-tempo .ic {
+  flex: none;
+  color: var(--text-2);
+}
+
+.detail-lines {
+  margin: 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-body);
+}
+
+.detail-focus {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+/* ---------- equipment + camera ---------- */
+
+.detail-equip,
+.detail-counts {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+.detail-gym,
+.detail-learning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.detail-gym .ic,
+.detail-learning .ic {
+  flex: none;
+}
+
+.detail-gym.has {
+  color: var(--success);
+}
+
+.detail-gym.needs,
+.detail-learning {
+  color: var(--warn);
+}
+
+.detail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  align-self: flex-start;
+  min-height: var(--tap-min);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+/* ---------- plan + history ---------- */
+
+.detail-plan {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-cue);
+  font-weight: 600;
+}
+
+.detail-none {
+  font-size: var(--fs-body);
+}
+
+.detail-last {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  font-size: var(--fs-body);
+}
+
+.detail-best {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.detail-best-label {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.detail-best-num {
+  font-family: var(--font-display);
+  font-size: var(--fs-num-sm);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.detail-best-unit {
+  font-size: var(--fs-body);
+}

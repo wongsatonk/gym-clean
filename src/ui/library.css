@@ -1,0 +1,366 @@
+/* M13c Library + search (src/ui/screens/library.ts). Tokens only (src/styles.css); the row's
+   stretched open button, chevron and tappable badges come from howto.css (.ex-row-open,
+   .ex-badge-btn). Text ≥ 20px, every target ≥ 56px. */
+
+.library {
+  gap: 14px;
+}
+
+.lib-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.lib-count {
+  flex: none;
+  font-size: var(--fs-body);
+}
+
+/* ---------- search field ---------- */
+
+.lib-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.lib-search-input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--tap-bar);
+  padding: 12px 64px 12px 16px;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: var(--r-btn);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.lib-search-input::placeholder {
+  color: var(--text-2);
+  opacity: 1;
+}
+
+/* Our own Clear button (≥ 56px) replaces the small native one. */
+.lib-search-input::-webkit-search-cancel-button,
+.lib-search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.lib-search-input:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.lib-search-clear {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap-min);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.lib-search-clear[hidden] {
+  display: none;
+}
+
+/* ---------- controls ---------- */
+
+.lib-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lib-groupby {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lib-ctl-label {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
+/* Five choices in a 3 + 2 grid (6 columns: thirds, then halves): "Equipment" / "Movement"
+   stay at 20px on a 358px row. */
+.lib-seg {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.lib-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: var(--tap-min);
+  min-width: 0;
+  padding: 0 6px;
+  border: none;
+  border-radius: calc(var(--r-card) - 6px);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lib-seg-btn {
+  grid-column: span 2;
+}
+
+.lib-seg-btn:nth-child(n + 4) {
+  grid-column: span 3;
+}
+
+.lib-seg-btn .ic {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.lib-seg-btn.active {
+  background: var(--selected);
+  color: var(--on-selected);
+}
+
+/* ---------- groups ---------- */
+
+.lib-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding-bottom: 24px;
+}
+
+.lib-area {
+  margin: 12px 0 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.lib-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lib-group-h {
+  margin: 0;
+  font-size: var(--fs-lead);
+}
+
+.lib-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 0 14px 0 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+}
+
+.lib-group-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lib-group-count {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+/* Chevron: down when open, right when folded (the back icon turned). */
+.lib-group-chev {
+  flex: none;
+  color: var(--text-2);
+  transform: rotate(-90deg);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.lib-group-head[aria-expanded='false'] .lib-group-chev {
+  transform: rotate(180deg);
+}
+
+.lib-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lib-list[hidden] {
+  display: none;
+}
+
+/* ---------- rows ---------- */
+
+.lib-row {
+  position: relative; /* the name button's ::after covers the row */
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  padding: 4px 14px 8px;
+  border-radius: var(--r-btn);
+  background: var(--surface);
+}
+
+.lib-row .ex-row-name {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.lib-row-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 12px;
+  min-width: 0;
+}
+
+.lib-row-meta {
+  font-size: var(--fs-body);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.lib-needs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--warn);
+}
+
+.lib-needs .ic {
+  flex: none;
+}
+
+/* ---------- search sections + hits ---------- */
+
+.lib-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.lib-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0 0;
+  font-size: var(--fs-lead);
+  font-weight: 700;
+}
+
+.lib-hit-item {
+  min-width: 0;
+}
+
+.lib-hit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+}
+
+.lib-hit-ic {
+  flex: none;
+  color: var(--text-2);
+}
+
+.lib-hit-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lib-hit-title {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.lib-hit-sub {
+  font-size: var(--fs-body);
+  overflow-wrap: anywhere;
+}
+
+.lib-hit .ex-row-chev {
+  flex: none;
+  color: var(--text-2);
+  transform: scaleX(-1);
+}
+
+.lib-hint {
+  text-align: center;
+  font-size: var(--fs-body);
+}
+
+/* The empty state's food row keeps the hit look, full width. */
+.library .empty-state .lib-hit {
+  margin-top: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lib-group-chev {
+    transition: none;
+  }
+}
