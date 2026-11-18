@@ -876,11 +876,13 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - From the store set + a Story-size share image with demo data: 3–5 Story frames with captions. **Nothing is posted**; he posts if he wants.
   - Done when: the drafts exist and main has shown them to him.
   - Deps: 35.
+  - 2026-11-17: **he approved the Story drafts** (docs/social/m13/). Still nothing posted; he posts them himself if he wants.
 - [ ] 38. [reviewer] Review the M13 diff: no new network request; landing page has no script/tracker; owner mode off hides every `OwnerSurface` and on changes nothing; an existing install is never onboarded; permission rules from slice 2 intact (mic on first use, notifications on first switch-on); original art only; no medical claims; sizes; name only via `brand.ts`; demo data made-up; ownership; tests-first evidence; motion via helpers.
   - Deps: 32, 33, 36.
 - [x] 39. [verifier] Verify milestone against SPEC acceptance criteria (M13): `npm run check`, full `npm run e2e`, `npm run build` (contains `1.15.0`, `welcome/index.html`), iOS simulator build (launch screen, 1.15.0); the 390×844 screenshots listed in SPEC + the 1.15.0 tour page; evidence into Verification evidence → M13.
   - Deps: 38.
 - [ ] 40. [main] merge + ask to push (his call). Install on his iPhone; her phone per docs/ios-setup.md "Her phone".
+  - 2026-11-17: merged + pushed (his OK). **Her phone waits** (his words: "I will install to her phone when everything prove ready to use") — after M13b's Checkpoint K2 passes.
   - 2026-11-17: verifier FAIL on 2 flaky self-check e2e items → fixed (3b77ccd), self-check spec 25/25 serial + 15/15 CI=1; full run 3 was 265 passed. Installed bb0bd3b (1.15.0 build 305) on his iPhone via `npm run ios:install` (both bundle gates pass); the permission catch-up asked only Microphone (1 of 1) → Allowed; Settings → Self-check **All 8 ready** (docs/screenshots/m13-iphone-selfcheck-all-ready.png). Left: merge to main + push (his call), her phone.
   - Deps: 39.
 - [ ] 41. 🧍 **Checkpoint K:** he and his wife each try a fresh install; she uses it for a few days; he checks the Rest "Next" card on the real phone, looks at the Story pack and posts it himself if he wants. Feedback through the "Published look" to-do (his phone, owner mode on) or `/feedback`.

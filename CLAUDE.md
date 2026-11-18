@@ -49,7 +49,7 @@ push or switch branches.**
 | `ui-engineer` | `src/ui/**` except 3D modules, `src/styles.css`, `index.html`, other `e2e/*.spec.ts` |
 | `anatomy-3d-engineer` | `src/ui/body3d/**`, `src/ui/bodyMap.ts`, `src/ui/skeleton3d.ts`, `src/ui/demo3d/**` |
 | `ml-engineer` | `ml/**` (Python training pipeline for the M7b food classifier), `src/food-vision/**` (classifier + Claude-backup client in the app) |
-| `ios-engineer` | `ios/**`, `capacitor.config.ts`, `src/native/**` (Capacitor shell, native plugins, TS bridge), `fixtures/headmotion/**`, `docs/ios-setup.md`, `scripts/gen-trainer-tools.mjs` (M10 phase B) |
+| `ios-engineer` | `ios/**`, `capacitor.config.ts`, `src/native/**` (Capacitor shell, native plugins, TS bridge), `fixtures/headmotion/**`, `docs/ios-setup.md`, `scripts/gen-trainer-tools.mjs` (M10 phase B), `scripts/check-native-bundle.mjs` + `scripts/ios-install.mjs` (the install gate) |
 | `reviewer` | Read-only review of diffs against these rules |
 | `verifier` | Read-only on app code; runs check/e2e/build, owns `scripts/screenshots.mjs`, `docs/screenshots/**` |
 | main session | `src/core/types.ts` changes others consume, `src/ui/app.ts` routing, `src/main.ts`, configs, `package.json`, git |
