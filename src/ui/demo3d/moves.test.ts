@@ -332,7 +332,10 @@ describe('tempo', () => {
       expect(time.lower).toBeGreaterThan(time.lift);
     });
 
-    it(`${m.exerciseId}: the lift moves the weight up, the lowering moves it down`, () => {
+    // A twist (Russian twist, air bike) has no weight going up: its "lift" is the turn, checked on
+    // the twist angle instead.
+    const twist = m.measure.joint === 'twist';
+    it(`${m.exerciseId}: the lift moves the weight up (or turns further), the lowering moves it down (or back)`, () => {
       // Find the mid-phase times and compare hand height a moment later.
       const total = cycleSeconds(m);
       const mid = (p: string) => {
@@ -348,6 +351,7 @@ describe('tempo', () => {
       // pulldown's weight stack); otherwise the hand.
       const y = (t: number) => {
         const p = poseAt(m, t);
+        if (twist) return measuredAngle(p, 'twist', m.measure.side);
         if (p.load) return p.load[1];
         return m.exerciseId === 'Pushups' ? p.r.s[1] : p.r.h[1];
       };
@@ -583,8 +587,11 @@ describe('M4d pose-tracked demos (curl, row, goblet squat)', () => {
 
 describe('manual-count demos without a rule: the range comes from the demo itself', () => {
   for (const m of DEMOS.filter((d) => !ruleFor(d.exerciseId))) {
-    it(`${m.exerciseId}: a manual program exercise with a real range of motion`, () => {
-      expect(PROGRAM_TRACKING.get(m.exerciseId)).toBe('manual');
+    it(`${m.exerciseId}: a manual exercise with a real range of motion`, () => {
+      // In the program it is set to manual; the M13c abs (pool only) have no rule, so count by hand.
+      if (PROGRAM_TRACKING.has(m.exerciseId))
+        expect(PROGRAM_TRACKING.get(m.exerciseId)).toBe('manual');
+      else expect(exercises.some((e) => e.id === m.exerciseId)).toBe(true);
       expect(Math.abs(m.far - m.start)).toBeGreaterThanOrEqual(30);
       const angles = sampleLoop(m).map((x) => x.angle);
       const lo = Math.min(m.start, m.far);

@@ -53,12 +53,28 @@ export type SegFrame = {
   shape: 'cylinder' | 'ellipsoid';
 };
 
-/** Body axes of a pose: spine up, forward (face direction flattened onto the chest plane), right. */
-export function bodyAxes(p: DemoPose): { up: V3; front: V3; right: V3 } {
-  const up = norm(sub(p.neck, p.hip));
-  let front = norm(addS(p.face, up, -dot(p.face, up)));
+export type Axes = { up: V3; front: V3; right: V3 };
+
+/** Orthonormal axes from an up direction and a facing direction (flattened onto the up plane). */
+function axesFrom(upDir: V3, face: V3): Axes {
+  const up = norm(upDir);
+  let front = norm(addS(face, up, -dot(face, up)));
   if (len(front) < 0.5) front = norm(cross(up, [0, 0, 1]));
   return { up, front, right: norm(cross(front, up)) };
+}
+
+/** Body axes of a pose: spine up, forward (face direction flattened onto the chest plane), right. */
+export function bodyAxes(p: DemoPose): Axes {
+  return axesFrom(sub(p.neck, p.hip), p.face);
+}
+
+/**
+ * Pelvis axes: the pose's own pelvis frame when it has one (M13c: the hips stay still while the
+ * chest turns, leans or curls), otherwise the body axes. The pelvis, the hip joints and the legs'
+ * front/outer sides follow these.
+ */
+export function pelvisAxes(p: DemoPose): Axes {
+  return p.pelvis ? axesFrom(p.pelvis.up, p.pelvis.face) : bodyAxes(p);
 }
 
 /**
@@ -117,6 +133,7 @@ const NO_TWIST: ArmTwist = { r: 0, l: 0 };
  */
 export function segmentFrames(p: DemoPose, twist: ArmTwist = NO_TWIST): SegFrame[] {
   const body = bodyAxes(p);
+  const pelvis = pelvisAxes(p);
   const centred = (
     segment: Segment,
     a: V3,
@@ -124,14 +141,15 @@ export function segmentFrames(p: DemoPose, twist: ArmTwist = NO_TWIST): SegFrame
     rx: number,
     rz: number,
     shape: SegFrame['shape'],
+    axes: Axes = body,
   ): SegFrame => ({
     segment,
     side: 0,
     a,
     b,
     axis: norm(sub(b, a)),
-    front: body.front,
-    outer: body.right,
+    front: axes.front,
+    outer: axes.right,
     rx,
     rz,
     shape,
@@ -142,10 +160,11 @@ export function segmentFrames(p: DemoPose, twist: ArmTwist = NO_TWIST): SegFrame
     centred(
       'pelvis',
       p.hip,
-      addS(p.hip, body.up, SIZES.pelvis.len),
+      addS(p.hip, pelvis.up, SIZES.pelvis.len),
       SIZES.pelvis.rx,
       SIZES.pelvis.rz,
       'ellipsoid',
+      pelvis,
     ),
     centred(
       'neck',
@@ -166,11 +185,11 @@ export function segmentFrames(p: DemoPose, twist: ArmTwist = NO_TWIST): SegFrame
   ];
   for (const [key, sg] of SIDES) {
     const sd = p[key];
-    const hipJ: V3 = add(p.hip, scale(body.right, p.hipW * sg));
+    const hipJ: V3 = add(p.hip, scale(pelvis.right, p.hipW * sg));
     const phi = twist[key];
-    const limb = (segment: Segment, a: V3, b: V3, r: number, turn = 0): SegFrame => {
+    const limb = (segment: Segment, a: V3, b: V3, r: number, turn = 0, axes = body): SegFrame => {
       const axis = norm(sub(b, a));
-      const f = limbFrame(axis, body, sg);
+      const f = limbFrame(axis, axes, sg);
       const c = Math.cos(turn);
       const sn = Math.sin(turn);
       const front = add(scale(f.front, c), scale(f.outer, sn));
@@ -189,9 +208,10 @@ export function segmentFrames(p: DemoPose, twist: ArmTwist = NO_TWIST): SegFrame
       limb('upperArm', sd.s, sd.e, SIZES.upperArm, phi),
       limb('forearm', sd.e, sd.w, SIZES.forearm),
       limb('hand', sd.w, sd.h, SIZES.hand),
-      limb('thigh', hipJ, sd.k, SIZES.thigh),
-      limb('shin', sd.k, sd.a, SIZES.shin),
-      limb('foot', sd.a, sd.toe, SIZES.foot),
+      // Legs hang from the pelvis: their front/outer follow it, not a turning chest.
+      limb('thigh', hipJ, sd.k, SIZES.thigh, 0, pelvis),
+      limb('shin', sd.k, sd.a, SIZES.shin, 0, pelvis),
+      limb('foot', sd.a, sd.toe, SIZES.foot, 0, pelvis),
     );
   }
   return out;
@@ -357,14 +377,15 @@ export function fitCamera(
 
 /**
  * Phase text for the sheet. Matches tempoLabel(): a push-up (starts with the lowering) says
- * "Down"/"Up", everything else "Lift"/"Lower". The hold at the far end and the pause at the start
- * both say "Hold".
+ * "Down"/"Up", everything else "Lift"/"Lower", unless the demo has its own words (pulldown
+ * "Pull"/"Return", dead bug "Lower"/"Return"). The hold at the far end and the pause at the
+ * start both say "Hold".
  */
 export function phaseLabel(m: DemoMove, phase: Phase): string {
   if (phase === 'hold' || phase === 'pause') return 'Hold';
-  if (m.outward === 'lower') return phase === 'lower' ? 'Down' : 'Up';
-  const w = m.words ?? { lift: 'Lift', lower: 'Lower' };
-  return phase === 'lift' ? w.lift : w.lower;
+  const w = m.words ?? (m.outward === 'lower' ? { lift: 'Up', lower: 'Down' } : undefined);
+  const words = w ?? { lift: 'Lift', lower: 'Lower' };
+  return phase === 'lift' ? words.lift : words.lower;
 }
 
 /**

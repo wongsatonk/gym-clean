@@ -64,7 +64,24 @@ export const MUSCLE_TO_PARTS: Readonly<Record<Muscle, readonly HighlightPart[]>>
   triceps: [{ segment: 'upperArm', face: 'back', span: [0.1, 0.9] }],
 };
 
+/**
+ * The sides of the waist (M13c): a span on the torso's outer face, both sides, below the lats.
+ * Side bends light only this; twists light it with the front of the abs.
+ */
+export const WAIST_SIDES: HighlightPart = { segment: 'torso', face: 'outer', span: [0.08, 0.5] };
+
+/**
+ * Where the abdominals light on the demo mannequin: the front (crunches, leg raises; the
+ * default), the sides of the waist (side bends) or both (twists).
+ */
+export type AbsRegion = 'front' | 'sides' | 'both';
+
 const isMuscle = (m: string): m is Muscle => Object.hasOwn(MUSCLE_TO_PARTS, m);
+
+function partsOf(m: Muscle, abs: AbsRegion): readonly HighlightPart[] {
+  if (m !== 'abdominals' || abs === 'front') return MUSCLE_TO_PARTS[m];
+  return abs === 'sides' ? [WAIST_SIDES] : [...MUSCLE_TO_PARTS[m], WAIST_SIDES];
+}
 
 /** Parts for one muscle name; [] for a name outside the M2 list. */
 export function partsFor(muscle: string): readonly HighlightPart[] {
@@ -75,11 +92,13 @@ export type Highlight = HighlightPart & { muscle: Muscle; level: 'primary' | 'se
 
 /**
  * Patches to light for an exercise: primary muscles strongly, secondary lightly. A muscle listed
- * as both stays primary. Unknown names are skipped.
+ * as both stays primary. Unknown names are skipped. `abs` says where the abdominals light (the
+ * demo's DemoMove.abs).
  */
 export function highlightFor(
   primary: readonly string[],
   secondary: readonly string[],
+  abs: AbsRegion = 'front',
 ): Highlight[] {
   const out: Highlight[] = [];
   const seen = new Set<string>();
@@ -87,7 +106,7 @@ export function highlightFor(
     for (const name of names) {
       if (!isMuscle(name) || seen.has(name)) continue;
       seen.add(name);
-      for (const p of MUSCLE_TO_PARTS[name]) out.push({ ...p, muscle: name, level });
+      for (const p of partsOf(name, abs)) out.push({ ...p, muscle: name, level });
     }
   };
   addAll(primary, 'primary');

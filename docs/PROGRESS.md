@@ -165,12 +165,12 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - One question after the gym-kit step: No (default, selected) / Yes, ≥ 56px, check + words; passes `wantsCore` back. Existing installs never see the intake again (unchanged rule).
   - Done when: render test + screenshot `m13c-intake-abs.png`; existing intake specs green via `npm run e2e:changed`.
   - Deps: 6.
-- [ ] 7. [anatomy-3d-engineer] 3D demos for the floor/bench abs, tests first where the registry has them.
+- [x] 7. [anatomy-3d-engineer] 3D demos for the floor/bench abs, tests first where the registry has them. **Done 2026-11-18** with task 8: all 10 abs exercises have demos (none left Info); per-pose pelvis frame so hips stay still while the chest curls/turns; new `twist`/`waist` angles; Dead Bug / Air Bike / Russian Twist show one side (single-angle loop). Scene chunk 38.7 → 46.7 kB.
   - Files: src/ui/demo3d/moves.ts, src/ui/demo3d/poses.ts, src/ui/demo3d/ids.ts (+ moves/poses/rig tests).
   - Crunches, Reverse Crunch, Flat Bench Lying Leg Raise, Dead Bug, Air Bike, Russian Twist (the ones task 2 vendored). Tempo text equals each how-to tempo line; phase labels short; camera fit keeps the whole figure in frame lying down.
   - Done when: ids in sync with `DEMO_IDS`, moves tests green, a frame per move in `docs/screenshots/m13c-demo-*.png` at 390×844 (How-to sheet harness); any move the rig can't show stays "Info" with the reason in the hand-back.
   - Deps: 2.
-- [ ] 8. [anatomy-3d-engineer] 3D demos for the standing/cable/hanging abs + abs regions.
+- [x] 8. [anatomy-3d-engineer] 3D demos for the standing/cable/hanging abs + abs regions. **Done 2026-11-18:** `WAIST_SIDES` highlight + `highlightFor(…, abs: 'front'|'sides'|'both')`; side bend lights the sides, twists front + sides; abs.test.ts 66 tests, demo3d 640/640. Known older issue (not fixed): supine demos with head toward +x draw the hip joints on the far side.
   - Files: src/ui/demo3d/moves.ts, poses.ts, ids.ts, highlight.ts (+tests), src/ui/bodyMap.ts / src/ui/body3d/parts.ts only if the abs region needs a fix.
   - Dumbbell Side Bend, Cable Crunch (kneeling), Pallof Press, Hanging Leg Raise. Side bends and twists light the **sides** of the torso (a highlight span on the outer face), crunches/leg raises the front. `pickView` gives front for abdominals-only exercises.
   - Done when: as task 7, plus a highlight test for the side face; screenshots; `npm run check`.

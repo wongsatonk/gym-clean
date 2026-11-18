@@ -95,7 +95,11 @@ export async function createDemoPlayer(
       primary: ex?.primaryMuscles ?? [],
       secondary: [...(ex?.secondaryMuscles ?? []), ...(move.helpers ?? [])],
     };
-    scene = lib.createDemoScene(move, lib.highlightFor(muscles.primary, muscles.secondary));
+    // The abs light where the move works them (side bends: the sides of the waist).
+    scene = lib.createDemoScene(
+      move,
+      lib.highlightFor(muscles.primary, muscles.secondary, move.abs),
+    );
   } catch (err) {
     console.warn('3D demo unavailable, using the muscle map', err);
     return null;

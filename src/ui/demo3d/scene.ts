@@ -29,7 +29,16 @@ import { figurePalette } from '../body3d/palette';
 import { addRim } from '../body3d/rim';
 import type { Highlight } from './highlight';
 import { poseAt, type DemoMove, type DemoPose, type V3 } from './moves';
-import { SIZES, armTwist, bodyAxes, demoBounds, fitCamera, patchesFor, segmentFrames } from './rig';
+import {
+  SIZES,
+  armTwist,
+  bodyAxes,
+  demoBounds,
+  fitCamera,
+  patchesFor,
+  pelvisAxes,
+  segmentFrames,
+} from './rig';
 
 // The demo data the player needs once three.js is here: re-exported so it loads in this one chunk
 // (player.ts imports only this module, lazily; the main chunk asks ids.ts).
@@ -245,12 +254,14 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
   const at = (a: V3, d: V3, k: number): V3 => [a[0] + d[0] * k, a[1] + d[1] * k, a[2] + d[2] * k];
 
   function pose(p: DemoPose): void {
-    const { up, front, right } = bodyAxes(p);
+    const { up, front } = bodyAxes(p);
     const T = SIZES.torso;
     const spine = Math.hypot(p.neck[0] - p.hip[0], p.neck[1] - p.hip[1], p.neck[2] - p.hip[2]);
     ellipsoid(torso, at(p.hip, up, spine * T.centreT), up, front, [T.rx, T.halfLen, T.rz]);
+    // The pelvis and hip joints keep the pose's own pelvis frame (twists, side bends, crunches).
+    const pel = pelvisAxes(p);
     const P = SIZES.pelvis;
-    ellipsoid(pelvis, at(p.hip, up, P.len / 2), up, front, [P.rx, P.len * 0.9, P.rz]);
+    ellipsoid(pelvis, at(p.hip, pel.up, P.len / 2), pel.up, pel.front, [P.rx, P.len * 0.9, P.rz]);
     rod(girdle, p.l.s, p.r.s, 0.055);
     rod(neck, at(p.neck, up, SIZES.neck.from), at(p.neck, up, SIZES.neck.to), SIZES.neck.r);
     const headC = at(p.neck, up, SIZES.head.at);
@@ -260,7 +271,7 @@ export function createDemoScene(move: DemoMove, highlights: readonly Highlight[]
     [p.r, p.l].forEach((sd, i) => {
       const L = limbs[i];
       if (!L) return;
-      const hipJ = at(p.hip, right, p.hipW * (i === 0 ? 1 : -1));
+      const hipJ = at(p.hip, pel.right, p.hipW * (i === 0 ? 1 : -1));
       ball(L.shoulder, sd.s, SIZES.shoulder);
       rod(L.upper, sd.s, sd.e, SIZES.upperArm);
       ball(L.elbow, sd.e, SIZES.upperArm * 0.95);

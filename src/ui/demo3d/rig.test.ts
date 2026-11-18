@@ -268,7 +268,7 @@ describe('phaseLabel', () => {
 
 describe('moving machine parts', () => {
   const machines = DEMOS.filter((d) => (d.pose(d.start).rods ?? d.pose(d.start).blocks)?.length);
-  it('the machine demos are the pulldown, leg curl, calf raise, crossover, pushdown, cable row, face pull, leg press and leg extension', () => {
+  it('the machine demos are the pulldown, leg curl, calf raise, crossover, pushdown, cable row, face pull, leg press, leg extension, cable crunch and Pallof press', () => {
     expect(machines.map((d) => d.exerciseId).sort()).toEqual(
       [
         'Wide-Grip_Lat_Pulldown',
@@ -280,6 +280,8 @@ describe('moving machine parts', () => {
         'Face_Pull',
         'Leg_Press',
         'Leg_Extensions',
+        'Cable_Crunch',
+        'Pallof_Press',
       ].sort(),
     );
   });
