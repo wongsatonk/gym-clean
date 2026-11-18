@@ -264,8 +264,9 @@ async function expectHold(cam: Locator, reason: string, repCount: number): Promi
   }
 }
 
-// One worker for the whole file: real-timer camera loops miss frames under parallel load.
-test.describe.configure({ mode: 'default', timeout: 150_000 });
+// Real-timer camera loops miss frames under parallel load, so the mobile-clips project runs one
+// test at a time (workers: 1). Each test starts its own page, so CI can shard them by test.
+test.describe.configure({ timeout: 150_000 });
 
 test('(1, 8, 9, 10) no person for 3 s after 2 reps → hold + prompt, nothing saved; Close while held saves (backdated)', async ({
   page,

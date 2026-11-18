@@ -28,7 +28,7 @@ jobs:
   # test at a time (playwright.config.ts). Each phase now gets its own runner at the same time, and
   # the parallel phase is sharded, so the wall time is the slowest job instead of the sum. Every
   # test still runs exactly once: shards 1-4 cover `mobile` + `pwa`, one job for the live camera,
-  # and the wall-clock clip specs (one 20-min job on 2026-11-17) split over 6 runners. `--no-deps`:
+  # and the wall-clock clip specs (one 20-min job on 2026-11-17) split over 8 runners. `--no-deps`:
   # each runs alone on its own runner, which is what the phase order was protecting.
   e2e:
     runs-on: ubuntu-latest
@@ -41,12 +41,14 @@ jobs:
           - { name: parallel-3, args: '--project=mobile --project=pwa --shard=3/4' }
           - { name: parallel-4, args: '--project=mobile --project=pwa --shard=4/4' }
           - { name: person-camera, args: '--project=mobile-person-camera --no-deps' }
-          - { name: clips-1, args: '--project=mobile-clips --no-deps --shard=1/6' }
-          - { name: clips-2, args: '--project=mobile-clips --no-deps --shard=2/6' }
-          - { name: clips-3, args: '--project=mobile-clips --no-deps --shard=3/6' }
-          - { name: clips-4, args: '--project=mobile-clips --no-deps --shard=4/6' }
-          - { name: clips-5, args: '--project=mobile-clips --no-deps --shard=5/6' }
-          - { name: clips-6, args: '--project=mobile-clips --no-deps --shard=6/6' }
+          - { name: clips-1, args: '--project=mobile-clips --no-deps --shard=1/8' }
+          - { name: clips-2, args: '--project=mobile-clips --no-deps --shard=2/8' }
+          - { name: clips-3, args: '--project=mobile-clips --no-deps --shard=3/8' }
+          - { name: clips-4, args: '--project=mobile-clips --no-deps --shard=4/8' }
+          - { name: clips-5, args: '--project=mobile-clips --no-deps --shard=5/8' }
+          - { name: clips-6, args: '--project=mobile-clips --no-deps --shard=6/8' }
+          - { name: clips-7, args: '--project=mobile-clips --no-deps --shard=7/8' }
+          - { name: clips-8, args: '--project=mobile-clips --no-deps --shard=8/8' }
     name: e2e (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4
