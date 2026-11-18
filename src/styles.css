@@ -2042,6 +2042,18 @@ h1 {
   padding-bottom: 8px;
 }
 
+/* M13b: a one-sided exercise's sets, one "R 12 · L 11 × 20 kg" line each (Summary, History,
+   Calendar day); the Calendar day's target goes on its own line under them. */
+.side-sets {
+  display: block;
+}
+
+.side-set,
+.side-target {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Summary (M4e Energy, src/ui/screens/summary.ts) ---------- */
 
 .summary.mood-energy {

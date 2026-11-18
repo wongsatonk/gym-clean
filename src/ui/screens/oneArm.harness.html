@@ -1,0 +1,177 @@
+<!doctype html>
+<!-- Dev-only visual check for M13b task 15 (one-sided sets read "R 12 · L 11"), made-up data.
+     Not part of the build or the app. Open on the dev server:
+     /src/ui/screens/oneArm.harness.html?view=summary | ?view=day | ?view=history | ?view=fix -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>One-arm sets harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { summaryScreen } from './summary.ts';
+      import { calendarDayScreen } from './calendarDay.ts';
+      import { historyScreen } from './history.ts';
+      import { createLastSetCorrection } from '../lastSetCorrection.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'summary';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      const NAMES = { row: 'One-Arm Dumbbell Row', bench: 'Bench Press', pull: 'Pull A' };
+      const name = (id) => NAMES[id] ?? id;
+      const S = (r, l, rp = 0, lp = 0) => ({
+        right: { reps: r, partials: rp },
+        left: { reps: l, partials: lp },
+      });
+      const D = new Date(2026, 10, 17, 18, 0).getTime();
+      let t = D;
+      const set = (exerciseId, reps, weightKg, setIndex, sides) => ({
+        sessionId: 's1',
+        exerciseId,
+        setIndex,
+        reps,
+        weightKg,
+        restTakenSec: 90,
+        startedAt: (t += 60_000),
+        endedAt: (t += 60_000),
+        ...(sides ? { sides } : {}),
+      });
+      const LOGS = [
+        set('bench', 10, 60, 0),
+        set('bench', 9, 60, 1),
+        set('row', 11, 20, 0, S(12, 11)),
+        set('row', 10, 20, 1, S(10, 10)),
+        set('row', 9, 20, 2, S(10, 9, 1, 0)),
+      ];
+      const fix = (open) => {
+        const c = createLastSetCorrection({
+          reps: 9,
+          partials: 0,
+          sides: S(10, 9, 1, 0),
+          limb: 'arm',
+          onCorrect: (r, p, side) => log('correct', r, p, side ?? 'total'),
+        });
+        if (open) c.el.querySelector('[data-lsc="fix"]').click();
+        if (q.get('side') === 'left') c.el.querySelector('[data-lsc="side-left"]').click();
+        return c.el;
+      };
+
+      if (view === 'summary') {
+        app.replaceChildren(
+          summaryScreen(
+            {
+              dayName: 'Pull A',
+              date: D,
+              durationSec: 41 * 60,
+              unit: 'kg',
+              logs: LOGS,
+              plannedExercises: 2,
+              restOverruns: 0,
+              skipped: [],
+              vsLastPct: 6,
+              last: { volumeKg: 1700, reps: 45 },
+              bests: [],
+              name,
+              fixEl: fix(q.get('open') === '1'),
+            },
+            { onDone: () => log('done') },
+          ),
+        );
+      } else if (view === 'day') {
+        app.replaceChildren(
+          calendarDayScreen(
+            {
+              day: {
+                date: '2026-11-17',
+                status: 'done',
+                dayId: 'pull',
+                setsPlanned: 5,
+                setsDone: 5,
+                exercises: [
+                  {
+                    exerciseId: 'bench',
+                    setsPlanned: 2,
+                    setsDone: 2,
+                    repsTarget: [8, 12],
+                    reps: [10, 9],
+                    status: 'done',
+                  },
+                  {
+                    exerciseId: 'row',
+                    setsPlanned: 3,
+                    setsDone: 3,
+                    repsTarget: [8, 12],
+                    reps: [11, 10, 9],
+                    sides: [S(12, 11), S(10, 10), S(10, 9)],
+                    status: 'done',
+                  },
+                ],
+              },
+              today: '2026-11-18',
+              dayName: name,
+              name,
+            },
+            {
+              onBack: () => log('back'),
+              onStart: () => log('start'),
+              onMove: () => log('move'),
+              onDoToday: () => log('doToday'),
+              onHistory: (id) => log('history', id),
+            },
+          ),
+        );
+      } else if (view === 'history') {
+        const sess = (id, d, sets) => ({
+          sessionId: id,
+          date: new Date(2026, 10, d, 18).getTime(),
+          dayStart: new Date(2026, 10, d).getTime(),
+          sets: sets.map((s) => ({ focusScore: null, ...s })),
+          topSet: sets[0],
+          volumeKg: sets.reduce((n, s) => n + s.reps * s.weightKg, 0),
+          focusScores: [],
+          avgFocus: null,
+        });
+        const detail = {
+          exerciseId: 'row',
+          sessions: [
+            sess('s0', 10, [
+              { reps: 12, weightKg: 20 },
+              { reps: 12, weightKg: 20 },
+            ]),
+            sess('s1', 17, [
+              { reps: 11, weightKg: 20, sides: S(12, 11) },
+              { reps: 10, weightKg: 20, sides: S(10, 10) },
+              { reps: 9, weightKg: 20, sides: S(10, 9) },
+            ]),
+          ],
+          trend: {
+            bestSet: { reps: 12, weightKg: 20, sessionId: 's0', date: D },
+            volumeChangeKg: 120,
+            volumeChangePct: 25,
+            avgFocus: null,
+          },
+        };
+        app.replaceChildren(
+          historyScreen(
+            { unit: 'kg', days: [], exercises: [detail], detail, dayName: name, name },
+            { onOpenExercise: () => {}, onBack: () => log('back'), onTab: () => {} },
+          ),
+        );
+      } else {
+        const main = document.createElement('main');
+        main.className = 'screen';
+        main.append(fix(true));
+        app.replaceChildren(main);
+      }
+      window.harnessReady = true;
+    </script>
+  </body>
+</html>

@@ -201,3 +201,41 @@ describe('calendarDayScreen', () => {
     expect(render(props('2026-11-02')).textContent).not.toMatch(/\bkg\b|\blb\b|weight/i);
   });
 });
+
+describe('calendarDayScreen M13b one-sided sets', () => {
+  const S = (r: number, l: number) => ({
+    right: { reps: r, partials: 0 },
+    left: { reps: l, partials: 0 },
+  });
+  const oneArm = {
+    exerciseId: 'row',
+    setsPlanned: 3,
+    setsDone: 2,
+    repsTarget: [8, 12] as [number, number],
+    reps: [11, 10],
+    sides: [S(12, 11), S(10, 10)],
+    status: 'partial' as const,
+  };
+  const dayWith = (ex: DayCompletion['exercises']): DayCompletion => ({
+    ...at('2026-11-06'),
+    exercises: ex,
+  });
+
+  it('a one-sided exercise reads "R 12 · L 11 reps" per set, then the target', () => {
+    const root = render(props('2026-11-06', { day: dayWith([oneArm]) }));
+    const reps = rows(root)[0]?.oneByClass('cal-ex-reps');
+    expect(reps?.byClass('side-set').map((l) => l.textContent)).toEqual([
+      'R 12 · L 11 reps',
+      'R 10 · L 10 reps',
+    ]);
+    expect(reps?.textContent).toContain('Target 8–12');
+  });
+
+  it('sets logged without sides keep the old line', () => {
+    const plain = { ...oneArm, sides: undefined };
+    const root = render(props('2026-11-06', { day: dayWith([plain]) }));
+    const reps = rows(root)[0]?.oneByClass('cal-ex-reps');
+    expect(reps?.byClass('side-set')).toHaveLength(0);
+    expect(reps?.textContent).toBe('11 · 10 reps, target 8–12');
+  });
+});

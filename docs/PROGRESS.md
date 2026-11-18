@@ -161,7 +161,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Full card only before the set's first rep; closes after 1.5 s tracked (today) **or 10 s**; after the first rep, a loss shows a one-line "Step into frame" strip at the top of the stage (spoken once per loss if the outOfFrame cue doesn't already say it), never the full card; "Phone position" still opens the card.
   - Done when: render test (first rep, then 3 s out of frame → strip shown, card hidden, nothing over the lower half); screenshot of the strip.
   - Deps: none for the logic, but same file as 13: run after 13 or in the same ui-engineer pass.
-- [ ] 15. [ui-engineer] Summary, Calendar day, History and Fix show both sides.
+- [x] 15. [ui-engineer] Summary, Calendar day, History and Fix show both sides.
   - Files: `src/ui/screens/summary.ts`, `src/ui/screens/calendarDay.ts`, `src/ui/screens/history.ts`, `src/ui/lastSetCorrection.ts` (+tests).
   - Done when: a `sides` set reads "R 12 · L 11 × 20 kg" (≥ 20px), older sets unchanged, Fix edits either side; screenshots.
   - Deps: 10, 12.
@@ -289,7 +289,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Props in / callbacks out. Off state: what Claude is, cost is paid by you to Anthropic, the **"What is sent" card** rendering `CLAUDE_SENDS` / `CLAUDE_NEVER_SENDS` (props), and "Turn on" that first shows the explainer again with **I understand** (sets `explainerOkAt`). Key: a paste field (`type=password`, `autocomplete=off`, `autocapitalize=off`, `spellcheck=false`), Save (the field clears at once), "Key saved" + Test key + **Remove key** (two taps). Model picker (labels + "about US$x per 100 questions" from props), daily limit 10 / 30 / 60, order (Claude first / Apple first, if M12-s3-q1 keeps it), usage: today "12 questions · about US$0.04", this month the same. A tip line: "You can also set a monthly spend limit in your Anthropic account." PWA: one line "Claude coach is in the iPhone app." and nothing else.
   - Done when: render tests (each state; the key never rendered back; two-tap remove; keyboard) + 390×844 screenshots (off with the What is sent card, explainer, key saved with usage, PWA line).
   - Deps: 3 (copy props from 4 can be stubbed until 4 lands).
-- [ ] 15. [ui-engineer] Chat: Claude badge, notes, Ask Claude instead.
+- [x] 15. [ui-engineer] Chat: Claude badge, notes, Ask Claude instead.
   - Files: src/ui/coach/chat.ts(+test), src/ui/coach/chat.css.
   - Source badge "Claude" (text, not colour alone); the Claude notes as the existing muted system line; an **Ask Claude instead** button (≥ 56px) under an Apple / quick-replies answer to free text when props say Claude is available; "Thinking…" unchanged (no streaming).
   - Done when: render tests + 390×844 screenshots (a Claude reply with badge, a fallback note, Ask Claude instead).
@@ -1158,7 +1158,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - List newest first (thumbnail, exercise, date, trigger label, star, "Deletes in N days" unless starred); detail: player (muted, loop), Star, Delete (confirm), **Share**, the Save Video / iCloud Photos line; empty state; Summary card "2 clips saved" → Clips.
   - Done when: render tests (empty, list, starred, expiring); 390×844 screenshots of list, detail, Summary card.
   - Deps: 3, 7.
-- [ ] 15. [ui-engineer] Settings → Clips.
+- [x] 15. [ui-engineer] Settings → Clips.
   - Files: src/ui/screens/clipSettings.ts(+test).
   - Blur Light / Medium / Strong (no off), Sound (off; first on → `onRequestMic`), Show weight (on), what is kept and for how long, "Delete all clips" (confirm).
   - Done when: render tests per state; 390×844 screenshot.
