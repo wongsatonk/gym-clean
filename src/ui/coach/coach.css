@@ -397,8 +397,8 @@
 
 /* ---------- Claude explain card (M13c task 6d, claudeOfferCard.ts) ---------- */
 /* Explains, never sends. The two lists differ by heading words and icon (never colour alone);
-   rows are plain dots. "Tell me when it's ready" is the one filled action (cta = press this) and
-   "Not now" the same size beside it, so both answers are equally easy to tap. */
+   rows are plain dots. "Tell me when it's ready" and "Not now" look the same and are the same size:
+   a consent choice gets no nudge, and both answers are equally easy to tap. */
 
 .co-card {
   display: flex;

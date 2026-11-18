@@ -800,6 +800,7 @@ export function mountApp(root: HTMLElement): void {
     voice.unlock(); // inside the tap, so iOS lets the count be spoken
     camera = createCameraView({
       title: `Practice: ${exerciseName(id)}`,
+      note: 'Practice: nothing is saved.',
       onClose: closeCameraView,
       exerciseId: id,
       spokenCount,

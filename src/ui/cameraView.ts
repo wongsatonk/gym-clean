@@ -242,6 +242,8 @@ export type CameraViewOptions = {
    * sideTurn: the counter moves to the other side from 0.
    */
   onNextSide?: () => void;
+  /** M13c: one line under the title (Practice: "Practice: nothing is saved."). */
+  note?: string;
 };
 
 /**
@@ -1133,7 +1135,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       : null;
   if (hud) hudObserver?.observe(hud);
 
-  const setDoneBtn = counter
+  // M13c: no Set done without a set to end (Practice passes no onSetDone).
+  const setDoneBtn = counter && opts.onSetDone
     ? h(
         'button',
         {
@@ -1203,6 +1206,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       'header',
       { class: `top-bar cam-top${learning ? ' has-learning' : ''}` },
       h('p', { class: 'page-title small-title cam-title' }, opts.title),
+      opts.note ? h('p', { class: 'cam-note', 'data-cam-note': true }, opts.note) : null,
       learning &&
         h(
           'span',

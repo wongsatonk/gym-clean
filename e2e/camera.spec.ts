@@ -587,6 +587,9 @@ test.describe('Practice from the day preview (M13c)', () => {
 
     const cam = await openPractice(page);
     await expect(cam.locator('.cam-title')).toHaveText('Practice: Dumbbell Bicep Curl');
+    // Practice says nothing is saved and has no Set done (there is no set to end).
+    await expect(cam.locator('[data-cam-note]')).toHaveText('Practice: nothing is saved.');
+    await expect(cam.getByRole('button', { name: /Set done/ })).toHaveCount(0);
     await expect(repNum(cam)).toHaveAttribute('data-reps', '0');
 
     // The clip: 3 reps counted on screen and spoken, word by word.

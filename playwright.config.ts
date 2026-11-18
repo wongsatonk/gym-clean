@@ -133,6 +133,8 @@ export default defineConfig({
     {
       command: `npx vite --port ${PORT} --strictPort`,
       url: `https://localhost:${PORT}`,
+      // No file watching: an edit in this shared checkout mid-run would full-reload pages under test.
+      env: { E2E_NO_WATCH: '1' },
       ignoreHTTPSErrors: true,
       // Never reuse: a server left on this port by another checkout would silently test its code.
       reuseExistingServer: false,
