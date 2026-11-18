@@ -209,6 +209,8 @@ const HOURS_COUNT = new RegExp(
 const HOUR_ARTICLES = new Set(P.shortOnTime.hourArticles.map((w) => normalizeText(w)));
 const AVOID_ANYWHERE = compileList(P.avoidArea.anywhere);
 const AVOID_BEFORE = P.avoidArea.before.map((w) => normalizeText(w));
+const AVOID_AFTER = P.avoidArea.after.map((w) => normalizeText(w));
+const AVOID_AFTER_FILLERS = P.avoidArea.afterFillers.map((w) => normalizeText(w));
 const AREA_FILLERS = ['on my', 'on the', 'for my', 'my', 'the', 'on'];
 const AREA_IGNORE = P.areaIgnore.phrases.map((p) => ({
   raw: normalizeText(p),
@@ -231,6 +233,19 @@ const SKIP_DAYS = P.skipDay.days.map((w) => normalizeText(w));
 const SKIP_BARE = P.skipDay.bare.map((w) => normalizeText(w));
 const SKIP_BARE_FOLLOWERS = compileList(P.skipDay.bareFollowers);
 const MISSING_KIT = compileList(P.missingKit.phrases);
+const REPLACED_AFTER = compileList(P.swapReplaced.after);
+const OWN = {
+  starts: P.ownNumbers.starts.map((w) => normalizeText(w)),
+  wh: P.ownNumbers.wh.map((w) => normalizeText(w)),
+  about: compileList(P.ownNumbers.about),
+  aboutWithMy: compileList(P.ownNumbers.aboutWithMy),
+  my: compileList(P.ownNumbers.my),
+  timeUnits: P.ownNumbers.timeUnits.map((w) => normalizeText(w)),
+  meals: compileList(P.ownNumbers.meals),
+  advice: compileList(P.ownNumbers.advice),
+  commands: compileList(P.ownNumbers.commands),
+  pastSelf: compileList(P.ownNumbers.pastSelf),
+};
 const MISSING_KIT_BARE = compileList(P.missingKit.bare);
 const MISSING_KIT_BARE_NOT = compileList(P.missingKit.bareNot);
 const SCOPE_PLAN = compileList(P.scope.plan);
@@ -240,6 +255,9 @@ const RED_FLAG = compileList(P.safety.redFlag);
 const COMBO_A = compileList(P.safety.redFlagCombos.a);
 const COMBO_B = compileList(P.safety.redFlagCombos.b);
 const STOPWORDS = new Set(P.exerciseStopwords.map((w) => normalizeText(w)));
+const HEAD_STOPWORDS = new Set(
+  P.exerciseHeadStopwords.words.map((w) => singular(normalizeText(w))),
+);
 const ALIASES = Object.entries(P.exerciseAliases)
   .filter((entry): entry is [string, string[]] => Array.isArray(entry[1]))
   .flatMap(([id, list]) =>
@@ -291,6 +309,10 @@ function stripFillers(prefix: string, fillers: readonly string[]): string {
   return p;
 }
 
+/**
+ * The first area word, and whether an avoid word sits right before one ("skip legs") or a
+ * worn-out word right after one ("my arms are toast", 1.15.2 eval req-036).
+ */
 function areaOf(text: string): { area: BodyArea; viaAvoidBefore: boolean } | undefined {
   let t = text;
   for (const ig of AREA_IGNORE) {
@@ -302,7 +324,9 @@ function areaOf(text: string): { area: BodyArea; viaAvoidBefore: boolean } | und
   if (!first) return undefined;
   const viaAvoidBefore = hits.some((h) => {
     const prefix = stripFillers(t.slice(0, h.start), AREA_FILLERS);
-    return AVOID_BEFORE.some((w) => endsWithWord(prefix, w));
+    if (AVOID_BEFORE.some((w) => endsWithWord(prefix, w))) return true;
+    const rest = stripLeading(t.slice(h.end), AVOID_AFTER_FILLERS);
+    return AVOID_AFTER.some((w) => startsWithWord(rest, w));
   });
   return { area: first.area, viaAvoidBefore };
 }
@@ -454,10 +478,10 @@ function nameTokens(name: string): string[] {
     .map(singular);
 }
 
-function exerciseOf(text: string, ctx: MatchContext): string | undefined {
+/** Catalog exercises the (normalized) text names in full or by alias, and the name tokens. */
+function exerciseHits(text: string, ctx: MatchContext) {
   const catalog = ctx.exercises ?? DEFAULT_EXERCISES;
   const ids = new Set(catalog.map((e) => e.id));
-  const today = new Set(ctx.todayExerciseIds ?? []);
   const words = new Set(text.split(' ').map(singular));
   const named = catalog.map((e) => ({ id: e.id, tokens: nameTokens(e.name) }));
 
@@ -469,6 +493,42 @@ function exerciseOf(text: string, ctx: MatchContext): string | undefined {
   for (const a of ALIASES) {
     if (ids.has(a.id) && has(a.m, text)) candidates.push({ id: a.id, score: a.score });
   }
+  // A generic word ("curls", "rows"): the exercises whose last name word was typed (never a
+  // head stopword alone: "fed up", "warm up").
+  const heads = named.filter((n) => {
+    const head = n.tokens[n.tokens.length - 1] ?? '';
+    return head !== '' && !HEAD_STOPWORDS.has(head) && words.has(head);
+  });
+  return { words, named, candidates, heads };
+}
+
+/**
+ * 1.15.2: the text names at least one catalog exercise (full name, alias or last name word), even
+ * when the rules can't tell which one is meant (route.ts sends such a swap/stall to the model).
+ */
+export function namesExercise(text: string, ctx: MatchContext = {}): boolean {
+  const { candidates, heads } = exerciseHits(normalizeText(text), ctx);
+  return candidates.length > 0 || heads.length > 0;
+}
+
+/**
+ * In "X instead of Y" the exercise being replaced is Y (1.15.2 eval req-058). When Y names an
+ * exercise only Y is read: `{ id }` (undefined when Y is unclear, so route.ts asks the model),
+ * never X. No marker, or nothing named after it: undefined (the usual reading of the whole text).
+ */
+function replacedExerciseOf(text: string, ctx: MatchContext): { id?: string } | undefined {
+  for (const s of REPLACED_AFTER(text)) {
+    const tail = text.slice(s.end).trim();
+    if (!namesExercise(tail, ctx)) continue;
+    const id = exerciseOf(tail, ctx);
+    return id === undefined ? {} : { id };
+  }
+  return undefined;
+}
+
+function exerciseOf(text: string, ctx: MatchContext): string | undefined {
+  const today = new Set(ctx.todayExerciseIds ?? []);
+  const { words, named, candidates, heads } = exerciseHits(text, ctx);
 
   const pick = (list: string[]): string | undefined => {
     const unique = [...new Set(list)];
@@ -482,9 +542,6 @@ function exerciseOf(text: string, ctx: MatchContext): string | undefined {
   if (best !== undefined && (today.size === 0 || today.has(best))) return best;
 
   // A generic word ("curls", "rows"): the exercise whose last name word was typed, preferring today's.
-  const heads = named.filter(
-    (n) => n.tokens.length > 0 && words.has(n.tokens[n.tokens.length - 1] ?? ''),
-  );
   const todayHeads = [...new Set(heads.filter((n) => today.has(n.id)).map((n) => n.id))];
   // A full multi-word name he typed ("leg extension") beats today's exercise that only shares its
   // last word (Standing Dumbbell Triceps Extension) unless today's name has every typed word too
@@ -539,6 +596,31 @@ function asksForCore(text: string, safety: Safety): boolean {
   if (!CORE_FOCUS.add(text).some((s) => !overlaps(s, words))) return false;
   const polite = CORE_FOCUS.politeAsk(text);
   return !CORE_FOCUS.questions(text).some((s) => !inside(s, polite));
+}
+
+/**
+ * 1.15.2 phone eval: a question about the user's own numbers or history ("How many calories have I
+ * eaten today?", "What's my best lat pulldown this month?"). route.ts sends these to the model
+ * even when a change intent matched. Not one: a meal word ("how much protein is left for
+ * dinner" asks for food ideas), advice ("how much should I deload"), or a command word ("how
+ * many fewer sets today") unless the message is about the user's past ("how many sessions did I
+ * skip"); a command after the first "?" always is a request ("did I stall on bench? swap it").
+ * "best" counts only with "my"; "left" right after a time unit ("20 minutes left") is time.
+ * Phrases: `ownNumbers` in phrases.json.
+ */
+export function asksOwnNumbers(text: string): boolean {
+  const t = normalizeText(text);
+  if (t === '' || has(OWN.meals, t) || has(OWN.advice, t)) return false;
+  const q = text.indexOf('?');
+  const afterQuestion = q < 0 ? '' : normalizeText(text.slice(q + 1));
+  if (has(OWN.commands, afterQuestion)) return false;
+  if (has(OWN.commands, t) && !has(OWN.pastSelf, t)) return false;
+  if (OWN.starts.some((w) => startsWithWord(t, w))) return true;
+  if (!OWN.wh.some((w) => startsWithWord(t, w))) return false;
+  const about = OWN.about(t).some(
+    (s) => !OWN.timeUnits.some((u) => endsWithWord(t.slice(0, s.start).trimEnd(), u)),
+  );
+  return about || (has(OWN.aboutWithMy, t) && has(OWN.my, t));
 }
 
 // ---- main ----
@@ -600,7 +682,8 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   const slots: IntentSlots = {};
   if (intent === 'avoidArea' && area) slots.area = area.area;
   if (intent === 'swap' || intent === 'stall' || intent === 'focusEdit') {
-    const exerciseId = exerciseOf(t, ctx);
+    const replaced = replacedExerciseOf(t, ctx);
+    const exerciseId = replaced ? replaced.id : exerciseOf(t, ctx);
     if (exerciseId !== undefined) slots.exerciseId = exerciseId;
   }
   if (intent === 'focusBlock' && forCore) slots.group = 'core';

@@ -92,6 +92,160 @@ describe('routeMessage', () => {
     expect(hi).not.toHaveProperty('call');
   });
 
+  // 1.15.2 phone eval: facts dropped 17 → 13 of 24 because these six questions got action cards.
+  it('a question about the user’s own numbers goes to the model, with the match', () => {
+    for (const [id, want] of [
+      ['monthSessions', 'focusEdit'],
+      ['pulldownBest', 'focusEdit'],
+      ['kcalEaten', 'food'],
+      ['proteinTarget', 'food'],
+      ['kcalLeft', 'food'],
+      ['proteinLeft', 'food'],
+    ] as const) {
+      const text = facts.items.find((f) => f.id === id)?.text ?? '';
+      expect(text).not.toBe('');
+      const r = routeMessage(text, coach);
+      expect([id, r.to]).toEqual([id, 'model']);
+      expect(r).not.toHaveProperty('call');
+      expect([id, r.match.intent]).toEqual([id, want]);
+    }
+  });
+
+  it('every facts question goes to the model', () => {
+    for (const f of facts.items)
+      expect([f.id, routeMessage(f.text, coach).to]).toEqual([f.id, 'model']);
+  });
+
+  it('the own-numbers guard stays narrow: change requests still go to the rules', () => {
+    for (const [text, name] of [
+      ['how much protein is left for dinner', 'suggestFood'], // req-066: a meal word asks for ideas
+      ['What should I eat?', 'suggestFood'],
+      ['Can you move my session to Friday?', 'postponeSession'],
+      ['The leg press is taken, what else can I do?', 'swapExercise'],
+    ] as const)
+      expect([text, routeMessage(text, coach)]).toMatchObject([
+        text,
+        { to: 'rules', why: 'action', call: { name } },
+      ]);
+  });
+
+  it('red flags, empty and Thai win over the own-numbers guard', () => {
+    expect(routeMessage('How much chest pain is normal?', coach)).toMatchObject({
+      to: 'rules',
+      why: 'redFlag',
+    });
+    expect(routeMessage('   ', coach)).toMatchObject({ to: 'rules', why: 'empty' });
+    expect(routeMessage('how many กินอะไรดี', coach)).toMatchObject({ to: 'rules', why: 'thai' });
+  });
+
+  // Reviewer (1.15.2 follow-up): change requests phrased as questions keep their rules card.
+  it('advice questions and questions with a command word keep their rules action', () => {
+    for (const [text, name, exerciseId] of [
+      ['What should I do with 20 minutes left?', 'shortOnTime'],
+      ['How much lighter should I go today?', 'lighterToday'],
+      ['How many sets should I cut today, I am tired', 'lighterToday'],
+      ['How many reps left in my plan? go lighter', 'lighterToday'],
+      ['how much should I deload', 'deloadWeek'],
+      ['How much protein should I eat?', 'suggestFood'],
+      ['How many calories should I eat today?', 'suggestFood'],
+      ['What can I eat with 40g protein left?', 'suggestFood'],
+      ["What's the best swap for the bench press?", 'swapExercise', 'Dumbbell_Bench_Press'],
+      [
+        'How much weight should I drop on bench, it stalled',
+        'adjustStalledExercise',
+        'Dumbbell_Bench_Press',
+      ],
+      ['Did I stall on bench? swap it', 'swapExercise', 'Dumbbell_Bench_Press'],
+    ] as const) {
+      const r = routeMessage(text, coach);
+      expect([text, r.to, r.to === 'rules' ? r.call?.name : undefined]).toEqual([
+        text,
+        'rules',
+        name,
+      ]);
+      if (exerciseId) expect([text, r.match.slots.exerciseId]).toEqual([text, exerciseId]);
+    }
+  });
+
+  it('history questions with a command word (did I skip / cut / drop) go to the model', () => {
+    for (const text of [
+      'How many sessions did I skip this month?',
+      'How many calories did I cut this week?',
+      'Did I drop below my calorie target?',
+    ]) {
+      const r = routeMessage(text, coach);
+      expect([text, r.to]).toEqual([text, 'model']);
+      expect(r).not.toHaveProperty('call');
+    }
+  });
+
+  it('fewer / less / easier questions stay a rules lighter', () => {
+    for (const text of [
+      'how many fewer sets today',
+      'how much easier today please',
+      'how much less weight today, feeling flat',
+    ])
+      expect([text, routeMessage(text, coach)]).toMatchObject([
+        text,
+        { to: 'rules', call: { name: 'lighterToday' } },
+      ]);
+  });
+
+  it('a session length wins over the guard: rules shortOnTime', () => {
+    for (const [text, minutes] of [
+      ['how much do I have left, I only have 30 min', 30],
+      ['how much time left? 15 minutes', 20],
+      ['how many minutes do I have, only 20 min today', 20],
+    ] as const)
+      expect([text, routeMessage(text, coach)]).toMatchObject([
+        text,
+        { to: 'rules', call: { name: 'shortOnTime', args: { minutes } } },
+      ]);
+  });
+
+  it('"X instead of Y" with an unclear Y never swaps X; it goes to the model', () => {
+    const r = routeMessage('Can I do the leg press instead of rows?', coach);
+    expect(r.match.slots.exerciseId).not.toBe('Leg_Press');
+    if (r.match.slots.exerciseId === undefined) expect(r.to).toBe('model');
+  });
+
+  it('every action request in the eval set the rules read as an action goes to the rules', () => {
+    for (const it of requests.items) {
+      if (it.safety === 'redFlag' || !RULES_ACTION_INTENTS.has(it.intent as never)) continue;
+      expect([it.text, routeMessage(it.text, coach).to]).toEqual([it.text, 'rules']);
+    }
+  });
+
+  // req-058: "instead of" names two exercises; the rules now read the replaced one.
+  it('"X instead of Y" is a rules swap of Y', () => {
+    expect(routeMessage('Can I do face pulls instead of reverse flyes?', coach)).toMatchObject({
+      to: 'rules',
+      why: 'action',
+      call: { name: 'swapExercise', args: { exerciseId: 'Reverse_Flyes' } },
+    });
+  });
+
+  it('a swap or stall naming an exercise the rules cannot pin down goes to the model', () => {
+    for (const text of [
+      'swap face pulls or reverse flyes',
+      'reverse flyes and face pulls have stalled',
+    ]) {
+      const r = routeMessage(text, coach);
+      expect([text, r.to]).toEqual([text, 'model']);
+      expect(['swap', 'stall']).toContain(r.match.intent);
+      expect(r.match.slots.exerciseId).toBeUndefined();
+    }
+    // Naming none: the rules ask which one (a picker, not an empty card).
+    expect(routeMessage('Swap an exercise', coach)).toMatchObject({
+      to: 'rules',
+      call: { name: 'swapExercise', args: {} },
+    });
+    expect(routeMessage('Adjust my plan', coach)).toMatchObject({
+      to: 'rules',
+      call: { name: 'adjustStalledExercise', args: {} },
+    });
+  });
+
   it('carries the same match handle() acts on', () => {
     const r = routeMessage('swap the leg press', coach);
     expect(r.match).toMatchObject({ intent: 'swap', slots: { exerciseId: 'Leg_Press' } });
@@ -102,6 +256,64 @@ describe('routeMessage', () => {
       const r = routeMessage(it.text, coach);
       if (it.safety === 'redFlag') expect([it.text, r.to]).toEqual([it.text, 'rules']);
     }
+  });
+});
+
+/**
+ * Regression paraphrases (1.15.2 follow-up): written after the 109/109 fit and reviewed, so they
+ * are not truly held out. Grow this list from his real phone eval exports (made-up wording, no
+ * personal data). [text, route, intent the match must have].
+ */
+const REGRESSION_PARAPHRASES: readonly [string, 'rules' | 'model', string][] = [
+  // Questions about the user's own numbers → the model.
+  ['How many workouts have I done this month?', 'model', 'focusEdit'],
+  ["What's my calorie target?", 'model', 'food'],
+  ['How much protein have I had today?', 'model', 'food'],
+  ['How many calories are left for me today?', 'model', 'food'],
+  ['When did I last do legs?', 'model', 'doToday'],
+  ['Did I hit my protein yesterday?', 'model', 'food'],
+  // Change requests → the rules.
+  ['What should I do with 20 minutes left?', 'rules', 'shortOnTime'],
+  ['Only have 25 minutes left today', 'rules', 'shortOnTime'],
+  ['How much lighter should I go today?', 'rules', 'lighter'],
+  ['feeling a bit flat today, go easy', 'rules', 'lighter'],
+  ['Everything feels meh today', 'rules', 'lighter'],
+  ['how much should I deload', 'rules', 'deload'],
+  ['I need a deload', 'rules', 'deload'],
+  ['How much protein should I eat?', 'rules', 'food'],
+  ['What can I snack on?', 'rules', 'food'],
+  ['any dinner ideas with the protein I have left?', 'rules', 'food'],
+  ["What's the best swap for the bench press?", 'rules', 'swap'],
+  ['Swap the goblet squat please', 'rules', 'swap'],
+  ['Use the cable row instead of the lat pulldown', 'rules', 'swap'],
+  ['Can I do lunges instead of the goblet squat?', 'rules', 'swap'],
+  ['Did I stall on bench? swap it', 'rules', 'swap'],
+  ['How much weight should I drop on bench, it stalled', 'rules', 'stall'],
+  ["I'm stuck on the shoulder press", 'rules', 'stall'],
+  ['my legs are wrecked', 'rules', 'avoidArea'],
+  // Known rules gap (pinned, not tuned): "push today's session" isn't a postpone phrase; the model
+  // gets it.
+  ["Could you push today's session to Saturday?", 'model', 'help'],
+  // Re-review: history questions with a command word → the model.
+  ['How many sessions did I skip this month?', 'model', 'focusEdit'],
+  ['How many calories did I cut this week?', 'model', 'food'],
+  ['Did I drop below my calorie target?', 'model', 'food'],
+  // Re-review: lighter and session-length questions → the rules.
+  ['how many fewer sets today', 'rules', 'lighter'],
+  ['how much easier today please', 'rules', 'lighter'],
+  ['how much less weight today, feeling flat', 'rules', 'lighter'],
+  ['how much do I have left, I only have 30 min', 'rules', 'shortOnTime'],
+  ['how much time left? 15 minutes', 'rules', 'shortOnTime'],
+  ['how many minutes do I have, only 20 min today', 'rules', 'shortOnTime'],
+];
+
+describe('regression paraphrases', () => {
+  it('route as pinned', () => {
+    const got = REGRESSION_PARAPHRASES.map(([text]) => {
+      const r = routeMessage(text, coach);
+      return [text, r.to, r.match.intent];
+    });
+    expect(got).toEqual(REGRESSION_PARAPHRASES.map((h) => [...h]));
   });
 });
 

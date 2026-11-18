@@ -10,14 +10,29 @@
  * - empty text (req-073 " " was a bridge error);
  * - Thai (Apple's model has no Thai; req-013 was swapped by sanitize, req-034 a bridge error).
  *
+ * 1.15.2 phone eval follow-up (facts fell 17 → 13 of 24): two narrow exceptions send a matched
+ * change to the model instead, both only with no discomfort word (those keep the rules' referral):
+ * - a question about the user's own numbers or history ("How many calories have I eaten today?",
+ *   "What's my best lat pulldown this month?"; intents.ts `asksOwnNumbers`), except a shortOnTime
+ *   match with a session length ("how much time left? 15 minutes");
+ * - a swap/stall that names an exercise the rules can't pin down (never a card for the wrong or no
+ *   exercise). Naming none ("Swap an exercise") stays with the rules, which ask which one.
+ * Red flags, empty text and Thai are decided first, as before.
+ *
  * `call` records the tool call a correct model would make for the match (tools.contract.json
  * names and args), for the trace and the eval; the proposal itself comes from `handle()`.
  */
 import type { ToolCall } from '../../types';
-import { matchText, resolveDay, type CoachContext } from '../coach';
+import { matchContext, matchText, resolveDay, type CoachContext } from '../coach';
 import { weekdaysFor, validDaysPerWeek } from '../focusBlock';
 import { shortOptionFor } from '../actions/shortOnTime';
-import type { Intent, IntentMatch, IntentSlots } from '../intents';
+import {
+  asksOwnNumbers,
+  namesExercise,
+  type Intent,
+  type IntentMatch,
+  type IntentSlots,
+} from '../intents';
 
 export type RouteWhy = 'redFlag' | 'action' | 'empty' | 'thai';
 export type BrainRoute =
@@ -38,6 +53,9 @@ export const RULES_ACTION_INTENTS: ReadonlySet<Intent> = new Set<Intent>([
   'doToday',
   'shortOnTime',
 ]);
+
+/** Changes to one exercise: without its id the rules would act on the wrong (or no) one. */
+const NEEDS_EXERCISE: ReadonlySet<Intent> = new Set<Intent>(['swap', 'stall']);
 
 const THAI = /[฀-๿]/;
 
@@ -107,6 +125,17 @@ export function routeMessage(text: string, coach: CoachContext): BrainRoute {
   if (match.safety === 'redFlag') return { to: 'rules', why: 'redFlag', match };
   if (text.trim() === '') return { to: 'rules', why: 'empty', match };
   if (THAI.test(text)) return toRules('thai', match, coach.today);
-  if (RULES_ACTION_INTENTS.has(match.intent)) return toRules('action', match, coach.today);
-  return { to: 'model', match };
+  if (!RULES_ACTION_INTENTS.has(match.intent)) return { to: 'model', match };
+  if (match.safety === 'none') {
+    // A session length typed ("how much time left? 15 minutes") is a shortOnTime request.
+    const sessionLength = match.intent === 'shortOnTime' && match.slots.minutes !== undefined;
+    if (!sessionLength && asksOwnNumbers(text)) return { to: 'model', match };
+    if (
+      NEEDS_EXERCISE.has(match.intent) &&
+      match.slots.exerciseId === undefined &&
+      namesExercise(text, matchContext(coach))
+    )
+      return { to: 'model', match };
+  }
+  return toRules('action', match, coach.today);
 }

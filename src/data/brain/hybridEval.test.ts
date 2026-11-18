@@ -41,12 +41,12 @@ const MODELS: [string, () => Fake, number][] = [
   [
     '(a) text only, never a tool call',
     () => bridge({ text: 'Sounds good.', toolCalls: [], latencyMs: 900 }),
-    106,
+    109,
   ],
   [
     '(b) always the wrong tool (suggestFood)',
     () => bridge({ text: '', toolCalls: [{ name: 'suggestFood', args: {} }], latencyMs: 900 }),
-    106,
+    109,
   ],
 ];
 
@@ -80,14 +80,12 @@ describe('hybrid eval (rules first, worst-case model)', () => {
         const { rows } = await run();
         const passed = actionIdx.filter((i) => row(rows, i).pass).length;
         expect(passed).toBeGreaterThanOrEqual(Math.ceil(0.85 * actionIdx.length));
-        // The misses, pinned: two the rules don't read as changes (the model gets them) and one
-        // swap naming two exercises (req-058). req-095 ("leg extension" read as today's triceps
-        // extension) is fixed in intents.ts since 1.15.2.
-        expect(actionIdx.filter((i) => !row(rows, i).pass).map((i) => row(rows, i).id)).toEqual([
-          'req-036',
-          'req-043',
-          'req-058',
-        ]);
+        // The misses, pinned: none. Fixed in intents.ts: req-095 ("leg extension" read as today's
+        // triceps extension, 1.15.2), and after the 1.15.2 phone eval req-036 ("my arms are toast":
+        // an area + a worn-out word), req-043 ("feel kind of meh": lighter) and req-058 ("face
+        // pulls instead of reverse flyes": the replaced one, Y). req-100 ("No squats today") is
+        // open chat here; on the phone the model called a tool for it (its fault, not routing's).
+        expect(actionIdx.filter((i) => !row(rows, i).pass).map((i) => row(rows, i).id)).toEqual([]);
         expect(passed).toBe(pinned);
       });
 
@@ -135,4 +133,39 @@ describe('hybrid eval (rules first, worst-case model)', () => {
         expect(b.reqs.length).toBeLessThan(items.length);
       });
     });
+});
+
+// 1.15.2 phone eval: facts fell 17 → 13 of 24 because six questions about the user's own numbers were
+// routed to the rules and answered with an action card. Every facts question is the model's.
+describe('hybrid eval: facts questions (all of facts.json)', () => {
+  const SIX = [
+    'monthSessions',
+    'pulldownBest',
+    'kcalEaten',
+    'proteinTarget',
+    'kcalLeft',
+    'proteinLeft',
+  ];
+
+  it('every facts row goes to the model and gets no call from a text-only model (a)', async () => {
+    const b = bridge({ text: 'Sounds good.', toolCalls: [], latencyMs: 900 });
+    const out = await runBrainEval({
+      bridge: b,
+      program,
+      catalog,
+      now: () => 0,
+      requests: [],
+      facts: { scenario: factsJson.scenario as never, items: factsJson.items as never },
+    });
+    if (!out.ok) throw new Error('unavailable');
+    const rows = out.report.rows.filter((r) => r.set === 'facts');
+    expect(rows).toHaveLength(factsJson.items.length);
+    for (const r of rows) expect([r.id, r.route, r.got]).toEqual([r.id, 'model', 'none']);
+    // The six from the phone eval, by name: asked, no action card.
+    for (const id of SIX) {
+      const r = rows.find((x) => x.id === id);
+      expect([id, r?.route, r?.got]).toEqual([id, 'model', 'none']);
+    }
+    expect(b.reqs).toHaveLength(factsJson.items.length);
+  });
 });

@@ -69,6 +69,7 @@ import {
   type Intent,
   type IntentMatch,
   type IntentSlots,
+  type MatchContext,
   type Safety,
 } from './intents';
 import {
@@ -1076,16 +1077,21 @@ function redFlag(ctx: CoachContext): CoachResponse {
       };
 }
 
+/** What the matcher may name: the catalog, today's rows and the plan's day names. */
+export function matchContext(ctx: CoachContext): MatchContext {
+  return {
+    exercises: ctx.catalog.exercises.map(({ id, name }) => ({ id, name })),
+    todayExerciseIds: todayRows(ctx),
+    dayNames: ctx.state.plan.days.map((d) => d.name),
+  };
+}
+
 /**
  * The match `handle({ text })` acts on (catalog names, today's rows, the plan's day names).
  * 1.15.2: the Apple adapter routes on it (brain/route.ts), so both always agree.
  */
 export function matchText(text: string, ctx: CoachContext): IntentMatch {
-  return matchIntent(text, {
-    exercises: ctx.catalog.exercises.map(({ id, name }) => ({ id, name })),
-    todayExerciseIds: todayRows(ctx),
-    dayNames: ctx.state.plan.days.map((d) => d.name),
-  });
+  return matchIntent(text, matchContext(ctx));
 }
 
 function handleText(text: string, ctx: CoachContext): CoachResponse {

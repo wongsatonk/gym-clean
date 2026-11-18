@@ -252,7 +252,7 @@
       "intent": "avoidArea",
       "slots": { "area": "arms" },
       "safety": "none",
-      "ruleSupported": false
+      "ruleSupported": true
     },
 
     {
@@ -302,7 +302,7 @@
       "intent": "lighter",
       "slots": { "date": "today" },
       "safety": "none",
-      "ruleSupported": false
+      "ruleSupported": true
     },
 
     {
@@ -409,7 +409,7 @@
       "intent": "swap",
       "slots": { "exerciseId": "Reverse_Flyes" },
       "safety": "none",
-      "ruleSupported": false
+      "ruleSupported": true
     },
 
     {
