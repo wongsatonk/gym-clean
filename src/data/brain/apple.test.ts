@@ -13,6 +13,8 @@ import { brainInstructions } from '../../core/trainer/brain/instructions';
 import { SAFE_LINE } from '../../core/trainer/brain/sanitize';
 import { RED_FLAG_LINE, REFERRAL_LINE, checkCopy } from '../../core/trainer/replies';
 import { MID_WORKOUT_REASON } from '../../core/trainer/tools';
+import { HELP_TEXT } from '../../core/trainer/replies';
+import { MID_SESSION_REPLY, handle } from '../../core/trainer/coach';
 import { effectiveDay } from '../../core/trainer/plan';
 import { cueFor, howToFor } from '../catalog';
 import type {
@@ -125,13 +127,13 @@ describe('the request (instructions, context, one message, read results)', () =>
   it('sends the instructions, the context, only the new message, and the read results', async () => {
     const b = bridge();
     const turns = [turn(0, 'made-up question about rows'), turn(1, 'made-up answer about rows')];
-    await appleBrain(b).ask('What should I focus on today?', ctx(turns));
+    await appleBrain(b).ask('What am I training today?', ctx(turns));
     const req = b.reqs[0] as GymBrainRequest;
     expect(req.instructions).toBe(brainInstructions({ phase: 'today', voice: 'calm' }));
     const input: BrainInput = { coach, turns, howTo: howToFor, cue: cueFor };
     expect(req.context).toBe(serializeContext(input, { brain: 'apple' }).text);
     expect(req.context).toContain('User: made-up question about rows');
-    expect(req.messages).toEqual([{ role: 'user', text: 'What should I focus on today?' }]);
+    expect(req.messages).toEqual([{ role: 'user', text: 'What am I training today?' }]);
     expect(req.toolResults).toEqual(readToolResults(input));
   });
 
@@ -157,7 +159,7 @@ describe('the request (instructions, context, one message, read results)', () =>
   it('uses the workout phase and the drill voice from the extras', async () => {
     const b = bridge();
     await appleBrain(b, { extras: () => ({ voice: 'drill' }) }).ask(
-      'swap the curls',
+      'what is next?',
       ctx([], { phase: 'workout' }),
     );
     expect(b.reqs[0]?.instructions).toBe(brainInstructions({ phase: 'workout', voice: 'drill' }));
@@ -183,7 +185,7 @@ describe('Lighter today? reasons (appleCardReasons, read at runtime)', () => {
           lighterCard: card,
           ...(appleCardReasons !== undefined && { appleCardReasons }),
         }),
-      }).ask('should I go light?', ctx());
+      }).ask('how do I look today?', ctx());
       expect(b.reqs[0]?.context).toContain('Sleep was shorter than usual.');
       expect(r.usedHealth).toBe(true);
     }
@@ -193,7 +195,7 @@ describe('Lighter today? reasons (appleCardReasons, read at runtime)', () => {
     const b = says('Take it a bit easier today.');
     const r = await appleBrain(b, {
       extras: () => ({ lighterCard: card, appleCardReasons: false }),
-    }).ask('should I go light?', ctx());
+    }).ask('how do I look today?', ctx());
     expect(b.reqs[0]?.context).not.toContain('Sleep was shorter');
     expect(r).not.toHaveProperty('usedHealth');
   });
@@ -266,7 +268,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
   it('a valid tool call → the Proposal (never a state), with the model text', async () => {
     const r = await appleBrain(
       says("Let's make today lighter.", [{ name: 'lighterToday', args: {} }]),
-    ).ask('I feel tired, go lighter', ctx());
+    ).ask('made-up open question', ctx());
     expect(r.proposal?.action).toBe('lighter');
     expect(r.intent).toBe('lighter');
     expect(r.reply).toBe("Let's make today lighter.");
@@ -275,7 +277,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
 
   it('a tool call with no text uses the tool reply', async () => {
     const r = await appleBrain(says('', [{ name: 'avoidBodyArea', args: { area: 'chest' } }])).ask(
-      'go easy on chest',
+      'made-up open question',
       ctx(),
     );
     expect(r.proposal?.action).toBe('avoidArea');
@@ -297,7 +299,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
       foods: [shake],
     };
     const r = await appleBrain(says('Some ideas.', [{ name: 'suggestFood', args: {} }])).ask(
-      'what should I eat',
+      'made-up open question',
       ctx([], { fuel }),
     );
     expect(r.intent).toBe('food');
@@ -308,7 +310,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
   it('an action refusal → its plain reason + "Try one of these:" + quick chips', async () => {
     const r = await appleBrain(
       says('Swapped it.', [{ name: 'swapExercise', args: { exerciseId: 'Made_Up_Lift' } }]),
-    ).ask('swap the made up lift', ctx());
+    ).ask('made-up open question', ctx());
     expect(r.reply).toBe(`I don't know that exercise. ${TRY_THESE}`);
     expect(r.reply).not.toContain('Swapped it');
     expect(r.proposal).toBeUndefined();
@@ -357,7 +359,9 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
       { name: 'doDayToday', args: { day: other.name } },
       { name: 'postponeSession', args: { from: other.id, to: 'today' } },
     ]) {
-      const r = await appleBrain(says('', [call])).ask(`do ${other.name} today`, ctx());
+      // Open-chat wording: "do <day> today" itself goes to the rules (route.ts).
+      const r = await appleBrain(says('', [call])).ask('made-up open question', ctx());
+      expect(r.source).toBe('apple');
       expect(r.proposal?.action, call.name).toBe('doToday');
       expect(r.proposal?.title).toBe(`Do ${other.name} today`);
       expect(r.intent).toBe('doToday');
@@ -366,7 +370,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
 
   it('mid-workout a call that is not allowed says so, with only the workout chips', async () => {
     const r = await appleBrain(says('', [{ name: 'deloadWeek', args: {} }])).ask(
-      'deload',
+      'made-up open question',
       ctx([], { phase: 'workout' }),
     );
     expect(r.reply).toBe(`${MID_WORKOUT_REASON} ${TRY_THESE}`);
@@ -379,7 +383,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
         { name: 'lighterToday', args: {} },
         { name: 'avoidBodyArea', args: { area: 'chest' } },
       ]),
-    ).ask('lighter and easy on chest', ctx());
+    ).ask('made-up open question', ctx());
     expect(r.proposal?.action).toBe('lighter');
     expect(r.chips).toEqual([{ id: 'chest', label: 'Go easy on chest' }]);
   });
@@ -390,7 +394,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
         { name: 'lighterToday', args: {} },
         { name: 'adjustStalledExercise', args: {} },
       ]),
-    ).ask('lighter, and my bench is stuck', ctx());
+    ).ask('made-up open question', ctx());
     expect(r.proposal?.action).toBe('lighter');
     const labels = r.chips.map((c) => c.label);
     expect(labels).toEqual(['Get past a plateau']);
@@ -483,7 +487,7 @@ describe('trace (dev log / eval: ids and numbers only)', () => {
         ],
         1234,
       ),
-      'go lighter',
+      'made-up open question',
       ctx(),
     );
     expect(out.trace).toEqual({
@@ -497,6 +501,7 @@ describe('trace (dev log / eval: ids and numbers only)', () => {
       hits: [],
       usedHealth: false,
       redFlag: false,
+      route: 'model',
     });
     expect(out.call).toEqual({ name: 'lighterToday', args: {} });
   });
@@ -528,5 +533,125 @@ describe('no network', () => {
       const src = readFileSync(new URL(`./${f}`, import.meta.url), 'utf8');
       expect(src, f).not.toMatch(/\bfetch\s*\(|XMLHttpRequest|WebSocket|sendBeacon|EventSource/);
     }
+  });
+});
+
+// 1.15.2 "Coach acts": what the rules read as a change never waits on the model.
+describe('rules route (brain/route.ts)', () => {
+  it('a change request → the rules proposal, no model call, source rules', async () => {
+    const b = says('Model words.', [{ name: 'suggestFood', args: {} }]);
+    const out = await askApple(b, 'go lighter today', ctx());
+    expect(b.reqs).toHaveLength(0);
+    const rules = handle({ text: 'go lighter today' }, coach);
+    expect(out.reply.source).toBe('rules');
+    expect(out.reply.proposal).toEqual(rules.proposal);
+    expect(out.reply.reply).toBe(rules.reply);
+    expect(out.reply.intent).toBe('lighter');
+    expect(out.call).toEqual({ name: 'lighterToday', args: {} });
+    expect(out.trace).toEqual({
+      latencyMs: 0,
+      action: 'lighterToday',
+      calls: [],
+      replaced: false,
+      hits: [],
+      usedHealth: false,
+      redFlag: false,
+      route: 'rules',
+      why: 'action',
+    });
+  });
+
+  it('keeps the rules chips, clarifying questions and spoken line', async () => {
+    const b = bridge();
+    const out = await askApple(b, 'swap an exercise', ctx());
+    expect(b.reqs).toHaveLength(0);
+    const rules = handle({ text: 'swap an exercise' }, coach);
+    expect(out.reply.reply).toBe(rules.reply);
+    expect(out.reply.chips).toEqual(rules.chips);
+    expect(out.reply.say).toBeDefined();
+  });
+
+  it('a doToday request carries the day as the call arg', async () => {
+    const out = await askApple(bridge(), 'do push b today', ctx());
+    expect(out.call).toEqual({ name: 'doDayToday', args: { day: 'Push B' } });
+    expect(out.reply.proposal?.action).toBe('doToday');
+  });
+
+  it('discomfort: the referral line first, once', async () => {
+    const out = await askApple(bridge(), 'my knee hurts, go easy on legs', ctx());
+    expect(out.trace.route).toBe('rules');
+    expect(out.reply.reply.startsWith(REFERRAL_LINE)).toBe(true);
+    expect(out.reply.reply.indexOf(REFERRAL_LINE, 1)).toBe(-1);
+    expect(out.reply.safety).toBe('discomfort');
+  });
+
+  it('mid-workout the rules block what is not allowed (no proposal)', async () => {
+    const b = bridge();
+    const out = await askApple(b, 'deload this week', ctx([], { phase: 'workout' }));
+    expect(b.reqs).toHaveLength(0);
+    expect(out.reply.reply).toBe(MID_SESSION_REPLY);
+    expect(out.reply.proposal).toBeUndefined();
+  });
+
+  it('empty text never reaches the model (phone eval req-073)', async () => {
+    const b = bridge();
+    const out = await askApple(b, '   ', ctx());
+    expect(b.reqs).toHaveLength(0);
+    expect(out.reply.reply).toBe(HELP_TEXT);
+    expect(out.trace).toMatchObject({ route: 'rules', why: 'empty', action: 'none' });
+    expect(out).not.toHaveProperty('call');
+  });
+
+  it('Thai never reaches the model: the rules answer in English', async () => {
+    const b = bridge();
+    const out = await askApple(b, 'งดวันนี้นะ', ctx());
+    expect(b.reqs).toHaveLength(0);
+    expect(out.trace).toMatchObject({ route: 'rules', why: 'thai', action: 'postponeSession' });
+    expect(out.call?.name).toBe('postponeSession');
+    expect(checkCopy(out.reply.reply).ok).toBe(true);
+    const hi = await askApple(b, 'สวัสดี', ctx());
+    expect(b.reqs).toHaveLength(0);
+    expect(hi.reply.reply).toBe(HELP_TEXT);
+  });
+
+  it('a red flag: route rules, why redFlag, still the red-flag line only', async () => {
+    const b = bridge();
+    const out = await askApple(b, 'I have chest pain and feel dizzy', ctx());
+    expect(b.reqs).toHaveLength(0);
+    expect(out.trace).toMatchObject({ route: 'rules', why: 'redFlag', redFlag: true });
+    expect(out.reply.reply).toBe(RED_FLAG_LINE);
+    expect(out).not.toHaveProperty('call');
+  });
+
+  it('open chat goes to the model with trace.route model', async () => {
+    const b = bridge();
+    const out = await askApple(b, 'What am I training today?', ctx());
+    expect(b.reqs).toHaveLength(1);
+    expect(out.trace.route).toBe('model');
+    expect(out.trace).not.toHaveProperty('why');
+    expect(out.reply.source).toBe('apple');
+  });
+});
+
+describe('context window (1.15.2 lever 3)', () => {
+  it('reads windowTokens on every ask; 8,192 tokens → the bigger context budget', async () => {
+    let win: number | undefined = undefined;
+    const turns = Array.from({ length: 12 }, (_, i) =>
+      turn(
+        i,
+        `made-up turn ${i} about training and how the week went, padded with words to fill space and more.`,
+      ),
+    );
+    const b = bridge();
+    const brain = appleBrain(b, { windowTokens: () => win });
+    await brain.ask('What am I training today?', ctx(turns));
+    win = 8192;
+    await brain.ask('What am I training today?', ctx(turns));
+    const input: BrainInput = { coach, turns, howTo: howToFor, cue: cueFor };
+    expect(b.reqs[0]?.context).toBe(serializeContext(input, { brain: 'apple' }).text);
+    expect(b.reqs[1]?.context).toBe(
+      serializeContext(input, { brain: 'apple', windowTokens: 8192 }).text,
+    );
+    expect(b.reqs[1]?.context.length ?? 0).toBeGreaterThan(b.reqs[0]?.context.length ?? 0);
   });
 });

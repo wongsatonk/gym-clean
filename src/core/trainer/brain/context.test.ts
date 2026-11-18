@@ -6,7 +6,14 @@ import { buildStarterPlan } from '../starterPlan';
 import type { TrainerCatalog } from '../swapCandidates';
 import { brainInstructions } from './instructions';
 import { toolContract } from '../tools';
-import { BUDGET, CONTEXT_BUDGET_CHARS, serializeContext, type BrainInput } from './context';
+import {
+  BUDGET,
+  BIG_WINDOW,
+  CONTEXT_BUDGET_CHARS,
+  contextBudgetChars,
+  serializeContext,
+  type BrainInput,
+} from './context';
 import type { CoachContext } from '../coach';
 import type { StallSession } from '../actions/stall';
 import type {
@@ -181,6 +188,54 @@ describe('budget', () => {
     expect(tokens).toBeLessThanOrEqual(BUDGET.windowTokens);
     expect(REPLY_TOKENS).toBe(350);
     expect(CONTEXT_BUDGET_CHARS).toBeLessThanOrEqual(6000);
+  });
+
+  // 1.15.2 lever 3: his iOS reports an 8,192-token window; we take a bigger context but stay
+  // well under it so prefill stays fast.
+  it('contextBudgetChars: 2,900 for an unknown or 4,096 window, 6,000 from 8,192 tokens', () => {
+    expect(contextBudgetChars()).toBe(CONTEXT_BUDGET_CHARS);
+    expect(contextBudgetChars(4096)).toBe(2900);
+    expect(contextBudgetChars(8191)).toBe(2900);
+    expect(contextBudgetChars(8192)).toBe(6000);
+    expect(contextBudgetChars(16384)).toBe(6000);
+    expect(contextBudgetChars(Number.NaN)).toBe(2900);
+  });
+
+  it('the 6,000-char context fits an 8,192 window with room to spare', () => {
+    const toolChars = JSON.stringify(
+      toolContract().tools.map(({ name, description, parameters }) => ({
+        name,
+        description,
+        parameters,
+      })),
+    ).length;
+    const instr = Math.max(
+      ...(['today', 'preview', 'workout'] as const).flatMap((phase) =>
+        (['calm', 'drill'] as const).map((voice) => brainInstructions({ phase, voice }).length),
+      ),
+    );
+    const chars =
+      instr +
+      toolChars +
+      contextBudgetChars(BIG_WINDOW.minWindowTokens) +
+      BUDGET.messageChars +
+      BUDGET.toolOutputChars;
+    const tokens = chars / BUDGET.charsPerToken + REPLY_TOKENS;
+    expect(tokens).toBeLessThanOrEqual(BIG_WINDOW.minWindowTokens);
+    // Prefill: the whole prompt stays under ~5,000 tokens even at 3 characters per token.
+    expect(tokens).toBeLessThanOrEqual(BIG_WINDOW.maxPromptTokens);
+  });
+
+  it('serializeContext uses the bigger budget only when the window allows it', () => {
+    const big = input({
+      turns: Array.from({ length: 12 }, (_, i) => turn(i)),
+    });
+    const small = serializeContext(big, { brain: 'apple' }).text;
+    const wide = serializeContext(big, { brain: 'apple', windowTokens: 8192 }).text;
+    expect(small.length).toBeLessThanOrEqual(2900);
+    expect(wide.length).toBeLessThanOrEqual(6000);
+    expect(wide.length).toBeGreaterThan(small.length);
+    expect(serializeContext(big, { brain: 'apple', windowTokens: 4096 }).text).toBe(small);
   });
 
   it('a heavy made-up 4-week history stays within the budget and keeps the essentials', () => {
@@ -568,6 +623,13 @@ describe('plan line (M13c task 6b: the coach knows the plan)', () => {
     expect(planLineOf(text)).toBeDefined();
     expect(text).toMatch(/Top sets/);
     // It sits with the plan lines, before the top sets.
+    expect(text.indexOf('Plan: ')).toBeLessThan(text.indexOf('Top sets'));
+  });
+
+  it('kept on the heavy history with an 8,192-token window, within 6,000 characters', () => {
+    const { text } = serializeContext(input(), { brain: 'apple', windowTokens: 8192 });
+    expect(text.length).toBeLessThanOrEqual(6000);
+    expect(planLineOf(text)).toBeDefined();
     expect(text.indexOf('Plan: ')).toBeLessThan(text.indexOf('Top sets'));
   });
 

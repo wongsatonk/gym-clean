@@ -306,4 +306,16 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     tryIt: 'settings',
     icon: 'speaker',
   },
+  // 1.16.1 (was 1.15.2) "Coach acts": change requests get the rules' Apply card at once; open chat stays with
+  // Apple's model (core brain/route.ts). Built as 1.15.2, shipped as a patch on top of 1.16.0
+  // (M13c) once main moved on.
+  {
+    release: '1.16.1',
+    id: 'coach-acts',
+    title: 'Coach acts faster',
+    what: 'Ask to move, swap, lighten or skip and the Apply card comes straight away.',
+    why: 'In the iPhone app, open questions still go to Apple Intelligence.',
+    tryIt: 'coach',
+    icon: 'coach',
+  },
 ];

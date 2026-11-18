@@ -12,6 +12,10 @@
  *   a second valid one → a chip. Read-only calls are ignored (their text
  *   was passed in).
  * - Red flags never reach the model: the rules answer (only the red-flag line).
+ * - 1.15.2 "Coach acts" (core brain/route.ts): a message the rules read as a change, an empty
+ *   one or Thai is answered by `handle()` (the chips' proposals: clarifying questions, kit-aware
+ *   swaps, the mid-workout block), sanitized, `source: 'rules'`, no model call. The 1.15.0 phone
+ *   eval: the model made the right call for 28 of 109 change requests, the rules for 103.
  * - Errors: rejects with `BrainError(code)`; the router falls back to the rules with a note.
  *
  * The bridge is injected (task 7's src/native/gymBrain.ts fits `GymBrainBridge`). Its
@@ -19,7 +23,8 @@
  * else is treated as `'other'`. No network: Apple's model runs on the phone.
  */
 import { handle, QUICK_CHIPS, type CoachChip } from '../../core/trainer/coach';
-import { matchIntent, type Intent, type Safety } from '../../core/trainer/intents';
+import type { Intent, Safety } from '../../core/trainer/intents';
+import { routeMessage, type RouteWhy } from '../../core/trainer/brain/route';
 import {
   runToolCall,
   TRAINER_TOOLS,
@@ -96,6 +101,8 @@ export type AppleDeps = {
   cue?: BrainInput['cue'];
   /** Clock for latency when the bridge reports none. */
   now?: () => number;
+  /** The model's context window in tokens (GymBrain `measure().contextSize`); read on every ask. */
+  windowTokens?: () => number | undefined;
 };
 
 /** The new message's cap (context.ts BUDGET counts 400 characters for it). */
@@ -237,8 +244,11 @@ export type AppleTrace = {
   replaced: boolean;
   hits: string[];
   usedHealth: boolean;
-  /** Answered by the rules without asking the model. */
+  /** Answered by the rules without asking the model because of a red flag. */
   redFlag: boolean;
+  /** 1.15.2: who answered (route.ts); `why` only for the rules. */
+  route: 'rules' | 'model';
+  why?: RouteWhy;
 };
 
 export type AppleAnswer = {
@@ -294,6 +304,7 @@ export async function buildAppleRequest(
   const context = serializeContext(input, {
     brain: 'apple',
     appleCardReasons: extras.appleCardReasons,
+    windowTokens: deps.windowTokens?.(),
   });
   return {
     request: {
@@ -316,10 +327,11 @@ export async function askApple(
 ): Promise<AppleAnswer> {
   const coach = ctx.coach;
   const phase = coach.phase;
-  const match = matchIntent(text);
+  const route = routeMessage(text, coach);
+  const match = route.match;
   const safety: Safety = match.safety;
 
-  if (safety === 'redFlag') {
+  if (route.to === 'rules' && route.why === 'redFlag') {
     const rules = handle({ text }, coach);
     const clean = sanitizeReply(rules.reply, 'redFlag', { phase });
     // Never a proposal, food ideas or a block after a red flag (the rules give none anyway).
@@ -337,7 +349,33 @@ export async function askApple(
         hits: clean.hits,
         usedHealth: false,
         redFlag: true,
+        route: 'rules',
+        why: 'redFlag',
       },
+    };
+  }
+
+  if (route.to === 'rules') {
+    const rules = handle({ text }, coach);
+    const clean = sanitizeReply(rules.reply, safety, { phase });
+    const reply: BrainReply = { ...rules, reply: clean.text, source: 'rules' };
+    delete reply.say;
+    const say = sayFor({ reply: clean.text, say: rules.say }, phase);
+    if (say !== undefined) reply.say = say;
+    return {
+      reply,
+      trace: {
+        latencyMs: 0,
+        action: route.call?.name ?? 'none',
+        calls: [],
+        replaced: clean.replaced,
+        hits: clean.hits,
+        usedHealth: false,
+        redFlag: false,
+        route: 'rules',
+        why: route.why,
+      },
+      ...(route.call ? { call: { name: route.call.name, args: { ...route.call.args } } } : {}),
     };
   }
 
@@ -428,6 +466,7 @@ export async function askApple(
       hits: clean.hits,
       usedHealth,
       redFlag: false,
+      route: 'model',
     },
     ...(first ? { call: { name: first.call.name, args: { ...first.call.args } } } : {}),
   };

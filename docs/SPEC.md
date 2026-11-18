@@ -1059,6 +1059,9 @@ Settings → Plan changes. A model's text never changes data by itself.
   matcher. The reason is shown once in Settings, e.g. "Apple Intelligence is off" / "not ready yet" / "this
   device can't run it". Model errors (guardrail, context too long, unsupported language, timeout) fall back
   to the rules with a one-line note. The PWA in Safari always uses rules (or Claude).
+  **1.15.2 (2026-11-17):** inside the Apple brain, a message the rule matcher reads as a change (and a red
+  flag, empty text or Thai) is answered by the rules' proposal path without calling the model; only open chat
+  (help, week, progress) reaches Apple's model. Proposals still need his Apply tap. See Decision "1.15.2 rules-first changes".
 - **Check current docs before building** (CLAUDE.md rule 8): Foundation Models' API is new and changes.
 
 #### Phase C — Claude brain (optional)
@@ -1392,6 +1395,8 @@ the M10 phase B/C sections above stay the contract for those brains, with the ch
 5. **Brains, in order:** chips → rules directly; free text → Apple Foundation Models in the iPhone app when
    available (slice 2) → Claude if he turned it on (slice 3) → the rule matcher. A model error falls back to
    the next brain with a one-line note, never a dead end. Settings shows which brain answers and why.
+   1.15.2: rule-matched change requests are answered by the rules even when Apple is available (Decision
+   "1.15.2 rules-first changes"); whether Claude (slice 3) gets the same rule is decided with slice 3.
    **Slice 1 has only the rule brain**, behind the same router so slices 2/3 plug in.
 6. **Focus block: the coach writes a plan (reverses the §6 / M10 non-goal, deterministic only).** He says
    e.g. "This month I want to build my chest." The coach asks only what's missing (focus group, 2–6 weeks,

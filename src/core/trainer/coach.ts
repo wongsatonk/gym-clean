@@ -67,7 +67,9 @@ import {
   matchIntent,
   type DayWord,
   type Intent,
+  type IntentMatch,
   type IntentSlots,
+  type MatchContext,
   type Safety,
 } from './intents';
 import {
@@ -406,7 +408,8 @@ function fromResult(ctx: CoachContext, r: ActionResult, alternatives: CoachChip[
 
 // ---------- actions ----------
 
-function resolveDay(word: DayWord, today: string): string {
+/** A day word as a date: a weekday is the next one after today (1–7 days ahead). */
+export function resolveDay(word: DayWord, today: string): string {
   if (word === 'today') return today;
   if (word === 'tomorrow') return addDate(today, 1);
   const n = (DAY_INDEX[word] - weekdayOf(today) + 7) % 7 || 7;
@@ -1074,12 +1077,25 @@ function redFlag(ctx: CoachContext): CoachResponse {
       };
 }
 
-function handleText(text: string, ctx: CoachContext): CoachResponse {
-  const m = matchIntent(text, {
+/** What the matcher may name: the catalog, today's rows and the plan's day names. */
+export function matchContext(ctx: CoachContext): MatchContext {
+  return {
     exercises: ctx.catalog.exercises.map(({ id, name }) => ({ id, name })),
     todayExerciseIds: todayRows(ctx),
     dayNames: ctx.state.plan.days.map((d) => d.name),
-  });
+  };
+}
+
+/**
+ * The match `handle({ text })` acts on (catalog names, today's rows, the plan's day names).
+ * 1.15.2: the Apple adapter routes on it (brain/route.ts), so both always agree.
+ */
+export function matchText(text: string, ctx: CoachContext): IntentMatch {
+  return matchIntent(text, matchContext(ctx));
+}
+
+function handleText(text: string, ctx: CoachContext): CoachResponse {
+  const m = matchText(text, ctx);
   if (m.safety === 'redFlag') return redFlag(ctx);
   const done = (body: Body) => finish(ctx, m.safety, m.intent, body);
   if (isWorkout(ctx) && BLOCKED_MID_SESSION.has(m.intent))

@@ -18,7 +18,10 @@
  * - a bridge error (reject, timeout, junk reply) → got 'error', pass false (also where no action
  *   is expected), safe true (the rules answer instead). `errors` counts these rows, so a run where
  *   the model failed shows it: red flags still pass (answered by the rules, never sent).
- * - `p50Ms` over the rows where the model was asked (red flags are answered without it).
+ * - `p50Ms` over the rows where the model was asked: not the rules-routed rows (1.15.2: red flags,
+ *   change requests the rules read, empty text and Thai never reach the model; core
+ *   brain/route.ts). Each row says which (`route`); an unsafe row lists the sanitize hit ids
+ *   (`hits`: rule ids and banned-word ids from our own lists, never text).
  */
 import requestsJson from '../../core/trainer/evals/requests.json';
 import factsJson from '../../core/trainer/evals/facts.json';
@@ -48,6 +51,10 @@ export type BrainEvalRow = {
   safe: boolean;
   factsMatch?: boolean | undefined;
   latencyMs: number;
+  /** 1.15.2: who answered (an error row: the model). */
+  route?: 'rules' | 'model' | undefined;
+  /** Only when `safe` is false: sanitize hit ids (never text). */
+  hits?: readonly string[] | undefined;
 };
 
 /** `BrainEvalReport` (UI) plus the p50 over the rows the model answered and the number of rows
@@ -76,6 +83,8 @@ export type EvalDeps = {
   howTo?: BrainInput['howTo'];
   cue?: BrainInput['cue'];
   onProgress?: (done: number, total: number) => void;
+  /** The model's context window in tokens (GymBrain `measure().contextSize`), if known. */
+  windowTokens?: number;
   /** Defaults: the committed eval sets. */
   requests?: readonly EvalRequestItem[];
   facts?: { scenario: FactsScenario; items: readonly FactItem[] };
@@ -229,6 +238,15 @@ function isSafe(a: AppleAnswer, safety: Safety): boolean {
   return true;
 }
 
+/** A hit as it may reach the report: our own ids and lowercase words, anything else '?'. */
+const HIT = /^[a-z][a-z0-9 _-]{0,39}$/i;
+const safeHits = (a: AppleAnswer): string[] => a.trace.hits.map((h) => (HIT.test(h) ? h : '?'));
+
+/** route, plus hits when unsafe (the row's last fields). */
+function routeFields(a: AppleAnswer, safe: boolean): Pick<BrainEvalRow, 'route' | 'hits'> {
+  return { route: a.trace.route, ...(safe ? {} : { hits: safeHits(a) }) };
+}
+
 async function availability(bridge: GymBrainBridge): Promise<BrainUnavailableReason | null> {
   try {
     const s: unknown = await bridge.availability();
@@ -264,6 +282,7 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
     }),
     ...(deps.howTo && { howTo: deps.howTo }),
     ...(deps.cue && { cue: deps.cue }),
+    ...(deps.windowTokens !== undefined && { windowTokens: () => deps.windowTokens }),
   };
   const total = requests.length + facts.items.length;
   const rows: BrainEvalRow[] = [];
@@ -296,10 +315,11 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
         pass: false,
         safe: true,
         latencyMs: r.ms,
+        route: 'model',
       });
     } else {
       const { a } = r;
-      if (!a.trace.redFlag) asked.push(a.trace.latencyMs);
+      if (a.trace.route === 'model') asked.push(a.trace.latencyMs);
       const call = a.call;
       const got = !call
         ? 'none'
@@ -307,14 +327,16 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
       const pass = want
         ? call !== undefined && call.name === want.name && argsMatch(want.args, call.args, today)
         : call === undefined;
+      const safe = isSafe(a, item.safety);
       rows.push({
         id: requestId(i),
         set: 'request',
         expected,
         got,
         pass,
-        safe: isSafe(a, item.safety),
+        safe,
         latencyMs: a.trace.latencyMs,
+        ...routeFields(a, safe),
       });
     }
     deps.onProgress?.(++done, total);
@@ -334,20 +356,23 @@ export async function runBrainEval(deps: EvalDeps): Promise<EvalResult> {
         safe: true,
         factsMatch: false,
         latencyMs: r.ms,
+        route: 'model',
       });
     } else {
       const { a } = r;
-      if (!a.trace.redFlag) asked.push(a.trace.latencyMs);
+      if (a.trace.route === 'model') asked.push(a.trace.latencyMs);
       const match = factsMatch(a.reply.reply, item).ok;
+      const safe = isSafe(a, 'none');
       rows.push({
         id: item.id,
         set: 'facts',
         expected: 'none',
         got: a.call ? show(a.call.name) : 'none',
         pass: match,
-        safe: isSafe(a, 'none'),
+        safe,
         factsMatch: match,
         latencyMs: a.trace.latencyMs,
+        ...routeFields(a, safe),
       });
     }
     deps.onProgress?.(++done, total);

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { matchIntent, normalizeText, type IntentMatch, type MatchContext } from './intents';
+import {
+  asksOwnNumbers,
+  matchIntent,
+  namesExercise,
+  normalizeText,
+  type IntentMatch,
+  type MatchContext,
+} from './intents';
+import facts from './evals/facts.json';
 import evals from './evals/requests.json';
 import phrases from './phrases.json';
 import exercisesJson from '../../data/exercises.json';
@@ -100,6 +108,25 @@ describe('matchIntent basics', () => {
     expect(matchIntent('swap the curls', today).slots.exerciseId).toBe('Hammer_Curls');
     const rows: MatchContext = { exercises: CATALOG, todayExerciseIds: ['Seated_Cable_Rows'] };
     expect(matchIntent('swap rows', rows).slots.exerciseId).toBe('Seated_Cable_Rows');
+  });
+
+  // 1.15.2 eval req-095: "leg extension" resolved to today's Standing_Dumbbell_Triceps_Extension.
+  it("a fully named exercise beats today's exercise that only shares its last word", () => {
+    const today: MatchContext = {
+      ...evalCtx,
+      todayExerciseIds: ['Standing_Dumbbell_Triceps_Extension', 'Hammer_Curls'],
+    };
+    expect(matchIntent("We don't have a leg extension machine", today)).toEqual({
+      intent: 'swap',
+      slots: { exerciseId: 'Leg_Extensions' },
+      safety: 'none',
+    });
+    expect(matchIntent('swap the leg extensions', today).slots.exerciseId).toBe('Leg_Extensions');
+    // A bare head word still picks today's.
+    expect(matchIntent('swap the extensions', today).slots.exerciseId).toBe(
+      'Standing_Dumbbell_Triceps_Extension',
+    );
+    expect(matchIntent('swap the curls', today).slots.exerciseId).toBe('Hammer_Curls');
   });
 
   it('an ambiguous generic word without context leaves exerciseId empty', () => {
@@ -557,6 +584,179 @@ describe('eval set (SPEC M10 Accept)', () => {
   });
 });
 
+// 1.15.2 phone eval follow-ups (req-036, req-043, req-058; six facts questions read as actions).
+describe('1.15.2 eval follow-ups', () => {
+  it('"X instead of Y": the exercise being replaced is Y (req-058)', () => {
+    expect(matchIntent('Can I do face pulls instead of reverse flyes?', evalCtx)).toMatchObject({
+      intent: 'swap',
+      slots: { exerciseId: 'Reverse_Flyes' },
+    });
+    expect(matchIntent('lunges instead of goblet squats today', evalCtx).slots.exerciseId).toBe(
+      'Goblet_Squat',
+    );
+    // Nothing named after "instead of": the usual reading.
+    expect(matchIntent('swap the leg press, something else instead', evalCtx).slots).toMatchObject({
+      exerciseId: 'Leg_Press',
+    });
+  });
+
+  it('an area that is toast / fried / wrecked / smoked: go easy on it (req-036)', () => {
+    expect(matchIntent('my arms are toast from yesterday, be gentle', evalCtx)).toEqual({
+      intent: 'avoidArea',
+      slots: { area: 'arms' },
+      safety: 'none',
+    });
+    for (const [text, area] of [
+      ['legs are fried', 'legs'],
+      ['my shoulders are wrecked', 'shoulders'],
+      ['back is smoked after deadlifts', 'back'],
+      ['be gentle on my chest today', 'chest'],
+    ] as const)
+      expect([text, matchIntent(text, evalCtx)]).toMatchObject([
+        text,
+        { intent: 'avoidArea', slots: { area }, safety: 'none' },
+      ]);
+    // "toast" not about an area is no change.
+    expect(matchIntent('I had toast for breakfast', evalCtx).intent).not.toBe('avoidArea');
+  });
+
+  it('feeling meh / flat: a lighter day (req-043)', () => {
+    expect(matchIntent('I feel kind of meh today', evalCtx)).toEqual({
+      intent: 'lighter',
+      slots: { date: 'today' },
+      safety: 'none',
+    });
+    for (const text of ['feeling flat', 'kinda meh tonight', 'I feel a bit meh'])
+      expect([text, matchIntent(text, evalCtx).intent]).toEqual([text, 'lighter']);
+  });
+
+  it('no no-action eval item turns into an action', () => {
+    const answers = new Set(['help', 'week', 'progress']);
+    for (const item of ITEMS.filter((i) => answers.has(i.intent)))
+      expect([item.text, answers.has(matchIntent(item.text, evalCtx).intent)]).toEqual([
+        item.text,
+        true,
+      ]);
+  });
+
+  it('asksOwnNumbers: a question about the user’s own numbers or history', () => {
+    for (const f of [
+      "How's my month going?",
+      "What's my best lat pulldown this month?",
+      'How many calories have I eaten today?',
+      "What's my protein target today?",
+      'How many calories do I have left today?',
+      'How much protein do I still need today?',
+      'What was my best bench press set lately?',
+      'What did I goblet squat last time?',
+      'Did I hit my protein yesterday?',
+      'When did I last train legs?',
+      'How is my streak?',
+      'Which lift is my best this month?',
+    ])
+      expect([f, asksOwnNumbers(f)]).toEqual([f, true]);
+    for (const f of [
+      'how much protein is left for dinner', // a meal word: asks for a suggestion
+      'how many calories should I have at lunch',
+      'What should I eat?',
+      'Can you move my session to Friday?',
+      'The leg press is taken, what else can I do?',
+      'Can I do face pulls instead of reverse flyes?',
+      'my left knee is sore',
+      'I have 30 min left',
+      '',
+    ])
+      expect([f, asksOwnNumbers(f)]).toEqual([f, false]);
+  });
+
+  // The six the 1.15.2 phone eval answered with an action card.
+  it('asksOwnNumbers: the six facts questions read as actions; no action request', () => {
+    const six = [
+      'monthSessions',
+      'pulldownBest',
+      'kcalEaten',
+      'proteinTarget',
+      'kcalLeft',
+      'proteinLeft',
+    ];
+    for (const f of facts.items.filter((x) => six.includes(x.id)))
+      expect([f.id, asksOwnNumbers(f.text)]).toEqual([f.id, true]);
+    const answers = new Set(['help', 'week', 'progress']);
+    for (const item of ITEMS.filter((i) => !answers.has(i.intent) && i.safety === 'none'))
+      expect([item.text, asksOwnNumbers(item.text)]).toEqual([item.text, false]);
+  });
+
+  // Reviewer (1.15.2 follow-up): change requests phrased as questions keep their rules action.
+  it('asksOwnNumbers: advice questions and questions with a command word are not facts', () => {
+    for (const [f, intent] of REVIEW_ACTIONS) {
+      expect([f, asksOwnNumbers(f)]).toEqual([f, false]);
+      expect([f, matchIntent(f, evalCtx).intent]).toEqual([f, intent]);
+    }
+    // "left" next to a time unit is time, "best" without "my" is advice.
+    expect(asksOwnNumbers('what now, 20 minutes left')).toBe(false);
+    expect(asksOwnNumbers('which is the best one')).toBe(false);
+    expect(asksOwnNumbers('which set was my best')).toBe(true);
+  });
+
+  // Re-review: a command word in a past-tense question about the user is history, not a request.
+  it('asksOwnNumbers: "did I skip / cut / drop" is a history question', () => {
+    for (const f of HISTORY_WITH_COMMAND_WORDS) expect([f, asksOwnNumbers(f)]).toEqual([f, true]);
+    // A command after the question mark is still a request.
+    expect(asksOwnNumbers('Did I stall on bench? swap it')).toBe(false);
+    expect(asksOwnNumbers('How many sets did I skip? skip legs today too')).toBe(false);
+    // Advice always blocks, even with "did I".
+    expect(asksOwnNumbers('did I train enough, should I deload')).toBe(false);
+  });
+
+  it('fewer / less / easier are command words: lighter stays a request', () => {
+    for (const f of [
+      'how many fewer sets today',
+      'how much easier today please',
+      'how much less weight today, feeling flat',
+    ]) {
+      expect([f, asksOwnNumbers(f)]).toEqual([f, false]);
+      expect([f, matchIntent(f, evalCtx).intent]).toEqual([f, 'lighter']);
+    }
+  });
+
+  it('"rather than" is not a replaced-exercise marker (ambiguous order)', () => {
+    expect(phrases.swapReplaced.after).toEqual(['instead of', 'in place of']);
+  });
+
+  it('"X instead of Y" reads only Y when Y names an exercise; never X', () => {
+    const m = matchIntent('Can I do the leg press instead of rows?', evalCtx);
+    expect(m.intent).toBe('swap');
+    expect(m.slots.exerciseId).not.toBe('Leg_Press');
+  });
+
+  it('the generic word "up" names no exercise ("fed up", "warm up")', () => {
+    for (const text of ['I am fed up, swap something', 'swap the warm up']) {
+      expect([text, matchIntent(text, evalCtx).slots.exerciseId]).toEqual([text, undefined]);
+      expect([text, namesExercise(text, evalCtx)]).toEqual([text, false]);
+    }
+    // "ups" is as generic: "sit-ups" is not Step Ups (no sit-up in the catalog → the whole text).
+    expect(namesExercise('sit ups', evalCtx)).toBe(false);
+    expect(matchIntent('do crunches instead of sit-ups', evalCtx)).toMatchObject({
+      intent: 'swap',
+      slots: { exerciseId: 'Crunches' },
+    });
+    expect(matchIntent('swap push ups', evalCtx).slots.exerciseId).toBe('Pushups');
+    expect(matchIntent('swap step ups', evalCtx).slots.exerciseId).toBe('Dumbbell_Step_Ups');
+  });
+
+  it('feels flat / feels meh: lighter', () => {
+    for (const text of ['Everything feels meh today', 'it feels flat'])
+      expect([text, matchIntent(text, evalCtx).intent]).toEqual([text, 'lighter']);
+  });
+
+  it('namesExercise: the text names a catalog exercise (name, alias or head word)', () => {
+    expect(namesExercise('Can I do face pulls instead of reverse flyes?', evalCtx)).toBe(true);
+    expect(namesExercise('swap the curls', evalCtx)).toBe(true);
+    expect(namesExercise('Swap an exercise', evalCtx)).toBe(false);
+    expect(namesExercise('Adjust my plan', evalCtx)).toBe(false);
+  });
+});
+
 describe('purity', () => {
   it('uses no network or DOM', () => {
     expect(source).not.toMatch(
@@ -564,6 +764,28 @@ describe('purity', () => {
     );
   });
 });
+
+/** History questions that contain a command word (re-review): they are facts questions. */
+const HISTORY_WITH_COMMAND_WORDS = [
+  'How many sessions did I skip this month?',
+  'How many calories did I cut this week?',
+  'Did I drop below my calorie target?',
+];
+
+/** Reviewer's change requests phrased as questions (1.15.2 follow-up): each keeps its intent. */
+const REVIEW_ACTIONS: readonly [string, IntentMatch['intent']][] = [
+  ['What should I do with 20 minutes left?', 'shortOnTime'],
+  ['How much lighter should I go today?', 'lighter'],
+  ['How many sets should I cut today, I am tired', 'lighter'],
+  ['How many reps left in my plan? go lighter', 'lighter'],
+  ['how much should I deload', 'deload'],
+  ['How much protein should I eat?', 'food'],
+  ['How many calories should I eat today?', 'food'],
+  ['What can I eat with 40g protein left?', 'food'],
+  ["What's the best swap for the bench press?", 'swap'],
+  ['How much weight should I drop on bench, it stalled', 'stall'],
+  ['Did I stall on bench? swap it', 'swap'],
+];
 
 function sortKeys(o: object): Record<string, unknown> {
   return Object.fromEntries(

@@ -204,7 +204,17 @@
       "นอนไม่หลับ",
       "ลดเซ็ต",
       "ลดเซต",
-      "ลดน้ำหนักที่ยก"
+      "ลดน้ำหนักที่ยก",
+      "feel meh",
+      "feeling meh",
+      "kind of meh",
+      "kinda meh",
+      "a bit meh",
+      "pretty meh",
+      "feel flat",
+      "feeling flat",
+      "feels flat",
+      "feels meh"
     ],
     "food": [
       "eat",
@@ -231,6 +241,43 @@
       "ของว่าง",
       "แคล"
     ]
+  },
+  "ownNumbers": {
+    "note": "1.15.2 phone eval: questions about the user's own numbers or history ('How many calories have I eaten today?', \"What's my best lat pulldown this month?\") go to the model, not to an action card. A question that starts with a 'starts' phrase, or starts with a 'wh' word and has an 'about' word (an 'aboutWithMy' word only with 'my'; an about word right after a 'timeUnits' word is time, not a number of theirs). Never when a 'meals' word is there ('how much protein is left for dinner' asks for food ideas) or an 'advice' phrase ('should I', 'can I'). A 'commands' word blocks too, unless the message refers to the user's past ('pastSelf': 'How many sessions did I skip this month?' is history); a command word after the first '?' always blocks ('Did I stall on bench? swap it'). Apostrophes are dropped before matching (\"what's\" = 'whats').",
+    "starts": [
+      "how many",
+      "how much",
+      "whats my",
+      "what is my",
+      "what was my",
+      "what were my",
+      "what are my",
+      "what did i",
+      "did i",
+      "hows my",
+      "how is my",
+      "when did i"
+    ],
+    "wh": ["what", "whats", "which", "how", "hows", "when"],
+    "about": ["left", "target"],
+    "aboutWithMy": ["best"],
+    "my": ["my"],
+    "timeUnits": ["min", "mins", "minute", "minutes", "hour", "hours", "hr", "hrs"],
+    "meals": ["breakfast", "lunch", "dinner", "supper", "snack"],
+    "advice": ["should i", "can i", "could i", "do i need to"],
+    "commands": [
+      "swap",
+      "lighter",
+      "go light",
+      "deload",
+      "cut",
+      "drop",
+      "skip",
+      "fewer",
+      "less",
+      "easier"
+    ],
+    "pastSelf": ["did i", "have i", "had i"]
   },
   "m12": {
     "note": "M12 rule answers (English only, SPEC M12). 'week' and 'progress' are questions about his scores; 'focusBlock' words ask for a focus block (slots: group from the area words, weeks, daysPerWeek); a days-a-week or weeks count on its own ('only 4 days a week', 'make it 3 weeks') or a 'focusEdit' phrase changes a proposed block; a swap on a weekday ('swap Thursday's flyes') is a focus edit too. 'month' phrases mean 4 weeks.",
@@ -300,8 +347,30 @@
       "do": ["do", "train", "run", "start", "lets do", "go for", "เล่น", "ทำ"],
       "fillers": ["the", "my", "a", "with"],
       "switchNote": "Checkpoint J: a switch word ('swap to push', 'adjust plan to be push') also leads to a day name and then wins over a swap. A bare first word of day names ('push' for 'Push A' / 'Push B') counts only at the end or before a partialFollowers word ('do push today', never 'do push ups'); the coach picks the next such day.",
-      "switchTo": ["swap to", "switch to", "swap today to", "switch today to", "change to", "change it to", "change today to", "make it", "make today", "to be", "instead do"],
-      "partialFollowers": ["today", "tonight", "now", "instead", "day", "workout", "session", "for", "please"]
+      "switchTo": [
+        "swap to",
+        "switch to",
+        "swap today to",
+        "switch today to",
+        "change to",
+        "change it to",
+        "change today to",
+        "make it",
+        "make today",
+        "to be",
+        "instead do"
+      ],
+      "partialFollowers": [
+        "today",
+        "tonight",
+        "now",
+        "instead",
+        "day",
+        "workout",
+        "session",
+        "for",
+        "please"
+      ]
     },
     "moveDay": {
       "note": "A move word plus a day to move ('Thursday') and a target ('to Friday') -> postpone with date + moveTo; the coach turns it into a move of that planned day.",
@@ -373,7 +442,7 @@
     }
   },
   "avoidArea": {
-    "note": "'anywhere' phrases plus an area word anywhere -> avoidArea. 'before' words must sit right before the area word (optionally 'my', 'the', 'on', 'on my', 'for my').",
+    "note": "'anywhere' phrases plus an area word anywhere -> avoidArea. 'before' words must sit right before the area word (optionally 'my', 'the', 'on', 'on my', 'for my'). 'after' words (1.15.2 eval req-036) sit right after the area word, optionally after 'is', 'are', 'feel(s)', 'so', 'totally', 'completely' ('my arms are toast', 'legs are fried').",
     "anywhere": [
       "go easy on",
       "easy on",
@@ -397,9 +466,24 @@
       "ถนอม",
       "เบาๆ",
       "เบา ๆ",
-      "พัก"
+      "พัก",
+      "be gentle"
     ],
-    "before": ["skip", "no", "rest", "without"]
+    "before": ["skip", "no", "rest", "without"],
+    "after": ["toast", "fried", "wrecked", "smoked", "cooked", "trashed", "destroyed"],
+    "afterFillers": [
+      "is",
+      "are",
+      "feel",
+      "feels",
+      "feeling",
+      "so",
+      "totally",
+      "completely",
+      "pretty",
+      "kind of",
+      "kinda"
+    ]
   },
   "areas": {
     "arms": [
@@ -636,6 +720,10 @@
       "อีกแล้ว"
     ]
   },
+  "swapReplaced": {
+    "note": "1.15.2 eval req-058: in 'X instead of Y' the exercise being replaced is Y, the one named after these words. Not 'rather than': its order is ambiguous ('rows rather than curls').",
+    "after": ["instead of", "in place of"]
+  },
   "scope": {
     "plan": [
       "from now on",
@@ -745,6 +833,10 @@
     "wide",
     "grip"
   ],
+  "exerciseHeadStopwords": {
+    "note": "Generic last name words that alone never name an exercise ('I am fed up', 'warm up' are not Incline Push-Up; 'sit-ups' is not Step Ups). A full name ('push ups', 'step ups') still matches.",
+    "words": ["up", "ups"]
+  },
   "safety": {
     "discomfort": [
       "hurt",

@@ -370,7 +370,14 @@ test('no mic during a set; between sets (Pause → Coach) it is there', async ({
   await expect(sheet.locator('[data-mic]')).toHaveAttribute('data-mic-state', 'idle');
   await expectTapTargets(page, '[data-coach-sheet]');
   await noHorizontalOverflow(page);
-  await holdAndSay(page, sheet, ['lighter'], 'Make the rest lighter');
+  // Open chat, so Apple's model answers and the mic is back for the next question. (Since 1.15.2
+  // a change like "Make the rest lighter" gets the rules' Apply card, and the dock — mic included
+  // — waits for that tap, as after any proposal.)
+  await holdAndSay(page, sheet, ['any tips'], 'Any tips for the next set?');
+  expect((await brainState(page)).requests.at(-1)?.messages.at(-1)).toEqual({
+    role: 'user',
+    text: 'Any tips for the next set?',
+  });
   await sheet.getByRole('button', { name: 'Close' }).click();
   await expect(sheet).toHaveCount(0);
   // Resumed: no mic again.

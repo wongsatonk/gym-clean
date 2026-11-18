@@ -273,10 +273,41 @@ describe('WHATS_NEW_PAGES', () => {
     expect(addedTopics(TODO_TOPICS, tourReleases(r116), false)).toEqual([]);
   });
 
-  it('holds only releases 1.12.0 to 1.16.0, every page in one of them', () => {
-    expect(r112.length + r113.length + r114.length + r115.length + r1151.length + r116.length).toBe(
-      WHATS_NEW_PAGES.length,
-    );
+  const r1161 = WHATS_NEW_PAGES.filter((p) => p.release === '1.16.1');
+
+  // 1.16.1 (built as 1.15.2) "Coach acts": change requests go to the rules' Apply card straight
+  // away (route.ts).
+  it('has one page for 1.16.1: the coach acts faster, for everyone, Try it in Coach', () => {
+    expect(r1161.map((p) => [p.id, p.tryIt, p.owner, p.title])).toEqual([
+      ['coach-acts', 'coach', undefined, 'Coach acts faster'],
+    ]);
+    const text = `${r1161[0]?.what} ${r1161[0]?.why}`;
+    expect(text).toMatch(/Apply/);
+    expect(text).toMatch(/Apple Intelligence/);
+    expect(text).not.toMatch(/\b(he|she|his|her)\b/i);
+  });
+
+  it('1.16.1 is shown after 1.16.0; from 1.15.1 both show, newest first; no new to-do topic', () => {
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.0' }, '1.16.0', true)).toEqual([]);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.0' }, '1.16.1', true)).toEqual(r1161);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.1' }, '1.16.1', true, false)).toEqual([
+      ...r1161,
+      ...r116,
+    ]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.16.1')).toEqual(r1161);
+    expect(addedTopics(TODO_TOPICS, tourReleases(r1161), true)).toEqual([]);
+  });
+
+  it('holds only releases 1.12.0 to 1.16.1, every page in one of them', () => {
+    expect(
+      r112.length +
+        r113.length +
+        r114.length +
+        r115.length +
+        r1151.length +
+        r116.length +
+        r1161.length,
+    ).toBe(WHATS_NEW_PAGES.length);
   });
 
   describe('owner mode (M13)', () => {
@@ -350,9 +381,11 @@ describe('WHATS_NEW_PAGES', () => {
   it('uses valid semver releases', () => {
     for (const p of WHATS_NEW_PAGES) {
       expect(p.release).toMatch(/^\d+\.\d+\.\d+$/);
-      // A release with pages is a new MINOR (patch 0); the one exception is 1.15.1 (M13b, Decision
-      // "One-arm sets": Next arm ships as a patch so M12 slice 3 keeps 1.16.0).
-      if (p.release !== '1.15.1') expect(p.release.endsWith('.0'), p.release).toBe(true);
+      // A release with pages is a new MINOR (patch 0); the exceptions are 1.15.1 (M13b, Decision
+      // "One-arm sets": Next arm ships as a patch so M12 slice 3 keeps 1.16.0) and 1.16.1
+      // ("Coach acts", a fix on top of 1.16.0).
+      if (p.release !== '1.15.1' && p.release !== '1.16.1')
+        expect(p.release.endsWith('.0'), p.release).toBe(true);
       expect(compareReleases(p.release, '1.12.0')).toBeGreaterThanOrEqual(0);
     }
   });

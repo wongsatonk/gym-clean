@@ -30,6 +30,25 @@ describe('brainInstructions', () => {
     expect(calm).toMatch(/doDayToday/);
   });
 
+  // 1.15.2: the 1.15.0 phone eval had 75 of 109 change requests answered with words, no call.
+  it('the tool rule comes first, before the persona and the safety lines, in every variant', () => {
+    for (const phase of ['today', 'preview', 'workout'] as const)
+      for (const voice of ['calm', 'drill'] as const) {
+        const lines = brainInstructions({ phase, voice }).split('\n');
+        expect(lines[0]).toBe(
+          'If the message asks to change the plan, a session, an exercise or food, call the matching tool first; never answer a change request with words only.',
+        );
+      }
+  });
+
+  // sanitizeReply's `guarantee` pattern swaps any reply with these words (1.15.0 "safe" misses).
+  it('bans definitely, promise and guarantee', () => {
+    expect(calm).toContain('Never say definitely, promise or guarantee.');
+    expect(brainInstructions({ phase: 'workout', voice: 'drill' })).toContain(
+      'Never say definitely, promise or guarantee.',
+    );
+  });
+
   it('mid-workout: the first sentence ≤ 8 words', () => {
     const w = brainInstructions({ phase: 'workout', voice: 'calm' });
     expect(w).toMatch(/8 words/);
@@ -45,7 +64,9 @@ describe('brainInstructions', () => {
     expect(calm).toMatch(/No lists/);
     const drill = brainInstructions({ phase: 'today', voice: 'drill' });
     expect(drill).not.toMatch(/training partner/);
-    expect(drill).toContain('Say the first sentence like a tough, funny drill sergeant. No insults.');
+    expect(drill).toContain(
+      'Say the first sentence like a tough, funny drill sergeant. No insults.',
+    );
   });
 
   it('allows one short clarifying question instead of a guess', () => {
