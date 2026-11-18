@@ -40,14 +40,14 @@ jobs:
       - id: cache
         uses: actions/cache@v4
         with:
-          path: test-results/fake-camera/person.mjpeg
+          path: node_modules/.cache/e2e-fake-camera/person.mjpeg
           key: fake-camera-${{ hashFiles('fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm', 'e2e/fake-camera.setup.ts') }}
       - if: steps.cache.outputs.cache-hit != 'true'
         name: Build the fake camera video
         run: |
           command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-          mkdir -p test-results/fake-camera
-          ffmpeg -y -loglevel error -i fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm -vf scale=480:640 -q:v 5 -r 30 test-results/fake-camera/person.mjpeg
+          mkdir -p node_modules/.cache/e2e-fake-camera
+          ffmpeg -y -loglevel error -i fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm -vf scale=480:640 -q:v 5 -r 30 node_modules/.cache/e2e-fake-camera/person.mjpeg
 
   e2e:
     needs: fake-camera
@@ -84,7 +84,7 @@ jobs:
       - name: Fake camera video (built by the fake-camera job)
         uses: actions/cache/restore@v4
         with:
-          path: test-results/fake-camera/person.mjpeg
+          path: node_modules/.cache/e2e-fake-camera/person.mjpeg
           key: fake-camera-${{ hashFiles('fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm', 'e2e/fake-camera.setup.ts') }}
           fail-on-cache-miss: true
       - run: npx playwright test ${{ matrix.args }}
