@@ -3,7 +3,8 @@
 // the real modules. Rules: nothing asks for a permission (only "read the stored answer" calls:
 // permissions.query, Reminders.permission, GymBrain/GymSpeech availability, Health isAvailable,
 // storage.persisted), the camera is never opened, nothing leaves the phone. Each check has its own
-// timeout and never throws (a throw or a timeout becomes a "fail" row with a readable reason).
+// timeout and never throws (a throw or a timeout becomes a "fail" row with a readable reason;
+// storage that answers late is a "warn": slow, not broken).
 // Native-only checks (coach, mic, notifications, Health) answer "iPhone app only" on the web
 // without touching their module.
 import type { GymBrainAvailability } from '../native/gymBrain';
@@ -40,13 +41,16 @@ export const SELF_CHECK_NAMES: Record<SelfCheckId, string> = {
   health: 'Apple Health',
 };
 
-/** Per-check timeouts (ms). The pose engine loads a 14.7 MB wasm the first time. */
+/**
+ * Per-check timeouts (ms). The pose engine loads a 14.7 MB wasm the first time. Storage (an
+ * IndexedDB write, read and delete) can take well over 6 s on a busy or older phone.
+ */
 export const SELF_CHECK_TIMEOUT_MS: Record<SelfCheckId, number> = {
   version: 2000,
   pose: 30_000,
   camera: 4000,
   voice: 5000,
-  storage: 6000,
+  storage: 20_000,
   brain: 8000,
   speech: 8000,
   notifications: 6000,
@@ -86,7 +90,26 @@ export type SelfCheckDeps = {
 
 const FRESH_BUILD = 'Install a fresh build of the app.';
 
-function guarded(id: SelfCheckId, fn: () => Promise<CheckOutcome>, info = false): SelfCheck {
+/** What a check says when it doesn't answer in time (unless it gives its own `slow` outcome). */
+const timedOut = (ms: number): CheckOutcome => ({
+  state: 'fail',
+  detail: `Didn't answer within ${Math.round(ms / 1000)} s.`,
+  fix: 'Tap Run again. If it happens again, install a fresh build.',
+});
+
+/** Storage that answers late still works: say so, don't suggest a new build. */
+const STORAGE_SLOW: CheckOutcome = {
+  state: 'warn',
+  detail: 'Storage was slow to answer.',
+  fix: 'Tap Run again.',
+};
+
+function guarded(
+  id: SelfCheckId,
+  fn: () => Promise<CheckOutcome>,
+  info = false,
+  slow?: CheckOutcome,
+): SelfCheck {
   const ms = SELF_CHECK_TIMEOUT_MS[id];
   return {
     id,
@@ -94,15 +117,7 @@ function guarded(id: SelfCheckId, fn: () => Promise<CheckOutcome>, info = false)
     ...(info ? { info: true } : {}),
     run: () =>
       new Promise<CheckOutcome>((resolve) => {
-        const t = setTimeout(
-          () =>
-            resolve({
-              state: 'fail',
-              detail: `Didn't answer within ${Math.round(ms / 1000)} s.`,
-              fix: 'Tap Run again. If it happens again, install a fresh build.',
-            }),
-          ms,
-        );
+        const t = setTimeout(() => resolve(slow ?? timedOut(ms)), ms);
         let p: Promise<CheckOutcome>;
         try {
           p = fn();
@@ -219,40 +234,45 @@ export function selfCheckRuns(d: SelfCheckDeps): SelfCheck[] {
       return { state: 'ok', detail: n === 1 ? '1 English voice' : `${n} English voices` };
     }),
 
-    guarded('storage', async () => {
-      const token = `check-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      try {
-        await d.storage.put(TEMP_KEY, token);
-        const back = await d.storage.get(TEMP_KEY);
-        await d.storage.delete(TEMP_KEY);
-        if (back !== token)
+    guarded(
+      'storage',
+      async () => {
+        const token = `check-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        try {
+          await d.storage.put(TEMP_KEY, token);
+          const back = await d.storage.get(TEMP_KEY);
+          await d.storage.delete(TEMP_KEY);
+          if (back !== token)
+            return {
+              state: 'fail',
+              detail: "Saved data didn't read back.",
+              fix: 'Restart the app. If it repeats, back up in Settings and reinstall.',
+            };
+        } catch (e) {
           return {
             state: 'fail',
-            detail: "Saved data didn't read back.",
-            fix: 'Restart the app. If it repeats, back up in Settings and reinstall.',
+            detail: describeLoadError(e),
+            fix: 'Free some space on the iPhone, then run this again.',
           };
-      } catch (e) {
-        return {
-          state: 'fail',
-          detail: describeLoadError(e),
-          fix: 'Free some space on the iPhone, then run this again.',
-        };
-      }
-      if (d.native) return { state: 'ok', detail: 'Saving works' };
-      let kept: boolean | undefined;
-      try {
-        kept = d.persisted ? await d.persisted() : undefined;
-      } catch {
-        kept = undefined;
-      }
-      if (kept === false)
-        return {
-          state: 'warn',
-          detail: 'Saving works, but Safari may clear it when space is low.',
-          fix: 'Add the app to the Home Screen, and back up in Settings.',
-        };
-      return { state: 'ok', detail: 'Saving works' };
-    }),
+        }
+        if (d.native) return { state: 'ok', detail: 'Saving works' };
+        let kept: boolean | undefined;
+        try {
+          kept = d.persisted ? await d.persisted() : undefined;
+        } catch {
+          kept = undefined;
+        }
+        if (kept === false)
+          return {
+            state: 'warn',
+            detail: 'Saving works, but Safari may clear it when space is low.',
+            fix: 'Add the app to the Home Screen, and back up in Settings.',
+          };
+        return { state: 'ok', detail: 'Saving works' };
+      },
+      false,
+      STORAGE_SLOW,
+    ),
 
     guarded('brain', async () => {
       if (!d.native) return iphoneOnly();

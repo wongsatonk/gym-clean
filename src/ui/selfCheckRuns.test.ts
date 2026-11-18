@@ -262,6 +262,35 @@ describe('selfCheckRuns', () => {
       expect(r).toMatchObject({ state: 'fail', detail: 'QuotaExceededError' });
     });
 
+    it('a slow phone gets 20 s, not 6 s, before storage gives up', async () => {
+      vi.useFakeTimers();
+      const d = deps();
+      let answer: () => void = () => undefined;
+      const put = d.storage.put;
+      d.storage.put = (k, v) =>
+        new Promise<void>((res) => (answer = () => void put(k, v).then(res)));
+      const p = run(d, 'storage');
+      let done = false;
+      void p.then(() => (done = true));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(done).toBe(false);
+      answer();
+      expect(await p).toMatchObject({ state: 'ok' });
+    });
+
+    it('no answer in 20 s says storage was slow, not a fresh build', async () => {
+      vi.useFakeTimers();
+      const d = deps();
+      d.storage.put = () => new Promise<void>(() => undefined);
+      const p = run(d, 'storage');
+      await vi.advanceTimersByTimeAsync(20_001);
+      const r = await p;
+      expect(r.state).toBe('warn');
+      expect(r.detail).toBe('Storage was slow to answer.');
+      expect(r.fix).toBe('Tap Run again.');
+      expect(`${r.detail} ${r.fix ?? ''}`).not.toMatch(/fresh build/i);
+    });
+
     it('not persisted warns on the web, with a fix; the iPhone app keeps its own data', async () => {
       const web = await run(
         deps({ native: false, persisted: () => Promise.resolve(false) }),

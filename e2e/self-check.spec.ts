@@ -134,10 +134,29 @@ async function setup(page: Page): Promise<void> {
   });
 }
 
+/**
+ * A full-page screenshot that rides out Chromium's capture outage. After the web test closes a
+ * page that loaded the real pose model on the GPU, every screenshot in the same browser (any
+ * page, viewport or full page) fails with "Unable to capture screenshot" for ~5 s while the GPU
+ * side recovers; the page itself renders fine. Retry only that error, for up to 15 s.
+ */
+async function capture(page: Page, path: string): Promise<void> {
+  const until = Date.now() + 15_000;
+  for (;;) {
+    try {
+      await page.screenshot({ path, fullPage: true });
+      return;
+    } catch (e) {
+      if (!String(e).includes('Unable to capture screenshot') || Date.now() > until) throw e;
+      await page.waitForTimeout(250);
+    }
+  }
+}
+
 async function shot(page: Page, name: string, outputPath: (n: string) => string) {
-  await page.screenshot({ path: outputPath(`${name}.png`), fullPage: true });
+  await capture(page, outputPath(`${name}.png`));
   const dir = process.env['SELFCHECK_SHOTS'];
-  if (dir) await page.screenshot({ path: `${dir}/${name}.png`, fullPage: true });
+  if (dir) await capture(page, `${dir}/${name}.png`);
 }
 
 async function readable(page: Page) {
