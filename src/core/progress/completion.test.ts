@@ -600,13 +600,27 @@ describe('one-sided sets (M13b)', () => {
       x.exerciseId === 'press'
         ? {
             ...x,
-            sides: { right: { reps: x.reps + 2, partials: 0 }, left: { reps: x.reps, partials: 0 } },
+            sides: {
+              right: { reps: x.reps + 2, partials: 0 },
+              left: { reps: x.reps, partials: 0 },
+            },
           }
         : x,
     );
-    expect(dayCompletion(input({ sets: sided }), '2026-11-09')).toEqual(
-      dayCompletion(input(), '2026-11-09'),
-    );
+    const day = dayCompletion(input({ sets: sided }), '2026-11-09');
+    // Same counts as two-sided; the press row also carries its per-set sides for Calendar day.
+    const press = day.exercises.find((e) => e.exerciseId === 'press');
+    expect(press?.sides?.length).toBe(press?.reps.length);
+    expect(press?.sides?.[0]?.left?.reps).toBe(press?.reps[0]);
+    const plain = {
+      ...day,
+      exercises: day.exercises.map((e) => {
+        const copy = { ...e };
+        delete copy.sides;
+        return copy;
+      }),
+    };
+    expect(plain).toEqual(dayCompletion(input(), '2026-11-09'));
     expect(weekScore(input({ sets: sided }), '2026-11-09')).toEqual(
       weekScore(input(), '2026-11-09'),
     );

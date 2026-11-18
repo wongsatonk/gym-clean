@@ -281,6 +281,7 @@ import {
   type ShareSize,
 } from './shareMonth';
 import { saveFile } from './saveFile';
+import { APP_NAME } from '../core/brand';
 import { reducedMotion, screenEntrance, type EnterDir } from './motion';
 import { undoToast, type UndoToast } from './coach/undoToast';
 import { planChangesScreen } from './screens/planChanges';
@@ -336,7 +337,7 @@ import {
 } from '../core/stats';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
-import { ruleStatus } from '../core/exercises';
+import { oneSidedLimb, ruleStatus } from '../core/exercises';
 import { h } from './dom';
 import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { createFuel } from './fuel/fuelController';
@@ -345,6 +346,7 @@ import { createHealthHost } from './healthHost';
 import { isAppRoute } from '../core/todo/routes';
 import type {
   AppRoute,
+  WorkSide,
   CheckIn,
   CoachSettings,
   ReminderKind,
@@ -4589,7 +4591,7 @@ export function mountApp(root: HTMLElement): void {
       const res = await saveFile(
         new Blob([JSON.stringify(file)], { type: 'application/json' }),
         backupFileName(t),
-        'Gym Clean backup',
+        `${APP_NAME} backup`,
       );
       restoreStep =
         res === 'cancelled'
@@ -5074,7 +5076,10 @@ export function mountApp(root: HTMLElement): void {
           reps: last.reps,
           partials: last.partials ?? 0,
           learning: lastLogLearning,
-          onCorrect: (reps, partials) => correctLastSet(reps, partials),
+          // M13b: a one-sided set fixes each side ("Right arm" / "Left arm").
+          sides: last.sides,
+          limb: oneSidedLimb(last.exerciseId),
+          onCorrect: (reps, partials, side) => correctLastSet(reps, partials, side),
         }),
       };
     }
@@ -5092,8 +5097,8 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
-  function correctLastSet(reps: number, partials: number): void {
-    dispatch({ type: 'CORRECT_LAST_SET', reps, partials });
+  function correctLastSet(reps: number, partials: number, side?: WorkSide): void {
+    dispatch({ type: 'CORRECT_LAST_SET', reps, partials, ...(side ? { side } : {}) });
     if (view.screen !== 'session') return;
     const s = view.s;
     const last = s.logs.at(-1);
@@ -5105,10 +5110,21 @@ export function mountApp(root: HTMLElement): void {
       r.reps = Math.max(0, Math.round(counts.reps));
       if (counts.partials > 0) r.partials = Math.round(counts.partials);
       else delete r.partials;
+      // M13b: the reducer's per-side counts (a fix without a side drops them).
+      if (last.sides) r.sides = last.sides;
+      else delete r.sides;
       if (last.focusScore === undefined) delete r.focusScore;
       else r.focusScore = Math.min(100, Math.max(0, Math.round(last.focusScore)));
     }).catch(logDbError);
-    rec((r) => void r.correctSet(counts));
+    const sideCounts = side ? last.sides?.[side] : undefined;
+    rec(
+      (r) =>
+        void r.correctSet(
+          counts,
+          undefined,
+          side && sideCounts ? { side, logged: sideCounts } : undefined,
+        ),
+    );
     if (last.cues) logFocusScore(last);
     if (s.phase === 'summary') saveTotals(s);
   }

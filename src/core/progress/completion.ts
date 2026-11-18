@@ -48,7 +48,7 @@ import { isWarmup } from '../warmup';
 
 export type CompletionSession = PlanSession & { sessionId: string };
 /** Warm-up sets (M12 1b, `warmup: true`) are ignored everywhere here. */
-export type CompletionSet = Pick<SetLog, 'sessionId' | 'exerciseId' | 'reps' | 'warmup'>;
+export type CompletionSet = Pick<SetLog, 'sessionId' | 'exerciseId' | 'reps' | 'warmup' | 'sides'>;
 
 export type CompletionInput = {
   state: TrainerState;
@@ -134,9 +134,15 @@ export function weekStart(date: string): string {
   return addDate(date, -((weekdayOf(date) + 6) % 7));
 }
 
+/** M13b: per-set sides, only when a one-sided set is among them (two-sided rows stay as before). */
+function sidesOf(sets: readonly CompletionSet[]) {
+  return sets.some((x) => x.sides) ? { sides: sets.map((x) => x.sides ?? null) } : {};
+}
+
 function rowsDone(rows: readonly PlannedExercise[], logged: readonly CompletionSet[]) {
   return rows.map((p) => {
-    const reps = logged.filter((x) => x.exerciseId === p.exerciseId).map((x) => x.reps);
+    const mine = logged.filter((x) => x.exerciseId === p.exerciseId);
+    const reps = mine.map((x) => x.reps);
     const setsDone = reps.length;
     const status: 'done' | 'partial' | 'missed' =
       reps.length === 0 ? 'missed' : reps.length >= p.sets ? 'done' : 'partial';
@@ -146,6 +152,7 @@ function rowsDone(rows: readonly PlannedExercise[], logged: readonly CompletionS
       setsDone,
       repsTarget: [p.targetReps[0], p.targetReps[1]] as [number, number],
       reps,
+      ...sidesOf(mine),
       status,
     };
   });
@@ -226,7 +233,8 @@ function projectedOf(p: Prepared, date: string): DayCompletion {
       const ids = [...new Set(logged.map((x) => x.exerciseId))];
       const ref = baseDay(state, date, dayId)?.exercises ?? [];
       const exercises = ids.map((id) => {
-        const reps = logged.filter((x) => x.exerciseId === id).map((x) => x.reps);
+        const mine = logged.filter((x) => x.exerciseId === id);
+        const reps = mine.map((x) => x.reps);
         const t = ref.find((r) => r.exerciseId === id)?.targetReps ?? [0, 0];
         return {
           exerciseId: id,
@@ -234,6 +242,7 @@ function projectedOf(p: Prepared, date: string): DayCompletion {
           setsDone: reps.length,
           repsTarget: [t[0], t[1]] as [number, number],
           reps,
+          ...sidesOf(mine),
           status: 'done' as const,
         };
       });

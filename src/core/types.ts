@@ -543,6 +543,8 @@ export type DayCompletion = {
     setsDone: number;
     repsTarget: [number, number];
     reps: number[];
+    /** M13b: per-set sides (same order as `reps`; null = a two-sided set). Only when any set has them. */
+    sides?: (Partial<Record<WorkSide, SideCount>> | null)[] | undefined;
     status: 'done' | 'partial' | 'missed';
   }[];
 };
@@ -720,7 +722,8 @@ export type BrainUnavailableReason =
   | 'notNative';
 
 /** A failed `respond` call, mapped from Apple's error families. */
-export type BrainErrorCode = 'guardrail' | 'contextTooLong' | 'unsupportedLanguage' | 'timeout' | 'other';
+export type BrainErrorCode =
+  'guardrail' | 'contextTooLong' | 'unsupportedLanguage' | 'timeout' | 'other';
 
 /** A tool call the model made (recorded, never applied without a tap). */
 export type ToolCall = { name: string; args: Record<string, unknown> };
@@ -827,13 +830,7 @@ export type OwnerMode = { on: boolean; setAt: number; by: 'fresh' | 'existing' |
 
 /** Things only the owner sees (developer and checkpoint tools). */
 export type OwnerSurface =
-  | 'todos'
-  | 'resign'
-  | 'devlog'
-  | 'buildHash'
-  | 'tourTodos'
-  | 'evalScreen'
-  | 'copyReport';
+  'todos' | 'resign' | 'devlog' | 'buildHash' | 'tourTodos' | 'evalScreen' | 'copyReport';
 
 /** settings 'onboarding'. */
 export type Onboarding = { doneAt?: number; skippedAt?: number };
