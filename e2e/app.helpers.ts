@@ -416,8 +416,12 @@ export async function foreground(page: Page): Promise<void> {
 export async function revealNotice(page: Page, target: Locator): Promise<void> {
   const toggle = page.locator('[data-screen="today"] [data-notices-toggle]');
   await expect(target.or(toggle).first()).toBeVisible();
-  if (!(await target.first().isVisible()) && (await toggle.count()) > 0) {
-    if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-  }
-  await expect(target.first()).toBeVisible();
+  // Retried: Today re-renders when its data lands, and a tap on a toggle that is being replaced
+  // is lost (seen on slow CI), leaving the row folded.
+  await expect(async () => {
+    if (!(await target.first().isVisible()) && (await toggle.count()) > 0) {
+      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+    }
+    await expect(target.first()).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10_000 });
 }
