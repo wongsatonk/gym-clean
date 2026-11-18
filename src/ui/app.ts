@@ -55,7 +55,6 @@ import {
   shouldOnboard,
   type OnboardingPermission,
 } from '../core/onboarding';
-import { nativePermissions, requestMicPermission } from '../native/permissions';
 import {
   INTAKE_SKIPPED_KEY,
   loadOnboardingFacts,
@@ -2990,6 +2989,11 @@ export function mountApp(root: HTMLElement): void {
       return false;
     }
   }
+
+  // Loaded lazily: the web build never fetches native modules.
+  const nativePermissions = async () => (await import('../native/permissions')).nativePermissions();
+  const requestMicPermission = async () =>
+    (await import('../native/permissions')).requestMicPermission();
 
   /**
    * iPhone app, first open of each release: the permission pages for what's still undecided

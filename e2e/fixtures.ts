@@ -13,16 +13,32 @@
 //
 // Onboarding is done by default: the 'intakeSkipped' row (firstRun 'skip') also means the M13
 // first-launch welcome does not open (shouldOnboard). first-launch.spec.ts uses firstRun 'fresh'.
+// It also stores 'permissionCatchUp' = this release, so the iPhone app's (faked native) first open
+// doesn't put the permission catch-up pages in front of Today.
 //
 // How: an init script wraps IDBFactory.open. When the app's database is created (upgrade from
 // version 0), the first successful open writes those rows in a readwrite transaction started
 // before Dexie's own success handler runs, so every read the app makes sees them. A database that
 // already exists (a reload, a seeded install) is left alone.
+import { readFileSync } from 'node:fs';
 import { test as base, type BrowserContext } from '@playwright/test';
+
+/** The app's release (package.json), as APP_RELEASE reads it. */
+const RELEASE = (
+  JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+    version: string;
+  }
+).version;
 
 export * from '@playwright/test';
 
-export type FreshDbOptions = { skipIntake: boolean; warmupsOff: boolean; ownerOn?: boolean };
+export type FreshDbOptions = {
+  skipIntake: boolean;
+  warmupsOff: boolean;
+  ownerOn?: boolean;
+  /** Set by freshDbDefaults: the release the permission catch-up counts as seen. */
+  release?: string;
+};
 
 /** Adds the fresh-database init script to `context` (for specs that build their own context). */
 export async function freshDbDefaults(
@@ -30,30 +46,36 @@ export async function freshDbDefaults(
   opts: FreshDbOptions = { skipIntake: true, warmupsOff: true },
 ): Promise<void> {
   if (!opts.skipIntake && !opts.warmupsOff && opts.ownerOn !== true) return;
-  await context.addInitScript((o: FreshDbOptions) => {
-    const proto = IDBFactory.prototype;
-    const open = proto.open;
-    let fresh = false;
-    proto.open = function (this: IDBFactory, name: string, version?: number) {
-      const req = version === undefined ? open.call(this, name) : open.call(this, name, version);
-      if (name !== 'gym-clean') return req;
-      req.addEventListener('upgradeneeded', (e) => {
-        if (e.oldVersion === 0) fresh = true;
-      });
-      req.addEventListener('success', () => {
-        if (!fresh) return;
-        const db = req.result;
-        if (!db.objectStoreNames.contains('settings')) return;
-        fresh = false;
-        const store = db.transaction('settings', 'readwrite').objectStore('settings');
-        if (o.skipIntake) store.put({ key: 'intakeSkipped', value: Date.now() });
-        if (o.warmupsOff) store.put({ key: 'trainerKit', value: { warmups: 'off' } });
-        if (o.ownerOn)
-          store.put({ key: 'ownerMode', value: { on: true, setAt: Date.now(), by: 'existing' } });
-      });
-      return req;
-    };
-  }, opts);
+  await context.addInitScript(
+    (o: FreshDbOptions) => {
+      const proto = IDBFactory.prototype;
+      const open = proto.open;
+      let fresh = false;
+      proto.open = function (this: IDBFactory, name: string, version?: number) {
+        const req = version === undefined ? open.call(this, name) : open.call(this, name, version);
+        if (name !== 'gym-clean') return req;
+        req.addEventListener('upgradeneeded', (e) => {
+          if (e.oldVersion === 0) fresh = true;
+        });
+        req.addEventListener('success', () => {
+          if (!fresh) return;
+          const db = req.result;
+          if (!db.objectStoreNames.contains('settings')) return;
+          fresh = false;
+          const store = db.transaction('settings', 'readwrite').objectStore('settings');
+          if (o.skipIntake) {
+            store.put({ key: 'intakeSkipped', value: Date.now() });
+            store.put({ key: 'permissionCatchUp', value: o.release });
+          }
+          if (o.warmupsOff) store.put({ key: 'trainerKit', value: { warmups: 'off' } });
+          if (o.ownerOn)
+            store.put({ key: 'ownerMode', value: { on: true, setAt: Date.now(), by: 'existing' } });
+        });
+        return req;
+      };
+    },
+    { ...opts, release: RELEASE },
+  );
 }
 
 export const test = base.extend<{
