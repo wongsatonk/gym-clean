@@ -173,6 +173,8 @@ const M12 = {
 const CORE_FOCUS = {
   words: compileList(P.m12.coreFocus.words),
   add: compileList(P.m12.coreFocus.add),
+  questions: compileList(P.m12.coreFocus.questions),
+  politeAsk: compileList(P.m12.coreFocus.politeAsk),
   alone: new Set(P.m12.coreFocus.alone.map((w) => normalizeText(w))),
 };
 const DO_WORDS = compileList(P.m12.doToday.do);
@@ -504,11 +506,24 @@ function missingKit(text: string): boolean {
   );
 }
 
-/** M13c: a request for abs ("add abs", "six pack", or only "abs" / "ท้อง"), no discomfort, no food. */
+const inside = (s: Span, spans: readonly Span[]): boolean =>
+  spans.some((o) => s.start >= o.start && s.end <= o.end);
+const overlaps = (s: Span, spans: readonly Span[]): boolean =>
+  spans.some((o) => s.start < o.end && o.start < s.end);
+
+/**
+ * M13c: a request for abs ("add abs", "six pack", or only "abs" / "ท้อง"), no discomfort, no food.
+ * The add word must sit outside the abs words, and a question word outside a polite ask
+ * ("why", "does", "ทำไม", but not "ได้ไหม") makes it a question about abs, not a request.
+ */
 function asksForCore(text: string, safety: Safety): boolean {
   if (safety !== 'none' || has(INTENTS.food, text)) return false;
   if (CORE_FOCUS.alone.has(text)) return true;
-  return has(CORE_FOCUS.words, text) && has(CORE_FOCUS.add, text);
+  const words = CORE_FOCUS.words(text);
+  if (words.length === 0) return false;
+  if (!CORE_FOCUS.add(text).some((s) => !overlaps(s, words))) return false;
+  const polite = CORE_FOCUS.politeAsk(text);
+  return !CORE_FOCUS.questions(text).some((s) => !inside(s, polite));
 }
 
 // ---- main ----

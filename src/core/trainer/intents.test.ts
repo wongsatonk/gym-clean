@@ -379,6 +379,33 @@ describe('M13c: asking for abs opens the focus flow with core', () => {
     for (const t of ['ฉันท้อง', 'ตั้งท้อง', 'ท้องว่าง', 'my stomach is full', 'I want a flat stomach'])
       expect(m(t).intent, t).not.toBe('focusBlock');
   });
+
+  it('M13c review: questions about abs do not open the focus flow', () => {
+    for (const t of [
+      'หน้าท้องทำไมไม่ลด',
+      'ทำไมหน้าท้องไม่ขึ้น',
+      'หน้าท้องลดยังไง',
+      'does core work help squats',
+      'do abs count as core',
+      'what works my abs',
+      'why do my abs not show',
+      'how do I get abs',
+      'does my core get trained by squats',
+      'ท้องผูก',
+      'ปวดท้อง',
+      'ฉันท้อง',
+      'ตั้งท้อง',
+    ])
+      expect(m(t).intent, t).not.toBe('focusBlock');
+  });
+
+  it('M13c review: an add word inside the abs words does not count; a polite ask still does', () => {
+    // "work" in "core work" is part of the abs words, not a request.
+    expect(m('core work').intent).not.toBe('focusBlock');
+    expect(m('core workout').intent).not.toBe('focusBlock');
+    for (const t of ['เพิ่มหน้าท้องได้ไหม', 'เพิ่มหน้าท้องได้มั้ย', 'can you add abs?', 'how about some abs'])
+      expect(m(t), t).toMatchObject(CORE);
+  });
 });
 
 describe('M12 1b short on time', () => {

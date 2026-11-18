@@ -7,6 +7,11 @@
  * measurements, Health days, check-ins, day feels, weigh-ins or the developer log (a test spies
  * every table), keeps no cache, stores no query and makes no network request. Ranking is pure
  * (src/core/searchPersonal.ts). Time is passed in (`now`).
+ *
+ * Without a date in the query, workouts are read from the newest WORKOUT_WINDOW_DAYS only (today
+ * and the 365 days before, by session start), so a word search stays quick after years of use; a
+ * date phrase ("12 nov 2024", "november 2024") reaches any older session. Kind words next to a
+ * date ("yesterday workout", "เมื่อวานกินอะไร") read only that kind's tables.
  */
 import {
   personalKinds,
@@ -52,6 +57,9 @@ export type PersonalSearchOptions = {
   exerciseName?: (exerciseId: string) => string;
 };
 
+/** Without a date, workouts come from today and this many days before (see the file comment). */
+export const WORKOUT_WINDOW_DAYS = 365;
+
 /** Local midnight (ms) of a YYYY-MM-DD date. */
 function midnight(date: string): number {
   const [y, m, d] = date.split('-').map(Number) as [number, number, number];
@@ -71,7 +79,10 @@ async function workoutItems(
 ): Promise<SearchEntry[]> {
   const sessions =
     range === null
-      ? await db.sessions.toArray()
+      ? await db.sessions
+          .where('startedAt')
+          .aboveOrEqual(midnight(addDate(today, -WORKOUT_WINDOW_DAYS)))
+          .toArray()
       : await db.sessions
           .where('startedAt')
           .between(...msRange(range), true, false)
@@ -134,7 +145,8 @@ async function mealItems(db: GymDb, range: DateQuery, today: string): Promise<Se
 /**
  * Searches your past workouts, logged meals and coach chat for `query` (words and/or a date
  * phrase). Newest first, `perKind` per section with a `more` flag; sections in the order
- * workout, meal, chat. Blank or one-letter queries (without a date) read nothing.
+ * workout, meal, chat. Blank or one-letter queries (without a date) read nothing; kind words next
+ * to a date read only those kinds' tables.
  */
 export async function personalSearch(
   db: GymDb,
@@ -150,14 +162,16 @@ export async function personalSearch(
     ...(opts.offset !== undefined ? { offset: opts.offset } : {}),
   };
   if (!personalQueryUsable(query, today)) return rankPersonal([], query, rankOpts);
-  const { range } = splitDateQuery(query, today);
+  const { range, kinds: named } = splitDateQuery(query, today);
   const parts = await Promise.all(
     kinds.map((k) =>
-      k === 'workout'
-        ? workoutItems(db, range, today, opts)
-        : k === 'chat'
-          ? chatItems(db, range, today, opts.now)
-          : mealItems(db, range, today),
+      named !== undefined && !named.includes(k)
+        ? []
+        : k === 'workout'
+          ? workoutItems(db, range, today, opts)
+          : k === 'chat'
+            ? chatItems(db, range, today, opts.now)
+            : mealItems(db, range, today),
     ),
   );
   return rankPersonal(parts.flat(), query, rankOpts);

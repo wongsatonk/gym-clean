@@ -58,7 +58,10 @@ describe('learn cards', () => {
     expect(text).toMatch(/add/i);
     expect(text).toMatch(/\bRest\b/);
     expect(text).toMatch(/fix/i);
-    expect(text).toMatch(/tune/i);
+    // M13c review: the why says what fixes do on this phone; nothing suggests data leaves it.
+    expect(c?.why).toMatch(/saved/i);
+    for (const w of [/tune/i, /update/i, /send/i, /upload/i, /share/i, /improve/i])
+      expect(c?.why ?? '', String(w)).not.toMatch(w);
   });
 
   it('coreTraining explains the "Also add abs?" choice: the block, the main focus unchanged', () => {

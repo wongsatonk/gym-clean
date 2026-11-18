@@ -281,6 +281,54 @@ describe('personalSearch', () => {
     expect(touched.has('foodEntries')).toBe(true);
   });
 
+  it('without a date, workouts come from the newest 365 days; a date reaches older ones', async () => {
+    await db.sessions.bulkPut([
+      {
+        sessionId: 's-year',
+        dayId: 'push-a',
+        startedAt: at('2025-11-18', 18),
+        endedAt: at('2025-11-18', 19),
+      },
+      {
+        sessionId: 's-older',
+        dayId: 'push-a',
+        startedAt: at('2025-11-17', 18),
+        endedAt: at('2025-11-17', 19),
+      },
+    ]);
+    await db.sets.bulkAdd([
+      set('s-year', 'Dumbbell_Bench_Press', at('2025-11-18', 18, 5)),
+      set('s-older', 'Dumbbell_Bench_Press', at('2025-11-17', 18, 5)),
+    ]);
+    expect(ids(await personalSearch(db, 'bench', { now: NOW })).workout).toEqual([
+      's-push',
+      's-year',
+    ]);
+    expect(ids(await personalSearch(db, 'bench 17 nov 2025', { now: NOW })).workout).toEqual([
+      's-older',
+    ]);
+    expect(ids(await personalSearch(db, 'november 2025', { now: NOW })).workout).toEqual([
+      's-year',
+      's-older',
+    ]);
+  });
+
+  it('a kind word next to a date reads only that kind (M13c review)', async () => {
+    const r = await personalSearch(db, 'yesterday workout', { now: NOW });
+    expect(ids(r)).toEqual({ workout: ['s-push'], meal: [], chat: [] });
+    const touched = new Set(log.map((t) => t.table));
+    expect(touched.has('sessions')).toBe(true);
+    expect(touched.has('foodEntries')).toBe(false);
+    expect(touched.has('chatMessages')).toBe(false);
+    log.length = 0;
+    expect(ids(await personalSearch(db, 'เมื่อวานกินอะไร', { now: NOW }))).toEqual({
+      workout: [],
+      meal: ['2026-11-17'],
+      chat: [],
+    });
+    expect(new Set(log.map((t) => t.table)).has('sessions')).toBe(false);
+  });
+
   it('empty data → empty sections', async () => {
     const empty = spiedDb(`search-empty-${n++}`);
     await empty.db.open();

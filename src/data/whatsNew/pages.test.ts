@@ -232,6 +232,9 @@ describe('WHATS_NEW_PAGES', () => {
     // The coach knows the plan; the Claude card only explains, nothing is sent.
     expect(text('coach-plan')).toMatch(/your plan/i);
     expect(text('coach-plan')).toMatch(/weekly sets/i);
+    expect(text('coach-plan')).toMatch(/when it plans/i);
+    // M13c review: only one brain answers "what is my plan missing", so the page doesn't promise it.
+    expect(text('coach-plan')).not.toMatch(/missing/i);
     expect(text('coach-plan')).toMatch(/Claude/);
     expect(text('coach-plan')).toMatch(/nothing is sent/i);
     // Photo from the library: both buttons, same recognition, on this phone.

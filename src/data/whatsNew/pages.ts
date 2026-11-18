@@ -283,7 +283,7 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     release: '1.16.0',
     id: 'coach-plan',
     title: 'The coach knows your plan',
-    what: 'The coach now sees your whole rotation and the weekly sets for each body area. Ask what your plan is missing.',
+    what: 'The coach now sees your days and the weekly sets for each body area when it plans.',
     why: 'When a question needs more than this phone can answer, a card explains what Claude could help with. Nothing is sent.',
     tryIt: 'coach',
     icon: 'chat',

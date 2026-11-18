@@ -87,7 +87,7 @@ export const LEARN_CARDS: readonly LearnCard[] = [
     body:
       'Counting with the camera is new for this exercise. While it learns, it may miss a rep or add one.\n\n' +
       'If the count is off, fix it on the Rest screen. The number you save is the one that counts.',
-    why: 'Fixed counts help tune the camera counting for this exercise in later updates.',
+    why: 'Your fixes keep your saved numbers right, so your progress uses real counts.',
   },
   // M13c: the "Also add abs?" step's Why? in the focus flow (abs join a plan only when you choose).
   {

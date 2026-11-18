@@ -6,6 +6,13 @@
 // it is taken out first and filters by `date`, then the other words match through task 3's
 // `search` (same normalizing, synonyms, Thai substring rule). Results are newest first per kind
 // (the match tier only breaks ties within a day), capped per kind with a "more" flag.
+//
+// Next to a date, kind words are not search words: "yesterday workout", "today's workout",
+// "what did I eat yesterday", "เมื่อวานกินอะไร" keep only that kind (KIND_WORDS), and fillers
+// ("on", "what", "did", "อะไร") drop out. Without a date every word is a search word.
+// Words that are often ordinary words are no dates on their own: bare "may" (only with a day or
+// a year), "sun" / "sat" / "wed" (only after "last" or right before an explicit date), and bare
+// Thai day names (they are also planets; จันทร์ is the moon): "วันจันทร์" or "จันทร์ที่แล้ว".
 import { buildSearchIndex, normalizeSearchText, search, type SearchEntry } from './search';
 import { addDate, localDate, weekdayOf } from './trainer/plan';
 import type { ChatMessage, DateQuery, FoodEntry, SearchHit, SetLog } from './types';
@@ -21,23 +28,31 @@ export type DateWord =
   | 'lastMonth'
   | { weekday: number; last?: true };
 
-const THAI_WEEKDAYS: readonly (readonly [string, number])[] = [
-  ['วันอาทิตย์', 0],
-  ['วันจันทร์', 1],
+/**
+ * Thai day names without "วัน". On their own they are no date (เสาร์, ศุกร์, อังคาร, พุธ,
+ * พฤหัส are also planets, and พระจันทร์ is the moon), so a day needs "วัน" ("วันจันทร์");
+ * "<name>ที่แล้ว" (last <name>) is clear without it. "อาทิตย์" also means week, so
+ * "อาทิตย์ที่แล้ว" stays last week.
+ */
+const THAI_DAY_NAMES: readonly (readonly [string, number])[] = [
+  ['อาทิตย์', 0],
   ['จันทร์', 1],
-  ['วันอังคาร', 2],
   ['อังคาร', 2],
-  ['วันพุธ', 3],
   ['พุธ', 3],
-  ['วันพฤหัสบดี', 4],
-  ['วันพฤหัส', 4],
   ['พฤหัสบดี', 4],
   ['พฤหัส', 4],
-  ['วันศุกร์', 5],
   ['ศุกร์', 5],
-  ['วันเสาร์', 6],
   ['เสาร์', 6],
 ];
+const THAI_WEEKDAYS: readonly (readonly [string, number])[] = THAI_DAY_NAMES.map(
+  ([w, n]) => [`วัน${w}`, n] as const,
+);
+
+/**
+ * Short English day names that are also ordinary words ("sun dried", "sat on", "wed"): a date
+ * only after "last" ("last sat") or right before an explicit date ("sat 14 nov").
+ */
+const CONTEXT_WEEKDAYS: Readonly<Record<string, number>> = { sun: 0, wed: 3, sat: 6 };
 
 /**
  * Date words → what they mean. A weekday is the last one on or before today ("monday" on a
@@ -52,7 +67,6 @@ export const DATE_WORDS: Readonly<Record<string, DateWord>> = {
   'this month': 'thisMonth',
   'last month': 'lastMonth',
   sunday: { weekday: 0 },
-  sun: { weekday: 0 },
   monday: { weekday: 1 },
   mon: { weekday: 1 },
   tuesday: { weekday: 2 },
@@ -60,7 +74,6 @@ export const DATE_WORDS: Readonly<Record<string, DateWord>> = {
   tue: { weekday: 2 },
   wednesday: { weekday: 3 },
   weds: { weekday: 3 },
-  wed: { weekday: 3 },
   thursday: { weekday: 4 },
   thurs: { weekday: 4 },
   thur: { weekday: 4 },
@@ -68,7 +81,6 @@ export const DATE_WORDS: Readonly<Record<string, DateWord>> = {
   friday: { weekday: 5 },
   fri: { weekday: 5 },
   saturday: { weekday: 6 },
-  sat: { weekday: 6 },
   วันนี้: 'today',
   เมื่อวานนี้: 'yesterday',
   เมื่อวาน: 'yesterday',
@@ -83,7 +95,7 @@ export const DATE_WORDS: Readonly<Record<string, DateWord>> = {
   เดือนก่อน: 'lastMonth',
   ...Object.fromEntries(THAI_WEEKDAYS.map(([w, n]) => [w, { weekday: n }])),
   ...Object.fromEntries(
-    THAI_WEEKDAYS.filter(([w]) => w.startsWith('วัน')).map(([w, n]) => [
+    [...THAI_WEEKDAYS, ...THAI_DAY_NAMES.filter(([, n]) => n !== 0)].map(([w, n]) => [
       `${w}ที่แล้ว`,
       { weekday: n, last: true },
     ]),
@@ -142,9 +154,12 @@ export const MONTH_WORDS: Readonly<Record<string, number>> = {
   'ธ.ค.': 12,
 };
 
-/** Month names that mean the whole month on their own (short ones like "dec" are too often a word prefix). */
+/**
+ * Month names that mean the whole month on their own (short ones like "dec" are too often a word
+ * prefix, and "may" too often a verb: "may 12" / "may 2025" still work).
+ */
 const MONTH_ALONE: readonly string[] = Object.keys(MONTH_WORDS)
-  .filter((w) => w.length >= 5 || w === 'may' || w === 'june' || w === 'july')
+  .filter((w) => w.length >= 5 || w === 'june' || w === 'july')
   .filter((w) => !w.includes('.') && w !== 'sept');
 
 /** Words left over next to a date phrase that aren't search words ("bench on monday"). */
@@ -157,7 +172,78 @@ const DATE_FILLERS: ReadonlySet<string> = new Set([
   'during',
   'the',
   'for',
+  'my',
+  'what',
+  'did',
+  'do',
+  'i',
+  'me',
+  'show',
+  'and',
+  '&',
 ]);
+
+export type PersonalKind = 'workout' | 'meal' | 'chat';
+
+/**
+ * Kind words next to a date: not search words, they keep only their kind ("yesterday workout"
+ * lists yesterday's workouts, not meals or chat). Without a date they are ordinary words.
+ */
+const KIND_WORDS: Readonly<Record<string, PersonalKind>> = {
+  workout: 'workout',
+  workouts: 'workout',
+  session: 'workout',
+  sessions: 'workout',
+  train: 'workout',
+  trained: 'workout',
+  training: 'workout',
+  lifted: 'workout',
+  gym: 'workout',
+  meal: 'meal',
+  meals: 'meal',
+  food: 'meal',
+  foods: 'meal',
+  eat: 'meal',
+  ate: 'meal',
+  eaten: 'meal',
+  breakfast: 'meal',
+  lunch: 'meal',
+  dinner: 'meal',
+  snack: 'meal',
+  snacks: 'meal',
+  chat: 'chat',
+  chats: 'chat',
+  coach: 'chat',
+  message: 'chat',
+  messages: 'chat',
+  say: 'chat',
+  said: 'chat',
+  ask: 'chat',
+  asked: 'chat',
+};
+
+/**
+ * Thai has no spaces, so these come out of a Thai word by substring (next to a date only):
+ * a kind word, or a filler (null). Food words like ข้าว are search words and stay.
+ */
+const THAI_STRIP: readonly (readonly [string, PersonalKind | null])[] = (
+  [
+    ['ออกกำลังกาย', 'workout'],
+    ['เล่น', 'workout'],
+    ['อาหาร', 'meal'],
+    ['มื้อ', 'meal'],
+    ['กิน', 'meal'],
+    ['แชท', 'chat'],
+    ['โค้ช', 'chat'],
+    ['คุย', 'chat'],
+    ['อะไร', null],
+    ['บ้าง', null],
+    ['ฉัน', null],
+    ['ผม', null],
+  ] as const
+)
+  .slice()
+  .sort((a, b) => b[0].length - a[0].length);
 
 const THAI = /[฀-๿]/;
 const B0 = '(?<![\\p{L}\\p{M}\\p{N}])';
@@ -178,8 +264,25 @@ function wordsPattern(words: readonly string[]): string {
 
 const MONTHS = `(${longestFirst(Object.keys(MONTH_WORDS)).map(esc).join('|')})`;
 const ORD = '(?:st|nd|rd|th)?';
-const WEEKDAY_LATIN = Object.keys(DATE_WORDS).filter(
-  (w) => !THAI.test(w) && typeof DATE_WORDS[w] === 'object',
+const WEEKDAY_LATIN = [
+  ...Object.keys(DATE_WORDS).filter((w) => !THAI.test(w) && typeof DATE_WORDS[w] === 'object'),
+  ...Object.keys(CONTEXT_WEEKDAYS),
+];
+
+/** An English day (any form) or a Thai "วัน…" day → 0–6. */
+function weekdayWord(w: string): number | undefined {
+  const d = DATE_WORDS[w];
+  return typeof d === 'object' ? d.weekday : CONTEXT_WEEKDAYS[w];
+}
+
+/** A day name just before an explicit date ("sat 14 nov", "Sat, 14 Nov", "วันเสาร์ที่ 14 พ.ย."). */
+const LEADING_DAY = new RegExp(
+  `(?:${B0}(?:${longestFirst(WEEKDAY_LATIN).map(esc).join('|')})|${longestFirst(
+    THAI_WEEKDAYS.map(([w]) => w),
+  )
+    .map(esc)
+    .join('|')})(?:,|\\s?ที่)?\\s?$`,
+  'u',
 );
 
 // ---------- date arithmetic (local YYYY-MM-DD strings) ----------
@@ -243,7 +346,12 @@ function wordRange(w: DateWord, today: string): DateQuery {
   }
 }
 
-type Matcher = { re: RegExp; read: (m: RegExpExecArray, today: string) => DateQuery };
+type Matcher = {
+  re: RegExp;
+  read: (m: RegExpExecArray, today: string) => DateQuery;
+  /** A day + month (or month + year) pattern: a day name just before it belongs to it. */
+  explicit?: true;
+};
 
 const month = (word: string | undefined): number => MONTH_WORDS[word ?? ''] ?? 0;
 const re = (s: string): RegExp => new RegExp(s, 'u');
@@ -254,6 +362,7 @@ const MATCHERS: readonly Matcher[] = [
   {
     re: re(`${B0}(\\d{4})-(\\d{1,2})-(\\d{1,2})${B1}`),
     read: (m, t) => dayOf(Number(m[1]), Number(m[2]), Number(m[3]), t),
+    explicit: true,
   },
   // 12/11, 12/11/2025, 12/11/25: day first; month first only when day first can't be a date
   {
@@ -262,28 +371,32 @@ const MATCHERS: readonly Matcher[] = [
       const [a, b, y] = [Number(m[1]), Number(m[2]), fullYear(m[3])];
       return dayOf(y, b, a, t) ?? dayOf(y, a, b, t);
     },
+    explicit: true,
   },
   // 12 nov, 12th november 2025, 12 พ.ย. 2568
   {
     re: re(`${B0}(\\d{1,2})${ORD}\\s?${MONTHS}(?:\\s(\\d{4}))?${B1}`),
     read: (m, t) => dayOf(fullYear(m[3]), month(m[2]), Number(m[1]), t),
+    explicit: true,
   },
   // nov 12, november 12th, 2025
   {
     re: re(`${B0}${MONTHS}\\s(\\d{1,2})${ORD}(?:,?\\s(\\d{4}))?${B1}`),
     read: (m, t) => dayOf(fullYear(m[3]), month(m[1]), Number(m[2]), t),
+    explicit: true,
   },
   // nov 2025
   {
     re: re(`${B0}${MONTHS}\\s(\\d{4})${B1}`),
     read: (m, t) => monthOf(fullYear(m[2]), month(m[1]), t),
+    explicit: true,
   },
   // last monday
   {
     re: re(`${B0}last\\s(${WEEKDAY_LATIN.map(esc).join('|')})${B1}`),
     read: (m, t) => {
-      const w = DATE_WORDS[m[1] ?? ''];
-      return typeof w === 'object' ? wordRange({ weekday: w.weekday, last: true }, t) : null;
+      const w = weekdayWord(m[1] ?? '');
+      return w === undefined ? null : wordRange({ weekday: w, last: true }, t);
     },
   },
   // today, last week, monday, วันจันทร์ …
@@ -304,23 +417,52 @@ const MATCHERS: readonly Matcher[] = [
 export type DateSplit = {
   /** The date phrase's inclusive range, or null when the query has none (or an impossible one). */
   range: DateQuery;
-  /** The rest of the query, lowercased, single-spaced (fillers like "on" dropped next to a date). */
+  /**
+   * The rest of the query, lowercased, single-spaced (next to a date: fillers like "on" and kind
+   * words like "workout" dropped, and the date's possessive "'s").
+   */
   words: string;
+  /** Next to a date only: the kinds its kind words named (PERSONAL_KINDS order); absent = all. */
+  kinds?: PersonalKind[];
 };
+
+/** The words left next to a date: fillers and kind words out (Thai ones by substring). */
+function wordsNextToDate(rest: string): { words: string; kinds: PersonalKind[] } {
+  const kinds = new Set<PersonalKind>();
+  const out: string[] = [];
+  for (const tok of rest.split(' ')) {
+    const kind = KIND_WORDS[tok];
+    if (kind !== undefined) kinds.add(kind);
+    else if (tok === '' || DATE_FILLERS.has(tok)) continue;
+    else if (!THAI.test(tok)) out.push(tok);
+    else {
+      let t = tok;
+      for (const [w, k] of THAI_STRIP) {
+        if (!t.includes(w)) continue;
+        t = t.split(w).join(' ');
+        if (k !== null) kinds.add(k);
+      }
+      out.push(...t.split(' ').filter((x) => x !== ''));
+    }
+  }
+  return { words: out.join(' '), kinds: PERSONAL_KINDS.filter((k) => kinds.has(k)) };
+}
 
 /** Finds a date phrase in `query` (today = local YYYY-MM-DD) and splits it from the other words. */
 export function splitDateQuery(query: string, today: string): DateSplit {
   const s = query.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim();
-  for (const { re: pattern, read } of MATCHERS) {
+  for (const { re: pattern, read, explicit } of MATCHERS) {
     const m = pattern.exec(s);
     if (m === null) continue;
     const range = read(m, today);
     if (range === null) return { range: null, words: s };
-    const rest = `${s.slice(0, m.index)} ${s.slice(m.index + m[0].length)}`
-      .split(' ')
-      .filter((w) => w !== '' && !DATE_FILLERS.has(w))
-      .join(' ');
-    return { range, words: rest };
+    const before = s.slice(0, m.index);
+    const lead = explicit === true ? LEADING_DAY.exec(before) : null;
+    const after = s.slice(m.index + m[0].length).replace(/^['’]s(?![\p{L}\p{M}\p{N}])/u, '');
+    const { words, kinds } = wordsNextToDate(
+      `${lead === null ? before : before.slice(0, lead.index)} ${after}`,
+    );
+    return kinds.length > 0 ? { range, words, kinds } : { range, words };
   }
   return { range: null, words: s };
 }
@@ -505,8 +647,6 @@ export function mealSearchItems(
 
 // ---------- ranking ----------
 
-export type PersonalKind = 'workout' | 'meal' | 'chat';
-
 /** Section order (SPEC M13c goal 3: Exercises, Workouts, Meals, Coach, …). */
 export const PERSONAL_KINDS: readonly PersonalKind[] = ['workout', 'meal', 'chat'];
 
@@ -558,7 +698,8 @@ export function personalKinds(kinds: readonly PersonalKind[] | undefined): Perso
 }
 
 /**
- * Ranks workout / chat / meal items for `query`: a date phrase filters by `date`, the other
+ * Ranks workout / chat / meal items for `query`: a date phrase filters by `date`, kind words next
+ * to it keep only those kinds' sections (the others come back empty), the other
  * words must match (task 3 rules), then newest first (match tier, then input order, within a
  * day). Blank, or one letter without a date, finds nothing.
  */
@@ -567,13 +708,14 @@ export function rankPersonal(
   query: string,
   opts: RankPersonalOptions,
 ): PersonalResults {
-  const { range, words } = splitDateQuery(query, opts.today);
+  const { range, words, kinds: named } = splitDateQuery(query, opts.today);
   const perKind = Math.max(1, Math.floor(opts.perKind ?? PERSONAL_PER_KIND));
   const usable = range !== null || [...normalizeSearchText(words)].length >= 2;
   const wordless = normalizeSearchText(words) === '';
   const sections = personalKinds(opts.kinds).map((kind): PersonalSection => {
     const offset = sectionOffset(opts.offset, kind);
-    if (!usable) return { kind, hits: [], total: 0, offset, more: false };
+    if (!usable || (named !== undefined && !named.includes(kind)))
+      return { kind, hits: [], total: 0, offset, more: false };
     const pool = items.filter(
       (it) =>
         it.kind === kind &&

@@ -109,7 +109,6 @@ describe('parseDateQuery (today = Wed 18 Nov 2026)', () => {
 
   it('Thai day names and phrases come from the data table', () => {
     expect(p('วันจันทร์')).toEqual(range('2026-11-16'));
-    expect(p('จันทร์')).toEqual(range('2026-11-16'));
     expect(p('วันพฤหัสบดี')).toEqual(range('2026-11-12'));
     expect(p('วันอาทิตย์')).toEqual(range('2026-11-15'));
     expect(p('วันพุธ')).toEqual(range('2026-11-18'));
@@ -131,6 +130,142 @@ describe('parseDateQuery (today = Wed 18 Nov 2026)', () => {
     for (const q of ['', '  ', 'bench', '12', '2.5', '8-12', 'decline', 'dec', 'monster', 'ข้าว']) {
       expect(p(q), q).toBeNull();
     }
+  });
+});
+
+describe('M13c review: ordinary words are not dates', () => {
+  const p = (q: string) => parseDateQuery(q, TODAY);
+
+  it('bare "may", "sun", "sat" and "wed" stay words', () => {
+    for (const q of [
+      'may',
+      'i may skip',
+      'sun',
+      'sun dried tomato',
+      'sat',
+      'wed',
+      'sat on the bench',
+    ])
+      expect(p(q), q).toBeNull();
+    expect(splitDateQuery('I may skip', TODAY)).toEqual({ range: null, words: 'i may skip' });
+    expect(splitDateQuery('sun dried tomato', TODAY)).toEqual({
+      range: null,
+      words: 'sun dried tomato',
+    });
+  });
+
+  it('"may" with a day or a year is still May', () => {
+    expect(p('may 12')).toEqual(range('2026-05-12'));
+    expect(p('12 may')).toEqual(range('2026-05-12'));
+    expect(p('may 2025')).toEqual(range('2025-05-01', '2025-05-31'));
+  });
+
+  it('full day names and the other short forms still work; "last sat" too', () => {
+    expect(p('sunday')).toEqual(range('2026-11-15'));
+    expect(p('saturday')).toEqual(range('2026-11-14'));
+    expect(p('wednesday')).toEqual(range('2026-11-18'));
+    expect(p('weds')).toEqual(range('2026-11-18'));
+    expect(p('fri')).toEqual(range('2026-11-13'));
+    expect(p('thu')).toEqual(range('2026-11-12'));
+    expect(p('last sat')).toEqual(range('2026-11-14'));
+    expect(p('last sun')).toEqual(range('2026-11-15'));
+  });
+
+  it('a day name right before an explicit date is part of the date', () => {
+    for (const q of [
+      'sat 14 nov',
+      'Sat, 14 Nov',
+      'saturday 14 november',
+      'วันเสาร์ที่ 14 พ.ย.',
+      'วันเสาร์ 14 พ.ย.',
+    ])
+      expect(splitDateQuery(q, TODAY), q).toEqual({ range: range('2026-11-14'), words: '' });
+    expect(splitDateQuery('rice sat 14 nov', TODAY)).toEqual({
+      range: range('2026-11-14'),
+      words: 'rice',
+    });
+    expect(splitDateQuery('wed 2026-11-11', TODAY)).toEqual({
+      range: range('2026-11-11'),
+      words: '',
+    });
+  });
+
+  it('Thai day names need "วัน" (bare ones are also planets and the moon)', () => {
+    for (const q of ['พระจันทร์', 'จันทร์', 'ดาวเสาร์', 'ดาวศุกร์', 'ดาวอังคาร', 'ดาวพุธ', 'ดาวพฤหัส'])
+      expect(p(q), q).toBeNull();
+    expect(p('วันเสาร์')).toEqual(range('2026-11-14'));
+    expect(p('วันพฤหัส')).toEqual(range('2026-11-12'));
+    // "<day>ที่แล้ว" (last <day>) is clear without "วัน".
+    expect(p('จันทร์ที่แล้ว')).toEqual(range('2026-11-16'));
+    expect(p('ศุกร์ที่แล้ว')).toEqual(range('2026-11-13'));
+    expect(p('วันศุกร์ที่แล้ว')).toEqual(range('2026-11-13'));
+  });
+});
+
+describe('M13c review: kind words next to a date', () => {
+  const s = (q: string) => splitDateQuery(q, TODAY);
+
+  it("possessive 's goes; a kind word limits the kinds and is not a search word", () => {
+    expect(s("today's workout")).toEqual({
+      range: range('2026-11-18'),
+      words: '',
+      kinds: ['workout'],
+    });
+    expect(s('Today’s workout')).toEqual({
+      range: range('2026-11-18'),
+      words: '',
+      kinds: ['workout'],
+    });
+    expect(s('yesterday workout')).toEqual({
+      range: range('2026-11-17'),
+      words: '',
+      kinds: ['workout'],
+    });
+    expect(s('what did i eat yesterday')).toEqual({
+      range: range('2026-11-17'),
+      words: '',
+      kinds: ['meal'],
+    });
+    expect(s('what did the coach say on monday')).toEqual({
+      range: range('2026-11-16'),
+      words: '',
+      kinds: ['chat'],
+    });
+    expect(s('bench session last week')).toEqual({
+      range: range('2026-11-09', '2026-11-15'),
+      words: 'bench',
+      kinds: ['workout'],
+    });
+    expect(s('yesterday meals and chat')).toEqual({
+      range: range('2026-11-17'),
+      words: '',
+      kinds: ['meal', 'chat'],
+    });
+  });
+
+  it('Thai: กิน / อะไร go, a food word like ข้าว stays', () => {
+    expect(s('เมื่อวานกินอะไร')).toEqual({ range: range('2026-11-17'), words: '', kinds: ['meal'] });
+    expect(s('เมื่อวานฉันกินอะไรบ้าง')).toEqual({
+      range: range('2026-11-17'),
+      words: '',
+      kinds: ['meal'],
+    });
+    expect(s('กินข้าวเมื่อวาน')).toEqual({
+      range: range('2026-11-17'),
+      words: 'ข้าว',
+      kinds: ['meal'],
+    });
+    expect(s('วันจันทร์เล่นอะไร')).toEqual({
+      range: range('2026-11-16'),
+      words: '',
+      kinds: ['workout'],
+    });
+  });
+
+  it('without a date, kind words are ordinary search words', () => {
+    expect(s('workout')).toEqual({ range: null, words: 'workout' });
+    expect(s('what did coach say')).toEqual({ range: null, words: 'what did coach say' });
+    expect(s('กินข้าว')).toEqual({ range: null, words: 'กินข้าว' });
   });
 });
 
@@ -415,6 +550,24 @@ describe('rankPersonal', () => {
     expect(ids(rank('rice last week')).meal).toEqual(['2026-11-10']);
     expect(ids(rank('rice')).meal).toEqual(['2026-11-17', '2026-11-10']);
     expect(ids(rank('bench yesterday'))).toEqual({ workout: ['s-push'], meal: [], chat: ['2'] });
+  });
+
+  it('a kind word next to a date keeps only that kind (M13c review)', () => {
+    expect(ids(rank('yesterday workout'))).toEqual({ workout: ['s-push'], meal: [], chat: [] });
+    expect(ids(rank("monday's workout"))).toEqual({ workout: ['s-pull'], meal: [], chat: [] });
+    expect(ids(rank('เมื่อวานกินอะไร'))).toEqual({ workout: [], meal: ['2026-11-17'], chat: [] });
+    expect(ids(rank('what did the coach say yesterday'))).toEqual({
+      workout: [],
+      meal: [],
+      chat: ['3', '2'],
+    });
+    expect(ids(rank('bench chat yesterday'))).toEqual({ workout: [], meal: [], chat: ['2'] });
+    const r = rank('yesterday workout');
+    expect(r.sections.map((x) => [x.kind, x.total, x.more])).toEqual([
+      ['workout', 1, false],
+      ['meal', 0, false],
+      ['chat', 0, false],
+    ]);
   });
 
   it('meals by Thai food name inside a longer Thai word', () => {
