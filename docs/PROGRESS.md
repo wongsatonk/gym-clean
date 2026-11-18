@@ -177,7 +177,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Fake camera: right synthetic row clip counts 4 with the "Right arm" label, one Next arm tap, the left clip counts 4; the side never changes without the tap; after the first rep an out-of-frame stretch shows the top strip, not the card.
   - Done when: green 3×.
   - Deps: 7, 16.
-- [ ] 19. [reviewer] Review the branch diff against CLAUDE.md (ownership, tests first, sizes, voice over screen, no video staged, privacy).
+- [x] 19. [reviewer] Review the branch diff against CLAUDE.md (ownership, tests first, sizes, voice over screen, no video staged, privacy).
   - Deps: 17, 18.
 - [ ] 20. [verifier] Verify milestone against SPEC M13b acceptance criteria: `npm run check`, `npm run e2e`, `npm run build` (1.15.1), fixture suite numbers, 390×844 screenshots `docs/screenshots/m13b-verify-*`, console clean; evidence into "Verification evidence → M13b".
   - Deps: 19.
@@ -3617,6 +3617,8 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-17: **M13b real row fixtures, revised (replaces "only clip 01 is a hard count target" below).** His words: "I count by myself because the camera log wrong number even I stand at the front of camera it still count up". His own logged counts are the truth (set 1 = 12, set 2 = 10, set 3 = 5); the task-1 counts came from the app's own target bar, which counted while he wasn't rowing. So **all five `row/real-*` clips are upper-bound / no-false-reps checks**: the `__reps-N__partials-0` in their names is a **ceiling, not an exact count** (an exception to SPEC §5's naming), counts must never go down, and the non-rowing spans count nothing. Today the bent-over clip 01 counts **0 reps / 5 partials** (its pulls read shallow in the screen recording); the row's angle thresholds stay unchanged until real dev-log landmarks from the K2 session (M13b-q4). The merge ask must say this plainly: in 1.15.1 the row may still undercount; Fix per side covers it.
 
 - 2026-11-17: **M13b: 1.15.1 carries What's New pages** (one exception to the 2026-11 policy "tour pages always come with a new MINOR"): two everyone pages (`next-arm`, `setup-card`), because the right-then-left flow changes how a set works and he must hear about it before the gym. The K2 to-do topic `one-arm-sets` is `platform: 'any'` (he trained in Safari last time).
 

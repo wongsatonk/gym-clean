@@ -843,12 +843,21 @@ export function mountApp(root: HTMLElement): void {
     void camera.start();
   }
 
+  /** M13b: true while a hands-free auto start dispatches (no side start line then). */
+  let autoStarting = false;
+
   function handsFreeOptions(): HandsFreeOptions {
     return {
       onAutoStart: ({ at, frameT }) => {
         // The set's frames from 1.5 s before the first rep go into the dev log (pre-roll).
         cameraPrerollFromT = frameT - 1500;
-        dispatch({ type: 'START_SET', now: at });
+        // He is already reps into the right arm: no "Right arm first." over the count words.
+        autoStarting = true;
+        try {
+          dispatch({ type: 'START_SET', now: at });
+        } finally {
+          autoStarting = false;
+        }
         cameraPrerollFromT = undefined;
       },
       onCommit: ({ endedAt }) => {
@@ -4603,10 +4612,17 @@ export function mountApp(root: HTMLElement): void {
         backupFileName(t),
         `${APP_NAME} backup`,
       );
+      // In the iPhone app a download link does nothing: only the share sheet saves the file.
       restoreStep =
         res === 'cancelled'
           ? { kind: 'message', text: 'Backup not saved.', error: false }
-          : { kind: 'message', text: 'Backup ready. Keep the file somewhere safe.', error: false };
+          : res === 'downloaded' && native
+            ? { kind: 'message', text: "Couldn't open the share sheet. Try again.", error: true }
+            : {
+                kind: 'message',
+                text: 'Backup ready. Keep the file somewhere safe.',
+                error: false,
+              };
     } catch (err) {
       logDbError(err);
       restoreStep = { kind: 'message', text: "Couldn't make the backup. Try again.", error: true };
@@ -4986,7 +5002,7 @@ export function mountApp(root: HTMLElement): void {
    * comes up: workout start, after rest, the exercise list or Skip.
    */
   function speakSideStart(prev: SessionState | null, s: SessionState): void {
-    if (!shouldSpeakFocusCue(prev, s) || s.doneSide) return;
+    if (autoStarting || !shouldSpeakFocusCue(prev, s) || s.doneSide) return;
     const limb = oneSidedLimb(currentPlanned(s)?.exerciseId ?? '');
     if (limb) voice.speak(ONE_SIDED_COPY[limb].spokenStart, { kind: 'cue' });
   }
@@ -5262,7 +5278,7 @@ export function mountApp(root: HTMLElement): void {
   /** M13b: the first side is done: log it, then NEXT_SIDE (the counter flips via syncCamera). */
   function nextSide(s: SessionState): void {
     const from = currentSide(s);
-    if (!from || s.doneSide || s.phase !== 'exercise') return;
+    if (!from || s.doneSide || s.phase !== 'exercise' || s.paused) return;
     const counts = { reps: s.reps, partials: s.partials };
     rec(
       (r) =>
