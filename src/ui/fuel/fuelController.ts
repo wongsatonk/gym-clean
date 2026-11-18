@@ -734,13 +734,22 @@ export function createFuel(host: FuelHost) {
   }
 
   const LOG_OPEN = '[data-log-open]';
+  /** M13c 12b: a past day has "Back to today" where Log food would be. */
+  const FUEL_TODAY = '[data-fuel-today]';
   const entryEditSel = (id: string) => `[data-entry-edit="${id}"]`;
 
-  /** Focus `sel` on the current screen, else its Log button (never left on <body>). */
+  /**
+   * Focus `sel` on the current screen, else its Log button, else (a past day) Back to today
+   * (never left on <body>).
+   */
   function focusOn(sel: string): void {
     const root = host.root;
     if (sheet || typeof root.querySelector !== 'function') return;
-    (root.querySelector<HTMLElement>(sel) ?? root.querySelector<HTMLElement>(LOG_OPEN))?.focus();
+    (
+      root.querySelector<HTMLElement>(sel) ??
+      root.querySelector<HTMLElement>(LOG_OPEN) ??
+      root.querySelector<HTMLElement>(FUEL_TODAY)
+    )?.focus();
   }
 
   /** `refocus`: where focus goes once the sheet is gone (false: the caller decides). */
@@ -781,15 +790,32 @@ export function createFuel(host: FuelHost) {
     host.toast(`Logged ${e.label}.`, () => void removeEntry(e, false));
   }
 
+  /**
+   * M13c 12b: an entry changed or went away. `entries` holds the 30-day window; a past day older
+   * than that is shown from `viewEntries`, so both lists follow (`next` null: removed).
+   */
+  function putEntry(id: string, next: FoodEntry | null): void {
+    // Edited rows keep their place; a restored row goes on the end.
+    const apply = (list: FoodEntry[], keep: boolean): FoodEntry[] => {
+      if (!next || !keep) return list.filter((x) => x.id !== id);
+      return list.some((x) => x.id === id)
+        ? list.map((x) => (x.id === id ? next : x))
+        : [...list, next];
+    };
+    const windowStart = addDate(today(), -(ENTRY_DAYS - 1));
+    entries = apply(entries, next !== null && next.date >= windowStart);
+    if (viewEntries !== null) viewEntries = apply(viewEntries, next?.date === viewDate);
+  }
+
   async function removeEntry(e: FoodEntry, undoable: boolean, focus?: string): Promise<void> {
     await track(deleteEntry(db, e.id));
-    entries = entries.filter((x) => x.id !== e.id);
+    putEntry(e.id, null);
     afterChange(focus);
     if (undoable)
       host.toast(`Deleted ${e.label}.`, () => {
         void track(restoreEntry(db, e))
           .then(() => {
-            entries = [...entries.filter((x) => x.id !== e.id), e];
+            putEntry(e.id, e);
             afterChange();
           })
           .catch(host.logError);
@@ -1091,14 +1117,16 @@ export function createFuel(host: FuelHost) {
             closeSheet(entryEditSel(e.id));
             void track(saveEntry(db, next))
               .then(() => {
-                entries = entries.map((x) => (x.id === e.id ? next : x));
+                putEntry(e.id, next);
                 afterChange(entryEditSel(e.id));
               })
               .catch(host.logError);
           },
           onDelete: () => {
-            closeSheet();
-            void removeEntry(e, true, LOG_OPEN).catch(host.logError);
+            // A past day has no Log food: Back to today takes focus there.
+            const home = viewDate === null ? LOG_OPEN : FUEL_TODAY;
+            closeSheet(home);
+            void removeEntry(e, true, home).catch(host.logError);
           },
           onClose: () => closeSheet(entryEditSel(e.id)),
         },
