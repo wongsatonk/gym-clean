@@ -11,9 +11,13 @@
 // M12 slice 1b (optional, short on time): a row done back to back with another shows a pair
 // label, "Pair: back to back with Triceps Pushdown" (`.pair-note`, `li.ex-row[data-pair]`; icon
 // + words, never colour alone). The pair rest is in the row's plan text (app.ts formats it).
+// M13c goal 4 (optional): `onBadge` makes the row's badges buttons (`[data-badge-open=<kind>]`)
+// and `onOpenExercise` makes the rest of the row open the exercise's detail: the name becomes a
+// button (`[data-ex-open=<id>]`) whose target covers the row (`li.ex-row.ex-row-tap`). Nothing
+// here starts a workout; without them the rows render exactly as before.
 import type { PlannedExercise, ProgramDay } from '../../core/types';
 import { exerciseById } from '../../data/catalog';
-import { badgesFor } from '../badges';
+import { badgesFor, type BadgeKind } from '../badges';
 import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -84,6 +88,13 @@ export type PreviewActions = {
   onSeeGymSwap?: ((exerciseId: string) => void) | undefined;
   /** M10e: Keep it on the missing-kit prompt. */
   onKeepExercise?: ((exerciseId: string) => void) | undefined;
+  /**
+   * M13c: a badge was tapped (3D demo / Info → How-to sheet, Camera → Camera sheet, Learning →
+   * learn card). Makes the badges buttons; `opener` is the badge, for focus return.
+   */
+  onBadge?: ((kind: BadgeKind, exerciseId: string, opener: HTMLElement) => void) | undefined;
+  /** M13c: a tap anywhere else on a row opens the exercise's detail. */
+  onOpenExercise?: ((exerciseId: string) => void) | undefined;
 };
 
 /** The "Adjusted" badge: icon + word (never colour alone). */
@@ -91,18 +102,39 @@ function adjustedBadge(): HTMLElement {
   return h('span', { class: 'adj-badge' }, icon('pencil', 'sm'), 'Adjusted');
 }
 
-function exRow(r: PreviewRow): HTMLElement {
+function exRow(r: PreviewRow, actions: PreviewActions): HTMLElement {
+  const { onBadge, onOpenExercise } = actions;
+  const name = h('strong', { class: 'ex-row-name' }, r.name);
   return h(
     'li',
     {
-      class: r.adjusted ? 'ex-row adjusted' : 'ex-row',
+      class: ['ex-row', r.adjusted ? 'adjusted' : '', onOpenExercise ? 'ex-row-tap' : '']
+        .filter(Boolean)
+        .join(' '),
       'data-ex': r.exerciseId,
       'data-adjusted': r.adjusted,
       'data-pair': r.pairedWith ? true : undefined,
     },
-    h('strong', { class: 'ex-row-name' }, r.name),
+    onOpenExercise
+      ? h(
+          'button',
+          {
+            type: 'button',
+            class: 'ex-row-open',
+            'data-ex-open': r.exerciseId,
+            onclick: () => onOpenExercise(r.exerciseId),
+          },
+          name,
+          icon('back', 'sm', { class: 'ex-row-chev' }),
+        )
+      : name,
     r.adjusted ? adjustedBadge() : null,
-    badgesFor({ exerciseId: r.exerciseId, tracking: r.tracking }),
+    badgesFor({
+      exerciseId: r.exerciseId,
+      tracking: r.tracking,
+      name: r.name,
+      onBadge: onBadge ? (kind, opener) => onBadge(kind, r.exerciseId, opener) : undefined,
+    }),
     r.adjustNote ? h('span', { class: 'adj-note' }, r.adjustNote) : null,
     r.pairedWith
       ? h(
@@ -162,7 +194,7 @@ export function previewScreen(props: PreviewProps, actions: PreviewActions): HTM
           )
         : null,
     ),
-    h('ol', { class: 'ex-list' }, ...props.rows.map(exRow)),
+    h('ol', { class: 'ex-list' }, ...props.rows.map((r) => exRow(r, actions))),
     props.removedRows?.length
       ? h(
           'section',

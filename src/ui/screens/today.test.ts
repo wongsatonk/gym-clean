@@ -322,6 +322,92 @@ describe('previewScreen', () => {
     go.click();
     expect(ready.calls.start).toEqual([PULL_A.id]);
   });
+
+  it('M13c: without onBadge / onOpenExercise the rows are unchanged (static badges, no open)', () => {
+    const { el } = renderPreview(false);
+    const row = el.byClass('ex-row')[0] as FakeEl;
+    expect(row.classes).toEqual(['ex-row']);
+    expect(row.children[0]?.tag).toBe('strong');
+    expect(row.byTag('button')).toHaveLength(0);
+    expect(el.find((e) => e.hasAttribute('data-badge-open'))).toHaveLength(0);
+    expect(el.find((e) => e.hasAttribute('data-ex-open'))).toHaveLength(0);
+  });
+});
+
+// ---------- M13c goal 4: tappable badges + row → detail ----------
+
+describe('previewScreen with M13c badge and row callbacks', () => {
+  const rows: PreviewRow[] = PULL_A.exercises.map((p, i) => ({
+    exerciseId: p.exerciseId,
+    tracking: p.tracking,
+    name: `Ex ${i}`,
+    plan: `${p.sets} × 8–12 reps`,
+  }));
+
+  function render() {
+    const calls = {
+      start: 0,
+      open: [] as string[],
+      badge: [] as [string, string, FakeEl][],
+    };
+    const el = asFake(
+      previewScreen(
+        { day: PULL_A, position: 2, total: 6, rows, loading: false },
+        {
+          onBack: () => {},
+          onStart: () => calls.start++,
+          onOpenExercise: (id) => calls.open.push(id),
+          onBadge: (kind, id, opener) => calls.badge.push([kind, id, asFake(opener)]),
+        },
+      ),
+    );
+    return { el, calls };
+  }
+
+  it('each row: the name is an open button covering the row; badges are buttons', () => {
+    const { el } = render();
+    const items = el.byClass('ex-row');
+    expect(items).toHaveLength(PULL_A.exercises.length);
+    items.forEach((row, i) => {
+      expect(row.classes).toContain('ex-row-tap');
+      const open = row.find((e) => e.hasAttribute('data-ex-open'));
+      expect(open).toHaveLength(1);
+      expect(open[0]?.tag).toBe('button');
+      expect(open[0]?.getAttribute('data-ex-open')).toBe(rows[i]?.exerciseId);
+      expect(open[0]?.oneByClass('ex-row-name').textContent).toBe(`Ex ${i}`);
+      const badges = row.find((e) => e.hasAttribute('data-badge-open'));
+      expect(badges.length).toBeGreaterThanOrEqual(1);
+      for (const b of badges) expect(b.tag).toBe('button');
+      // Labels use the row's display name.
+      expect(badges[0]?.getAttribute('aria-label')).toMatch(new RegExp(` for Ex ${i}$`));
+    });
+  });
+
+  it('a row tap opens the detail; a badge tap calls onBadge only; nothing starts', () => {
+    const { el, calls } = render();
+    const row = el.byClass('ex-row')[1] as FakeEl;
+    const id = rows[1]?.exerciseId as string;
+    (row.find((e) => e.hasAttribute('data-ex-open'))[0] as FakeEl).click();
+    expect(calls.open).toEqual([id]);
+    const badge = row.find((e) => e.hasAttribute('data-badge-open'))[0] as FakeEl;
+    badge.click();
+    expect(calls.badge).toHaveLength(1);
+    expect(calls.badge[0]?.[0]).toBe(badge.getAttribute('data-badge-open'));
+    expect(calls.badge[0]?.[1]).toBe(id);
+    expect(calls.badge[0]?.[2]).toBe(badge);
+    expect(calls.open).toEqual([id]);
+    expect(calls.start).toBe(0);
+  });
+
+  it('a pose row offers Camera; the camera badge reports "camera" with its exercise id', () => {
+    const { el, calls } = render();
+    const pose = rows.findIndex((r) => r.tracking === 'pose');
+    expect(pose).toBeGreaterThanOrEqual(0);
+    const row = el.byClass('ex-row')[pose] as FakeEl;
+    const cam = row.find((e) => e.getAttribute('data-badge-open') === 'camera')[0] as FakeEl;
+    cam.click();
+    expect(calls.badge.map((c) => [c[0], c[1]])).toEqual([['camera', rows[pose]?.exerciseId]]);
+  });
 });
 
 // ---------- M10 trainer props ----------

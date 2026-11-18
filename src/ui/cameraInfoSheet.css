@@ -1,0 +1,207 @@
+/* M13c goal 4: the Camera sheet (src/ui/cameraInfoSheet.ts). Tokens only, Pro mood. Body ≥ 20px,
+   taps ≥ 56px. Same shape and layer as the learn card (40: above sheets 20, below How-to 50).
+   Colour roles: Practice is the one orange CTA; Close is a neutral surface-2 button; the
+   learning note has an info edge (a note, never a warning colour). The veil fades in (CSS, zeroed
+   by the global reduced-motion rule); the panel's rise is motion.ts enterScreen. */
+
+.camsheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.camsheet-veil {
+  position: absolute;
+  inset: 0;
+  background: var(--veil);
+  animation: motion-fade var(--dur-base) var(--ease-standard);
+}
+
+.camsheet-panel {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: 92dvh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+  border-top: var(--line-w) solid var(--line);
+  border-radius: var(--r-card) var(--r-card) 0 0;
+  min-width: 0;
+}
+
+/* The body scrolls; the actions below it stay in view. */
+.camsheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 16px 12px;
+}
+
+.camsheet-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.camsheet-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.camsheet-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.camsheet-h {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.camsheet-counts {
+  margin: 0;
+  font-size: var(--fs-lead);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.camsheet-place {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* The shared pictogram (stroke colours from .setup-pic in styles.css), a little larger here. */
+.camsheet .camsheet-pic {
+  flex: none;
+  width: 108px;
+  height: 72px;
+}
+
+.camsheet-lines {
+  margin: 0;
+  padding-left: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--fs-body);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.camsheet-facts {
+  flex: 1 1 auto;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.camsheet-fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
+  min-width: 0;
+}
+
+.camsheet-fact dt {
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.camsheet-fact dd {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.camsheet-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-btn);
+  background: var(--surface-2);
+  font-size: var(--fs-body);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.camsheet-note .ic {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-2);
+}
+
+.camsheet-learning {
+  border-left: 4px solid var(--info);
+}
+
+.camsheet-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+  border-top: var(--line-w) solid var(--line);
+}
+
+.camsheet .camsheet-practice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap-cta);
+  margin-top: 0;
+  font-size: var(--fs-lead);
+}
+
+.camsheet-practice-note {
+  margin: 0;
+  text-align: center;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.camsheet-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: var(--tap-bar);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  background: var(--surface-2);
+  color: var(--text);
+}
