@@ -41,8 +41,9 @@ export default defineConfig({
       // Fixture clips counted on the wall clock (CLIP_SPECS): last, alone, one test at a time.
       // CI already runs workers: 1 overall.
       name: 'mobile-clips',
+      // One test at a time (workers: 1); fullyParallel only lets CI shard by test, not by file.
       workers: 1,
-      fullyParallel: false,
+      fullyParallel: true,
       dependencies: ['mobile-person-camera'],
       testMatch: CLIP_SPECS,
       use: {
