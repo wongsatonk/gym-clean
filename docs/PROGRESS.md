@@ -151,7 +151,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: `src/core/` stats modules that read `SetLog.reps` (tests only if they already do the right thing), `src/data/backup.ts`(+test), `src/data/devlog.ts`(+test), `src/data/whatsNew/pages.ts`(+test), `src/data/todos/topics.ts`(+test).
   - Done when: a `sides` set counts once in volume/bests/e1RM/stalls/completion with `reps` = lower side; backups round-trip `sides` (and old backups still load); the dev log records a `nextSide` event with its time and per-side counted/logged; a 1.15.1 What's New page ("Next arm") and a Checkpoint K2 to-do guide exist.
   - Deps: 10.
-- [ ] 13. [ui-engineer] Exercise screen + camera view: side label and Next arm.
+- [x] 13. [ui-engineer] Exercise screen + camera view: side label and Next arm.
   - Files: `src/ui/screens/exercise.ts`(+test), `src/ui/cameraView.ts`, `src/styles.css`, harness.
   - Side label ("Right arm", ≥ 20px) over the count (≥ 64px); on the first side the full-width primary button is **Next arm** (≥ 56px; no Set done there); on the second side Set done; Next arm speaks the switch line (cuts count speech) and calls back `onNextSide`; the camera view takes the side as a prop and shows it; manual one-sided exercises get per-side +/-; "leg" wording from task 5's data. Nothing else new reachable mid-set.
   - Done when: render tests (both sides, manual + camera, leg wording) and 390×844 screenshots `docs/screenshots/m13b-*` (right, left, camera with label).
@@ -1149,7 +1149,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Draws task 7's layout on a 1080×1920 canvas: tokens, the brand mark (original, from M13), text with a dark scrim for legibility.
   - Done when: render test + a 1080×1920 PNG of the overlay on a grey frame (screenshot), boxes inside the margins.
   - Deps: 7.
-- [ ] 13. [ui-engineer] Arm switch, recording dot, "Save last rep".
+- [x] 13. [ui-engineer] Arm switch, recording dot, "Save last rep".
   - Files: src/ui/screens/preview.ts(+test) ("Record best reps" switch, off each workout, one line "Clips stay on this phone. Others are blurred."), the camera screen module under src/ui (dot + "Clips" text while armed, top corner, not over the count), src/ui/screens/rest.ts(+test) ("Save last rep" ≥ 56px, "Saved" state; shown only when armed and a candidate exists).
   - Done when: render tests (off by default, dot only when armed, Save last rep hidden when not armed); 390×844 screenshots of preview, camera with the dot, Rest with the button.
   - Deps: 3.

@@ -15,6 +15,11 @@
 // (`[data-warmup]`, `[data-warmup-label]`) with Skip warm-ups (`[data-skip-warmups]`), and the
 // set badge reads "Warm-up 1 of 2" instead of "Set 1 of 4" (no working-set pip is lit). Plain
 // text and one button: no motion (this screen stays motion-off, motion.ts MOTION_OFF).
+// M13b one-sided set (`side` given, oneArm.ts): the reps stepper is headed by the side
+// ("Right arm", `[data-side-label]`), so its +/- are that side's. On the first side the CTA slot
+// holds Next arm (`[data-next-side]`, speaks the switch line, then onNextSide); Set done is not
+// offered there. On the second side a line gives the first side's reps (`[data-side-done]`) and
+// Set done ignores taps for SWITCH_GUARD_MS after the switch (a double tap on Next arm).
 import type { PlannedExercise } from '../../core/types';
 import { exerciseById } from '../../data/catalog';
 import { badgesFor } from '../badges';
@@ -22,6 +27,15 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { workoutTopBar } from '../topBar';
+import {
+  nextSideButton,
+  sideLabel,
+  sideLabelText,
+  sideOfTurn,
+  speakSideSwitch,
+  SWITCH_GUARD_MS,
+  type OneSidedView,
+} from '../oneArm';
 import { muscleLabel } from '../../core/dayInfo';
 
 export type StepField = 'reps' | 'weight';
@@ -65,6 +79,8 @@ export type ExerciseProps = {
    * `unit` are then the warm-up's; `setIndex` / `sets` stay the working sets (pips, all unlit).
    */
   warmup?: WarmupStep | undefined;
+  /** M13b: a one-sided set (`oneSidedView(id, s)`); undefined for a two-sided exercise. */
+  side?: OneSidedView | undefined;
 };
 
 export type ExerciseActions = {
@@ -82,6 +98,11 @@ export type ExerciseActions = {
    * goes to set 1.
    */
   onSkipWarmups?: (() => void) | undefined;
+  /**
+   * M13b, first side of a one-sided set: Next arm was tapped (the switch line is already being
+   * spoken). app.ts dispatches `{ type: 'NEXT_SIDE', now }`.
+   */
+  onNextSide?: (() => void) | undefined;
 };
 
 function stepper(
@@ -91,6 +112,7 @@ function stepper(
   name: string,
   value: string,
   onAdjust: ExerciseActions['onAdjust'],
+  head?: HTMLElement,
 ): HTMLElement {
   const btn = (dir: -1 | 1) =>
     h(
@@ -106,12 +128,13 @@ function stepper(
   return h(
     'div',
     { class: 'stepper ex-stepper', 'data-stepper': field },
-    h(
-      'p',
-      { class: 'st-label', 'aria-hidden': 'true' },
-      h('span', { class: 'caps' }, label),
-      h('small', {}, sub),
-    ),
+    head ??
+      h(
+        'p',
+        { class: 'st-label', 'aria-hidden': 'true' },
+        h('span', { class: 'caps' }, label),
+        h('small', {}, sub),
+      ),
     h(
       'div',
       { class: 'st-row' },
@@ -246,7 +269,24 @@ export function exerciseScreen(p: ExerciseProps, a: ExerciseActions): HTMLElemen
           h('p', { class: 'cue-text' }, p.cue),
         )
       : null,
-    stepper('reps', 'Reps', 'count', 'Reps', String(p.reps), a.onAdjust),
+    p.side?.turn === 'second' && p.side.doneReps !== undefined
+      ? h(
+          'p',
+          { class: 'side-done', 'data-side-done': true },
+          `${sideLabelText(p.side.limb, sideOfTurn('first'))}: `,
+          h('strong', {}, String(p.side.doneReps)),
+          ` ${p.side.doneReps === 1 ? 'rep' : 'reps'}`,
+        )
+      : null,
+    stepper(
+      'reps',
+      'Reps',
+      'count',
+      'Reps',
+      String(p.reps),
+      a.onAdjust,
+      p.side ? sideLabel(p.side.limb, sideOfTurn(p.side.turn)) : undefined,
+    ),
     stepper('weight', 'Weight', p.unit, p.unit, p.weightText, a.onAdjust),
     h(
       'button',
@@ -276,20 +316,32 @@ export function exerciseScreen(p: ExerciseProps, a: ExerciseActions): HTMLElemen
             : null,
         )
       : null,
-    h(
-      'div',
-      { class: 'sticky-bottom' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'primary-btn cta-btn',
-          'data-set-done': true,
-          onclick: a.onSetDone,
-        },
-        icon('check', 'lg'),
-        'Set done',
-      ),
-    ),
+    h('div', { class: 'sticky-bottom' }, ctaButton(p.side, a)),
+  );
+}
+
+/** Set done, or Next arm on the first side of a one-sided set. */
+function ctaButton(side: OneSidedView | undefined, a: ExerciseActions): HTMLElement {
+  if (side?.turn === 'first' && a.onNextSide) {
+    const onNext = a.onNextSide;
+    return nextSideButton(side.limb, () => {
+      speakSideSwitch(side.limb, sideOfTurn('second'));
+      onNext();
+    });
+  }
+  const switchedAt = side?.turn === 'second' ? side.switchedAt : undefined;
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: 'primary-btn cta-btn',
+      'data-set-done': true,
+      onclick: () => {
+        if (switchedAt !== undefined && Date.now() - switchedAt < SWITCH_GUARD_MS) return;
+        a.onSetDone();
+      },
+    },
+    icon('check', 'lg'),
+    'Set done',
   );
 }

@@ -1,0 +1,37 @@
+/* M13b task 13: one-sided sets ("Right arm", Next arm). Text only, no motion. */
+
+/* "Right arm" over the count: bold words in the main text colour (the limb word carries the
+   meaning, never colour alone), with a cue-coloured bar like the spoken lines. */
+.side-label {
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 6px solid var(--cue);
+  font-size: var(--fs-head);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+/* Exercise screen: the first side's reps once Next arm moved on ("Right arm 12 reps"). */
+.side-done {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.side-done strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Camera HUD: the label sits on top of the count, inside the solid rep panel. */
+.rep-panel .side-label.on-hud {
+  font-size: var(--fs-lead);
+}
+
+.rep-pin[hidden],
+.next-side-btn[hidden],
+.cam-bottom .cta-btn[hidden] {
+  display: none;
+}
