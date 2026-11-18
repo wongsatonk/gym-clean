@@ -1665,7 +1665,11 @@ number below is a default held as data and tuned at a checkpoint. Every change t
 #### Claude brain (slice 3; planned 2026-11-18)
 Wongsaton at Checkpoint J: the coach should "talk naturally, as human"; 2026-11-18: "plan Claude next".
 Planner calls are in Decision "M12 slice 3 plan" and the open ones are M12-s3-q1…q8 (defaults below). This
-section wins over M10 phase C where they differ.
+section wins over M10 phase C where they differ. **Release 1.17.0, after M13c (his answer to M13c-q4,
+2026-11-18).** M13c already ships the `CLAUDE_SENDS` / `CLAUDE_NEVER_SENDS` lists and a "Claude could help
+with this" explain card with no request behind it; slice 3 reuses both, and his rule (2026-11-18: "If coach
+does not have information enough and need to send data to Claude Api, explain to user") means no request
+ever goes out before that explanation and his yes. He will add his key "soon".
 - **Opt-in, off by default, every user.** Settings → Coach → **Claude coach**. Turning it on first shows a
   **"What is sent"** explainer with **I understand**. Each phone uses its own key (his wife can add hers).
 - **iPhone app only** (M12-s3-q2). The PWA shows "Claude coach is in the iPhone app." and never contacts
@@ -2166,7 +2170,239 @@ arm avoid the error while lifting up".** Planner defaults are in PROGRESS Decisi
   bent over, do the counts match each arm, is Next arm easy to hit with a dumbbell in hand, and does the
   set-up card stay out of the way.
 
-### M14 — Wrist and ears: Apple Watch app + AirPods head motion (approved 2026-11-17; builds after M13; release 1.16.0)
+### M13c — Library, abs and home polish (added 2026-11-18, after testing 1.15.2 on his iPhone; release 1.16.0; builds next, after M13b is merged, before M12 slice 3 (1.17.0) and M14 (1.18.0))
+Wongsaton (2026-11-18): **"I want to have background instead of just only black color in the app,
+expand/collapse voice selection in setting, search bar of the app, 3D demo badge in idle should show the 3d
+example when click it, user can see it from main screen doesn't need to start workout, also camera and learning
+badge. I didn't see any exercise for my abs. Overall of exercise display to see all of exercises in the app,
+options to group by exercise, machine, etc."** His answers to M13c-q1…q4 the same day are in PROGRESS Decision
+"M13c answers" (2026-11-18), which wins over Decision "M13c Library, abs and home polish" where they differ:
+**moving glow**, **search everything**, **abs through the focus you choose** (and a coach that knows your plan
+and explains before anything would go to Claude), **next, as 1.16.0**. Branch `m13c-library-abs`, cut from
+`main` once M13b is merged. Hard rules in CLAUDE.md win everywhere (dark theme, ≥ 64px numbers, ≥ 20px body,
+≥ 56px targets, original art, no medical claims, privacy). All copy says "you": each phone holds its own
+user's plan (his wife uses her own install), so nothing assumes him or a man.
+
+**What the app does today (read 2026-11-18):** the "3D demo" / "Info" / "Camera" / "Learning" badges
+(`src/ui/badges.ts`) are static pills, "not buttons", on the day preview rows (`screens/preview.ts`: Today's
+Start or a day card opens it; nothing has started yet), in the Exercise screen header and in the How-to sheet
+header. The 3D demo is reachable only from the Exercise screen's "How to" button, i.e. inside a workout. The
+phone set-up (placement) shows only when the camera opens in a set; "Learning" is explained nowhere outside a
+workout (a camera chip + "Still learning: fix the count on Rest."). There is no exercise list or search; the
+only per-exercise screen is Calendar → an exercise's history. `exercises.json` has 60 exercises (30 in the
+program + a 30-exercise swap pool) and **none has `abdominals` as a primary muscle**, although the 2D map, the
+3D body and the demo highlights already have an abdominals region and `bodyAreas.json` has a "Core" area.
+Settings → Voice lists every installed English voice as a long open list (drill-sergeant persona). Non-workout
+screens use a flat `#0d0f12`; in-workout screens are pure black (`.mood-track`).
+
+#### Goals
+1. **Background: a moving glow** (M13c-q1 answered: option c). Non-workout screens (Today, day preview, Fuel,
+   Coach, Calendar, Settings, Library, sheets on them) get a dark base with soft glows, one tinted by the
+   accent colour, that **drift slowly** (one cycle ≈ 40–60 s, small travel). Drawn by us in CSS: no image
+   files, no canvas, no JS animation loop. **Battery-cheap by construction:** the glow is a fixed,
+   pre-composited layer (`will-change: transform`) moved only with `transform` / `opacity` keyframes, so the
+   compositor animates it with no layout or paint per frame (no animated `background-position`, `filter` or
+   gradient stops). It **pauses** when the app is hidden (`visibilitychange`), while a sheet or the camera covers
+   the screen, and on every in-workout screen; **Reduce Motion** turns it into the still glow (the app's one
+   reduced-motion rule). **In-workout screens (Exercise, Rest, camera) stay pure black** (readability at 2 m,
+   OLED). A fixed layer behind the content (iOS ignores `background-attachment: fixed`); sticky bottoms and the
+   tab bar fade into it without a flat band. The brightest point the glow ever reaches keeps `--text-2` at
+   ≥ 4.5:1 and `--text` at ≥ 7:1, checked by a test. Settings → Accent colour gains **Background: Moving glow /
+   Plain** (Plain = today's flat look, nothing animates).
+2. **Voice picker collapses.** In Settings → Voice the voice list is a **disclosure row**, collapsed every time
+   Settings opens: "Voice" + the chosen voice ("Automatic: Daniel" or the picked one), a chevron, ≥ 56px,
+   `aria-expanded`. Tapping opens the list in place; picking a voice updates the row and keeps it open.
+   Calm / Drill sergeant, Rudeness and **Test voice** stay outside the collapse. No voices → the existing hint
+   shows directly. No behaviour change to which voice speaks.
+3. **Search.** A **Search** button (magnifier + the word, ≥ 56px) in the app bar of Today, Fuel, Calendar and
+   Settings (not Coach, which has its own text box; never on Exercise, Rest or the camera) opens the Library
+   with the search field focused. Scope (M13c-q2 answered: **everything**, all in 1.16.0):
+   - **Bundled data:** **exercises** (name, muscles, body-area words incl. the Thai ones in `bodyAreas.json`,
+     equipment, plan day, synonyms such as "abs", "six pack", "quads", "lats"), **Settings sections** (opens
+     Settings scrolled to that section), **Why? cards** (opens the card), and one row **"Search foods for
+     '…'"** that opens the Fuel log sheet with the text in its existing offline food search.
+   - **Your data on this phone:** **past workouts** (by day name, exercise, or a date: "yesterday", "monday",
+     "12 nov", "last week"; opens that Calendar day), **coach chat** (your messages and the coach's replies;
+     opens the Coach tab at that message), **logged meals** (food names, by date; opens that Fuel day).
+     Read from the local database on demand (no extra copy, no new table), newest first, capped per section
+     with "Show more".
+   Results come in sections (Exercises, Workouts, Meals, Coach, Settings, Why?, Foods). Exercises you've done
+   rank first among equal matches. Search runs entirely on the phone; nothing is sent, logged or backed up.
+4. **Tappable badges, outside a workout.** On the day preview rows and in the Library the badges become
+   **buttons** (the pill looks the same; the hit area is ≥ 56px tall; label "3D demo for Goblet Squat"):
+   - **3D demo** → the How-to sheet (looping 3D demo, phase text, tempo, how-to lines, focus, cue);
+     **Info** → the same sheet with the 2D map (as today).
+   - **Camera** → a new **Camera sheet**: "What the camera counts" (one line from the rule data, e.g. "Counts
+     each curl from your elbow angle."), the phone set-up pictogram + placement lines, distance and height,
+     "Right first, then Next arm" for one-sided exercises, the learning note when learning, and a **Practice**
+     button: the camera opens with that exercise's counter, counts and speaks as in a set, **saves nothing**
+     (no set, no session, no developer-log frames), hands-free off; Close returns to where you were.
+   - **Learning** → a learn card "Camera still learning" (what it means, fix the count on Rest).
+   - Tapping a preview row anywhere else opens the exercise's **detail** (goal 6). Badges on the Exercise
+     screen and in the camera view **stay static** (nothing new reachable mid-set). Opening any of these never
+     starts a workout.
+5. **Abs.** About **10 abdominal exercises** are vendored from `yuhonas/free-exercise-db` (Unlicense; category
+   `strength` only; exact ids checked against upstream at a pinned commit) for an apartment gym: body only,
+   dumbbell, cable and bench first. Candidates: Crunches, Reverse Crunch, Flat Bench Lying Leg Raise, Dead Bug,
+   Air Bike (bicycle crunch), Russian Twist, Dumbbell Side Bend, Cable Crunch (rope **or** bar, his gym has no
+   rope), Pallof Press (D-handle), Hanging Leg Raise (needs the pull-up bar; Library shows "Needs: Pull-up
+   bar"). Each gets a cue (≤ 8 words), 2–3 how-to lines, a tempo line, kit needs, the abdominals region on the
+   2D and 3D maps (sides lit for side bends / twists), and a **3D demo** where our mannequin can show it
+   (otherwise "Info" + the map, listed in PROGRESS).
+   - **Into the plan only when you choose it** (M13c-q3 answered: "It depends of the plan use choose to focus,
+     if they also choose abs, add the to their exercise."). No plan gets abs by itself:
+     - **Focus block:** **Abs & core** is a focus group you can pick (the M12 focus flow already lists `core`
+       once a doable abs exercise exists; with no core sets today its weekly target is the existing
+       `emptyBaseSets` 6). Picking another group (e.g. Chest) adds one step, **"Also add abs?"** (Yes / No):
+       Yes adds abs rows to the same block at the empty-base target (≥ 2 days, 3 sets each, 10–15 reps, 60 s
+       rest, kit from My gym), without changing the main group's numbers. Apply / Undo as for every block;
+       the abs rows end with the block like the other added rows, and the end-of-block "what next?" card
+       offers **"Keep abs in the next block"** (M13c-q5, open; this default is built unless he says otherwise).
+     - **Intake (new users):** one more question, **"Add abs to your plan?"** (No by default); Yes gives the
+       starter plan a core slot on ≥ 3 days.
+     - **Asking the coach** ("add abs", "core", "six pack", Thai "หน้าท้อง") opens the same focus flow with
+       Abs & core picked, never a silent change.
+   - **The coach knows your plan.** The on-device coach already reads today's plan, the next 7 days,
+     overrides, the focus block and the go-easy list. M13c adds one compact line it was missing: **weekly sets
+     per body area over the whole rotation** (e.g. "Weekly sets: chest 16, back 18, legs 14, shoulders 10,
+     arms 12, core 0") plus the rotation's day names, so it can tell you abs aren't in your plan and suggest
+     the focus. Apple's tool list stays unchanged (no Swift regeneration); the line fits the context budget
+     (test).
+   - **Claude: explain first, ask, never send by itself** (his words: "If coach does not have information
+     enough and need to send data to Claude Api, explain to user. I will add the Api key to the app soon.").
+     When the phone's coach can't answer a question (the "couldn't do that" / out-of-scope replies), the chat
+     shows once a day a **"Claude could help with this"** card: in plain words what would be sent (from one
+     data list, `CLAUDE_SENDS`, the same list M12 slice 3 uses) and what never is, and why. In 1.16.0 there is
+     no Claude client and no key, so the card's only actions are **"Tell me when it's ready"** (sets the
+     existing `coach.claudeWanted`) and **Not now**; nothing is ever sent. M12 slice 3 (1.17.0) turns the card's
+     yes into the real request, still only after this explanation.
+   - **Manual counting** for all of them in 1.16.0 (no "Camera" badge). Pallof Press and Dumbbell Side Bend are
+     done one side then the other and **logged as reps per side, one number** (not the M13b Next-arm flow);
+     Russian Twist and Dead Bug alternate and count one total, like lunges. Plank / side plank need timed
+     sets (seconds, not reps) and are **not** in 1.16.0.
+6. **Exercise Library.** A new screen (route `library`) lists **every exercise in the app** (program, swap
+   pool, abs), grouped by **Muscle** (default; body area → muscle), **Equipment** (Dumbbell, Barbell, Cable,
+   Machine, Kettlebell, Body only), **Plan day** (Push A … Legs B, in rotation order; an exercise can sit under
+   several; "Not in your plan" last), **Movement** (Push / Pull / Hold, compound or isolation) or **A–Z**, with
+   the search field on top and a **"My gym only"** switch (off: kit you lack reads "Needs: Rope attachment").
+   Group headers fold and show counts. Each row: name, tappable badges, main muscle, equipment.
+   - **Exercise detail** (route `library/exercise`): the name and badges; the 2D muscle map with its legend
+     and a **Watch 3D demo** button (the How-to sheet); how-to lines, tempo, focus line, the spoken cue;
+     equipment + whether your gym has it; the camera block (counts line + **Phone set-up** → the Camera sheet)
+     when tracked; **In your plan**: "Push A · 4 × 8–12 reps" per day, or "Not in your plan"; **History**:
+     last time, best set and "See history" (Calendar's existing exercise history), or "Not done yet". Read at
+     rest only; nothing here is spoken.
+7. **Food photo from your library** (his follow-up the same day: "Add the option to upload photo from library
+   in log food too"). Today the Log food photo button (`src/ui/fuel/photoCapture.ts`) sits over one hidden input
+   with `capture="environment"`, which forces the camera. It becomes two buttons, **Take photo** and **Choose
+   from library** (each ≥ 56px, icon + words), like Progress photos' Take / Pick from library: the first keeps
+   `capture="environment"`, the second has no `capture` (the iOS photo picker; no Photos permission prompt).
+   A library photo goes through exactly the same path: EXIF-upright decode, ≤ 512 px, on-device recognition,
+   top 3 + confirm, saved only if "Save photos" is on. Where there is no food model yet, the existing "add a
+   food model in Settings" line stays as it is.
+8. **What's New 1.16.0** pages (the moving background, Search everything + Library, tap a badge, Abs through a
+   focus, the coach knows your plan, photo from library) and a To-do guide for Checkpoint K3.
+
+#### Changes to earlier contracts
+- M4b badges ("Not buttons … nothing to press") → buttons on the preview rows, the Library and its detail;
+  still static on the Exercise screen, the camera view and inside the How-to sheet.
+- M13 goal 5 "One look": non-workout screens gain the background layer; `#0d0f12` stays the base and the
+  launch-screen colour; the track style stays pure black.
+- M10 catalog test "a 20–30 exercise swap pool" → 20–45 (the abs set sits in the pool).
+- M12 focus blocks: `FocusBlockParams` gains `alsoCore?: true` (abs rows added beside the main group at the
+  empty-base target); the main group's maths is unchanged. Apple's `proposeFocusBlock` tool schema is
+  **unchanged** (it can still pick `core` as the group); "Also add abs?" is a rules-flow chip.
+- M12 slice 1b intake gains `wantsCore?: boolean` ("Add abs to your plan?", default No).
+- M12 slice 2 context: one new line (weekly sets per area + rotation day names); `CONTEXT_BUDGET_CHARS`
+  re-checked by its test.
+- M12 slice 3: `CLAUDE_SENDS` / `CLAUDE_NEVER_SENDS` (its task 4 lists) and the explain card are built here,
+  in 1.16.0, without any request code; slice 3 reuses them.
+- M13b one-sided list: Pallof Press and Dumbbell Side Bend are deliberately **not** in it (one number per set).
+
+#### Non-goals
+Timed holds (plank); camera rep counting for any abs exercise (first candidates for a later wave: Dumbbell Side
+Bend, front view; Cable Crunch, side view); abs added to a plan without the user choosing them; an "Add to
+today" button in the Library; editing exercises or adding your own; any Claude request, key field or client
+(M12 slice 3, 1.17.0); a new Apple tool; searching progress photos, measurements, Health data or the dev log;
+several user profiles on one phone; a sixth tab; light theme; photo or video backgrounds; any change to the
+Exercise / Rest / camera screens beyond the Practice entry.
+
+#### Privacy
+No new network request; the Claude card only explains and stores `coach.claudeWanted`. Search, the Library
+and Practice run on the phone over bundled data and the local database; queries are not stored, logged or
+backed up; search never reads progress photos, measurements, Health data, check-in answers outside the chat
+thread, or the dev log. Practice keeps no frames, sets or dev-log rows. Vendored exercise text is public-domain
+data already credited on About → Licenses (free-exercise-db).
+
+#### Data model (adds to §4; final shape in `src/core/types.ts`)
+```ts
+// AppRoute gains: 'library' | 'library/exercise'
+type LibraryGroupBy = 'muscle' | 'equipment' | 'day' | 'movement' | 'az';
+type SearchKind = 'exercise' | 'setting' | 'learn' | 'food' | 'workout' | 'chat' | 'meal';
+type SearchItem = { kind: SearchKind; id: string; title: string; subtitle?: string; keywords: string[];
+  date?: string };                                             // workout / chat / meal: YYYY-MM-DD
+type SearchHit = SearchItem & { score: number };
+type DateQuery = { from: string; to: string } | null;          // "yesterday", "monday", "12 nov", "last week"
+type BackgroundStyle = 'glow' | 'plain';                      // settings 'background', backed up; glow moves
+// FocusBlockParams gains alsoCore?: true; Intake gains wantsCore?: boolean
+// settings 'claudeOffer' = { lastShownDate?: string } (once a day); coach.claudeWanted already exists
+// src/core/exercises: CameraInfo = { counts: string; lines: string[]; view; distanceM; heightHint;
+//   oneSided?: OneSidedLimb; learning: boolean }  — each rule gains `countsLine`
+// No Dexie version change.
+```
+
+#### Accept
+- Unit tests, written first (made-up data + the real catalog):
+  - catalog: ≥ 8 exercises with `abdominals` as primary, ≥ 5 doable with the default gym, every new one with
+    cue / how-to / kit / body-area / SVG path; every program exercise still has a swap candidate;
+  - library grouping (each group-by, multi-day exercises, "Not in your plan", My gym only) and search (ranking,
+    synonyms, Thai body words, settings / learn / food rows, done-first ties, empty and 1-letter queries);
+  - personal search: date queries ("yesterday", weekday names, "12 nov", "last week") → the right range;
+    workouts by exercise and day name, chat by words, meals by food and date; caps + "show more"; nothing
+    from progress photos, measurements, Health or the dev log is ever an item;
+  - camera info for every rule (counts line ≤ 10 words, `checkCopy`), null for manual exercises;
+  - focus: `core` is offered once a doable abs exercise exists; a core block reaches `emptyBaseSets` on ≥ 2 days;
+    `alsoCore` adds abs rows without changing the main group's numbers, respects kit and go-easy, Undo
+    restores; intake `wantsCore` gives a core slot on ≥ 3 days, No gives none; no other path adds abs;
+  - coach context: the weekly-sets-per-area line + rotation names, within `CONTEXT_BUDGET_CHARS`; the tool
+    contract file is byte-identical;
+  - Claude card: shown only after a can't-answer reply, once a day, never when `claudeWanted` is 'no'; its text
+    renders every `CLAUDE_SENDS` / `CLAUDE_NEVER_SENDS` item; no code path makes a request (a test asserts no
+    `fetch` / native send is reachable from it);
+  - background tokens: contrast at the brightest point the glow reaches; raw colours only in token blocks
+    (`tokens.test.ts`); the glow keyframes animate only `transform` / `opacity`;
+  - voice row collapsed by default, summary text, expand/collapse, pick keeps it open;
+  - badges: buttons with a callback, static spans without; preview row tap vs badge tap.
+- E2E (390×844; no off-device request): search "abs" → the abs exercises first → detail → Watch 3D demo →
+  back; each group-by; "voice" → Settings scrolled to Voice; the food row opens the Fuel log with the text;
+  preview: 3D demo / Camera / Learning badges open their sheets and nothing starts; Practice with the fake
+  camera counts and leaves no set or session; Coach → focus Chest → "Also add abs?" Yes → Apply → the
+  preview shows abs rows → Undo; Coach → focus Abs & core → Apply; with seeded sessions, chat and meals,
+  search "yesterday" / "bench" / "rice" opens the right Calendar day, chat message and Fuel day; a coach
+  can't-answer reply shows the Claude card with the send list and no request leaves the page; the voice row
+  starts collapsed; Today's root has a moving glow (its transform changes over time), stops with reduced
+  motion and on the Exercise screen (black); Plain restores the flat look; Log food → Choose from library (a
+  file set on the library input, which has no `capture`) → the same suggestions sheet as Take photo.
+- **Performance / battery (the moving glow):** a 10 s Chrome performance trace on Today at 390×844 shows no
+  Layout or Paint events caused by the glow after the first frame (composite only) and main-thread work per
+  frame no higher than with Plain (± 1 ms); the glow layer is its own compositor layer; the animation is
+  paused (`animationPlayState`) with the page hidden, a sheet open, an in-workout screen, and reduced motion.
+  On his iPhone at K3: an hour of normal use with Moving glow vs Plain, battery % noted (no heat).
+- 390×844 screenshots: Today / Fuel / Calendar / Settings with the background (and Plain), the preview with
+  badges, the Camera sheet, the learning card, the Library in each grouping, a search for "abs", a search with
+  workout / chat / meal results, an exercise detail (with and without history), the focus flow's "Also add
+  abs?" step and its proposal, the intake abs question, the Claude explain card, Settings voice collapsed /
+  expanded, a 3D demo frame per abs move, the Log food photo row with both buttons.
+- `npm run check`, the full `npm run e2e` (verifier), `npm run build` shows 1.16.0; iPhone install via
+  `npm run ios:install` and Settings → Self-check all ✓.
+- 🧍 **Checkpoint K3** (his iPhone, a normal week): he reports whether the moving background reads well at the
+  gym and at home and costs no noticeable battery, whether search finds what he types (incl. Thai, dates,
+  chat and meals), whether the badges and Practice help him set up before a set, whether choosing abs through
+  a focus works the way he meant, whether the coach knows his plan and the Claude card explains clearly,
+  anything in the Library that's hard to find, and whether Choose from library opens his photos in the iPhone
+  app and recognises a saved meal photo.
+
+### M14 — Wrist and ears: Apple Watch app + AirPods head motion (approved 2026-11-17; builds after M13c and M12 slice 3; release 1.18.0 — renumbered 2026-11-18, was 1.16.0)
 Wongsaton (2026-11-17), after being told AirPods head motion and an Apple Watch app were parked / out of
 scope: **"Add it and I need apple watch app too."** Both are in. Planner calls are in Decision "M14 Wrist and
 ears" (2026-11-17) and can be corrected. Branch `m14-wrist-ears`, cut from the M13 result. **iPhone app only**
@@ -2408,7 +2644,7 @@ Recovery rule (data, `src/core/watch/hrRules.ts`, tuned at Checkpoint L): after 
   `transferUserInfo` is device-only and checked at Checkpoint L); watch screenshots of exercise, rest, controls, summary,
   not-connected on a 41 mm and a 46 mm (or Ultra) watch.
 - 390×844 screenshots: Rest with heart rate + recovery line, Settings → Apple Watch, Settings → AirPods, the why
-  page, the clip recorder (owner mode on). Version 1.16.0 with What's New pages.
+  page, the clip recorder (owner mode on). Version 1.18.0 with What's New pages.
 - 🧍 **Checkpoint L** (gym, watch + AirPods on, a few sessions): phone in the pocket for one session and on the
   floor for another; Set done / Start now / Pause from the watch; haptics at 10 s and rest end; behaviour when
   he walks away from the phone and back; heart rate on the Rest screen and the recovery line (too early? too
@@ -2419,7 +2655,7 @@ Recovery rule (data, `src/core/watch/hrRules.ts`, tuned at Checkpoint L): after 
   when he looks around and stay quiet when still; calf raise / shrug counts; head-motion clips recorded per the
   guide. He reports through the "Wrist and ears" to-do or `/feedback`.
 
-### M15 — Best-rep clips (approved 2026-11-17; builds after M14; release 1.17.0)
+### M15 — Best-rep clips (approved 2026-11-17; builds after M14; release 1.19.0 — renumbered 2026-11-18, was 1.17.0)
 Wongsaton (2026-11-17): **"Don't forget about social engineer job, it can record in the app while i'm working out,
 randomize record of the perfect lift up weight or anything to be good of public via instagram"**, and on the
 no-recording rule: **"you can change that but need to save only on my phone not on cloud"**. CLAUDE.md's Privacy
@@ -2468,7 +2704,7 @@ after M14; M15-q1). Works in the PWA and the iPhone app; each phone keeps its ow
    WKWebView has neither) is decided by the facts task against current docs.
 9. **Story pack.** After Checkpoint M the `social-media` agent builds a Story pack template from clips he picks;
    nothing is posted, and no clip or frame of him is committed (the repo is public).
-10. **What's New 1.17.0:** Best-rep clips, blur + silent, Clips screen + Share, "stays on this phone".
+10. **What's New 1.19.0:** Best-rep clips, blur + silent, Clips screen + Share, "stays on this phone".
 
 #### Changes to earlier contracts
 - **§6** "recording/saving video": opt-in best-rep clips are in scope (see "Changed by M15" there).
@@ -2529,7 +2765,7 @@ type ClipRules = { bufferMs: number; leadInMs: number; tailMs: number; minMs: nu
   to restore it); export time per clip noted.
 - 390×844 screenshots: preview with the switch, camera with the dot, Rest with "Save last rep", Clips list, clip
   detail, Settings → Clips, Summary card; one 1080×1920 export frame (synthetic figures, blur visible). Version
-  1.17.0 with What's New pages.
+  1.19.0 with What's New pages.
 - 🧍 **Checkpoint M** (gym): he records a workout with clips on, checks the blur on the people behind him, and
   shares one clip to a private Story or Close Friends. He reports how many clips were kept and whether they
   were the right reps, through the "Best-rep clips" to-do or `/feedback`.
