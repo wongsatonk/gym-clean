@@ -54,6 +54,11 @@
 //                                            #   personal search + jumps; Also add abs, Claude
 //                                            #   card, Practice, Fuel photo buttons; intake abs;
 //                                            #   reduced motion: m13c-verify-*.png
+//   node scripts/screenshots.mjs m1152 [coach|tour]
+//                                            # 1.15.2 Coach acts: 'Make today lighter' on the
+//                                            #   rules route (fake GymBrain, model not asked),
+//                                            #   Apply/Undo; the 1.15.2 What's New page:
+//                                            #   m1152-verify-*.png
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -4532,6 +4537,157 @@ async function m13b(browser, only) {
   if (!only || only === 'tour') await m13bTour(browser);
 }
 
+// ------------------------------------- 1.15.2 "Coach acts": rules-routed change + tour page
+async function m1152Phone(browser) {
+  const p = await m13bPhone(browser);
+  // Fake GymBrain as e2e/native-fakes.ts (made-up replies); records every respond request.
+  await p.page.addInitScript(() => {
+    const state = { requests: [], availabilityCalls: 0 };
+    window.__gymBrain = state;
+    const plugin = {
+      availability: () => { state.availabilityCalls++; return Promise.resolve({ available: true }); },
+      respond: (req) => {
+        state.requests.push(JSON.parse(JSON.stringify(req)));
+        return Promise.resolve({ text: 'Made-up model reply.', toolCalls: [], latencyMs: 420 });
+      },
+      prewarm: () => Promise.resolve({}),
+      measure: () => Promise.resolve({ instructions: 1180, tools: 1420, prompt: 950, contextSize: 8192 }),
+    };
+    const cap = window.Capacitor ?? {};
+    cap.isNativePlatform = () => true;
+    cap.getPlatform = () => 'ios';
+    cap.Plugins = { ...(cap.Plugins ?? {}), GymBrain: plugin };
+    window.Capacitor = cap;
+  });
+  return p;
+}
+
+async function m1152Seed(page, seenRelease) {
+  const t0 = new Date(2026, 10, 11, 18, 0, 0).getTime();
+  await page.evaluate(({ t0, seenRelease }) => new Promise((res, rej) => {
+    const o = indexedDB.open('gym-clean');
+    o.onerror = () => rej(o.error);
+    o.onsuccess = () => {
+      const tx = o.result.transaction(['sessions', 'sets', 'settings'], 'readwrite');
+      tx.objectStore('settings').put({ key: 'whatsNew', value: { seenRelease } });
+      tx.objectStore('settings').put({ key: 'permissionCatchUp', value: '1.15.2' });
+      tx.objectStore('sessions').put({ sessionId: 's1', dayId: 'push-a', startedAt: t0, endedAt: t0 + 2_400_000, setsDone: 1, totalVolumeKg: 0, restOverruns: 0 });
+      tx.objectStore('sets').put({ sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 10, weightKg: 20, startedAt: t0 + 60_000, endedAt: t0 + 90_000 });
+      tx.oncomplete = () => { o.result.close(); res(true); };
+      tx.onerror = () => rej(tx.error);
+    };
+  }), { t0, seenRelease });
+  await page.reload();
+}
+
+async function m1152Coach(browser) {
+  const p = await m1152Phone(browser);
+  const { page } = p;
+  const flow = { flow: 'm1152-coach' };
+  await page.clock.install({ time: new Date(2026, 10, 13, 18, 0, 0) });
+  await page.goto(BASE + '/');
+  // Native first open shows the permission catch-up (seeded as 1.15.1); let the DB exist, then seed.
+  await page.locator('main').first().waitFor();
+  await page.waitForTimeout(1500);
+  await m1152Seed(page, '1.15.2');
+  await page.locator('[data-cal]').first().waitFor();
+  flow.tourOpen = await page.locator('[data-tour="whats-new"]').count();
+  await page.locator('[data-tab="coach"]').click();
+  const coach = page.locator('[data-screen="coach"]');
+  await coach.waitFor();
+  await page.waitForFunction(() => (window.__gymBrain?.availabilityCalls ?? 0) > 0, null, { timeout: 15_000 });
+  const items = coach.locator('li.chat-item-coach');
+  const before = await items.count();
+  const users = coach.locator('.cs-msg-user');
+  const mine = await users.count();
+  for (let i = 0; i < 10 && (await users.count()) === mine; i++) {
+    await coach.getByLabel('Ask the coach').fill('Make today lighter');
+    await coach.getByRole('button', { name: 'Send' }).click();
+    await page.waitForTimeout(600);
+  }
+  await page.waitForFunction(({ n }) => document.querySelectorAll('[data-screen="coach"] li.chat-item-coach').length > n, { n: before }, { timeout: 10_000 });
+  await page.waitForTimeout(500);
+  const reply = items.last();
+  const card = reply.locator('[data-proposal]');
+  await card.scrollIntoViewIfNeeded();
+  flow.badge = (await reply.locator('[data-chat-source]').textContent().catch(() => null))?.trim();
+  flow.badgeSource = await reply.locator('[data-chat-source]').getAttribute('data-chat-source').catch(() => null);
+  flow.replyText = (await reply.innerText()).replace(/\s+/g, ' ').slice(0, 300);
+  flow.cardVisible = await card.isVisible();
+  flow.applyBtn = await card.getByRole('button', { name: 'Apply' }).boundingBox();
+  flow.modelRequests = await page.evaluate(() => window.__gymBrain.requests.length);
+  // The card is taller than one screen: one shot with the bubble + badge, one with Apply.
+  await coach.locator('.cs-msg-user').last().evaluate((e) => e.scrollIntoView({ block: 'start' }));
+  await page.waitForTimeout(350);
+  await shot(page, p.log, 'm1152-verify-coach-rules-badge', {
+    sizes: await m13bSizes(page, '[data-screen="coach"]'), badge: flow.badge, modelRequests: flow.modelRequests,
+  });
+  const apply = card.getByRole('button', { name: 'Apply' });
+  await apply.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+  await page.waitForTimeout(350);
+  flow.applyOnScreen = await apply.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), h: Math.round(r.height), w: Math.round(r.width), hitIsButton: el === hit || el.contains(hit) };
+  });
+  await shot(page, p.log, 'm1152-verify-coach-rules-apply', {
+    sizes: await m13bSizes(page, '[data-screen="coach"]'), applyOnScreen: flow.applyOnScreen,
+  });
+  await card.getByRole('button', { name: 'Apply' }).click();
+  await card.locator('[data-card-status="applied"]').waitFor();
+  flow.applied = (await card.locator('[data-card-status="applied"]').textContent())?.trim();
+  await shot(page, p.log, 'm1152-verify-coach-rules-applied', { applied: flow.applied });
+  await card.getByRole('button', { name: 'Undo' }).click();
+  await card.locator('[data-card-status="undone"]').waitFor();
+  flow.undone = (await card.locator('[data-card-status="undone"]').textContent())?.trim();
+  flow.modelRequestsAfter = await page.evaluate(() => window.__gymBrain.requests.length);
+  flow.spoken = await page.evaluate(() => window.__spoken);
+  flow.offsite = p.offsite;
+  flow.console = [...p.log];
+  results.push(flow);
+  await p.ctx.close();
+}
+
+async function m1152Tour(browser) {
+  const p = await m1152Phone(browser);
+  const { page } = p;
+  const flow = { flow: 'm1152-tour', pages: [] };
+  await page.clock.install({ time: new Date(2026, 10, 13, 18, 0, 0) });
+  await page.goto(BASE + '/');
+  await page.locator('main').first().waitFor();
+  await page.waitForTimeout(1500);
+  await m1152Seed(page, '1.15.1');
+  const tour = page.locator('[data-tour="whats-new"]');
+  await tour.waitFor({ timeout: 15_000 });
+  for (let i = 1; i <= 4; i++) {
+    const c = (await tour.locator('[data-wn="count"]').textContent().catch(() => null))?.trim();
+    const title = (await tour.locator('[data-wn="title"]').first().textContent().catch(() => ''))?.trim();
+    const version = (await tour.locator('[data-wn="version"]').textContent().catch(() => null))?.trim();
+    const text = (await tour.innerText()).replace(/\s+/g, ' ').slice(0, 400);
+    flow.pages.push({ c, title, version, text });
+    await page.waitForTimeout(350);
+    await shot(page, p.log, `m1152-verify-whats-new-${i}`, {
+      count: c, title, version, sizes: await m13bSizes(page, '[data-tour="whats-new"]'),
+    });
+    const next = tour.locator('[data-wn="next"]');
+    if (!(await next.count())) break;
+    const label = (await next.textContent())?.trim() ?? '';
+    flow.nextLabel = label;
+    if (/done|try/i.test(label)) break;
+    await next.click();
+    await page.waitForTimeout(250);
+  }
+  flow.offsite = p.offsite;
+  flow.console = [...p.log];
+  results.push(flow);
+  await p.ctx.close();
+}
+
+async function m1152(browser, only) {
+  if (!only || only === 'coach') await m1152Coach(browser);
+  if (!only || only === 'tour') await m1152Tour(browser);
+}
+
 // ------------------------------------------------- M13c verify (task 21): Library, abs, glow
 // The wired app at 390×844 (DPR 2), clock on Wed 18 Nov 2026 18:00, fresh DB with the e2e
 // defaults (intake skipped, no warm-ups), speech mocked with three English voices, pose model
@@ -5340,6 +5496,7 @@ try {
   else if (milestone === 'm13') await m13(browser);
   else if (milestone === 'm13b') await m13b(browser, process.argv[3]);
   else if (milestone === 'm13c') await m13c(browser, process.argv[3]);
+  else if (milestone === 'm1152') await m1152(browser, process.argv[3]);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));

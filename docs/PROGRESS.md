@@ -4652,6 +4652,11 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 | iPhone install + Self-check | Not run (task 23) |
 | Gym rules / layout | First pass FAIL (badges covered the preview's Start workout bar); **PASS after 9fcc10d** (re-verify above) |
 | 🧍 Checkpoint K3 | His, after the install |
+### 1.15.2 "Coach acts" (2026-11-18, verifier PASS on 4bb599e + c80e2cd)
+- Unit hybrid eval (src/data/brain/hybridEval.test.ts, requests.json through runBrainEval): **106/109 actions** with a model that never calls a tool and with one that always calls the wrong tool (misses req-036, 043, 058); 16/16 red flags pass + safe on the rules with no call; 18 rules-routed no-action items all pass (0 false actions); the model is never asked for red-flag, empty or Thai text. Phone baseline (1.15.0): 28/109.
+- `npm run check`: 248 files, 5890 passed, 1 skipped; scripts 138/138. Full `npm run e2e`: **276 passed, 1 skipped, 0 failed** (20.1 min). coach-apple / whats-new / mic at --repeat-each 5: 115/115. `npm run build` contains 1.15.2 (Xcode 1.15.2, build 380).
+- Reviewer PASS (no blocking). Fixed after review: dev log records route/why for rule-routed answers; quiet failure of the window measure; Decision + SPEC notes. Open non-blocking: the eval counts a rules-route pass even when handle() asked a clarifying question instead of showing a card (same meaning as the model path's "a call was made").
+- Screenshots (390x844): `docs/screenshots/m1152-verify-coach-rules-badge.png`, `-coach-rules-apply.png`, `-coach-rules-applied.png`, `-whats-new-1.png`.
 
 
 ### M13b fixtures (task 1, 2026-11-17, pose-engineer)
