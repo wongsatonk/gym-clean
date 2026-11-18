@@ -1,7 +1,8 @@
 // M12 slice 1b task 25: the intake (SPEC M12 trainer kit item 3, Decision "Second user").
 // One question per screen: goal kind (+ optional own words), training days 2–6, session length
-// 30 / 45 / 60 / 75, experience, areas to go easy on. Back / Next / Skip for now. The last screen
-// lists what the answers would change (starter plan or "Build a new plan from my answers", the
+// 30 / 45 / 60 / 75, experience, areas to go easy on, and (M13c task 6e) "Add abs to your plan?"
+// (No chosen by default; Why? opens the core-training card when the caller passes `onLearn`).
+// Back / Next / Skip for now. The last screen lists what the answers would change (starter plan or "Build a new plan from my answers", the
 // go-easy list, Fuel targets before → after), each with its own Apply: nothing changes without
 // a tap.
 //
@@ -14,19 +15,23 @@
 // coaching words only.
 //
 // e2e hooks: `main[data-screen="intake"]` + `data-step` = goal / days / length / experience /
-// easyOn / summary, `[data-intake-count]`, `[data-option=<id>]` with aria-checked,
+// easyOn / wantsCore / summary, `[data-intake-count]`, `[data-option=<id>]` with aria-checked,
 // `[data-goal-text]`, `[data-intake-back]`, `[data-intake-next]` (disabled until answered),
 // `[data-intake-skip]`, `[data-intake-close]`, `[data-change=<id>]`, `[data-apply=<id>]`
-// (`data-applied` once applied), `[data-change-error=<id>]`, `[data-intake-done]`.
+// (`data-applied` once applied), `[data-change-error=<id>]`, `[data-intake-done]`,
+// `[data-learn-open="coreTraining"]` (the abs question's Why?).
+import { INTAKE_OPTIONS } from '../../core/trainerKit/intake';
 import type { BodyArea, GoalKind, Intake } from '../../core/types';
 import { backButton, forwardContent } from '../backButton';
+import { whyButton } from '../coach/learnCard';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { checkMorph, enterScreen } from '../motion';
 import { moodClass } from '../tokens';
 import './intake.css';
 
-export type IntakeStepId = 'goal' | 'days' | 'length' | 'experience' | 'easyOn' | 'summary';
+export type IntakeStepId =
+  'goal' | 'days' | 'length' | 'experience' | 'easyOn' | 'wantsCore' | 'summary';
 
 export const INTAKE_STEPS: readonly IntakeStepId[] = [
   'goal',
@@ -34,9 +39,10 @@ export const INTAKE_STEPS: readonly IntakeStepId[] = [
   'length',
   'experience',
   'easyOn',
+  'wantsCore',
   'summary',
 ];
-/** The question screens (the summary is not counted in "Question 2 of 5"). */
+/** The question screens (the summary is not counted in "Question 2 of 6"). */
 export const INTAKE_QUESTIONS = INTAKE_STEPS.length - 1;
 
 export const GOAL_KINDS: readonly GoalKind[] = ['muscle', 'fat', 'strength', 'general'];
@@ -74,6 +80,14 @@ export const AREA_LABEL: Record<BodyArea, string> = {
   core: 'Core',
 };
 
+/** The abs question's choices (core `INTAKE_OPTIONS.wantsCore`), No first. */
+const CORE_OPTIONS = INTAKE_OPTIONS.wantsCore.options;
+export type CoreChoice = (typeof CORE_OPTIONS)[number]['id'];
+export const CORE_LABEL = Object.fromEntries(CORE_OPTIONS.map((o) => [o.id, o.label])) as Record<
+  CoreChoice,
+  string
+>;
+
 export const GOAL_TEXT_MAX = 80;
 
 /** Titles for the plan change, for the caller (`IntakeChange.title`). */
@@ -103,11 +117,17 @@ export const INTAKE_COPY = {
     title: 'Any areas to go easy on?',
     why: 'Pick any, or none. The coach keeps the load light there until you take it off the list.',
   },
+  wantsCore: {
+    title: INTAKE_OPTIONS.wantsCore.question,
+    why: INTAKE_OPTIONS.wantsCore.hint,
+  },
   summary: {
     title: 'What your answers change',
     why: 'Nothing changes until you tap Apply.',
   },
   goalText: 'In your own words (optional)',
+  /** Added to the answers line on the last screen when abs are in. */
+  withCore: 'With abs',
   noChanges: 'Nothing to change right now. Your answers are saved.',
   working: 'Working it out…',
   applyFailed: "That didn't apply. Try again.",
@@ -156,9 +176,14 @@ export type IntakeActions = {
   onSkip: () => void;
   /** Set when the intake was opened from Settings: shows "‹ Back" in the top bar. */
   onClose?: (() => void) | undefined;
+  /**
+   * Why? on the abs question: open this learn card (`INTAKE_OPTIONS.wantsCore.learnId`).
+   * `opener` gets focus back when the sheet closes. No handler → no Why? link.
+   */
+  onLearn?: ((learnId: string, opener: HTMLElement) => void) | undefined;
 };
 
-/** "Question 2 of 5". */
+/** "Question 2 of 6". */
 export function questionCountText(index: number): string {
   return `Question ${index + 1} of ${INTAKE_QUESTIONS}`;
 }
@@ -182,6 +207,8 @@ type Draft = {
   sessionMin?: Intake['sessionMin'] | undefined;
   experience?: Intake['experience'] | undefined;
   easyOn: Set<BodyArea>;
+  /** Abs in the plan. Always answered: No unless a stored Yes. */
+  wantsCore: boolean;
 };
 
 function draftFrom(initial: Partial<Intake> | null | undefined): Draft {
@@ -199,6 +226,7 @@ function draftFrom(initial: Partial<Intake> | null | undefined): Draft {
         ? i.experience
         : undefined,
     easyOn: new Set((i.easyOn ?? []).filter((a) => BODY_AREAS.includes(a))),
+    wantsCore: i.wantsCore === true ? true : INTAKE_OPTIONS.wantsCore.default,
   };
 }
 
@@ -219,6 +247,7 @@ function complete(d: Draft, at: number): Intake | null {
     sessionMin: d.sessionMin,
     experience: d.experience,
     easyOn: BODY_AREAS.filter((a) => d.easyOn.has(a)),
+    wantsCore: d.wantsCore,
     at,
   };
 }
@@ -448,6 +477,28 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
           },
         }),
       ];
+    if (step === 'wantsCore') {
+      const learnId = INTAKE_OPTIONS.wantsCore.learnId;
+      const onLearn = actions.onLearn;
+      return [
+        optionGroup({
+          options: CORE_OPTIONS.map((o) => ({ id: o.id, label: o.label })),
+          multi: false,
+          labelledBy: titleId,
+          layout: 'list',
+          isOn: (id) => (id === 'yes') === draft.wantsCore,
+          onPick: (id) => {
+            draft.wantsCore = CORE_OPTIONS.find((o) => o.id === id)?.value ?? false;
+          },
+        }),
+        onLearn
+          ? whyButton((opener) => onLearn(learnId, opener), {
+              label: 'Why? About abs training',
+              attrs: { 'data-learn-open': learnId },
+            })
+          : null,
+      ];
+    }
     if (step === 'experience')
       return [
         optionGroup({
@@ -598,6 +649,7 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
         { class: 'intake-answers', 'data-intake-answers': true },
         intakeSummary(intake),
         intake.easyOn.length ? ` · Easy on: ${areaList(intake.easyOn)}` : '',
+        intake.wantsCore ? ` · ${INTAKE_COPY.withCore}` : '',
       ),
       list,
     ];
@@ -645,7 +697,7 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
             'data-intake-next': true,
             onclick: next,
           },
-          ...forwardContent(step === 'easyOn' ? 'See what changes' : 'Next'),
+          ...forwardContent(INTAKE_STEPS[i + 1] === 'summary' ? 'See what changes' : 'Next'),
         );
     syncNext();
     const nav = h(

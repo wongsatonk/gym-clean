@@ -160,7 +160,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Card: title, why line, "What would be sent" list and "Never sent" list (from 6c), "Your key isn't set up yet." and two buttons: **Tell me when it's ready** (→ `onWanted`) and **Not now** (→ `onDismiss`), ≥ 56px; shown, never spoken.
   - Done when: render tests (lists render every item, buttons call back, no other action exists); screenshot `m13c-claude-card.png`; `npm run check`.
   - Deps: 6c.
-- [ ] 6e. [ui-engineer] Intake: "Add abs to your plan?".
+- [x] 6e. [ui-engineer] Intake: "Add abs to your plan?". **Done 2026-11-18:** step 6 of 6 after easyOn (No default, "Yes, add abs"), summary " · With abs", optional `onLearn` Why? → coreTraining; main fixed `parseIntake` (src/data/trainerKit/store.ts) dropping `wantsCore` on save (+ store test); intake.spec 15/15 and the stored Yes asserted.
   - Files: the intake screen in src/ui (find it via `settings/goal` / `intake` route; e.g. src/ui/screens/intake*.ts) (+test).
   - One question after the gym-kit step: No (default, selected) / Yes, ≥ 56px, check + words; passes `wantsCore` back. Existing installs never see the intake again (unchanged rule).
   - Done when: render test + screenshot `m13c-intake-abs.png`; existing intake specs green via `npm run e2e:changed`.

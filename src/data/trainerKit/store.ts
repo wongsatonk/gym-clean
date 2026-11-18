@@ -96,6 +96,7 @@ function parseIntake(v: unknown): Intake | null {
     sessionMin,
     experience,
     easyOn,
+    ...(typeof v.wantsCore === 'boolean' ? { wantsCore: v.wantsCore } : {}),
     at: v.at,
   };
 }

@@ -1,7 +1,8 @@
 // M12 slice 1b task 38: the intake, the Goal card and the gym file in the real app at 390×844
 // (SPEC M12 trainer-kit item 3 + slice 1b Accept, Decision "Second user").
 //
-// - A fresh install opens the intake (one question per screen) → "What your answers change" →
+// - A fresh install opens the intake (one question per screen, the last "Add abs to your plan?"
+//   with No chosen by default) → "What your answers change" →
 //   Starter plan Apply (Undo toast puts the plan back) → Apply again → Done → Today runs the
 //   starter plan. Nothing is spoken.
 // - An existing install (any session) is never forced: Today shows "Set your goal"; the intake
@@ -42,18 +43,19 @@ async function finishWelcome(page: Page) {
 const step = (page: Page, id: string) => expect(intake(page)).toHaveAttribute('data-step', id);
 
 /**
- * Answers every question (none for go-easy-on) and lands on the summary. `first`: no earlier
- * answers, so Next waits for a pick on every question (nothing is preselected).
+ * Answers every question (none for go-easy-on; abs as given, else the default No) and lands on
+ * the summary. `first`: no earlier answers, so Next waits for a pick on every question but the
+ * optional ones (go-easy-on, and abs where No is chosen by default).
  */
 async function answer(
   page: Page,
-  a: { goal: string; days: string; length: string; experience: string },
+  a: { goal: string; days: string; length: string; experience: string; abs?: 'yes' | 'no' },
   first = false,
 ) {
   const pick = async (id: string, value: string, next: string) => {
     await step(page, id);
     const nextBtn = intake(page).locator('[data-intake-next]');
-    if (first && id !== 'easyOn') await expect(nextBtn).toBeDisabled();
+    if (first && id !== 'easyOn' && id !== 'wantsCore') await expect(nextBtn).toBeDisabled();
     if (value) {
       await intake(page).locator(`[data-option="${value}"]`).click();
       await expect(intake(page).locator(`[data-option="${value}"]`)).toHaveAttribute(
@@ -68,7 +70,8 @@ async function answer(
   await pick('days', a.days, 'length');
   await pick('length', a.length, 'experience');
   await pick('experience', a.experience, 'easyOn');
-  await pick('easyOn', '', 'summary');
+  await pick('easyOn', '', 'wantsCore');
+  await pick('wantsCore', a.abs ?? '', 'summary');
 }
 
 /** Today's program day names, in the week strip / day list order. */
@@ -91,17 +94,37 @@ test.describe('fresh install', () => {
     await throughWelcome(page);
     await expect(intake(page)).toBeVisible();
     await expect(page.locator('[data-tabbar]')).toHaveCount(0);
-    await expect(intake(page).locator('[data-intake-count]')).toHaveText('Question 1 of 5');
+    await expect(intake(page).locator('[data-intake-count]')).toHaveText('Question 1 of 6');
     await expect(intake(page).locator('[data-intake-skip]')).toBeVisible();
     await expect(intake(page).locator('[data-intake-close]')).toHaveCount(0); // first run: Skip only
     await expectTapTargets(page, 'main[data-screen="intake"]');
     await noHorizontalOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('m12b-intake.png') });
 
+    // Up to the abs question: No is chosen by default (check + words), Next reads "See what
+    // changes".
     await answer(page, { goal: 'muscle', days: '3', length: '45', experience: 'new' }, true);
+    await intake(page).locator('[data-intake-back]').click();
+    await step(page, 'wantsCore');
+    await expect(intake(page).locator('[data-intake-count]')).toHaveText('Question 6 of 6');
+    await expect(intake(page).locator('h1')).toHaveText('Add abs to your plan?');
+    const no = intake(page).locator('[data-option="no"]');
+    const yes = intake(page).locator('[data-option="yes"]');
+    await expect(no).toHaveAttribute('aria-checked', 'true');
+    await expect(no).toHaveText('No');
+    await expect(no.locator('svg')).toHaveCount(1);
+    await expect(yes).toHaveAttribute('aria-checked', 'false');
+    await expect(yes).toHaveText('Yes, add abs');
+    await expect(intake(page).locator('[data-intake-next]')).toHaveText('See what changes');
+    await expectTapTargets(page, 'main[data-screen="intake"]');
+    await noHorizontalOverflow(page);
+    await page.screenshot({ path: testInfo.outputPath('m13c-intake-abs.png') });
+    await intake(page).locator('[data-intake-next]').click();
+    await step(page, 'summary');
     const plan = intake(page).locator('[data-change="plan"]');
     await expect(plan).toBeVisible();
     await expect(plan).toContainText('Starter plan');
+    const planWithoutAbs = (await plan.textContent()) ?? '';
     await expect(intake(page)).toContainText('Nothing changes until you tap Apply.');
     await expectTapTargets(page, 'main[data-screen="intake"]');
     await noHorizontalOverflow(page);
@@ -126,7 +149,17 @@ test.describe('fresh install', () => {
     await page.locator('[data-intake-open]').click();
     await expect(intake(page)).toBeVisible();
     await expect(intake(page).locator('[data-intake-close]')).toBeVisible();
-    await answer(page, { goal: 'muscle', days: '3', length: '45', experience: 'new' });
+    await answer(page, {
+      goal: 'muscle',
+      days: '3',
+      length: '45',
+      experience: 'new',
+      abs: 'yes',
+    });
+    await expect(intake(page).locator('[data-intake-answers]')).toContainText('With abs');
+    // Yes adds an abs exercise to the starter plan's days.
+    await expect(intake(page).locator('[data-change="plan"]')).toContainText('Starter plan');
+    await expect(intake(page).locator('[data-change="plan"]')).not.toHaveText(planWithoutAbs);
     await intake(page).locator('[data-apply="plan"]').click();
     await expect(intake(page).locator('[data-apply="plan"]')).toHaveAttribute(
       'data-applied',
@@ -144,6 +177,7 @@ test.describe('fresh install', () => {
       days: 3,
       sessionMin: 45,
       experience: 'new',
+      wantsCore: true,
     });
     await page.reload();
     await expect(page.locator('[data-cal]').first()).toBeVisible();
