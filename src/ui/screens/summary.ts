@@ -36,6 +36,7 @@ import { postWorkoutIdea, type MealIdea } from '../fuel/proteinNudge';
 import { createStallCards, type StallCardData, type StallCardOption } from '../coachSummary';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { sidedSetBlock } from '../sidesText';
 import { moodClass } from '../tokens';
 import { dateLabel } from './today';
 
@@ -262,6 +263,17 @@ function tile(key: string, value: string, label: string): HTMLElement {
   );
 }
 
+/** M13b: a one-sided exercise gets one "R 12 · L 11 × 20 kg" line per set; others as before. */
+function setsCell(sets: SetLog[], unit: Unit, restSkipped: boolean): HTMLElement[] {
+  const block = sidedSetBlock(sets, unit, 'muted');
+  if (!block) {
+    return [
+      h('span', { class: 'muted' }, setsText(sets, unit) + (restSkipped ? ' · rest skipped' : '')),
+    ];
+  }
+  return restSkipped ? [block, h('span', { class: 'muted' }, 'rest skipped')] : [block];
+}
+
 function setList(p: SummaryProps): HTMLElement {
   const byExercise = new Map<string, SetLog[]>();
   for (const l of p.logs)
@@ -278,11 +290,7 @@ function setList(p: SummaryProps): HTMLElement {
         'li',
         {},
         h('strong', {}, p.name(id)),
-        h(
-          'span',
-          { class: 'muted' },
-          setsText(sets, p.unit) + (p.skipped.includes(id) ? ' · rest skipped' : ''),
-        ),
+        ...setsCell(sets, p.unit, p.skipped.includes(id)),
         note(id),
       ),
     ),

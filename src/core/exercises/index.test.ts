@@ -827,3 +827,64 @@ describe('rule status (M4f)', () => {
     expect(ruleStatus('')).toBeUndefined();
   });
 });
+
+describe('M13b one-arm row: hinge gate and tracking hold (task 8)', () => {
+  const get = (folder: string): ExerciseRule => {
+    const r = ruleForFolder(folder);
+    if (!r) throw new Error(folder);
+    return r;
+  };
+
+  it('row and concentration curl only count bent over / seated (hip ≤ 130°)', () => {
+    // Real clip 01 (bent over the bench) reads 90–115°, 8 of 688 frames over 130°; standing in
+    // front of the phone 152–171°; clip 04's crouch with the dumbbell on the floor 84–135°.
+    expect(get('row').maxHipAngleDeg).toBe(130);
+    // Seated: synthetic clips 66–76°; standing up in front of the phone reads like the row's.
+    expect(get('concentration-curl').maxHipAngleDeg).toBe(130);
+  });
+
+  it('no other rule has the hinge gate (standing exercises are filmed standing)', () => {
+    const gated = RULES.filter((r) => r.maxHipAngleDeg !== undefined).map((r) => r.folder);
+    expect(gated.sort()).toEqual(['concentration-curl', 'row']);
+  });
+
+  it('row holds tracking 500 ms through a visibility dip and keeps the 0.5 visibility gate', () => {
+    const row = get('row');
+    expect(row.trackingHoldMs).toBe(500);
+    // Task 2 suggested 0.3; measured on the real clips it counted a set-up wiggle (clip 03,
+    // 2.2 s), so the hold covers the "Step into frame" flash instead.
+    expect(row.minVisibility).toBe(0.5);
+    expect(RULES.filter((r) => r.trackingHoldMs !== undefined).map((r) => r.folder)).toEqual([
+      'row',
+    ]);
+  });
+});
+
+describe('M13b row placement copy (task 9, from the task 2 measurements)', () => {
+  const row = ruleForFolder('row');
+  if (!row) throw new Error('row rule missing');
+  const p = row.placement;
+
+  it('bench height, side-on, not on the floor, whole body in view (the hinge gate reads the hips)', () => {
+    // Task 2: pose found on 97% of frames at bench height vs 52–66% with the phone on the floor.
+    expect(p.lines).toEqual([
+      'Phone at bench height, side-on',
+      'Working arm faces the phone',
+      'Not on the floor: whole body in view',
+    ]);
+    expect(p.heightHint).toBe('Bench height');
+    expect(p.distanceM).toEqual([2, 3]);
+  });
+
+  it('works for either arm (no "right"/"left"/"rowing arm")', () => {
+    for (const text of [...p.lines, p.spoken, p.facing])
+      expect(text).not.toMatch(/\b(right|left|rowing arm)\b/i);
+    expect(p.facing).toBe('Side-on, working arm toward the phone');
+  });
+
+  it('the spoken sentence says the same as the lines', () => {
+    expect(p.spoken).toBe(
+      'Put the phone at bench height, not on the floor, 2 to 3 metres away, whole body in view.',
+    );
+  });
+});

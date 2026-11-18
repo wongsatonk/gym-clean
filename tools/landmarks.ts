@@ -8,19 +8,34 @@ declare global {
     __extract: (
       url: string,
       fps?: number,
-    ) => Promise<{ frames: LandmarkFrame[]; total: number; error?: string }>;
+      opts?: ExtractOptions,
+    ) => Promise<{ frames: LandmarkFrame[]; total: number; ms?: number; error?: string }>;
   }
 }
+
+/**
+ * Sweep options (M13b task 2). Defaults = the fixture settings: lite, CPU, MediaPipe's default
+ * confidences (0.5). `model` is a file name under /models/.
+ */
+export type ExtractOptions = {
+  model?: string;
+  delegate?: 'CPU' | 'GPU';
+  minPoseDetectionConfidence?: number;
+  minPosePresenceConfidence?: number;
+  minTrackingConfidence?: number;
+};
 
 const MAX_SECONDS = 600;
 const r4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
-async function landmarker(): Promise<PoseLandmarker> {
+async function landmarker(opts: ExtractOptions): Promise<PoseLandmarker> {
   const fileset = await FilesetResolver.forVisionTasks('/mediapipe/wasm');
+  const { model = 'pose_landmarker_lite.task', delegate = 'CPU', ...conf } = opts;
   return PoseLandmarker.createFromOptions(fileset, {
-    baseOptions: { modelAssetPath: '/models/pose_landmarker_lite.task', delegate: 'CPU' },
+    baseOptions: { modelAssetPath: `/models/${model}`, delegate },
     runningMode: 'VIDEO',
     numPoses: 1,
+    ...conf,
   });
 }
 
@@ -31,7 +46,7 @@ function seek(video: HTMLVideoElement, t: number): Promise<void> {
   });
 }
 
-window.__extract = async (url, fps = 30) => {
+window.__extract = async (url, fps = 30, opts = {}) => {
   const status = document.getElementById('status');
   const video = document.createElement('video');
   video.muted = true;
@@ -55,14 +70,17 @@ window.__extract = async (url, fps = 30) => {
     return { frames: [], total: 0, error: `unsupported duration (${video.duration}s)` };
   }
 
-  const lm = await landmarker();
+  const lm = await landmarker(opts);
   const frames: LandmarkFrame[] = [];
+  let inferMs = 0;
   const total = Math.floor(video.duration * fps);
   for (let i = 0; i < total; i++) {
     const t = i / fps;
     await seek(video, t);
     const ms = Math.round(t * 1000);
+    const t0 = performance.now();
     const r = lm.detectForVideo(video, ms);
+    inferMs += performance.now() - t0;
     const pose = r.landmarks[0];
     if (pose) {
       const frame: LandmarkFrame = {
@@ -82,5 +100,5 @@ window.__extract = async (url, fps = 30) => {
   }
   lm.close();
   video.remove();
-  return { frames, total };
+  return { frames, total, ms: total ? inferMs / total : 0 };
 };

@@ -155,3 +155,13 @@ describe('units', () => {
     expect(formatE1rm(76, 'lb')).toBe('167.6 lb');
   });
 });
+
+describe('one-sided sets (M13b)', () => {
+  it('estimate from the lower side (the set’s reps), never the better side', () => {
+    const s = set('s', 'row', 20, 10, {
+      sides: { right: { reps: 12, partials: 0 }, left: { reps: 10, partials: 0 } },
+    });
+    expect(bestSetE1rm([s])).toMatchObject({ weightKg: 20, reps: 10 });
+    expect(bestSetE1rm([s])?.e1rmKg).toBeCloseTo(e1rm(20, 10) ?? 0, 6);
+  });
+});

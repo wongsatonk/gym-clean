@@ -244,6 +244,7 @@ describe('gatherFacts', () => {
       appleReplies: 0,
       micMessages: 0,
       checkInsDone: 0,
+      oneSidedSets: 0,
     });
     expect(f.flags).toEqual({
       calendarAfterSession: true,
@@ -258,6 +259,18 @@ describe('gatherFacts', () => {
     expect((await gatherFacts(db, 'native', NOW, { buildId: 'build-old' })).buildFirstSeenAt).toBe(
       day(9),
     );
+  });
+
+  it('counts working sets logged on both sides (M13b), never a one-side or warm-up set', async () => {
+    const both = { right: { reps: 11, partials: 0 }, left: { reps: 10, partials: 1 } };
+    await db.sets.bulkAdd([
+      { ...set('o1', 'Dumbbell_Bent_Over_Row', 0, false), reps: 10, sides: both },
+      { ...set('o1', 'Dumbbell_Bent_Over_Row', 1, true), reps: 10, sides: both },
+      { ...set('o1', 'Dumbbell_Bent_Over_Row', 2, false), sides: { right: { reps: 9, partials: 0 } } },
+      { ...set('o1', 'Dumbbell_Bent_Over_Row', 3, false), warmup: true, sides: both },
+      set('o1', 'Dumbbell_Bicep_Curl', 4, false),
+    ]);
+    expect((await gatherFacts(db, 'web', NOW)).counts.oneSidedSets).toBe(2);
   });
 
   it('counts only sessions since the first iPhone-app launch', async () => {

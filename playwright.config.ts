@@ -1,8 +1,11 @@
 import { defineConfig, type PlaywrightTestConfig } from '@playwright/test';
 import { FAKE_PERSON_VIDEO } from './e2e/fake-camera.setup';
 
-// E2E_PORT lets several checkouts/worktrees run e2e side by side.
-const PORT = Number(process.env.E2E_PORT ?? 5174);
+// E2E_PORT lets several checkouts/worktrees run e2e side by side. Unset, each run picks its own
+// port from the runner's pid (5200–5999; PWA = +1000), so two runs at once never fight over 5174.
+// It goes back into process.env so the worker processes (which load this config too) agree.
+if (!process.env.E2E_PORT) process.env.E2E_PORT = String(5200 + (process.pid % 800));
+const PORT = Number(process.env.E2E_PORT);
 // M6 PWA: the service worker only exists in a production build, so pwa.spec.ts runs against
 // `vite preview` of a build in its own out dir (dist/ stays untouched) on a second port.
 const PWA_PORT = Number(process.env.E2E_PWA_PORT ?? PORT + 1000);

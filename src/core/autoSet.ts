@@ -27,6 +27,14 @@
 //   setSession({ phase: 'rest' }) call; otherwise the started set is dropped as a manual Set done.
 // - If the frame clock restarts (t goes back ≥ 100 ms; smaller steps back are ignored), stored times are rebased onto the new clock as
 //   if no time passed, and the stop/idle timers restart from the first new frame.
+//
+// One-sided sets (SPEC M13b goal 4, Decision "One-arm sets" (c)): setSession's `sideTurn` says
+// which side of a right-then-left set is running. On the 'first' side nothing ends or holds the
+// set (no still / stalled stop, no break, whatever the camera sees: standing up, walking out, a
+// stream restart); counts only go up. After ≥ 1 rep and nextSideReminderSec without a rep,
+// partial or tracked phase change, one `remindNextSide` (the caller speaks "Tap Next arm when
+// you're ready."). The switch to 'second' (Next arm) zeroes the counts and starts the set's stop
+// timers again; from there everything is M5c (auto stop + Undo, breaks).
 import type { RepPhase, UntrackedReason } from './repCounter';
 import type { LandmarkFrame, RepEvent } from './types';
 
@@ -71,6 +79,11 @@ export type AutoSetConfig = {
    * Bigger than the ±5° jitter seen in real logs.
    */
   stillMoveDeg: number;
+  /**
+   * One-sided sets, first side: after ≥ 1 rep, this long without a rep / partial / tracked phase
+   * change gives one `remindNextSide` (M13b, "~6 s idle").
+   */
+  nextSideReminderSec: number;
 };
 
 export const AUTO_SET_DEFAULTS: Readonly<AutoSetConfig> = Object.freeze({
@@ -88,6 +101,7 @@ export const AUTO_SET_DEFAULTS: Readonly<AutoSetConfig> = Object.freeze({
   idleNoPersonSec: 180,
   idleNoRepSec: 600,
   stillMoveDeg: 15,
+  nextSideReminderSec: 6,
 });
 
 export type AutoStopReason = 'still' | 'stalled';
@@ -127,7 +141,12 @@ export type AutoSetAction =
   /** Save now: SET_DONE with now = endedAt. */
   | { type: 'commit'; endedAt: number; reps: number; partials: number }
   /** Stop the camera ("Camera off."). Terminal. */
-  | { type: 'close'; reason: AutoCloseReason };
+  | { type: 'close'; reason: AutoCloseReason }
+  /**
+   * One-sided set, first side, idle after ≥ 1 rep: say ONE_SIDED_COPY[limb].idleReminder once
+   * ("Tap Next arm when you're ready."). Nothing ends; the set stays on the first side.
+   */
+  | { type: 'remindNextSide'; reps: number; partials: number };
 
 export type AutoSetState = 'off' | 'rest' | 'set' | 'pending' | 'held' | 'closed';
 
@@ -136,7 +155,15 @@ export type AutoSetSession = {
   paused: boolean;
   /** How long the current rest has run at `t` (ignored outside rest). */
   restElapsedMs: number;
+  /**
+   * M13b, one-sided exercise in the exercise phase: 'first' before Next arm, 'second' after it.
+   * Omitted (or null) for a two-sided exercise; ignored outside the exercise phase.
+   */
+  sideTurn?: SideTurn | null;
 };
+
+/** Which side of a one-sided (right-then-left) set is running. */
+export type SideTurn = 'first' | 'second';
 
 /**
  * One camera frame, after the rep counter has seen it. Push one for every camera tick, including
@@ -260,6 +287,12 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
   let stillFactor = 1;
   /** First frame of the current posture / body-line gate run (null = not gated). */
   let gateSince: number | null = null;
+  /** One-sided set: the side running (null = two-sided, or not in a set). */
+  let sideTurn: SideTurn | null = null;
+  /** The first side's Next arm reminder was given. */
+  let reminded = false;
+  /** Last rep / partial / tracked phase change (the Next arm reminder's idle clock). */
+  let moveT = -Infinity;
 
   // Pending stop (Undo window).
   let pendingUntil: number | null = null;
@@ -291,6 +324,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     if (lastEventT !== null) lastEventT += shift;
     activityT += shift;
     movedT += shift;
+    moveT += shift;
     if (pendingUntil !== null) pendingUntil += shift;
     if (gateSince !== null) gateSince += shift;
     pendingEndedAt += shift;
@@ -308,6 +342,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
   function enterRest(t: number, restElapsedMs: number): void {
     state = 'rest';
     pendingUntil = null;
+    sideTurn = null;
     reps = 0;
     partials = 0;
     restReps = [];
@@ -324,6 +359,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     lastEventT = lastEvT;
     activityT = t;
     movedT = t;
+    moveT = t;
     anchorAngle = null;
     stopFloor = t;
     stillFactor = 1;
@@ -364,6 +400,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
     if (session.phase === 'other') {
       state = 'off';
       pendingUntil = null;
+      sideTurn = null;
       return out;
     }
     if (session.phase === 'rest') {
@@ -377,6 +414,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
       // exercise
       // 'held' stays held (a tap decides); pausing it only stops the idle limits.
       if (state === 'off' || state === 'rest') enterSet(t, 0, 0, null);
+      turnTo(session.sideTurn ?? null, t);
       if (paused && state === 'pending') out.push(...cancel(t, 'paused'));
     }
     if (wasPaused && !paused) {
@@ -385,6 +423,33 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
       resumeT = t;
     }
     return out;
+  }
+
+  /**
+   * The session's side of a one-sided set. Into 'first': a new set (fresh reminder). 'first' →
+   * 'second' (Next arm): the second side starts at 0 with fresh stop timers. Repeats are no-ops.
+   */
+  function turnTo(next: SideTurn | null, t: number): void {
+    if (next === sideTurn) return;
+    const prev = sideTurn;
+    sideTurn = next;
+    if (next === 'first') reminded = false;
+    else if (next === 'second' && prev === 'first' && state === 'set') enterSet(t, 0, 0, null);
+  }
+
+  /** First side of a one-sided set: count, never stop or hold; one reminder when idle. */
+  function firstSideFrame(t: number): AutoSetAction[] {
+    if (paused) return [];
+    const out: AutoSetAction[] = [];
+    if (
+      !reminded &&
+      reps >= 1 &&
+      t - Math.max(moveT, stopFloor) >= ms(config.nextSideReminderSec)
+    ) {
+      reminded = true;
+      out.push({ type: 'remindNextSide', reps, partials });
+    }
+    return [...out, ...idle(t)];
   }
 
   function idle(t: number): AutoSetAction[] {
@@ -453,8 +518,10 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
       } else partials++;
       lastEventT = ev.t;
       activityT = t;
+      moveT = t;
     }
     if (phaseChanged) activityT = t;
+    if (phaseChanged && input.tracking) moveT = t;
     // Gate run: a gated frame starts or extends it, a re-tracked frame ends it; visibility-gated
     // and no-pose frames leave it as it is. Gated frames reset the still / stalled clocks.
     const gated = gatedFrame(input);
@@ -472,6 +539,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
       }
     }
 
+    if (state === 'set' && sideTurn === 'first') return firstSideFrame(t);
     if (state === 'pending') {
       if (phaseChanged && !START_BAND.has(input.phase)) attemptInWindow = true;
       return pendingFrame(input, repSeen);
@@ -524,9 +592,7 @@ export function createAutoSet(config: AutoSetConfig = AUTO_SET_DEFAULTS): AutoSe
 
   /** A posture / body-line gate failure with the person in frame (a break candidate). */
   function gatedFrame(input: AutoSetInput): boolean {
-    return (
-      (input.untracked === 'posture' || input.untracked === 'bodyLine') && presentIn(input)
-    );
+    return (input.untracked === 'posture' || input.untracked === 'bodyLine') && presentIn(input);
   }
 
   function presentIn(input: AutoSetInput): boolean {

@@ -2042,6 +2042,18 @@ h1 {
   padding-bottom: 8px;
 }
 
+/* M13b: a one-sided exercise's sets, one "R 12 · L 11 × 20 kg" line each (Summary, History,
+   Calendar day); the Calendar day's target goes on its own line under them. */
+.side-sets {
+  display: block;
+}
+
+.side-set,
+.side-target {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Summary (M4e Energy, src/ui/screens/summary.ts) ---------- */
 
 .summary.mood-energy {
@@ -2908,6 +2920,45 @@ textarea:focus-visible {
 }
 
 .cam-chip[hidden] {
+  display: none;
+}
+
+/* M13b: "Step into frame" strip. One line across the top of the video, right under the count
+   (measured HUD height), so it never covers the count or the lower half where he is bent over.
+   The ROM gauge is hidden while he isn't tracked, so the strip may span the full width. Spoken
+   once per loss (cameraView), so the screen is only the backup. No animation. */
+.cam-frame-strip {
+  position: absolute;
+  top: calc(16px + var(--hud-h, 160px));
+  left: 8px;
+  right: 8px;
+  margin: 0;
+  min-height: var(--tap-min);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--r-card);
+  border: 2px solid var(--warn);
+  border-left-width: 8px;
+  background: var(--surface);
+  color: var(--warn);
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.cam-frame-strip[hidden] {
+  display: none;
+}
+
+/* The strip says it: the same words don't repeat in the count panel (the hint, or the focus
+   cue's "Step back into frame." in the coach line), which keeps the HUD short. */
+.cam-stage.frame-lost .rep-hint[data-hint='frame'],
+.cam-stage.frame-lost .rep-coach[data-cue='outOfFrame'] {
   display: none;
 }
 

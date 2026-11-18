@@ -1,7 +1,17 @@
 // Workout session state machine (SPEC M1). Pure: every event carries its own timestamp.
+import type { SideTurn } from './autoSet';
+import { FIRST_SIDE, isOneSided, otherSide } from './exercises/oneSided';
 import { focusScore, isFocusCueId } from './focusScore';
 import { isSetEffort } from './trainer/effortRules';
-import type { FocusCueId, PlannedExercise, ProgramDay, SetEffort, SetLog } from './types';
+import type {
+  FocusCueId,
+  PlannedExercise,
+  ProgramDay,
+  SetEffort,
+  SetLog,
+  SideCount,
+  WorkSide,
+} from './types';
 import { fromUnit, snapToStep, toUnit, type Unit } from './units';
 import {
   isWarmup,
@@ -18,6 +28,17 @@ import { WARMUP_RULES } from './warmupRules';
 export const REST_OVERRUN_GRACE_SEC = 30;
 
 export type SessionPhase = 'exercise' | 'rest' | 'summary';
+
+/** M13b: the first side of a one-sided set once NEXT_SIDE has moved on from it. */
+export type DoneSide = {
+  readonly side: WorkSide;
+  readonly reps: number;
+  readonly partials: number;
+  /** That side's SET_FOCUS cues (null = none arrived), joined with the second side's at SET_DONE. */
+  readonly focusCues: readonly FocusCueId[] | null;
+  /** When NEXT_SIDE switched (clamped to ≥ setStartedAt). */
+  readonly at: number;
+};
 
 export type SessionState = {
   readonly sessionId: string;
@@ -65,6 +86,15 @@ export type SessionState = {
    * entry.
    */
   readonly warmups?: Readonly<Record<string, readonly WarmupSet[]>>;
+  /**
+   * M13b: only for a one-sided exercise (exercises/oneSided.ts), absent for two-sided ones. The
+   * side the current (exercise phase) or upcoming (rest) set is on: every set starts on
+   * FIRST_SIDE; NEXT_SIDE moves it to the other. `reps` / `partials` / `focusCues` are this
+   * side's.
+   */
+  readonly side?: WorkSide;
+  /** M13b: the first side's counts once NEXT_SIDE moved on; absent before that. */
+  readonly doneSide?: DoneSide;
 };
 
 export type StartOptions = {
@@ -98,7 +128,24 @@ export type SessionEvent =
    * M4c ground truth: fix the just-logged set's reps/partials on Rest (the camera's Set done
    * logs immediately). Ignored outside Rest, while paused, or with no logged set.
    */
-  | { type: 'CORRECT_LAST_SET'; reps: number; partials: number }
+  | {
+      type: 'CORRECT_LAST_SET';
+      reps: number;
+      partials: number;
+      /**
+       * M13b: fix one side of a one-sided set (sets or adds that side; `reps` / `partials` then
+       * become the lower side's). Ignored for a set logged without `sides`. Left out on a set with
+       * `sides`: the numbers are the set's total and `sides` is dropped.
+       */
+      side?: WorkSide;
+    }
+  /**
+   * M13b: one-sided exercise, first side done ("Next arm"): keep its reps/partials/cues and
+   * count the other side from here (`reps` stays as a starting value, partials and cues reset).
+   * Only in the exercise phase, not paused, on the first side. The rest clock is untouched: rest
+   * starts at SET_DONE after the second side. `now` is clamped to ≥ `setStartedAt`.
+   */
+  | { type: 'NEXT_SIDE'; now: number }
   /**
    * M12 1b: the optional Easy / Good / Hard answer for the set just logged (`null` clears it).
    * Only on Rest, not paused, and only for the last logged set (`setIndex` must be its
@@ -168,6 +215,46 @@ export type SessionSummary = {
 };
 
 const roundKg = (kg: number) => Math.round(kg * 100) / 100;
+
+/**
+ * M13b: which side of a one-sided set is running, for hands-free (`AutoSetSession.sideTurn`):
+ * 'first' before Next arm, 'second' after it; null for a two-sided exercise and outside the
+ * exercise phase.
+ */
+export function sideTurn(s: SessionState): SideTurn | null {
+  if (s.phase !== 'exercise' || s.side === undefined) return null;
+  return s.doneSide ? 'second' : 'first';
+}
+
+/** M13b: the side being worked, null for a two-sided exercise (or on Summary). */
+export function currentSide(s: SessionState): WorkSide | null {
+  return s.phase === 'summary' ? null : (s.side ?? null);
+}
+
+/**
+ * M13b: the side a one-sided set is logged as (`SetLog.reps` / `partials`): fewer reps; on a
+ * tie, more partials (the weaker side). Null when no side is recorded.
+ */
+export function lowerSide(sides: Partial<Record<WorkSide, SideCount>>): SideCount | null {
+  let low: SideCount | null = null;
+  for (const side of [FIRST_SIDE, otherSide(FIRST_SIDE)]) {
+    const c = sides[side];
+    if (!c) continue;
+    if (!low || c.reps < low.reps || (c.reps === low.reps && c.partials > low.partials)) low = c;
+  }
+  return low ? { reps: low.reps, partials: low.partials } : null;
+}
+
+/**
+ * M13b: `s` set up for a fresh set of `exerciseId`: on FIRST_SIDE with no done side for a
+ * one-sided exercise; without either field for a two-sided one (so its state is as before).
+ */
+function freshSide(s: SessionState, exerciseId: string): SessionState {
+  const rest: { -readonly [K in keyof SessionState]: SessionState[K] } = { ...s };
+  delete rest.side;
+  delete rest.doneSide;
+  return isOneSided(exerciseId) ? { ...rest, side: FIRST_SIDE } : rest;
+}
 
 function planned(day: ProgramDay, exIndex: number): PlannedExercise {
   const p = day.exercises[exIndex];
@@ -260,7 +347,8 @@ export function startSession(
       })
     : {};
   const warmups = Object.keys(ramps).length > 0 ? { warmups: ramps } : {};
-  return {
+  const first = planned(day, 0);
+  const state: SessionState = {
     sessionId,
     day,
     startedAt: now,
@@ -282,6 +370,7 @@ export function startSession(
     lastWeightKg,
     ...warmups,
   };
+  return freshSide(state, first.exerciseId);
 }
 
 export function currentPlanned(s: SessionState): PlannedExercise {
@@ -319,12 +408,13 @@ function toSummary(s: SessionState, now: number): SessionState {
 function goToExercise(s: SessionState, exIndex: number, now: number): SessionState {
   if (exIndex < 0) return toSummary(s, now);
   const p = planned(s.day, exIndex);
-  return {
+  const moved: SessionState = {
     ...s,
     exIndex,
     setIndex: workingFor(s, p.exerciseId).length,
     ...defaultsFor(s, p),
   };
+  return freshSide(moved, p.exerciseId);
 }
 
 /**
@@ -338,9 +428,19 @@ function correctLast(
   const last = s.logs.at(-1);
   if (!last) return s;
   if (!Number.isFinite(e.reps) || !Number.isFinite(e.partials)) return s;
-  const reps = Math.max(0, Math.round(e.reps));
-  const partials = Math.max(0, Math.round(e.partials));
-  const fixed: SetLog = { ...last, reps };
+  if (e.side !== undefined && !last.sides) return s;
+  const count = {
+    reps: Math.max(0, Math.round(e.reps)),
+    partials: Math.max(0, Math.round(e.partials)),
+  };
+  const fixed: SetLog = { ...last };
+  if (e.side !== undefined && last.sides) {
+    fixed.sides = { ...last.sides, [e.side]: count };
+  } else {
+    delete fixed.sides;
+  }
+  const { reps, partials } = (fixed.sides && lowerSide(fixed.sides)) ?? count;
+  fixed.reps = reps;
   if (partials > 0) fixed.partials = partials;
   else delete fixed.partials;
   applyScore(fixed);
@@ -501,23 +601,39 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       if (s.phase !== 'rest' || !Number.isFinite(e.sec) || e.sec <= 0) return s;
       return { ...s, restTargetSec: s.restTargetSec + e.sec };
 
+    case 'NEXT_SIDE': {
+      if (s.phase !== 'exercise' || s.side === undefined || s.doneSide) return s;
+      const doneSide: DoneSide = {
+        side: s.side,
+        reps: s.reps,
+        partials: s.partials,
+        focusCues: s.focusCues,
+        at: Math.max(e.now, s.setStartedAt),
+      };
+      return { ...s, side: otherSide(s.side), doneSide, partials: 0, focusCues: null };
+    }
+
     case 'SET_DONE': {
       if (s.phase !== 'exercise') return s;
       const now = Math.max(e.now, s.setStartedAt);
       const p = currentPlanned(s);
       const warm = warmupFor(s, p);
+      const sides = setSides(s);
+      const count = (sides && lowerSide(sides)) ?? { reps: s.reps, partials: s.partials };
+      const cues = setCues(s);
       const log: SetLog = {
         sessionId: s.sessionId,
         exerciseId: p.exerciseId,
         // A warm-up set is numbered within the ramp; working sets start at 0 after it.
         setIndex: warm ? warm.index : s.setIndex,
-        reps: s.reps,
-        ...(s.partials > 0 ? { partials: s.partials } : {}),
+        reps: count.reps,
+        ...(count.partials > 0 ? { partials: count.partials } : {}),
         weightKg: s.weightKg,
         restTakenSec: s.lastRestTakenSec,
         ...(s.restTargetSec > 0 ? { restTargetSec: s.restTargetSec } : {}),
-        ...(s.focusCues ? { cues: [...s.focusCues] } : {}),
+        ...(cues ? { cues } : {}),
         ...(warm ? { warmup: true as const } : {}),
+        ...(sides ? { sides } : {}),
         startedAt: s.setStartedAt,
         endedAt: now,
       };
@@ -526,7 +642,17 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       const moved = warm
         ? goToExercise(logged, s.exIndex, now) // the next warm-up, or working set 1 with its own values
         : s.setIndex + 1 < p.sets
-          ? { ...logged, setIndex: s.setIndex + 1, partials: 0, focusCues: null } // keep reps/weight for the next set
+          ? freshSide(
+              // keep reps/weight for the next set (a one-sided set's logged, lower reps)
+              {
+                ...logged,
+                setIndex: s.setIndex + 1,
+                reps: count.reps,
+                partials: 0,
+                focusCues: null,
+              },
+              p.exerciseId,
+            )
           : goToExercise(logged, nextUnfinished(logged, s.exIndex), now);
       if (moved.phase === 'summary') return moved;
       return {
@@ -576,6 +702,22 @@ export function next(s: SessionState, e: SessionEvent): SessionState {
       return { ...moved, setStartedAt: e.now, lastRestTakenSec: 0, restTargetSec: 0 };
     }
   }
+}
+
+/** M13b: the per-side counts of a one-sided set being logged; undefined for a two-sided one. */
+function setSides(s: SessionState): Partial<Record<WorkSide, SideCount>> | undefined {
+  if (s.side === undefined) return undefined;
+  const sides: Partial<Record<WorkSide, SideCount>> = {};
+  if (s.doneSide) sides[s.doneSide.side] = { reps: s.doneSide.reps, partials: s.doneSide.partials };
+  sides[s.side] = { reps: s.reps, partials: s.partials };
+  return sides;
+}
+
+/** The set's cues: both sides' SET_FOCUS cues joined (M13b), null when neither side got any. */
+function setCues(s: SessionState): FocusCueId[] | null {
+  const first = s.doneSide?.focusCues ?? null;
+  if (!first && !s.focusCues) return null;
+  return [...(first ?? []), ...(s.focusCues ?? [])];
 }
 
 export function summarize(s: SessionState): SessionSummary {

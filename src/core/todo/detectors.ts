@@ -44,6 +44,9 @@ export const FACT_COUNTS = [
   'micMessages',
   /** Weekly check-ins answered (skipped weeks don't count). */
   'checkInsDone',
+  // M13b (Checkpoint K2).
+  /** Working sets of a one-sided exercise logged on both sides (Next arm / Next leg used). */
+  'oneSidedSets',
 ] as const;
 
 /** The flags a facts snapshot carries. */
@@ -130,6 +133,8 @@ export const detectors: Record<TodoDetectorId, Detector> = {
   micUses: atLeast('micMessages', 3),
   reminderOn: flag('reminderOn'),
   checkInDone: atLeast('checkInsDone', 1),
+  // M13b (Checkpoint K2): one set done right, then Next arm, then left.
+  oneSidedSet: atLeast('oneSidedSets', 1),
 };
 
 export const DETECTOR_IDS = Object.keys(detectors) as TodoDetectorId[];

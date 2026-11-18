@@ -3,7 +3,9 @@
 import { restCueText, restCuesBetween } from '../core/restCues';
 import {
   currentPlanned,
+  currentSide,
   currentWarmup,
+  sideTurn,
   next,
   next as nextState,
   restElapsedMs,
@@ -280,6 +282,10 @@ import {
   shareStoryLayout,
   type ShareSize,
 } from './shareMonth';
+import { saveFile } from './saveFile';
+import { ONE_SIDED_COPY, otherSide } from '../core/exercises/oneSided';
+import { oneSidedView } from './oneArm';
+import { APP_NAME } from '../core/brand';
 import { reducedMotion, screenEntrance, type EnterDir } from './motion';
 import { undoToast, type UndoToast } from './coach/undoToast';
 import { planChangesScreen } from './screens/planChanges';
@@ -335,7 +341,7 @@ import {
 } from '../core/stats';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
-import { ruleStatus } from '../core/exercises';
+import { oneSidedLimb, ruleStatus } from '../core/exercises';
 import { h } from './dom';
 import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { createFuel } from './fuel/fuelController';
@@ -344,6 +350,7 @@ import { createHealthHost } from './healthHost';
 import { isAppRoute } from '../core/todo/routes';
 import type {
   AppRoute,
+  WorkSide,
   CheckIn,
   CoachSettings,
   ReminderKind,
@@ -817,6 +824,10 @@ export function mountApp(root: HTMLElement): void {
               if (!cameraHandsFree) closeCameraView();
               dispatch({ type: 'SET_DONE', now: now() });
             },
+            // M13b: Next arm on the first side of a one-sided set (it takes Set done's place).
+            onNextSide: () => {
+              if (view.screen === 'session') nextSide(view.s);
+            },
             ...(handsFree ? { handsFree: handsFreeOptions() } : {}),
           }),
     });
@@ -832,12 +843,21 @@ export function mountApp(root: HTMLElement): void {
     void camera.start();
   }
 
+  /** M13b: true while a hands-free auto start dispatches (no side start line then). */
+  let autoStarting = false;
+
   function handsFreeOptions(): HandsFreeOptions {
     return {
       onAutoStart: ({ at, frameT }) => {
         // The set's frames from 1.5 s before the first rep go into the dev log (pre-roll).
         cameraPrerollFromT = frameT - 1500;
-        dispatch({ type: 'START_SET', now: at });
+        // He is already reps into the right arm: no "Right arm first." over the count words.
+        autoStarting = true;
+        try {
+          dispatch({ type: 'START_SET', now: at });
+        } finally {
+          autoStarting = false;
+        }
         cameraPrerollFromT = undefined;
       },
       onCommit: ({ endedAt }) => {
@@ -902,6 +922,8 @@ export function mountApp(root: HTMLElement): void {
       paused: s.paused,
       restElapsedMs: restElapsedMs(s, now()),
       ...cameraTarget(),
+      // M13b: locks the counter to the right arm, then the left after Next arm (null: two-sided).
+      sideTurn: sideTurn(s),
     });
     if (s.phase === 'exercise' && pendingSet) {
       cameraThisSet = true;
@@ -3294,21 +3316,15 @@ export function mountApp(root: HTMLElement): void {
   }
 
   /** The eval report (ids, actions, pass/safe, latency; no text) as a file on this phone. */
+  /** The share sheet in the iPhone app (an <a download> click does nothing there). */
   function exportEval(): void {
     const report = evalState.report;
     if (!report) return;
-    const url = URL.createObjectURL(
+    void saveFile(
       new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }),
-    );
-    const a = h('a', {
-      href: url,
-      download: `gym-clean-coach-eval-${localDate(report.at)}.json`,
-      hidden: true,
-    });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      `gym-clean-coach-eval-${localDate(report.at)}.json`,
+      'Coach eval',
+    ).catch(logDbError);
   }
 
   // ---------- M12 slice 1c: What's New tour + to-dos (todo/todoHost.ts) ----------
@@ -4590,15 +4606,23 @@ export function mountApp(root: HTMLElement): void {
     try {
       const t = now();
       const file = await exportAll(db, { now: t });
-      const url = URL.createObjectURL(
+      // The share sheet in the iPhone app (an <a download> click does nothing there).
+      const res = await saveFile(
         new Blob([JSON.stringify(file)], { type: 'application/json' }),
+        backupFileName(t),
+        `${APP_NAME} backup`,
       );
-      const a = h('a', { href: url, download: backupFileName(t), hidden: true });
-      document.body.append(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      restoreStep = { kind: 'message', text: 'Backup saved to this phone.', error: false };
+      // In the iPhone app a download link does nothing: only the share sheet saves the file.
+      restoreStep =
+        res === 'cancelled'
+          ? { kind: 'message', text: 'Backup not saved.', error: false }
+          : res === 'downloaded' && native
+            ? { kind: 'message', text: "Couldn't open the share sheet. Try again.", error: true }
+            : {
+                kind: 'message',
+                text: 'Backup ready. Keep the file somewhere safe.',
+                error: false,
+              };
     } catch (err) {
       logDbError(err);
       restoreStep = { kind: 'message', text: "Couldn't make the backup. Try again.", error: true };
@@ -4838,6 +4862,7 @@ export function mountApp(root: HTMLElement): void {
     startTicker();
     render();
     speakFocusCue(null, s);
+    speakSideStart(null, s);
     speakBetweenSets(s);
   }
 
@@ -4969,6 +4994,17 @@ export function mountApp(root: HTMLElement): void {
       root.querySelector<HTMLElement>(`[data-effort-opt="${e.effort}"]`)?.focus();
     speakFocusCue(prev, s);
     speakBetweenSets(s);
+    speakSideStart(prev, s);
+  }
+
+  /**
+   * M13b: a one-sided set starts on the right, said out loud (voice over screen) whenever a set
+   * comes up: workout start, after rest, the exercise list or Skip.
+   */
+  function speakSideStart(prev: SessionState | null, s: SessionState): void {
+    if (autoStarting || !shouldSpeakFocusCue(prev, s) || s.doneSide) return;
+    const limb = oneSidedLimb(currentPlanned(s)?.exerciseId ?? '');
+    if (limb) voice.speak(ONE_SIDED_COPY[limb].spokenStart, { kind: 'cue' });
   }
 
   /**
@@ -5078,7 +5114,10 @@ export function mountApp(root: HTMLElement): void {
           reps: last.reps,
           partials: last.partials ?? 0,
           learning: lastLogLearning,
-          onCorrect: (reps, partials) => correctLastSet(reps, partials),
+          // M13b: a one-sided set fixes each side ("Right arm" / "Left arm").
+          sides: last.sides,
+          limb: oneSidedLimb(last.exerciseId),
+          onCorrect: (reps, partials, side) => correctLastSet(reps, partials, side),
         }),
       };
     }
@@ -5096,8 +5135,8 @@ export function mountApp(root: HTMLElement): void {
     );
   }
 
-  function correctLastSet(reps: number, partials: number): void {
-    dispatch({ type: 'CORRECT_LAST_SET', reps, partials });
+  function correctLastSet(reps: number, partials: number, side?: WorkSide): void {
+    dispatch({ type: 'CORRECT_LAST_SET', reps, partials, ...(side ? { side } : {}) });
     if (view.screen !== 'session') return;
     const s = view.s;
     const last = s.logs.at(-1);
@@ -5109,10 +5148,21 @@ export function mountApp(root: HTMLElement): void {
       r.reps = Math.max(0, Math.round(counts.reps));
       if (counts.partials > 0) r.partials = Math.round(counts.partials);
       else delete r.partials;
+      // M13b: the reducer's per-side counts (a fix without a side drops them).
+      if (last.sides) r.sides = last.sides;
+      else delete r.sides;
       if (last.focusScore === undefined) delete r.focusScore;
       else r.focusScore = Math.min(100, Math.max(0, Math.round(last.focusScore)));
     }).catch(logDbError);
-    rec((r) => void r.correctSet(counts));
+    const sideCounts = side ? last.sides?.[side] : undefined;
+    rec(
+      (r) =>
+        void r.correctSet(
+          counts,
+          undefined,
+          side && sideCounts ? { side, logged: sideCounts } : undefined,
+        ),
+    );
     if (last.cues) logFocusScore(last);
     if (s.phase === 'summary') saveTotals(s);
   }
@@ -5204,6 +5254,7 @@ export function mountApp(root: HTMLElement): void {
         today: today || undefined,
         last: last || undefined,
         warmup: warm ? { index: warm.index, total: warm.of } : undefined,
+        side: oneSidedView(id, s),
       },
       {
         onList: () => setSheet({ kind: 'list' }),
@@ -5219,8 +5270,28 @@ export function mountApp(root: HTMLElement): void {
             delta: dir * (field === 'reps' ? 1 : stepFor(s.unit)),
           }),
         onSetDone: () => dispatch({ type: 'SET_DONE', now: now() }),
+        onNextSide: () => nextSide(s),
       },
     );
+  }
+
+  /** M13b: the first side is done: log it, then NEXT_SIDE (the counter flips via syncCamera). */
+  function nextSide(s: SessionState): void {
+    const from = currentSide(s);
+    if (!from || s.doneSide || s.phase !== 'exercise' || s.paused) return;
+    const counts = { reps: s.reps, partials: s.partials };
+    rec(
+      (r) =>
+        void r.nextSide({
+          from,
+          to: otherSide(from),
+          logged: counts,
+          ...(cameraThisSet ? { counted: counts } : {}),
+        }),
+    );
+    dispatch({ type: 'NEXT_SIDE', now: now() });
+    // The camera counts the left from 0: nothing counted there must not log the right's reps.
+    if (camera && cameraThisSet) dispatch({ type: 'SET_COUNTED', reps: 0, partials: 0 });
   }
 
   /**

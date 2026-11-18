@@ -826,3 +826,122 @@ describe('developer log pre-roll (M5c hands-free)', () => {
     expect(frameBytes / frames.length).toBeLessThanOrEqual(470);
   });
 });
+
+describe('developer log one-sided sets (M13b)', () => {
+  const ROW = 'Dumbbell_Bent_Over_Row';
+  const open = (r: DevLogRecorder) =>
+    r.beginSet({ exerciseId: ROW, setIndex: 1, targetReps: [8, 12], weightKg: 20, startedAt: clock });
+
+  it('records Next arm as a nextSide event with its time and the first side’s counts', async () => {
+    const r = await start({ id: 'ns1' });
+    open(r);
+    r.nextSide(
+      { from: 'right', to: 'left', counted: { reps: 12, partials: 1 }, logged: { reps: 12, partials: 1 } },
+      clock + 30_000,
+    );
+    await r.endSet({
+      counted: { reps: 11, partials: 0 },
+      logged: { reps: 11, partials: 0 },
+      sides: {
+        right: { counted: { reps: 12, partials: 1 }, logged: { reps: 12, partials: 1 } },
+        left: { counted: { reps: 11, partials: 0 }, logged: { reps: 11, partials: 0 } },
+      },
+      weightKg: 20,
+      endedAt: clock + 60_000,
+    });
+    await r.finish();
+    const s = must((await exportSession(db, 'ns1')).sessions[0]);
+    const ev = s.events.find((e) => e.type === 'nextSide');
+    expect(ev).toEqual({
+      t: clock + 30_000,
+      type: 'nextSide',
+      data: {
+        exerciseId: ROW,
+        setIndex: 1,
+        from: 'right',
+        to: 'left',
+        counted: { reps: 12, partials: 1 },
+        logged: { reps: 12, partials: 1 },
+      },
+    });
+    expect(s.sets[0]).toMatchObject({
+      nextSideAt: clock + 30_000,
+      logged: { reps: 11, partials: 0 },
+      sides: {
+        right: { counted: { reps: 12, partials: 1 }, logged: { reps: 12, partials: 1 } },
+        left: { counted: { reps: 11, partials: 0 }, logged: { reps: 11, partials: 0 } },
+      },
+    });
+  });
+
+  it('keeps the first side from nextSide when the set end gives only the second (manual set)', async () => {
+    const r = await start({ id: 'ns2' });
+    open(r);
+    r.nextSide({ from: 'right', to: 'left', logged: { reps: 10, partials: 0 } }, clock + 1);
+    await r.endSet({
+      logged: { reps: 9, partials: 0 },
+      sides: { left: { logged: { reps: 9, partials: 0 } } },
+      weightKg: 20,
+    });
+    await r.finish();
+    const set = await firstSet(db, 'ns2');
+    expect(set.sides).toEqual({
+      right: { logged: { reps: 10, partials: 0 } },
+      left: { logged: { reps: 9, partials: 0 } },
+    });
+    expect(set.counted).toBeUndefined();
+  });
+
+  it('the nextSide event carries ids and numbers only (no text)', async () => {
+    const r = await start({ id: 'ns3' });
+    open(r);
+    r.nextSide({ from: 'right', to: 'left', logged: { reps: 3, partials: 0 } });
+    await r.finish();
+    const s = must((await exportSession(db, 'ns3')).sessions[0]);
+    const data = must(s.events.find((e) => e.type === 'nextSide')).data as Record<string, unknown>;
+    expect(Object.keys(data).sort()).toEqual(['exerciseId', 'from', 'logged', 'setIndex', 'to']);
+    for (const v of [data.from, data.to]) expect(['right', 'left']).toContain(v);
+  });
+
+  it('ignores nextSide with no open set, and a two-sided set has no sides', async () => {
+    const r = await start({ id: 'ns4' });
+    r.nextSide({ from: 'right', to: 'left', logged: { reps: 3, partials: 0 } });
+    await cameraSet(r);
+    await r.finish();
+    const s = must((await exportSession(db, 'ns4')).sessions[0]);
+    expect(s.events.some((e) => e.type === 'nextSide')).toBe(false);
+    expect(s.sets[0]?.sides).toBeUndefined();
+    expect(s.sets[0]?.nextSideAt).toBeUndefined();
+  });
+
+  it('a Fix on one side corrects that side and the set, and logs which side', async () => {
+    const r = await start({ id: 'ns5' });
+    open(r);
+    r.nextSide({ from: 'right', to: 'left', logged: { reps: 12, partials: 0 } }, clock + 1);
+    await r.endSet({
+      logged: { reps: 11, partials: 0 },
+      sides: { left: { logged: { reps: 11, partials: 0 } } },
+      weightKg: 20,
+    });
+    await r.correctSet({ reps: 10, partials: 0 }, clock + 5, {
+      side: 'right',
+      logged: { reps: 10, partials: 0 },
+    });
+    await r.finish();
+    const s = must((await exportSession(db, 'ns5')).sessions[0]);
+    expect(s.sets[0]).toMatchObject({
+      logged: { reps: 10, partials: 0 },
+      sides: { right: { logged: { reps: 10, partials: 0 } }, left: { logged: { reps: 11, partials: 0 } } },
+    });
+    expect(s.events.find((e) => e.type === 'correction')).toMatchObject({
+      t: clock + 5,
+      data: {
+        side: 'right',
+        from: { reps: 11, partials: 0 },
+        to: { reps: 10, partials: 0 },
+        sideFrom: { reps: 12, partials: 0 },
+        sideTo: { reps: 10, partials: 0 },
+      },
+    });
+  });
+});

@@ -1098,3 +1098,52 @@ describe('M12 slice 2 weekly check-ins in backups', () => {
     }
   });
 });
+
+describe('M13b one-sided sets in backups', () => {
+  const SIDES = { right: { reps: 12, partials: 1 }, left: { reps: 11, partials: 0 } };
+
+  it('round-trips a set’s per-side counts', async () => {
+    await a.sets.add({ ...SET_ROW, reps: 11, partials: 0, sides: SIDES });
+    await a.sets.add({ ...SET_ROW, setIndex: 1, reps: 9, sides: { right: { reps: 9, partials: 0 } } });
+    const file = await exportAll(a, { appVersion: 't', now: T0 });
+    await importAll(b, viaFile(file));
+    const rows = (await b.sets.toArray()).sort((x, y) => x.setIndex - y.setIndex);
+    expect(rows.map((r) => r.sides)).toEqual([SIDES, { right: { reps: 9, partials: 0 } }]);
+    expect(rows[0]?.reps).toBe(11);
+  });
+
+  it('still loads an older backup whose sets have no sides', async () => {
+    const f = await exportAll(a, { appVersion: '1.15.0', now: T0 });
+    f.tables.sets = [{ ...SET_ROW, id: 1 }];
+    await importAll(b, viaFile(f));
+    expect((await b.sets.get(1))?.sides).toBeUndefined();
+    expect((await b.sets.get(1))?.reps).toBe(10);
+  });
+
+  it('refuses badly shaped sides with code corrupt', async () => {
+    const bad: unknown[] = [
+      'R12 L11',
+      [12, 11],
+      null,
+      { right: 12 },
+      { right: { reps: '12', partials: 0 } },
+      { right: { reps: 12 } },
+      { left: { reps: 12, partials: -1 } },
+      { left: { reps: Number.NaN, partials: 0 } },
+      { middle: { reps: 3, partials: 0 } },
+    ];
+    for (const sides of bad) {
+      const f = await exportAll(a, { appVersion: 't', now: T0 });
+      const text = JSON.stringify({ ...f, tables: { ...f.tables, sets: [{ ...SET_ROW, id: 1, sides }] } });
+      let err: unknown = null;
+      try {
+        validateBackup(b, text);
+      } catch (e) {
+        err = e;
+      }
+      expect(err, JSON.stringify(sides)).toBeInstanceOf(BackupError);
+      expect((err as BackupError).code).toBe('corrupt');
+      expect((err as BackupError).message).toContain('sides');
+    }
+  });
+});

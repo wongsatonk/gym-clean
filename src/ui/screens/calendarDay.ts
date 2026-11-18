@@ -7,6 +7,7 @@ import type { DayCompletion, FocusGroup } from '../../core/types';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
 import { countUp } from '../motion';
+import { sidedSetBlock, type SetSides } from '../sidesText';
 import { moodClass } from '../tokens';
 import { dayLong, ringPct, statusRing, statusWord } from './calendar';
 
@@ -87,8 +88,30 @@ export function repsLine(ex: DayCompletion['exercises'][number]): string {
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/**
+ * M13b: a day exercise may carry each logged set's per-side counts (parallel to `reps`), for
+ * "R 12 · L 11 reps". Optional until `DayCompletion` has it (core `completion.ts`).
+ */
+export type DayExercise = DayCompletion['exercises'][number] & {
+  sides?: readonly (SetSides | null | undefined)[] | undefined;
+};
+
+/** One-sided: one "R 12 · L 11 reps" line per set, then "Target 8–12"; else the old line. */
+function repsCell(ex: DayExercise): HTMLElement | null {
+  const sets = ex.reps.map((reps, i) => ({ reps, weightKg: 0, sides: ex.sides?.[i] ?? null }));
+  const block = sidedSetBlock(sets, 'kg', '');
+  if (!block) return repsLine(ex) ? h('p', { class: 'cal-ex-reps muted' }, repsLine(ex)) : null;
+  const target = repsLine({ ...ex, reps: [] });
+  return h(
+    'p',
+    { class: 'cal-ex-reps muted' },
+    block,
+    target ? h('span', { class: 'side-target' }, target) : null,
+  );
+}
+
 function exerciseRow(
-  ex: DayCompletion['exercises'][number],
+  ex: DayExercise,
   props: CalendarDayProps,
   actions: CalendarDayActions,
 ): HTMLElement {
@@ -118,7 +141,7 @@ function exerciseRow(
         icon(r.icon, 'sm'),
         h('span', {}, `${r.word} · ${sets}`),
       ),
-      repsLine(ex) ? h('p', { class: 'cal-ex-reps muted' }, repsLine(ex)) : null,
+      repsCell(ex),
     ),
     h(
       'button',

@@ -18,6 +18,17 @@ const base = import.meta.env.BASE_URL;
 export const MODEL_URL = `${base}models/pose_landmarker_lite.task`;
 export const WASM_URL = `${base}mediapipe/wasm`;
 
+/**
+ * Detection/presence/tracking confidences (MediaPipe default 0.5). 0.3 keeps the pose through the
+ * bent-over row (M13b task 2: frames with a pose 92/52/64/57/61% -> 95/71/76/80/87% on the five
+ * real row clips, same speed). Fixtures in fixtures/landmarks stay extracted at the defaults.
+ */
+export const POSE_CONFIDENCE = {
+  minPoseDetectionConfidence: 0.3,
+  minPosePresenceConfidence: 0.3,
+  minTrackingConfidence: 0.3,
+} as const;
+
 export type CreateOptions = {
   /**
    * Fetch the wasm loader + model ourselves (blob: loader, modelAssetBuffer) instead of letting
@@ -39,7 +50,12 @@ async function create(delegate: Delegate, ownFetch: boolean): Promise<PoseLandma
     const baseOptions = ownFetch
       ? { modelAssetBuffer: await loadModelBuffer(new URL(MODEL_URL, location.origin).href, (u) => fetch(u)), delegate }
       : { modelAssetPath: MODEL_URL, delegate };
-    return await PoseLandmarker.createFromOptions(fileset, { baseOptions, runningMode: 'VIDEO', numPoses: 1 });
+    return await PoseLandmarker.createFromOptions(fileset, {
+      baseOptions,
+      runningMode: 'VIDEO',
+      numPoses: 1,
+      ...POSE_CONFIDENCE,
+    });
   } finally {
     release();
   }

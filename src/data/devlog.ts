@@ -8,7 +8,7 @@
 import Dexie from 'dexie';
 import { FrameEncoder, decodeFrames, type DevLogFrame } from '../core/devlogCodec';
 import type { RuleStatus } from '../core/exercises/types';
-import type { LandmarkFrame, RepEvent } from '../core/types';
+import type { LandmarkFrame, RepEvent, WorkSide } from '../core/types';
 import type {
   DevLogCameraMeta,
   DevLogChunkRow,
@@ -16,11 +16,19 @@ import type {
   DevLogEvent,
   DevLogSessionRow,
   DevLogSetRow,
+  DevLogSide,
   DevLogSpeech,
   GymDb,
 } from './db';
 
-export type { DevLogCameraMeta, DevLogCount, DevLogEvent, DevLogSpeech, DevLogFrame };
+export type {
+  DevLogCameraMeta,
+  DevLogCount,
+  DevLogEvent,
+  DevLogSide,
+  DevLogSpeech,
+  DevLogFrame,
+};
 
 export const DEVLOG_FLUSH_MS = 10_000;
 export const DEVLOG_CAP_BYTES = 150 * 1024 * 1024;
@@ -42,6 +50,10 @@ export type DevLogSetExport = {
   startedAt: number;
   endedAt?: number;
   restTakenSec?: number;
+  /** M13b: per-side counts of a one-sided set; `counted`/`logged` are the lower side's. */
+  sides?: Partial<Record<WorkSide, DevLogSide>>;
+  /** M13b: when Next arm / Next leg was tapped (wall clock ms). */
+  nextSideAt?: number;
   camera?: DevLogCameraMeta & {
     /** M4f: the rule's status at set start; missing on sets logged before M4f. */
     ruleStatus?: RuleStatus;
@@ -140,7 +152,24 @@ export type DevLogSetEnd = {
   /** Wall clock ms; default now. */
   endedAt?: number;
   restTakenSec?: number;
+  /**
+   * M13b one-sided set: per-side counts. Merged over what `nextSide` stored, so a caller may
+   * pass only the second side.
+   */
+  sides?: Partial<Record<WorkSide, DevLogSide>>;
 };
+
+/** M13b: Next arm / Next leg, logged with the side just finished. */
+export type DevLogNextSide = {
+  from: WorkSide;
+  to: WorkSide;
+  /** What the camera counted on `from` (camera sets only). */
+  counted?: DevLogCount;
+  logged: DevLogCount;
+};
+
+/** M13b: a Fix on one side of a one-sided set (the set's own `logged` is then the lower side). */
+export type DevLogSideCorrection = { side: WorkSide; logged: DevLogCount };
 
 export type DevLogBeginOptions = {
   /**
@@ -177,10 +206,18 @@ export interface DevLogRecorder {
   repEvent(ev: RepEvent): void;
   speech(s: DevLogSpeech): void;
   fps(t: number, fps: number): void;
+  /**
+   * M13b: Next arm / Next leg in the open set. Logs a 'nextSide' event (ids and numbers only)
+   * and keeps the finished side's counts on the set. Ignored with no open set.
+   */
+  nextSide(info: DevLogNextSide, t?: number): void;
   /** Closes the open set and flushes it. */
   endSet(result: DevLogSetEnd): Promise<void>;
-  /** Corrects the last ended set's logged numbers (clamped ≥ 0) and logs a 'correction' event. */
-  correctSet(logged: DevLogCount, t?: number): Promise<void>;
+  /**
+   * Corrects the last ended set's logged numbers (clamped ≥ 0) and logs a 'correction' event.
+   * M13b: with `side`, that side's logged count is corrected too and the event names the side.
+   */
+  correctSet(logged: DevLogCount, t?: number, side?: DevLogSideCorrection): Promise<void>;
   /** Writes everything buffered so far. */
   flush(): Promise<void>;
   /** Resolves when every write queued so far is done. */
@@ -205,6 +242,7 @@ const NOOP: DevLogRecorder = {
   repEvent: () => {},
   speech: () => {},
   fps: () => {},
+  nextSide: () => {},
   endSet: async () => {},
   correctSet: async () => {},
   flush: async () => {},
@@ -352,10 +390,41 @@ class Recorder implements DevLogRecorder {
     if (this.active) this.open?.fps.push({ t, fps });
   }
 
+  nextSide(info: DevLogNextSide, t?: number): void {
+    const o = this.active ? this.open : null;
+    if (!o) return;
+    const at = t ?? this.now();
+    const row = o.row;
+    const side: DevLogSide = { logged: clampCount(info.logged) };
+    if (info.counted) side.counted = clampCount(info.counted);
+    row.sides = { ...row.sides, [info.from]: side };
+    row.nextSideAt = at;
+    o.dirty = true;
+    const data: Record<string, unknown> = {
+      exerciseId: row.exerciseId,
+      setIndex: row.setIndex,
+      from: info.from,
+      to: info.to,
+    };
+    if (side.counted) data.counted = { ...side.counted };
+    data.logged = { ...side.logged };
+    this.logEvent('nextSide', data, at);
+  }
+
   endSet(result: DevLogSetEnd): Promise<void> {
     const o = this.active ? this.open : null;
     if (!o) return this.settled();
     const row = o.row;
+    if (result.sides) {
+      const merged = { ...row.sides };
+      for (const k of ['right', 'left'] as const) {
+        const s = result.sides[k];
+        if (!s) continue;
+        merged[k] = { logged: clampCount(s.logged) };
+        if (s.counted) (merged[k] as DevLogSide).counted = clampCount(s.counted);
+      }
+      row.sides = merged;
+    }
     if (result.counted) row.counted = { ...result.counted };
     row.logged = { ...result.logged };
     row.weightKg = result.weightKg;
@@ -368,23 +437,32 @@ class Recorder implements DevLogRecorder {
     return done;
   }
 
-  correctSet(logged: DevLogCount, t?: number): Promise<void> {
+  correctSet(logged: DevLogCount, t?: number, side?: DevLogSideCorrection): Promise<void> {
     const row = this.active ? this.lastEnded : null;
     if (!row) return this.settled();
-    const to = {
-      reps: Math.max(0, Math.round(logged.reps)),
-      partials: Math.max(0, Math.round(logged.partials)),
-    };
+    const to = clampCount(logged);
     const from = row.logged ? { ...row.logged } : undefined;
     row.logged = to;
-    this.logEvent(
-      'correction',
-      { exerciseId: row.exerciseId, setIndex: row.setIndex, from, to },
-      t,
-    );
+    const data: Record<string, unknown> = {
+      exerciseId: row.exerciseId,
+      setIndex: row.setIndex,
+      from,
+      to,
+    };
+    const changes: Partial<DevLogSetRow> = { logged: to };
+    if (side) {
+      const prev = row.sides?.[side.side];
+      const sideTo = clampCount(side.logged);
+      row.sides = { ...row.sides, [side.side]: { ...prev, logged: sideTo } };
+      data.side = side.side;
+      if (prev) data.sideFrom = { ...prev.logged };
+      data.sideTo = sideTo;
+      changes.sides = structuredClone(row.sides);
+    }
+    this.logEvent('correction', data, t);
     const key = row.key;
     this.enqueue(async () => {
-      await this.db.devlogSets.update(key, { logged: to });
+      await this.db.devlogSets.update(key, changes);
     });
     return this.flush();
   }
@@ -490,6 +568,11 @@ class Recorder implements DevLogRecorder {
     this.halt();
     await this.settled();
   }
+}
+
+/** Whole, non-negative counts (the log's ground truth never goes below zero). */
+function clampCount(c: DevLogCount): DevLogCount {
+  return { reps: Math.max(0, Math.round(c.reps)), partials: Math.max(0, Math.round(c.partials)) };
 }
 
 /**

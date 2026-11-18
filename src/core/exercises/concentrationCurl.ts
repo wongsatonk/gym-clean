@@ -26,6 +26,9 @@ export const concentrationCurl: ExerciseRule = {
   start: 'extended',
   eccentric: 'toExtended',
   sideMode: 'best',
+  // M13b task 8: seated (hip 66–76° on the synthetic clips); standing up in front of the phone
+  // (152–171° on the real row clips) counts nothing.
+  maxHipAngleDeg: 130,
   focus: learningFocus(),
   hints: { far: 'Curl up to your shoulder.', start: 'Lower until your arm is straight.' },
   placement: {

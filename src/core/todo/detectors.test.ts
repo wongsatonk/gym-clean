@@ -44,6 +44,7 @@ describe('detector registry', () => {
       micUses: true,
       reminderOn: true,
       checkInDone: true,
+      oneSidedSet: true,
     };
     expect([...DETECTOR_IDS].sort()).toEqual(Object.keys(all).sort());
     expect(Object.keys(detectors).sort()).toEqual(Object.keys(all).sort());
@@ -76,6 +77,8 @@ const COUNT_CASES: [TodoDetectorId, (typeof FACT_COUNTS)[number], number][] = [
   ['appleAnswers', 'appleReplies', 5],
   ['micUses', 'micMessages', 3],
   ['checkInDone', 'checkInsDone', 1],
+  // M13b (Checkpoint K2).
+  ['oneSidedSet', 'oneSidedSets', 1],
 ];
 
 describe.each(COUNT_CASES)('%s (counts.%s)', (id, key, need) => {

@@ -409,3 +409,37 @@ describe('M12 1b: e1RM chart in the exercise detail', () => {
     ).toHaveLength(0);
   });
 });
+
+describe('history screen M13b one-sided sets', () => {
+  const sides = (r: number, l: number) => ({
+    right: { reps: r, partials: 0 },
+    left: { reps: l, partials: 0 },
+  });
+  const ONE_ARM: ExerciseHistory = {
+    ...ROW,
+    sessions: [
+      sess('s1', 6, [{ reps: 10, weightKg: 20 }]),
+      {
+        ...sess('s3', 13, [
+          { reps: 11, weightKg: 20 },
+          { reps: 10, weightKg: 20 },
+        ]),
+        sets: [
+          { reps: 11, weightKg: 20, focusScore: null, sides: sides(12, 11) },
+          { reps: 10, weightKg: 20, focusScore: null, sides: sides(10, 10) },
+        ],
+      },
+    ],
+  };
+
+  it('a session with sides lists "R 12 · L 11 × 20 kg" per set; an older one-arm session as before', () => {
+    const { el } = render({ detail: ONE_ARM });
+    const rows = byAttr(el, 'data-history-session');
+    expect(rows[0]?.byClass('side-set').map((l) => l.textContent)).toEqual([
+      'R 12 · L 11 × 20 kg',
+      'R 10 · L 10 × 20 kg',
+    ]);
+    expect(rows[1]?.byClass('side-set')).toHaveLength(0);
+    expect(rows[1]?.textContent).toContain('10×20 kg');
+  });
+});

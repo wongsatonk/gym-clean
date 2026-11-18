@@ -9,6 +9,11 @@
 // synthetic-03-<flaw> clips (M5 task 9) add one deliberate form mistake on reps 5-8 of an 8-rep set,
 // as positive fixtures for the focus/form rules. The flaw is a per-rep weight `w` (0 = clean) that
 // each exercise's pose function reads through `PoseExtra`.
+//
+// synthetic-03-left clips (M13b task 7) are the one-sided exercises' clean 4-rep set done with the
+// LEFT arm: the rendered frames are flipped left-right. A mirrored image of a person showing their
+// right side is a (physically valid) person facing the other way and showing their left side, so
+// the near, working arm reads as the left arm. See LEFT for the per-exercise adjustments.
 import {
   BoxGeometry,
   CapsuleGeometry,
@@ -44,6 +49,8 @@ export type ClipSpec = {
   reps: number;
   partials: number;
   flaw?: FlawSpec;
+  /** The working arm when it isn't the default right (mirrored clips, M13b). */
+  side?: 'left';
 };
 
 declare global {
@@ -646,7 +653,15 @@ function bellAtHand(axis: Vector3) {
 type Move = 'full' | 'fast' | 'partial';
 /** One rep of a schedule: turnaround angle, lift/lowering seconds, flaw weight. */
 type Rep = { kind: 'full' | 'partial'; turn: number; up: number; down: number; w: number };
-type Plan = { name: string; moves: (Move | Rep)[]; flaw?: Omit<FlawSpec, 'reps' | 'flawReps'> };
+type Plan = {
+  name: string;
+  moves: (Move | Rep)[];
+  flaw?: Omit<FlawSpec, 'reps' | 'flawReps'>;
+  /** Render the frames flipped left-right: the working arm becomes the left one (M13b). */
+  mirror?: boolean;
+  /** Camera override for this clip (default: the exercise's). */
+  cam?: Exercise['cam'];
+};
 const CLEAN: Plan = { name: 'synthetic-01', moves: ['full', 'full', 'full', 'full'] };
 const MESSY: Plan = { name: 'synthetic-02', moves: ['full', 'partial', 'fast', 'partial', 'fast'] };
 
@@ -741,6 +756,27 @@ const FLAWS: Record<string, Plan[]> = {
   ],
 };
 
+// M13b task 7: one-sided exercises (SPEC M13b goal 1) that have a renderer here get a clean 4-rep
+// set with the left arm (mirrored). MediaPipe is not mirror-symmetric, so a plain flip of the
+// right-arm clip misreads: the row's working wrist swaps labels with the braced hand at the top of a
+// 45 deg turn (counted 0/4), and the concentration curl's hanging left arm reads ~142 deg in the
+// right clip's 3/4 view (under the 145 extended threshold; counted 2/0). Measured fixes, each
+// rendered twice to check they hold: the row turns at 62 (reads ~71-89, no swap), the concentration
+// curl's camera moves further round toward the front. Both still go >= 10 deg past the thresholds.
+const LEFT: Record<string, Plan> = {
+  row: {
+    name: 'synthetic-03-left',
+    moves: CLEAN.moves.map(() => full({ turn: 62 })),
+    mirror: true,
+  },
+  'concentration-curl': {
+    name: 'synthetic-03-left',
+    moves: CLEAN.moves,
+    mirror: true,
+    cam: { pos: [2.8, 0.78, 2.4], look: [0.22, 0.62, 0], fov: 32 },
+  },
+};
+
 // curl/synthetic-01 predates this renderer (3 full + 1 partial) and is kept byte-identical because
 // the e2e fake camera plays it; scripts/synthetic.mjs never re-renders an existing copy.
 const plansFor = (folder: string): Plan[] => [
@@ -748,6 +784,7 @@ const plansFor = (folder: string): Plan[] => [
     ? [{ name: 'synthetic-01', moves: ['full', 'full', 'full', 'partial'] } as Plan, MESSY]
     : [CLEAN, MESSY]),
   ...(FLAWS[folder] ?? []),
+  ...(LEFT[folder] ? [LEFT[folder]] : []),
 ];
 const HOLD_START = 1.0;
 const TAIL = 0.8;
@@ -813,6 +850,7 @@ window.__clips = () =>
         reps: full,
         partials,
       };
+      if (p.mirror) spec.side = 'left';
       if (p.flaw) {
         spec.flaw = {
           ...p.flaw,
@@ -924,9 +962,10 @@ window.__render = async ({ folder, name }) => {
   const floor = new Mesh(new PlaneGeometry(10, 10), new MeshStandardMaterial({ color: 0xa8a29a }));
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
-  const camera = new PerspectiveCamera(ex.cam.fov, W / H, 0.1, 30);
-  camera.position.set(...ex.cam.pos);
-  camera.lookAt(...ex.cam.look);
+  const cam = plan.cam ?? ex.cam;
+  const camera = new PerspectiveCamera(cam.fov, W / H, 0.1, 30);
+  camera.position.set(...cam.pos);
+  camera.lookAt(...cam.look);
 
   // Side view: the figure faces +x (screen right), the camera sees its right side.
   // Front view: turn the figure to face the camera (+z).
@@ -941,7 +980,20 @@ window.__render = async ({ folder, name }) => {
   );
   const total = keys.at(-1)?.t ?? 0;
 
-  const stream = renderer.domElement.captureStream(30);
+  // Mirrored clips record a 2D canvas that redraws each WebGL frame flipped left-right.
+  let out: HTMLCanvasElement = renderer.domElement;
+  let flip: (() => void) | undefined;
+  if (plan.mirror) {
+    out = document.createElement('canvas');
+    out.width = W;
+    out.height = H;
+    const ctx = out.getContext('2d');
+    if (!ctx) throw new Error('no 2d context');
+    ctx.setTransform(-1, 0, 0, 1, W, 0);
+    document.body.append(out);
+    flip = () => ctx.drawImage(renderer.domElement, 0, 0, W, H);
+  }
+  const stream = out.captureStream(30);
   const rec = new MediaRecorder(stream, {
     mimeType: 'video/webm;codecs=vp9',
     videoBitsPerSecond: 4e6,
@@ -951,6 +1003,7 @@ window.__render = async ({ folder, name }) => {
   const done = new Promise<void>((r) => (rec.onstop = () => r()));
   update(ex.pose(ex.start, CLEAN_X));
   renderer.render(scene, camera);
+  flip?.();
   rec.start(250);
 
   const t0 = performance.now();
@@ -960,6 +1013,7 @@ window.__render = async ({ folder, name }) => {
       const theta = angleAt(keys, t);
       update(ex.pose(theta, extraAt(keys, t, plan.flaw?.flaw ?? null)));
       renderer.render(scene, camera);
+      flip?.();
       if (t < total) requestAnimationFrame(frame);
       else resolve();
     };

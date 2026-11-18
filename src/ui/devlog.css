@@ -132,6 +132,37 @@
   display: none;
 }
 
+/* M13b: Right arm / Left arm picker for a one-sided set (the steppers edit the pressed side).
+   The pressed side is marked by a thick outline and bold text, not colour alone. */
+.lsc-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.lsc-nowrap {
+  white-space: nowrap;
+}
+
+.lsc-sides[hidden] {
+  display: none;
+}
+
+.lsc-side {
+  min-height: var(--tap-min);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 2px solid var(--line);
+}
+
+.lsc-side[aria-pressed='true'] {
+  font-weight: 800;
+  color: var(--text);
+  border: 3px solid var(--selected);
+}
+
 .lsc-steppers {
   display: grid;
   gap: 10px;

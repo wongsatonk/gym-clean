@@ -12,7 +12,9 @@ Use `git status`, `git diff`, `git diff --stat` (and `git diff main...HEAD` for 
 milestone). Only run read-only commands plus `npm run check` if useful.
 
 ## Check, in this order
-1. **Privacy (blocking):** no upload/fetch of frames or landmarks, no video recording or saving,
+1. **Privacy (blocking):** no upload/fetch of frames or landmarks; video recording only in the
+   M6c recorder (explicit tap, blur on by default + full-frame fail-safe, mic off by default,
+   share sheet/download only, never stored or uploaded by the app);
    no analytics/telemetry, no third-party CDN at runtime, nothing reads `fixtures/videos/**`,
    raw videos still gitignored.
 2. **Architecture (blocking):** `src/core/` pure (no DOM/MediaPipe/Dexie/ui/pose imports, no

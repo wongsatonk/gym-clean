@@ -18,6 +18,9 @@
  *
  * Release 1.15.0 (M13) adds "Published look" (Checkpoint K: a fresh install on a second phone).
  * Like every to-do it shows only in owner mode (src/core/todo/progress.ts).
+ *
+ * Release 1.15.1 (M13b) adds "One-arm sets" (Checkpoint K2: a one-arm row session at the gym). It
+ * folds in M13b-q1 (one-leg exercises too) and M13b-q2 (which side's count is the set's).
  */
 import { RULES } from '../../core/exercises';
 import { TRAINER_KIT_DEFAULTS } from '../../core/trainerKit/defaults';
@@ -59,8 +62,80 @@ const R113 = '1.13.0';
 const R114 = '1.14.0';
 /** M13 Published look (first launch, owner mode, About, Story share). */
 const R115 = '1.15.0';
+/** M13b one-arm sets (right, Next arm, left). */
+const R1151 = '1.15.1';
 
 export const TODO_TOPICS: readonly TodoTopic[] = [
+  {
+    id: 'one-arm-sets',
+    title: 'One-arm sets',
+    checkpoint: 'Checkpoint K2',
+    since: R1151,
+    platform: 'any',
+    steps: [
+      {
+        id: 'one-arm-set',
+        title: 'Finish a one-arm set with Next arm',
+        why: 'Right arm, tap Next arm, then left arm, in one set. One-Arm Dumbbell Row is a good one.',
+        tryIt: 'today',
+        kind: 'auto',
+        detector: 'oneSidedSet',
+        params: { min: 1 },
+      },
+      {
+        id: 'in-view',
+        title: 'Did the camera keep you in view while bent over?',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'arm-counts',
+        title: 'How many arm counts were wrong?',
+        why: 'Count each arm of each set as one.',
+        kind: 'ask',
+        note: 'optional',
+        options: WRONG_COUNT,
+      },
+      {
+        id: 'next-arm-easy',
+        title: 'Was Next arm easy to tap with a dumbbell in hand?',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'setup-card',
+        title: 'Did the phone set-up card stay out of the way?',
+        why: 'After the first rep, losing you should show one line at the top, not the card.',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'one-leg',
+        title: 'Step-ups and split squats also go right, then left. Keep that?',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'fine', label: 'Keep it' },
+          { id: 'oneTotal', label: 'Count them as one total' },
+          { id: 'untried', label: "Didn't try one" },
+        ],
+      },
+      {
+        id: 'set-number',
+        title: 'Which arm should count as the set?',
+        why: 'Today the lower count counts for targets and bests. Both are saved.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'lower', label: 'The lower arm (as now)' },
+          { id: 'higher', label: 'The higher arm' },
+        ],
+      },
+    ],
+  },
   {
     id: 'coach-calendar',
     title: 'Coach tab and Calendar',

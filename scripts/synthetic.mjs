@@ -1,6 +1,7 @@
 // npm run synthetic [-- <folder>...] [--force]
 // Renders the synthetic mannequin clips (tools/synthetic.ts) to
-// fixtures/synthetic/<folder>/synthetic-0N[-<flaw>]__reps-<n>__partials-<m>.webm, and writes the
+// fixtures/synthetic/<folder>/synthetic-0N[-<flaw>|-left]__reps-<n>__partials-<m>.webm (-left: the
+// one-sided exercises mirrored to the left arm, M13b), and writes the
 // ground truth of the flaw clips (synthetic-03-<flaw>, M5) to fixtures/synthetic/flaws.json.
 // Existing clips are kept unless --force: rendering is real-time and not byte-reproducible, and
 // curl/synthetic-01 is the e2e fake-camera clip, which must stay byte-identical.

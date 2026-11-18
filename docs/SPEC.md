@@ -393,7 +393,8 @@ mid-set.
   - **Bilateral curls and the bent-over row:** both arms move together, and a side view counts the
     near arm (M4f-q1).
   - **Concentration curls:** the camera counts the arm nearest the phone. Reps are per arm, as in the
-    plan (M4f-q2).
+    plan (M4f-q2). **Superseded by M13b (2026-11-17):** right arm, then a Next arm tap, then left arm,
+    both counted in one set.
   - **Dumbbell shoulder press:** the seated-press counting convention applies; the first press from the
     shoulders counts (Decision 2026-11-13, answer 2).
   - **Triceps extension:** one dumbbell held overhead with both hands, as in the how-to (M4f-q9).
@@ -722,6 +723,59 @@ auto start simply falls back to tapping Start set).
   "last 7 days" view of every session (requested at M1b).
 - Lighthouse pass on accessibility; respect `prefers-reduced-motion`.
 - **Accept:** installs on my phone home screen and works in airplane mode after first load.
+
+### M6c — Story clip recorder with adjustable background blur (added 2026-11-13)
+Record short clips of myself training **inside the app** to share on Instagram Stories, with
+everyone and everything except me blurred. Opt-in, on the phone only.
+
+**Recording**
+- A **Record** button on the camera screen (and on pose-tracked exercises). Before the first
+  recording: a one-time notice ("Video stays on your phone. Make sure you're allowed to film
+  here. Background blur is on.").
+- Composited 9:16 video: camera view + optional overlays (each a toggle): skeleton, live rep
+  counter, set/exercise label, small "Gym Clean" tag. Overlays stay inside Instagram's safe
+  zones (top ~13%, bottom ~18% kept clear).
+- `canvas.captureStream(30)` + `MediaRecorder` (MP4/H.264 on iPhone Safari; check the supported
+  mime types at runtime). Resolution 1080×1920 if the phone keeps ≥ 24 fps while tracking,
+  otherwise 720×1280 (chosen automatically, shown in the UI). Max 60 s per clip, with a visible
+  timer and a 3-2-1 countdown (spoken).
+- **Microphone off by default** (other people's voices); a toggle turns it on.
+- After stopping: preview → **Save / Share** via the iOS share sheet (`navigator.share` with the
+  file → "Save Video" to Photos or straight to Instagram) → the clip is discarded from the app.
+  Fallback: download. Never stored in IndexedDB, never uploaded by the app.
+
+**Background blur (adjustable)**
+- Person mask from the Pose Landmarker (`outputSegmentationMasks: true`, 1 pose) — keep me
+  sharp, process everything else. Done in a WebGL shader (don't rely on canvas `filter`;
+  check Safari support), so it stays fast on the iPhone.
+- **Modes:** Blur (default) · Pixelate · Solid colour · Dim only · Off.
+- **Sliders / options:**
+  - Strength: blur radius / pixel size, 0–100 (default 70).
+  - Edge softness: feather of the mask edge, 0–100 (default 40) — so the cut-out doesn't look
+    harsh.
+  - Background brightness: −100 (darker) to +50 (default −20) — makes me stand out.
+  - Solid colour picker (Solid colour mode), from the app's dark palette plus custom.
+  - Mask expand/shrink: −10 to +10 px (fixes hair/edge halos).
+- **Presets:** Subtle · Strong (default) · Anonymous gym (max blur, darker) · Studio (solid
+  colour). Last-used settings remembered (in the `settings` table).
+- **Live preview** of the blur before and during recording; a split view (original ↔ blurred)
+  while adjusting.
+- **Fail-safe:** if pose tracking is lost or the mask confidence drops, the **whole frame** is
+  blurred at the current strength until I'm tracked again (never shows an unblurred background
+  by accident). "Off" mode asks for a confirmation each session.
+- If a **second person** is detected (run detection with 2 poses every ~1 s), show and speak
+  "Someone else is in frame — they're blurred," and make sure the mask only keeps the person
+  being tracked (the one closest to the centre / largest).
+
+**Accept:**
+- Unit tests (pure, in `src/core/capture/`): preset → shader parameters, slider ranges and
+  clamping, fail-safe decision (mask confidence, tracking lost → full blur), recording
+  resolution/fps choice, safe-zone layout math, second-person rule.
+- E2E (Chromium, fake camera with a synthetic clip): open recorder → change preset and sliders
+  → record 3 s → preview → share/download a playable video; settings persist after reload;
+  tracking lost → full-frame blur screenshot.
+- 🧍 On my iPhone: record at the gym in Strong and Anonymous gym presets; check fps, the edge
+  look, that other people are unreadable, and that the clip saves to Photos and posts to Stories.
 
 ### M7 — Fuel: food & nutrition (added 2026-11-13)
 Goal: make eating enough for muscle gain as low-effort as the workouts. Most of my food is Thai
@@ -2052,6 +2106,66 @@ type ShareStats = { sessionsDone: number; volumeKg: number; streakWeeks: number 
   it for a few days; he looks at the Story pack and posts it himself if he wants. They report what still
   looks home-made, anything that assumed him, and whether the first launch asked too much.
 
+### M13b — One-arm sets + row camera fixes (added 2026-11-17, gym feedback; release 1.15.1; builds after M13, before M12 slice 3 and M14)
+Wongsaton trained One-Arm Dumbbell Row (4 sets) with the web app in Safari and screen-recorded it. The
+camera lost him while bent over the bench, overcounted (14/12, 13, ~5 false partials a set), flipped from
+one arm to the other mid-set (and the count went back to 0), and the "Set up your phone" card stayed over
+the lower half of the view. His decision: **"Right then left but should have button or anything to go next
+arm avoid the error while lifting up".** Planner defaults are in PROGRESS Decision "One-arm sets"
+(2026-11-17). This supersedes M4f-q2 (near side only, other side not counted).
+
+#### Goals
+1. **One-sided exercises are data.** A list in `src/core/exercises/` names each one-sided exercise and its
+   limb: arms (One-Arm Dumbbell Row, Concentration Curls, Seated One-arm Cable Pulley Rows) and legs
+   (Dumbbell Step-Ups, Split Squat with Dumbbells, Single-Leg Glute Bridge, Seated One-Leg Calf Raise).
+   Alternating lunges stay one total (M4f-q6). No `if (exercise === …)` branches.
+2. **Right, then left, in one set.** A one-sided set starts on the **right** arm (leg). The screen names the
+   side ("Right arm", ≥ 20px) above the count (≥ 64px). The primary button on the first side is **Next arm**
+   (or Next leg; ≥ 56px, full width); Set done appears only on the second side. Tapping Next arm is spoken
+   ("Left arm. Turn so your left arm faces the phone."), cuts any count speech, and the count starts again
+   at 0 for the left arm. Manual (non-camera) one-sided exercises get the same flow with per-side reps.
+3. **The camera counts the set's arm only.** The rep counter takes the side from the session and locks it
+   from the first frame; it never picks or switches sides itself, and nothing the camera sees resets the
+   count mid-arm. If the locked arm isn't visible, the usual "Step into frame" applies.
+4. **Hands-free.** On the first side hands-free never ends the set; after ~6 s idle with ≥ 1 rep it says
+   "Tap Next arm when you're ready." once. On the second side the M5c auto Set done + Undo work as before.
+   The rest clock starts when the second side ends.
+5. **Per-arm records.** `SetLog.sides` holds `{ right, left }` (reps + partials); `SetLog.reps` is the lower
+   of the two (what both arms reached), so targets, bests, e1RM, stalls and volume stay comparable with older
+   sets. The set summary, Calendar day and History show both ("R 12 · L 11"); Fix corrects either side;
+   backups round-trip `sides`; the developer log records the switch time and per-side counts.
+6. **Row counting fixed on real data.** His recordings become landmark fixtures
+   (`fixtures/landmarks/row/real-*`, landmarks only, never video). **Revised 2026-11-17 (his words: "I count
+   by myself because the camera log wrong number"):** the clips are upper-bound / no-false-reps checks, not
+   exact counts (the app's overlays cover him in the recordings); exact tuning waits for dev-log landmarks. The cause of each symptom is written down. Fixes go in the rule data (`row.ts`) first.
+7. **He stays in view while bent over.** The pose settings (confidence thresholds, or the model, if the
+   measurements justify it and the iPhone keeps ≥ 24 fps) are chosen from measured detection on his row
+   clips; the row's placement lines/sentence change if the clips show a better phone spot.
+8. **The set-up card gets out of the way.** The full "Set up your phone" card shows only before the set's
+   first rep and closes itself once he is tracked (1.5 s) or after 10 s. After that, losing him shows a
+   one-line "Step into frame" strip at the top of the view (and it is spoken), never the full card over the
+   lower half. "Phone position" still opens the card.
+9. **What's New** has a 1.15.1 page (Next arm); the To-dos gain the Checkpoint K2 guide.
+
+#### Accept
+- `npm run check` and `npm run e2e` green; `npm run build` contains 1.15.1; iOS version synced.
+- Fixture suite: every `fixtures/landmarks/row/real-*` clip stays within its labelled reps (a ceiling), counts
+  nothing while he isn't rowing, never changes side and never counts down (Decision 2026-11-17, revised);
+  all synthetic folders unchanged; new left-arm synthetic clips for row and concentration curl count with the
+  side locked to left and count 0 with it locked to right.
+- Unit: the counter never changes side or resets counts on its own (replay of the set-3 recording); session
+  logs one SetLog per one-sided set with both sides; two-sided exercises behave exactly as before.
+- Detection on the bent-over spans of his clips is reported (before/after) and does not get worse.
+- e2e: a manual one-sided exercise goes Right → Next arm → Left → Set done → Rest, and summary + Calendar day
+  show both arms; the fake-camera row counts 4 on the right and 4 on the left with one Next arm tap; after
+  the first rep, being out of frame shows the top strip, not the card.
+- 390×844 screenshots: right side, left side, camera view with the side label, the top strip, the summary
+  and Calendar day with both arms.
+- His iPhone: `npm run ios:install` passes the bundle check and Settings → Self-check is all ✓.
+- 🧍 **Checkpoint K2:** a one-arm row session at the gym (iPhone app). He reports: does it keep him in view
+  bent over, do the counts match each arm, is Next arm easy to hit with a dumbbell in hand, and does the
+  set-up card stay out of the way.
+
 ### M14 — Wrist and ears: Apple Watch app + AirPods head motion (approved 2026-11-17; builds after M13; release 1.16.0)
 Wongsaton (2026-11-17), after being told AirPods head motion and an Apple Watch app were parked / out of
 scope: **"Add it and I need apple watch app too."** Both are in. Planner calls are in Decision "M14 Wrist and
@@ -2420,6 +2534,152 @@ type ClipRules = { bufferMs: number; leadInMs: number; tailMs: number; minMs: nu
   shares one clip to a private Story or Close Friends. He reports how many clips were kept and whether they
   were the right reps, through the "Best-rep clips" to-do or `/feedback`.
 
+> **2026-11-13 drafts (merged 2026-11-17 at his request).** The M8 section below and the older M9 draft after it were written before the M9 section above; where they differ, the M9 section above, M11, M14 and M15 win. M8 is not planned yet.
+
+### M8 — Wearables: AirPods Pro + Apple Watch (planned 2026-11-13, after M7)
+I train with **AirPods Pro + Apple Watch and play music** the whole time. The app is a Safari
+web app / home-screen PWA, so it can't read HealthKit or drive the Watch directly; this
+milestone uses what the web can reach.
+
+**8.1 Voice over music (AirPods)**
+- All spoken cues must work while my music plays through the AirPods: short phrases, music ducks
+  or mixes, nothing gets cut off. Add a "Voice" setting: cue volume (rate/pitch where Safari
+  allows) and a "Test voice" button.
+- 🧍 checked at the next gym checkpoint: are cues clear over music? Do they interrupt the music?
+
+**8.2 Push-to-talk voice commands (AirPods mic)**
+- A large "Hold to talk" button on the Exercise and Rest screens (≥ 56 px, thumb-reachable).
+  No always-on listening (gym noise, battery, music).
+- Commands (English first): "done" / "set done", "<n> reps", "weight <n>" (in the display
+  unit), "skip", "pause", "resume", "next", "how long" (speaks rest left). Unknown → spoken
+  "Sorry, say again", nothing changes.
+- Parsing is pure (`src/core/voiceCommands.ts`, tests first: number words and digits, "twelve
+  reps", "twelve", "done twelve", noise words). Recognition uses Safari's `SpeechRecognition`
+  (`webkitSpeechRecognition`); hide the button when unsupported.
+- **Privacy note in Settings, off by default:** Safari may send the audio to Apple's speech
+  service to transcribe it. Nothing is recorded or stored by the app.
+- Every voice action has the same effect as the button and is confirmed by voice ("Set 3 done,
+  twelve reps").
+- ✗ **Dropped:** AirPods stem-squeeze controls (Media Session API). iOS sends them to the app
+  that's playing audio, which is my music player.
+
+**8.3 Apple Watch workout import (Apple Shortcut)**
+- I keep using the Watch's Workout app (Traditional Strength Training). After the workout I
+  run an Apple Shortcut that reads that workout from Apple Health (start, duration, average
+  and max heart rate, active kcal) and opens:
+  `https://<site>/#/import/watch?start=<ISO>&dur=<sec>&hrAvg=<bpm>&hrMax=<bpm>&kcal=<kcal>`
+- **Data goes in the URL fragment (`#…`), never the query string**, so it isn't sent to the
+  web server. The app reads it, clears it from the address bar, and shows a confirm card that
+  matches the workout to the Gym Clean session with the most time overlap (or lets me pick).
+- Parsing + matching are pure and tested (bad/missing/out-of-range values rejected, units).
+  Stored as `WatchWorkout` (see §4) on the phone only. Session Summary and History show HR and
+  active kcal.
+- Fuel (M7) shows active kcal for the day as information only. It never changes calorie
+  targets automatically (watch estimates are rough).
+- `docs/watch-shortcut.md`: step-by-step for me to build the Shortcut in the Shortcuts app
+  (Find Health Samples / workouts → get details → URL → Open URL), with screenshots described in
+  words. Claude can't build it on my phone.
+
+**8.4 Rest alerts on the Watch (needs M6 + a decision)**
+- When the rest timer ends while the phone is locked, a notification mirrors to the Watch as a
+  wrist tap. iOS only delivers this for home-screen web apps via Web Push, and a locked phone
+  pauses the page, so it needs a tiny push sender: e.g. a Cloudflare Worker (free tier) that
+  stores my push subscription and sends one push at the rest end time.
+- Only the push subscription and the alert time/text leave the phone; opt-in.
+- **Open decision before building 8.4:** OK to run that small server? Until then the
+  in-app voice cue (through the AirPods) is the rest alert.
+
+**Not in M8 (see M9):** a native iOS/watchOS app (Swift, or the web app
+wrapped with Capacitor + HealthKit) for live heart rate during sets, heart-rate-based rest, and
+Watch buttons/haptics. Needs Xcode; free on my own phone but re-signed every 7 days unless I pay
+for the Apple Developer Program ($99/yr).
+
+**Accept:**
+- Unit tests: voice command parser, Shortcut URL parsing/validation, session matching.
+- E2E: mocked `SpeechRecognition` drives "twelve reps" → "done" → set logged with 12 reps and a
+  spoken confirmation; opening a fragment import URL shows the confirm card, saves the
+  WatchWorkout and removes the data from the URL.
+- 🧍 **Checkpoint E:** at the gym with music on: voice cues over music, push-to-talk works
+  through the AirPods, and the Shortcut imports that day's Watch workout.
+
+### M9 — Native iPhone shell + AirPods head motion (planned 2026-11-13, after M8)
+Wrap the same web app in a native iOS shell (Capacitor) so it can use what Safari can't:
+**AirPods Pro head motion** (`CMHeadphoneMotionManager`), Apple Health, local notifications
+(mirrored to the Apple Watch) and haptics. The GitHub Pages web app keeps working; every native
+feature is behind `isNative()` feature detection with the M8 web path as the fallback.
+Distribution: my own iPhone only, built from Xcode on my Mac (free personal team, re-sign every
+7 days; the paid Apple Developer Program is optional, my decision later). No App Store.
+
+**9.0 Feasibility spike first (🧍 needs my iPhone + AirPods)**
+A minimal shell + plugin that shows live head pitch/yaw/roll and logs the sample rate. Check on
+device, write the results in PROGRESS.md Decisions, then plan the rest:
+- Motion streams while **my music plays from another app**.
+- Motion + the **AirPods mic** at the same time (developers report motion stopping when the
+  AirPods mic is in use). If it conflicts: in the native shell, nod gestures replace
+  push-to-talk for simple commands, and push-to-talk pauses motion while held.
+- Motion while the app is in the foreground with the screen kept awake; what happens on lock.
+- Camera + MediaPipe pose still work inside the shell's WKWebView.
+
+**9.1 Shell**
+- Capacitor iOS project in `ios/`, `capacitor.config.ts`, scripts `npm run ios:sync` /
+  `ios:open`. Same Vite build, bundled offline in the app. Keep-awake natively during sessions.
+- Info.plist usage strings for motion, camera, microphone, speech recognition and Health,
+  written plainly. No analytics, no extra network access.
+- `docs/ios-setup.md`: step by step for me (Xcode, sign in with my Apple ID, trust the
+  developer profile on the iPhone, re-sign every 7 days, how to update).
+- CI: web build + tests unchanged; the iOS project must at least compile in CI if a macOS
+  runner is available, otherwise it's checked locally.
+
+**9.2 HeadMotion plugin (Swift → JS)**
+- Wraps `CMHeadphoneMotionManager`: start/stop, connect/disconnect events, availability check,
+  permission state. Emits `HeadMotionFrame` (see §4) to `src/native/headMotion.ts`.
+- **Recorder** (dev screen): record labelled head-motion sessions and export JSON to Files →
+  `fixtures/headmotion/<exercise or gesture>/<label>__reps-N.json` (or `__nods-N__shakes-M`).
+  Head-motion numbers don't show me, so these fixtures may be committed (no video, no audio).
+- Pure processing (filtering, resampling to a fixed rate, calibration) lives in `src/core/`.
+
+**9.3 Head gestures (pure: `src/core/headGestures.ts`, tests first)**
+- **Nod** (pitch down→up) = yes / "set done". **Shake** (yaw left→right→left) = no / skip.
+- Only listens when the app asks a yes/no question (e.g. "Set done?" after movement stops,
+  "Start set 3?", "Skip?"), never all the time, to avoid false triggers from training.
+- Every gesture action is confirmed by voice, with a 5 s undo (button, or shake right after).
+- Tuned on fixtures: deliberate nods/shakes + "noise" (walking, re-racking, looking around,
+  drinking water, music head-bobbing).
+
+**9.4 Head-motion rep counting**
+- For exercises where the head moves: **push-up, goblet squat, lunge, pull-up / assisted
+  pull-up, dip**. Per-exercise signal + thresholds as data in `src/core/exercises/*.ts`, same
+  state-machine approach as the camera counter (SPEC §3: smoothing, hysteresis, min phase time).
+- Not for curls, presses, raises or rows (head stays still) — those stay camera/manual.
+- Source priority: camera when it's tracking well, head motion otherwise; when both run,
+  show which one counted and log disagreements for tuning.
+
+**9.5 Neck position cue**
+- Calibrate neutral head pitch at set start (standing, looking ahead). During squats, rows and
+  hinges, if pitch stays > ±25° from neutral for > 1 s: "Keep your neck neutral." Same rate limit
+  as M5 cues, counts toward the focus score. Coaching hint only, never injury language.
+
+**9.6 Automatic set start / end**
+- During rest, a movement pattern that matches the next exercise's start → "Starting set 3"
+  (setting, default on in the shell). After reps stop and I'm still for ~4 s → asks "Set done?"
+  → nod / shake.
+
+**9.7 Native replacements for the M8 workarounds (only when running in the shell)**
+- **Apple Health** read (workouts, heart rate, active energy) replaces the Shortcut import.
+- **Local notifications** for rest end (mirrored to the Apple Watch with a tap) replace the
+  push server (M8.4 is then not needed).
+- **Haptics** on the phone for set start / rest end.
+- Live heart rate during sets needs a watchOS app → still out of scope (possible M10).
+
+**Accept:**
+- 9.0 spike results recorded; the plan for 9.1–9.7 adjusted to them.
+- Unit tests: gesture detector on fixtures (≥ 95% of deliberate nods/shakes detected, ≤ 1 false
+  trigger per 30 min of noise fixtures), head-motion rep counts exact on every fixture
+  (`__reps-N`), neck-cue timing, auto start/end decisions, `isNative()` fallbacks.
+- The web app (GitHub Pages) still passes all checks with no native code paths taken.
+- 🧍 **Checkpoint F:** a gym session in the shell with music on: nod to finish sets, head-motion
+  reps on push-ups/squats, rest alert on the Watch, Health data in the Summary.
+
 ## 3. Rep counter design
 
 States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per exercise).
@@ -2458,7 +2718,9 @@ States: `TOP → DOWN → BOTTOM → UP → TOP` (named by angle direction per e
   stopped short of the missed threshold, smoothed degrees) are set on partials only.
 - (M4c) Gauge: `position = (startThreshold − angle) / (startThreshold − farThreshold)` on the
   oriented scale, so 0 = start line and 1 = target line, clamped to [−0.25, 1.25] for display.
-- Use the side with higher average visibility (left vs right) for unilateral views.
+- Use the side with higher average visibility (left vs right) for unilateral views. **Exception (M13b):**
+  one-sided exercises lock the side the session names (right, then left after Next arm); the counter
+  never picks or switches it.
 
 ## 4. Data model
 
@@ -2482,6 +2744,8 @@ type SetLog = {
   reps: number; partials?: number; weightKg: number;
   restTakenSec: number; focusScore?: number; cues?: string[];
   startedAt: number; endedAt: number;
+  // M13b: one-sided exercises; `reps` is then the lower of the two sides
+  sides?: { right?: { reps: number; partials: number }; left?: { reps: number; partials: number } };
 };
 // M4c — developer log (on device only; numbers, never images)
 type DevLogSession = {
@@ -2521,6 +2785,23 @@ type FoodEntry = MacroSet & {
   photoConfidence?: number;                          // M7b: confidence of the accepted guess (if it was offered)
 };
 type WeighIn = { date: string; kg: number };
+
+// M8 — Apple Watch workout imported via an Apple Shortcut (stored on device only)
+type WatchWorkout = {
+  id: string; sessionId?: string; start: number; durationSec: number;
+  hrAvg?: number; hrMax?: number; activeKcal?: number;
+  source: 'apple-watch-shortcut' | 'healthkit'; importedAt: number;
+};
+
+// M9 — AirPods head motion from the native shell (CMHeadphoneMotionManager)
+type HeadMotionFrame = {
+  t: number;                                          // ms since stream start
+  attitude: { pitch: number; roll: number; yaw: number }; // radians
+  quaternion?: { x: number; y: number; z: number; w: number };
+  userAccel: { x: number; y: number; z: number };     // g, gravity removed
+  rotationRate: { x: number; y: number; z: number };  // rad/s
+  sensor: 'left' | 'right' | 'unknown';               // data arrives from one bud at a time
+};
 type NutritionSettings = {
   mode: 'quick' | 'full'; heightCm: number; birthYear: number; sex: 'male' | 'female';
   activity: 'sedentary' | 'light' | 'moderate' | 'very';

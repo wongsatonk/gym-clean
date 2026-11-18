@@ -10,9 +10,11 @@ import {
   type AutoSetAction,
   type AutoSetConfig,
   type AutoStopReason,
+  type SideTurn,
 } from '../core/autoSet';
 import { autoSetConfigFor, focusFlagsFor, ruleFor } from '../core/exercises';
-import { createFocusTracker, type FocusCue, type FocusTracker } from '../core/focus';
+import { ONE_SIDED_COPY, oneSidedLimb } from '../core/exercises/oneSided';
+import { CUE_TEXT, createFocusTracker, type FocusCue, type FocusTracker } from '../core/focus';
 import { FpsMeter } from '../core/fps';
 import {
   createCoachSpeech,
@@ -29,6 +31,7 @@ import { openCamera, stopStream, type Facing } from '../pose/camera';
 import type { PoseTracker } from '../pose/landmarker';
 import { describeLoadError } from '../pose/loadError';
 import { createAutoStopBanner, type AutoStopBannerHandle } from './autoStopBanner';
+import { createFrameStrip, createSetupControl } from './cameraSetup';
 import { createHoldPanel, type HoldPanelHandle } from './holdPanel';
 import {
   createCameraRestPanel,
@@ -37,6 +40,7 @@ import {
 } from './cameraRestPanel';
 import { h } from './dom';
 import { icon } from './icons';
+import { nextSideButton, sideLabel, sideOfTurn, speakSideSwitch, SWITCH_GUARD_MS } from './oneArm';
 import type { Skeleton3D, SkeletonPreset } from './skeleton3d';
 import { cssToken } from './tokens';
 import { voice } from './voice';
@@ -71,6 +75,13 @@ export type CameraSession = {
   restElapsedMs: number;
   /** Set line / target for the set being done or coming next ("Set 3 of 4 · 12 reps"). */
   target?: CameraTarget;
+  /**
+   * M13b, one-sided exercise (`sideTurn(s)` from core/session): 'first' (right) before Next arm,
+   * 'second' (left) after it, null on Rest (the next set starts on the right). Given (even null),
+   * it locks the counter to that side, shows "Right arm" over the count and, on the first side
+   * with `onNextSide`, puts Next arm where Set done is. Omitted: today's behaviour.
+   */
+  sideTurn?: SideTurn | null;
 };
 
 /**
@@ -224,6 +235,12 @@ export type CameraViewOptions = {
    * auto start, right after onAutoStart) and after every cue. Dispatch SET_FOCUS { cues }.
    */
   onFocus?: (cues: FocusCueId[]) => void;
+  /**
+   * M13b: Next arm tapped on the first side of a one-sided set (the switch line is already being
+   * spoken, the count word cut). Dispatch NEXT_SIDE { now }, then setSession with the new
+   * sideTurn: the counter moves to the other side from 0.
+   */
+  onNextSide?: () => void;
 };
 
 /**
@@ -283,6 +300,8 @@ export type RepPanel = {
   readonly el: HTMLElement;
   /** False while the person is missing or not tracked yet (the "Step into frame" state). */
   readonly inFrame: boolean;
+  /** Reps shown for this set (after setBase / freeze). */
+  readonly reps: number;
   /** Feed one detector result (null = no person found). Returns the counter's events. */
   update(frame: LandmarkFrame | null): RepEvent[];
   reset(): void;
@@ -319,7 +338,15 @@ export type RepPanel = {
    * video's right edge; hidden while the person isn't tracked.
    */
   readonly gauge: HTMLElement;
+  /**
+   * M13b one-sided set: a fixed side label ("Right arm") shown over the count instead of the
+   * counter's side line; null = back to the counter's side line.
+   */
+  pinSide(label: HTMLElement | null): void;
 };
+
+/** M13b task 8: a hinge-gated exercise (row, concentration curl) seen standing up. */
+export const BEND_HINT = 'Bend forward to start';
 
 /** Gauge scale: −0.25 (bottom) … 1.25 (top). The start/target lines sit at these % from the top. */
 const GAUGE_SPAN = GAUGE_MAX - GAUGE_MIN;
@@ -435,6 +462,8 @@ export function createRepPanel(
     clock?: () => number;
     /** Every rep/partial event, in order (developer log). */
     onRepEvent?: (ev: RepEvent) => void;
+    /** A hint was handed to the voice (its own words, before any persona rewrite). */
+    onHintSpoken?: (text: string) => void;
   },
 ): RepPanel {
   let target = opts.target;
@@ -459,9 +488,12 @@ export function createRepPanel(
   );
   // The partial-rep coaching hint ("Curl higher."), shown for COACH_SHOW_MS or until the next rep.
   const coach = h('p', { class: 'rep-coach', 'aria-live': 'polite' });
+  const pinSlot = h('div', { class: 'rep-pin', hidden: true });
+  let pinned = false;
   const el = h(
     'section',
     { class: `rep-panel${target ? ' has-target' : ''}`, 'aria-label': 'Rep counter' },
+    pinSlot,
     h('div', { class: 'rep-count' }, num, of, label),
     setLine,
     h('div', { class: 'rep-info' }, side, hint, coach, partials),
@@ -506,14 +538,25 @@ export function createRepPanel(
       partials.textContent = p > 0 ? `${p} partial${p === 1 ? '' : 's'}` : '';
       el.classList.toggle('at-target', target !== undefined && reps >= target.targetReps);
     }
-    const s = sideText(counter.side);
+    const s = pinned ? '' : sideText(counter.side);
     if (s !== shownSide) {
       shownSide = s;
       side.textContent = s;
       side.dataset.side = counter.side ?? '';
     }
-    const hintKey =
-      !present || !counter.tracking ? 'frame' : counter.phase === 'setup' ? 'start' : '';
+    // Standing up for a bent-over / seated exercise: in view, just not in position (task 8).
+    const bend =
+      present &&
+      !counter.tracking &&
+      counter.untracked === 'bodyLine' &&
+      counter.rule.maxHipAngleDeg !== undefined;
+    const hintKey = bend
+      ? 'bend'
+      : !present || !counter.tracking
+        ? 'frame'
+        : counter.phase === 'setup'
+          ? 'start'
+          : '';
     inFrame = hintKey !== 'frame';
     if (hintKey !== shownHint) {
       shownHint = hintKey;
@@ -521,9 +564,11 @@ export function createRepPanel(
       hint.textContent =
         hintKey === 'frame'
           ? 'Step into frame'
-          : hintKey === 'start'
-            ? 'Get into start position'
-            : '';
+          : hintKey === 'bend'
+            ? BEND_HINT
+            : hintKey === 'start'
+              ? 'Get into start position'
+              : '';
     }
     gauge.update(counter, present);
   }
@@ -557,6 +602,7 @@ export function createRepPanel(
       const u = voice.speak(d.text, { kind: d.kind, cancel });
       // u.text is the line actually spoken (the drill persona may rewrite hints).
       report({ t, text: u?.text ?? d.text, kind: d.kind });
+      if (d.kind === 'hint') opts.onHintSpoken?.(d.text);
       if (u) {
         const done = () => apply(policy.ended(d.id, clock()));
         u.addEventListener('end', done);
@@ -592,6 +638,9 @@ export function createRepPanel(
   return {
     el,
     gauge: gauge.el,
+    get reps() {
+      return shownCounts().reps;
+    },
     get inFrame() {
       return inFrame;
     },
@@ -676,6 +725,12 @@ export function createRepPanel(
       showCoach(text, '', now, id);
       apply(policy.hint(text, now));
     },
+    pinSide(labelEl) {
+      pinned = labelEl !== null;
+      pinSlot.replaceChildren(...(labelEl ? [labelEl] : []));
+      pinSlot.hidden = !pinned;
+      render(inFrame);
+    },
     speakPlacement(text) {
       const u = voice.speak(text, { kind: 'cue' });
       report({ t: clock(), text: u?.text ?? text, kind: 'placement' });
@@ -714,13 +769,6 @@ function placementPictogram(view: 'side' | 'front'): SVGSVGElement {
   return svg;
 }
 
-/** Card stays up until tracking has held this long. */
-const SETUP_STABLE_MS = 1500;
-/** Card comes back after the person has been out of frame this long. */
-const SETUP_LOST_MS = 1000;
-/** "Phone position" tapped: keep the card up at least this long even while tracking. */
-const SETUP_MANUAL_MS = 8000;
-
 export function createCameraView(opts: CameraViewOptions): CameraView {
   let facing: Facing = 'user';
   let stream: MediaStream | null = null;
@@ -738,6 +786,13 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
 
   const rule = opts.exerciseId ? ruleFor(opts.exerciseId) : undefined;
   const repCounter = rule ? createRepCounter(rule) : null;
+  // M13b one-sided sets: the limb, and the session's side turn once setSession gave one.
+  const limb = opts.exerciseId ? oneSidedLimb(opts.exerciseId) : undefined;
+  /** undefined = the caller never gave a side turn (counter keeps the rule's sideMode). */
+  let turn: SideTurn | null | undefined;
+  let lockedTo: 'right' | 'left' | null = null;
+  /** performance.now() of the last Next arm tap (the Set done double-tap guard). */
+  let switchedAt = -Infinity;
 
   // ---- Developer log: sync buffer writes; a recorder error never breaks the camera loop ----
   const recorder = repCounter ? (opts.recorder ?? null) : null;
@@ -906,6 +961,10 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       ? createRepPanel(repCounter, rule.limb, {
           ...opts,
           onRepEvent: (ev) => rec((r) => r.repEvent(ev)),
+          // The focus cue said it (not rate-dropped): the strip won't say it again this loss.
+          onHintSpoken: (text) => {
+            if (text === CUE_TEXT.outOfFrame) setup.heardOutOfFrame();
+          },
           onSpeech: (e) => {
             opts.onSpeech?.(e);
             rec((r) =>
@@ -931,13 +990,10 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   const overlay = h('canvas', { class: 'cam-overlay' });
   const status = h('p', { class: 'cam-status', 'aria-live': 'polite' }, 'Starting camera…');
 
-  // ---- "Set up your phone" card ----
-  let setupOpen = Boolean(placement);
-  let stableSince: number | null = null;
-  let lostSince: number | null = null;
-  let holdUntil = 0;
-  // "Got it" tapped: don't bring the card back until the person has been in frame and lost again.
-  let dismissed = false;
+  // ---- "Set up your phone" card + "Step into frame" strip (M13b: timing in cameraSetup.ts) ----
+  const setup = createSetupControl(Boolean(placement));
+  let setupOpen = setup.card;
+  const frameStrip = counter ? createFrameStrip() : null;
   const setupCard = placement
     ? h(
         'section',
@@ -960,7 +1016,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           {
             class: 'ghost-btn setup-hide',
             onclick: () => {
-              dismissed = true;
+              setup.dismiss();
               showSetup(false);
               setupBtn?.focus();
             },
@@ -976,7 +1032,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           class: 'cam-chip setup-open',
           hidden: true,
           onclick: () => {
-            holdUntil = performance.now() + SETUP_MANUAL_MS;
+            setup.openManual(performance.now());
             showSetup(true);
           },
         },
@@ -993,19 +1049,30 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     setupBtn.hidden = open;
   }
 
-  /** Auto show/hide: hides once tracking is stable, comes back when the person is lost. */
-  function updateSetup(inFrame: boolean, now: number): void {
-    if (!setupCard) return;
-    if (inFrame) {
-      lostSince = null;
-      dismissed = false;
-      stableSince ??= now;
-      if (setupOpen && now - stableSince >= SETUP_STABLE_MS && now >= holdUntil) showSetup(false);
-    } else {
-      stableSince = null;
-      lostSince ??= now;
-      if (!setupOpen && !dismissed && now - lostSince >= SETUP_LOST_MS) showSetup(true);
-    }
+  /**
+   * One tick: the card closes (stable tracking, first rep, 10 s) and never re-opens by itself; a
+   * loss shows the strip, spoken once per loss mid-set unless the focus cue already said it.
+   */
+  function updateSetup(frame: LandmarkFrame | null, now: number): void {
+    const inFrame = counter ? counter.inFrame : frame !== null;
+    const reps = counter?.reps ?? 0;
+    const autoState = auto?.state ?? 'off';
+    // Like the focus outOfFrame rule: nobody in view with a hands-free stop to follow is the set
+    // ending, not something to call him back for.
+    const present = frame !== null && personInFrame(frame);
+    const autoStopFollows =
+      autoState === 'set' && autoConfig !== null && reps >= autoConfig.stopMinReps;
+    const v = setup.tick({
+      t: now,
+      inFrame,
+      counted: reps > 0,
+      live: mode === 'set' && (autoState === 'off' || autoState === 'set'),
+      speakable: present || !autoStopFollows,
+    });
+    if (v.card !== setupOpen) showSetup(v.card);
+    frameStrip?.show(v.strip);
+    stage.classList.toggle('frame-lost', v.strip);
+    if (v.speak) say(CUE_TEXT.outOfFrame);
   }
 
   // ---- 3D live skeleton: collapsed by default, loaded on first open ----
@@ -1095,6 +1162,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           type: 'button',
           class: 'primary-btn cta-btn',
           onclick: () => {
+            // A double tap on Next arm (same spot) must not end the set on the second side.
+            if (performance.now() - switchedAt < SWITCH_GUARD_MS) return;
             // Silence first so a late count word can't cut off the rest cue that follows.
             counter.silence();
             // Hands-free Undo window or hold: save at once, with the same backdated end.
@@ -1109,6 +1178,20 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         'Set done',
       )
     : null;
+
+  // M13b: Next arm in the Set done slot on the first side of a one-sided set.
+  const nextBtn =
+    counter && limb && opts.onNextSide
+      ? nextSideButton(limb, () => {
+          if (turn !== 'first' || disposed) return;
+          counter.silence(); // a count word still speaking is cut off
+          const text = speakSideSwitch(limb, sideOfTurn('second'));
+          rec((r) => r.speech({ t: frameNow(), text, kind: 'cue' }));
+          switchedAt = performance.now();
+          opts.onNextSide?.();
+        })
+      : null;
+  if (nextBtn) nextBtn.hidden = true;
 
   const closeSheet = () => {
     counter?.silence();
@@ -1125,6 +1208,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     overlay,
     hud,
     gaugeSlot,
+    frameStrip?.el,
     setupCard,
     h('div', { class: 'cam-stage-bottom' }, setupBtn, switchBtn),
   );
@@ -1169,6 +1253,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       status,
       !counter && h('p', { class: 'muted cam-privacy' }, 'On-device only. Nothing is recorded.'),
       setDoneBtn,
+      nextBtn,
     ),
   );
 
@@ -1254,7 +1339,33 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   function focusTarget(): HTMLElement | null {
     if (mode === 'rest')
       return restPanel?.el.querySelector<HTMLElement>('[data-cam-rest="start"]') ?? null;
-    return setDoneBtn;
+    return nextBtn && !nextBtn.hidden ? nextBtn : setDoneBtn;
+  }
+
+  /**
+   * M13b: follow the session's side turn. The counter is locked to that side (right on the first
+   * turn and on Rest, left on the second); a change of side starts it from 0 (and the focus cues
+   * for the new side). Next arm replaces Set done on the first turn.
+   */
+  function applySideTurn(next: SideTurn | null | undefined): void {
+    if (next === undefined || !limb || !repCounter || !counter) return;
+    turn = next;
+    const want = sideOfTurn(next ?? 'first');
+    if (lockedTo !== want) {
+      const wasLocked = lockedTo !== null;
+      lockedTo = want;
+      repCounter.setSide(want);
+      counter.reset();
+      if (wasLocked && next === 'second') startFocusSet();
+    }
+    counter.pinSide(sideLabel(limb, want, 'on-hud'));
+    if (nextBtn && setDoneBtn) {
+      const showNext = next === 'first';
+      const hadFocus = document.activeElement === (showNext ? setDoneBtn : nextBtn);
+      nextBtn.hidden = !showNext;
+      setDoneBtn.hidden = showNext;
+      if (hadFocus) (showNext ? nextBtn : setDoneBtn).focus();
+    }
   }
 
   function dropBanner(): void {
@@ -1400,6 +1511,11 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           if (banner === b) dropBanner();
           break;
         }
+        case 'remindNextSide': {
+          // First side, idle after ≥ 1 rep: once per side (autoSet), logged by logAuto above.
+          if (limb) say(ONE_SIDED_COPY[limb].idleReminder);
+          break;
+        }
         case 'close': {
           dropBanner();
           counter.silence();
@@ -1469,7 +1585,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           }
         });
       }
-      updateSetup(counter ? counter.inFrame : frame !== null, now);
+      updateSetup(frame, now);
       skeleton?.update(frame?.world, facing === 'user');
       if (now - lastStatus > 250) {
         lastStatus = now;
@@ -1610,10 +1726,16 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
         targetTop = session.target.targetReps;
         curTarget = session.target;
       }
+      applySideTurn(session.sideTurn);
       if (!auto || !counter) return;
       if (session.target) counter.setTarget(session.target);
       const actions = auto.setSession(
-        { phase: session.phase, paused: session.paused, restElapsedMs: session.restElapsedMs },
+        {
+          phase: session.phase,
+          paused: session.paused,
+          restElapsedMs: session.restElapsedMs,
+          ...(session.sideTurn !== undefined ? { sideTurn: session.sideTurn } : {}),
+        },
         frameNow(),
       );
       if (session.phase === 'rest') {

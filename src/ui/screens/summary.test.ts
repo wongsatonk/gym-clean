@@ -425,3 +425,28 @@ describe('summaryScreen M12 1b post-workout meal idea', () => {
     expect(el.find((e) => e.hasAttribute('data-meal-idea-logged'))).toHaveLength(1);
   });
 });
+
+describe('summaryScreen M13b one-sided sets', () => {
+  const sided = (r: number, l: number, kg: number, i: number): SetLog => ({
+    ...log('row', Math.min(r, l), kg, i),
+    sides: { right: { reps: r, partials: 0 }, left: { reps: l, partials: 0 } },
+  });
+
+  it('a one-sided exercise lists one line per set, "R 12 · L 11 × 20 kg"', () => {
+    const logs = [sided(12, 11, 20, 0), sided(10, 10, 20, 1), log('curl', 10, 12)];
+    const { el } = render({ logs, skipped: ['row'] });
+    const items = el.oneByClass('set-list').children;
+    const lines = items[0]?.byClass('side-set') ?? [];
+    expect(lines.map((l) => l.textContent)).toEqual(['R 12 · L 11 × 20 kg', 'R 10 · L 10 × 20 kg']);
+    expect(lines[0]?.getAttribute('aria-label')).toBe('Right 12, left 11 reps × 20 kg');
+    expect(items[0]?.textContent).toContain('rest skipped');
+    // Two-sided exercises keep the old one-line text.
+    expect(items[1]?.byClass('side-set')).toHaveLength(0);
+    expect(items[1]?.textContent).toContain('10×12 kg');
+  });
+
+  it('total reps count the lower side (SetLog.reps), as stored', () => {
+    const { el } = render({ logs: [sided(12, 11, 20, 0)] });
+    expect(el.find((e) => e.getAttribute('data-stat') === 'reps')[0]?.textContent).toContain('11');
+  });
+});

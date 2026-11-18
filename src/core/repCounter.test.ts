@@ -757,6 +757,142 @@ describe('createRepCounter: sides', () => {
   });
 });
 
+describe('createRepCounter: fixed side (one-arm sets, M13b)', () => {
+  /** Left arm does `keys`, right arm held straight and clearer (best mode would pick it). */
+  const leftWorks = (keys: ReturnType<typeof curve>, rightVis = 0.95, leftVis = 0.6) =>
+    sample(CURL, keys, {
+      sides: ['left'],
+      visibility: () => leftVis,
+      other: { right: { angle: 170, visibility: rightVis } },
+    });
+  /** Right arm does `keys` at `rightVis`, left arm held straight at `leftVis`. */
+  const rightWorks = (keys: ReturnType<typeof curve>, leftVis = 0.13, rightVis = 0.95) =>
+    sample(CURL, keys, {
+      sides: ['right'],
+      visibility: () => rightVis,
+      other: { left: { angle: 170, visibility: leftVis } },
+    });
+  const shift = (frames: LandmarkFrame[], dt: number) => frames.map((f) => ({ ...f, t: f.t + dt }));
+  const counts = (c: { reps: number; partials: number }) => ({
+    reps: c.reps,
+    partials: c.partials,
+  });
+
+  it('reports the side before any frame and reads it from the first frame', () => {
+    const counter = createRepCounter(CURL, { side: 'left' });
+    expect(counter.side).toBe('left');
+    for (const f of leftWorks(curlReps(2))) counter.push(f);
+    expect(counter.side).toBe('left');
+    expect(counts(counter)).toEqual({ reps: 2, partials: 0 });
+    // Best mode would have picked the clearer (idle) right arm and counted nothing.
+    expect(runAll(CURL, leftWorks(curlReps(2))).counter.reps).toBe(0);
+  });
+
+  it('never counts the other arm, even when only the other arm is visible', () => {
+    const counter = createRepCounter(CURL, { side: 'left' });
+    for (const f of rightWorks(curlReps(2))) counter.push(f);
+    expect(counts(counter)).toEqual({ reps: 0, partials: 0 });
+    expect(counter.side).toBe('left');
+    expect(counter.tracking).toBe(false);
+    expect(counter.untracked).toBe('visibility');
+  });
+
+  it('a stream restart mid-set keeps the side and the counts (the set-3 arm flip)', () => {
+    const counter = createRepCounter(CURL, { side: 'right' });
+    for (const f of rightWorks(curlReps(2))) counter.push(f);
+    expect(counter.reps).toBe(2);
+    // The stream restarts (t re-zeroes); now the idle left arm is the clearer one.
+    const after = rightWorks(curlReps(2), 0.95, 0.6);
+    for (const f of after) counter.push(f);
+    expect(counter.side).toBe('right');
+    expect(counts(counter)).toEqual({ reps: 4, partials: 0 });
+    // Without a fixed side the restart unlocks it and the counter jumps to the idle left arm.
+    const best = createRepCounter(CURL);
+    for (const f of [...rightWorks(curlReps(2)), ...after]) best.push(f);
+    expect(best.side).toBe('left');
+    expect(best.reps).toBe(2);
+  });
+
+  it('losing the person for seconds keeps the side and the counts', () => {
+    const counter = createRepCounter(CURL, { side: 'right' });
+    const first = rightWorks(curlReps(1));
+    for (const f of first) counter.push(f);
+    const end = first[first.length - 1]?.t ?? 0;
+    // 3 s with no one in view, then the left arm is the clearer one for a while.
+    const lost = sample(CURL, curve(170, [[3000, 170]]), {
+      sides: [],
+      other: { left: { angle: 170, visibility: 0.1 }, right: { angle: 170, visibility: 0.1 } },
+    });
+    for (const f of shift(lost, end + DT)) counter.push(f);
+    expect(counter.tracking).toBe(false);
+    for (const f of shift(rightWorks(curlReps(1), 0.95, 0.6), end + 3100)) counter.push(f);
+    expect(counter.side).toBe('right');
+    expect(counts(counter)).toEqual({ reps: 2, partials: 0 });
+  });
+
+  it('reset() zeroes the counts but keeps the fixed side', () => {
+    const counter = createRepCounter(CURL, { side: 'left' });
+    for (const f of leftWorks(curlReps(1))) counter.push(f);
+    expect(counter.reps).toBe(1);
+    counter.reset();
+    expect(counts(counter)).toEqual({ reps: 0, partials: 0 });
+    expect(counter.side).toBe('left');
+    for (const f of leftWorks(curlReps(1))) counter.push(f);
+    expect(counter.reps).toBe(1);
+  });
+
+  it('setSide() zeroes the counts and restarts tracking on the new arm', () => {
+    const counter = createRepCounter(CURL, { side: 'right' });
+    // Two right reps, then a shallow one (a partial) so lastMiss/lastPartial are set.
+    const keys = curve(170, [...segsOf(curlReps(2)), [800, 110], [1200, 170], [500, 170]]);
+    const right = rightWorks(keys);
+    for (const f of right) counter.push(f);
+    expect(counts(counter)).toEqual({ reps: 2, partials: 1 });
+    expect(counter.lastMiss).not.toBeNull();
+
+    counter.setSide('left');
+    expect(counts(counter)).toEqual({ reps: 0, partials: 0 });
+    expect(counter.side).toBe('left');
+    expect(counter.phase).toBe('setup');
+    expect(counter.lastMiss).toBeNull();
+    expect(counter.lastPartial).toBeNull();
+    expect(counter.angle).toBeNull();
+
+    // The stream goes on (t keeps rising): he turns, the left arm works, the right is now hidden.
+    const end = right[right.length - 1]?.t ?? 0;
+    const left = sample(CURL, curlReps(3), {
+      sides: ['left'],
+      other: { right: { angle: 170, visibility: 0.13 } },
+    });
+    for (const f of shift(left, end + 2000)) counter.push(f);
+    expect(counter.side).toBe('left');
+    expect(counts(counter)).toEqual({ reps: 3, partials: 0 });
+    // And the right arm no longer counts.
+    for (const f of shift(rightWorks(curlReps(2)), end + 20000)) counter.push(f);
+    expect(counter.reps).toBe(3);
+  });
+
+  it('setSide() fixes the side of a counter made without one', () => {
+    const counter = createRepCounter(CURL);
+    for (const f of rightWorks(curlReps(1))) counter.push(f);
+    expect(counter.side).toBe('right');
+    counter.setSide('left');
+    expect(counter.side).toBe('left');
+    expect(counter.reps).toBe(0);
+    for (const f of shift(rightWorks(curlReps(2), 0.6), 10000)) counter.push(f);
+    expect(counter.reps).toBe(0);
+    expect(counter.side).toBe('left');
+  });
+
+  it('setSide() to the same side still starts the arm from 0', () => {
+    const counter = createRepCounter(CURL, { side: 'right' });
+    for (const f of rightWorks(curlReps(1))) counter.push(f);
+    counter.setSide('right');
+    expect(counts(counter)).toEqual({ reps: 0, partials: 0 });
+    expect(counter.side).toBe('right');
+  });
+});
+
 describe('createRepCounter: events', () => {
   it('fills index, t, tempo and angle range on every event', () => {
     const { events, eventFrameT } = runAll(CURL, sample(CURL, curlReps(3, 800, 1200)));
@@ -1438,6 +1574,17 @@ describe('createRepCounter: camera view variant (rule.otherView, push-up filmed 
     expect(counter.rule).toBe(PUSHUP);
   });
 
+  it('a fixed side survives the view switch and still reads that one arm (M13b)', () => {
+    const counter = createRepCounter(PUSHUP, { side: 'left' });
+    for (const f of sample(PUSHUP, keys)) counter.push(f);
+    expect(counter.rule.view).toBe('front'); // thresholds still follow the view
+    expect(counter.side).toBe('left'); // but never 'both' or the other arm
+    expect(counter.reps).toBe(2);
+    for (const f of sample(PUSHUP, keys).map(sideOn)) counter.push(f); // stream restart
+    expect(counter.rule).toBe(PUSHUP);
+    expect(counter.side).toBe('left');
+  });
+
   /** Turn the world body about the vertical axis so the shoulder line has this yaw. */
   function yawed(f: LandmarkFrame, deg: number): LandmarkFrame {
     const th = (deg * Math.PI) / 180;
@@ -1747,6 +1894,9 @@ describe.each([
     [500, home],
   ];
   const settle: [number, number][] = [[600, home]];
+  /** Frames in the rule's own posture: seated / bent over (hip 90°) for a hinge-gated rule. */
+  const posed = (frames: LandmarkFrame[]) =>
+    rule.maxHipAngleDeg === undefined ? frames : frames.map((f) => withHip(f, 90));
 
   it('is a learning rule', () => {
     expect(rule.status).toBe('learning');
@@ -1755,7 +1905,7 @@ describe.each([
 
   it('counts 4 clean reps, no partials', () => {
     const keys = curve(home, [...settle, ...rep, ...rep, ...rep, ...rep]);
-    const { counter, events } = runAll(rule, sample(rule, keys, { anchor }));
+    const { counter, events } = runAll(rule, posed(sample(rule, keys, { anchor })));
     expect(reps(events)).toHaveLength(4);
     expect(partials(events)).toHaveLength(0);
     expect(counter.reps).toBe(4);
@@ -1774,7 +1924,7 @@ describe.each([
       [500, home],
       ...rep,
     ]);
-    const { counter, events } = runAll(rule, sample(rule, keys, { anchor }));
+    const { counter, events } = runAll(rule, posed(sample(rule, keys, { anchor })));
     expect(events.map((e) => e.type)).toEqual(['rep', 'partial', 'rep']);
     expect(events[1]?.reason).toBe('far');
     expect(counter.reps).toBe(2);
@@ -1784,7 +1934,7 @@ describe.each([
   it('±8° jitter in the start band makes nothing', () => {
     const keys = curve(home, [[6000, home]]);
     const noise = (i: number) => (i % 2 === 0 ? 8 : -8);
-    const { counter, events } = runAll(rule, sample(rule, keys, { anchor, noise }));
+    const { counter, events } = runAll(rule, posed(sample(rule, keys, { anchor, noise })));
     expect(events).toHaveLength(0);
     expect(counter.reps).toBe(0);
     expect(counter.partials).toBe(0);
@@ -1823,3 +1973,124 @@ describe.each(['Dumbbell_Shoulder_Press', 'Standing_Dumbbell_Triceps_Extension']
     });
   },
 );
+
+// ---------------------------------------------------------------------------------------------
+// M13b task 8: hinge gate (rule.maxHipAngleDeg) and the short tracking hold (rule.trackingHoldMs).
+// ---------------------------------------------------------------------------------------------
+
+describe('createRepCounter: hinge gate (rule.maxHipAngleDeg, M13b)', () => {
+  /** A curl-shaped arm cycle under a rule that only counts while bent over (hip ≤ 140°). */
+  const HINGED: ExerciseRule = { ...CURL, maxHipAngleDeg: 140 };
+  const at = (frames: LandmarkFrame[], hip: (t: number) => number, kneeVis = 0.9) =>
+    frames.map((f) => withHip(f, hip(f.t), kneeVis));
+
+  it('counts nothing while he stands facing the phone (hip near straight)', () => {
+    const { counter, events } = runAll(
+      HINGED,
+      at(sample(HINGED, curlReps(3)), () => 170),
+    );
+    expect(events).toEqual([]);
+    expect(counter.tracking).toBe(false);
+    expect(counter.untracked).toBe('bodyLine');
+    expect(counter.phase).toBe('setup');
+  });
+
+  it('counts the same arm cycles bent over the bench', () => {
+    const { counter } = runAll(
+      HINGED,
+      at(sample(HINGED, curlReps(3)), () => 95),
+    );
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 3, partials: 0 });
+    expect(counter.untracked).toBeNull();
+  });
+
+  it('an unknown hip angle (knees hidden) counts nothing: the hinge is not confirmed', () => {
+    const { counter } = runAll(
+      HINGED,
+      at(sample(HINGED, curlReps(2)), () => 95, 0.1),
+    );
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 0, partials: 0 });
+    expect(counter.untracked).toBe('bodyLine');
+  });
+
+  it('a 1–3 frame hip glitch mid-rep does not drop the rep', () => {
+    const frames = sample(HINGED, curlReps(2));
+    // Glitch frames in the middle of each lift (~ t 1000 and 3600 ms).
+    const glitch = (t: number) => (Math.abs(t - 1000) < 50 || Math.abs(t - 3600) < 50 ? 170 : 95);
+    const { counter } = runAll(HINGED, at(frames, glitch));
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 0 });
+  });
+
+  it('standing up mid-rep for longer than a glitch drops that attempt; counting resumes bent over', () => {
+    const frames = sample(HINGED, curlReps(3));
+    // Rep 1 lift is 600–1400 ms, bottom to 1700, lowering to 2900. Stand from 1200 to 2600.
+    const { counter } = runAll(
+      HINGED,
+      at(frames, (t) => (t >= 1200 && t < 2600 ? 170 : 95)),
+    );
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 0 });
+  });
+
+  it('rules without the gate ignore the hip angle', () => {
+    const { counter } = runAll(
+      CURL,
+      at(sample(CURL, curlReps(2)), () => 170),
+    );
+    expect(counter.reps).toBe(2);
+  });
+});
+
+describe('createRepCounter: tracking hold (rule.trackingHoldMs, M13b)', () => {
+  const HOLD: ExerciseRule = { ...CURL, trackingHoldMs: 500 };
+  /** Two curls with the wrist hidden (visibility 0.1) from `from` for `ms`. */
+  const dip = (rule: ExerciseRule, from: number, ms: number) =>
+    sample(rule, curlReps(2), {
+      visibility: (t) => (t >= from && t < from + ms ? 0.1 : 0.95),
+    });
+
+  it('a 400 ms visibility dip keeps tracking (no "Step into frame" flash) and the counts', () => {
+    const counter = createRepCounter(HOLD);
+    for (const f of dip(HOLD, 1000, 400)) {
+      counter.push(f);
+      expect(counter.tracking, `t=${f.t}`).toBe(true);
+      expect(counter.untracked).toBeNull();
+    }
+    expect({ reps: counter.reps, partials: counter.partials }).toEqual({ reps: 2, partials: 0 });
+  });
+
+  it('a longer loss reads untracked once the hold runs out', () => {
+    const counter = createRepCounter(HOLD);
+    const seen: boolean[] = [];
+    for (const f of dip(HOLD, 1000, 1200)) {
+      counter.push(f);
+      if (f.t >= 1000 && f.t < 2200) seen.push(counter.tracking);
+      if (f.t >= 1000 + 500 + DT && f.t < 2200) expect(counter.untracked).toBe('visibility');
+    }
+    expect(seen[0]).toBe(true);
+    expect(seen[seen.length - 1]).toBe(false);
+  });
+
+  it('without a hold, the first hidden frame reads untracked (other rules unchanged)', () => {
+    const counter = createRepCounter(CURL);
+    for (const f of dip(CURL, 1000, 400)) {
+      counter.push(f);
+      if (f.t >= 1000 && f.t < 1400) expect(counter.tracking).toBe(false);
+    }
+  });
+
+  it('the hold never covers the hinge gate', () => {
+    const rule: ExerciseRule = { ...HOLD, maxHipAngleDeg: 140 };
+    const counter = createRepCounter(rule);
+    const frames = sample(rule, curlReps(1)).map((f) => withHip(f, f.t < 300 ? 95 : 170));
+    for (const f of frames) counter.push(f);
+    expect(counter.tracking).toBe(false);
+    expect(counter.untracked).toBe('bodyLine');
+  });
+
+  it('reset() ends a hold', () => {
+    const counter = createRepCounter(HOLD);
+    counter.push(makeFrame(HOLD, { t: 0, left: { angle: 170 }, right: { angle: 170 } }));
+    counter.reset();
+    expect(counter.tracking).toBe(false);
+  });
+});

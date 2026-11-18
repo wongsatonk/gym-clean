@@ -32,6 +32,7 @@ import { e1rmChart, type E1rmPoint } from '../charts/e1rmChart';
 import { h } from '../dom';
 import { emptyState } from '../emptyState';
 import { icon } from '../icons';
+import { sidedSetBlock } from '../sidesText';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
 import { dateLabel } from './today';
@@ -428,7 +429,12 @@ function sessionRow(s: ExerciseSessionEntry, unit: Unit, bodyweight: boolean): H
       h('span', { class: 'hist-session-date' }, dateLabel(s.date)),
       focusBadge(s.avgFocus),
     ),
-    h('p', { class: 'hist-session-sets' }, setsLine(s.sets, unit)),
+    // M13b: one-sided sets read "R 12 · L 11 × 20 kg", one per line; others as before.
+    h(
+      'p',
+      { class: 'hist-session-sets' },
+      sidedSetBlock(s.sets, unit, '') ?? setsLine(s.sets, unit),
+    ),
     h('p', { class: 'hist-day-stats' }, total),
   );
 }

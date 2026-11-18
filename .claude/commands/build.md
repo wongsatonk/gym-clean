@@ -29,10 +29,14 @@ milestone, stop and ask Wongsaton.
 3. Dispatch the remaining tasks to their owners — **independent tasks in parallel** (several
    Agent calls in one message), dependent ones in order. Give each subagent: the task text and
    its "Done when", the files it owns, relevant Decisions, and what earlier tasks produced. Tell
-   it not to commit.
+   it not to commit. When two helpers that run Playwright work at once, give each its own
+   `--output=test-results-<n>` (ports are picked per run automatically; a shared `test-results`
+   gets wiped by the other run and causes false failures).
 4. When they report back: integrate anything they asked for (wiring, shared types), then run
-   `npm run check`.
-5. Dispatch **reviewer** on the diff. Send BLOCKING findings back to the owning agent; repeat
+   `npm run check` and `npm run e2e:changed` (only the browser specs touched since `main`).
+   **Never the full `npm run e2e` here**: it takes ~20 min and the verifier runs it once.
+5. Dispatch **reviewer** once per wave of parallel tasks (or once before verify for a small
+   milestone), not after every task. Send BLOCKING findings back to the owning agent; repeat
    until PASS.
 6. Commit the task (`git add` the task's files only, clear message, one task per commit), tick it
    in PROGRESS.md, and update Status / Decisions / Next step.
@@ -40,7 +44,8 @@ milestone, stop and ask Wongsaton.
    "Blockers / questions for Wongsaton", set Waiting on human: yes, and report.
 
 ## 3. Verify the milestone
-Dispatch **verifier**. On FAIL, send each failure to its owner, fix, re-review, re-verify (the
+Dispatch **verifier** (the one full `npm run e2e` of the milestone; keep the checkout quiet while
+it runs: no other Playwright run, no edits to `playwright.config.ts` or e2e specs). On FAIL, send each failure to its owner, fix, re-review, re-verify (the
 3-attempt rule applies). On PASS, paste its evidence into PROGRESS.md → Verification evidence
 and commit.
 

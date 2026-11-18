@@ -80,10 +80,12 @@ test.beforeAll(async ({ browser }, testInfo) => {
 });
 /** The last feature page's title (the tour's last page when nothing was added). */
 const LAST_FEATURE = CURRENT_PAGES.at(-1)?.title ?? '';
-/** The first page whose Try it opens another tab (not Today), for the Try it test. */
-const TRY_IDX = CURRENT_PAGES.findIndex((p) =>
+/** The first page whose Try it opens another tab (else one that opens Today), for the Try it test. */
+const TAB_IDX = CURRENT_PAGES.findIndex((p) =>
   ['calendar', 'coach', 'fuel', 'settings'].includes(p.tryIt ?? ''),
 );
+// 1.15.1's pages (Next arm, set-up card) both try it on Today: then Today's tab is the check.
+const TRY_IDX = TAB_IDX >= 0 ? TAB_IDX : CURRENT_PAGES.findIndex((p) => p.tryIt === 'today');
 const TRY_PAGE = CURRENT_PAGES[TRY_IDX];
 
 /** A profile updated from the previous release: one finished session, that tour seen. */

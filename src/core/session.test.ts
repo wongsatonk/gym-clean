@@ -3,7 +3,10 @@ import type { FocusCueId, PlannedExercise, ProgramDay } from './types';
 import {
   REST_OVERRUN_GRACE_SEC,
   currentPlanned,
+  currentSide,
+  sideTurn,
   currentWarmup,
+  lowerSide,
   next,
   restElapsedMs,
   startSession,
@@ -1754,5 +1757,263 @@ describe('warm-up sets (M12 1b)', () => {
         now: sec(40),
       }),
     ).toBe(r);
+  });
+});
+
+describe('one-sided sets (M13b): right, Next side, left, one SetLog', () => {
+  const row: PlannedExercise = {
+    exerciseId: 'One-Arm_Dumbbell_Row',
+    sets: 2,
+    targetReps: [8, 12],
+    restSec: 60,
+    startWeightKg: 20,
+    tracking: 'pose',
+  };
+  const stepUps: PlannedExercise = {
+    exerciseId: 'Dumbbell_Step_Ups',
+    sets: 1,
+    targetReps: [10, 10],
+    restSec: 90,
+    tracking: 'manual',
+  };
+  const oneDay: ProgramDay = { id: 'one', name: 'One Day', exercises: [row, exA, stepUps] };
+  const one = () => startSession(oneDay, 's1', T0);
+  const counted = (reps: number, partials = 0): SessionEvent => ({
+    type: 'SET_COUNTED',
+    reps,
+    partials,
+  });
+  const nextSide = (t: number): SessionEvent => ({ type: 'NEXT_SIDE', now: sec(t) });
+  const done = (t: number): SessionEvent => ({ type: 'SET_DONE', now: sec(t) });
+
+  it('a one-sided set starts on the right; two-sided exercises have no side', () => {
+    const s = one();
+    expect(s.side).toBe('right');
+    expect(currentSide(s)).toBe('right');
+    expect(s.doneSide).toBeUndefined();
+    const two = fresh();
+    expect(currentSide(two)).toBeNull();
+    expect('side' in two).toBe(false);
+    expect('doneSide' in two).toBe(false);
+  });
+
+  it('sideTurn: first before Next arm, second after, null for two-sided, on Rest and Summary', () => {
+    const s = one();
+    expect(sideTurn(s)).toBe('first');
+    expect(sideTurn(run(s, counted(5), nextSide(30)))).toBe('second');
+    expect(sideTurn(fresh())).toBeNull();
+    expect(sideTurn(run(s, counted(5), nextSide(30), counted(4), done(60)))).toBeNull();
+  });
+
+  it('NEXT_SIDE keeps the right count and moves to the left', () => {
+    const s = run(one(), counted(12, 1), nextSide(30));
+    expect(s.phase).toBe('exercise');
+    expect(currentSide(s)).toBe('left');
+    expect(s.doneSide).toEqual({
+      side: 'right',
+      reps: 12,
+      partials: 1,
+      focusCues: null,
+      at: sec(30),
+    });
+    expect(s.partials).toBe(0);
+    expect(s.logs).toHaveLength(0);
+    expect(s.restRunningSince).toBeNull();
+  });
+
+  it('SET_COUNTED and ADJUST apply to the current side only', () => {
+    const s = run(
+      one(),
+      counted(12),
+      { type: 'ADJUST', field: 'reps', delta: -1 },
+      nextSide(30),
+      counted(9, 2),
+      { type: 'ADJUST', field: 'reps', delta: 1 },
+    );
+    expect(s.doneSide).toMatchObject({ reps: 11, partials: 0 });
+    expect(s.reps).toBe(10);
+    expect(s.partials).toBe(2);
+  });
+
+  it('SET_DONE on the left logs one SetLog with both sides, reps = the lower side', () => {
+    const s = run(one(), counted(12), nextSide(30), counted(11, 1), done(60));
+    expect(s.logs).toHaveLength(1);
+    expect(s.logs[0]).toMatchObject({
+      exerciseId: 'One-Arm_Dumbbell_Row',
+      setIndex: 0,
+      reps: 11,
+      partials: 1,
+      weightKg: 20,
+      sides: { right: { reps: 12, partials: 0 }, left: { reps: 11, partials: 1 } },
+      startedAt: T0,
+      endedAt: sec(60),
+    });
+    // the left being lower or the right being lower: either way the lower side
+    const r = run(one(), counted(8, 2), nextSide(30), counted(10), done(60));
+    expect(r.logs[0]).toMatchObject({ reps: 8, partials: 2 });
+    expect(r.logs[0]?.partials).toBe(2);
+  });
+
+  it('the rest clock starts when the left side ends, not at the switch', () => {
+    const s = run(one(), counted(12), nextSide(30), counted(12), done(70));
+    expect(s.phase).toBe('rest');
+    expect(s.restRunningSince).toBe(sec(70));
+    expect(restElapsedMs(s, sec(100))).toBe(30_000);
+    const t = run(s, { type: 'START_SET', now: sec(130) });
+    expect(t.lastRestTakenSec).toBe(60);
+  });
+
+  it('the next set starts on the right again with the logged (lower) reps', () => {
+    const s = run(one(), counted(12), nextSide(30), counted(10), done(60));
+    expect(currentSide(s)).toBe('right');
+    expect(s.doneSide).toBeUndefined();
+    expect(s.setIndex).toBe(1);
+    expect(s.reps).toBe(10);
+    expect(s.partials).toBe(0);
+    const t = run(s, { type: 'START_SET', now: sec(120) }, counted(9), nextSide(150));
+    expect(t.doneSide).toMatchObject({ side: 'right', reps: 9 });
+  });
+
+  it('SET_DONE on the first side (early end) logs the right only', () => {
+    const s = run(one(), counted(7, 1), done(40));
+    expect(s.logs[0]).toMatchObject({
+      reps: 7,
+      partials: 1,
+      sides: { right: { reps: 7, partials: 1 } },
+      endedAt: sec(40),
+    });
+    expect(s.logs[0]?.sides?.left).toBeUndefined();
+    expect(s.phase).toBe('rest');
+  });
+
+  it('NEXT_SIDE is ignored for two-sided exercises, on the second side, on Rest and while paused', () => {
+    const two = fresh();
+    expect(next(two, nextSide(10))).toBe(two);
+    const left = run(one(), nextSide(10));
+    expect(next(left, nextSide(20))).toBe(left);
+    const paused = run(one(), { type: 'PAUSE', now: sec(5) });
+    expect(next(paused, nextSide(10))).toBe(paused);
+    const rest = run(one(), done(30));
+    expect(next(rest, nextSide(40))).toBe(rest);
+  });
+
+  it('NEXT_SIDE time is clamped to the set start', () => {
+    const s = run(one(), { type: 'NEXT_SIDE', now: T0 - 5000 });
+    expect(s.doneSide?.at).toBe(T0);
+  });
+
+  it('focus cues are per side and joined at Set done; the score uses the logged reps/partials', () => {
+    const s = run(
+      one(),
+      counted(10),
+      { type: 'SET_FOCUS', cues: ['rushedLowering'] as FocusCueId[] },
+      nextSide(30),
+      counted(10),
+      { type: 'SET_FOCUS', cues: ['rushedLowering', 'rushedLowering'] as FocusCueId[] },
+      done(60),
+    );
+    expect(s.logs[0]?.cues).toEqual(['rushedLowering', 'rushedLowering', 'rushedLowering']);
+    expect(typeof s.logs[0]?.focusScore).toBe('number');
+    const manual = run(one(), counted(10), nextSide(30), done(60));
+    expect(manual.logs[0]?.cues).toBeUndefined();
+    expect(manual.logs[0]?.focusScore).toBeUndefined();
+    const rightOnly = run(
+      one(),
+      { type: 'SET_FOCUS', cues: [] as FocusCueId[] },
+      nextSide(30),
+      done(60),
+    );
+    expect(rightOnly.logs[0]?.cues).toEqual([]);
+  });
+
+  it('CORRECT_LAST_SET with a side fixes that side and recomputes the lower side', () => {
+    const s = run(one(), counted(12), nextSide(30), counted(11), done(60));
+    const fixLeft = run(s, { type: 'CORRECT_LAST_SET', side: 'left', reps: 13, partials: 0 });
+    expect(fixLeft.logs[0]).toMatchObject({
+      reps: 12,
+      sides: { right: { reps: 12, partials: 0 }, left: { reps: 13, partials: 0 } },
+    });
+    expect(fixLeft.reps).toBe(12); // carries to the next set
+    const fixRight = run(s, { type: 'CORRECT_LAST_SET', side: 'right', reps: 9, partials: 2 });
+    expect(fixRight.logs[0]).toMatchObject({
+      reps: 9,
+      partials: 2,
+      sides: { right: { reps: 9, partials: 2 }, left: { reps: 11, partials: 0 } },
+    });
+    expect(s.logs[0]?.sides?.left?.reps).toBe(11); // immutably
+  });
+
+  it('CORRECT_LAST_SET can add the left to an early-ended set', () => {
+    const s = run(one(), counted(7), done(40));
+    const f = run(s, { type: 'CORRECT_LAST_SET', side: 'left', reps: 6, partials: 0 });
+    expect(f.logs[0]).toMatchObject({
+      reps: 6,
+      sides: { right: { reps: 7, partials: 0 }, left: { reps: 6, partials: 0 } },
+    });
+  });
+
+  it('CORRECT_LAST_SET with a side is ignored for a two-sided set; without one it fixes the total', () => {
+    const two = run(fresh(), { type: 'SET_DONE', now: sec(30) });
+    expect(next(two, { type: 'CORRECT_LAST_SET', side: 'left', reps: 3, partials: 0 })).toBe(two);
+    const s = run(one(), counted(12), nextSide(30), counted(11), done(60));
+    const total = run(s, { type: 'CORRECT_LAST_SET', reps: 10, partials: 0 });
+    expect(total.logs[0]?.reps).toBe(10);
+    expect(total.logs[0]?.sides).toBeUndefined();
+  });
+
+  it('CORRECT_LAST_SET per side works on Summary for the final set (leg exercise)', () => {
+    const d: ProgramDay = { id: 'legs', name: 'Legs', exercises: [stepUps] };
+    const s = run(startSession(d, 's2', T0), nextSide(30), counted(9), done(60));
+    expect(s.phase).toBe('summary');
+    expect(s.logs[0]).toMatchObject({ reps: 9, sides: { right: { reps: 10 }, left: { reps: 9 } } });
+    const f = run(s, { type: 'CORRECT_LAST_SET', side: 'left', reps: 10, partials: 0 });
+    expect(f.logs[0]?.reps).toBe(10);
+  });
+
+  it('summarize counts a one-sided set once with the lower side’s volume', () => {
+    const s = run(one(), counted(12), nextSide(30), counted(10), done(60), {
+      type: 'FINISH',
+      now: sec(90),
+    });
+    expect(summarize(s)).toMatchObject({ setsDone: 1, totalVolumeKg: 200 });
+    expect(s.logs[0]?.sides).toEqual({
+      right: { reps: 12, partials: 0 },
+      left: { reps: 10, partials: 0 },
+    });
+  });
+
+  it('moving to a two-sided exercise drops the side fields; moving back adds them', () => {
+    const s = run(one(), nextSide(10), { type: 'GO_TO_EXERCISE', exIndex: 1, now: sec(20) });
+    expect(currentPlanned(s).exerciseId).toBe('A');
+    expect('side' in s).toBe(false);
+    expect('doneSide' in s).toBe(false);
+    const back = run(s, { type: 'GO_TO_EXERCISE', exIndex: 0, now: sec(30) });
+    expect(currentSide(back)).toBe('right');
+    expect(back.doneSide).toBeUndefined();
+    const skip = run(one(), nextSide(10), { type: 'SKIP_EXERCISE', now: sec(20) });
+    expect('side' in skip).toBe(false);
+  });
+
+  it('two-sided exercises log no sides', () => {
+    const s = run(fresh(), counted(9), { type: 'SET_DONE', now: sec(30) });
+    expect(s.logs[0]?.sides).toBeUndefined();
+    expect('sides' in (s.logs[0] ?? {})).toBe(false);
+  });
+
+  it('lowerSide picks fewer reps, then more partials on a tie', () => {
+    expect(
+      lowerSide({ right: { reps: 12, partials: 0 }, left: { reps: 11, partials: 3 } }),
+    ).toEqual({
+      reps: 11,
+      partials: 3,
+    });
+    expect(
+      lowerSide({ right: { reps: 10, partials: 1 }, left: { reps: 10, partials: 0 } }),
+    ).toEqual({
+      reps: 10,
+      partials: 1,
+    });
+    expect(lowerSide({ left: { reps: 4, partials: 0 } })).toEqual({ reps: 4, partials: 0 });
+    expect(lowerSide({})).toBeNull();
   });
 });
