@@ -6,16 +6,23 @@
 // X to which day?") open the tab with their chip already sent; the Pause sheet shows the same
 // thread as a compact chat with the workout chips only; nothing to type during a set; a red flag mid-workout is the one line that is spoken.
 // Replies on the tab are shown, never spoken. No request leaves the dev server (route-asserted).
+// M13c task 18: a question the phone's coach can't answer → the "Claude could help with this"
+// card (both lists, "Your key isn't set up yet."); Tell me when it's ready stores settings coach
+// claudeWanted 'yes', Not now stores nothing but the date; once a day; never after "no"; no request
+// to any host but the page's (the card sends nothing: no Claude client exists in 1.16.0).
 import { expect, test, type Page } from './fixtures';
 import {
   MIN,
   at,
   coachTab,
   expectTapTargets,
+  getSetting,
   guardNetwork,
   leaveCoach,
   noHorizontalOverflow,
+  offDevice,
   openApp,
+  putSetting,
   record,
   seed,
   revealNotice,
@@ -277,6 +284,146 @@ test('Pause sheet: the same thread as a compact chat, workout chips only; nothin
   await expect(sheet).toHaveCount(0);
   await expect(page.getByRole('dialog', { name: 'Paused' })).toBeVisible();
   expect(await page.evaluate((n) => window.__spoken.slice(n), before)).toEqual([RED_FLAG]);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// ---------- M13c: the Claude explain card ----------
+
+/** A question the rules coach can't answer (its "I can help with:" fallback). */
+const OFF_TOPIC = 'What is the capital of France?';
+const claudeCard = (page: Page) => coachTab(page).locator('[data-claude-offer]');
+
+async function askCoach(page: Page, text: string) {
+  await coachTab(page).getByLabel('Ask the coach').fill(text);
+  await coachTab(page).getByRole('button', { name: 'Send' }).click();
+  await expect(bubbles(page, 'user').last()).toContainText(text);
+}
+
+/** Both lists exactly as core's CLAUDE_SENDS / CLAUDE_NEVER_SENDS (read from the page's modules). */
+async function expectBothLists(page: Page) {
+  const lists = await page.evaluate(async () => {
+    const m = await import('/src/core/trainer/claude/sends.ts' as string);
+    const ids = (l: { id: string }[]) => l.map((x) => x.id);
+    return { sends: ids(m.CLAUDE_SENDS), never: ids(m.CLAUDE_NEVER_SENDS) };
+  });
+  expect(lists.sends.length).toBeGreaterThan(0);
+  expect(lists.never.length).toBeGreaterThan(0);
+  const card = claudeCard(page);
+  expect(
+    await card
+      .locator('[data-claude-sends] [data-claude-send]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-claude-send'))),
+  ).toEqual(lists.sends);
+  expect(
+    await card
+      .locator('[data-claude-never] [data-claude-never-item]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-claude-never-item'))),
+  ).toEqual(lists.never);
+}
+
+test("Claude card: an off-topic question → the card with both lists → Tell me when it's ready stores 'yes'; once a day; nothing sent", async ({
+  page,
+  baseURL,
+}, testInfo) => {
+  const offsite = await guardNetwork(page);
+  const { requests, errors } = record(page);
+  await openApp(page, at(18, 18));
+  await goCoach(page);
+
+  await askCoach(page, OFF_TOPIC);
+  await expect(bubbles(page, 'coach').last()).toContainText('I can help with:');
+  const card = claudeCard(page);
+  await expect(card).toBeVisible();
+  // It sits under the reply that couldn't help; the thread shows the start of that turn, and
+  // the card's title is on screen without scrolling.
+  await expect(bubbles(page, 'coach').last()).toBeInViewport();
+  await expect(card.locator('.co-title')).toBeInViewport();
+  await expect(card).toContainText('Claude could help with this');
+  await expect(card).toContainText('What would be sent');
+  await expect(card).toContainText('Never sent');
+  await expect(card).toContainText("Your key isn't set up yet.");
+  await expectBothLists(page);
+  // Exactly two answers, the same size, both ≥ 56px.
+  await expect(card.getByRole('button')).toHaveCount(2);
+  const wanted = card.locator('[data-claude-offer-wanted]');
+  const notNow = card.locator('[data-claude-offer-dismiss]');
+  await expect(wanted).toHaveText("Tell me when it's ready");
+  await expect(notNow).toHaveText('Not now');
+  await expectTapTargets(page, '[data-claude-offer]');
+  await noHorizontalOverflow(page);
+  await card.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('m13c-e2e-claude-card.png') });
+  // Shown today: saved so it shows once a day.
+  await expect.poll(() => getSetting(page, 'claudeOffer')).toEqual({ lastShownDate: '2026-11-18' });
+
+  await wanted.click();
+  await expect(claudeCard(page)).toHaveCount(0);
+  await expect
+    .poll(() => getSetting(page, 'coach'))
+    .toEqual(expect.objectContaining({ claudeWanted: 'yes' }));
+
+  // Once a day: another question the coach can't answer → no second card, also after a reload.
+  await askCoach(page, 'Who won the football last night?');
+  await expect(bubbles(page, 'coach').last()).toContainText('I can help with:');
+  await expect(claudeCard(page)).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+  await goCoach(page);
+  await expect(bubbles(page, 'user').last()).toContainText('football');
+  await expect(claudeCard(page)).toHaveCount(0);
+
+  // Shown, never spoken; nothing left the page's own host.
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offDevice(requests, baseURL)).toEqual([]);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('Claude card: Not now saves only the date; it comes back the next day; never after "no"', async ({
+  page,
+  baseURL,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { requests, errors } = record(page);
+  await openApp(page, at(18, 18));
+  await goCoach(page);
+
+  // A real answer gets no card.
+  await coachTab(page).locator('[data-coach-starter="week"]').click();
+  await expect(bubbles(page, 'coach')).toHaveCount(1);
+  await expect(claudeCard(page)).toHaveCount(0);
+
+  await askCoach(page, OFF_TOPIC);
+  await expect(claudeCard(page)).toBeVisible();
+  await claudeCard(page).locator('[data-claude-offer-dismiss]').click();
+  await expect(claudeCard(page)).toHaveCount(0);
+  await expect.poll(() => getSetting(page, 'claudeOffer')).toEqual({ lastShownDate: '2026-11-18' });
+  const coach = (await getSetting(page, 'coach')) as { claudeWanted?: string } | undefined;
+  expect(coach?.claudeWanted).toBeUndefined();
+
+  // The next day: the card can show again.
+  await page.clock.setSystemTime(at(19, 18));
+  await page.reload();
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+  await goCoach(page);
+  await askCoach(page, OFF_TOPIC);
+  await expect(claudeCard(page)).toBeVisible();
+  await expect.poll(() => getSetting(page, 'claudeOffer')).toEqual({ lastShownDate: '2026-11-19' });
+
+  // "No" (the to-do's answer) → never again, even on a new day.
+  const prev = ((await getSetting(page, 'coach')) ?? {}) as Record<string, unknown>;
+  await putSetting(page, 'coach', { ...prev, claudeWanted: 'no' });
+  await page.clock.setSystemTime(at(20, 18));
+  await page.reload();
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+  await goCoach(page);
+  await askCoach(page, 'What is the capital of Spain?');
+  await expect(bubbles(page, 'coach').last()).toContainText('I can help with:');
+  await expect(claudeCard(page)).toHaveCount(0);
+
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offDevice(requests, baseURL)).toEqual([]);
   expect(offsite).toEqual([]);
   expect(errors).toEqual([]);
 });

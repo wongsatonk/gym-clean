@@ -116,7 +116,20 @@ test('badges: Push A has six 3D demos, Camera on the tracked four (M4f adds Tric
     .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(fontPx).toBeGreaterThanOrEqual(20);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-  await expectStaticBadges(page, '.ex-row');
+  // M13c goal 4: on the preview (nothing started yet) each badge is its own ≥ 56px button that
+  // opens its sheet (badges.spec.ts); the pill inside keeps its word. Mid-set they stay static
+  // (the Exercise screen check below).
+  const pills = await page.locator('.ex-row [data-badge]').evaluateAll((els) =>
+    els.map((el) => {
+      const btn = el.closest('button');
+      return {
+        inBadgeButton: btn?.hasAttribute('data-badge-open') ?? false,
+        tall: (btn?.getBoundingClientRect().height ?? 0) >= 56,
+      };
+    }),
+  );
+  expect(pills.length).toBeGreaterThan(0);
+  for (const p of pills) expect(p).toEqual({ inBadgeButton: true, tall: true });
 
   // Legs B preview (M4d batch 2): every row, Leg Press included, has a 3D demo and no Camera.
   await page.getByRole('button', { name: 'Back', exact: true }).click();

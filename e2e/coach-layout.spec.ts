@@ -14,10 +14,22 @@ import {
   expectTapTargets,
   noHorizontalOverflow,
   openApp,
+  putSetting,
   record,
 } from './app.helpers';
 
 const VIEW_H = 844;
+
+/**
+ * M13c: the first reply of the day the phone's coach can't answer ("I can help with:") gets the
+ * tall "Claude could help with this" card under it (coach-tab.spec.ts covers it; a tall item opens
+ * at its top). These specs measure plain replies, so the card counts as shown today already.
+ */
+async function claudeCardShownToday(page: Page, date: string) {
+  await putSetting(page, 'claudeOffer', { lastShownDate: date });
+  await page.reload();
+  await expect(page.locator('[data-cal]').first()).toBeVisible();
+}
 
 async function goCoach(page: Page) {
   await page.locator('[data-tab="coach"]').click();
@@ -53,6 +65,7 @@ test('the thread gets most of the Coach tab: chips in one sideways row, newest r
 }, testInfo) => {
   const { errors } = record(page);
   await openApp(page, at(13, 18));
+  await claudeCardShownToday(page, '2026-11-13');
   await goCoach(page);
 
   // Empty thread: the starters live in the thread, so it is already the big part.
@@ -125,6 +138,7 @@ test('Checkpoint J: every new reply scrolls into view, and stays there when the 
 }) => {
   const { errors } = record(page);
   await openApp(page, at(13, 18));
+  await claudeCardShownToday(page, '2026-11-13');
   await goCoach(page);
   for (const q of [
     // Plain text replies (a proposal card taller than the thread opens at its top instead).
