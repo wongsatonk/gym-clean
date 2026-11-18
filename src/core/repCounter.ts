@@ -17,6 +17,11 @@
 // the image plane with the video aspect estimated from the pose; `maxTorsoLeanDeg` drops frames
 // (and the attempt in progress) once the torso leans away from its posture at the settle;
 // `otherView` swaps in thresholds for the other camera view, judged while settling.
+//
+// Fixed side (M13b one-arm sets): `createRepCounter(rule, { side })` reads only that arm from the
+// first frame. The side is never picked, switched or unlocked by the counter (stream restarts,
+// view changes and reset() keep it); only setSide() changes it, which also zeroes the counts.
+// Without a side, the rule's sideMode applies as before.
 import {
   angleBetweenDeg,
   frameAngle,
@@ -58,7 +63,10 @@ export type RepCounter = {
   readonly reps: number;
   readonly partials: number;
   readonly phase: RepPhase;
-  /** Side used for the last tracked frame; null before any. */
+  /**
+   * Side used for the last tracked frame; null before any. With a fixed side (options.side or
+   * setSide) it is always that side, from before the first frame.
+   */
   readonly side: TrackedSide | null;
   /** False when the last frame failed the visibility gate ("Step into frame"). */
   readonly tracking: boolean;
@@ -89,8 +97,21 @@ export type RepCounter = {
    * (null otherwise, and before any frame).
    */
   readonly sideAngles: SideAngles | null;
-  /** Back to the initial state (counts 0, phase setup, side unlocked, no last miss). */
+  /**
+   * Back to the initial state (counts 0, phase setup, no last miss). The side is unlocked, unless
+   * it is fixed: a fixed side is kept.
+   */
   reset(): void;
+  /**
+   * Fix the counter to this arm from now on (the session's Next arm): counts go to 0 and tracking
+   * restarts in setup, as reset() does, even if the side is the same.
+   */
+  setSide(side: Side): void;
+};
+
+export type RepCounterOptions = {
+  /** Count only this arm (one-sided exercises, M13b); omit for the rule's sideMode. */
+  side?: Side;
 };
 
 /** Frames used to choose the better-visible side while in setup ('best' side mode). */
@@ -104,7 +125,7 @@ const LEAN_RELOCK_MS = 3000;
 
 type Reading = { angle: number; side: TrackedSide; gate: boolean };
 
-export function createRepCounter(rule: ExerciseRule): RepCounter {
+export function createRepCounter(rule: ExerciseRule, options: RepCounterOptions = {}): RepCounter {
   const sign = rule.direction === 'decreasing' ? 1 : -1;
   const h = rule.hysteresisDeg;
   const startExtended = rule.start === 'extended';
@@ -145,8 +166,10 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   let reps = 0;
   let partials = 0;
   let phase: RepPhase = 'setup';
-  let side: TrackedSide | null = null;
-  let lockedSide: Side | null = null;
+  /** The arm the session fixed (never changed by the counter itself); null = sideMode applies. */
+  let fixedSide: Side | null = options.side ?? null;
+  let side: TrackedSide | null = fixedSide;
+  let lockedSide: Side | null = fixedSide;
   let window: LandmarkFrame[] = [];
   let tracking = false;
   let ema: number | null = null;
@@ -200,11 +223,11 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   /** Recent shoulder-line yaws while settling, to judge the camera view (rule.otherView). */
   let yaws: number[] = [];
 
-  /** Forget the limb's position (back to setup, side unlocked) but keep the counts. */
+  /** Forget the limb's position (back to setup, side unlocked unless fixed) but keep the counts. */
   function restartTracking(): void {
     phase = 'setup';
-    side = null;
-    lockedSide = null;
+    side = fixedSide;
+    lockedSide = fixedSide;
     window = [];
     tracking = false;
     ema = null;
@@ -239,8 +262,8 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     applyRule(target);
     ema = null;
     settleSince = null;
-    side = null;
-    lockedSide = null;
+    side = fixedSide;
+    lockedSide = fixedSide;
   }
 
   function reset(): void {
@@ -251,6 +274,11 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
     untracked = null;
     sideAngles = null;
     restartTracking();
+  }
+
+  function setSide(s: Side): void {
+    fixedSide = s;
+    reset();
   }
 
   function readSide(frame: LandmarkFrame, s: Side): number | null {
@@ -324,6 +352,12 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
 
   /** Angle + side for this frame from the visible limb(s), or null when visibility fails. */
   function readAngle(frame: LandmarkFrame): Reading | null {
+    if (fixedSide !== null) {
+      // One arm only, whatever the rule's sideMode (the other arm is never read).
+      const a = readSide(frame, fixedSide);
+      if (a === null) return null;
+      return { angle: a, side: fixedSide, gate: extendedGatePasses(rule, frame, fixedSide) };
+    }
     if (active.sideMode === 'both') {
       const l = sideAngles?.left ?? null;
       const r = sideAngles?.right ?? null;
@@ -567,6 +601,7 @@ export function createRepCounter(rule: ExerciseRule): RepCounter {
   return {
     push,
     reset,
+    setSide,
     get reps() {
       return reps;
     },

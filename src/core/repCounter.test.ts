@@ -757,6 +757,142 @@ describe('createRepCounter: sides', () => {
   });
 });
 
+describe('createRepCounter: fixed side (one-arm sets, M13b)', () => {
+  /** Left arm does `keys`, right arm held straight and clearer (best mode would pick it). */
+  const leftWorks = (keys: ReturnType<typeof curve>, rightVis = 0.95, leftVis = 0.6) =>
+    sample(CURL, keys, {
+      sides: ['left'],
+      visibility: () => leftVis,
+      other: { right: { angle: 170, visibility: rightVis } },
+    });
+  /** Right arm does `keys` at `rightVis`, left arm held straight at `leftVis`. */
+  const rightWorks = (keys: ReturnType<typeof curve>, leftVis = 0.13, rightVis = 0.95) =>
+    sample(CURL, keys, {
+      sides: ['right'],
+      visibility: () => rightVis,
+      other: { left: { angle: 170, visibility: leftVis } },
+    });
+  const shift = (frames: LandmarkFrame[], dt: number) => frames.map((f) => ({ ...f, t: f.t + dt }));
+  const counts = (c: { reps: number; partials: number }) => ({
+    reps: c.reps,
+    partials: c.partials,
+  });
+
+  it('reports the side before any frame and reads it from the first frame', () => {
+    const counter = createRepCounter(CURL, { side: 'left' });
+    expect(counter.side).toBe('left');
+    for (const f of leftWorks(curlReps(2))) counter.push(f);
+    expect(counter.side).toBe('left');
+    expect(counts(counter)).toEqual({ reps: 2, partials: 0 });
+    // Best mode would have picked the clearer (idle) right arm and counted nothing.
+    expect(runAll(CURL, leftWorks(curlReps(2))).counter.reps).toBe(0);
+  });
+
+  it('never counts the other arm, even when only the other arm is visible', () => {
+    const counter = createRepCounter(CURL, { side: 'left' });
+    for (const f of rightWorks(curlReps(2))) counter.push(f);
+    expect(counts(counter)).toEqual({ reps: 0, partials: 0 });
+    expect(counter.side).toBe('left');
+    expect(counter.tracking).toBe(false);
+    expect(counter.untracked).toBe('visibility');
+  });
+
+  it('a stream restart mid-set keeps the side and the counts (the set-3 arm flip)', () => {
+    const counter = createRepCounter(CURL, { side: 'right' });
+    for (const f of rightWorks(curlReps(2))) counter.push(f);
+    expect(counter.reps).toBe(2);
+    // The stream restarts (t re-zeroes); now the idle left arm is the clearer one.
+    const after = rightWorks(curlReps(2), 0.95, 0.6);
+    for (const f of after) counter.push(f);
+    expect(counter.side).toBe('right');
+    expect(counts(counter)).toEqual({ reps: 4, partials: 0 });
+    // Without a fixed side the restart unlocks it and the counter jumps to the idle left arm.
+    const best = createRepCounter(CURL);
+    for (const f of [...rightWorks(curlReps(2)), ...after]) best.push(f);
+    expect(best.side).toBe('left');
+    expect(best.reps).toBe(2);
+  });
+
+  it('losing the person for seconds keeps the side and the counts', () => {
+    const counter = createRepCounter(CURL, { side: 'right' });
+    const first = rightWorks(curlReps(1));
+    for (const f of first) counter.push(f);
+    const end = first[first.length - 1]?.t ?? 0;
+    // 3 s with no one in view, then the left arm is the clearer one for a while.
+    const lost = sample(CURL, curve(170, [[3000, 170]]), {
+      sides: [],
+      other: { left: { angle: 170, visibility: 0.1 }, right: { angle: 170, visibility: 0.1 } },
+    });
+    for (const f of shift(lost, end + DT)) counter.push(f);
+    expect(counter.tracking).toBe(false);
+    for (const f of shift(rightWorks(curlReps(1), 0.95, 0.6), end + 3100)) counter.push(f);
+    expect(counter.side).toBe('right');
+    expect(counts(counter)).toEqual({ reps: 2, partials: 0 });
+  });
+
+  it('reset() zeroes the counts but keeps the fixed side', () => {
+    const counter = createRepCounter(CURL, { side: 'left' });
+    for (const f of leftWorks(curlReps(1))) counter.push(f);
+    expect(counter.reps).toBe(1);
+    counter.reset();
+    expect(counts(counter)).toEqual({ reps: 0, partials: 0 });
+    expect(counter.side).toBe('left');
+    for (const f of leftWorks(curlReps(1))) counter.push(f);
+    expect(counter.reps).toBe(1);
+  });
+
+  it('setSide() zeroes the counts and restarts tracking on the new arm', () => {
+    const counter = createRepCounter(CURL, { side: 'right' });
+    // Two right reps, then a shallow one (a partial) so lastMiss/lastPartial are set.
+    const keys = curve(170, [...segsOf(curlReps(2)), [800, 110], [1200, 170], [500, 170]]);
+    const right = rightWorks(keys);
+    for (const f of right) counter.push(f);
+    expect(counts(counter)).toEqual({ reps: 2, partials: 1 });
+    expect(counter.lastMiss).not.toBeNull();
+
+    counter.setSide('left');
+    expect(counts(counter)).toEqual({ reps: 0, partials: 0 });
+    expect(counter.side).toBe('left');
+    expect(counter.phase).toBe('setup');
+    expect(counter.lastMiss).toBeNull();
+    expect(counter.lastPartial).toBeNull();
+    expect(counter.angle).toBeNull();
+
+    // The stream goes on (t keeps rising): he turns, the left arm works, the right is now hidden.
+    const end = right[right.length - 1]?.t ?? 0;
+    const left = sample(CURL, curlReps(3), {
+      sides: ['left'],
+      other: { right: { angle: 170, visibility: 0.13 } },
+    });
+    for (const f of shift(left, end + 2000)) counter.push(f);
+    expect(counter.side).toBe('left');
+    expect(counts(counter)).toEqual({ reps: 3, partials: 0 });
+    // And the right arm no longer counts.
+    for (const f of shift(rightWorks(curlReps(2)), end + 20000)) counter.push(f);
+    expect(counter.reps).toBe(3);
+  });
+
+  it('setSide() fixes the side of a counter made without one', () => {
+    const counter = createRepCounter(CURL);
+    for (const f of rightWorks(curlReps(1))) counter.push(f);
+    expect(counter.side).toBe('right');
+    counter.setSide('left');
+    expect(counter.side).toBe('left');
+    expect(counter.reps).toBe(0);
+    for (const f of shift(rightWorks(curlReps(2), 0.6), 10000)) counter.push(f);
+    expect(counter.reps).toBe(0);
+    expect(counter.side).toBe('left');
+  });
+
+  it('setSide() to the same side still starts the arm from 0', () => {
+    const counter = createRepCounter(CURL, { side: 'right' });
+    for (const f of rightWorks(curlReps(1))) counter.push(f);
+    counter.setSide('right');
+    expect(counts(counter)).toEqual({ reps: 0, partials: 0 });
+    expect(counter.side).toBe('right');
+  });
+});
+
 describe('createRepCounter: events', () => {
   it('fills index, t, tempo and angle range on every event', () => {
     const { events, eventFrameT } = runAll(CURL, sample(CURL, curlReps(3, 800, 1200)));
@@ -1436,6 +1572,17 @@ describe('createRepCounter: camera view variant (rule.otherView, push-up filmed 
     expect(counter.reps).toBe(2); // counts kept
     counter.reset();
     expect(counter.rule).toBe(PUSHUP);
+  });
+
+  it('a fixed side survives the view switch and still reads that one arm (M13b)', () => {
+    const counter = createRepCounter(PUSHUP, { side: 'left' });
+    for (const f of sample(PUSHUP, keys)) counter.push(f);
+    expect(counter.rule.view).toBe('front'); // thresholds still follow the view
+    expect(counter.side).toBe('left'); // but never 'both' or the other arm
+    expect(counter.reps).toBe(2);
+    for (const f of sample(PUSHUP, keys).map(sideOn)) counter.push(f); // stream restart
+    expect(counter.rule).toBe(PUSHUP);
+    expect(counter.side).toBe('left');
   });
 
   /** Turn the world body about the vertical axis so the shoulder line has this yaw. */

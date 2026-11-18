@@ -109,7 +109,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `ONE_SIDED: Record<exerciseId, OneSidedLimb>` (the 3 arm + 4 leg ids in SPEC M13b goal 1), `oneSidedLimb(id)`, `FIRST_SIDE = 'right'`, copy as data: side label ("Right arm"/"Left leg"), button ("Next arm"/"Next leg"), spoken switch ("Left arm. Turn so your left arm faces the phone."), spoken start ("Right arm first."), idle reminder ("Tap Next arm when you're ready.").
   - Done when: tests check every id exists in `exercises.json`, lunges are not in the list, copy ≤ 8 words for labels/buttons.
   - Deps: 4.
-- [ ] 6. [core-engineer] Rep counter with a fixed side, tests first.
+- [x] 6. [core-engineer] Rep counter with a fixed side, tests first.
   - Files: `src/core/repCounter.ts`(+test), `src/core/exercises/types.ts` if a type changes.
   - `createRepCounter(rule, { side? })`: with a side, it is locked from the first frame and never picked, switched or unlocked (`restartTracking`, `judgeView` keep it); `setSide(side)` zeroes counts and restarts tracking for the new arm. Without a side, today's `'best'` behaviour is unchanged (dev tools, two-arm rules).
   - Done when: right-arm synthetic row counts 4 locked right / 0 locked left; left clips (task 7) the reverse; a stream restart mid-set keeps side and counts; all existing counter + fixture tests unchanged.
@@ -234,7 +234,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `brainInstructions({ brain: 'claude', voice })`: builds on the 1.15.0 friendlier persona: talk like a human personal trainer (warm, plain, uses his own words back, one short clarifying question when something's missing), ≤ 4 short sentences, `say` line rules unchanged, every change only through a `propose*` tool (never promise a change in text: the 1.15.0 rule), facts only from the context block, the M10 safety lines verbatim (referral line, no medical content, no promises), English. May be longer than Apple's (`INSTRUCTIONS_MAX_CHARS` stays for Apple; Claude gets its own cap, provisional 3,000).
   - Done when tests cover: safety lines present verbatim for both brains; "never promise in text" present; Apple's text unchanged by this task (snapshot); `checkCopy` passes.
   - Deps: 3.
-- [ ] 6. [core-engineer] Response parser, **tests first**.
+- [x] 6. [core-engineer] Response parser, **tests first**.
   - Files: src/core/trainer/claude/response.ts(+test).
   - `parseClaudeResponse(status, bodyText)` → `{ text, toolCalls: ToolCall[], usage: ClaudeUsageDay-shaped, stopReason }` or a `BrainErrorCode`: 200 with text + `tool_use` blocks (in order); `max_tokens` → keep the text (sanitize caps it later); `refusal` → `'guardrail'`; 401/403 → `'auth'`; 429 → `'rateLimited'`; 529/5xx → `'busy'`; 400/404/413/junk JSON/missing content → `'other'`. Body over 64 KB → `'other'`.
   - Done when tests cover every status, mixed text + 2 tool calls, empty content, malformed JSON, and that the parsed result carries no request id or header values.
@@ -939,7 +939,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `watchSnapshot(state, ctx, rev, now)` → `WatchSnapshot` (texts in his unit, warm-up label, `rest.endsAt` from the rest clock, one-step `next` lookahead incl. its rest seconds, summary); `watchEventToSession(ev, state, seen, clock)` → `SessionEvent | null` (dedupe by id, stale `basedOnRev` dropped by exercise/set/phase, watch time → phone time via the offset, clamped like M5c); `clockOffset(hello/snapshot pairs)`; replay of a queued list in order.
   - Done when: tests cover every phase (warm-up, last set of an exercise, last set of the day, paused, summary), each event type, duplicate, stale, phone + watch double Set done → one log, offline Set done then reconnect, offset + clamp; `npm run check`.
   - Deps: 3.
-- [ ] 6. [core-engineer] Heart-rate summaries + recovery rule. Tests first.
+- [x] 6. [core-engineer] Heart-rate summaries + recovery rule. Tests first.
   - Files: src/core/watch/heartRate.ts(+test), src/core/watch/hrRules.ts (data), src/core/watch/copy.ts(+test).
   - `setHr(samples, set)` → `{ avgBpm, maxBpm, samples }` inside `startedAt..endedAt` (none when < 3 samples); `attachLate(logs, samples)`; `recoveryReady(restState, samples, baseline, rules)` per SPEC (45 s, 15 s left, baseline + 30% of the rise, fallback max − 25, once per rest); `sessionBaseline`. Copy: "Heart rate back down. Ready when you are." and the Settings explainers, incl. SPEC M14's Save to Apple Health line ("Saves each gym session as a Strength Training workout in Apple Health."), the "Either way, the heart rate and calories your watch measures during the session stay in Health, like your other Apple Watch readings." line and the Health-access-denied line; a test that no Save-to-Health string says or implies nothing reaches Health when off ("Nothing else", "nothing is saved", "nothing in Health"); gender-neutral; pass `checkCopy` + the M11 banned list + no zone/max/safe words.
   - Done when: edge tests (44/45 s, 14/15 s left, missing baseline, sparse samples, warm-up sets), copy tests; `npm run check`.
@@ -1103,7 +1103,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `repWindow(repEvent)` → `RepWindow` clamped to 4–6 s; `isCleanRep(rep, cuesFired, rule)` (no cue, no partial, reached far threshold, tempo in band); `betterForm(a, b)`; `decideSet({ candidates, setLog, bests, effort?, manual? }, kept, rules)` → keep / replace / drop with trigger; cap + replacement; manual never counted toward the cap; warm-ups never trigger `best`.
   - Done when: tests cover each trigger, none firing, two triggers on one set (one clip, highest priority), cap full + higher priority replaces lowest, cap full + lower priority dropped, Hard tapped after the set, manual over cap, warm-up set; `npm run check`.
   - Deps: 3.
-- [ ] 6. [core-engineer] Clip store + retention (Dexie). Tests first.
+- [x] 6. [core-engineer] Clip store + retention (Dexie). Tests first.
   - Files: src/data/db.ts (next version: `clips` meta + `clipBlobs`), src/data/backup.ts (both in `LOCAL_ONLY_TABLES`), src/data/clips/store.ts(+test) (`addClip(meta, blob | fileRef)`, `listClips`, `star`, `deleteClip`, `deleteAll`, `purgeExpired(now)` = 7 days unless starred, storage-backend interface so the iPhone app passes the native store from task 16).
   - Done when: round-trip tests (fake-indexeddb), purge edges (6 d 23 h kept, 7 d deleted, starred kept), backup export has no clip rows, restore leaves clips alone, delete removes blob/file via the backend; `npm run check`.
   - Deps: 3.
