@@ -95,7 +95,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Run the cropped clips through Pose Landmarker: lite at defaults; lite with lower `minPoseDetectionConfidence` / `minPosePresenceConfidence` / `minTrackingConfidence` (e.g. 0.3); full model. Report % frames with a pose on the bent-over spans, desktop ms/frame, and what the frames suggest for phone spot (distance, height, angle). Note the caveat that screen recordings are lower quality than the live camera.
   - Done when: table + one recommendation; if it's the full model, main decides with him in view of bundle size and iPhone fps (≥ 24).
   - Deps: 1.
-- [ ] 3. [pose-engineer] Apply the detection setting, tests first.
+- [x] 3. [pose-engineer] Apply the detection setting, tests first.
   - Files: `src/pose/landmarker.ts`(+test); `public/models/**` only if main approved the full model in 2.
   - Done when: a unit test pins the options passed to `createFromOptions`; detection on the bent-over spans ≥ the measured winner and never below today's; `e2e/camera.spec.ts` still green; `npm run ios:check` passes if a model file was added.
   - Deps: 2.
