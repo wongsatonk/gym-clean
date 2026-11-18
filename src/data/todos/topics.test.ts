@@ -31,6 +31,7 @@ function strings(t: TodoTopic): string[] {
 describe('TODO_TOPICS', () => {
   it('has the 12 topics of the SPEC table plus the 1.13.0, 1.14.0 and 1.15.0 ones, in order, with their checkpoints', () => {
     expect(TODO_TOPICS.map((t) => [t.id, t.checkpoint])).toEqual([
+      ['one-arm-sets', 'Checkpoint K2'],
       ['coach-calendar', 'Checkpoint I'],
       ['coach-iphone', 'Checkpoint J'],
       ['trainer-kit-gym', 'Checkpoint J'],
@@ -54,6 +55,7 @@ describe('TODO_TOPICS', () => {
       'trainer-kit-gym': '1.13.0',
       'coach-iphone': '1.14.0',
       'published-look': '1.15.0',
+      'one-arm-sets': '1.15.1',
     };
     for (const t of TODO_TOPICS) expect(t.since, t.id).toBe(since[t.id] ?? '1.12.0');
   });
@@ -63,12 +65,14 @@ describe('TODO_TOPICS', () => {
     expect(ids('1.12.0')).toHaveLength(12);
     expect(ids('1.12.0')).not.toContain('trainer-kit-gym');
     expect(ids('1.12.3')).toEqual(ids('1.12.0'));
-    expect(ids('1.13.0')).toEqual(
-      TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'coach-iphone' && id !== 'published-look'),
-    );
+    const after114 = ['coach-iphone', 'published-look', 'one-arm-sets'];
+    expect(ids('1.13.0')).toEqual(TODO_TOPICS.map((t) => t.id).filter((id) => !after114.includes(id)));
     expect(ids('1.13.4')).toEqual(ids('1.13.0'));
-    expect(ids('1.14.0')).toEqual(TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'published-look'));
-    expect(ids('1.15.0')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.14.0')).toEqual(
+      TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'published-look' && id !== 'one-arm-sets'),
+    );
+    expect(ids('1.15.0')).toEqual(TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'one-arm-sets'));
+    expect(ids('1.15.1')).toEqual(TODO_TOPICS.map((t) => t.id));
     expect(ids('1.16.0')).toEqual(TODO_TOPICS.map((t) => t.id));
     expect(ids('1.11.0')).toEqual([]);
     // Data order is kept, and another list can be passed in.
@@ -141,12 +145,14 @@ describe('TODO_TOPICS', () => {
     expect(p('coach-iphone', 'apple-answers')).toEqual({ min: 5 });
     expect(p('coach-iphone', 'mic')).toEqual({ min: 3 });
     expect(p('coach-iphone', 'check-in')).toEqual({ min: 1 });
+    expect(p('one-arm-sets', 'one-arm-set')).toEqual({ min: 1 });
   });
 
   it('has the auto steps of the SPEC table', () => {
     expect(
       Object.fromEntries(TODO_TOPICS.map((t) => [t.id, autos(t).map((s) => s.detector)])),
     ).toEqual({
+      'one-arm-sets': ['oneSidedSet'],
       'coach-calendar': ['chatAsked', 'proposalOutcome', 'calendarAfterSession'],
       'coach-iphone': ['appleAnswers', 'micUses', 'reminderOn', 'checkInDone'],
       'trainer-kit-gym': ['effortSets', 'warmupSession', 'intakeDone', 'measurementLogged'],
@@ -184,6 +190,35 @@ describe('TODO_TOPICS', () => {
       'hrv',
     ]);
     expect(asks(byId('camera')).map((s) => s.id)).toContain('commit-landmarks');
+  });
+
+  describe('one-arm sets (1.15.1, Checkpoint K2)', () => {
+    const topic = byId('one-arm-sets');
+
+    it('is for both apps, titled as in the plan, not recurring, no decision steps', () => {
+      expect(topic.title).toBe('One-arm sets');
+      expect(topic.platform).toBe('any');
+      expect(topic.recurring).toBeUndefined();
+      expect(topic.owner).toBeUndefined();
+      for (const s of asks(topic)) expect(s.setting, s.id).toBeUndefined();
+    });
+
+    it('auto step first: a set finished on both sides, with a Try it', () => {
+      expect(topic.steps.slice(0, 1).map((s) => [s.id, s.kind, s.tryIt])).toEqual([
+        ['one-arm-set', 'auto', 'today'],
+      ]);
+    });
+
+    it('asks the Checkpoint K2 questions and folds in M13b-q1 and q2', () => {
+      expect(asks(topic).map((s) => [s.id, s.options.map((o) => o.id), s.note])).toEqual([
+        ['in-view', ['yes', 'mostly', 'no'], 'optional'],
+        ['arm-counts', ['none', 'few', 'many'], 'optional'],
+        ['next-arm-easy', ['yes', 'mostly', 'no'], 'optional'],
+        ['setup-card', ['yes', 'mostly', 'no'], 'optional'],
+        ['one-leg', ['fine', 'oneTotal', 'untried'], 'optional'],
+        ['set-number', ['lower', 'higher'], 'optional'],
+      ]);
+    });
   });
 
   describe('trainer kit at the gym (1.13.0, feeds Checkpoint J)', () => {

@@ -413,3 +413,28 @@ describe('warm-up sets are excluded (M12 1b)', () => {
     expect(exercisesWithHistory(only, today)).toEqual([]);
   });
 });
+
+describe('one-sided sets (M13b)', () => {
+  const today = at(11, 10);
+  const SIDES = { right: { reps: 12, partials: 1 }, left: { reps: 10, partials: 0 } };
+  const row = [
+    log({ sessionId: 'o1', reps: 10, partials: 0, sides: SIDES, startedAt: at(11, 9) }),
+    log({ sessionId: 'o1', setIndex: 1, reps: 9, startedAt: at(11, 9) + MIN }),
+  ];
+
+  it('the day list counts a set with sides once, volume at the lower side', () => {
+    const [d] = lastDays([sess('o1', at(11, 9))], row, today);
+    expect(d?.setCount).toBe(2);
+    expect(d?.volumeKg).toBe(20 * 10 + 20 * 9);
+  });
+
+  it('exercise history keeps both sides for display; top set and volume use the lower side', () => {
+    const h = exerciseHistory(row, BENCH, today);
+    expect(h.sessions[0]?.sets).toEqual([
+      { weightKg: 20, reps: 10, focusScore: null, sides: SIDES },
+      { weightKg: 20, reps: 9, focusScore: null },
+    ]);
+    expect(h.sessions[0]?.topSet).toEqual({ weightKg: 20, reps: 10 });
+    expect(h.sessions[0]?.volumeKg).toBe(380);
+  });
+});

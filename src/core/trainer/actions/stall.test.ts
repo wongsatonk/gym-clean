@@ -601,3 +601,23 @@ describe('wording: plateau, never "stalled" / "fell short" (M13)', () => {
     expect(NO_STALLS).toMatch(/plateau/i);
   });
 });
+
+describe('one-sided sets (M13b)', () => {
+  it('a better side alone is no gain: the lower side decides', () => {
+    let h = series('row', 'b', [
+      [20, 10],
+      [20, 10],
+    ]);
+    h = add(h, 'b', at(10, 19), 'row', [[20, 10]]);
+    // Third session: right 12, left 10 → reps 10 (no gain over 20 × 10).
+    h = {
+      ...h,
+      sets: h.sets.map((s, i) =>
+        i === h.sets.length - 1
+          ? { ...s, sides: { right: { reps: 12, partials: 0 }, left: { reps: 10, partials: 0 } } }
+          : s,
+      ),
+    };
+    expect(stalls(h)).toMatchObject([{ exerciseId: 'row', sessions: 3, top: { weightKg: 20, reps: 10 } }]);
+  });
+});

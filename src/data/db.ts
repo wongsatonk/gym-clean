@@ -22,6 +22,7 @@ import type {
   TrainerState,
   WeeklyCheck,
   WeighIn,
+  WorkSide,
 } from '../core/types';
 import type { RuleStatus } from '../core/exercises/types';
 import type { Rudeness } from '../core/personas';
@@ -63,6 +64,8 @@ export type SettingRow = { key: string; value: unknown };
 // ---------- M4c: developer log (on device only; numbers, never images) ----------
 
 export type DevLogCount = { reps: number; partials: number };
+/** M13b: one side of a one-sided set (camera count, if any, and what was logged). */
+export type DevLogSide = { counted?: DevLogCount; logged: DevLogCount };
 export type DevLogEvent = { t: number; type: string; data?: unknown };
 /** `dropped` = why the speech policy skipped a hint (see src/core/coachSpeech.ts DropReason). */
 export type DevLogSpeech = {
@@ -112,6 +115,13 @@ export type DevLogSetRow = {
    * Not indexed, so no schema version bump; rows from before M4f simply lack it.
    */
   ruleStatus?: RuleStatus;
+  /**
+   * M13b: per-side counts of a one-sided set (right first, then left); `counted`/`logged` above
+   * are the set's own (the lower side). Unindexed, so no schema bump; older rows lack them.
+   */
+  sides?: Partial<Record<WorkSide, DevLogSide>>;
+  /** M13b: when Next arm / Next leg was tapped (wall clock ms). */
+  nextSideAt?: number;
 };
 
 /**

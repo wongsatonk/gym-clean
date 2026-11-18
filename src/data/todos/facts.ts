@@ -18,6 +18,9 @@
  * M12 slice 2 (Checkpoint J): coach messages with `source: 'apple'`, his messages with `viaMic`,
  * `settings` 'reminders' (via `mergeReminders`: any of session / missed day / Sunday recap on) and
  * `checkIns` answered (not skipped, `checkInStatus`). Times and check-in answers stay put.
+ *
+ * M13b (Checkpoint K2): working sets whose `sides` hold both a right and a left count (a count of
+ * sets; the per-side numbers stay put).
  */
 import { checkInStatus } from '../../core/checkIn/checkIn';
 import { ruleStatus } from '../../core/exercises';
@@ -152,6 +155,9 @@ export async function gatherFacts(
     // Trainer kit: warm-up sets mark their workout; effort counts on working sets only.
     if (s.warmup === true) warmupSessions.add(s.sessionId);
     else if (typeof s.effort === 'string' && EFFORTS.includes(s.effort)) counts.effortSets++;
+    // M13b: a working set logged on both sides (right, Next arm, left).
+    if (s.warmup !== true && s.sides?.right !== undefined && s.sides.left !== undefined)
+      counts.oneSidedSets++;
     let ex = exercisesBySession.get(s.sessionId);
     if (!ex) exercisesBySession.set(s.sessionId, (ex = new Set()));
     ex.add(s.exerciseId);

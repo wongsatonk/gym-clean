@@ -413,3 +413,38 @@ describe('warm-up sets are excluded (M12 1b)', () => {
     expect(lastSession([s], sets)?.volumeKg).toBe(160);
   });
 });
+
+describe('one-sided sets count once at the lower side (M13b)', () => {
+  // Right 12, left 10 → the session logged reps = 10 (the lower side).
+  const sided = (over: Partial<SetLog> = {}): SetLog =>
+    log({
+      exerciseId: 'Dumbbell_Bent_Over_Row',
+      reps: 10,
+      weightKg: 20,
+      sides: { right: { reps: 12, partials: 0 }, left: { reps: 10, partials: 0 } },
+      ...over,
+    });
+
+  it('volume is lower side × kg, one set', () => {
+    expect(sessionVolume([sided()])).toBe(200);
+    expect(sessionVolume([sided(), sided({ setIndex: 1 })])).toBe(400);
+  });
+
+  it('the better side alone is no new best', () => {
+    const history = [log({ sessionId: 'old', exerciseId: 'Dumbbell_Bent_Over_Row', reps: 11 })];
+    expect(newBests([sided()], history)).toEqual([]);
+  });
+
+  it('a best counts the lower side', () => {
+    const history = [log({ sessionId: 'old', exerciseId: 'Dumbbell_Bent_Over_Row', reps: 9 })];
+    expect(newBests([sided()], history)).toEqual([
+      {
+        exerciseId: 'Dumbbell_Bent_Over_Row',
+        kind: 'reps',
+        weightKg: 20,
+        reps: 10,
+        old: { weightKg: 20, reps: 9 },
+      },
+    ]);
+  });
+});

@@ -593,3 +593,22 @@ describe('warm-up sets are excluded (M12 1b)', () => {
     expect(c.exercises.every((e) => e.setsDone === 0)).toBe(true);
   });
 });
+
+describe('one-sided sets (M13b)', () => {
+  it('a set with both sides counts as one set done with its lower-side reps', () => {
+    const sided = SETS.map((x) =>
+      x.exerciseId === 'press'
+        ? {
+            ...x,
+            sides: { right: { reps: x.reps + 2, partials: 0 }, left: { reps: x.reps, partials: 0 } },
+          }
+        : x,
+    );
+    expect(dayCompletion(input({ sets: sided }), '2026-11-09')).toEqual(
+      dayCompletion(input(), '2026-11-09'),
+    );
+    expect(weekScore(input({ sets: sided }), '2026-11-09')).toEqual(
+      weekScore(input(), '2026-11-09'),
+    );
+  });
+});

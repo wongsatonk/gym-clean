@@ -330,6 +330,13 @@ const trainerState: Check = (v) =>
   isObj(v) && num(v.version) && isObj(v.plan) && isObj(v.schedule) && Array.isArray(v.overrides);
 const rating: Check = (v) => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 5;
 const goalTarget: Check = (v) => isObj(v) && str(v.kind) && num(v.value);
+const count: Check = (v) => num(v) && (v as number) >= 0;
+/** M13b `SetLog.sides`: only `right` / `left`, each `{ reps, partials }` (non-negative numbers). */
+const sides: Check = (v) =>
+  isObj(v) &&
+  Object.entries(v).every(
+    ([k, c]) => (k === 'right' || k === 'left') && isObj(c) && count(c.reps) && count(c.partials),
+  );
 
 const MACROS = { kcal: num, proteinG: num, 'carbsG?': num, 'fatG?': num };
 
@@ -357,6 +364,7 @@ const ROW_SHAPES: Record<BackupTable, Record<string, Check>> = {
     'cues?': arr,
     'effort?': str,
     'warmup?': bool,
+    'sides?': sides,
     startedAt: num,
     endedAt: num,
   },

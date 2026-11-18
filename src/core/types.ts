@@ -630,7 +630,8 @@ export type TodoDetectorId =
   | 'appleAnswers'
   | 'micUses'
   | 'reminderOn'
-  | 'checkInDone';
+  | 'checkInDone'
+  | 'oneSidedSet';
 
 export type TodoOption = { id: string; label: string };
 

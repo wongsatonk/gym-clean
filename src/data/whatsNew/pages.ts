@@ -222,4 +222,23 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     icon: 'sliders',
     owner: true,
   },
+  // 1.15.1: M13b one-arm sets. A patch with pages (Decision "One-arm sets": M12 slice 3 keeps 1.16.0).
+  {
+    release: '1.15.1',
+    id: 'next-arm',
+    title: 'Right arm, then left',
+    what: 'One-arm and one-leg exercises now do the right side, then the left, in one set. Tap Next arm to switch.',
+    why: 'The camera counts only the side you are on. Both counts are saved; the lower one counts for the set.',
+    tryIt: 'today',
+    icon: 'dumbbell',
+  },
+  {
+    release: '1.15.1',
+    id: 'setup-card',
+    title: 'Camera stays clear',
+    what: 'The phone set-up card now closes by itself. After your first rep it stays closed.',
+    why: 'If the camera loses you, one Step into frame line shows at the top and is spoken.',
+    tryIt: 'today',
+    icon: 'camera',
+  },
 ];

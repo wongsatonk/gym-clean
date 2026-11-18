@@ -136,8 +136,47 @@ describe('WHATS_NEW_PAGES', () => {
     for (const p of WHATS_NEW_PAGES) expect(p.owner === undefined || p.owner === true).toBe(true);
   });
 
-  it('holds only releases 1.12.0 to 1.15.0, every page in one of them', () => {
-    expect(r112.length + r113.length + r114.length + r115.length).toBe(WHATS_NEW_PAGES.length);
+  const r1151 = WHATS_NEW_PAGES.filter((p) => p.release === '1.15.1');
+
+  it('has two pages for 1.15.1 (M13b): Next arm and the camera set-up card, for everyone', () => {
+    expect(r1151.map((p) => [p.id, p.tryIt, p.owner])).toEqual([
+      ['next-arm', 'today', undefined],
+      ['setup-card', 'today', undefined],
+    ]);
+  });
+
+  it('1.15.1 says right then left, the Next arm button, both counts and which one counts', () => {
+    const text = (id: string) => {
+      const p = r1151.find((x) => x.id === id);
+      return `${p?.title} ${p?.what} ${p?.why}`;
+    };
+    expect(text('next-arm')).toMatch(/right/i);
+    expect(text('next-arm')).toMatch(/left/i);
+    expect(text('next-arm')).toMatch(/Next arm/);
+    expect(text('next-arm')).toMatch(/lower/i);
+    expect(text('next-arm')).toMatch(/leg/i);
+    expect(text('setup-card')).toMatch(/Step into frame/);
+    // Second user (M13): "you", never a gendered word.
+    for (const p of r1151) expect(`${p.title} ${p.what} ${p.why}`).not.toMatch(/\b(he|she|his|her)\b/i);
+  });
+
+  it('1.15.1 is shown after 1.15.0, and an update from 1.14.0 shows both releases, newest first', () => {
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.0' }, '1.15.0', true)).toEqual([]);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.0' }, '1.15.1', true)).toEqual(r1151);
+    expect(
+      tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.14.0' }, '1.15.1', true, false),
+    ).toEqual([...r1151, ...r115.filter((p) => !p.owner)]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.15.1')).toEqual(r1151);
+    expect(replayPages(WHATS_NEW_PAGES, '1.15.0')).toEqual(r115);
+    expect(addedTopics(TODO_TOPICS, tourReleases(r1151), true).map((t) => t.id)).toEqual([
+      'one-arm-sets',
+    ]);
+  });
+
+  it('holds only releases 1.12.0 to 1.15.1, every page in one of them', () => {
+    expect(r112.length + r113.length + r114.length + r115.length + r1151.length).toBe(
+      WHATS_NEW_PAGES.length,
+    );
   });
 
   describe('owner mode (M13)', () => {
@@ -213,8 +252,9 @@ describe('WHATS_NEW_PAGES', () => {
   it('uses valid semver releases', () => {
     for (const p of WHATS_NEW_PAGES) {
       expect(p.release).toMatch(/^\d+\.\d+\.\d+$/);
-      // A release with pages is a new MINOR (patch 0).
-      expect(p.release.endsWith('.0')).toBe(true);
+      // A release with pages is a new MINOR (patch 0); the one exception is 1.15.1 (M13b, Decision
+      // "One-arm sets": Next arm ships as a patch so M12 slice 3 keeps 1.16.0).
+      if (p.release !== '1.15.1') expect(p.release.endsWith('.0'), p.release).toBe(true);
       expect(compareReleases(p.release, '1.12.0')).toBeGreaterThanOrEqual(0);
     }
   });

@@ -39,7 +39,14 @@ export type DaySession = {
   avgFocus: number | null;
 };
 
-export type HistorySet = { weightKg: number; reps: number; focusScore: number | null };
+export type HistorySet = {
+  weightKg: number;
+  /** M13b: for a one-sided set, the lower side (what both sides reached). */
+  reps: number;
+  focusScore: number | null;
+  /** M13b: a one-sided set's per-side counts, for "R 12 · L 11"; absent on other sets. */
+  sides?: SetLog['sides'];
+};
 
 /** One session of one exercise. */
 export type ExerciseSessionEntry = {
@@ -176,11 +183,21 @@ export function exerciseHistory(
       sessionId,
       date: first.startedAt,
       dayStart: dayStartOf(first.startedAt),
-      sets: logs.map((l) => ({
-        weightKg: l.weightKg,
-        reps: l.reps,
-        focusScore: l.focusScore ?? null,
-      })),
+      sets: logs.map((l) => {
+        const out: HistorySet = {
+          weightKg: l.weightKg,
+          reps: l.reps,
+          focusScore: l.focusScore ?? null,
+        };
+        if (l.sides) {
+          out.sides = {};
+          for (const k of ['right', 'left'] as const) {
+            const c = l.sides[k];
+            if (c) out.sides[k] = { reps: c.reps, partials: c.partials };
+          }
+        }
+        return out;
+      }),
       topSet: top,
       volumeKg: sessionVolume(logs),
       focusScores,

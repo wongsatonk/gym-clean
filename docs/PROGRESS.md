@@ -137,7 +137,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - First side: idle never ends the set; after ≥ 1 rep and ~6 s idle, one "remind next side" action. Second side: today's auto Set done + Undo. Being out of frame / untracked never ends or restarts a set mid-side (the set-3 reset).
   - Done when: unit + replay tests on the real row clips pass; two-sided behaviour unchanged.
   - Deps: 8, 10.
-- [ ] 12. [core-engineer] Records, backup, dev log, What's New, To-do.
+- [x] 12. [core-engineer] Records, backup, dev log, What's New, To-do.
   - Files: `src/core/` stats modules that read `SetLog.reps` (tests only if they already do the right thing), `src/data/backup.ts`(+test), `src/data/devlog.ts`(+test), `src/data/whatsNew/pages.ts`(+test), `src/data/todos/topics.ts`(+test).
   - Done when: a `sides` set counts once in volume/bests/e1RM/stalls/completion with `reps` = lower side; backups round-trip `sides` (and old backups still load); the dev log records a `nextSide` event with its time and per-side counted/logged; a 1.15.1 What's New page ("Next arm") and a Checkpoint K2 to-do guide exist.
   - Deps: 10.
@@ -3605,6 +3605,8 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 - [x] 7. Verify (check, e2e, build, 390×844 screenshots of each screen, console), merge, push → 🧍 Checkpoint A
 
 ## Decisions
+
+- 2026-11-17: **M13b: 1.15.1 carries What's New pages** (one exception to the 2026-11 policy "tour pages always come with a new MINOR"): two everyone pages (`next-arm`, `setup-card`), because the right-then-left flow changes how a set works and he must hear about it before the gym. The K2 to-do topic `one-arm-sets` is `platform: 'any'` (he trained in Safari last time).
 
 - 2026-11-17: **M13b real row fixtures: only clip 01 is a hard count target.** Task 1 found the app *undercounted* (set 1: 9 + 15 true reps; set 2: 12; set 4: 9) and that in clips 02–05 the app's rep card covers his torso and arm in the screen recordings, so those elbow traces are noise. Clip 01 (bent over, near arm, 92% pose found) must count 9/0 exactly; clips 02–05 are "no false reps" checks (counted ≤ true, clip 04's crouch with the dumbbell on the floor counts nothing, no partials). His own set numbers differ from what the frames show (M13b-q3 stays open for him). Next gym session: the dev-log landmark export is the better data (M13b-q4). Also found: in recording 1 the pose was found on every frame but the app still said "Step into frame" (a framing/visibility gate, not the model) — task 2 covers the gate, not only the model settings; and reps were counted during rest while he placed the phone (task 11).
 
