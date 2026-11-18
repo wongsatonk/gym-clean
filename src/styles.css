@@ -2548,6 +2548,8 @@ h1 {
 .sticky-bottom {
   position: sticky;
   bottom: 0;
+  /* M13c: above tappable badges (.ex-badges-tap is z-index 1) scrolling under the dock. */
+  z-index: 2;
   margin-top: auto;
   padding: 12px 0 max(4px, env(safe-area-inset-bottom));
   background: linear-gradient(transparent, var(--bg) 24%);

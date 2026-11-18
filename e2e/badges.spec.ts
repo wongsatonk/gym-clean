@@ -169,3 +169,30 @@ test('Exercise screen: the badges are static labels, not buttons (nothing new mi
   ).toHaveCount(0);
   await expect(ex).toBeVisible();
 });
+
+// Verifier find (M13c task 21): badge buttons scrolling under the sticky Start bar took its taps.
+test('preview: the Start workout bar stays on top of the badges at every scroll', async ({
+  page,
+}) => {
+  await openPushA(page);
+  const start = page.getByRole('button', { name: 'Start workout' });
+  for (const y of [0, 150, 300, 600]) {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    const box = await start.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) continue;
+    // Points across the bar all hit the Start button itself, never a badge under it.
+    const hits = await page.evaluate(
+      ({ x, w, cy }) =>
+        [0.1, 0.3, 0.5, 0.7, 0.9].map((f) => {
+          const el = document.elementFromPoint(x + w * f, cy);
+          return el?.closest('button')?.textContent?.trim() ?? '';
+        }),
+      { x: box.x, w: box.width, cy: box.y + box.height / 2 },
+    );
+    for (const h of hits) expect(h, `scroll ${y}`).toContain('Start workout');
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await start.click();
+  await expect(page.locator('main[data-screen="exercise"]')).toBeVisible();
+});
