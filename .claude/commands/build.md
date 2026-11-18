@@ -30,8 +30,8 @@ milestone, stop and ask Wongsaton.
    Agent calls in one message), dependent ones in order. Give each subagent: the task text and
    its "Done when", the files it owns, relevant Decisions, and what earlier tasks produced. Tell
    it not to commit. When two helpers that run Playwright work at once, give each its own
-   `E2E_PORT`/`E2E_PWA_PORT` and `--output=test-results-<n>` (one checkout, shared ports and
-   `test-results` otherwise collide and cause false failures).
+   `--output=test-results-<n>` (ports are picked per run automatically; a shared `test-results`
+   gets wiped by the other run and causes false failures).
 4. When they report back: integrate anything they asked for (wiring, shared types), then run
    `npm run check` and `npm run e2e:changed` (only the browser specs touched since `main`).
    **Never the full `npm run e2e` here**: it takes ~20 min and the verifier runs it once.

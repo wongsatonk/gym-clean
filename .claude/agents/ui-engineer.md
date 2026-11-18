@@ -34,7 +34,8 @@ milestone and GitHub runs it again after a push. While working, run the specs yo
 (`npx playwright test e2e/<file>.spec.ts`, `--no-deps` for camera/clip specs) or
 `npm run e2e:changed`; before you report, `npm run e2e:fast` (the parallel phase, ~1.5 min).
 Re-check a failure with `npm run e2e:failed`, not a full run. Another run may share this
-checkout: if port 5174 is taken, set `E2E_PORT`/`E2E_PWA_PORT` and `--output=test-results-<you>`.
+checkout: ports are picked per run automatically; pass `--output=test-results-<you>` so the two
+runs don't wipe each other's results.
 
 ## Boundaries
 Don't touch `src/core/**`, `src/data/**`, `src/pose/**`, 3D modules, configs or package.json —
