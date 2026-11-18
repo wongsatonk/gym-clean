@@ -77,13 +77,16 @@ describe('where Search can appear', () => {
     });
   const users = files(UI)
     .filter((p) => !p.endsWith('searchButton.ts'))
-    .filter((p) => /from '\.\.?\/(\.\.\/)?searchButton'|data-search-open/.test(readFileSync(p, 'utf8')))
+    .filter((p) =>
+      /from '\.\.?\/(\.\.\/)?searchButton'|data-search-open/.test(readFileSync(p, 'utf8')),
+    )
     .map((p) => p.slice(UI.length + 1))
     .sort();
 
-  it('only Today, Fuel, Calendar, Settings (and app.ts, which wires them) use it', () => {
+  it('only Today, Fuel, Calendar, Settings (and app.ts / the Fuel controller, which wire them) use it', () => {
     const allowed = new Set([
       'app.ts',
+      'fuel/fuelController.ts',
       'screens/today.ts',
       'screens/fuel.ts',
       'screens/calendar.ts',

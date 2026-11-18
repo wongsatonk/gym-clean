@@ -13,7 +13,15 @@
 // the photo sheet and logged with `entryFromPhoto`. The photo is kept only when "Save photos to
 // improve recognition" is on (`maybeSavePhoto`), labelled with the dish he confirmed; otherwise
 // the canvas is dropped once the sheet closes. Photos and results never reach the developer log.
-import { weekStartOf, weeklyCheck, checkHasChange, decideCheck, applyAcceptedCheck, trend } from '../../core/nutrition/adjust';
+import type { OnSearch } from '../searchButton';
+import {
+  weekStartOf,
+  weeklyCheck,
+  checkHasChange,
+  decideCheck,
+  applyAcceptedCheck,
+  trend,
+} from '../../core/nutrition/adjust';
 import {
   dayTotals,
   foodDate,
@@ -36,7 +44,12 @@ import {
   scaleFood,
   type EntryOpts,
 } from '../../core/nutrition/portions';
-import { buildSearchIndex, searchFoods, type SearchIndex, type SearchResult } from '../../core/nutrition/search';
+import {
+  buildSearchIndex,
+  searchFoods,
+  type SearchIndex,
+  type SearchResult,
+} from '../../core/nutrition/search';
 import {
   NUTRITION_DEFAULTS,
   clampProtein,
@@ -80,7 +93,12 @@ import { sessionsSince, type GymDb } from '../../data/db';
 import { CLASS_MAP } from '../../food-vision/classMap';
 import { decide as decidePhoto, type ScoredLabel } from '../../food-vision/decide';
 import { entryFromPhoto } from '../../core/nutrition/photo';
-import { deletePhotos, getFoodVisionSettings, getModel, maybeSavePhoto } from '../../data/nutrition/photoStore';
+import {
+  deletePhotos,
+  getFoodVisionSettings,
+  getModel,
+  maybeSavePhoto,
+} from '../../data/nutrition/photoStore';
 import { foodDb } from '../../data/nutrition/foodDb';
 import { lookupBarcode } from '../../data/nutrition/offClient';
 import { EDIT_FROM_LABEL, SEED_FOODS, THAI_DISHES } from '../../data/nutrition/foods';
@@ -159,6 +177,8 @@ export type FuelHost = {
   bodyComp?: (() => readonly HealthDay[]) | undefined;
   /** M12 1b: opens a learn card ("Why?" on the protein nudge). Omitted → no Why? link. */
   openLearn?: ((id: string, opener: HTMLElement) => void) | undefined;
+  /** M13c: the app's Search button on the Fuel header. Omitted → no button. */
+  onSearch?: OnSearch | undefined;
 };
 
 /** M11-q8: what the weigh-in screen needs from the Health wiring (app.ts). */
@@ -167,7 +187,9 @@ export type FuelHealthHost = {
    * Core's activity-level check (`src/core/nutrition/activityCheck.ts`): the level his 14-day
    * active energy fits, or null (no Health data, same level, or already answered this check).
    */
-  activitySuggestion: (current: NutritionSettings['activity']) => NutritionSettings['activity'] | null;
+  activitySuggestion: (
+    current: NutritionSettings['activity'],
+  ) => NutritionSettings['activity'] | null;
   /** He answered Switch or Keep: remember it so the line isn't asked again for this check. */
   onActivityAnswered: (answer: 'switch' | 'keep', level: NutritionSettings['activity']) => void;
 };
@@ -226,7 +248,9 @@ function macrosOf(m: MacroSet): MacroSet {
 /** The serving basis without an undefined `servingG` (exactOptionalPropertyTypes). */
 function cleanBasis(b: MyFoodDraft['basis']): Food['basis'] {
   if ('per100g' in b) return { per100g: true };
-  return b.servingG !== undefined ? { servingLabel: b.servingLabel, servingG: b.servingG } : { servingLabel: b.servingLabel };
+  return b.servingG !== undefined
+    ? { servingLabel: b.servingLabel, servingG: b.servingG }
+    : { servingLabel: b.servingLabel };
 }
 
 /**
@@ -236,7 +260,13 @@ function cleanBasis(b: MyFoodDraft['basis']): Food['basis'] {
 function entryBase(e: FoodEntry): Food {
   const grams = 'grams' in e.amount;
   const v = amountValue(e.amount);
-  const raw: Food = { ...macrosOf(e), id: e.id, name: e.label, source: 'custom', basis: { servingLabel: 'entry' } };
+  const raw: Food = {
+    ...macrosOf(e),
+    id: e.id,
+    name: e.label,
+    source: 'custom',
+    basis: { servingLabel: 'entry' },
+  };
   const per = v > 0 ? scaleFood(raw, { servings: (grams ? 100 : 1) / v }) : null;
   return {
     ...(per ?? macrosOf(e)),
@@ -367,7 +397,9 @@ export function createFuel(host: FuelHost) {
     favorites = fav;
     checks = c;
     sessions = sess.map((x) =>
-      x.endedAt !== undefined ? { startedAt: x.startedAt, endedAt: x.endedAt } : { startedAt: x.startedAt },
+      x.endedAt !== undefined
+        ? { startedAt: x.startedAt, endedAt: x.endedAt }
+        : { startedAt: x.startedAt },
     );
     nudgeShownDate = shown;
     index = null;
@@ -460,7 +492,8 @@ export function createFuel(host: FuelHost) {
 
   function lastSessionEnd(): number | undefined {
     let end: number | undefined;
-    for (const s of sessions) if (s.endedAt !== undefined && (end === undefined || s.endedAt > end)) end = s.endedAt;
+    for (const s of sessions)
+      if (s.endedAt !== undefined && (end === undefined || s.endedAt > end)) end = s.endedAt;
     return end;
   }
 
@@ -580,7 +613,8 @@ export function createFuel(host: FuelHost) {
       } else {
         const recipeId = fav.ref.recipeId;
         const r = recipes.find((x) => x.id === recipeId);
-        const item = r && recipeItem(r, `fav:${fav.id}`, { badge: 'favorite', defaultAmount: amount });
+        const item =
+          r && recipeItem(r, `fav:${fav.id}`, { badge: 'favorite', defaultAmount: amount });
         if (!item) continue;
         favKeys.add(refKey(fav.ref, fav.amount));
         out.push(item);
@@ -599,7 +633,10 @@ export function createFuel(host: FuelHost) {
         if (item) out.push(item);
       } else if (e.ref?.foodId !== undefined) {
         const f = map.get(e.ref.foodId);
-        if (f) out.push(foodItem(f, key, { badge: 'recent', defaultAmount: amount, portions: undefined }));
+        if (f)
+          out.push(
+            foodItem(f, key, { badge: 'recent', defaultAmount: amount, portions: undefined }),
+          );
       } else {
         const base = entryBase(e);
         out.push({
@@ -669,7 +706,9 @@ export function createFuel(host: FuelHost) {
           .map(resultItem)
           .filter((i): i is LogItem => i !== null && keep(i));
         target.setSearch(
-          usda === null && items.length === 0 ? { status: 'offline' } : { status: 'results', query, items },
+          usda === null && items.length === 0
+            ? { status: 'offline' }
+            : { status: 'results', query, items },
         );
       })();
     }, SEARCH_DEBOUNCE_MS);
@@ -761,7 +800,12 @@ export function createFuel(host: FuelHost) {
    * `pending`: a photo whose dish is being found through search (M7b). It lives only in this
    * sheet's callbacks, so it is dropped with the sheet.
    */
-  function openLog(section?: LogSection, detail?: LogItem, pending?: PendingPhoto): void {
+  function openLog(
+    section?: LogSection,
+    detail?: LogItem,
+    pending?: PendingPhoto,
+    initialQuery?: string,
+  ): void {
     void ensureSeeded().then(() => {
       const el = logSheet(
         {
@@ -771,8 +815,13 @@ export function createFuel(host: FuelHost) {
           recipes: recipeItems(),
           thai: thaiItems(),
           myFoods: myFoodItems(),
-          presets: QUICK_PRESETS.map((p) => ({ label: p.label, kcal: p.kcal, proteinG: p.proteinG })),
+          presets: QUICK_PRESETS.map((p) => ({
+            label: p.label,
+            kcal: p.kcal,
+            proteinG: p.proteinG,
+          })),
           initialSection: section,
+          initialQuery,
           initialDetail: detail,
           scan: barcode,
           photoAvailable: photoModel !== null,
@@ -791,6 +840,7 @@ export function createFuel(host: FuelHost) {
       );
       openSheet(el);
       logEl = el;
+      if (initialQuery) runSearch(initialQuery, el);
     });
   }
 
@@ -844,7 +894,10 @@ export function createFuel(host: FuelHost) {
       const classifier = await ph.load(model);
       if (seq !== photoSeq || sheet !== el) return;
       const { categories } = classifier.classify(captured.canvas);
-      state = { status: 'result', decision: decidePhoto(categories, CLASS_MAP, { claudeAvailable: false }) };
+      state = {
+        status: 'result',
+        decision: decidePhoto(categories, CLASS_MAP, { claudeAvailable: false }),
+      };
     } catch (err) {
       // Not host.logError: nothing about photos goes to the developer log. The sheet says it.
       console.warn('Food photo: classify failed', err);
@@ -866,14 +919,25 @@ export function createFuel(host: FuelHost) {
    * Saves the entry, then (save-photos on only) the photo labelled with the dish. Undo removes
    * both. The in-memory photo is dropped either way once this returns.
    */
-  async function addPhotoEntry(e: FoodEntry, dishId: string, pending: PendingPhoto | undefined): Promise<void> {
+  async function addPhotoEntry(
+    e: FoodEntry,
+    dishId: string,
+    pending: PendingPhoto | undefined,
+  ): Promise<void> {
     await track(saveEntry(db, e));
     entries = [...entries, e];
     let savedId: string | null = null;
     const blob = pending?.photo.blob;
     if (pending && blob) {
       const id = uid('photo');
-      const photo = { id, dishId, createdAt: pending.takenAt, w: pending.photo.w, h: pending.photo.h, blob };
+      const photo = {
+        id,
+        dishId,
+        createdAt: pending.takenAt,
+        w: pending.photo.w,
+        h: pending.photo.h,
+        blob,
+      };
       const saved = await track(maybeSavePhoto(db, photoSettings, photo)).catch((err: unknown) => {
         host.logError(err);
         return false;
@@ -909,7 +973,8 @@ export function createFuel(host: FuelHost) {
         foods = [...foods.filter((x) => x.id !== f.id), f];
         index = null;
         openLog('myFoods', foodItem(f, `food:${f.id}`, f.note ? { note: f.note } : {}));
-        if (r.from === 'online') host.toast(`Saved ${f.name} to My foods.`, () => void unsaveFood(f));
+        if (r.from === 'online')
+          host.toast(`Saved ${f.name} to My foods.`, () => void unsaveFood(f));
         return;
       }
       case 'notFound':
@@ -986,7 +1051,12 @@ export function createFuel(host: FuelHost) {
       };
       if (f.name === '') return;
       await track(saveFood(db, f));
-      const fav: Favorite = { id: `fav:${f.id}`, ref: { foodId: f.id }, amount: { servings: 1 }, createdAt: host.now() };
+      const fav: Favorite = {
+        id: `fav:${f.id}`,
+        ref: { foodId: f.id },
+        amount: { servings: 1 },
+        createdAt: host.now(),
+      };
       await track(addFavorite(db, fav));
       foods = [...foods, f];
       favorites = [...favorites, fav];
@@ -1036,9 +1106,19 @@ export function createFuel(host: FuelHost) {
     );
   }
 
-  function openFoodEditor(existing: Food | null, labelPrompt: boolean, opts: { barcode?: string } = {}): void {
+  function openFoodEditor(
+    existing: Food | null,
+    labelPrompt: boolean,
+    opts: { barcode?: string } = {},
+  ): void {
     const draft: MyFoodDraft = existing
-      ? { ...macrosOf(existing), id: existing.id, name: existing.name, nameTh: existing.nameTh, basis: existing.basis }
+      ? {
+          ...macrosOf(existing),
+          id: existing.id,
+          name: existing.name,
+          nameTh: existing.nameTh,
+          basis: existing.basis,
+        }
       : { kcal: 0, proteinG: 0, name: '', basis: { servingLabel: '' }, barcode: opts.barcode };
     const back = () =>
       openLog((existing && !labelPrompt) || opts.barcode ? 'myFoods' : 'favorites');
@@ -1076,7 +1156,8 @@ export function createFuel(host: FuelHost) {
                 else back();
                 host.render();
                 // A scanned product added by hand: Undo takes it out of My foods again.
-                if (!existing && f.barcode) host.toast(`Saved ${f.name} to My foods.`, () => void unsaveFood(f));
+                if (!existing && f.barcode)
+                  host.toast(`Saved ${f.name} to My foods.`, () => void unsaveFood(f));
               })
               .catch(host.logError);
           },
@@ -1139,7 +1220,8 @@ export function createFuel(host: FuelHost) {
       {
         draft,
         mode,
-        perServing: (d) => recipePerServing(asRecipe(d, 'draft'), foodMap()) ?? { kcal: 0, proteinG: 0 },
+        perServing: (d) =>
+          recipePerServing(asRecipe(d, 'draft'), foodMap()) ?? { kcal: 0, proteinG: 0 },
       },
       {
         // Ingredients are weighed in grams: only foods with values per 100 g.
@@ -1147,7 +1229,8 @@ export function createFuel(host: FuelHost) {
         onSave: (d) => {
           const r = asRecipe(d, existing?.id ?? uid('recipe'));
           void (async () => {
-            for (const i of r.ingredients) if (i.foodId.startsWith('usda:')) await keepUsda(i.foodId);
+            for (const i of r.ingredients)
+              if (i.foodId.startsWith('usda:')) await keepUsda(i.foodId);
             await track(saveRecipe(db, r));
             recipes = [...recipes.filter((x) => x.id !== r.id), r];
             index = null;
@@ -1223,7 +1306,8 @@ export function createFuel(host: FuelHost) {
         targets: targets(),
         totals: viewDate === null ? totals() : dayTotals(shownEntries(), shownDate()),
         entries: viewDate === null ? todayEntries() : shownEntries(),
-        day: viewDate === null ? null : { date: viewDate, label: searchDateLabel(viewDate, today()) },
+        day:
+          viewDate === null ? null : { date: viewDate, label: searchDateLabel(viewDate, today()) },
         unit: host.unit(),
         lastWeighInKg: latestKg(),
         lastWeighInSource: latestWeighIn()?.source,
@@ -1253,6 +1337,7 @@ export function createFuel(host: FuelHost) {
           host.render();
         },
         onTab: (t) => host.goTab(t),
+        onSearch: host.onSearch,
       },
     );
   }
@@ -1266,7 +1351,9 @@ export function createFuel(host: FuelHost) {
   function dismissProteinNudge(key: string): void {
     if (nudgeSeen.includes(key)) return;
     nudgeSeen = [...nudgeSeen, key].slice(-NUDGE_SEEN_MAX);
-    void track(db.settings.put({ key: NUDGE_SEEN_KEY, value: [...nudgeSeen] })).catch(host.logError);
+    void track(db.settings.put({ key: NUDGE_SEEN_KEY, value: [...nudgeSeen] })).catch(
+      host.logError,
+    );
     host.render();
   }
 
@@ -1301,7 +1388,10 @@ export function createFuel(host: FuelHost) {
   }
 
   /** M11-q8: the activity-level suggestion for the weigh-in screen, or null. */
-  function activityNow(): { current: NutritionSettings['activity']; suggested: NutritionSettings['activity'] } | null {
+  function activityNow(): {
+    current: NutritionSettings['activity'];
+    suggested: NutritionSettings['activity'];
+  } | null {
     if (!host.health || !settings) return null;
     const suggested = host.health.activitySuggestion(settings.activity);
     return suggested && suggested !== settings.activity
@@ -1423,7 +1513,10 @@ export function createFuel(host: FuelHost) {
           surplusKcal: NUTRITION_DEFAULTS.surplusKcal,
           proteinGPerKg: NUTRITION_DEFAULTS.proteinGPerKg,
           fatPct: NUTRITION_DEFAULTS.fatPct,
-          gainPctPerWeek: [NUTRITION_DEFAULTS.gainPctPerWeek[0], NUTRITION_DEFAULTS.gainPctPerWeek[1]],
+          gainPctPerWeek: [
+            NUTRITION_DEFAULTS.gainPctPerWeek[0],
+            NUTRITION_DEFAULTS.gainPctPerWeek[1],
+          ],
           barcodeLookup: storedBarcode,
           ...body,
         };
@@ -1437,7 +1530,9 @@ export function createFuel(host: FuelHost) {
     settings = withGoalKind;
     mode = next.mode;
     barcode = next.barcodeLookup;
-    weighIns = [...weighIns.filter((x) => x.date !== w.date), w].sort((a, b) => (a.date < b.date ? -1 : 1));
+    weighIns = [...weighIns.filter((x) => x.date !== w.date), w].sort((a, b) =>
+      a.date < b.date ? -1 : 1,
+    );
     evaluateNudge();
     leaveSetup(back);
   }
@@ -1480,8 +1575,10 @@ export function createFuel(host: FuelHost) {
           saveSettings(next);
         },
         onSurplus: (kcal) =>
-          settings && saveSettings({ ...settings, surplusKcal: clampSurplus(kcal, settings.goalKind) }),
-        onProteinPerKg: (g) => settings && saveSettings({ ...settings, proteinGPerKg: clampProtein(g) }),
+          settings &&
+          saveSettings({ ...settings, surplusKcal: clampSurplus(kcal, settings.goalKind) }),
+        onProteinPerKg: (g) =>
+          settings && saveSettings({ ...settings, proteinGPerKg: clampProtein(g) }),
         onSetup: () => openSetup('settings'),
         onBarcodeLookup: (on) => {
           barcode = on;
@@ -1518,6 +1615,10 @@ export function createFuel(host: FuelHost) {
       sub = { kind: 'main' };
       viewDate = date < today() ? date : null;
       await loadViewDay();
+    },
+    /** M13c: the app's Search → "Search foods for '…'": the log sheet on Search with that text. */
+    openLogSearch(query: string): void {
+      openLog('search', undefined, undefined, query);
     },
     /** M13c 12b: the past day on show, or null (today). */
     viewDay: (): string | null => viewDate,
@@ -1574,7 +1675,12 @@ export function createFuel(host: FuelHost) {
       const tot = totals();
       const hint = postWorkoutHint(tot, t);
       if (!t || hint === null) return null;
-      return { proteinG: tot.proteinG, targetG: t.proteinG.value, hint, estimate: t.proteinG.estimate };
+      return {
+        proteinG: tot.proteinG,
+        targetG: t.proteinG.value,
+        hint,
+        estimate: t.proteinG.estimate,
+      };
     },
     /** Today's evening nudge text (M7-q6), or null. */
     nudgeText: (): string | null => nudge?.text ?? null,

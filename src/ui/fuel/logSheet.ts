@@ -98,6 +98,8 @@ export type LogSheetProps = {
   /** M7-q3 Light / Regular / Big plate starters. */
   presets: readonly QuickPreset[];
   initialSection?: LogSection | undefined;
+  /** M13c: Search opened from the app's Search ("Search foods for '…'"): the field starts with it. */
+  initialQuery?: string | undefined;
   /** Open straight on this item's detail (a scanned barcode); Back goes to `initialSection`. */
   initialDetail?: LogItem | undefined;
   /** M7-q5: barcode lookup is on, so Search and My foods offer "Scan a barcode". */
@@ -204,7 +206,7 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
   let section: LogSection = p.initialSection ?? 'favorites';
   let detail: LogItem | null = p.initialDetail ?? null;
   let search: SearchState = { status: 'idle' };
-  let query = '';
+  let query = p.initialQuery ?? '';
   const preview = p.preview ?? scaleItem;
 
   const shell = sheetShell({
