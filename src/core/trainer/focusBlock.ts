@@ -22,6 +22,15 @@
  * - The last week is lighter: every row gets the M10 lighter set rule and `adjusted: 'lighter'`.
  * - M12 1b standing go-easy list (`state.easyOn`): added exercises (and swaps in revisions) never
  *   load a listed area, and rows that load one are never bumped.
+ * - Added exercises: his plan's first, then the group's `FOCUS_RULES.prefer` list, then catalog
+ *   order.
+ * - M13c `alsoCore` ("Also add abs?" Yes, another group): after the main group is filled, abs
+ *   rows (`FOCUS_RULES.alsoCore`: 3 × 10–15, 60 s, manual, weight 0 for body-only) go on the
+ *   lightest days without abs, one a day and a different exercise each, until the week has
+ *   `emptyBaseSets` abs sets on ≥ `alsoCore.minDays` days (session cap kept). The main group's
+ *   rows, target and trims are byte-identical to the block without it; the last week makes them
+ *   lighter like every row. Never with `core` on the go-easy list, never on a core block; the
+ *   block is marked `alsoCore` only when an abs row went in. The rows end with the block.
  */
 import { LIGHTER } from './actions/lighter';
 import { easyCatalog, easyOnArea } from './actions/avoidArea';
@@ -241,6 +250,8 @@ export function buildFocusBlock(
   const catalog = easyCatalog(kit, easy);
   const R = FOCUS_RULES;
   const { group, weeks, startDate } = params;
+  const CORE = R.alsoCore.group;
+  const withCore = params.alsoCore === true && group !== CORE && !easy.includes(CORE);
   const weekdays = [...new Set(params.weekdays)].sort((a, b) => a - b);
   const planDay = (id: string) => state.plan.days.find((d) => d.id === id);
   const rotation = state.schedule.rotation.filter((id) => planDay(id) !== undefined);
@@ -276,15 +287,21 @@ export function buildFocusBlock(
   const focusPlanRows = state.plan.days
     .flatMap((d) => d.exercises)
     .filter((p) => isFocusExercise(p.exerciseId, group, catalog));
-  const pool = catalog.exercises
-    .filter((e) => isFocusExercise(e.id, group, catalog) && catalog.canDo(e.id))
-    .map((e, order) => ({ e, order, inPlan: planIds.indexOf(e.id) }))
-    .sort((a, b) => {
-      const pa = a.inPlan < 0 ? Infinity : a.inPlan;
-      const pb = b.inPlan < 0 ? Infinity : b.inPlan;
-      return pa - pb || a.order - b.order;
-    })
-    .map((x) => x.e);
+  const poolFor = (g: FocusGroup): Exercise[] => {
+    const prefer: readonly string[] = R.prefer[g] ?? [];
+    const rank = (ids: readonly string[], id: string) => {
+      const i = ids.indexOf(id);
+      return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return catalog.exercises
+      .filter((e) => isFocusExercise(e.id, g, catalog) && catalog.canDo(e.id))
+      .map((e, order) => ({ e, order, inPlan: rank(planIds, e.id), pref: rank(prefer, e.id) }))
+      .sort((a, b) => a.inPlan - b.inPlan || a.pref - b.pref || a.order - b.order)
+      .map((x) => x.e);
+  };
+  const pool = poolFor(group);
+  const corePool = withCore ? poolFor(CORE) : [];
+  let coreAdded = false;
 
   const templateFor = (e: Exercise): PlannedExercise => {
     const own = state.plan.days.flatMap((d) => d.exercises).find((p) => p.exerciseId === e.id);
@@ -347,6 +364,7 @@ export function buildFocusBlock(
       weekDays.push({ date, day });
     }
     fillWeek(work);
+    if (withCore) addCore(work);
     if (w === weeks - 1) {
       for (const x of work) {
         x.day.exercises = x.day.exercises.map((p) => ({
@@ -441,6 +459,45 @@ export function buildFocusBlock(
     }
   }
 
+  /** M13c: abs rows on the lightest days (see the header); the main group's rows stay as is. */
+  function addCore(work: Work[]): void {
+    const C = R.alsoCore;
+    const coreOf = (x: Work) => focusSetsOf(x.day.exercises, CORE, catalog);
+    const cap = (x: Work) => Math.max(x.baseTotal, R.maxSetsPerSession);
+    let s = work.reduce((n, x) => n + coreOf(x), 0);
+    const used = new Set(work.flatMap((x) => x.day.exercises.map((p) => p.exerciseId)));
+    for (;;) {
+      const days = work.filter((x) => coreOf(x) > 0).length;
+      if (s >= R.emptyBaseSets && days >= C.minDays) return;
+      const pick = (x: Work): Exercise | undefined => {
+        const inDay = new Set(x.day.exercises.map((p) => p.exerciseId));
+        const ok = corePool.filter((e) => !inDay.has(e.id));
+        return ok.find((e) => !used.has(e.id)) ?? ok[0];
+      };
+      const x = work
+        .filter(
+          (y) =>
+            coreOf(y) === 0 &&
+            cap(y) - totalSets(y.day.exercises) >= R.minAddedSets &&
+            pick(y) !== undefined,
+        )
+        .sort((a, b) => totalSets(a.day.exercises) - totalSets(b.day.exercises))[0];
+      const e = x && pick(x);
+      if (!x || !e) return;
+      const tpl: PlannedExercise = {
+        exerciseId: e.id,
+        sets: Math.min(C.sets, cap(x) - totalSets(x.day.exercises)),
+        targetReps: [C.targetReps[0], C.targetReps[1]],
+        restSec: C.restSec,
+        tracking: 'manual',
+      };
+      x.day.exercises.push(swappedRow(tpl, { exercise: e, tracking: 'manual' }, {}));
+      used.add(e.id);
+      s += tpl.sets;
+      coreAdded = true;
+    }
+  }
+
   return withId({
     group,
     startDate,
@@ -449,6 +506,7 @@ export function buildFocusBlock(
     days,
     targetSetsPerWeek: target,
     baseSetsPerWeek: Math.round(base),
+    ...(coreAdded ? { alsoCore: true as const } : {}),
   });
 }
 
@@ -459,6 +517,7 @@ const paramsOf = (b: FocusBlock): FocusBlockParams => ({
   weeks: b.weeks,
   weekdays: [...b.weekdays],
   startDate: b.startDate,
+  ...(b.alsoCore ? { alsoCore: true as const } : {}),
 });
 
 function nameOf(catalog: Cat, id: string): string {

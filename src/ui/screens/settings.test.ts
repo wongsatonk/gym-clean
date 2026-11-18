@@ -15,6 +15,7 @@ import {
   GOAL_RERUN_LABEL,
   GOAL_SET_LABEL,
   settingsScreen,
+  settingsSectionId,
   unitNote,
   type SettingsActions,
   type SettingsProps,
@@ -736,5 +737,49 @@ describe('settingsScreen M13 owner mode', () => {
   it('new copy passes the coaching-words check', () => {
     for (const s of ['What changed in this version.', 'About Gym Clean', 'Show the welcome again'])
       expect(checkCopy(s).ok).toBe(true);
+  });
+});
+
+describe('Settings: Search and jump targets (M13c)', () => {
+  const noop = () => undefined;
+  const base: SettingsActions = {
+    onAccent: noop,
+    onSpokenCount: noop,
+    onCoachTips: noop,
+    onHandsFree: noop,
+    onUnit: noop,
+    onCameraTest: noop,
+    onTab: noop,
+  };
+
+  it('without onSearch: the bare title, no Search', () => {
+    const { el } = render();
+    expect(el.children[0]?.tag).toBe('h1');
+    expect(el.find((e) => e.hasAttribute('data-search-open'))).toHaveLength(0);
+  });
+
+  it('with onSearch: "Settings" + Search in one row; a tap passes the button out', () => {
+    const got: unknown[] = [];
+    const el = asFake(settingsScreen(props(), { ...base, onSearch: (o) => got.push(o) }));
+    const head = el.children[0];
+    expect(head?.tag).toBe('header');
+    expect(head?.byTag('h1')[0]?.textContent).toBe('Settings');
+    const btn = one(el, (e) => e.hasAttribute('data-search-open'), 'Search');
+    expect(btn.textContent).toBe('Search');
+    btn.click();
+    expect(got).toEqual([btn]);
+  });
+
+  it('every section is a jump target: id settings-<key>, tabindex -1, still labelled by its heading', () => {
+    const { el } = render();
+    const secs = el.byClass('set-section');
+    expect(secs.length).toBeGreaterThan(0);
+    for (const s of secs) {
+      const key = s.getAttribute('data-section') ?? '';
+      expect(s.getAttribute('id')).toBe(settingsSectionId(key));
+      expect(s.getAttribute('id')).toBe(`settings-${key}`);
+      expect(s.getAttribute('tabindex')).toBe('-1');
+      expect(s.getAttribute('aria-labelledby')).toBe(`set-${key}`);
+    }
   });
 });

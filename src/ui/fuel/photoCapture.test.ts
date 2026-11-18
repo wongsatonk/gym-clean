@@ -3,8 +3,10 @@ import { FakeEl, asFake, useFakeDom } from '../screens/testDom';
 import { byAttr } from './fuelTestKit';
 import {
   PHOTO_JPEG_QUALITY,
+  PHOTO_LIBRARY_LABEL,
+  PHOTO_TAKE_LABEL,
   fitWithin,
-  photoButton,
+  photoButtons,
   preparePhoto,
   type PhotoDeps,
 } from './photoCapture';
@@ -149,47 +151,82 @@ describe('preparePhoto', () => {
   });
 });
 
-describe('photoButton', () => {
-  it('is a button over a hidden camera file input', () => {
-    const el = asFake(photoButton({ onFile: () => undefined }));
-    const input = byAttr(el, 'data-photo-input');
-    expect(input.tag).toBe('input');
-    expect(input.getAttribute('type')).toBe('file');
-    expect(input.getAttribute('accept')).toBe('image/*');
-    expect(input.getAttribute('capture')).toBe('environment');
-    expect(input.getAttribute('tabindex')).toBe('-1');
+describe('photoButtons (M13c task 15: Take photo + Choose from library)', () => {
+  type Input = FakeEl & { files?: unknown; value?: string };
+  const mount = () => {
+    const got: unknown[] = [];
+    const el = asFake(photoButtons({ onFile: (f) => got.push(f) }));
+    return {
+      el,
+      got,
+      take: byAttr(el, 'data-photo-input') as Input,
+      library: byAttr(el, 'data-photo-library-input') as Input,
+    };
+  };
+
+  it('Take photo is a button over a hidden camera file input', () => {
+    const { el, take } = mount();
+    expect(take.tag).toBe('input');
+    expect(take.getAttribute('type')).toBe('file');
+    expect(take.getAttribute('accept')).toBe('image/*');
+    expect(take.getAttribute('capture')).toBe('environment');
+    expect(take.getAttribute('tabindex')).toBe('-1');
     const btn = byAttr(el, 'data-photo-open');
     expect(btn.tag).toBe('button');
-    expect(btn.textContent).toBe('Photo');
+    expect(btn.textContent).toBe(PHOTO_TAKE_LABEL);
+    expect(PHOTO_TAKE_LABEL).toBe('Take photo');
   });
 
-  it('the button opens the input', () => {
-    const el = asFake(photoButton({ onFile: () => undefined }));
-    const input = byAttr(el, 'data-photo-input');
-    const opened = vi.fn();
-    input.addEventListener('click', opened);
-    byAttr(el, 'data-photo-open').click();
-    expect(opened).toHaveBeenCalledTimes(1);
+  it('Choose from library is a button over a file input with no capture (the photo picker)', () => {
+    const { el, library } = mount();
+    expect(library.tag).toBe('input');
+    expect(library.getAttribute('type')).toBe('file');
+    expect(library.getAttribute('accept')).toBe('image/*');
+    expect(library.hasAttribute('capture')).toBe(false);
+    expect(library.getAttribute('tabindex')).toBe('-1');
+    // Its own hook, so `[data-photo-input]` still means the camera input in older specs.
+    expect(library.hasAttribute('data-photo-input')).toBe(false);
+    const btn = byAttr(el, 'data-photo-library');
+    expect(btn.tag).toBe('button');
+    expect(btn.textContent).toBe(PHOTO_LIBRARY_LABEL);
+    expect(PHOTO_LIBRARY_LABEL).toBe('Choose from library');
   });
 
-  it('hands over the picked file and clears the input so the same photo can be picked again', () => {
-    const got: unknown[] = [];
-    const el = asFake(photoButton({ onFile: (f) => got.push(f) }));
-    const input = byAttr(el, 'data-photo-input') as FakeEl & { files?: unknown; value?: string };
-    const file = { name: 'meal.jpg' };
-    input.files = [file];
-    input.value = 'C:\\fakepath\\meal.jpg';
-    input.dispatch('change', {});
-    expect(got).toEqual([file]);
-    expect(input.value).toBe('');
+  it('each button has an icon and opens its own input', () => {
+    const { el, take, library } = mount();
+    const opened: string[] = [];
+    take.addEventListener('click', () => opened.push('take'));
+    library.addEventListener('click', () => opened.push('library'));
+    const takeBtn = byAttr(el, 'data-photo-open');
+    const libBtn = byAttr(el, 'data-photo-library');
+    expect(takeBtn.find((e) => e.getAttribute('data-icon') !== null)).toHaveLength(1);
+    expect(libBtn.find((e) => e.getAttribute('data-icon') !== null)).toHaveLength(1);
+    takeBtn.click();
+    libBtn.click();
+    expect(opened).toEqual(['take', 'library']);
+  });
+
+  it('both inputs reach the same callback and are cleared so the same photo can be picked again', () => {
+    const { got, take, library } = mount();
+    const shot = { name: 'camera.jpg' };
+    const picked = { name: 'library.jpg' };
+    take.files = [shot];
+    take.value = 'C:\\fakepath\\camera.jpg';
+    take.dispatch('change', {});
+    library.files = [picked];
+    library.value = 'C:\\fakepath\\library.jpg';
+    library.dispatch('change', {});
+    expect(got).toEqual([shot, picked]);
+    expect(take.value).toBe('');
+    expect(library.value).toBe('');
   });
 
   it('a cancelled pick calls nothing', () => {
-    const got: unknown[] = [];
-    const el = asFake(photoButton({ onFile: (f) => got.push(f) }));
-    const input = byAttr(el, 'data-photo-input') as FakeEl & { files?: unknown };
-    input.files = [];
-    input.dispatch('change', {});
+    const { got, take, library } = mount();
+    take.files = [];
+    take.dispatch('change', {});
+    library.files = [];
+    library.dispatch('change', {});
     expect(got).toEqual([]);
   });
 });

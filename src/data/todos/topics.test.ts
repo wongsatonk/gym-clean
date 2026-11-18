@@ -29,8 +29,9 @@ function strings(t: TodoTopic): string[] {
 }
 
 describe('TODO_TOPICS', () => {
-  it('has the 12 topics of the SPEC table plus the 1.13.0, 1.14.0 and 1.15.0 ones, in order, with their checkpoints', () => {
+  it('has the 12 topics of the SPEC table plus the 1.13.0 to 1.16.0 ones, in order, with their checkpoints', () => {
     expect(TODO_TOPICS.map((t) => [t.id, t.checkpoint])).toEqual([
+      ['library-abs', 'Checkpoint K3'],
       ['one-arm-sets', 'Checkpoint K2'],
       ['coach-calendar', 'Checkpoint I'],
       ['coach-iphone', 'Checkpoint J'],
@@ -56,6 +57,7 @@ describe('TODO_TOPICS', () => {
       'coach-iphone': '1.14.0',
       'published-look': '1.15.0',
       'one-arm-sets': '1.15.1',
+      'library-abs': '1.16.0',
     };
     for (const t of TODO_TOPICS) expect(t.since, t.id).toBe(since[t.id] ?? '1.12.0');
   });
@@ -65,15 +67,23 @@ describe('TODO_TOPICS', () => {
     expect(ids('1.12.0')).toHaveLength(12);
     expect(ids('1.12.0')).not.toContain('trainer-kit-gym');
     expect(ids('1.12.3')).toEqual(ids('1.12.0'));
-    const after114 = ['coach-iphone', 'published-look', 'one-arm-sets'];
-    expect(ids('1.13.0')).toEqual(TODO_TOPICS.map((t) => t.id).filter((id) => !after114.includes(id)));
-    expect(ids('1.13.4')).toEqual(ids('1.13.0'));
-    expect(ids('1.14.0')).toEqual(
-      TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'published-look' && id !== 'one-arm-sets'),
+    const after114 = ['coach-iphone', 'published-look', 'one-arm-sets', 'library-abs'];
+    expect(ids('1.13.0')).toEqual(
+      TODO_TOPICS.map((t) => t.id).filter((id) => !after114.includes(id)),
     );
-    expect(ids('1.15.0')).toEqual(TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'one-arm-sets'));
-    expect(ids('1.15.1')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.13.4')).toEqual(ids('1.13.0'));
+    const after115 = ['published-look', 'one-arm-sets', 'library-abs'];
+    expect(ids('1.14.0')).toEqual(
+      TODO_TOPICS.map((t) => t.id).filter((id) => !after115.includes(id)),
+    );
+    expect(ids('1.15.0')).toEqual(
+      TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'one-arm-sets' && id !== 'library-abs'),
+    );
+    expect(ids('1.15.1')).toEqual(
+      TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'library-abs'),
+    );
     expect(ids('1.16.0')).toEqual(TODO_TOPICS.map((t) => t.id));
+    expect(ids('1.16.2')).toEqual(TODO_TOPICS.map((t) => t.id));
     expect(ids('1.11.0')).toEqual([]);
     // Data order is kept, and another list can be passed in.
     expect(topicsForRelease('1.12.0', [byId('trainer-kit-gym'), byId('resign')])).toEqual([
@@ -117,7 +127,8 @@ describe('TODO_TOPICS', () => {
 
   it('every Try it is a known route', () => {
     for (const t of TODO_TOPICS)
-      for (const s of t.steps) if (s.tryIt !== undefined) expect(isAppRoute(s.tryIt), s.id).toBe(true);
+      for (const s of t.steps)
+        if (s.tryIt !== undefined) expect(isAppRoute(s.tryIt), s.id).toBe(true);
   });
 
   it('every string passes checkCopy and is short', () => {
@@ -152,6 +163,7 @@ describe('TODO_TOPICS', () => {
     expect(
       Object.fromEntries(TODO_TOPICS.map((t) => [t.id, autos(t).map((s) => s.detector)])),
     ).toEqual({
+      'library-abs': [],
       'one-arm-sets': ['oneSidedSet'],
       'coach-calendar': ['chatAsked', 'proposalOutcome', 'calendarAfterSession'],
       'coach-iphone': ['appleAnswers', 'micUses', 'reminderOn', 'checkInDone'],
@@ -190,6 +202,72 @@ describe('TODO_TOPICS', () => {
       'hrv',
     ]);
     expect(asks(byId('camera')).map((s) => s.id)).toContain('commit-landmarks');
+  });
+
+  describe('library, abs and background (1.16.0, Checkpoint K3)', () => {
+    const topic = byId('library-abs');
+
+    it('is for both apps, titled as in the plan, ask steps only (no new detector), no decisions', () => {
+      expect(topic.title).toBe('Library, abs and background');
+      expect(topic.checkpoint).toBe('Checkpoint K3');
+      expect(topic.platform).toBe('any');
+      expect(topic.recurring).toBeUndefined();
+      expect(topic.owner).toBeUndefined();
+      expect(autos(topic)).toEqual([]);
+      for (const s of asks(topic)) {
+        expect(s.setting, s.id).toBeUndefined();
+        expect(s.note, s.id).toBe('optional');
+      }
+    });
+
+    it('asks every SPEC K3 question in order, with the battery comparison and M13c-q5 folded in', () => {
+      expect(asks(topic).map((s) => [s.id, s.options.map((o) => o.id), s.multi, s.tryIt])).toEqual([
+        ['glow-reads', ['yes', 'mostly', 'no'], undefined, 'today'],
+        ['battery', ['same', 'glowMore', 'notYet'], undefined, 'settings'],
+        ['warm', ['no', 'yes'], undefined, undefined],
+        ['search-finds', ['yes', 'mostly', 'no'], undefined, 'today'],
+        [
+          'search-missed',
+          ['exercises', 'thai', 'dates', 'chat', 'meals', 'settings', 'none'],
+          true,
+          undefined,
+        ],
+        ['badges-setup', ['yes', 'mostly', 'no', 'untried'], undefined, 'today'],
+        ['abs-focus', ['yes', 'mostly', 'no', 'untried'], undefined, 'coach'],
+        ['abs-after-block', ['offer', 'keep', 'ask'], undefined, undefined],
+        ['coach-plan', ['yes', 'mostly', 'no'], undefined, 'coach'],
+        ['claude-card', ['clear', 'unclear', 'notSeen'], undefined, undefined],
+        ['library-find', ['nothing', 'something'], undefined, 'today'],
+        ['photo-library', ['yes', 'no', 'notYet'], undefined, 'fuel'],
+        ['photo-recognised', ['yes', 'no', 'noModel', 'notYet'], undefined, undefined],
+      ]);
+    });
+
+    it('the battery step compares an hour of Moving glow with an hour of Plain and asks for the %', () => {
+      const s = asks(topic).find((x) => x.id === 'battery');
+      const text = `${s?.title} ${s?.why}`;
+      expect(text).toMatch(/hour/i);
+      expect(text).toMatch(/Moving glow/);
+      expect(text).toMatch(/\bPlain\b/);
+      expect(text).toMatch(/battery %/i);
+      expect(text).toMatch(/note/i);
+    });
+
+    it('search covers Thai words, dates, chat and meals; M13c-q5 offers the default first', () => {
+      const why = asks(topic).find((x) => x.id === 'search-finds')?.why ?? '';
+      for (const w of [/Thai/, /yesterday/, /chat/i, /meal/i]) expect(why).toMatch(w);
+      const q5 = asks(topic).find((x) => x.id === 'abs-after-block');
+      expect(q5?.options[0]?.label).toMatch(/as now/i);
+    });
+
+    it('the photo-library steps say they are for the iPhone app (steps have no platform field)', () => {
+      for (const id of ['photo-library', 'photo-recognised'])
+        expect(asks(topic).find((x) => x.id === id)?.title, id).toMatch(/^In the iPhone app, /);
+    });
+
+    it('says "you", never he or she', () => {
+      expect(strings(topic).join(' ')).not.toMatch(/\b(he|his|him|she|her|hers|wife|husband)\b/i);
+    });
   });
 
   describe('one-arm sets (1.15.1, Checkpoint K2)', () => {
@@ -360,7 +438,8 @@ describe('TODO_TOPICS', () => {
         const opts = step.options.map((o) => o.id);
         for (const k of Object.keys(step.setting?.values ?? {})) expect(opts).toContain(k);
       }
-      const values = (topic: string) => decisions.find((d) => d.topic === topic)?.step.setting?.values;
+      const values = (topic: string) =>
+        decisions.find((d) => d.topic === topic)?.step.setting?.values;
       expect(values('apple-card')).toEqual({ yes: true, no: false });
       expect(values('trainer-kit')).toEqual({ keep: TRAINER_KIT_DEFAULTS });
       expect(values('claude')).toEqual({ yes: 'yes', later: 'later', no: 'no' });
@@ -376,7 +455,15 @@ describe('TODO_TOPICS', () => {
 
   it('trainer-kit defaults are the M12-q4 defaults', () => {
     expect(TRAINER_KIT_DEFAULTS).toEqual({
-      measurementSites: ['leftArm', 'rightArm', 'chest', 'waist', 'hips', 'leftThigh', 'rightThigh'],
+      measurementSites: [
+        'leftArm',
+        'rightArm',
+        'chest',
+        'waist',
+        'hips',
+        'leftThigh',
+        'rightThigh',
+      ],
       e1rmFormula: 'epley',
       warmups: 'firstHeavyLift',
       reviewWeeks: 5,

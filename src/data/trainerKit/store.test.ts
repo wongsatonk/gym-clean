@@ -114,6 +114,15 @@ describe('intake (settings key "intake")', () => {
     expect(await db.settings.count()).toBe(2);
   });
 
+  it('keeps the M13c abs answer (wantsCore) and drops a non-boolean one', async () => {
+    await saveIntake(db, intake({ wantsCore: true }));
+    expect(await getIntake(db)).toEqual(intake({ wantsCore: true }));
+    await saveIntake(db, intake({ wantsCore: false }));
+    expect((await getIntake(db))?.wantsCore).toBe(false);
+    await db.settings.put({ key: 'intake', value: { ...intake(), wantsCore: 'yes' } });
+    expect(await getIntake(db)).toEqual(intake());
+  });
+
   it('trims the own-words goal, drops an empty one and repeated easy-on areas', async () => {
     await saveIntake(
       db,

@@ -5,6 +5,9 @@
  * - Next block: when a focus block ends, the recap (progress/recap.ts) offers another block for
  *   the same group or the next one in `NEXT_BLOCK_RULES.groupOrder`, from the day after it ends.
  *   A block's last week is already lighter, so these offers add no lighter week of their own.
+ *   M13c-q5 default: abs added by a block (`alsoCore`) end with it, so those two offers carry no
+ *   abs; after a block with abs (`alsoCore`, or a core block) a third offer, "Keep abs in the
+ *   next block", is the same group again with `alsoCore` (a core block: the next group).
  * - `lighterWeek: true` is for offers that don't follow a block's lighter week (e.g. after the
  *   deload suggestion): `proposeNextBlock` then builds the lighter week (7 days, the M10 deload
  *   rule) and the block as ONE Proposal, so one Apply puts them in and one Undo takes them out:
@@ -29,6 +32,7 @@ import { groupLabel, proposeFocusBlock } from './actions/focusBlock';
 import { DELOAD, proposeDeload, type ActionContext, type ActionResult } from './actions/lighter';
 import { detectStalls } from './actions/stall';
 import { blockEnd } from './focusBlock';
+import { FOCUS_RULES } from './focusRules';
 import { addDate, localDate, type PlanSession } from './plan';
 import type { TrainerCatalog } from './swapCandidates';
 
@@ -69,9 +73,14 @@ export type NextBlockArgs = {
    * past moves to today (tomorrow when today is trained; day 8 with `lighterWeek`).
    */
   startDate?: string;
+  /** M13c: "Keep abs in the next block": abs rows join the next block too. */
+  alsoCore?: true;
 };
 
 export type NextBlockOffer = { label: string; args: NextBlockArgs };
+
+/** M13c: the offer that keeps abs for one more block. */
+export const KEEP_ABS_LABEL = 'Keep abs in the next block';
 
 /**
  * The two offers after `block` ended: the same group again or the next group in the order, with
@@ -82,19 +91,27 @@ export function nextBlockOffers(
   block: Pick<FocusBlock, 'group' | 'weeks' | 'startDate'> & {
     weekdays: readonly number[];
     days?: FocusBlock['days'];
+    alsoCore?: true;
   },
 ): NextBlockOffer[] {
   const startDate = addDate(blockEnd(block), 1);
-  return [block.group, nextGroup(block.group)].map((group) => ({
+  const args = (group: FocusGroup): NextBlockArgs => ({
+    group,
+    weeks: block.weeks,
+    weekdays: [...block.weekdays],
+    lighterWeek: false,
+    startDate,
+  });
+  const offers = [block.group, nextGroup(block.group)].map((group) => ({
     label: `Next: ${groupLabel(group)}`,
-    args: {
-      group,
-      weeks: block.weeks,
-      weekdays: [...block.weekdays],
-      lighterWeek: false,
-      startDate,
-    },
+    args: args(group),
   }));
+  const core = FOCUS_RULES.alsoCore.group;
+  if (block.alsoCore === true || block.group === core) {
+    const group = block.group === core ? nextGroup(core) : block.group;
+    offers.push({ label: KEEP_ABS_LABEL, args: { ...args(group), alsoCore: true } });
+  }
+  return offers;
 }
 
 const later = (a: string, b: string | undefined): string => (b !== undefined && b > a ? b : a);
@@ -116,6 +133,7 @@ export function proposeNextBlock(
     weeks: args.weeks,
     weekdays: [...args.weekdays],
     startDate,
+    ...(args.alsoCore === true ? { alsoCore: true as const } : {}),
   });
   if (args.lighterWeek !== true) {
     const busy = ctx.sessions.some((s) => localDate(s.startedAt) === ctx.today);

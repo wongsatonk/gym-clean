@@ -2,7 +2,26 @@
 // time in the loop. Pure, no three.js import. Loaded lazily with the 3D chunk (player.ts); badges
 // and the How-to sheet ask ids.ts (hasDemo) instead, which a test keeps in sync with DEMOS. The player (player.ts, scene.ts) draws DemoPose as
 // spheres, ellipsoids and tapered cylinders.
+import type { AbsRegion } from './highlight';
 import {
+  AIR_BIKE,
+  CABLE_CRUNCH_MACHINE,
+  LEG_RAISE_BENCH,
+  PALLOF_MACHINE,
+  PALLOF_START,
+  PULL_UP_BAR,
+  RUSSIAN_TWIST,
+  SIDE_BEND,
+  airBikePose,
+  cableCrunchPose,
+  crunchPose,
+  deadBugPose,
+  hangingLegRaisePose,
+  legRaisePose,
+  pallofPressPose,
+  reverseCrunchPose,
+  russianTwistPose,
+  sideBendPose,
   BENT_ROW,
   bentOverRowPose,
   CABLE_ROW_MACHINE,
@@ -104,6 +123,11 @@ export type DemoMove = {
    * Lower 2 s"); shown in the tempo text. Default: TEMPO.hold, not shown.
    */
   hold?: number;
+  /**
+   * Where the abdominals light (M13c): the front (default; crunches, leg raises), the sides of the
+   * waist (side bend) or both (twists).
+   */
+  abs?: AbsRegion;
 };
 
 export type Key = { t: number; angle: number };
@@ -481,6 +505,131 @@ export const DEMOS: readonly DemoMove[] = [
     // Calves are on the back of the shins: open on a 3/4 rear view, as the standing calf raise.
     openYaw: 0.6,
   },
+  // M13c task 7: the floor and bench abs (pool only, counted by hand). Original poses; the hip
+  // and twist angles are the demo's own (no rep-counter rule). Lying on the back, the head points
+  // to -x. One-sided moves (dead bug, air bike, Russian twist) show the right side only.
+  {
+    exerciseId: 'Crunches',
+    view: 'side',
+    measure: { joint: 'hip', side: 'r' },
+    // Flat on the floor (the right shoulder sits 11 cm outside the hip joint, so ~119) -> the
+    // shoulder blades about 25 cm up.
+    start: 119,
+    far: 89,
+    outward: 'lift',
+    pose: crunchPose,
+    props: [],
+  },
+  {
+    exerciseId: 'Reverse_Crunch',
+    view: 'side',
+    measure: { joint: 'hip', side: 'r' },
+    // Knees up, thighs about vertical -> hips rolled up, knees over the chest.
+    start: 92,
+    far: 52,
+    outward: 'lift',
+    pose: reverseCrunchPose,
+    props: [],
+  },
+  {
+    exerciseId: 'Flat_Bench_Lying_Leg_Raise',
+    view: 'side',
+    measure: { joint: 'hip', side: 'r' },
+    // Legs level with the bench (~167 with the shoulder offset) -> pointing straight up.
+    start: 167,
+    far: 90,
+    outward: 'lift',
+    pose: legRaisePose,
+    props: LEG_RAISE_BENCH,
+  },
+  {
+    exerciseId: 'Dead_Bug',
+    view: 'side',
+    measure: { joint: 'hip', side: 'r' },
+    // Table-top -> the right leg long, hovering. The lowering comes first (how-to tempo line).
+    start: 90,
+    far: 160,
+    outward: 'lower',
+    pose: deadBugPose,
+    props: [],
+    words: { lift: 'Return', lower: 'Lower' },
+  },
+  {
+    exerciseId: 'Air_Bike',
+    view: 'side',
+    measure: { joint: 'twist', side: 'r' },
+    // Chest square -> turned right, the left elbow toward the right knee.
+    start: 0,
+    far: AIR_BIKE.twist,
+    outward: 'lift',
+    pose: airBikePose,
+    props: [],
+    words: { lift: 'Twist', lower: 'Return' },
+    abs: 'both',
+  },
+  {
+    exerciseId: 'Russian_Twist',
+    view: 'side',
+    measure: { joint: 'twist', side: 'r' },
+    start: 0,
+    far: RUSSIAN_TWIST.twist,
+    outward: 'lift',
+    pose: russianTwistPose,
+    props: [],
+    words: { lift: 'Twist', lower: 'Return' },
+    abs: 'both',
+  },
+  // M13c task 8: standing, cable and hanging abs.
+  {
+    exerciseId: 'Dumbbell_Side_Bend',
+    // Front: the lean is sideways.
+    view: 'front',
+    measure: { joint: 'waist', side: 'r' },
+    start: 90,
+    far: 90 - SIDE_BEND.lean,
+    outward: 'lower',
+    pose: sideBendPose,
+    props: [],
+    abs: 'sides',
+  },
+  {
+    exerciseId: 'Cable_Crunch',
+    view: 'side',
+    measure: { joint: 'hip', side: 'r' },
+    // Kneeling tall, torso a little forward -> curled well down over the still hips.
+    start: 160,
+    far: 115,
+    outward: 'lift',
+    pose: cableCrunchPose,
+    props: CABLE_CRUNCH_MACHINE,
+    words: { lift: 'Crunch', lower: 'Return' },
+  },
+  {
+    exerciseId: 'Pallof_Press',
+    // The press goes straight out from the chest and the cable comes in from the left: a 3/4
+    // front view shows both (and the abs). Front is the nearest preset.
+    view: 'front',
+    measure: { joint: 'elbow', side: 'r' },
+    start: PALLOF_START,
+    far: 175,
+    outward: 'lift',
+    pose: pallofPressPose,
+    props: PALLOF_MACHINE,
+    words: { lift: 'Push', lower: 'Return' },
+    hold: 1,
+    openYaw: -0.85,
+  },
+  {
+    exerciseId: 'Hanging_Leg_Raise',
+    view: 'side',
+    measure: { joint: 'hip', side: 'r' },
+    // Hanging straight (~167 with the shoulder offset) -> legs level with the hips.
+    start: 167,
+    far: 90,
+    outward: 'lift',
+    pose: hangingLegRaisePose,
+    props: PULL_UP_BAR,
+  },
 ];
 
 const BY_ID = new Map(DEMOS.map((d) => [d.exerciseId, d]));
@@ -494,11 +643,16 @@ export function demoFor(exerciseId: string): DemoMove | undefined {
 
 /**
  * Tempo text shown next to the demo, in the order the rep happens: "Down 2 s · Up 1 s" when a rep
- * starts with the lowering (push-up), "Lift 1 s · Lower 2 s" when it starts with the lift.
+ * starts with the lowering (push-up), "Lift 1 s · Lower 2 s" when it starts with the lift; a
+ * demo's own words replace Lift/Lower (or Up/Down).
  */
 export function tempoLabel(m: DemoMove): string {
   const hold = m.hold === undefined ? '' : ` · Hold ${m.hold} s`;
-  if (m.outward === 'lower') return `Down ${TEMPO.lower} s${hold} · Up ${TEMPO.lift} s`;
+  if (m.outward === 'lower') {
+    // Dead bug: "Lower 2 s · Return 1 s".
+    const w = m.words ?? { lift: 'Up', lower: 'Down' };
+    return `${w.lower} ${TEMPO.lower} s${hold} · ${w.lift} ${TEMPO.lift} s`;
+  }
   const w = m.words ?? { lift: 'Lift', lower: 'Lower' };
   return `${w.lift} ${TEMPO.lift} s${hold} · ${w.lower} ${TEMPO.lower} s`;
 }

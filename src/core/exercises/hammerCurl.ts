@@ -22,6 +22,7 @@ export const hammerCurl: ExerciseRule = {
   sideMode: 'best',
   focus: learningFocus(),
   hints: { far: 'Curl to shoulder height.', start: 'Straighten your arm at the bottom.' },
+  countsLine: 'Counts each hammer curl from your elbow angle.',
   placement: {
     view: 'side',
     facing: 'Side-on, curling arm toward the phone',

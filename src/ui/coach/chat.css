@@ -72,6 +72,34 @@
   align-items: flex-start;
 }
 
+/* M13c task 12b: a message opened from search (chat.ts revealMessage). The outline sits inside
+   the bubble / card (the thread has no side padding, so an outer ring would be clipped). 'fade'
+   holds, then fades over REVEAL_MS (2.4 s); 'static' (reduced motion) just shows until removed.
+   The item takes focus for screen readers; the outline is the visible mark, not the focus ring. */
+.chat-item[data-chat-reveal] > :first-child {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
+.chat-item[data-chat-reveal='fade'] > :first-child {
+  animation: chat-reveal 2400ms var(--ease-standard) forwards;
+}
+
+.chat-item[tabindex='-1']:focus {
+  outline: none;
+}
+
+@keyframes chat-reveal {
+  0%,
+  60% {
+    outline-color: var(--focus);
+  }
+
+  100% {
+    outline-color: transparent;
+  }
+}
+
 .chat-item-user {
   align-items: flex-end;
 }

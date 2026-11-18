@@ -1,10 +1,14 @@
 // Drill-sergeant coach voice (design 2026-11-13): Settings → "Coach voice". Speech is mocked and
 // records each utterance with its voice, rate and pitch; getVoices() returns window.__cvVoices.
 // The live count part replaces the pose model with a fixture player (like hands-free.spec.ts).
+// M13c task 10: the voice list is a disclosure ("Voice" + the chosen voice), collapsed every time
+// Settings opens. M13C_SHOTS=1 writes docs/screenshots/m13c-voice-{collapsed,open}.png.
 import { expect, test, type Page } from './fixtures';
 import { leaveSettings } from './workout.helpers';
 
 test.describe.configure({ timeout: 90_000 });
+
+const SHOTS = process.env.M13C_SHOTS === '1';
 
 const CURL = '/fixtures/landmarks/curl/synthetic-02__reps-3__partials-2.json';
 
@@ -156,6 +160,33 @@ test('Drill → Savage → Fred: Test voice speaks a Savage line in Fred, faster
   await cv.getByRole('button', { name: 'Savage' }).click();
   await pressed(cv.locator('[data-rudeness="3"]'));
   await expect(cv.locator('[data-strong-language]')).toHaveClass(/cv-note-on/);
+  // The voice picker starts collapsed: one row, "Voice" + what Automatic picks, list hidden.
+  const toggle = cv.locator('[data-voice-toggle]');
+  const list = cv.locator('#cv-voice-list');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toHaveAttribute('aria-controls', 'cv-voice-list');
+  await expect(cv.locator('[data-voice-summary]')).toHaveText('Automatic: Daniel');
+  await expect(list).toBeHidden();
+  await expect(cv.getByRole('button', { name: 'Test voice' })).toBeVisible();
+  expect((await toggle.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(56);
+  if (SHOTS) {
+    await toggle.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'docs/screenshots/m13c-voice-collapsed.png' });
+  }
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(list).toBeVisible();
+  if (SHOTS) {
+    // The whole open list above the tab bar, with the chevron settled.
+    await toggle.evaluate((e) => e.scrollIntoView({ block: 'start' }));
+    await page.evaluate(() => window.scrollBy(0, -24));
+    await page.waitForFunction(() =>
+      document
+        .getAnimations()
+        .every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity),
+    );
+    await page.screenshot({ path: 'docs/screenshots/m13c-voice-open.png' });
+  }
   // Picker: Automatic (Daniel, the default order's first) then every installed English voice.
   await expect(cv.locator('[data-voice-name]')).toHaveText([
     'Automatic: Daniel',
@@ -165,6 +196,10 @@ test('Drill → Savage → Fred: Test voice speaks a Savage line in Fred, faster
   ]);
   await cv.locator('[data-voice-name="Fred"]').click();
   await pressed(cv.locator('[data-voice-name="Fred"]'));
+  // A pick updates the row and keeps the list open.
+  await expect(cv.locator('[data-voice-summary]')).toHaveText('Fred (US)');
+  await expect(cv.locator('[data-voice-toggle]')).toHaveAttribute('aria-expanded', 'true');
+  await expect(list).toBeVisible();
 
   // Gym rules on the section: 56 px targets, 20 px text, no sideways scroll.
   const sizes = await cv.evaluate((el) => ({
@@ -200,6 +235,9 @@ test('Drill → Savage → Fred: Test voice speaks a Savage line in Fred, faster
   cv = await openSettings(page);
   await pressed(cv.locator('[data-coach-persona="drill"]'));
   await pressed(cv.locator('[data-rudeness="3"]'));
+  // Collapsed again after a reload (not remembered), naming the saved voice.
+  await expect(cv.locator('[data-voice-toggle]')).toHaveAttribute('aria-expanded', 'false');
+  await expect(cv.locator('[data-voice-summary]')).toHaveText('Fred (US)');
   await pressed(cv.locator('[data-voice-name="Fred"]'));
   await cv.getByRole('button', { name: 'Test voice' }).click();
   await expect.poll(async () => (await said(page)).at(-1)?.voice).toBe('Fred');
@@ -219,6 +257,10 @@ test('only a female voice installed: it is offered and Automatic speaks in it', 
   const cv = await openSettings(page);
   await cv.getByRole('button', { name: 'Drill sergeant' }).click();
   await expect(page.locator('[data-coach-voice] [data-no-voice]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-voice] [data-voice-summary]')).toHaveText(
+    'Automatic: Samantha',
+  );
+  await page.locator('[data-coach-voice] [data-voice-toggle]').click();
   await expect(page.locator('[data-coach-voice] [data-voice-name]')).toHaveText([
     'Automatic: Samantha',
     'Samantha (US)',
@@ -242,6 +284,7 @@ test('no English voice installed: the picker shows how to add one in iOS', async
   await expect(hint).toBeVisible();
   await expect(hint).toContainText('Settings → Accessibility → Spoken Content → Voices → English');
   await expect(page.locator('[data-coach-voice] [data-voice-name]')).toHaveCount(0);
+  await expect(page.locator('[data-coach-voice] [data-voice-toggle]')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   expect(errors).toEqual([]);
 });

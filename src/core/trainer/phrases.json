@@ -287,6 +287,14 @@
       "longer block"
     ],
     "month": ["this month", "next month", "a month", "for a month", "the month", "month"],
+    "coreFocus": {
+      "note": "M13c (Decision 'M13c answers', q3): asking for abs opens the focus flow with group core, never a change. An abs word plus an 'add' word outside the abs word ('work' in 'core work' doesn't count) -> focusBlock with group core; a message that is only an 'alone' word does too. A question word ('why', 'does', 'ทำไม', 'ไหม') means a question about abs, not a request, unless it is part of a polite ask ('เพิ่มหน้าท้องได้ไหม', 'how about some abs'). 'do', 'work', 'ทำ', 'มี' are no add words (they sit inside questions: 'ทำไม', 'does core work help'). Bare 'ท้อง' is only in 'alone' (in a sentence it can mean other things). Never with a discomfort word or a food phrase; avoid/skip words win earlier.",
+      "words": ["abs", "ab workout", "abs workout", "core", "core work", "six pack", "sixpack", "six packs", "หน้าท้อง", "กล้ามท้อง", "ซิกแพค", "ซิกแพ็ค", "ซิกแพก"],
+      "add": ["add", "more", "want", "need", "get", "train", "some", "เพิ่ม", "เล่น", "ฝึก", "อยาก", "สร้าง"],
+      "questions": ["why", "what", "does", "how", "count", "ทำไม", "อะไร", "ยังไง", "อย่างไร", "ไหม", "มั้ย", "หรือเปล่า", "รึเปล่า", "หรือไม่"],
+      "politeAsk": ["how about", "what about", "ได้ไหม", "ได้มั้ย", "หน่อยได้ไหม"],
+      "alone": ["abs", "core", "six pack", "sixpack", "six packs", "หน้าท้อง", "ท้อง", "ซิกแพค", "ซิกแพ็ค", "ซิกแพก", "กล้ามท้อง"]
+    },
     "doToday": {
       "note": "A 'do' word, then (after 'the'/'my') one of the coach's plan day names ('Push A') -> doToday, only when the request is about today (no other day word). A skip word wins ('dont do push a' is a postpone).",
       "do": ["do", "train", "run", "start", "lets do", "go for", "เล่น", "ทำ"],
@@ -494,7 +502,7 @@
       "น่อง",
       "ก้น"
     ],
-    "core": ["core", "abs", "stomach", "belly", "waist", "หน้าท้อง", "ท้อง", "เอว", "แกนกลาง"]
+    "core": ["core", "abs", "stomach", "belly", "waist", "six pack", "sixpack", "six packs", "หน้าท้อง", "ท้อง", "เอว", "แกนกลาง", "ซิกแพค", "ซิกแพ็ค", "ซิกแพก"]
   },
   "areaIgnore": {
     "note": "Removed from the text before looking for area words: phrases where an area word means something else.",

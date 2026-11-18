@@ -170,6 +170,12 @@ export type ExerciseRule = {
   hints: CoachHints;
   /** Phone placement guidance for this exercise's view (M4c). */
   placement: PhonePlacement;
+  /**
+   * What the camera counts, one line (≤ 10 words, passes checkCopy, names the measured joint),
+   * shown on the Camera sheet (M13c goal 4), never spoken. E.g. "Counts each curl from your
+   * elbow angle."
+   */
+  countsLine: string;
 };
 
 /** SPEC §3 counter defaults shared by every rule; a rule may override any of them. */

@@ -35,6 +35,15 @@
   --scrim-soft: rgb(0 0 0 / 0.5);
   --veil: rgb(13 15 18 / 0.94);
   --veil-faint: rgb(13 15 18 / 0.2);
+  /* M13c moving glow: the page colour, translucent, so a sticky bottom (the Start dock) lets the
+     glow through instead of cutting a flat band. The tab bar stays solid --surface: content
+     scrolls under it, and any see-through left readable ghosts of that text behind the labels. */
+  --bg-veil: rgb(13 15 18 / 0.88);
+  /* M13c moving glow: two faint glows over --bg, one tinted by the accent (computed on <html>,
+     where data-accent lives, so it follows the picker), one by the muscle cyan. tokens.test.ts
+     composites both at full strength over --bg: --text >= 7:1, --text-2 >= 4.5:1 per accent. */
+  --glow-a: color-mix(in srgb, var(--cta) 16%, transparent);
+  --glow-b: color-mix(in srgb, var(--muscle) 9%, transparent);
   --glass-line: rgb(255 255 255 / 0.25);
   --glass-track: rgb(255 255 255 / 0.14);
   /* The accent picker's swatches: each theme's --cta, shown whatever the current accent is. */
@@ -124,6 +133,7 @@
    M13 task 18: Calendar and its day view moved to the standard surface (pro). */
 .mood-track {
   --bg: #000000;
+  --bg-veil: rgb(0 0 0 / 0.88);
   --line: #3a3a3a;
   --r-card: 8px;
   --line-w: 2px;
@@ -191,6 +201,92 @@
   from {
     transform: translateY(100%);
   }
+}
+
+/* ---------- Moving glow (M13c task 9, his q1 answer: option c) ----------
+   A dark base with two soft glows that drift slowly behind the non-workout screens (Today,
+   preview, Fuel, Coach, Calendar, Settings, Summary, Library). Battery-cheap by construction:
+   ONE fixed ::before layer per screen root, pre-drawn once (two radial gradients from the glow
+   tokens), promoted to its own compositor layer (will-change) and moved only by transform /
+   opacity keyframes, so after the first frame the compositor animates it with no layout or
+   paint (e2e/background-perf.spec.ts traces it). No image, no canvas, no JS loop, no animated
+   background-position / filter / gradient stops; iOS ignores background-attachment: fixed.
+   Never on: in-workout screens (Exercise, Rest and the camera stay flat / pure black for
+   readability at 2 m), sheets (they cover the page; the glow pauses under them) and Plain
+   (html[data-background='plain'], Settings → Accent colour → Background).
+   Paused: html[data-ambient='paused'] (motion.ts watchAmbient: page hidden, a sheet, the
+   camera or a motion-off screen in the document). Reduced motion: the ONE reduced-motion rule
+   below drops the animation, leaving the still glow. */
+html:not([data-background='plain'])
+  :is(.mood-energy, .mood-pro).screen:not(
+    .sheet,
+    .camera-sheet,
+    [data-screen='exercise'],
+    [data-motion='off']
+  ) {
+  /* The layer paints above the root's own --bg and below its content. */
+  isolation: isolate;
+}
+
+html:not([data-background='plain'])
+  :is(.mood-energy, .mood-pro).screen:not(
+    .sheet,
+    .camera-sheet,
+    [data-screen='exercise'],
+    [data-motion='off']
+  )::before {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  /* Bigger than the viewport by more than the travel, so no edge ever shows. */
+  inset: -8%;
+  pointer-events: none;
+  background:
+    radial-gradient(62% 42% at 80% 12%, var(--glow-a), transparent),
+    radial-gradient(58% 40% at 14% 80%, var(--glow-b), transparent);
+  will-change: transform;
+  /* 25 s each way, alternate: one there-and-back cycle is 50 s. */
+  animation: ambient-drift 25s ease-in-out infinite alternate;
+}
+
+html[data-ambient='paused']:not([data-background='plain'])
+  :is(.mood-energy, .mood-pro).screen:not(
+    .sheet,
+    .camera-sheet,
+    [data-screen='exercise'],
+    [data-motion='off']
+  )::before {
+  animation-play-state: paused;
+}
+
+/* Small travel: at most 4% of the layer (about 18 px across, 40 px down on a 390 x 844 phone). */
+@keyframes ambient-drift {
+  0% {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+    opacity: 0.85;
+  }
+
+  50% {
+    transform: translate3d(2%, 2.5%, 0) scale(1.04);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translate3d(4%, -1%, 0) scale(1.02);
+    opacity: 0.9;
+  }
+}
+
+/* Sticky bottoms fade into the glow (translucent page colour). */
+html:not([data-background='plain'])
+  :is(.mood-energy, .mood-pro).screen:not(
+    .sheet,
+    .camera-sheet,
+    [data-screen='exercise'],
+    [data-motion='off']
+  )
+  .sticky-bottom {
+  background: linear-gradient(transparent, var(--bg-veil) 24%);
 }
 
 /* Reduced motion: every duration to zero and no animation or transition anywhere, so screens,
@@ -2452,6 +2548,8 @@ h1 {
 .sticky-bottom {
   position: sticky;
   bottom: 0;
+  /* M13c: above tappable badges (.ex-badges-tap is z-index 1) scrolling under the dock. */
+  z-index: 2;
   margin-top: auto;
   padding: 12px 0 max(4px, env(safe-area-inset-bottom));
   background: linear-gradient(transparent, var(--bg) 24%);
@@ -2649,7 +2747,7 @@ textarea:focus-visible {
   row-gap: 4px; /* the chip row costs the video (and the set-up card) as little as possible */
 }
 
-.cam-top.has-learning > :not(.cam-title, .cam-learning) {
+.cam-top.has-learning > :not(.cam-title, .cam-learning, .cam-note) {
   grid-row: 1 / span 2;
 }
 
@@ -2669,6 +2767,16 @@ textarea:focus-visible {
   font-weight: 700;
   line-height: 1.3;
   white-space: nowrap;
+}
+
+/* M13c Practice: "Practice: nothing is saved." on its own full-width row under the title. */
+.cam-note {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  line-height: 1.3;
 }
 
 .cam-learning .ic {
@@ -3530,6 +3638,31 @@ textarea:focus-visible {
 
 /* One word, never broken mid-word; narrow phones drop to two columns (auto-fit) instead. */
 .accent-name {
+  white-space: nowrap;
+}
+
+/* M13c Background: Moving glow / Plain (src/ui/backgroundPicker.ts), under the swatches. The
+   Settings segmented look at body size so "Moving glow" fits half of a 360 px row. */
+.bg-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.bg-picker-label {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+}
+
+.bg-picker .segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.settings .bg-picker .seg-btn {
+  min-width: 0;
+  font-size: var(--fs-cue);
   white-space: nowrap;
 }
 

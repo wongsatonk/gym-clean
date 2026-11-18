@@ -132,6 +132,7 @@ import {
   type Advice,
 } from '../core/advice';
 import {
+  bodyAreaLabel,
   bodyAreaOf,
   catalogExercises,
   cueFor,
@@ -341,7 +342,40 @@ import {
 } from '../core/stats';
 import { createDevLogPanel, type DevLogPanelHandle } from './devLogPanel';
 import { createLastSetCorrection, type LastSetCorrectionHandle } from './lastSetCorrection';
-import { oneSidedLimb, ruleStatus } from '../core/exercises';
+import { cameraInfo, oneSidedLimb, ruleStatus } from '../core/exercises';
+// ---- M13c: Library, search, tappable badges, Practice, background, Claude card ----
+import { equipmentGroupLabel, groupExercises } from '../core/library';
+import {
+  buildSearchIndex,
+  exerciseSearchItems,
+  learnSearchItems,
+  search as searchIndex,
+  type SearchIndex,
+} from '../core/search';
+import {
+  personalQueryUsable,
+  type PersonalKind,
+  type PersonalResults,
+} from '../core/searchPersonal';
+import { personalSearch } from '../data/searchSources';
+import { muscleLabel } from '../core/dayInfo';
+import { createLibraryScreen, type LibraryHandle, type LibraryRow } from './screens/library';
+import {
+  detailHistoryOf,
+  exerciseDetailScreen,
+  type DetailHistory,
+} from './screens/exerciseDetail';
+import { settingsSearchItems, settingsSectionFor } from './screens/settingsIndex';
+import { settingsSectionId } from './screens/settings';
+import { closeCameraInfo, openCameraInfo } from './cameraInfoSheet';
+import { howToContent } from './howToSheet';
+import type { BadgeKind } from './badges';
+import { applyBackground, backgroundStyle } from './backgroundPicker';
+import { watchAmbient } from './motion';
+import { claudeOfferFor, claudeOfferShown, claudeOutcomeOf } from '../core/trainer/claude/offer';
+import { COULDNT_DO } from '../data/brain/apple';
+import { REVEAL_MS, revealMessage } from './coach/chat';
+import type { BackgroundStyle, ClaudeOffer, LibraryGroupBy, SearchHit } from '../core/types';
 import { h } from './dom';
 import { createCoachVoiceSettings } from './coachVoiceSettings';
 import { createFuel } from './fuel/fuelController';
@@ -430,6 +464,15 @@ type View =
       data: CalendarData | 'error' | null;
     }
   | ({ screen: 'preview'; loading: boolean } & PreviewDay)
+  // M13c: the Library (Search) and an exercise's detail; `back` is the view to return to.
+  | { screen: 'library'; back: View }
+  | {
+      screen: 'exerciseDetail';
+      exerciseId: string;
+      back: View;
+      /** undefined while loading; null = never done. */
+      history: DetailHistory | null | undefined;
+    }
   | { screen: 'session'; s: SessionState; sheet: Sheet };
 
 const UNDO_FAILED = "Can't undo that now: the plan changed since.";
@@ -437,6 +480,26 @@ const UNDO_FAILED = "Can't undo that now: the plan changed since.";
 export function mountApp(root: HTMLElement): void {
   const db = new GymDb();
   let view: View = { screen: 'today', upNextDayId: null, stats: null };
+  // M13c state: background style, the Claude card's message and shown date, the open Library.
+  let background: BackgroundStyle = 'glow';
+  let claudeOffer: ClaudeOffer = {};
+  let claudeOfferMsgId: number | null = null;
+  let lib: {
+    handle: LibraryHandle;
+    query: string;
+    groupBy: LibraryGroupBy;
+    myGymOnly: boolean;
+    personal: PersonalResults | undefined;
+    opener: HTMLElement | null;
+    scrollY: number;
+    seq: number;
+    timer: ReturnType<typeof setTimeout> | undefined;
+  } | null = null;
+  let libIndex: SearchIndex | null = null;
+  let libDoneIds: ReadonlySet<string> = new Set();
+  /** One counter for every Library, so a late personal result never matches a newer Library. */
+  let libSeq = 0;
+  let pendingReveal: { id: string; until: number } | null = null;
   let unit: Unit = 'kg';
   let spokenCount = true;
   let coachTips = true;
@@ -580,6 +643,7 @@ export function mountApp(root: HTMLElement): void {
       const card = findLearnCard(LEARN_CARDS, id);
       if (card) openLearnCard(card, opener);
     },
+    onSearch: (opener) => openLibrary(opener),
   });
 
   // ---------- M11 Health (iPhone app only; healthHost.ts) ----------
@@ -676,7 +740,10 @@ export function mountApp(root: HTMLElement): void {
   }
 
   /** M4b: full-screen "How to" sheet with the 3D demo (or the muscle map when there's none). */
-  function openHowTo(p: PlannedExercise, opener: HTMLElement | null): void {
+  function openHowTo(
+    p: Pick<PlannedExercise, 'exerciseId' | 'tracking'>,
+    opener: HTMLElement | null,
+  ): void {
     if (howTo) return;
     const sheet = createHowToSheet({
       exerciseId: p.exerciseId,
@@ -694,6 +761,411 @@ export function mountApp(root: HTMLElement): void {
     root.inert = true; // nothing behind the sheet takes focus or taps
     document.body.append(sheet.el); // same task as create, so focus lands on Close
   }
+
+  // ---------- M13c: Library, search, tappable badges, Practice ----------
+  // Search opens from Today, Fuel, Calendar and Settings only; badges and Practice work before a
+  // workout and never during a set. Everything is on this phone: no search leaves it.
+
+  /** The badge input for any exercise: the camera counts it when a rule exists. */
+  const trackingOf = (id: string): PlannedExercise['tracking'] =>
+    cameraInfo(id) ? 'pose' : 'manual';
+
+  function openBadge(kind: BadgeKind, id: string, opener: HTMLElement): void {
+    switch (kind) {
+      case '3d':
+      case 'info':
+        openHowTo({ exerciseId: id, tracking: trackingOf(id) }, opener);
+        return;
+      case 'camera':
+        openCameraSheet(id, opener);
+        return;
+      case 'learning': {
+        const card = findLearnCard(LEARN_CARDS, 'cameraLearning');
+        if (card) openLearnCard(card, opener);
+        return;
+      }
+    }
+  }
+
+  function openCameraSheet(id: string, opener: HTMLElement): void {
+    const info = cameraInfo(id);
+    if (!info) return;
+    openCameraInfo(
+      info,
+      { name: exerciseName(id), exerciseId: id, onPractice: () => openPractice(id) },
+      opener,
+    );
+  }
+
+  /** Practice: the camera counts and speaks reps; nothing is saved, no dev log, no hands-free. */
+  function openPractice(id: string): void {
+    if (camera || view.screen === 'session') return;
+    voice.unlock(); // inside the tap, so iOS lets the count be spoken
+    camera = createCameraView({
+      title: `Practice: ${exerciseName(id)}`,
+      note: 'Practice: nothing is saved.',
+      onClose: closeCameraView,
+      exerciseId: id,
+      spokenCount,
+      speakPlacement: true,
+    });
+    cameraExerciseId = null; // not a workout set: syncCamera leaves it alone
+    cameraHandsFree = false;
+    root.append(camera.el);
+    void camera.start();
+  }
+
+  function libRows(): LibraryRow[] {
+    return catalogExercises().map((e) => ({
+      id: e.id,
+      name: exerciseName(e.id),
+      tracking: trackingOf(e.id),
+      muscle: muscleLabel(e.primaryMuscles[0] ?? ''),
+      equipment: equipmentGroupLabel(e.equipment),
+      needs: missingKitLabels(e.id, gym),
+    }));
+  }
+
+  function libGroups(by: LibraryGroupBy, myGymOnly: boolean) {
+    return groupExercises(catalogExercises(), by, {
+      planDays: planDays(),
+      areaOf: bodyAreaOf,
+      muscleLabel,
+      canDo: (id) => gymCanDo(id, gym),
+      myGymOnly,
+      doneIds: libDoneIds,
+    });
+  }
+
+  function buildLibIndex(): SearchIndex {
+    return buildSearchIndex([
+      ...exerciseSearchItems(catalogExercises(), {
+        planDays: planDays(),
+        areaOf: bodyAreaOf,
+        areaLabel: bodyAreaLabel,
+        muscleLabel,
+      }),
+      ...settingsSearchItems({ owner: ownerOn() }),
+      ...learnSearchItems(LEARN_CARDS),
+    ]);
+  }
+
+  const backLabelFor = (v: View): string => {
+    const t = tabOf(v);
+    return t ? (TABS.find((x) => x.id === t)?.label ?? 'Back') : 'Back';
+  };
+
+  /** Search: the Library over the current view; focus goes to the field inside this tap (iOS). */
+  function openLibrary(opener: HTMLElement): void {
+    if (view.screen === 'session' || view.screen === 'library') return;
+    const back = view;
+    libIndex = buildLibIndex();
+    const groupBy: LibraryGroupBy = 'muscle';
+    const handle = createLibraryScreen(
+      {
+        rows: libRows(),
+        groups: libGroups(groupBy, false),
+        groupBy,
+        query: '',
+        hits: [],
+        myGymOnly: false,
+        areaLabel: bodyAreaLabel,
+        backLabel: backLabelFor(back),
+        autofocus: true,
+      },
+      {
+        onQuery: (q) => libQuery(q),
+        onGroupBy: (by) => {
+          if (!lib) return;
+          lib.groupBy = by;
+          lib.handle.update({ groupBy: by, groups: libGroups(by, lib.myGymOnly) });
+        },
+        onMyGym: (on) => {
+          if (!lib) return;
+          lib.myGymOnly = on;
+          lib.handle.update({ myGymOnly: on, groups: libGroups(lib.groupBy, on) });
+        },
+        onOpenExercise: (id) => openExerciseDetail(id),
+        onBadge: (kind, id, op) => openBadge(kind, id, op),
+        onHit: (hit, op) => openSearchHit(hit, op),
+        onMore: (kind) => void libMore(kind),
+        onBack: () => closeLibrary(),
+      },
+    );
+    lib = {
+      handle,
+      query: '',
+      groupBy,
+      myGymOnly: false,
+      personal: undefined,
+      opener,
+      scrollY: window.scrollY,
+      seq: 0,
+      timer: undefined,
+    };
+    view = { screen: 'library', back };
+    render();
+    handle.focusSearch();
+    window.scrollTo(0, 0);
+    void loadDoneIds();
+  }
+
+  /** Exercises with logged sets (listed first; ranked first on ties). */
+  async function loadDoneIds(): Promise<void> {
+    try {
+      const ids = new Set<string>();
+      await db.sets.each((r) => {
+        ids.add(r.exerciseId);
+      });
+      libDoneIds = ids;
+      if (lib && view.screen === 'library') {
+        lib.handle.update({
+          groups: libGroups(lib.groupBy, lib.myGymOnly),
+          hits: lib.query && libIndex ? searchIndex(libIndex, lib.query, { doneIds: ids }) : [],
+        });
+      }
+    } catch (err) {
+      logDbError(err);
+    }
+  }
+
+  function closeLibrary(): void {
+    if (view.screen !== 'library' || !lib) return;
+    const { opener, scrollY } = lib;
+    if (lib.timer) clearTimeout(lib.timer);
+    view = view.back;
+    render();
+    window.scrollTo(0, scrollY);
+    // The opener's screen was rebuilt: focus the new screen's Search button instead.
+    const target = opener?.isConnected
+      ? opener
+      : root.querySelector<HTMLElement>('[data-search-open]');
+    target?.focus({ preventScroll: true });
+  }
+
+  /** Bundled hits now; this phone's workouts, meals and chat after a short pause (on device). */
+  function libQuery(q: string): void {
+    if (!lib || !libIndex) return;
+    lib.query = q;
+    const seq = ++libSeq;
+    lib.seq = seq;
+    if (lib.timer) clearTimeout(lib.timer);
+    const usable = personalQueryUsable(q, todayDate());
+    lib.personal = undefined;
+    lib.handle.update({
+      query: q,
+      hits: searchIndex(libIndex, q, { doneIds: libDoneIds }),
+      personal: undefined,
+      personalLoading: usable,
+    });
+    if (!usable) return;
+    lib.timer = setTimeout(() => {
+      void personalSearch(db, q, { now: now(), dayName: dayNameOf })
+        .then((r) => {
+          if (!lib || lib.seq !== seq) return; // a newer query won
+          lib.personal = r;
+          lib.handle.update({ personal: r, personalLoading: false });
+        })
+        .catch((err: unknown) => {
+          logDbError(err);
+          if (lib && lib.seq === seq) lib.handle.update({ personalLoading: false });
+        });
+    }, 200);
+  }
+
+  async function libMore(kind: PersonalKind): Promise<void> {
+    if (!lib?.personal) return;
+    const seq = lib.seq;
+    const sec = lib.personal.sections.find((x) => x.kind === kind);
+    if (!sec) return;
+    try {
+      const r = await personalSearch(db, lib.query, {
+        now: now(),
+        dayName: dayNameOf,
+        kinds: [kind],
+        offset: { [kind]: sec.hits.length },
+      });
+      if (!lib?.personal || lib.seq !== seq) return;
+      const next = r.sections.find((x) => x.kind === kind);
+      if (!next) return;
+      const personal: PersonalResults = {
+        ...lib.personal,
+        sections: lib.personal.sections.map((x) =>
+          x.kind === kind ? { ...x, hits: [...x.hits, ...next.hits], more: next.more } : x,
+        ),
+      };
+      lib.personal = personal;
+      lib.handle.update({ personal });
+    } catch (err) {
+      logDbError(err);
+    }
+  }
+
+  function openSearchHit(hit: SearchHit, opener: HTMLElement): void {
+    switch (hit.kind) {
+      case 'exercise':
+        openExerciseDetail(hit.id);
+        return;
+      case 'learn': {
+        const card = findLearnCard(LEARN_CARDS, hit.id);
+        if (card) openLearnCard(card, opener);
+        return;
+      }
+      case 'setting': {
+        const key = settingsSectionFor(hit.id, ownerOn());
+        setEnter('settings');
+        view = { screen: 'settings' };
+        render();
+        const el = key ? document.getElementById(settingsSectionId(key)) : null;
+        if (el) {
+          el.scrollIntoView({ block: 'start' });
+          el.focus({ preventScroll: true });
+        } else window.scrollTo(0, 0);
+        return;
+      }
+      case 'food': {
+        const q = hit.keywords[0] ?? '';
+        setEnter('fuel');
+        const seq = ++navSeq;
+        void fuel.open().then(() => {
+          if (seq !== navSeq || view.screen !== 'library') return; // another tab was chosen
+          view = { screen: 'fuel' };
+          render();
+          window.scrollTo(0, 0);
+          fuel.openLogSearch(q);
+        });
+        return;
+      }
+      case 'workout': {
+        const date = hit.date;
+        if (!date) return;
+        setEnter('calendar');
+        openCalendar();
+        if (view.screen === 'calendar') {
+          view = { ...view, month: date.slice(0, 7), date };
+          render();
+        }
+        return;
+      }
+      case 'meal': {
+        const date = hit.date ?? hit.id;
+        setEnter('fuel');
+        const seq = ++navSeq;
+        void fuel.openDay(date).then(() => {
+          if (seq !== navSeq || view.screen !== 'library') return; // another tab was chosen
+          view = { screen: 'fuel' };
+          render();
+          window.scrollTo(0, 0);
+        });
+        return;
+      }
+      case 'chat': {
+        // Re-applied after every Coach render while it lasts (a late mic refresh rebuilds the tab).
+        pendingReveal = { id: hit.id, until: now() + REVEAL_MS };
+        void openCoachTab(tabPhase).then(() => applyPendingReveal());
+        return;
+      }
+    }
+  }
+
+  /** Search → a chat message: outline it again if the Coach tab was rebuilt meanwhile. */
+  function applyPendingReveal(): void {
+    if (!pendingReveal) return;
+    if (view.screen !== 'coach' || now() > pendingReveal.until) {
+      pendingReveal = null;
+      return;
+    }
+    const coachRoot = coachTabEl;
+    if (coachRoot?.isConnected && !revealMessage(coachRoot, pendingReveal.id)) pendingReveal = null;
+  }
+
+  function libraryView(): HTMLElement {
+    if (!lib) {
+      // Lost its state (e.g. a restore re-render): back to Today rather than an empty screen.
+      view = { screen: 'today', upNextDayId: null, stats: null };
+      queueMicrotask(goToday);
+      return todayScreen(null, null);
+    }
+    return lib.handle.el;
+  }
+
+  function openExerciseDetail(id: string): void {
+    if (view.screen === 'session') return;
+    const back = view;
+    view = { screen: 'exerciseDetail', exerciseId: id, back, history: undefined };
+    render();
+    window.scrollTo(0, 0);
+    void loadDetailHistory(id);
+  }
+
+  async function loadDetailHistory(id: string): Promise<void> {
+    let history: DetailHistory | null = null;
+    try {
+      const t = now();
+      const sessions = await db.sessions.toArray();
+      const finished = sessions.filter((x) => x.endedAt !== undefined);
+      const sets = await setsForSessions(
+        db,
+        finished.map((x) => x.sessionId),
+      );
+      history = detailHistoryOf(exerciseHistory(sets, id, t, 520));
+    } catch (err) {
+      logDbError(err);
+    }
+    if (view.screen !== 'exerciseDetail' || view.exerciseId !== id) return;
+    view = { ...view, history };
+    render();
+  }
+
+  function exerciseDetailView(v: Extract<View, { screen: 'exerciseDetail' }>): HTMLElement {
+    const id = v.exerciseId;
+    const plan = planDays().flatMap((d) =>
+      d.exercises
+        .filter((x) => x.exerciseId === id)
+        .map((x) => ({ day: d.name, sets: x.sets, targetReps: x.targetReps })),
+    );
+    return exerciseDetailScreen(
+      {
+        exerciseId: id,
+        name: exerciseName(id),
+        tracking: trackingOf(id),
+        content: howToContent(id),
+        equipment: equipmentGroupLabel(exerciseById(id)?.equipment ?? null),
+        needs: missingKitLabels(id, gym),
+        camera: cameraInfo(id),
+        plan,
+        history: v.history ?? null,
+        unit,
+        backLabel: v.back.screen === 'library' ? 'Library' : backLabelFor(v.back),
+      },
+      {
+        onBack: () => {
+          if (view.screen !== 'exerciseDetail') return;
+          const back = view.back;
+          // A preview left while loading never finishes: open it again.
+          if (back.screen === 'preview' && back.loading) {
+            void openPreview(back.planDay);
+            return;
+          }
+          view = back;
+          render();
+        },
+        onBadge: (kind, exId, opener) => openBadge(kind, exId, opener),
+        onHowTo: (opener) => openHowTo({ exerciseId: id, tracking: trackingOf(id) }, opener),
+        onMyGym: () => goRoute('settings/myGym'),
+        onCameraInfo: (opener) => openCameraSheet(id, opener),
+        onHistory: () => {
+          setEnter('calendar');
+          openCalendar();
+          if (view.screen === 'calendar') {
+            view = { ...view, exerciseId: id };
+            render();
+          }
+        },
+      },
+    );
+  }
+
   let correction: { key: string; handle: LastSetCorrectionHandle } | null = null;
 
   // Per-day caches, loaded on the preview screen and kept for the session.
@@ -982,6 +1454,15 @@ export function mountApp(root: HTMLElement): void {
       photosView = null;
     }
     if (view.screen !== 'intake') intakeEl = null;
+    // M13c: leaving the Library (and a detail opened from it) drops its state.
+    if (
+      lib &&
+      view.screen !== 'library' &&
+      !(view.screen === 'exerciseDetail' && view.back.screen === 'library')
+    ) {
+      if (lib.timer) clearTimeout(lib.timer);
+      lib = null;
+    }
     // M13: leaving the Calendar drops an open share preview (and its image URL).
     if (view.screen !== 'calendar' && sharePrev) {
       if (sharePrev.url) URL.revokeObjectURL(sharePrev.url);
@@ -1004,7 +1485,9 @@ export function mountApp(root: HTMLElement): void {
       for (const el of [...root.children]) if (!overlays.includes(el as HTMLElement)) el.remove();
       root.prepend(screen);
     } else {
-      root.replaceChildren(screen);
+      // The Library hands back the same element: re-inserting it would drop the field's focus.
+      if (!(root.childElementCount === 1 && root.firstElementChild === screen))
+        root.replaceChildren(screen);
       if (camera) root.append(camera.el);
     }
     if (tour && tour.el.parentNode !== root) root.append(tour.el);
@@ -1017,6 +1500,7 @@ export function mountApp(root: HTMLElement): void {
       ensureBody3d();
       placeBody3d();
     }
+    if (pendingReveal && view.screen === 'coach') applyPendingReveal();
     // Settings shows "Restore undone." inline: the notice would say it twice.
     if (view.screen === 'settings' && toast?.dataset.notice === 'restore') removeToast();
     placeToast();
@@ -1079,6 +1563,10 @@ export function mountApp(root: HTMLElement): void {
         return previewScreen(v, v.loading);
       case 'session':
         return sessionScreen(v.s, v.sheet);
+      case 'library':
+        return libraryView();
+      case 'exerciseDetail':
+        return exerciseDetailView(v);
     }
   }
 
@@ -1107,6 +1595,9 @@ export function mountApp(root: HTMLElement): void {
       case 'todos':
       case 'todoTopic':
         return v.from;
+      case 'library':
+      case 'exerciseDetail':
+        return tabOf(v.back);
       default:
         return null;
     }
@@ -1303,6 +1794,7 @@ export function mountApp(root: HTMLElement): void {
         onStart: (day) => void openPreview(day),
         onOpenDay: (day) => void openPreview(day),
         onTab: (tab) => goTab(tab),
+        onSearch: (opener) => openLibrary(opener),
         onNoticesToggle: (open) => {
           noticesOpen = open;
         },
@@ -2120,6 +2612,30 @@ export function mountApp(root: HTMLElement): void {
       // A revised focus block replaces the one waiting: only the newest card keeps Apply.
       if (msg.card?.kind === 'focusBlock') expireWaitingBlocks();
       const saved = await postMessage(msg);
+      // M13c: the coach couldn't help → the Claude explain card (shown, never sent; once a day).
+      const offerNow = claudeOfferFor({
+        outcome: claudeOutcomeOf(
+          {
+            reply: r.reply,
+            safety: r.safety,
+            source: chip ? 'chip' : r.source,
+            ...(r.note ? { note: r.note } : {}),
+            ...(p ? { proposal: p } : {}),
+            ...(r.foods ? { foods: r.foods } : {}),
+            ...(r.focusBlock ? { focusBlock: r.focusBlock } : {}),
+          },
+          { couldntDo: [COULDNT_DO] },
+        ),
+        claudeWanted: coachSettings.claudeWanted,
+        offer: claudeOffer,
+        today: todayDate(),
+        phase,
+      });
+      if (offerNow.show && saved.id !== undefined) {
+        claudeOfferMsgId = saved.id;
+        claudeOffer = claudeOfferShown(todayDate());
+        void db.settings.put({ key: 'claudeOffer', value: claudeOffer }).catch(logDbError);
+      }
       if (p && saved.id !== undefined && msg.card?.kind !== 'redFlag') {
         liveProposals.set(saved.id, { proposal: p, source: r.source, intent: r.intent });
         trainerLog(r.intent, p.action, 'shown', r.source);
@@ -2367,6 +2883,7 @@ export function mountApp(root: HTMLElement): void {
       // The Coach tab, and the Pause sheet (paused: no set is running). Never during a set.
       allowTyping: true,
       inWorkout: sheet,
+      ...(claudeOfferMsgId !== null ? { claudeOffer: { messageId: claudeOfferMsgId } } : {}),
       focusBlocks: blocks,
       exerciseName,
       isFocusExercise: (exId, block) => isFocusExercise(exId, block.group, trainerCatalog),
@@ -2412,6 +2929,17 @@ export function mountApp(root: HTMLElement): void {
       onLearn: (learnId, opener) => {
         const card = findLearnCard(LEARN_CARDS, learnId);
         if (card) openLearnCard(card, opener);
+      },
+      // M13c: the Claude card's two answers. Nothing is sent: the key comes in a later release.
+      onClaudeWanted: () => {
+        claudeOfferMsgId = null;
+        coachSettings = { ...coachSettings, claudeWanted: 'yes' };
+        void patchCoachRow({ claudeWanted: 'yes' }).catch(logDbError);
+        renderCoachViews();
+      },
+      onClaudeDismiss: () => {
+        claudeOfferMsgId = null;
+        renderCoachViews();
       },
       onEndWorkout: () => {
         closeChatSheet();
@@ -2529,6 +3057,9 @@ export function mountApp(root: HTMLElement): void {
         ...(sr === 'mic' || sr === 'always' || sr === 'off' ? { speakReplies: sr } : {}),
         ...(typeof o.appleCardReasons === 'boolean'
           ? { appleCardReasons: o.appleCardReasons }
+          : {}),
+        ...(o.claudeWanted === 'yes' || o.claudeWanted === 'later' || o.claudeWanted === 'no'
+          ? { claudeWanted: o.claudeWanted }
           : {}),
       };
     } catch (err) {
@@ -3673,6 +4204,7 @@ export function mountApp(root: HTMLElement): void {
           render();
         },
         onShare: () => void shareCalendarMonth(),
+        onSearch: (opener) => openLibrary(opener),
         onRetry: () => {
           if (view.screen !== 'calendar') return;
           view = { ...view, data: null };
@@ -4154,6 +4686,11 @@ export function mountApp(root: HTMLElement): void {
         },
         onApply: (id, a) => applyIntakeChange(id, a),
         onDone: (a) => void intakeDone(a, v.from),
+        // M13c: Why? on "Add abs to your plan?".
+        onLearn: (learnId, opener) => {
+          const card = findLearnCard(LEARN_CARDS, learnId);
+          if (card) openLearnCard(card, opener);
+        },
         onSkip: () => {
           if (v.from === 'first')
             void db.settings.put({ key: INTAKE_SKIPPED_KEY, value: now() }).catch(logDbError);
@@ -4479,6 +5016,7 @@ export function mountApp(root: HTMLElement): void {
     return renderSettings(
       {
         accent,
+        background,
         spokenCount,
         coachTips,
         handsFree,
@@ -4490,7 +5028,7 @@ export function mountApp(root: HTMLElement): void {
             coachVoice = { ...v };
             voice.configure(coachVoice);
             void setCoachVoice(db, coachVoice).catch(logDbError);
-            render();
+            // No render(): the picker redraws itself, and a full Settings rebuild would fold the voice list (M13c task 10).
           },
           onTest: (v) => {
             voice.unlock(); // inside the tap (iOS)
@@ -4524,6 +5062,14 @@ export function mountApp(root: HTMLElement): void {
         version: versionLine(ownerOn()),
       },
       {
+        onSearch: (opener) => openLibrary(opener),
+        onBackground: (style) => {
+          background = style;
+          applyBackground(style);
+          mirrorBackground(style);
+          void db.settings.put({ key: 'background', value: style }).catch(logDbError);
+          render();
+        },
         onAccent: (a) => {
           accent = a;
           applyAccent(a); // at once, before the save
@@ -4693,6 +5239,9 @@ export function mountApp(root: HTMLElement): void {
       accent = await getAccent(db);
       applyAccent(accent);
       mirrorAccent(accent);
+      background = backgroundStyle((await db.settings.get('background'))?.value);
+      applyBackground(background);
+      mirrorBackground(background);
       coachVoice = await getCoachVoice(db);
       voice.configure(coachVoice);
     } catch (err) {
@@ -4827,12 +5376,16 @@ export function mountApp(root: HTMLElement): void {
         onUndoAdjust: () => void undoNewest('banner'),
         onSeeGymSwap: (id) => seeGymSwap('preview', id),
         onKeepExercise: (id) => keepGymExercise(id),
+        // M13c: badges open their sheets before a workout; a row opens the exercise detail.
+        onBadge: (kind, id, opener) => openBadge(kind, id, opener),
+        onOpenExercise: (id) => openExerciseDetail(id),
       },
     );
   }
 
   function startDay(day: ProgramDay, adjust: ProposalAction | null = null): void {
     voice.unlock(); // must happen inside the tap
+    closeCameraInfo(); // M13c: a badge sheet never stays over a workout
     const t = now();
     liftsForWarmups ??= warmupLifts(catalogExercises());
     const s = startSession(day, crypto.randomUUID(), t, {
@@ -4979,7 +5532,10 @@ export function mountApp(root: HTMLElement): void {
     }
     logToDevLog(prev, s, e);
     // A set starts: an open learn card (effort "Why?") never stays over it.
-    if (s.phase === 'exercise' && !s.paused && shouldSpeakFocusCue(prev, s)) closeLearnCard();
+    if (s.phase === 'exercise' && !s.paused && shouldSpeakFocusCue(prev, s)) {
+      closeLearnCard();
+      closeCameraInfo();
+    }
     if (prev.phase !== 'rest' && s.phase === 'rest') lastCueElapsedMs = 0;
     if (s.phase === 'summary' && prev.phase !== 'summary') onFinished(s);
     syncCamera(); // before render: the rest screen leaves the tip/Fix to the camera's rest panel
@@ -5634,6 +6190,14 @@ export function mountApp(root: HTMLElement): void {
   }
 
   /** A sync copy of the accent for index.html's pre-paint script (IndexedDB stays the source). */
+  function mirrorBackground(b: BackgroundStyle): void {
+    try {
+      localStorage.setItem('gc-background', b);
+    } catch {
+      // private mode / storage off: the style still applies once IndexedDB loads
+    }
+  }
+
   function mirrorAccent(a: Accent): void {
     try {
       localStorage.setItem('gc-accent', a);
@@ -5682,6 +6246,25 @@ export function mountApp(root: HTMLElement): void {
       applyAccent(a);
       mirrorAccent(a); // keeps the pre-paint copy in sync (e.g. after clearing site data)
       if (view.screen === 'settings') render();
+    })
+    .catch(logDbError);
+  // M13c: the background style (Moving glow by default) and the glow's pause watcher.
+  watchAmbient();
+  void db.settings
+    .get('background')
+    .then((row) => {
+      background = backgroundStyle(row?.value);
+      applyBackground(background);
+      mirrorBackground(background);
+      if (view.screen === 'settings') render();
+    })
+    .catch(logDbError);
+  void db.settings
+    .get('claudeOffer')
+    .then((row) => {
+      const v = row?.value as ClaudeOffer | undefined;
+      if (v && typeof v.lastShownDate === 'string')
+        claudeOffer = { lastShownDate: v.lastShownDate };
     })
     .catch(logDbError);
   void getCoachVoice(db)

@@ -43,6 +43,18 @@ export const DEMO_IDS: readonly string[] = [
   'Dumbbell_Step_Ups',
   'Leg_Extensions',
   'Dumbbell_Seated_One-Leg_Calf_Raise',
+  // M13c abs, floor and bench
+  'Crunches',
+  'Reverse_Crunch',
+  'Flat_Bench_Lying_Leg_Raise',
+  'Dead_Bug',
+  'Air_Bike',
+  'Russian_Twist',
+  // M13c abs, standing, cable and hanging
+  'Dumbbell_Side_Bend',
+  'Cable_Crunch',
+  'Pallof_Press',
+  'Hanging_Leg_Raise',
 ];
 
 const IDS = new Set(DEMO_IDS);

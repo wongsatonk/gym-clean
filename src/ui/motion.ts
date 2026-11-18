@@ -238,3 +238,89 @@ export function ringFill(el: SVGElement | HTMLElement, pct: number): Stop {
     easing: EASE.standard,
   });
 }
+
+// ---- The moving glow (M13c task 9) ----
+// The glow itself is pure CSS (styles.css "Moving glow"): one fixed ::before layer per
+// non-workout screen root, moved by a transform/opacity keyframe on the compositor. This is the
+// JS side: `html[data-ambient='paused']` sets its animation-play-state to paused. Reasons stack,
+// so the page coming back into view never restarts it while a sheet is still open.
+
+/**
+ * What covers the screen (the glow pauses under it): any modal sheet (role=dialog +
+ * aria-modal: How-to, learn card, coach / Fuel sheets, pause, tour…), the full-page overlays
+ * (camera, exercise list, notes) and every motion-off screen. Hidden elements don't count.
+ */
+export const AMBIENT_COVER = ["[aria-modal='true']", '.overlay', ...MOTION_OFF.split(/,\s*/)]
+  .map((s) => `${s.replace(/"/g, "'")}:not([hidden])`)
+  .join(', ');
+
+const ambientReasons = new WeakMap<object, Set<string>>();
+
+function htmlRoot(): HTMLElement | undefined {
+  return (globalThis as { document?: Document }).document?.documentElement ?? undefined;
+}
+
+/**
+ * Pause (`on` true) or release the moving glow for one `reason` ('hidden', 'covered', or the
+ * caller's own). It stays paused while any reason holds. No-op without a DOM.
+ */
+export function pauseAmbient(on: boolean, reason = 'app', root = htmlRoot()): void {
+  if (!root) return;
+  const set = ambientReasons.get(root) ?? new Set<string>();
+  ambientReasons.set(root, set);
+  if (on) set.add(reason);
+  else set.delete(reason);
+  if (set.size > 0) root.setAttribute('data-ambient', 'paused');
+  else root.removeAttribute('data-ambient');
+}
+
+/** Is the glow paused for any reason? */
+export function ambientPaused(root = htmlRoot()): boolean {
+  return root ? (ambientReasons.get(root)?.size ?? 0) > 0 : false;
+}
+
+/**
+ * Call once at start-up: pauses the glow while the page is hidden (`visibilitychange`) and while
+ * anything in AMBIENT_COVER is in the document (one MutationObserver on <body>: nodes added or
+ * removed, `hidden` / `aria-modal` flipped; checks are
+ * batched to one querySelector per task). Returns a stop function. No-op without a DOM.
+ */
+export function watchAmbient(
+  doc: Document | undefined = (globalThis as { document?: Document }).document,
+): Stop {
+  if (!doc?.documentElement) return noop;
+  const root = doc.documentElement;
+  const onVisibility = () => pauseAmbient(doc.hidden, 'hidden', root);
+  const sync = () => pauseAmbient(doc.querySelector(AMBIENT_COVER) !== null, 'covered', root);
+  let queued = false;
+  const schedule = () => {
+    if (queued) return;
+    queued = true;
+    queueMicrotask(() => {
+      queued = false;
+      if (live) sync();
+    });
+  };
+  let live = true;
+  doc.addEventListener('visibilitychange', onVisibility);
+  const MO = (globalThis as { MutationObserver?: typeof MutationObserver }).MutationObserver;
+  const observer = MO && doc.body ? new MO(schedule) : null;
+  if (observer && doc.body)
+    observer.observe(doc.body, {
+      childList: true,
+      subtree: true,
+      // A sheet kept in the DOM and shown/hidden by attribute.
+      attributes: true,
+      attributeFilter: ['hidden', 'aria-modal'],
+    });
+  onVisibility();
+  sync();
+  return () => {
+    if (!live) return;
+    live = false;
+    doc.removeEventListener('visibilitychange', onVisibility);
+    observer?.disconnect();
+    pauseAmbient(false, 'hidden', root);
+    pauseAmbient(false, 'covered', root);
+  };
+}

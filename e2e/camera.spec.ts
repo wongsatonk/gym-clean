@@ -148,7 +148,7 @@ const REMIND_LINE = "Tap Next arm when you're ready.";
 
 type RowWindow = Window & {
   __said: { text: string; at: number }[];
-  __clip: 'right' | 'left';
+  __clip: string;
   __noPerson: boolean;
   __playing: boolean;
   __clipDone: number;
@@ -156,14 +156,26 @@ type RowWindow = Window & {
   __clipDoneAt: number;
   /** Wall-clock time each count was first shown on the camera (page side, no test latency). */
   __repsAt: Record<number, number>;
-  __playClip: (clip: 'right' | 'left') => void;
+  __playClip: (clip: string) => void;
 };
 
 async function installRowPlayer(page: Page): Promise<void> {
-  await page.addInitScript(() => {
+  await installClipPlayer(page, ROW_CLIPS, 'right');
+}
+
+/**
+ * Speech, wake lock and a fixture player in place of src/pose/landmarker.ts (see above), with
+ * `clips` (name → fixture URL) and `first` the clip held before the first __playClip.
+ */
+async function installClipPlayer(
+  page: Page,
+  clips: Record<string, string>,
+  first: string,
+): Promise<void> {
+  await page.addInitScript((firstClip: string) => {
     const w = window as unknown as RowWindow;
     w.__said = [];
-    w.__clip = 'right';
+    w.__clip = firstClip;
     w.__noPerson = false;
     w.__playing = false;
     w.__clipDone = 0;
@@ -219,16 +231,15 @@ async function installRowPlayer(page: Page): Promise<void> {
         }),
       },
     });
-  });
+  }, first);
   await page.route(/\/src\/pose\/landmarker\.ts/, (route) =>
     route.fulfill({
       contentType: 'application/javascript',
       body: `
         export async function createPoseTracker() {
-          const clips = {
-            right: await (await fetch(${JSON.stringify(ROW_CLIPS.right)})).json(),
-            left: await (await fetch(${JSON.stringify(ROW_CLIPS.left)})).json(),
-          };
+          const urls = ${JSON.stringify(clips)};
+          const clips = {};
+          for (const [k, u] of Object.entries(urls)) clips[k] = await (await fetch(u)).json();
           let idx = 0;
           return {
             delegate: 'CPU',
@@ -279,7 +290,7 @@ function rowSetRows(page: Page): Promise<RowSetRow[]> {
 
 const said = (page: Page) =>
   page.evaluate(() => (window as unknown as RowWindow).__said.map((s) => s.text));
-const playClip = (page: Page, clip: 'right' | 'left') =>
+const playClip = (page: Page, clip: string) =>
   page.evaluate((c) => (window as unknown as RowWindow).__playClip(c), clip);
 const setNoPerson = (page: Page, on: boolean) =>
   page.evaluate((v) => ((window as unknown as RowWindow).__noPerson = v), on);
@@ -288,6 +299,9 @@ async function clipDone(page: Page, n: number): Promise<void> {
   await expect
     .poll(() => page.evaluate(() => (window as unknown as RowWindow).__clipDone), {
       timeout: 60_000,
+      // Back to 0 after a pass = the page was reloaded mid-test: the dev server full-reloads every
+      // open page when a source file under src/ changes (another agent editing during the run).
+      message: `clip #${n} played to its end (0 after an earlier pass = page reloaded mid-test)`,
     })
     .toBe(n);
 }
@@ -481,6 +495,137 @@ test.describe('one-arm row on the camera (M13b)', () => {
     });
     // The reminder belongs to the first side only.
     expect((await said(page)).filter((t) => t === REMIND_LINE)).toHaveLength(1);
+    expect(w.errors).toEqual([]);
+    expect(w.thirdParty).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// M13c task 19: Practice (SPEC M13c goal 4). Day preview → Camera badge → camera sheet → Practice
+// opens the camera with the exercise's rule: it counts and speaks reps, saves nothing (no session,
+// no set row, no developer-log session — owner mode is on here, so the dev log would record a
+// workout set) and never runs hands-free (the setting is on by default: no auto-stop, no spoken
+// "Set done."). The same fixture player plays the synthetic curl clip (3 reps, 1 partial).
+
+const CURL_CLIP = '/fixtures/landmarks/curl/synthetic-01__reps-3__partials-1.json';
+const CURL_ID = 'Dumbbell_Bicep_Curl';
+
+/** Every row of an IndexedDB store of the app's database. */
+function storeRows(page: Page, store: string): Promise<unknown[]> {
+  return page.evaluate(
+    (name) =>
+      new Promise<unknown[]>((resolve, reject) => {
+        const open = indexedDB.open('gym-clean');
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const req = open.result.transaction(name).objectStore(name).getAll();
+          req.onsuccess = () => {
+            open.result.close();
+            resolve(req.result as unknown[]);
+          };
+          req.onerror = () => reject(req.error);
+        };
+      }),
+    store,
+  );
+}
+
+const SAVED_STORES = ['sessions', 'sets', 'devlogSessions', 'devlogSets', 'devlogChunks'];
+const savedCounts = async (page: Page) =>
+  Object.fromEntries(
+    await Promise.all(SAVED_STORES.map(async (s) => [s, (await storeRows(page, s)).length])),
+  ) as Record<string, number>;
+
+/**
+ * Pull A preview → the curl row's Camera badge → Practice, then waits for a tracked person.
+ * Retries a fake capture device that fails to start on a loaded machine (see openCameraSheet).
+ */
+async function openPractice(page: Page): Promise<Locator> {
+  const cam = page.getByRole('dialog', { name: 'Camera' });
+  const sheet = page.locator(`[data-camera-sheet="${CURL_ID}"]`);
+  for (let attempt = 1; ; attempt++) {
+    const badge = page.locator(`[data-badges="${CURL_ID}"] [data-badge-open=camera]`);
+    await expect(badge).toHaveAccessibleName('Camera set-up for Dumbbell Bicep Curl');
+    await badge.click();
+    await expect(sheet).toBeVisible();
+    await expect(sheet.locator('[data-camera-title]')).toHaveText('Camera: Dumbbell Bicep Curl');
+    const practice = sheet.locator('[data-camera-practice]');
+    await expect(practice).toHaveText(/Practice/);
+    await practice.click();
+    await expect(sheet).toHaveCount(0);
+    await expect(cam).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          (await cam.getAttribute('data-error')) ?? (await cam.getAttribute('data-delegate')),
+        { timeout: 30_000 },
+      )
+      .not.toBeNull();
+    const error = await cam.getAttribute('data-error');
+    if (error === null || !/NotReadableError|AbortError/.test(error) || attempt === 3) break;
+    await cam.locator('.cam-top').getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(cam).toHaveCount(0);
+  }
+  await expect(cam).toHaveAttribute('data-person', 'true', { timeout: 15_000 });
+  return cam;
+}
+
+test.describe('Practice from the day preview (M13c)', () => {
+  test.use({ owner: 'on' });
+
+  test('Camera badge → Practice counts and speaks the reps, saves nothing, never hands-free', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const w = watchRow(page);
+    await installClipPlayer(page, { curl: CURL_CLIP }, 'curl');
+    await page.goto('/');
+    await page.getByRole('button', { name: /Pull A/ }).click();
+    const start = page.getByRole('button', { name: 'Start workout' });
+    await expect(start).toBeVisible();
+    const before = await savedCounts(page);
+
+    const cam = await openPractice(page);
+    await expect(cam.locator('.cam-title')).toHaveText('Practice: Dumbbell Bicep Curl');
+    // Practice says nothing is saved and has no Set done (there is no set to end).
+    await expect(cam.locator('[data-cam-note]')).toHaveText('Practice: nothing is saved.');
+    await expect(cam.getByRole('button', { name: /Set done/ })).toHaveCount(0);
+    await expect(repNum(cam)).toHaveAttribute('data-reps', '0');
+
+    // The clip: 3 reps counted on screen and spoken, word by word.
+    await page.waitForTimeout(800);
+    await playClip(page, 'curl');
+    await clipDone(page, 1);
+    await expect(repNum(cam)).toHaveAttribute('data-reps', '3');
+    await expect
+      .poll(async () => (await said(page)).filter((t) => /^(One|Two|Three|Four)$/.test(t)))
+      .toEqual(['One', 'Two', 'Three']);
+
+    // Standing still well past the hands-free still stop (6 s) and its Undo window: no auto stop,
+    // no rest, nothing proposed or spoken about a finished set.
+    await page.waitForTimeout(10_000);
+    const texts = await said(page);
+    expect(
+      texts.some((t) => /^Set done\b/.test(t)),
+      texts.join(' | '),
+    ).toBe(false);
+    expect(texts.some((t) => /on hold/i.test(t))).toBe(false);
+    await expect(cam.locator('[data-auto-stop]')).toHaveCount(0);
+    await expect(cam.locator('[data-cam-rest]')).toHaveCount(0);
+    await expect(repNum(cam)).toHaveAttribute('data-reps', '3');
+    expect(await savedCounts(page)).toEqual(before);
+
+    // Close: back on the preview, camera off, still nothing saved and no workout started.
+    await cam.locator('.cam-top').getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(cam).toHaveCount(0);
+    await expect(start).toBeVisible();
+    const live = await page.evaluate(() =>
+      [...document.querySelectorAll('video')].some((v) => v.srcObject instanceof MediaStream),
+    );
+    expect(live).toBe(false);
+    await page.waitForTimeout(500); // any late write would land by now
+    expect(await savedCounts(page)).toEqual(before);
+    expect(before).toEqual(Object.fromEntries(SAVED_STORES.map((s) => [s, 0])));
     expect(w.errors).toEqual([]);
     expect(w.thirdParty).toEqual([]);
   });

@@ -9,6 +9,8 @@
 //
 // M12 1b task 32: "Cardio this week: 95 min" (core `cardioLine`) on the week score card
 // (`[data-cardio]`), hidden when `cardioMinutes` is null (no Health). Display only.
+// M13c (optional): Search next to the title (`[data-search-open]`, ../searchButton.ts) when
+// `onSearch` is set.
 import './calendar.css';
 import { cardioLine } from '../../core/health/cardio';
 import { pctOf, scoreLine } from '../../core/progress/recap';
@@ -17,6 +19,7 @@ import type { DayCompletion, DayStatus, FocusGroup, PeriodScore } from '../../co
 import { h } from '../dom';
 import { icon } from '../icons';
 import { countUp } from '../motion';
+import { pageHead, type OnSearch } from '../searchButton';
 import { moodClass } from '../tokens';
 
 export type CalendarProps = {
@@ -60,6 +63,8 @@ export type CalendarActions = {
   onShare: () => void;
   /** Error card's retry. */
   onRetry?: (() => void) | undefined;
+  /** M13c: Search next to the title (opens the Library, field focused). Omitted → no button. */
+  onSearch?: OnSearch | undefined;
 };
 
 // ---------- pure helpers ----------
@@ -471,7 +476,7 @@ export function calendarScreen(props: CalendarProps, actions: CalendarActions): 
       'data-screen': 'calendar',
       'data-month': props.month,
     },
-    h('h1', { class: 'page-title' }, 'Calendar'),
+    pageHead('Calendar', actions.onSearch),
     nav,
     ...body,
     props.tabs ?? null,

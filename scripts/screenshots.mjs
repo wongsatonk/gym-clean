@@ -46,6 +46,14 @@
 //                                            #   History), camera row (fixture player: right count,
 //                                            #   top strip, left), 1.15.1 tour + K2 to-do:
 //                                            #   m13b-verify-*.png
+//   node scripts/screenshots.mjs m13c [main|personal|coach|intake|reduced]
+//                                            # M13c verify: Today glow + pause wiring, Library
+//                                            #   groupings, search abs/voice, detail, 3D demo,
+//                                            #   voice row, Background, preview badges, Camera
+//                                            #   sheet, learning card, Exercise flat / Rest black;
+//                                            #   personal search + jumps; Also add abs, Claude
+//                                            #   card, Practice, Fuel photo buttons; intake abs;
+//                                            #   reduced motion: m13c-verify-*.png
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -4524,6 +4532,772 @@ async function m13b(browser, only) {
   if (!only || only === 'tour') await m13bTour(browser);
 }
 
+// ------------------------------------------------- M13c verify (task 21): Library, abs, glow
+// The wired app at 390×844 (DPR 2), clock on Wed 18 Nov 2026 18:00, fresh DB with the e2e
+// defaults (intake skipped, no warm-ups), speech mocked with three English voices, pose model
+// replaced by the synthetic curl fixture player (Practice), a fake food classifier (Fuel photo).
+// Every request off localhost is aborted and recorded. docs/screenshots/m13c-verify-*.png.
+const M13C_AT = new Date(2026, 10, 18, 18, 0).getTime();
+const M13C_CURL = '/fixtures/landmarks/curl/synthetic-01__reps-3__partials-1.json';
+const M13C_VOICES = [
+  { name: 'Samantha', lang: 'en-US', default: true, localService: true },
+  { name: 'Daniel', lang: 'en-GB', default: false, localService: true },
+  { name: 'Fred', lang: 'en-US', default: false, localService: true },
+];
+
+async function m13cPhone(browser, { fresh = false, reducedMotion = 'no-preference', owner = false } = {}) {
+  const release = JSON.parse(execFileSync('cat', ['package.json'], { encoding: 'utf8' })).version;
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    ignoreHTTPSErrors: true,
+    permissions: ['camera'],
+    reducedMotion,
+  });
+  const offsite = [];
+  await ctx.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'localhost' || url.protocol === 'data:' || url.protocol === 'blob:')
+      return route.continue();
+    offsite.push(url.href);
+    return route.abort();
+  });
+  if (!fresh)
+    await ctx.addInitScript((o) => {
+      const proto = IDBFactory.prototype;
+      const open = proto.open;
+      let isNew = false;
+      proto.open = function (name, version) {
+        const req = version === undefined ? open.call(this, name) : open.call(this, name, version);
+        if (name !== 'gym-clean') return req;
+        req.addEventListener('upgradeneeded', (e) => { if (e.oldVersion === 0) isNew = true; });
+        req.addEventListener('success', () => {
+          if (!isNew) return;
+          const db = req.result;
+          if (!db.objectStoreNames.contains('settings')) return;
+          isNew = false;
+          const s = db.transaction('settings', 'readwrite').objectStore('settings');
+          s.put({ key: 'intakeSkipped', value: Date.now() });
+          s.put({ key: 'permissionCatchUp', value: o.release });
+          s.put({ key: 'trainerKit', value: { warmups: 'off' } });
+          if (o.owner) s.put({ key: 'ownerMode', value: { on: true, setAt: Date.now(), by: 'existing' } });
+        });
+        return req;
+      };
+    }, { release, owner });
+  await ctx.addInitScript((voices) => {
+    window.__spoken = [];
+    window.__fakeFoodResult = [];
+    window.__gymCleanFakeFoodClassifier = { classify: () => window.__fakeFoodResult };
+    class FakeUtterance extends EventTarget {
+      constructor(text) { super(); this.text = text; this.lang = ''; this.rate = 1; this.volume = 1; this.voice = null; this.pitch = 1; }
+    }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: FakeUtterance, configurable: true });
+    const synth = new EventTarget();
+    Object.assign(synth, {
+      speak: (u) => {
+        if (u.text && u.volume !== 0) window.__spoken.push(u.text);
+        setTimeout(() => u.dispatchEvent(new Event('end')), 300);
+      },
+      cancel: () => {}, pause: () => {}, resume: () => {}, getVoices: () => voices,
+      speaking: false, pending: false, paused: false,
+    });
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: synth });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => {}, release: async () => {} }) },
+    });
+    for (const k of ['share', 'canShare'])
+      Object.defineProperty(navigator, k, { configurable: true, value: undefined });
+  }, M13C_VOICES);
+  // Practice: the synthetic curl fixture (3 reps, 1 partial) played once when __playing is set.
+  await ctx.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+        export async function createPoseTracker() {
+          const frames = await (await fetch(${JSON.stringify(M13C_CURL)})).json();
+          let idx = 0;
+          window.__clipDone = 0;
+          return {
+            delegate: 'CPU',
+            detect(_v, t) {
+              if (!window.__playing) { idx = 0; return { ...frames[0], t }; }
+              const f = frames[idx++];
+              if (idx >= frames.length) { window.__playing = false; window.__clipDone++; idx = 0; }
+              return { ...f, t };
+            },
+            close() {},
+          };
+        }`,
+    }),
+  );
+  const page = await ctx.newPage();
+  const log = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => log.push(`pageerror: ${e.message}`));
+  m13cPage = page;
+  await page.clock.install({ time: M13C_AT });
+  await page.goto(BASE + '/');
+  if (!fresh) await page.locator('[data-cal]').first().waitFor();
+  return { ctx, page, log, offsite };
+}
+
+/** Smallest text, buttons/inputs under 56px tall, text under 20px (visible, in the viewport). */
+async function m13cSizes(page, scope = 'body') {
+  return page.evaluate((scope) => {
+    const root = document.querySelector(scope) ?? document.body;
+    const vis = (e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';
+    const inView = (e) => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
+    let minFont = Infinity;
+    let minFontText = '';
+    const smallText = [];
+    for (const el of root.querySelectorAll('*')) {
+      if (el.closest('svg') || !vis(el) || !inView(el)) continue;
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      if (!own) continue;
+      const fs = parseFloat(getComputedStyle(el).fontSize);
+      if (fs < minFont) { minFont = fs; minFontText = el.textContent.trim().slice(0, 40); }
+      if (fs < 20) smallText.push(`"${el.textContent.trim().replace(/\s+/g, ' ').slice(0, 30)}" ${fs}px`);
+    }
+    const smallTargets = [...root.querySelectorAll('button, [role=button], a[href], input:not([type=file]), select, [role=switch]')]
+      .filter((e) => vis(e) && inView(e))
+      .filter((e) => e.getBoundingClientRect().height < 56)
+      .map((e) => `${(e.getAttribute('aria-label') ?? e.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 30)} ${Math.round(e.getBoundingClientRect().width)}x${Math.round(e.getBoundingClientRect().height * 10) / 10}`);
+    return { minFont, minFontText, smallText: smallText.slice(0, 12), smallTargets: smallTargets.slice(0, 12) };
+  }, scope);
+}
+
+async function m13cShot(p, name, extra = {}, opts = {}) {
+  await p.page.waitForTimeout(opts.wait ?? 450);
+  const sizes = await m13cSizes(p.page, opts.scope);
+  await shot(p.page, p.log, `m13c-verify-${name}`, { sizes, ...extra });
+}
+
+/** The ::before glow of a screen root and every 'ambient-drift' animation's play state. */
+async function m13cGlow(page, sel) {
+  return page.evaluate((sel) => {
+    const root = document.querySelector(sel);
+    if (!root) return null;
+    const cs = getComputedStyle(root, '::before');
+    return {
+      content: cs.content, animationName: cs.animationName, playState: cs.animationPlayState,
+      transform: cs.transform, rootBg: getComputedStyle(root).backgroundColor,
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+      anims: document.getAnimations().filter((a) => a.animationName === 'ambient-drift').map((a) => a.playState),
+      ambient: document.documentElement.getAttribute('data-ambient'),
+      background: document.documentElement.getAttribute('data-background'),
+    };
+  }, sel);
+}
+
+async function m13cPutRows(page, store, rows) {
+  for (let i = 0; i < 60; i++) {
+    const ok = await page.evaluate(({ store, rows }) => new Promise((resolve) => {
+      const open = indexedDB.open('gym-clean');
+      open.onerror = () => resolve(false);
+      open.onsuccess = () => {
+        const d = open.result;
+        if (!d.objectStoreNames.contains(store)) { d.close(); return resolve(false); }
+        const tx = d.transaction(store, 'readwrite');
+        for (const r of rows) tx.objectStore(store).put(r);
+        tx.oncomplete = () => { d.close(); resolve(true); };
+        tx.onerror = () => resolve(false);
+      };
+    }), { store, rows });
+    if (ok) return;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`could not put rows into ${store}`);
+}
+
+async function m13cCount(page, store) {
+  return page.evaluate((store) => new Promise((resolve) => {
+    const open = indexedDB.open('gym-clean');
+    open.onsuccess = () => {
+      const d = open.result;
+      if (!d.objectStoreNames.contains(store)) { d.close(); return resolve(-1); }
+      const rq = d.transaction(store).objectStore(store).count();
+      rq.onsuccess = () => { d.close(); resolve(rq.result); };
+      rq.onerror = () => resolve(-2);
+    };
+    open.onerror = () => resolve(-3);
+  }), store);
+}
+
+let m13cPage = null;
+async function m13cStep(flow, name, fn) {
+  try {
+    const r = await fn();
+    flow.steps.push({ step: name, ok: true, ...(r ?? {}) });
+  } catch (e) {
+    const failShot = `test-results/m13c-verify-fail-${name}.png`;
+    mkdirSync('test-results', { recursive: true });
+    await m13cPage?.screenshot({ path: failShot }).catch(() => {});
+    flow.steps.push({ step: name, ok: false, error: String(e?.message ?? e).split('\n').slice(0, 4).join(' / '), failShot });
+  }
+}
+
+async function m13cMain(browser) {
+  const p = await m13cPhone(browser);
+  const { page } = p;
+  const flow = { flow: 'm13c-main', steps: [] };
+  const lib = page.locator('main[data-screen="library"]');
+  const field = lib.locator('[data-library-search]');
+  const openLib = async (from = 'today') => {
+    await page.locator(`main[data-screen="${from}"] [data-search-open]`).click();
+    await lib.waitFor();
+  };
+
+  // Today with the glow (moving): the transform changes over 2 s; Start in the first viewport.
+  await m13cStep(flow, 'today-glow', async () => {
+    const today = 'main[data-screen="today"]';
+    const g1 = await m13cGlow(page, today);
+    await page.waitForTimeout(2000);
+    const g2 = await m13cGlow(page, today);
+    const start = await page.locator('[data-hero] [data-start]').first().boundingBox();
+    const search = await page.locator(`${today} [data-search-open]`).boundingBox();
+    await m13cShot(p, 'today-glow', { glow: g1, transformLater: g2?.transform, startBottom: start && start.y + start.height, searchButton: search });
+    return { moved: g1?.transform !== g2?.transform, playState: g1?.playState, anims: g1?.anims };
+  });
+
+  // Real-app pause wiring (app.ts watchAmbient, not a test harness): hidden page, a sheet.
+  await m13cStep(flow, 'pause-hidden', async () => {
+    const set = (h) => page.evaluate((h) => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') });
+      document.dispatchEvent(new Event('visibilitychange'));
+    }, h);
+    await set(true);
+    const hidden = await m13cGlow(page, 'main[data-screen="today"]');
+    await set(false);
+    const back = await m13cGlow(page, 'main[data-screen="today"]');
+    return { hidden: { anims: hidden.anims, ambient: hidden.ambient }, visible: { anims: back.anims, ambient: back.ambient } };
+  });
+
+  // Library: Muscle (default) and the other groupings.
+  await m13cStep(flow, 'library-groupings', async () => {
+    await openLib();
+    const focused = await field.evaluate((e) => e === document.activeElement);
+    await m13cShot(p, 'library-muscle', { focused });
+    const counts = {};
+    for (const by of ['equipment', 'day', 'movement', 'az']) {
+      await lib.locator(`[data-group-by="${by}"]`).click();
+      await page.waitForTimeout(300);
+      counts[by] = await lib.locator('[data-library-ex]').count();
+      await m13cShot(p, `library-${by}`);
+    }
+    await lib.locator('[data-group-by="muscle"]').click();
+    counts.muscle = await lib.locator('[data-library-ex]').count();
+    counts.total = await lib.locator('[data-library-count]').textContent();
+    return { focused, counts };
+  });
+
+  // Search "abs": the abs exercises first.
+  await m13cStep(flow, 'search-abs', async () => {
+    await field.fill('abs');
+    const hits = lib.locator('[data-search-section="exercise"] [data-library-ex]');
+    await hits.first().waitFor();
+    const ids = await hits.evaluateAll((els) => els.map((e) => e.getAttribute('data-library-ex')));
+    const sections = await lib.locator('[data-search-section]').evaluateAll((els) => els.map((e) => e.getAttribute('data-search-section')));
+    await m13cShot(p, 'search-abs', { ids, sections });
+    return { ids, sections };
+  });
+
+  // Exercise detail (no history: an abs move) → Watch 3D demo → Close → Back.
+  await m13cStep(flow, 'detail-abs', async () => {
+    const id = await lib.locator('[data-search-section="exercise"] [data-library-ex]').first().getAttribute('data-library-ex');
+    await lib.locator(`[data-ex-open="${id}"]`).first().click();
+    const detail = page.locator(`main[data-screen="exercise-detail"][data-exercise="${id}"]`);
+    await detail.waitFor();
+    await m13cShot(p, 'detail-new', { id });
+    await page.screenshot({ path: `${OUT}/m13c-verify-detail-new-full.png`, fullPage: true });
+    await detail.locator('[data-detail-howto]').click();
+    const sheet = page.locator(`[data-howto="sheet"][data-exercise="${id}"]`);
+    await sheet.waitFor();
+    const mode = await sheet.locator('[data-howto="stage"]').getAttribute('data-mode', { timeout: 15_000 });
+    await page.waitForTimeout(2500);
+    const g = await m13cGlow(page, 'main[data-screen="exercise-detail"]');
+    await m13cShot(p, 'howto-3d-demo', { id, mode, glowUnderSheet: g && { anims: g.anims, ambient: g.ambient } });
+    await sheet.locator('[data-howto="close"]').click();
+    await detail.locator('[data-detail-back]').click();
+    await lib.waitFor();
+    return { id, mode, keptQuery: await field.inputValue(), glowUnderSheet: g && { anims: g.anims, ambient: g.ambient } };
+  });
+
+  // "voice" → Settings scrolled to Voice.
+  await m13cStep(flow, 'search-voice', async () => {
+    await field.fill('voice');
+    const hit = lib.locator('[data-search-section="setting"] [data-search-hit]').first();
+    await hit.waitFor();
+    await m13cShot(p, 'search-voice');
+    await hit.click();
+    const voice = page.locator('#settings-voice');
+    await voice.waitFor();
+    await page.waitForTimeout(500);
+    const focused = await voice.evaluate((e) => e === document.activeElement);
+    const top = (await voice.boundingBox())?.y;
+    await m13cShot(p, 'settings-voice-section', { focused, top });
+    return { focused, top };
+  });
+
+  // Settings: voice row collapsed / open (Drill sergeant shows the picker), Background row.
+  await m13cStep(flow, 'settings-voice-row', async () => {
+    const cv = page.locator('[data-coach-voice]');
+    await cv.getByRole('button', { name: 'Drill sergeant' }).click();
+    const toggle = page.locator('[data-coach-voice] [data-voice-toggle]');
+    await toggle.waitFor();
+    await toggle.scrollIntoViewIfNeeded();
+    const collapsed = { expanded: await toggle.getAttribute('aria-expanded'), summary: await page.locator('[data-voice-summary]').textContent(), h: (await toggle.boundingBox())?.height };
+    await m13cShot(p, 'voice-collapsed', { collapsed });
+    await toggle.click();
+    await page.waitForTimeout(400);
+    await toggle.evaluate((e) => e.scrollIntoView({ block: 'start' }));
+    await page.evaluate(() => window.scrollBy(0, -24));
+    const open = { expanded: await toggle.getAttribute('aria-expanded'), names: await page.locator('[data-coach-voice] [data-voice-name]').allTextContents() };
+    await m13cShot(p, 'voice-open', { open });
+    await page.locator('[data-coach-voice] [data-voice-name="Fred"]').click();
+    const afterPick = { expanded: await toggle.getAttribute('aria-expanded'), summary: await page.locator('[data-voice-summary]').textContent() };
+    return { collapsed, open, afterPick };
+  });
+
+  await m13cStep(flow, 'settings-background', async () => {
+    const row = page.locator('[data-section="accent"] [data-background-picker]');
+    await row.scrollIntoViewIfNeeded();
+    await row.evaluate((e) => e.scrollIntoView({ block: 'center' }));
+    const before = await m13cGlow(page, 'main[data-screen="settings"]');
+    await m13cShot(p, 'settings-background', { glow: before });
+    await row.getByRole('button', { name: 'Plain' }).click();
+    await page.waitForTimeout(300);
+    const plain = await m13cGlow(page, 'main[data-screen="settings"]');
+    const stored = await page.evaluate(() => localStorage.getItem('gc-background'));
+    await m13cShot(p, 'settings-background-plain', { glow: plain, stored });
+    await page.locator('[data-tab="today"]').click();
+    await page.locator('main[data-screen="today"]').waitFor();
+    const todayPlain = await m13cGlow(page, 'main[data-screen="today"]');
+    await m13cShot(p, 'today-plain', { glow: todayPlain });
+    // Survives a reload (pre-paint mirror + settings row).
+    await page.reload();
+    await page.locator('[data-cal]').first().waitFor();
+    const afterReload = await m13cGlow(page, 'main[data-screen="today"]');
+    await page.locator('[data-tab="settings"]').click();
+    await page.locator('[data-section="accent"] [data-background-picker]').getByRole('button', { name: 'Moving glow' }).click();
+    await page.locator('[data-tab="today"]').click();
+    const glowAgain = await m13cGlow(page, 'main[data-screen="today"]');
+    return { plain: { content: plain.content, anims: plain.anims, background: plain.background }, todayPlain: { content: todayPlain.content, anims: todayPlain.anims, rootBg: todayPlain.rootBg }, afterReload: { background: afterReload.background, content: afterReload.content }, glowAgain: { content: glowAgain.content, anims: glowAgain.anims } };
+  });
+
+  // Fuel and Calendar with the glow (+ their Search buttons).
+  await m13cStep(flow, 'tabs-glow', async () => {
+    const out = {};
+    for (const tab of ['fuel', 'calendar', 'coach']) {
+      await page.locator(`[data-tab="${tab}"]`).click();
+      await page.locator(`main[data-screen="${tab}"], [data-screen="${tab}"]`).first().waitFor();
+      const g = await m13cGlow(page, `[data-screen="${tab}"]`);
+      out[tab] = { anims: g?.anims, content: g?.content && g.content !== 'none', search: await page.locator(`[data-screen="${tab}"] [data-search-open]`).count() };
+      await m13cShot(p, `${tab}-glow`, { glow: g });
+    }
+    return out;
+  });
+
+  // Day preview (Push A): tappable badges; 3D demo / Camera / Learning sheets; nothing starts.
+  await m13cStep(flow, 'preview-badges', async () => {
+    await page.locator('[data-tab="today"]').click();
+    await page.getByRole('button', { name: /Push A/ }).first().click();
+    const prev = page.locator('main[data-screen="preview"]');
+    await prev.locator('.ex-row').first().waitFor();
+    const badges = await prev.locator('[data-badge-open]').evaluateAll((els) => els.map((e) => ({ kind: e.getAttribute('data-badge-open'), label: e.getAttribute('aria-label'), tag: e.tagName, h: Math.round(e.getBoundingClientRect().height) })));
+    await m13cShot(p, 'preview-badges', { badges: badges.slice(0, 8), badgeCount: badges.length, minBadgeH: Math.min(...badges.map((b) => b.h)) });
+    return { badgeCount: badges.length, kinds: [...new Set(badges.map((b) => b.kind))], minBadgeH: Math.min(...badges.map((b) => b.h)) };
+  });
+
+  await m13cStep(flow, 'camera-sheet', async () => {
+    const prev = page.locator('main[data-screen="preview"]');
+    const row = prev.locator('li.ex-row').filter({ has: page.locator('[data-badge-open="camera"]') }).first();
+    const id = await row.getAttribute('data-ex');
+    await row.locator('[data-badge-open="camera"]').click();
+    const sheet = page.locator(`[data-camera-sheet="${id}"]`);
+    await sheet.waitFor();
+    const g = await m13cGlow(page, 'main[data-screen="preview"]');
+    const counts = await sheet.locator('[data-camera-counts]').textContent();
+    await m13cShot(p, 'camera-sheet', { id, counts, glowUnderSheet: { anims: g.anims, ambient: g.ambient } });
+    await sheet.locator('[data-camera-close]').click();
+    return { id, counts, glowUnderSheet: { anims: g.anims, ambient: g.ambient } };
+  });
+
+  await m13cStep(flow, 'learning-card', async () => {
+    const prev = page.locator('main[data-screen="preview"]');
+    const btn = prev.locator('[data-badge-open="learning"]').first();
+    if (!(await btn.count())) return { skipped: 'no learning badge on Push A' };
+    await btn.click();
+    const card = page.locator('[data-learn-sheet="cameraLearning"]');
+    await card.waitFor();
+    await m13cShot(p, 'learning-card', { title: await card.locator('[data-learn-title]').textContent() });
+    await card.locator('[data-learn-close]').click();
+    return {};
+  });
+
+  await m13cStep(flow, 'preview-nothing-started', async () => ({
+    sessions: await m13cCount(page, 'sessions'), sets: await m13cCount(page, 'sets'),
+    onPreview: await page.locator('main[data-screen="preview"]').count(),
+    spoken: await page.evaluate(() => window.__spoken),
+  }));
+
+  // Exercise screen: flat (no glow), badges static, glow paused; Rest is pure black.
+  await m13cStep(flow, 'exercise-flat', async () => {
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    const ex = page.locator('main[data-screen="exercise"]');
+    await ex.waitFor();
+    await page.waitForTimeout(500);
+    const g = await m13cGlow(page, 'main[data-screen="exercise"]');
+    const badgeButtons = await page.locator('[data-badge-open]').count();
+    await m13cShot(p, 'exercise-flat', { glow: g, badgeButtons });
+    await page.getByRole('button', { name: 'Set done' }).click();
+    const rest = page.locator('main[data-screen="rest"]');
+    await rest.waitFor();
+    await page.waitForTimeout(600);
+    const r = await m13cGlow(page, 'main[data-screen="rest"]');
+    await m13cShot(p, 'rest-black', { glow: r });
+    return { exercise: { content: g.content, anims: g.anims, ambient: g.ambient, rootBg: g.rootBg }, badgeButtons, rest: { content: r.content, rootBg: r.rootBg, ambient: r.ambient } };
+  });
+
+  flow.offsite = p.offsite;
+  flow.console = p.log;
+  results.push(flow);
+  await p.ctx.close();
+}
+
+/** Seeded history: "yesterday", "bench", "rice", a chat word; exercise detail with history. */
+async function m13cPersonal(browser) {
+  const p = await m13cPhone(browser);
+  const { page } = p;
+  const flow = { flow: 'm13c-personal', steps: [] };
+  const lib = page.locator('main[data-screen="library"]');
+  const field = lib.locator('[data-library-search]');
+  const at = (d, h) => new Date(2026, 10, d, h, 0).getTime();
+  const BENCH = 'Dumbbell_Bench_Press';
+  const sess = (day, dayId, ex) => {
+    const sessionId = `s-${dayId}-${day}`;
+    const start = at(day, 18);
+    return { s: { sessionId, dayId, startedAt: start, endedAt: start + 45 * 60_000 },
+      sets: [0, 1, 2].map((k) => ({ sessionId, exerciseId: ex, setIndex: k, reps: 8 + k, weightKg: 20 + 2.5 * k, startedAt: start + (k + 1) * 180_000 })) };
+  };
+  const all = [sess(17, 'push-a', BENCH), sess(13, 'pull-a', 'Dumbbell_Bicep_Curl'), sess(10, 'push-a', BENCH)];
+  await m13cPutRows(page, 'chatMessages', [
+    { id: 701, createdAt: at(16, 9), role: 'user', text: 'I ran a half marathon on Sunday, should I rest my legs?', source: 'rules', phase: 'today' },
+    { id: 702, createdAt: at(16, 9) + 2000, role: 'coach', text: 'Take it easy on legs today.', source: 'rules', phase: 'today' },
+  ]);
+  const food = (id, date, hour, label) => ({ id, date, time: new Date(`${date}T${String(hour).padStart(2, '0')}:00:00`).getTime(), slot: 'lunch', label, amount: { servings: 1 }, estimate: true, kcal: 400, proteinG: 20, carbsG: 60, fatG: 8 });
+  await m13cPutRows(page, 'foodEntries', [food('f17', '2026-11-17', 12, 'Jasmine rice'), food('f13', '2026-11-13', 12, 'Chicken salad')]);
+  await m12Seed(page, all.map((x) => x.s), all.flatMap((x) => x.sets), JSON.parse(execFileSync('cat', ['package.json'], { encoding: 'utf8' })).version);
+
+  for (const [q, name] of [['yesterday', 'search-yesterday'], ['bench', 'search-bench'], ['rice', 'search-rice'], ['marathon', 'search-chat']]) {
+    await m13cStep(flow, name, async () => {
+      if (!(await lib.count())) await page.locator('main[data-screen="today"] [data-search-open]').click();
+      await field.fill(q);
+      await page.waitForTimeout(700);
+      await lib.locator('[data-search-loading]').waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+      const hits = await lib.locator('[data-search-hit]').evaluateAll((els) => els.map((e) => e.getAttribute('data-search-hit')));
+      await m13cShot(p, name, { hits });
+      return { hits };
+    });
+  }
+  // A workout hit → Calendar day; meal → Fuel day; chat → Coach message.
+  await m13cStep(flow, 'jump-workout', async () => {
+    await field.fill('yesterday');
+    const w = lib.locator('[data-search-section="workout"] [data-search-hit]').first();
+    await w.waitFor();
+    await w.click();
+    const day = page.locator('main[data-screen="calendar-day"]');
+    await day.waitFor();
+    await m13cShot(p, 'jump-calendar-day', { date: await day.getAttribute('data-date') });
+    return { date: await day.getAttribute('data-date') };
+  });
+  await m13cStep(flow, 'jump-meal', async () => {
+    await page.locator('[data-tab="today"]').click();
+    await page.locator('main[data-screen="today"] [data-search-open]').click();
+    await field.fill('rice');
+    const m = lib.locator('[data-search-section="meal"] [data-search-hit]').first();
+    await m.waitFor();
+    await m.click();
+    const fuelDay = page.locator('main[data-screen="fuel"] [data-fuel-day]');
+    await fuelDay.first().waitFor();
+    await m13cShot(p, 'jump-fuel-day', { day: await fuelDay.first().getAttribute('data-fuel-day') });
+    return { day: await fuelDay.first().getAttribute('data-fuel-day') };
+  });
+  await m13cStep(flow, 'jump-chat', async () => {
+    await page.locator('[data-tab="today"]').click();
+    await page.locator('main[data-screen="today"] [data-search-open]').click();
+    await field.fill('marathon');
+    const c = lib.locator('[data-search-section="chat"] [data-search-hit]').first();
+    await c.waitFor();
+    await c.click();
+    const msg = page.locator('[data-screen="coach"] [data-msg-id="701"]');
+    await msg.waitFor();
+    await page.waitForTimeout(500);
+    const focused = await msg.evaluate((e) => e === document.activeElement);
+    await m13cShot(p, 'jump-coach-message', { focused });
+    return { focused };
+  });
+  // Exercise detail with history (bench).
+  await m13cStep(flow, 'detail-history', async () => {
+    await page.locator('[data-tab="today"]').click();
+    await page.locator('main[data-screen="today"] [data-search-open]').click();
+    await field.fill('bench');
+    await lib.locator(`[data-ex-open="${BENCH}"]`).first().click();
+    const detail = page.locator(`main[data-screen="exercise-detail"][data-exercise="${BENCH}"]`);
+    await detail.waitFor();
+    await m13cShot(p, 'detail-history');
+    await page.screenshot({ path: `${OUT}/m13c-verify-detail-history-full.png`, fullPage: true });
+    const best = await detail.evaluate((el) => {
+      const big = [...el.querySelectorAll('*')].filter((e) => parseFloat(getComputedStyle(e).fontSize) >= 64 && e.textContent.trim());
+      return big.map((e) => `${e.textContent.trim().slice(0, 20)} ${getComputedStyle(e).fontSize}`);
+    });
+    return { best, plan: await detail.locator('[data-detail-plan-row]').allTextContents() };
+  });
+  flow.offsite = p.offsite;
+  flow.console = p.log;
+  results.push(flow);
+  await p.ctx.close();
+}
+
+/** Coach: Chest + "Also add abs?" → proposal; the Claude card; Practice; Fuel photo buttons. */
+async function m13cCoachAndMore(browser) {
+  const p = await m13cPhone(browser, { owner: true });
+  const { page } = p;
+  const flow = { flow: 'm13c-coach', steps: [] };
+  const coach = page.locator('[data-screen="coach"]');
+  const ask = async (t) => {
+    await coach.getByLabel('Ask the coach').fill(t);
+    await coach.getByRole('button', { name: 'Send' }).click();
+  };
+  await m13cStep(flow, 'also-add-abs', async () => {
+    await page.locator('[data-tab="coach"]').click();
+    await coach.waitFor();
+    await ask('This month I want to build my chest');
+    await coach.locator('[data-coach-followup]').filter({ hasText: '5 days' }).click();
+    await coach.getByText('Also add abs?').first().waitFor();
+    await m13cShot(p, 'also-add-abs');
+    await coach.locator('[data-coach-followup]').filter({ hasText: /^Yes$/ }).click();
+    const card = coach.locator('[data-focus-block-card]').last();
+    await card.waitFor();
+    await card.scrollIntoViewIfNeeded();
+    await m13cShot(p, 'abs-proposal', { withAbs: /with abs/.test(await coach.innerText()) });
+    return { withAbs: /with abs/.test(await coach.innerText()) };
+  });
+  await m13cStep(flow, 'claude-card', async () => {
+    await ask('What is the capital of France?');
+    const card = coach.locator('[data-claude-offer]');
+    await card.waitFor();
+    await card.scrollIntoViewIfNeeded();
+    const buttons = await card.getByRole('button').allTextContents();
+    await m13cShot(p, 'claude-card', { buttons });
+    await page.screenshot({ path: `${OUT}/m13c-verify-claude-card-full.png`, fullPage: true });
+    return { buttons, sends: await card.locator('[data-claude-send]').count(), never: await card.locator('[data-claude-never-item]').count() };
+  });
+
+  // Practice (fixture player, owner on so a dev-log session would show if anything were saved).
+  await m13cStep(flow, 'practice', async () => {
+    await page.locator('[data-tab="today"]').click();
+    await page.getByRole('button', { name: /Pull A/ }).first().click();
+    const before = {};
+    for (const s of ['sessions', 'sets', 'devlogSessions', 'devlogSets']) before[s] = await m13cCount(page, s);
+    await page.locator('[data-badges="Dumbbell_Bicep_Curl"] [data-badge-open=camera]').click();
+    const sheet = page.locator('[data-camera-sheet="Dumbbell_Bicep_Curl"]');
+    await sheet.waitFor();
+    await sheet.locator('[data-camera-practice]').click();
+    const cam = page.getByRole('dialog', { name: 'Camera' });
+    await cam.waitFor();
+    await page.waitForFunction(() => document.querySelector('[role="dialog"][aria-label="Camera"]')?.getAttribute('data-person') === 'true', null, { timeout: 30_000 }).catch(() => {});
+    await page.waitForTimeout(800);
+    await page.evaluate(() => { window.__playing = true; });
+    await page.waitForFunction(() => (window.__clipDone ?? 0) >= 1, null, { timeout: 30_000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+    const reps = await cam.locator('[data-reps]').first().getAttribute('data-reps').catch(() => null);
+    const note = await cam.locator('[data-cam-note]').textContent().catch(() => null);
+    const setDone = await cam.getByRole('button', { name: /Set done/ }).count();
+    await m13cShot(p, 'practice-camera', { reps, note, setDone });
+    await cam.locator('.cam-top').getByRole('button', { name: 'Close', exact: true }).click();
+    await page.waitForTimeout(600);
+    const after = {};
+    for (const s of ['sessions', 'sets', 'devlogSessions', 'devlogSets']) after[s] = await m13cCount(page, s);
+    return { reps, note, setDone, spoken: await page.evaluate(() => window.__spoken), before, after };
+  });
+
+  // Fuel → Log food: Take photo + Choose from library (a made-up model imported in Settings).
+  await m13cStep(flow, 'fuel-photo', async () => {
+    // Practice's Close left us on the Pull A preview (where we were): Back to Today first.
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await page.locator('[data-tab="settings"]').click();
+    const fp = page.locator('[data-food-photos]');
+    await fp.scrollIntoViewIfNeeded();
+    await fp.locator('input[data-food-model-file]').setInputFiles({ name: 'made-up-food.tflite', mimeType: 'application/octet-stream', buffer: Buffer.from([1, 2, 3, 4]) });
+    await page.waitForFunction(() => document.querySelector('[data-food-model]')?.getAttribute('data-state') === 'ready', null, { timeout: 10_000 });
+    await page.locator('[data-tab="fuel"]').click();
+    await page.locator('main[data-screen="fuel"] [data-log-open]').click();
+    const sheet = page.locator('[data-log-sheet]');
+    await sheet.waitFor();
+    const row = sheet.locator('[data-log-photo]');
+    await row.scrollIntoViewIfNeeded();
+    const info = {
+      take: await row.locator('[data-photo-open]').textContent(),
+      library: await row.locator('[data-photo-library]').textContent(),
+      takeCapture: await row.locator('[data-photo-input]').getAttribute('capture'),
+      libraryHasCapture: await row.locator('[data-photo-library-input]').evaluate((e) => e.hasAttribute('capture')),
+      heights: await row.locator('button').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height))),
+    };
+    await m13cShot(p, 'fuel-photo-buttons', info);
+    await page.evaluate(() => { window.__fakeFoodResult = [{ categoryName: 'pad_thai', score: 0.82 }, { categoryName: 'som_tum', score: 0.09 }, { categoryName: 'tom_yum_goong', score: 0.05 }]; });
+    const png = await page.evaluate(() => { const c = document.createElement('canvas'); c.width = 640; c.height = 480; const x = c.getContext('2d'); x.fillStyle = '#c2410c'; x.fillRect(0, 0, 640, 480); return c.toDataURL('image/png').split(',')[1]; });
+    await row.locator('[data-photo-library-input]').setInputFiles({ name: 'from-library.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+    const ps = page.locator('[data-photo-sheet]');
+    await ps.waitFor();
+    await page.waitForTimeout(600);
+    info.state = await ps.locator('[data-photo-state]').getAttribute('data-photo-state');
+    await m13cShot(p, 'fuel-photo-library-result', { state: info.state });
+    return info;
+  });
+  flow.offsite = p.offsite;
+  flow.console = p.log;
+  results.push(flow);
+  await p.ctx.close();
+}
+
+/** Chest block with abs applied → which day previews (Today hero, Calendar days) list abs rows. */
+async function m13cAbsPreview(browser) {
+  const p = await m13cPhone(browser);
+  const { page } = p;
+  const flow = { flow: 'm13c-abs-preview', steps: [] };
+  const coach = page.locator('[data-screen="coach"]');
+  const ABS = ['Air_Bike', 'Cable_Crunch', 'Crunches', 'Dead_Bug', 'Dumbbell_Side_Bend', 'Flat_Bench_Lying_Leg_Raise', 'Hanging_Leg_Raise', 'Pallof_Press', 'Reverse_Crunch', 'Russian_Twist'];
+  await m13cStep(flow, 'apply-chest-with-abs', async () => {
+    await page.locator('[data-tab="coach"]').click();
+    await coach.getByLabel('Ask the coach').fill('This month I want to build my chest');
+    await coach.getByRole('button', { name: 'Send' }).click();
+    await coach.locator('[data-coach-followup]').filter({ hasText: '5 days' }).click();
+    await coach.locator('[data-coach-followup]').filter({ hasText: /^Yes$/ }).click();
+    const card = coach.locator('[data-focus-block-card]').last();
+    await card.getByRole('button', { name: 'Apply' }).click();
+    await card.locator('[data-card-status="applied"]').waitFor();
+    return {};
+  });
+  await m13cStep(flow, 'preview-with-abs', async () => {
+    await page.locator('[data-tab="today"]').click();
+    await page.locator('main[data-screen="today"]').waitFor();
+    const days = {};
+    // The Today hero and each day button: which previews list an abs row?
+    const names = ['push-a', 'pull-a', 'legs-a', 'push-b', 'pull-b', 'legs-b'];
+    for (const n of names) {
+      await page.waitForTimeout(400);
+      const dayBtn = page.locator(`main[data-screen="today"] [data-day="${n}"]`).first();
+      if (!(await dayBtn.count())) { days[n] = 'no button on Today'; continue; }
+      await dayBtn.dispatchEvent('click');
+      const prev = page.locator('main[data-screen="preview"]');
+      await prev.locator('li.ex-row').first().waitFor({ timeout: 5000 });
+      const ids = await prev.locator('li.ex-row').evaluateAll((els) => els.map((e) => e.getAttribute('data-ex')));
+      days[n] = ids.filter((x) => ABS.includes(x));
+      await page.getByRole('button', { name: 'Back', exact: true }).click();
+      await page.locator('main[data-screen="today"]').waitFor();
+    }
+    // The stored block: which dates carry abs rows.
+    const state = await page.evaluate(() => new Promise((resolve) => {
+      const open = indexedDB.open('gym-clean');
+      open.onsuccess = () => {
+        const rq = open.result.transaction('trainer').objectStore('trainer').get('current');
+        rq.onsuccess = () => { open.result.close(); resolve(rq.result?.state ?? null); };
+      };
+    }));
+    const absDates = (state?.blocks ?? []).flatMap((b) => b.days.filter((d) => d.day?.exercises?.some((e) => ABS.includes(e.exerciseId))).map((d) => `${d.date} ${d.day.name}`));
+    const first = absDates[0]?.split(' ')[0];
+    let calAbs = [];
+    if (first) {
+      await page.locator('[data-tab="calendar"]').click();
+      await page.locator(`[data-cal-day="${first}"]`).click();
+      const day = page.locator('main[data-screen="calendar-day"]');
+      await day.waitFor();
+      const ids = await day.locator('[data-cal-ex]').evaluateAll((els) => els.map((e) => e.getAttribute('data-cal-ex')));
+      calAbs = ids.filter((x) => ABS.includes(x));
+      if (calAbs[0]) await day.locator(`[data-cal-ex="${calAbs[0]}"]`).first().scrollIntoViewIfNeeded();
+      await m13cShot(p, 'calendar-day-with-abs', { date: first, calAbs });
+    }
+    return { previews: days, absDates: absDates.slice(0, 8), calendarDay: first, calAbs };
+  });
+  // The next day (19 Nov, a block day with abs): Today's hero → the preview lists the abs row.
+  await m13cStep(flow, 'next-day-preview-with-abs', async () => {
+    await page.clock.setSystemTime(new Date(2026, 10, 19, 18, 0).getTime());
+    await page.reload();
+    await page.locator('[data-cal]').first().waitFor();
+    await page.locator('main[data-screen="today"] [data-hero] [data-start]').first().click();
+    const prev = page.locator('main[data-screen="preview"]');
+    await prev.locator('li.ex-row').first().waitFor();
+    await page.waitForTimeout(1000);
+    const ids = await prev.locator('li.ex-row').evaluateAll((els) => els.map((e) => e.getAttribute('data-ex')));
+    const abs = ids.filter((x) => ABS.includes(x));
+    if (abs[0]) await page.evaluate((id) => document.querySelector(`main[data-screen="preview"] li.ex-row[data-ex="${id}"]`)?.scrollIntoView({ block: 'center' }), abs[0]);
+    await m13cShot(p, 'preview-with-abs', { ids, abs });
+    return { ids, abs, sessions: await m13cCount(page, 'sessions') };
+  });
+  flow.offsite = p.offsite;
+  flow.console = p.log;
+  results.push(flow);
+  await p.ctx.close();
+}
+
+/** Fresh install: welcome → intake up to "Add abs to your plan?". */
+async function m13cIntake(browser) {
+  const p = await m13cPhone(browser, { fresh: true });
+  const { page } = p;
+  const flow = { flow: 'm13c-intake', steps: [] };
+  await m13cStep(flow, 'intake-abs', async () => {
+    const welcome = page.locator('[data-screen="welcome"]');
+    await welcome.waitFor();
+    while (await welcome.isVisible()) await page.locator('[data-ob="primary"]').click();
+    const intake = page.locator('main[data-screen="intake"]');
+    await intake.waitFor();
+    for (const [id, value] of [['goal', 'muscle'], ['days', '3'], ['length', '45'], ['experience', 'new'], ['easyOn', '']]) {
+      await page.waitForFunction((id) => document.querySelector('main[data-screen="intake"]')?.getAttribute('data-step') === id, id);
+      if (value) await intake.locator(`[data-option="${value}"]`).click();
+      await intake.locator('[data-intake-next]').click();
+    }
+    await page.waitForFunction(() => document.querySelector('main[data-screen="intake"]')?.getAttribute('data-step') === 'wantsCore');
+    const noChecked = await intake.locator('[data-option="no"]').getAttribute('aria-checked');
+    await m13cShot(p, 'intake-abs', { noChecked });
+    return { noChecked };
+  });
+  flow.offsite = p.offsite;
+  flow.console = p.log;
+  results.push(flow);
+  await p.ctx.close();
+}
+
+/** Reduced motion: the still glow (layer drawn, nothing animates). */
+async function m13cReduced(browser) {
+  const p = await m13cPhone(browser, { reducedMotion: 'reduce' });
+  const flow = { flow: 'm13c-reduced', steps: [] };
+  await m13cStep(flow, 'reduced-motion', async () => {
+    const g = await m13cGlow(p.page, 'main[data-screen="today"]');
+    await m13cShot(p, 'today-reduced-motion', { glow: g });
+    return { content: g.content !== 'none', animationName: g.animationName, anims: g.anims };
+  });
+  flow.offsite = p.offsite;
+  flow.console = p.log;
+  results.push(flow);
+  await p.ctx.close();
+}
+
+async function m13c(browser, only) {
+  if (!only || only === 'main') await m13cMain(browser);
+  if (!only || only === 'personal') await m13cPersonal(browser);
+  if (!only || only === 'coach') await m13cCoachAndMore(browser);
+  if (!only || only === 'abs') await m13cAbsPreview(browser);
+  if (!only || only === 'intake') await m13cIntake(browser);
+  if (!only || only === 'reduced') await m13cReduced(browser);
+}
+
 const milestone = (process.argv[2] ?? 'm4').replace(/^--/, '');
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -4565,6 +5339,7 @@ try {
   else if (milestone === 'store') await store(browser);
   else if (milestone === 'm13') await m13(browser);
   else if (milestone === 'm13b') await m13b(browser, process.argv[3]);
+  else if (milestone === 'm13c') await m13c(browser, process.argv[3]);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));

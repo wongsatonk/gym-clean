@@ -97,10 +97,66 @@
   font-weight: 700;
 }
 
+/* M13c task 10: the "Voice" disclosure row. Two lines (label, chosen voice) and a chevron that
+   points down when closed and up when open; it turns with --dur-fast (0 with reduced motion). */
+.cv-disclosure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--tap-bar);
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.cv-disc-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cv-disc-label {
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.cv-disc-summary {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.cv-disc-chev {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-2);
+  transform: rotate(-90deg); /* the back chevron, pointing down */
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.cv-disclosure[aria-expanded='true'] .cv-disc-chev {
+  transform: rotate(90deg);
+}
+
 .cv-voices {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.cv-voices[hidden] {
+  display: none;
 }
 
 .cv-row {

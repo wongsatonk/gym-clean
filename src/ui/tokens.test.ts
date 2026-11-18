@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import indexHtml from '../../index.html?raw';
 import { ACCENTS, TOKEN_NAMES, cssToken, moodClass } from './tokens';
+import { MOTION_OFF } from './motion';
 import { FIGURE_TOKEN_FALLBACK } from './body3d/palette';
 
 // Vitest replaces CSS imports (even `?raw`) with '' unless css.include matches, so the
@@ -353,7 +354,151 @@ describe('design tokens: themes and moods', () => {
     expect(contrast(hexOf('--text-2'), hexOf('--ember-hi', energy))).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('the sticky-bottom veil is the page colour, translucent', () => {
+    const veil = (v: string | undefined) => /^rgb\((\d+) (\d+) (\d+) \/ (0?\.\d+)\)$/.exec(v ?? '');
+    const page = (hex: string) => hexToRgb(hex).join(' ');
+    const root = veil(ROOT['--bg-veil']);
+    expect(root?.slice(1, 4).join(' ')).toBe(page(hexOf('--bg')));
+    const track = tokenBlock('.mood-track');
+    expect(veil(track['--bg-veil'])?.slice(1, 4).join(' ')).toBe(page(hexOf('--bg', track)));
+    expect(Number(root?.[4])).toBeGreaterThanOrEqual(0.85);
+  });
+
   it('cssToken is empty without a DOM', () => {
     expect(cssToken('--cta')).toBe('');
+  });
+});
+
+// M13c task 9: the moving glow (his q1 answer). One fixed ::before layer on the non-workout
+// screen roots, two soft radial glows (accent + muscle cyan at low alpha), moved by one
+// transform/opacity keyframe set. These tests pin what makes it readable and cheap.
+describe('moving glow background', () => {
+  const css = stripComments(stylesCss);
+  /** `color-mix(in srgb, var(--x) N%, transparent)` → the token it tints and its alpha. */
+  function glowToken(name: string): { of: string; alpha: number } {
+    const m = /^color-mix\(in srgb, var\((--[\w-]+)\) (\d+(?:\.\d+)?)%, transparent\)$/.exec(
+      ROOT[name] ?? '',
+    );
+    if (!m) throw new Error(`${name} is not a color-mix glow: ${ROOT[name]}`);
+    return { of: m[1] ?? '', alpha: Number(m[2]) / 100 };
+  }
+  function over(top: string, alpha: number, base: [number, number, number]) {
+    const t = hexToRgb(top);
+    return base.map((c, i) => c * (1 - alpha) + (t[i] ?? 0) * alpha) as [number, number, number];
+  }
+  const toHex = (rgb: number[]) =>
+    `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+
+  const layerRules = rules(css).filter((r) => /animation\s*:[^;]*ambient-drift/.test(r.body));
+  const keyframes = (() => {
+    const start = css.indexOf('@keyframes ambient-drift');
+    if (start < 0) return '';
+    let depth = 0;
+    let i = css.indexOf('{', start);
+    const open = i;
+    for (; i < css.length; i++) {
+      if (css[i] === '{') depth++;
+      if (css[i] === '}' && --depth === 0) break;
+    }
+    return css.slice(open + 1, i);
+  })();
+  /** Highest opacity any keyframe (or the layer itself) reaches; 1 when none is set. */
+  const peakOpacity = (() => {
+    const all = [...keyframes.matchAll(/opacity\s*:\s*([\d.]+)/g)].map((m) => Number(m[1]));
+    const own = layerRules.flatMap((r) => decls(r.body)).find(([k]) => k === 'opacity');
+    if (own) all.push(Number(own[1]));
+    return all.length ? Math.max(...all) : 1;
+  })();
+
+  it('tints one glow with the accent and one with the muscle cyan, both faint', () => {
+    expect(glowToken('--glow-a').of).toBe('--cta');
+    expect(glowToken('--glow-b').of).toBe('--muscle');
+    expect(glowToken('--glow-a').alpha).toBeLessThanOrEqual(0.2);
+    expect(glowToken('--glow-b').alpha).toBeLessThanOrEqual(0.2);
+  });
+
+  // The brightest point: both glows at full strength stacked on --bg at the peak opacity (the
+  // gradients start at the token colour and never overlap more than that).
+  it.each(ACCENTS)(
+    'accent %s: --text >= 7:1 and --text-2 >= 4.5:1 at the brightest point',
+    (accent) => {
+      const acc = tokenBlock(`[data-accent='${accent}']`);
+      const a = glowToken('--glow-a');
+      const b = glowToken('--glow-b');
+      let px = hexToRgb(hexOf('--bg'));
+      px = over(hexOf(a.of, acc), a.alpha * peakOpacity, px);
+      px = over(hexOf(b.of, acc), b.alpha * peakOpacity, px);
+      const brightest = toHex(px);
+      expect(contrast(hexOf('--text'), brightest)).toBeGreaterThanOrEqual(7);
+      expect(contrast(hexOf('--text-2'), brightest)).toBeGreaterThanOrEqual(4.5);
+      // The action colour still stands out from the page as a graphic.
+      expect(contrast(hexOf('--cta', acc), brightest)).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  it('is one fixed, pre-composited ::before layer drawn only from the glow tokens', () => {
+    expect(layerRules).toHaveLength(1);
+    const layer = layerRules[0] as Rule;
+    expect(layer.selector).toMatch(/::before$/);
+    const d = Object.fromEntries(decls(layer.body));
+    expect(d['position']).toBe('fixed');
+    expect(d['will-change']).toBe('transform');
+    expect(d['pointer-events']).toBe('none');
+    const bgVars = [...(d['background'] ?? '').matchAll(/var\((--[\w-]+)\)/g)].map((m) => m[1]);
+    expect(new Set(bgVars)).toEqual(new Set(['--glow-a', '--glow-b']));
+    expect(d['background']).toMatch(/radial-gradient/);
+    // iOS ignores background-attachment: fixed; no filter / blend work per frame either.
+    for (const k of ['background-attachment', 'filter', 'backdrop-filter', 'mix-blend-mode'])
+      expect(d, k).not.toHaveProperty(k);
+  });
+
+  it('never runs on in-workout screens, sheets or the black Track mood', () => {
+    const sel = (layerRules[0] as Rule).selector.replace(/"/g, "'");
+    expect(sel).not.toMatch(/mood-track/);
+    for (const hook of MOTION_OFF.replace(/"/g, "'").split(/,\s*/))
+      expect(sel, hook).toContain(hook);
+    expect(sel).toContain('.sheet');
+    expect(sel).toMatch(/\.mood-energy/);
+    expect(sel).toMatch(/\.mood-pro/);
+    expect(sel).toMatch(/:not\(\[data-background='plain'\]\)/);
+  });
+
+  it('the keyframes move only transform and opacity, slowly, with a small travel', () => {
+    expect(keyframes).toMatch(/transform/);
+    const props = new Set(
+      [...keyframes.matchAll(/([\w-]+)\s*:/g)].map((m) => m[1]).filter((p) => p !== undefined),
+    );
+    expect([...props].every((p) => p === 'transform' || p === 'opacity')).toBe(true);
+    expect(peakOpacity).toBeLessThanOrEqual(1);
+    for (const m of keyframes.matchAll(/translate3?d?\(([^)]*)\)/g)) {
+      for (const v of (m[1] ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)) {
+        expect(v, m[0]).toMatch(/^-?\d+(\.\d+)?%$|^0$/);
+        expect(Math.abs(parseFloat(v)), m[0]).toBeLessThanOrEqual(6);
+      }
+    }
+    const d = Object.fromEntries(decls((layerRules[0] as Rule).body));
+    const secs = Number(/(\d+(?:\.\d+)?)s/.exec(d['animation'] ?? '')?.[1]);
+    // One there-and-back cycle (alternate) of 40–60 s.
+    expect(d['animation']).toMatch(/alternate/);
+    expect(d['animation']).toMatch(/infinite/);
+    expect(2 * secs).toBeGreaterThanOrEqual(40);
+    expect(2 * secs).toBeLessThanOrEqual(60);
+  });
+
+  it('pauses on html[data-ambient=paused]; Plain removes the layer', () => {
+    const paused = rules(css).filter((r) => r.selector.includes("html[data-ambient='paused']"));
+    expect(paused.some((r) => /animation-play-state\s*:\s*paused/.test(r.body))).toBe(true);
+    expect(paused.every((r) => r.selector.endsWith('::before'))).toBe(true);
+    // Plain: the layer's selector requires :not([data-background='plain']), so Plain has no
+    // ::before at all (checked above); nothing else may draw the glow tokens.
+    const users = rules(css).filter((r) => /var\(--glow-[ab]\)/.test(r.body));
+    expect(users).toEqual(layerRules);
+  });
+
+  it('launch colour and page colour are unchanged (#0d0f12)', () => {
+    expect(hexOf('--bg').toLowerCase()).toBe('#0d0f12');
   });
 });

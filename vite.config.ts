@@ -110,7 +110,8 @@ export default defineConfig(({ mode }) => ({
     __APP_RELEASE__: JSON.stringify(appRelease()),
     __APP_BUILD__: JSON.stringify(appBuild()),
   },
-  server: { host: true },
+  // E2E_NO_WATCH (playwright.config.ts): no watcher / HMR, so edits never reload pages under test.
+  server: { host: true, ...(process.env.E2E_NO_WATCH ? { watch: null, hmr: false } : {}) },
   // Pre-bundle lazily imported deps so the dev server never reloads the page mid-session
   // when it first sees them (this broke e2e runs once three.js became a dynamic import).
   optimizeDeps: { include: ['three', 'dexie', '@mediapipe/tasks-vision'] },

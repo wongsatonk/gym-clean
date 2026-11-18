@@ -750,6 +750,26 @@
         "Smith_Machine_Calf_Raise",
         "Dumbbell_Seated_One-Leg_Calf_Raise"
       ]
+    },
+    "core": {
+      "muscles": ["abdominals"],
+      "prefer": [
+        "Cable_Crunch",
+        "Flat_Bench_Lying_Leg_Raise",
+        "Dead_Bug",
+        "Reverse_Crunch",
+        "Crunches",
+        "Air_Bike"
+      ]
+    }
+  },
+  "wantsCore": {
+    "note": "M13c (Decision 'M13c answers', q3): only when the intake answer 'Add abs to your plan?' is Yes (Intake.wantsCore). The 'slot' joins these days of the split as an accessory right after the day's main lifts (so a short session trims it last among the accessories). The days are chosen so every training week has it on at least 3 days (both days of a 2-day plan). Without a Yes, no day gets it, and no other slot ever picks an abs exercise.",
+    "slot": "core",
+    "days": {
+      "fullBody": ["full-a", "full-b", "full-c"],
+      "upperLower": ["upper-a", "lower-a", "lower-b"],
+      "pushPullLegs": ["pull-a", "legs-a", "pull-b", "legs-b"]
     }
   },
   "prescription": {

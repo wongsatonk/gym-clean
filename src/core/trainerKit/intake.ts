@@ -25,9 +25,29 @@ export const INTAKE_OPTIONS = {
   sessionMin: INTAKE_SESSION_MIN,
   experience: EXPERIENCES.map((id) => ({ id, label: EXPERIENCE_LABELS[id] })),
   areas: BODY_AREAS.map((id) => ({ id, label: AREA_LABELS[id] })),
+  /**
+   * M13c (Decision "M13c answers", q3): "Add abs to your plan?", after the go-easy step (the
+   * intake has no gym-kit step), No selected by default. Yes → `Intake.wantsCore: true` → the
+   * starter plan gets a core slot on ≥ 3 days. `learnId`: the Why? card.
+   */
+  wantsCore: {
+    id: 'wantsCore',
+    after: 'easyOn',
+    question: 'Add abs to your plan?',
+    hint: 'A few abs sets on 3 days a week. You can add them later with a focus block too.',
+    options: [
+      { id: 'no', value: false, label: 'No' },
+      { id: 'yes', value: true, label: 'Yes, add abs' },
+    ],
+    default: false,
+    learnId: 'coreTraining',
+  },
 } as const;
 
-/** Answers as stored: days within 2–6, a listed session length, known areas once, trimmed own words. */
+/**
+ * Answers as stored: days within 2–6, a listed session length, known areas once, trimmed own
+ * words, and the abs answer when it is a Yes / No (absent = No).
+ */
 export function normalizeIntake(intake: Intake): Intake {
   const minDays = INTAKE_DAYS[0] ?? 2;
   const maxDays = INTAKE_DAYS[INTAKE_DAYS.length - 1] ?? 6;
@@ -54,6 +74,7 @@ export function normalizeIntake(intake: Intake): Intake {
     at: intake.at,
   };
   if (goalText) out.goalText = goalText;
+  if (typeof intake.wantsCore === 'boolean') out.wantsCore = intake.wantsCore;
   return out;
 }
 

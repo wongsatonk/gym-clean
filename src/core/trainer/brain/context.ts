@@ -3,8 +3,9 @@
  * Pure: `serializeContext(input, opts)` → `{ text, usedHealth }`.
  *
  * Holds: today's plan (exercise ids, sets x reps, weight), the next 7 days, active overrides, the
- * focus block, the go-easy list, week/month scores + streak (the rule answer's own text), today's
- * Fuel totals vs targets, the goal text + lift-goal progress, 4 weeks of top sets (warm-ups
+ * focus block, the go-easy list, the plan line (M13c: rotation day names + weekly working sets per
+ * body area, so the coach can say "your plan has no abs"), week/month scores + streak (the rule
+ * answer's own text), today's Fuel totals vs targets, the goal text + lift-goal progress, 4 weeks of top sets (warm-ups
  * excluded), and the last ≤ 8 chat turns. For Apple only, and only while
  * `appleCardReasons !== false` (M12-q1, read at runtime), the "Lighter today?" card's reasons as
  * number-free sentences; then `usedHealth` is true.
@@ -24,12 +25,22 @@
  * compact), a 400-character message and two read-tool outputs (2 × 600), about 2,960 characters
  * are left: CONTEXT_BUDGET_CHARS = 2,900 (context.test.ts recomputes this from the real texts).
  * It was 3,200 until Checkpoint J (1.15.0) added the doDayToday tool and the partner voice.
- * Over budget, older top sets go first, then older turns, then a hard cut.
+ * Over budget, older top sets go first, then older turns, then the plan line, then a hard cut.
+ * The plan line (~110–130 characters for a six-day rotation) lives inside this budget: it takes
+ * room from the top sets, so the budget arithmetic above is unchanged.
  */
-import type { ChatMessage, Goal, GoalKind, ReadinessSignal, SetLog } from '../../types';
+import type {
+  BodyArea,
+  ChatMessage,
+  Goal,
+  GoalKind,
+  PlannedExercise,
+  ReadinessSignal,
+  SetLog,
+} from '../../types';
 import { handle, type CoachContext } from '../coach';
-import { addDate, effectiveDays, localDate, weekdayOf } from '../plan';
-import { blockEnd } from '../focusBlock';
+import { addDate, blockAt, effectiveDays, localDate, weekdayOf } from '../plan';
+import { blockEnd, groupSetsOf } from '../focusBlock';
 import { formatWeight } from '../../units';
 import { goalProgress, goalProgressText } from '../../trainerKit/goals';
 
@@ -167,6 +178,54 @@ function stateLines(ctx: CoachContext): string[] {
   return lines;
 }
 
+/** The plan line's body areas, in the order the line lists them (core always, so "core 0" shows). */
+const PLAN_AREAS: readonly BodyArea[] = ['chest', 'back', 'legs', 'shoulders', 'arms', 'core'];
+
+const dayIndex = (date: string) =>
+  Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) /
+  86_400_000;
+
+/**
+ * M13c task 6b: "Plan: Push A, Pull A, …. Weekly sets: chest 16, back 18, …, core 0." Weekly
+ * working sets per area (a row counts for each area of its primary muscles, focusBlock.ts
+ * `groupSetsOf`) = the rotation's sets × training days a week / rotation length, rounded; during a
+ * focus block, the sets of this block week's rows. null when the rotation is empty.
+ */
+function planLine(ctx: CoachContext): string | null {
+  const { plan, schedule } = ctx.state;
+  const rotation = schedule.rotation
+    .map((id) => plan.days.find((d) => d.id === id))
+    .filter((d) => d !== undefined);
+  if (rotation.length === 0) return null;
+  const names = rotation.map((d) => d.name).join(', ');
+
+  let rows: PlannedExercise[];
+  let scale: number;
+  let head = 'Weekly sets';
+  const hit = blockAt(ctx.state, ctx.today);
+  if (hit) {
+    const b = hit.block;
+    const week = Math.floor((dayIndex(ctx.today) - dayIndex(b.startDate)) / 7);
+    const from = addDate(b.startDate, week * 7);
+    const to = addDate(from, 6);
+    rows = b.days
+      .filter((d) => d.date >= from && d.date <= to)
+      .flatMap((d) => d.day?.exercises ?? []);
+    scale = 1;
+    head = `Weekly sets (focus block week ${week + 1} of ${b.weeks})`;
+  } else {
+    rows = rotation.flatMap((d) => d.exercises);
+    const rest = new Set(
+      schedule.restWeekdays.filter((w) => Number.isInteger(w) && w >= 0 && w <= 6),
+    );
+    scale = (7 - rest.size) / rotation.length;
+  }
+  const sets = PLAN_AREAS.map(
+    (a) => `${a} ${Math.round(groupSetsOf(rows, a, ctx.catalog) * scale)}`,
+  ).join(', ');
+  return `Plan: ${names}. ${head}: ${sets}.`;
+}
+
 /** The rule brain's own "How am I doing?" answer: week + month scores, streak, block. */
 function scoreLine(ctx: CoachContext): string {
   return handle({ chip: 'progress' }, { ...ctx, phase: 'today' }).reply;
@@ -277,21 +336,24 @@ export function serializeContext(
   const ctx = input.coach;
   const healthOk = opts.brain === 'apple' && opts.appleCardReasons !== false;
   const reasons = healthOk && input.lighterCard ? reasonLines(input.lighterCard) : [];
-  const fixed = [
+  const plan = planLine(ctx);
+  const all = [
     `Today ${ctx.today} ${SHORT_DAY[weekdayOf(ctx.today)] ?? ''}. Weights in ${ctx.unit}.`,
     ...planLines(ctx),
     ...stateLines(ctx),
+    plan,
     scoreLine(ctx),
     fuelLine(ctx),
     ...goalLines(input),
     reasons.length > 0 ? `Lighter today? card: ${reasons.join(' ')}` : null,
   ].filter((l): l is string => l !== null && l !== '');
+  const fixed = (withPlan: boolean) => (withPlan ? all : all.filter((l) => l !== plan));
   const tops = topSets(ctx);
 
-  const build = (perExercise: number, turns: number) => {
+  const build = (perExercise: number, turns: number, withPlan = true) => {
     const chat = turnLines(input.turns, healthOk, turns);
     return [
-      ...fixed,
+      ...fixed(withPlan),
       topLine(tops, perExercise),
       ...(chat.length > 0 ? ['Chat so far:', ...chat] : []),
     ]
@@ -299,13 +361,13 @@ export function serializeContext(
       .join('\n');
   };
 
-  const tries: [number, number][] = [];
+  const tries: [number, number, boolean?][] = [];
   for (let k = MAX_TOP_PER_EXERCISE; k >= 2; k--) tries.push([k, MAX_TURNS]);
   for (let t = MAX_TURNS - 2; t >= 2; t -= 2) tries.push([2, t]);
-  tries.push([1, 2], [1, 0], [0, 0]);
+  tries.push([1, 2], [1, 0], [0, 0], [0, 0, false]);
   let text = '';
-  for (const [k, t] of tries) {
-    text = build(k, t);
+  for (const [k, t, withPlan] of tries) {
+    text = build(k, t, withPlan);
     if (text.length <= CONTEXT_BUDGET_CHARS) break;
   }
   if (text.length > CONTEXT_BUDGET_CHARS) {

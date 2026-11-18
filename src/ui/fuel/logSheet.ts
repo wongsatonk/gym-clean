@@ -29,7 +29,7 @@ import {
   stepper,
 } from './common';
 import { GRAM_STEP, SERVING_STEP, slotChips } from './entrySheet';
-import { photoButton } from './photoCapture';
+import { photoButtons } from './photoCapture';
 
 /** M7b-q4: shown in place of the Photo button until a food model is imported. */
 export const PHOTO_HINT = 'Log from a photo: add a food model in Settings.';
@@ -98,6 +98,8 @@ export type LogSheetProps = {
   /** M7-q3 Light / Regular / Big plate starters. */
   presets: readonly QuickPreset[];
   initialSection?: LogSection | undefined;
+  /** M13c: Search opened from the app's Search ("Search foods for '…'"): the field starts with it. */
+  initialQuery?: string | undefined;
   /** Open straight on this item's detail (a scanned barcode); Back goes to `initialSection`. */
   initialDetail?: LogItem | undefined;
   /** M7-q5: barcode lookup is on, so Search and My foods offer "Scan a barcode". */
@@ -204,7 +206,7 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
   let section: LogSection = p.initialSection ?? 'favorites';
   let detail: LogItem | null = p.initialDetail ?? null;
   let search: SearchState = { status: 'idle' };
-  let query = '';
+  let query = p.initialQuery ?? '';
   const preview = p.preview ?? scaleItem;
 
   const shell = sheetShell({
@@ -242,8 +244,14 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
     ? p.photoAvailable
       ? h(
           'div',
-          { class: 'log-photo', 'data-log-photo': true },
-          photoButton({ onFile: (f) => onPhoto(f), label: 'Log from a photo' }),
+          // M13c task 15: Take photo + Choose from library, one handler.
+          {
+            class: 'log-photo',
+            'data-log-photo': true,
+            role: 'group',
+            'aria-label': 'Log from a photo',
+          },
+          photoButtons({ onFile: (f) => onPhoto(f) }),
         )
       : h('p', { class: 'fuel-hint log-photo-hint', 'data-photo-hint': true }, PHOTO_HINT)
     : null;

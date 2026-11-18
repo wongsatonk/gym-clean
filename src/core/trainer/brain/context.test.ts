@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { trainerCatalog } from '../../testkit/trainerCatalog';
 import programJson from '../../../data/program.json';
 import { seedPlan } from '../plan';
+import { buildStarterPlan } from '../starterPlan';
+import type { TrainerCatalog } from '../swapCandidates';
 import { brainInstructions } from './instructions';
 import { toolContract } from '../tools';
 import { BUDGET, CONTEXT_BUDGET_CHARS, serializeContext, type BrainInput } from './context';
@@ -9,9 +11,13 @@ import type { CoachContext } from '../coach';
 import type { StallSession } from '../actions/stall';
 import type {
   ChatMessage,
+  Exercise,
+  FocusBlock,
   Goal,
   NutritionTargets,
+  PlannedExercise,
   Program,
+  ProgramDay,
   ReadinessCard,
   SetLog,
   TrainerState,
@@ -388,5 +394,192 @@ describe('never contains', () => {
       expect(text, bad).not.toContain(bad);
     expect(text).not.toContain('Check-in saved.');
     expect(text).toContain('Last week: 5 of 6 sessions.');
+  });
+});
+
+describe('plan line (M13c task 6b: the coach knows the plan)', () => {
+  // A made-up abs exercise, so these tests don't depend on the vendored abs set.
+  const CRUNCH: Exercise = {
+    id: 'Made_Up_Crunch',
+    name: 'Made-up Crunch',
+    force: 'pull',
+    level: 'beginner',
+    mechanic: 'isolation',
+    equipment: 'body only',
+    category: 'strength',
+    primaryMuscles: ['abdominals'],
+    secondaryMuscles: [],
+    instructions: [],
+  };
+  const CAT: TrainerCatalog = { ...CATALOG, exercises: [...CATALOG.exercises, CRUNCH] };
+  const row = (exerciseId: string, sets: number): PlannedExercise => ({
+    exerciseId,
+    sets,
+    targetReps: [8, 12],
+    restSec: 90,
+    tracking: 'manual',
+  });
+  const UPPER: ProgramDay = {
+    id: 'upper',
+    name: 'Upper',
+    exercises: [row('Dumbbell_Bench_Press', 4), row('Dumbbell_Bicep_Curl', 3)],
+  };
+  const LOWER = (withCore: boolean): ProgramDay => ({
+    id: 'lower',
+    name: 'Lower',
+    exercises: [row('Goblet_Squat', 5), ...(withCore ? [row('Made_Up_Crunch', 3)] : [])],
+  });
+  /** Two days, trained Mon/Tue/Thu/Fri (4 a week): weekly = per rotation × 4 / 2. */
+  const twoDay = (withCore: boolean, over: Partial<TrainerState> = {}): TrainerState => ({
+    version: 3,
+    plan: { days: [UPPER, LOWER(withCore)], seededFrom: 'made-up', edited: true },
+    schedule: { rotation: ['upper', 'lower'], restWeekdays: [0, 3, 6] },
+    overrides: [],
+    ...over,
+  });
+  const ctxFor = (s: TrainerState, over: Partial<CoachContext> = {}): CoachContext =>
+    coach({ state: s, sessions: [], sets: [], catalog: CAT, ...over });
+  const planLineOf = (text: string) => text.split('\n').find((l) => l.startsWith('Plan: '));
+
+  it('names the rotation days and the weekly sets per body area, core included', () => {
+    const { text } = serializeContext(input({ coach: ctxFor(twoDay(true)) }), { brain: 'apple' });
+    expect(planLineOf(text)).toBe(
+      'Plan: Upper, Lower. Weekly sets: chest 8, back 0, legs 10, shoulders 0, arms 6, core 6.',
+    );
+  });
+
+  it('a plan without abs says core 0', () => {
+    const { text } = serializeContext(input({ coach: ctxFor(twoDay(false)) }), {
+      brain: 'claude',
+    });
+    expect(planLineOf(text)).toBe(
+      'Plan: Upper, Lower. Weekly sets: chest 8, back 0, legs 10, shoulders 0, arms 6, core 0.',
+    );
+  });
+
+  it('counts every training day: no rest weekdays = 7 days of the rotation a week (rounded)', () => {
+    const s = twoDay(true, { schedule: { rotation: ['upper', 'lower'], restWeekdays: [] } });
+    const { text } = serializeContext(input({ coach: ctxFor(s) }), { brain: 'apple' });
+    // per rotation × 7 / 2: chest 14, legs 17.5 → 18, arms 10.5 → 11, core 10.5 → 11.
+    expect(planLineOf(text)).toBe(
+      'Plan: Upper, Lower. Weekly sets: chest 14, back 0, legs 18, shoulders 0, arms 11, core 11.',
+    );
+  });
+
+  it('a day that runs twice in the rotation counts twice', () => {
+    const s = twoDay(false, {
+      schedule: { rotation: ['upper', 'lower', 'upper'], restWeekdays: [0, 4, 5, 6] },
+    });
+    const { text } = serializeContext(input({ coach: ctxFor(s) }), { brain: 'apple' });
+    // 3 days a week, one rotation a week: chest 8, arms 6, legs 5.
+    expect(planLineOf(text)).toBe(
+      'Plan: Upper, Lower, Upper. Weekly sets: chest 8, back 0, legs 5, shoulders 0, arms 6, core 0.',
+    );
+  });
+
+  it("during a focus block, uses this block week's rows", () => {
+    const BIG_UPPER: ProgramDay = {
+      ...UPPER,
+      exercises: [row('Dumbbell_Bench_Press', 5), row('Dumbbell_Bicep_Curl', 3)],
+    };
+    // Two weeks from Mon 2026-11-09: week 1 Mon / Wed / Fri, week 2 only Mon / Wed.
+    const days = Array.from({ length: 14 }, (_, i) => {
+      const date = `2026-11-${String(9 + i).padStart(2, '0')}`;
+      const wd = i % 7; // 0 = Monday
+      const train = i < 7 ? [0, 2, 4] : [0, 2];
+      const day = !train.includes(wd) ? null : wd === 2 ? LOWER(true) : BIG_UPPER;
+      return { date, day };
+    });
+    const block: FocusBlock = {
+      id: 'b-made-up',
+      group: 'chest',
+      startDate: '2026-11-09',
+      weeks: 2,
+      weekdays: [1, 3, 5],
+      days,
+      targetSetsPerWeek: 10,
+      baseSetsPerWeek: 8,
+    };
+    const s = twoDay(false, { blocks: [block] });
+    const week1 = serializeContext(input({ coach: ctxFor(s) }), { brain: 'apple' }).text;
+    expect(planLineOf(week1)).toBe(
+      'Plan: Upper, Lower. Weekly sets (focus block week 1 of 2): chest 10, back 0, legs 5, shoulders 0, arms 6, core 3.',
+    );
+    const week2 = serializeContext(input({ coach: ctxFor(s, { today: '2026-11-18' }) }), {
+      brain: 'apple',
+    }).text;
+    expect(planLineOf(week2)).toBe(
+      'Plan: Upper, Lower. Weekly sets (focus block week 2 of 2): chest 5, back 0, legs 5, shoulders 0, arms 3, core 3.',
+    );
+    // After the block: back to the plan.
+    const after = serializeContext(input({ coach: ctxFor(s, { today: '2026-11-25' }) }), {
+      brain: 'apple',
+    }).text;
+    expect(planLineOf(after)).toBe(
+      'Plan: Upper, Lower. Weekly sets: chest 8, back 0, legs 10, shoulders 0, arms 6, core 0.',
+    );
+  });
+
+  it('a starter plan from the intake (made-up answers)', () => {
+    const starter = buildStarterPlan(
+      { goalKind: 'muscle', days: 3, sessionMin: 60, experience: 'some', easyOn: [], at: 1 },
+      CATALOG,
+      CATALOG,
+    );
+    const s: TrainerState = {
+      version: 1,
+      plan: starter.plan,
+      schedule: starter.schedule,
+      overrides: [],
+    };
+    const { text } = serializeContext(input({ coach: ctxFor(s, { catalog: CATALOG }) }), {
+      brain: 'apple',
+    });
+    const names = starter.schedule.rotation.map(
+      (id) => starter.plan.days.find((d) => d.id === id)?.name,
+    );
+    const line = planLineOf(text) ?? '';
+    expect(line.startsWith(`Plan: ${names.join(', ')}. Weekly sets: chest `)).toBe(true);
+    expect(line).toMatch(
+      /Weekly sets: chest \d+, back \d+, legs \d+, shoulders \d+, arms \d+, core \d+\.$/,
+    );
+    // Every area the starter plan trains has sets; 3 days a week is one rotation a week.
+    expect(line).not.toMatch(/(chest|back|legs) 0\b/);
+  });
+
+  it('no rotation → no plan line', () => {
+    const s = twoDay(false, { schedule: { rotation: [], restWeekdays: [] } });
+    const { text } = serializeContext(input({ coach: ctxFor(s) }), { brain: 'apple' });
+    expect(planLineOf(text)).toBeUndefined();
+  });
+
+  it('the default program: six day names and the line costs ≤ 140 characters', () => {
+    const { text } = serializeContext(input(), { brain: 'apple' });
+    const line = planLineOf(text) ?? '';
+    expect(line).toMatch(
+      /^Plan: Push A, Pull A, Legs A, Push B, Pull B, Legs B\. Weekly sets: chest \d+, back \d+, legs \d+, shoulders \d+, arms \d+, core 0\.$/,
+    );
+    expect(line.length).toBeLessThanOrEqual(140);
+  });
+
+  it('kept on the heavy history (top sets and turns are trimmed first), within the budget', () => {
+    const { text } = serializeContext(input(), { brain: 'apple' });
+    expect(text.length).toBeLessThanOrEqual(CONTEXT_BUDGET_CHARS);
+    expect(planLineOf(text)).toBeDefined();
+    expect(text).toMatch(/Top sets/);
+    // It sits with the plan lines, before the top sets.
+    expect(text.indexOf('Plan: ')).toBeLessThan(text.indexOf('Top sets'));
+  });
+
+  it('dropped last: when even the fixed lines are over the budget, it goes before the hard cut', () => {
+    const many: Goal[] = Array.from({ length: 60 }, (_, i) => ({
+      ...LIFT_GOAL,
+      id: `g${i}`,
+      text: `Made-up lift goal number ${i} with a long description to fill the context`,
+    }));
+    const { text } = serializeContext(input({ goals: many }), { brain: 'apple' });
+    expect(text.length).toBeLessThanOrEqual(CONTEXT_BUDGET_CHARS);
+    expect(planLineOf(text)).toBeUndefined();
+    expect(text).not.toMatch(/Top sets/);
   });
 });

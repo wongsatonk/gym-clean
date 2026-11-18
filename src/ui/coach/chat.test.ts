@@ -20,7 +20,10 @@ import {
   recapRange,
   newestScrollTop,
   pinNewest,
+  REVEAL_MS,
   redFlagUp,
+  revealMessage,
+  revealScrollTop,
   splitReplyChips,
   textToSend,
   visibleChatChips,
@@ -995,5 +998,197 @@ describe('chat: a lead-in reply ("I can help with:") keeps its options under it'
     });
     expect(attr(coachItems(el)[0] as FakeEl, 'data-coach-chip')).toHaveLength(0);
     expect(attr(dock(el), 'data-coach-chip')).toHaveLength(2);
+  });
+});
+
+// ---------- M13c task 12b: revealMessage (search → Coach at that message) ----------
+
+const at = <T>(list: readonly T[], i: number): T => {
+  const v = list[i];
+  if (v === undefined) throw new Error(`nothing at ${i}`);
+  return v;
+};
+const idAt = (list: readonly ChatMessage[], i: number): number => at(list, i).id ?? -1;
+
+type Box = FakeEl & {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+  scrollTo?: (o: { top: number; behavior: string }) => void;
+};
+type Item = FakeEl & { offsetTop: number; offsetHeight: number };
+
+/** Gives the mounted thread a layout: a 400px box over 2000px of messages, 100px each. */
+function layout(el: FakeEl): { box: Box; items: Item[] } {
+  const box = el.oneByClass('chat-scroll') as Box;
+  box.scrollHeight = 2000;
+  box.clientHeight = 400;
+  box.scrollTop = 1600;
+  const items = attr(el, 'data-msg-id') as Item[];
+  items.forEach((it, i) => {
+    it.offsetTop = 200 * i;
+    it.offsetHeight = 100;
+  });
+  return { box, items };
+}
+
+describe('revealScrollTop', () => {
+  it('centres a message in the box', () => {
+    expect(
+      revealScrollTop({ itemTop: 1000, itemHeight: 100, clientHeight: 400, scrollHeight: 2000 }),
+    ).toBe(850);
+  });
+
+  it('a message taller than the box shows from its top (small gap)', () => {
+    expect(
+      revealScrollTop({ itemTop: 1000, itemHeight: 600, clientHeight: 400, scrollHeight: 2000 }),
+    ).toBe(992);
+  });
+
+  it('clamps to the top and the bottom of the thread', () => {
+    expect(
+      revealScrollTop({ itemTop: 50, itemHeight: 100, clientHeight: 400, scrollHeight: 2000 }),
+    ).toBe(0);
+    expect(
+      revealScrollTop({ itemTop: 1950, itemHeight: 50, clientHeight: 400, scrollHeight: 2000 }),
+    ).toBe(1600);
+  });
+});
+
+describe('revealMessage (M13c task 12b)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const thread = () => [
+    msg('user', 'How heavy should my bench be?'),
+    msg('coach', 'Start with a weight you can lift 10 times.'),
+    msg('user', 'Thanks'),
+    msg('coach', 'Any time.'),
+  ];
+
+  it('scrolls smoothly to the message, outlines it (fading), focuses it, then clears', () => {
+    vi.useFakeTimers();
+    const messages = thread();
+    const { el } = mount({ messages });
+    const { box, items } = layout(el);
+    const calls: { top: number; behavior: string }[] = [];
+    box.scrollTo = (o) => {
+      calls.push(o);
+      box.scrollTop = o.top;
+    };
+    const target = at(messages, 1);
+    expect(
+      revealMessage(el as unknown as HTMLElement, target.id ?? -1, { reducedMotion: false }),
+    ).toBe(true);
+    // Item 1 sits at 200..300: centred → 200 - 150 = 50.
+    expect(calls).toEqual([{ top: 50, behavior: 'smooth' }]);
+    const item = at(items, 1);
+    expect(item.getAttribute('data-msg-id')).toBe(String(target.id));
+    expect(item.getAttribute('data-chat-reveal')).toBe('fade');
+    expect(item.getAttribute('tabindex')).toBe('-1');
+    expect(
+      (globalThis as unknown as { document: { activeElement: unknown } }).document.activeElement,
+    ).toBe(item);
+    // Only that message is marked.
+    expect(attr(el, 'data-chat-reveal')).toEqual([item]);
+    vi.advanceTimersByTime(REVEAL_MS - 1);
+    expect(item.hasAttribute('data-chat-reveal')).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(item.hasAttribute('data-chat-reveal')).toBe(false);
+  });
+
+  it('reduced motion: an instant jump and a static outline (also read from matchMedia)', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('matchMedia', (q: string) => ({
+      matches: q === '(prefers-reduced-motion: reduce)',
+    }));
+    const messages = thread();
+    const { el } = mount({ messages });
+    const { box, items } = layout(el);
+    const calls: { top: number; behavior: string }[] = [];
+    box.scrollTo = (o) => calls.push(o);
+    // Search hands the id over as a string.
+    expect(revealMessage(el as unknown as HTMLElement, String(at(messages, 2).id))).toBe(true);
+    expect(calls).toEqual([{ top: 250, behavior: 'auto' }]);
+    expect(at(items, 2).getAttribute('data-chat-reveal')).toBe('static');
+    vi.advanceTimersByTime(REVEAL_MS);
+    expect(at(items, 2).hasAttribute('data-chat-reveal')).toBe(false);
+  });
+
+  it('without scrollTo it sets scrollTop; a second reveal restarts the outline timer', () => {
+    vi.useFakeTimers();
+    const messages = thread();
+    const { el } = mount({ messages });
+    const { box, items } = layout(el);
+    const root = el as unknown as HTMLElement;
+    revealMessage(root, idAt(messages, 3), { reducedMotion: true });
+    expect(box.scrollTop).toBe(450);
+    vi.advanceTimersByTime(REVEAL_MS - 100);
+    revealMessage(root, idAt(messages, 3), { reducedMotion: true });
+    vi.advanceTimersByTime(200);
+    expect(at(items, 3).getAttribute('data-chat-reveal')).toBe('static');
+    vi.advanceTimersByTime(REVEAL_MS);
+    expect(at(items, 3).hasAttribute('data-chat-reveal')).toBe(false);
+  });
+
+  it('works on the Coach tab screen root too', () => {
+    vi.useFakeTimers();
+    const messages = thread();
+    const screen = asFake(
+      coachTabScreen(
+        { messages, allowTyping: true },
+        {
+          onText() {},
+          onChip() {},
+          onArea() {},
+          onFollowUp() {},
+          onApply() {},
+          onDismiss() {},
+        },
+        document.createElement('nav'),
+      ),
+    );
+    const { items } = layout(screen);
+    expect(
+      revealMessage(screen as unknown as HTMLElement, idAt(messages, 0), { reducedMotion: true }),
+    ).toBe(true);
+    expect(at(items, 0).getAttribute('data-chat-reveal')).toBe('static');
+  });
+
+  it('false when the message is gone, the chat is unknown or not mounted', () => {
+    const messages = thread();
+    const { el } = mount({ messages });
+    layout(el);
+    const root = el as unknown as HTMLElement;
+    expect(revealMessage(root, 9999, { reducedMotion: true })).toBe(false);
+    expect(revealMessage(asFake(document.createElement('div')) as unknown as HTMLElement, 1)).toBe(
+      false,
+    );
+    el.oneByClass('chat-scroll').isConnected = false;
+    expect(revealMessage(root, idAt(messages, 0), { reducedMotion: true })).toBe(false);
+    expect(attr(el, 'data-chat-reveal')).toHaveLength(0);
+  });
+
+  it("the newest-pin after mount doesn't undo a reveal (it does pin without one)", () => {
+    const frames: (() => void)[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: () => void) => frames.push(cb));
+    const messages = thread();
+
+    const plain = mount({ messages });
+    const p = layout(plain.el);
+    p.box.scrollTop = 0;
+    frames.splice(0).forEach((f) => f());
+    expect(p.box.scrollTop).toBe(1600);
+
+    const revealed = mount({ messages });
+    const r = layout(revealed.el);
+    revealMessage(revealed.el as unknown as HTMLElement, idAt(messages, 1), {
+      reducedMotion: true,
+    });
+    expect(r.box.scrollTop).toBe(50);
+    frames.splice(0).forEach((f) => f());
+    expect(r.box.scrollTop).toBe(50);
   });
 });

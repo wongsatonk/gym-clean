@@ -34,4 +34,30 @@ export const FOCUS_RULES = {
   } as Record<number, readonly number[]>,
   /** "Keep my days" without rest weekdays: his weekdays over this many days back. */
   historyDays: 28,
+  /**
+   * Added exercises of a group: these ids first (after the plan's own), then catalog order.
+   * Core: a loadable cable move first, then floor/bench moves (M13c task 6).
+   */
+  prefer: {
+    core: [
+      'Cable_Crunch',
+      'Flat_Bench_Lying_Leg_Raise',
+      'Dead_Bug',
+      'Reverse_Crunch',
+      'Crunches',
+      'Air_Bike',
+    ],
+  } as { readonly core: readonly string[] } & Partial<Record<string, readonly string[]>>,
+  /**
+   * M13c "Also add abs?" Yes (Decision "M13c answers", q3): abs rows on another group's block,
+   * one row a day on the lightest days, until the week has `emptyBaseSets` abs sets on at least
+   * `minDays` days. The main group's rows are never touched; the rows end with the block.
+   */
+  alsoCore: {
+    group: 'core',
+    sets: 3,
+    targetReps: [10, 15] as [number, number],
+    restSec: 60,
+    minDays: 2,
+  },
 } as const;

@@ -326,3 +326,24 @@ describe('cardio line on the week score (M12 1b task 32)', () => {
     }
   });
 });
+
+describe('Calendar: Search next to the title (M13c)', () => {
+  it('without onSearch the title is the bare h1 and there is no Search', () => {
+    const el = render();
+    expect(el.children[0]?.tag).toBe('h1');
+    expect(el.find((e) => e.hasAttribute('data-search-open'))).toHaveLength(0);
+  });
+
+  it('with onSearch: the title row holds "Calendar" and Search; a tap passes the button out', () => {
+    const onSearch = vi.fn();
+    const el = render(props(), Object.assign(acts(), { onSearch }));
+    const head = must(el.children[0]);
+    expect(head.tag).toBe('header');
+    expect(head.byTag('h1')[0]?.textContent).toBe('Calendar');
+    const btn = must(head.find((e) => e.hasAttribute('data-search-open'))[0]);
+    expect(btn.textContent).toBe('Search');
+    btn.click();
+    expect(onSearch).toHaveBeenCalledTimes(1);
+    expect(onSearch).toHaveBeenCalledWith(btn);
+  });
+});

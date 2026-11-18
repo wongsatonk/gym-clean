@@ -5,7 +5,7 @@ import { LEARN_CARDS, learnCard } from './learnCards';
 import source from './learnCards.ts?raw';
 
 describe('learn cards', () => {
-  it('has the ten topics, each id once', () => {
+  it('has the ten topics plus the two M13c cards, each id once', () => {
     expect(LEARN_CARDS.map((c) => c.id)).toEqual([
       'progressiveOverload',
       'effort',
@@ -17,6 +17,9 @@ describe('learn cards', () => {
       'shortSessions',
       'measurements',
       'consistency',
+      // M13c: the Learning badge's card and the "Also add abs?" step's Why?.
+      'cameraLearning',
+      'coreTraining',
     ]);
   });
 
@@ -44,6 +47,40 @@ describe('learn cards', () => {
       expect(ids.has(id ?? ''), `${intent} → ${id}`).toBe(true);
     expect(learnCard('protein')?.title).toBeTruthy();
     expect(learnCard('nope')).toBeUndefined();
+  });
+
+  it('cameraLearning explains the Learning badge: new counting, may miss or add a rep, fix it on Rest', () => {
+    const c = learnCard('cameraLearning');
+    expect(c?.title).toBe('Camera still learning');
+    const text = `${c?.body} ${c?.why}`;
+    expect(text).toMatch(/new/i);
+    expect(text).toMatch(/miss/i);
+    expect(text).toMatch(/add/i);
+    expect(text).toMatch(/\bRest\b/);
+    expect(text).toMatch(/fix/i);
+    // M13c review: the why says what fixes do on this phone; nothing suggests data leaves it.
+    expect(c?.why).toMatch(/saved/i);
+    for (const w of [/tune/i, /update/i, /send/i, /upload/i, /share/i, /improve/i])
+      expect(c?.why ?? '', String(w)).not.toMatch(w);
+  });
+
+  it('coreTraining explains the "Also add abs?" choice: the block, the main focus unchanged', () => {
+    const c = learnCard('coreTraining');
+    expect(c?.title).toBeTruthy();
+    const text = `${c?.title} ${c?.body} ${c?.why}`;
+    expect(text).toMatch(/\babs\b/i);
+    expect(c?.why).toMatch(/block/i);
+    expect(c?.why).toMatch(/main focus/i);
+    expect(c?.why).toMatch(/end with the block/i);
+    // Coaching, not a promise about how you'll look.
+    expect(text).not.toMatch(/burn (belly|stomach) fat|spot|flat (belly|stomach)/i);
+  });
+
+  it('every card says "you", never he or she (M13 anyone-scan)', () => {
+    for (const c of LEARN_CARDS)
+      expect(`${c.title} ${c.body} ${c.why ?? ''}`, c.id).not.toMatch(
+        /\b(he|she|his|her|him|hers)\b/i,
+      );
   });
 
   it('is written for anyone (no names or personal numbers)', () => {

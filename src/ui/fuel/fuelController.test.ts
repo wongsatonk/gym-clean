@@ -26,6 +26,7 @@ import {
   getNutritionSettings,
   listWeeklyChecks,
   saveFood,
+  saveEntry,
   saveNutritionSettings,
   saveWeeklyCheck,
   saveWeighIn,
@@ -176,6 +177,12 @@ function makeApp(now = EVENING, photo?: FuelPhotoHost, health?: FuelHealthHost) 
     view = 'settings';
     render();
   };
+  /** M13c 12b: Fuel on a given day (what the app does after `openDay`). */
+  const openDay = async (date: string) => {
+    await ctrl.openDay(date);
+    view = 'fuel';
+    render();
+  };
   return {
     ctrl,
     root,
@@ -188,6 +195,7 @@ function makeApp(now = EVENING, photo?: FuelPhotoHost, health?: FuelHealthHost) 
     onScreen,
     type,
     showSettings,
+    openDay,
   };
 }
 
@@ -785,4 +793,107 @@ describe('M11 health pass-through', () => {
     app.onScreen('data-weigh-in').click();
     expect(app.root.find((e) => e.hasAttribute('data-activity-suggest'))).toHaveLength(0);
   });
+});
+
+describe('M13c 12b: openDay (search → a Fuel day)', () => {
+  const entry = (id: string, date: string, label: string): Parameters<typeof saveEntry>[1] => ({
+    id,
+    date,
+    time: new Date(`${date}T12:00:00`).getTime(),
+    slot: 'lunch',
+    label,
+    amount: { servings: 1 },
+    estimate: false,
+    kcal: 500,
+    proteinG: 30,
+  });
+
+  it('opens a day in the 30-day window, then Back to today', async () => {
+    await setUp();
+    const yesterday = localDate(EVENING - DAY);
+    await saveEntry(db, entry('a', yesterday, 'Rice'));
+    await saveEntry(db, entry('b', localDate(EVENING), 'Shake'));
+    const app = makeApp();
+    await app.ctrl.openDay(yesterday);
+    app.ctrl.screen();
+    await app.openFuel(); // open() resets to today…
+    expect(app.ctrl.viewDay()).toBeNull();
+    await app.ctrl.openDay(yesterday); // …openDay shows that day
+    app.root.replaceChildren(asFake(app.ctrl.screen()));
+    expect(app.ctrl.viewDay()).toBe(yesterday);
+    expect(app.onScreen('data-fuel-day', yesterday).textContent).toBe('Tue 17 Nov');
+    expect(
+      app.root.find((e) => e.hasAttribute('data-entry')).map((e) => e.getAttribute('data-entry')),
+    ).toEqual(['a']);
+    app.onScreen('data-fuel-today').click();
+    expect(app.ctrl.viewDay()).toBeNull();
+    app.root.replaceChildren(asFake(app.ctrl.screen()));
+    expect(
+      app.root.find((e) => e.hasAttribute('data-entry')).map((e) => e.getAttribute('data-entry')),
+    ).toEqual(['b']);
+  });
+
+  it('a day older than the window is read on its own; today or later opens today', async () => {
+    await setUp();
+    const old = localDate(EVENING - 90 * DAY);
+    await saveEntry(db, entry('old', old, 'Khao man gai'));
+    const app = makeApp();
+    await app.ctrl.openDay(old);
+    app.root.replaceChildren(asFake(app.ctrl.screen()));
+    expect(app.onScreen('data-entry', 'old').textContent).toContain('Khao man gai');
+    await app.ctrl.openDay(localDate(EVENING + DAY));
+    expect(app.ctrl.viewDay()).toBeNull();
+  });
+
+  const rowIds = (app: ReturnType<typeof makeApp>) =>
+    app.root.find((e) => e.hasAttribute('data-entry')).map((e) => e.getAttribute('data-entry'));
+
+  // Review fix: a day older than the window lives in its own list, so edits and deletes must
+  // reach it too (and Delete's focus has no Log button there: Back to today takes it).
+  for (const [name, daysAgo] of [
+    ['older than the 30-day window', 90],
+    ['inside the 30-day window', 1],
+  ] as const) {
+    it(`${name}: Delete removes the row (focus on Back to today), Undo brings it back`, async () => {
+      await setUp();
+      const day = localDate(EVENING - daysAgo * DAY);
+      await saveEntry(db, entry('x', day, 'Khao man gai'));
+      await saveEntry(db, entry('y', day, 'Som tam'));
+      const app = makeApp();
+      await app.openDay(day);
+      expect(rowIds(app)).toEqual(['x', 'y']);
+      app.onScreen('data-entry-edit', 'x').click();
+      app.inSheet('data-entry-remove').click();
+      await flush();
+      expect(await entriesBetween(db, day, day)).toHaveLength(1);
+      expect(rowIds(app)).toEqual(['y']);
+      expect(active()).toBe(app.onScreen('data-fuel-today'));
+      expect(app.toasts.at(-1)?.text).toBe('Deleted Khao man gai.');
+      app.toasts.at(-1)?.onUndo();
+      await flush();
+      expect(await entriesBetween(db, day, day)).toHaveLength(2);
+      expect(rowIds(app).sort()).toEqual(['x', 'y']);
+      // Today's list never picks up the old day's row.
+      app.onScreen('data-fuel-today').click();
+      app.root.replaceChildren(asFake(app.ctrl.screen()));
+      expect(rowIds(app)).toEqual([]);
+    });
+
+    it(`${name}: editing the amount shows the new amount on the row`, async () => {
+      await setUp();
+      const day = localDate(EVENING - daysAgo * DAY);
+      await saveEntry(db, entry('x', day, 'Khao man gai'));
+      const app = makeApp();
+      await app.openDay(day);
+      expect(app.onScreen('data-entry', 'x').textContent).toContain('500 kcal');
+      app.onScreen('data-entry-edit', 'x').click();
+      app.inSheet('data-step', 'up').click();
+      app.inSheet('data-entry-save').click();
+      await flush();
+      expect((await entriesBetween(db, day, day))[0]?.kcal).toBe(750);
+      expect(app.onScreen('data-entry', 'x').textContent).toContain('750 kcal');
+      expect(app.onScreen('data-entry', 'x').textContent).not.toContain('500 kcal');
+      expect(active()).toBe(app.onScreen('data-entry-edit', 'x'));
+    });
+  }
 });

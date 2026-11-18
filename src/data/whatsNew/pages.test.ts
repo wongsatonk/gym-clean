@@ -157,15 +157,17 @@ describe('WHATS_NEW_PAGES', () => {
     expect(text('next-arm')).toMatch(/leg/i);
     expect(text('setup-card')).toMatch(/Step into frame/);
     // Second user (M13): "you", never a gendered word.
-    for (const p of r1151) expect(`${p.title} ${p.what} ${p.why}`).not.toMatch(/\b(he|she|his|her)\b/i);
+    for (const p of r1151)
+      expect(`${p.title} ${p.what} ${p.why}`).not.toMatch(/\b(he|she|his|her)\b/i);
   });
 
   it('1.15.1 is shown after 1.15.0, and an update from 1.14.0 shows both releases, newest first', () => {
     expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.0' }, '1.15.0', true)).toEqual([]);
     expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.0' }, '1.15.1', true)).toEqual(r1151);
-    expect(
-      tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.14.0' }, '1.15.1', true, false),
-    ).toEqual([...r1151, ...r115.filter((p) => !p.owner)]);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.14.0' }, '1.15.1', true, false)).toEqual([
+      ...r1151,
+      ...r115.filter((p) => !p.owner),
+    ]);
     expect(replayPages(WHATS_NEW_PAGES, '1.15.1')).toEqual(r1151);
     expect(replayPages(WHATS_NEW_PAGES, '1.15.0')).toEqual(r115);
     expect(addedTopics(TODO_TOPICS, tourReleases(r1151), true).map((t) => t.id)).toEqual([
@@ -173,8 +175,106 @@ describe('WHATS_NEW_PAGES', () => {
     ]);
   });
 
-  it('holds only releases 1.12.0 to 1.15.1, every page in one of them', () => {
-    expect(r112.length + r113.length + r114.length + r115.length + r1151.length).toBe(
+  const r116 = WHATS_NEW_PAGES.filter((p) => p.release === '1.16.0');
+
+  it('has seven pages for 1.16.0 (M13c), for everyone, each with its Try it and icon', () => {
+    expect(r116.map((p) => [p.id, p.tryIt, p.icon, p.owner])).toEqual([
+      ['moving-glow', 'settings', 'palette', undefined],
+      ['search', 'today', 'list', undefined],
+      ['tap-badge', 'today', 'play', undefined],
+      ['abs', 'coach', 'dumbbell', undefined],
+      ['coach-plan', 'coach', 'chat', undefined],
+      ['food-photo-library', 'fuel', 'camera', undefined],
+      ['voice-list', 'settings', 'speaker', undefined],
+    ]);
+  });
+
+  it('1.16.0 describes what ships: glow + Plain, search scope, badges, abs by choice, plan, photo', () => {
+    const text = (id: string) => {
+      const p = r116.find((x) => x.id === id);
+      return `${p?.title} ${p?.what} ${p?.why}`;
+    };
+    // Moving glow on the home screens, black workout screens, Plain in Settings, Reduce Motion.
+    expect(text('moving-glow')).toMatch(/glow/i);
+    expect(text('moving-glow')).toMatch(/workout screens stay black/i);
+    expect(text('moving-glow')).toMatch(/\bPlain\b/);
+    expect(text('moving-glow')).toMatch(/Settings/);
+    expect(text('moving-glow')).toMatch(/Reduce Motion/);
+    // Search everything (bundled + your own data on this phone) and the Library.
+    for (const w of [
+      /exercises/i,
+      /settings/i,
+      /learn cards/i,
+      /foods/i,
+      /workouts/i,
+      /chats?/i,
+      /meals/i,
+    ])
+      expect(text('search')).toMatch(w);
+    expect(text('search')).toMatch(/Library/);
+    expect(text('search')).toMatch(/on this phone/i);
+    expect(text('search')).toMatch(/nothing is sent/i);
+    // Badges: 3D demo, Camera with Practice, Learning, before a workout; nothing starts.
+    for (const w of [
+      /3D demo/,
+      /Camera/,
+      /Learning/,
+      /Practice/,
+      /before a workout/i,
+      /saves nothing/i,
+    ])
+      expect(text('tap-badge')).toMatch(w);
+    // Abs only by choice: Abs & core focus, "add abs" with another focus, the first questions.
+    expect(text('abs')).toMatch(/Abs & core/);
+    expect(text('abs')).toMatch(/another focus/i);
+    expect(text('abs')).toMatch(/only when you choose/i);
+    expect(text('abs')).toMatch(/first questions/i);
+    // The coach knows the plan; the Claude card only explains, nothing is sent.
+    expect(text('coach-plan')).toMatch(/your plan/i);
+    expect(text('coach-plan')).toMatch(/weekly sets/i);
+    expect(text('coach-plan')).toMatch(/when it plans/i);
+    // M13c review: only one brain answers "what is my plan missing", so the page doesn't promise it.
+    expect(text('coach-plan')).not.toMatch(/missing/i);
+    expect(text('coach-plan')).toMatch(/Claude/);
+    expect(text('coach-plan')).toMatch(/nothing is sent/i);
+    // Photo from the library: both buttons, same recognition, on this phone.
+    expect(text('food-photo-library')).toMatch(/Take photo/);
+    expect(text('food-photo-library')).toMatch(/Choose from library/);
+    expect(text('food-photo-library')).toMatch(/on this phone/i);
+    // The voice list folds into one row.
+    expect(text('voice-list')).toMatch(/one row/i);
+    expect(text('voice-list')).toMatch(/Test voice/);
+  });
+
+  it('1.16.0 pages say "you", never he or she, and promise nothing medical', () => {
+    for (const p of r116) {
+      const all = `${p.title} ${p.what} ${p.why}`;
+      expect(all, p.id).not.toMatch(/\b(he|she|his|her|him|hers|wife|husband)\b/i);
+      expect(all, p.id).not.toMatch(/\b(cure|heal|prevent|guarantee|clinically)\b/i);
+    }
+  });
+
+  it('1.16.0 is shown after 1.15.1; an update from 1.15.0 shows both, newest first, and the K3 to-do', () => {
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.1' }, '1.15.1', true)).toEqual([]);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.1' }, '1.16.0', true)).toEqual(r116);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.0' }, '1.16.0', true)).toEqual([
+      ...r116,
+      ...r1151,
+    ]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.16.0')).toEqual(r116);
+    expect(replayPages(WHATS_NEW_PAGES, '1.15.1')).toEqual(r1151);
+    expect(addedTopics(TODO_TOPICS, tourReleases(r116), true).map((t) => t.id)).toEqual([
+      'library-abs',
+    ]);
+    // Owner mode off: the same pages (none is owner-only), no to-do.
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.15.1' }, '1.16.0', true, false)).toEqual(
+      r116,
+    );
+    expect(addedTopics(TODO_TOPICS, tourReleases(r116), false)).toEqual([]);
+  });
+
+  it('holds only releases 1.12.0 to 1.16.0, every page in one of them', () => {
+    expect(r112.length + r113.length + r114.length + r115.length + r1151.length + r116.length).toBe(
       WHATS_NEW_PAGES.length,
     );
   });
@@ -215,11 +315,9 @@ describe('WHATS_NEW_PAGES', () => {
       expect(list.some((p) => p.owner)).toBe(false);
       expect(ids(list)).not.toContain('todos');
       expect(ids(list)).not.toContain('owner-tools');
-      expect(ids(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.14.0' }, '1.15.0', true, false))).toEqual([
-        'new-look',
-        'about',
-        'story',
-      ]);
+      expect(
+        ids(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.14.0' }, '1.15.0', true, false)),
+      ).toEqual(['new-look', 'about', 'story']);
       expect(replayPages(WHATS_NEW_PAGES, '1.15.0', false).map((p) => p.id)).toEqual([
         'new-look',
         'about',

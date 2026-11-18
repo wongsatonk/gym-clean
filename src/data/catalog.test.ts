@@ -7,6 +7,7 @@ import type { BodyArea } from '../core/types';
 import { MUSCLES, bodyMapSvg } from '../ui/bodyMap';
 import { hasDemo } from '../ui/demo3d/ids';
 import { ruleFor } from '../core/exercises';
+import { isOneSided } from '../core/exercises/oneSided';
 import { checkCopy } from '../core/trainer/replies';
 import {
   areaForWord,
@@ -163,13 +164,15 @@ describe('catalog (M10 swap pool)', () => {
   const catalog = catalogExercises();
   const programIds = [...new Set(allPlanned.map((p) => p.exerciseId))];
 
-  it('lists the program exercises plus a 20-30 exercise swap pool, ids unique', () => {
+  it('lists the program exercises plus a 20-45 exercise swap pool, ids unique', () => {
     const ids = catalog.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const id of programIds) expect(ids, id).toContain(id);
     const pool = ids.filter((id) => !programIds.includes(id));
+    // 20-30 in M10; 20-45 since M13c (the abs set sits in the pool): SPEC M13c "Changes to
+    // earlier contracts" and PROGRESS Decision "M13c answers" (2026-11-18).
     expect(pool.length).toBeGreaterThanOrEqual(20);
-    expect(pool.length).toBeLessThanOrEqual(30);
+    expect(pool.length).toBeLessThanOrEqual(45);
   });
 
   it('keeps the vendored free-exercise-db shape (strength only)', () => {
@@ -507,4 +510,108 @@ describe('single D-handle copy (M10e-q4)', () => {
       expect(lines, id).toMatch(/other arm/i);
     });
   }
+});
+
+// M13c task 2: the abs set, vendored verbatim from free-exercise-db (Unlicense) at commit
+// f00c92c7dcf1216a928a52c3706c7ce8e2f71ed5. Manual counting only; abs join a plan only through a
+// chosen focus or the intake (Decision "M13c answers"), never through program.json.
+describe('abs set (M13c)', () => {
+  const ABS = [
+    'Crunches',
+    'Reverse_Crunch',
+    'Flat_Bench_Lying_Leg_Raise',
+    'Dead_Bug',
+    'Air_Bike',
+    'Russian_Twist',
+    'Dumbbell_Side_Bend',
+    'Cable_Crunch',
+    'Pallof_Press',
+    'Hanging_Leg_Raise',
+  ];
+  const DEFAULT = defaultGymProfile();
+  const catalog = catalogExercises();
+  const absPrimary = catalog.filter((e) => e.primaryMuscles[0] === 'abdominals');
+  // "you" wording, never he/she (the app is shared; same word list as the M13 anyone-scan).
+  const GENDERED =
+    /\b(he|him|his|himself|she|her|hers|herself|man|men|guy|guys|bro|bros|dude|dudes|lads?|boys?|girls?)\b/i;
+
+  it('are in the catalog: strength, abdominals primary, the core area', () => {
+    for (const id of ABS) {
+      const e = exerciseById(id);
+      expect(e, id).toBeDefined();
+      expect(e?.category, id).toBe('strength');
+      expect(e?.primaryMuscles[0], id).toBe('abdominals');
+      expect(bodyAreaOf(e?.primaryMuscles[0] ?? ''), id).toBe('core');
+    }
+  });
+
+  it('give at least 8 abdominals-primary exercises, at least 5 doable in the default gym', () => {
+    expect(absPrimary.length).toBeGreaterThanOrEqual(8);
+    expect(absPrimary.filter((e) => gymCanDo(e.id, DEFAULT)).length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('never sit in the default program (abs only by your choice)', () => {
+    for (const id of ABS) expect(allPlanned.map((p) => p.exerciseId), id).not.toContain(id);
+  });
+
+  it('have a short cue and 2-3 how-to lines in coaching words, written for anyone', () => {
+    for (const id of ABS) {
+      const cue = cueFor(id);
+      expect(cue, id).toBeTruthy();
+      expect(cue.split(/\s+/).length, cue).toBeLessThanOrEqual(8);
+      const h = howToFor(id);
+      expect(h, id).toBeDefined();
+      expect(h?.lines.length ?? 0, id).toBeGreaterThanOrEqual(2);
+      expect(h?.lines.length ?? 0, id).toBeLessThanOrEqual(3);
+      for (const t of [cue, ...(h?.lines ?? []), h?.focus ?? '', h?.tempo ?? '']) {
+        expect(t.length, `${id}: ${t}`).toBeLessThanOrEqual(70);
+        expect(t, `${id}: ${t}`).not.toMatch(banned);
+        expect(checkCopy(t).ok, `${id}: ${t}`).toBe(true);
+        expect(t, `${id}: ${t}`).not.toMatch(GENDERED);
+      }
+      expect(h?.focus, id).toMatch(/^Focus: /);
+      expect(h?.tempo, id).toMatch(/\b(Lower|Return|Down) 2 s\b/);
+    }
+  });
+
+  it('say how to count sides: one side then the other, or both sides as one', () => {
+    const text = (id: string) => (howToFor(id)?.lines ?? []).join(' ');
+    for (const id of ['Pallof_Press', 'Dumbbell_Side_Bend']) {
+      expect(text(id), id).toMatch(/all reps on one side, then the other/i);
+      expect(text(id), id).toMatch(/log reps per side/i);
+    }
+    for (const id of ['Russian_Twist', 'Dead_Bug'])
+      expect(text(id), id).toMatch(/count both sides as one/i);
+  });
+
+  it('carry the kit they need (Cable Crunch: rope or lat bar)', () => {
+    for (const id of ['Crunches', 'Reverse_Crunch', 'Dead_Bug', 'Air_Bike', 'Russian_Twist'])
+      expect(kitNeeds(id), id).toEqual([[]]);
+    expect(kitNeeds('Flat_Bench_Lying_Leg_Raise')).toEqual([['adjustable-bench']]);
+    expect(kitNeeds('Dumbbell_Side_Bend')).toEqual([['dumbbells'], ['kettlebell']]);
+    expect(kitNeeds('Cable_Crunch')).toEqual([
+      ['cable-pulley', 'cable-rope'],
+      ['cable-pulley', 'cable-lat-bar'],
+    ]);
+    expect(kitNeeds('Pallof_Press')).toEqual([['cable-pulley', 'cable-d-handle']]);
+    expect(kitNeeds('Hanging_Leg_Raise')).toEqual([['pull-up-bar']]);
+    // The default gym has a lat bar, no rope and no pull-up bar.
+    expect(gymCanDo('Cable_Crunch', DEFAULT)).toBe(true);
+    expect(gymCanDo('Cable_Crunch', { equipment: ['cable-pulley'] })).toBe(false);
+    expect(gymCanDo('Hanging_Leg_Raise', DEFAULT)).toBe(false);
+    expect(missingKitLabels('Hanging_Leg_Raise', DEFAULT)).toEqual(['Pull-up bar']);
+    expect(preferredSwaps('Hanging_Leg_Raise')[0]).toBe('Flat_Bench_Lying_Leg_Raise');
+  });
+
+  it('are counted by hand (no pose rule) and not in the one-arm (Next arm) list', () => {
+    for (const id of ABS) {
+      expect(ruleFor(id), id).toBeUndefined();
+      expect(isOneSided(id), id).toBe(false);
+    }
+  });
+
+  it('can be named in words, English and Thai', () => {
+    for (const w of ['abs', 'six pack', 'stomach', 'belly', 'core', 'ท้อง', 'หน้าท้อง', 'พุง'])
+      expect(areaForWord(w), w).toBe('core');
+  });
 });

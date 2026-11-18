@@ -353,6 +353,86 @@ describe('buildStarterPlan', () => {
     });
   });
 
+  // ---- M13c: "Add abs to your plan?" (Decision "M13c answers", q3) ----
+
+  const isAbs = (id: string) => exercise(id).primaryMuscles.includes('abdominals');
+  const absDays = (p: StarterPlan) =>
+    p.plan.days.filter((d) => d.exercises.some((r) => isAbs(r.exerciseId)));
+
+  it('no abs unless the intake said Yes: No and no answer give none, for every answer set', () => {
+    for (const goalKind of GOALS)
+      for (const days of DAYS)
+        for (const sessionMin of MINUTES)
+          for (const experience of EXPERIENCE)
+            for (const wantsCore of [undefined, false]) {
+              const i = intake({ goalKind, days, sessionMin, experience });
+              const p = build(wantsCore === undefined ? i : { ...i, wantsCore });
+              expect(absDays(p), `${goalKind} ${days}d ${sessionMin} ${experience}`).toEqual([]);
+            }
+  });
+
+  it('Yes: a core slot on ≥ 3 days (every day of a 2-day plan), for every answer set', () => {
+    for (const goalKind of GOALS)
+      for (const days of DAYS)
+        for (const sessionMin of MINUTES)
+          for (const experience of EXPERIENCE) {
+            const label = `${goalKind} ${days}d ${sessionMin} ${experience}`;
+            const p = build(intake({ goalKind, days, sessionMin, experience, wantsCore: true }));
+            expect(absDays(p).length, label).toBeGreaterThanOrEqual(Math.min(3, p.plan.days.length));
+            // ≥ 3 abs days in every week the plan runs (the rotation over the training days).
+            const rot = p.plan.days.map((d) => absDays(p).includes(d));
+            for (let start = 0; start < rot.length; start++) {
+              const week = Array.from({ length: days }, (_, k) => rot[(start + k) % rot.length]);
+              expect(week.filter(Boolean).length, `${label} from ${start}`).toBeGreaterThanOrEqual(
+                Math.min(3, days),
+              );
+            }
+            for (const d of p.plan.days) {
+              const abs = d.exercises.filter((r) => isAbs(r.exerciseId));
+              expect(abs.length, `${label} ${d.id}`).toBeLessThanOrEqual(1);
+              expect(estimateMinutes(d), `${label} ${d.id}`).toBeLessThanOrEqual(sessionMin);
+              for (const r of abs) {
+                expect(r.targetReps).toEqual(STARTER_TEMPLATES.prescription[goalKind].accessory.reps);
+                expect(r.tracking).toBe('manual');
+              }
+            }
+          }
+  });
+
+  it('Yes: the abs picks follow the prefer list, kit-aware', () => {
+    const prefer = STARTER_TEMPLATES.slots.core.prefer;
+    expect(prefer.slice(0, 3)).toEqual(['Cable_Crunch', 'Flat_Bench_Lying_Leg_Raise', 'Dead_Bug']);
+    const firstAbs = (p: StarterPlan) =>
+      absDays(p).map((d) => d.exercises.find((r) => isAbs(r.exerciseId))?.exerciseId);
+    const yes = intake({ days: 3, wantsCore: true });
+    expect(firstAbs(build(yes))).toEqual(['Cable_Crunch', 'Flat_Bench_Lying_Leg_Raise', 'Dead_Bug']);
+    // No cables: the body-only ones; no bench either: never the bench leg raise.
+    expect(firstAbs(build(yes, DUMBBELLS_ONLY))[0]).toBe('Dead_Bug');
+    for (const gym of [DUMBBELLS_ONLY, NO_KIT])
+      for (const id of firstAbs(build(yes, gym))) {
+        expect(gym.canDo(id ?? ''), id).toBe(true);
+        expect(exercise(id ?? '').equipment, id).toBe('body only');
+      }
+  });
+
+  it('Yes with go-easy core: no abs', () => {
+    const p = build(intake({ days: 4, wantsCore: true, easyOn: ['core'] }));
+    expect(absDays(p)).toEqual([]);
+  });
+
+  it('Yes changes only the abs: the other days and picks match the No plan', () => {
+    for (const days of DAYS) {
+      const no = build(intake({ days, sessionMin: 75, experience: 'years' }));
+      const yes = build(intake({ days, sessionMin: 75, experience: 'years', wantsCore: true }));
+      expect(yes.schedule).toEqual(no.schedule);
+      expect(yes.plan.days.map((d) => d.id)).toEqual(no.plan.days.map((d) => d.id));
+      for (const [i, d] of yes.plan.days.entries()) {
+        const mainNo = no.plan.days[i]?.exercises.slice(0, 2).map((r) => r.exerciseId);
+        expect(d.exercises.slice(0, 2).map((r) => r.exerciseId)).toEqual(mainNo);
+      }
+    }
+  });
+
   it('answers out of range build nothing', () => {
     for (const days of [0, 1, 7, 2.5, Number.NaN]) {
       const p = build(intake({ days }));

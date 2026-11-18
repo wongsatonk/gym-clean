@@ -38,6 +38,8 @@ export {
   otherSide,
   type OneSidedCopy,
 } from './oneSided';
+// M13c goal 4: the Camera sheet's data (cameraInfo.ts reads ruleFor at call time only).
+export { cameraInfo, type CameraInfo } from './cameraInfo';
 
 export const RULES: readonly ExerciseRule[] = [
   curl,

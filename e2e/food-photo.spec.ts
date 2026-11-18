@@ -10,7 +10,10 @@
 // - save-photos off → nothing in `foodPhotos`; on → 1 photo labelled with the confirmed dish →
 //   Export downloads a zip with labels.csv → Delete with Undo;
 // - 0 off-device requests, no console errors, taps ≥ 56px, no horizontal overflow, nothing spoken.
-// FOOD_SHOTS=1 writes docs/screenshots/m7b-wired-*.png.
+// - M13c task 15: Take photo + Choose from library; a file set on the library input (no
+//   `capture`) opens the same suggestions sheet as Take photo and logs the same way.
+// FOOD_SHOTS=1 writes docs/screenshots/m7b-wired-*.png; M13C_SHOTS=1 writes
+// docs/screenshots/m13c-food-photo-buttons.png.
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Locator, type Page } from './fixtures';
@@ -33,6 +36,7 @@ declare global {
 }
 
 const SHOTS = process.env.FOOD_SHOTS === '1';
+const M13C_SHOTS = process.env.M13C_SHOTS === '1';
 const at = (day: number, hour: number, min = 0) => new Date(2026, 10, day, hour, min).getTime();
 const LUNCH = at(18, 12, 10); // a Wednesday lunchtime
 
@@ -568,6 +572,83 @@ test('save-photos on: 1 labelled photo → Export zip with labels.csv → Delete
   await expect(foodPhotos(page).locator('[data-food-photo-count]')).toHaveText('1 saved photo');
   expect(await rows(page, 'foodPhotos')).toHaveLength(1);
 
+  expect(offDevice(requests, baseURL ?? '')).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test('M13c: Choose from library (no capture) → the same suggestions sheet as Take photo → logged', async ({
+  page,
+  baseURL,
+}) => {
+  const { requests, errors } = record(page);
+  await openApp(page);
+  await importModel(page);
+  await expectModelReady(page);
+  await setResult(page, CONFIDENT);
+  await goFuel(page);
+  await fuelMain(page).locator('[data-log-open]').click();
+  await expect(logSheet(page)).toBeVisible();
+
+  // Two buttons, icon + words, side by side, each ≥ 56px.
+  const row = logSheet(page).locator('[data-log-photo]');
+  const take = row.locator('[data-photo-open]');
+  const library = row.locator('[data-photo-library]');
+  await expect(take).toHaveText('Take photo');
+  await expect(library).toHaveText('Choose from library');
+  await expect(take.locator('svg')).toHaveCount(1);
+  await expect(library.locator('svg')).toHaveCount(1);
+  await expectTapTargets(row);
+  const [tb, lb] = [await take.boundingBox(), await library.boundingBox()];
+  expect(tb && lb && Math.abs(tb.y - lb.y)).toBeLessThan(1); // one row
+  expect(tb && lb && Math.abs(tb.height - lb.height)).toBeLessThan(1);
+  for (const b of [tb, lb]) expect(b?.height ?? 0).toBeGreaterThanOrEqual(56);
+  const fontPx = await row
+    .locator('button')
+    .evaluateAll((els) => els.map((e) => parseFloat(getComputedStyle(e).fontSize)));
+  for (const f of fontPx) expect(f).toBeGreaterThanOrEqual(20);
+  // The camera input keeps capture; the library input has none (the iOS photo picker).
+  await expect(row.locator('[data-photo-input]')).toHaveAttribute('capture', 'environment');
+  const libInput = row.locator('[data-photo-library-input]');
+  await expect(libInput).toHaveAttribute('type', 'file');
+  await expect(libInput).toHaveAttribute('accept', 'image/*');
+  expect(await libInput.evaluate((e) => e.hasAttribute('capture'))).toBe(false);
+  await noOverflow(page);
+  if (M13C_SHOTS) await page.screenshot({ path: 'docs/screenshots/m13c-food-photo-buttons.png' });
+
+  // The library photo → the same confident sheet Take photo shows.
+  await libInput.setInputFiles({
+    name: 'from-library.png',
+    mimeType: 'image/png',
+    buffer: await madeUpPng(page),
+  });
+  const sheet = photoSheet(page);
+  await expect(sheet).toBeVisible();
+  await expect(sheet.locator('[data-photo-state]')).toHaveAttribute(
+    'data-photo-state',
+    'confident',
+  );
+  await expect(sheet.locator('[data-photo-option]')).toHaveCount(3);
+  await expect(sheet.locator('[data-photo-option="pad_thai"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(sheet.locator('[data-photo-option="pad_thai"] [data-photo-pct]')).toHaveText('82%');
+  await noClaude(sheet);
+  await expectTapTargets(sheet);
+  await noOverflow(page);
+
+  await sheet.locator('[data-photo-log]').click();
+  await expect(photoSheet(page)).toHaveCount(0);
+  await expect.poll(async () => (await rows(page, 'foodEntries')).length).toBe(1);
+  const [e] = await rows<FoodEntry>(page, 'foodEntries');
+  expect(e).toMatchObject({
+    ...expected(PAD_THAI, 'Regular'),
+    source: 'photo-local',
+    estimate: true,
+    photoConfidence: 0.82,
+  });
+  // Save photos is off: nothing kept from the library either.
+  expect(await rows(page, 'foodPhotos')).toHaveLength(0);
   expect(offDevice(requests, baseURL ?? '')).toEqual([]);
   expect(errors).toEqual([]);
 });

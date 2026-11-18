@@ -434,19 +434,27 @@ describe('logSheet: photo entry (M7b task 15, M7b-q4)', () => {
     const body = el.find((e) => e.children.includes(row))[0];
     expect(body).toBeDefined();
     expect(body?.children.indexOf(row)).toBeLessThan(body?.children.indexOf(nav as FakeEl) ?? -1);
-    expect(byAttr(row, 'data-photo-open').textContent).toBe('Log from a photo');
+    expect(row.getAttribute('aria-label')).toBe('Log from a photo');
+    expect(byAttr(row, 'data-photo-open').textContent).toBe('Take photo');
+    expect(byAttr(row, 'data-photo-library').textContent).toBe('Choose from library');
     expect(all(el, 'data-photo-hint')).toHaveLength(0);
     const input = byAttr(row, 'data-photo-input') as FakeEl & { files?: unknown };
     const file = { name: 'meal.jpg' };
     input.files = [file];
     input.dispatch('change', {});
-    expect(files).toEqual([file]);
+    // M13c task 15: a library photo reaches the same handler.
+    const library = byAttr(row, 'data-photo-library-input') as FakeEl & { files?: unknown };
+    const picked = { name: 'library.jpg' };
+    library.files = [picked];
+    library.dispatch('change', {});
+    expect(files).toEqual([file, picked]);
     expectCleanCopy(el);
   });
 
   it('without a model: one line pointing to Settings, no button', () => {
     const { el } = openWithPhoto({ photoAvailable: false });
     expect(all(el, 'data-photo-open')).toHaveLength(0);
+    expect(all(el, 'data-photo-library')).toHaveLength(0);
     expect(byAttr(el, 'data-photo-hint').textContent).toBe(
       'Log from a photo: add a food model in Settings.',
     );

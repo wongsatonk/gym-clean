@@ -461,6 +461,9 @@ test('a focus-block miss: Move it → the Coach tab with Do it today sent → Ap
   await coachTab(page).getByLabel('Ask the coach').fill('This month I want to build my chest');
   await coachTab(page).getByRole('button', { name: 'Send' }).click();
   await coachTab(page).locator('[data-coach-followup]').filter({ hasText: '5 days' }).click();
+  // M13c: "Also add abs?" (the plan has no abs); No keeps the chest-only block.
+  await expect(coachTab(page)).toContainText('Also add abs?');
+  await coachTab(page).locator('[data-coach-followup]').filter({ hasText: /^No$/ }).click();
   const block = coachTab(page).locator('[data-focus-block-card]').last();
   await block.getByRole('button', { name: 'Apply' }).click();
   await expect(block.locator('[data-card-status="applied"]')).toBeVisible();

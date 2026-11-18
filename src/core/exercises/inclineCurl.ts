@@ -22,6 +22,7 @@ export const inclineCurl: ExerciseRule = {
   sideMode: 'best',
   focus: learningFocus(),
   hints: { far: 'Curl higher.', start: 'Lower all the way down.' },
+  countsLine: 'Counts each curl from your elbow angle.',
   placement: {
     view: 'side',
     facing: 'Side-on, curling arm toward the phone',

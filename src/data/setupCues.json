@@ -1,6 +1,7 @@
 {
   "note": "M12 1b setup cues (trainer-kit item 10): 2-3 short setup checks per exercise, spoken once before the first working set. They cover what the camera can't judge (grip, feet, bench and seat position, bracing), written for this app in coaching language, at most 8 words each.",
   "cues": {
+    "Air_Bike": ["Lie on your back.", "Hands lightly by your head.", "Lower back on the floor."],
     "Arnold_Dumbbell_Press": [
       "Sit tall, back on the pad.",
       "Feet flat.",
@@ -19,6 +20,11 @@
     ],
     "Cable_Chest_Press": ["Sit tall, chest up.", "Handles at chest height.", "Feet flat."],
     "Cable_Crossover": ["Pulleys set high.", "One foot forward.", "Lean in a little."],
+    "Cable_Crunch": [
+      "Pulley set high.",
+      "Kneel a step from the stack.",
+      "Rope or bar by your head."
+    ],
     "Cable_Rear_Delt_Fly": ["Pulleys set high.", "Cross the cables.", "Stand tall, core tight."],
     "Cable_Rope_Overhead_Triceps_Extension": [
       "Face away from the pulley.",
@@ -37,6 +43,12 @@
       "Free hand on your knee."
     ],
     "Cross_Body_Hammer_Curl": ["Stand tall.", "Thumbs up grip.", "Elbows at your sides."],
+    "Crunches": [
+      "Lie on your back, knees bent.",
+      "Hands lightly by your head.",
+      "Lower back on the floor."
+    ],
+    "Dead_Bug": ["Lie on your back.", "Arms up, knees over hips.", "Lower back on the floor."],
     "Dumbbell_Bench_Press": ["Feet flat.", "Shoulder blades back.", "Wrists over elbows."],
     "Dumbbell_Bicep_Curl": ["Stand tall, core tight.", "Palms forward.", "Elbows at your sides."],
     "Dumbbell_Flyes": ["Feet flat.", "Shoulder blades back.", "Elbows a little bent."],
@@ -49,6 +61,11 @@
       "Sit tall."
     ],
     "Dumbbell_Shoulder_Press": ["Back on the pad.", "Feet flat.", "Core tight, ribs down."],
+    "Dumbbell_Side_Bend": [
+      "Feet shoulder width.",
+      "Dumbbell in one hand.",
+      "Other hand on your waist."
+    ],
     "Dumbbell_Squat": ["Feet shoulder width.", "Toes a little out.", "Chest up, core tight."],
     "Dumbbell_Step_Ups": ["Whole foot on the box.", "Stand tall.", "Eyes forward."],
     "Face_Pull": ["Handle at face height.", "Step back, stand tall.", "Core tight."],
@@ -57,6 +74,11 @@
       "Pulleys set low.",
       "Shoulder blades back."
     ],
+    "Flat_Bench_Lying_Leg_Raise": [
+      "Hips at the bench end.",
+      "Hold the bench sides.",
+      "Lower back on the bench."
+    ],
     "Front_Dumbbell_Raise": [
       "Stand tall, core tight.",
       "Palms face your thighs.",
@@ -64,6 +86,11 @@
     ],
     "Goblet_Squat": ["Hold the weight at your chest.", "Feet shoulder width.", "Elbows tucked in."],
     "Hammer_Curls": ["Stand tall.", "Thumbs up grip.", "Elbows at your sides."],
+    "Hanging_Leg_Raise": [
+      "Grip the bar shoulder width.",
+      "Arms straight, legs still.",
+      "Core tight."
+    ],
     "Incline_Dumbbell_Curl": [
       "Bench at a low incline.",
       "Back and head on the pad.",
@@ -93,8 +120,23 @@
       "Hips down, hold the handles."
     ],
     "One-Arm_Dumbbell_Row": ["Free hand on the bench.", "Feet staggered.", "Back flat."],
+    "Pallof_Press": [
+      "Pulley at chest height.",
+      "Side to the cable.",
+      "Feet hip width, knees soft."
+    ],
     "Pushups": ["Hands a bit wider than shoulders.", "Body in one line.", "Core tight."],
+    "Reverse_Crunch": [
+      "Lie on your back.",
+      "Arms by your sides, palms down.",
+      "Knees bent up high."
+    ],
     "Reverse_Flyes": ["Chest on the pad.", "Feet planted.", "Elbows a little bent."],
+    "Russian_Twist": [
+      "Sit, knees bent, feet down.",
+      "Lean back a little.",
+      "Hands together in front."
+    ],
     "Seated_Bent-Over_Rear_Delt_Raise": [
       "Sit on the bench edge.",
       "Chest toward your thighs.",

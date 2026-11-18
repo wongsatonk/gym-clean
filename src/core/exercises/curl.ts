@@ -26,6 +26,7 @@ export const curl: ExerciseRule = {
     bodySwing: false,
   },
   hints: { far: 'Curl higher.', start: 'Straighten your arm at the bottom.' },
+  countsLine: 'Counts each curl from your elbow angle.',
   placement: {
     view: 'side',
     facing: 'Side-on, curling arm toward the phone',

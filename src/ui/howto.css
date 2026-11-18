@@ -31,6 +31,115 @@
   color: var(--text-2);
 }
 
+/* ---------- M13c tappable badges (badgesFor with onBadge; outside a workout only) ----------
+   The pill looks the same; the button around it is a transparent ≥ 56px tall hit box (a real
+   box, not an overlapping pseudo-element, so neighbouring targets never overlap). 8px between
+   targets. The focus ring and the pressed state show on the pill itself. */
+
+.ex-badges-tap {
+  column-gap: 8px;
+  row-gap: 0;
+  position: relative;
+  z-index: 1; /* above a preview row's stretched open button */
+}
+
+.ex-badge-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text);
+}
+
+.ex-badge-btn:focus-visible {
+  outline: none;
+}
+
+.ex-badge-btn:focus-visible .ex-badge {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ex-badge-btn .ex-badge {
+  padding-block: 4px;
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+
+.ex-badge-btn:active .ex-badge {
+  background: var(--surface);
+  border-color: var(--text-2);
+}
+
+/* ---------- M13c preview row: the whole row opens the exercise's detail ----------
+   The name is a button whose ::after covers the row (a "stretched" target); badges sit above it
+   with their own targets. Only when the preview has onOpenExercise (li.ex-row-tap). */
+
+.ex-row.ex-row-tap {
+  position: relative;
+}
+
+.ex-row-open {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.ex-row-open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-btn);
+}
+
+.ex-row-open:focus-visible {
+  outline: none;
+}
+
+.ex-row-open:focus-visible::after {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* No press scale here: a transform would make the button the ::after's containing block, the
+   target would shrink mid-tap and the release would land outside it (no click). The row dims
+   instead. */
+.ex-row-open:active {
+  transform: none;
+  filter: none;
+}
+
+.ex-row-open:active::after {
+  background: var(--veil-faint);
+}
+
+.ex-row-open .ex-row-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* "Open" chevron: the back arrow turned around (decorative; the name is the label). */
+.ex-row-open .ex-row-chev {
+  flex: none;
+  color: var(--text-2);
+  transform: scaleX(-1);
+}
+
 /* ---------- How to sheet ---------- */
 
 .howto-sheet {

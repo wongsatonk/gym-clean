@@ -2,7 +2,8 @@
 <!-- Dev-only visual check for M12 slice 1b tasks 25, 26 and 30 (intake, Goal card, Settings
      rows, My gym share / import, Progress photos), with made-up data. Not part of the build or
      the app. Open on the dev server:
-     /src/ui/intake/trainerKit.harness.html?view=intake | intake-days | intake-easy | summary
+     /src/ui/intake/trainerKit.harness.html?view=intake | intake-days | intake-easy | intake-abs
+     | summary
      | goal-card | goal-prompt | settings | gym-import | photos | photos-compare | photos-off -->
 <html lang="en">
   <head>
@@ -62,6 +63,7 @@
             onApply: (id) => log('apply', id),
             onDone: () => log('done'),
             onSkip: () => log('skip'),
+            onLearn: (id) => log('learn', id),
           },
         );
 
@@ -141,6 +143,7 @@
       else if (view === 'intake-days')
         el = intake({ initial: { goalKind: 'muscle', days: 3 }, startStep: 'days' });
       else if (view === 'intake-easy') el = intake({ initial: INTAKE, startStep: 'easyOn' });
+      else if (view === 'intake-abs') el = intake({ initial: INTAKE, startStep: 'wantsCore' });
       else if (view === 'summary') el = intake({ initial: INTAKE, startStep: 'summary' });
       else if (view === 'goal-prompt') el = card([]);
       else if (view === 'goal-card')

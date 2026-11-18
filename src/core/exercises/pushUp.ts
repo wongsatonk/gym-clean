@@ -38,6 +38,7 @@ export const pushUp: ExerciseRule = {
     hipSag: false,
   },
   hints: { far: 'Go lower.', start: 'Push all the way up.' },
+  countsLine: 'Counts each push-up from your elbow angle.',
   placement: {
     view: 'side',
     facing: 'Side-on',

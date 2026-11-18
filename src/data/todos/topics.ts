@@ -21,6 +21,12 @@
  *
  * Release 1.15.1 (M13b) adds "One-arm sets" (Checkpoint K2: a one-arm row session at the gym). It
  * folds in M13b-q1 (one-leg exercises too) and M13b-q2 (which side's count is the set's).
+ *
+ * Release 1.16.0 (M13c) adds "Library, abs and background" (Checkpoint K3: a normal week with the
+ * moving glow, search, the badges + Practice, abs through a focus, the coach's plan line, the
+ * Claude card and food photos from the library). Ask steps only (no new detector); it folds in the
+ * Moving glow vs Plain battery comparison and M13c-q5 (do abs stay after a block). Steps have no
+ * platform field, so the two photo-library steps say "In the iPhone app," and offer "Not yet".
  */
 import { RULES } from '../../core/exercises';
 import { TRAINER_KIT_DEFAULTS } from '../../core/trainerKit/defaults';
@@ -64,8 +70,165 @@ const R114 = '1.14.0';
 const R115 = '1.15.0';
 /** M13b one-arm sets (right, Next arm, left). */
 const R1151 = '1.15.1';
+/** M13c Library, abs and home polish (moving glow, search, badges, abs by choice). */
+const R116 = '1.16.0';
 
 export const TODO_TOPICS: readonly TodoTopic[] = [
+  {
+    id: 'library-abs',
+    title: 'Library, abs and background',
+    checkpoint: 'Checkpoint K3',
+    since: R116,
+    platform: 'any',
+    steps: [
+      {
+        id: 'glow-reads',
+        title: 'Does the moving background read well, at the gym and at home?',
+        why: 'Workout screens stay black. Settings has a Plain background if you prefer it.',
+        tryIt: 'today',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'battery',
+        title: 'Battery: an hour of normal use with Moving glow, then an hour with Plain',
+        why: 'Switch under Background in Settings. Put the battery % each hour used in the note.',
+        tryIt: 'settings',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'same', label: 'About the same' },
+          { id: 'glowMore', label: 'Moving glow used more' },
+          { id: 'notYet', label: 'Not compared yet' },
+        ],
+      },
+      {
+        id: 'warm',
+        title: 'Did the phone get warm with Moving glow?',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'no', label: 'No' },
+          { id: 'yes', label: 'Yes, see my note' },
+        ],
+      },
+      {
+        id: 'search-finds',
+        title: 'Did Search find what you typed?',
+        why: 'Try a Thai body word, a date like "yesterday", a line from a coach chat and a meal.',
+        tryIt: 'today',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'search-missed',
+        title: 'Which searches missed?',
+        kind: 'ask',
+        multi: true,
+        note: 'optional',
+        options: [
+          { id: 'exercises', label: 'Exercise names' },
+          { id: 'thai', label: 'Thai words' },
+          { id: 'dates', label: 'Dates' },
+          { id: 'chat', label: 'Coach chat' },
+          { id: 'meals', label: 'Meals' },
+          { id: 'settings', label: 'Settings' },
+          { id: 'none', label: 'None missed' },
+        ],
+      },
+      {
+        id: 'badges-setup',
+        title: 'Did the badges and Practice help you set up before a set?',
+        why: 'On the day preview, tap 3D demo, Camera or Learning. Practice saves nothing.',
+        tryIt: 'today',
+        kind: 'ask',
+        note: 'optional',
+        options: [...YES_MOSTLY_NO, { id: 'untried', label: "Didn't try them" }],
+      },
+      {
+        id: 'abs-focus',
+        title: 'Did choosing abs through a focus work the way you meant?',
+        why: 'Ask the coach for Abs & core, or say Yes to abs after picking another focus.',
+        tryIt: 'coach',
+        kind: 'ask',
+        note: 'optional',
+        options: [...YES_MOSTLY_NO, { id: 'untried', label: "Didn't try it" }],
+      },
+      {
+        id: 'abs-after-block',
+        title: 'When a focus block with abs ends, what should happen to the abs?',
+        why: 'Today they end with the block, and the next-block card offers Keep abs in one tap.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'offer', label: 'End with the block, offer to keep (as now)' },
+          { id: 'keep', label: 'Keep abs in my plan for good' },
+          { id: 'ask', label: 'Ask me each time' },
+        ],
+      },
+      {
+        id: 'coach-plan',
+        title: 'Did the coach know your plan?',
+        why: 'Ask something like "Is there abs work in my plan?"',
+        tryIt: 'coach',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'claude-card',
+        title: 'Was the Claude card clear about what would be sent?',
+        why: "It shows at most once a day when the coach on this phone can't answer. Nothing is sent.",
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'clear', label: 'Clear' },
+          { id: 'unclear', label: 'Not clear, see my note' },
+          { id: 'notSeen', label: "Didn't see it" },
+        ],
+      },
+      {
+        id: 'library-find',
+        title: 'Was anything in the Library hard to find?',
+        why: 'Try each grouping and the My gym only switch.',
+        tryIt: 'today',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'nothing', label: 'Nothing' },
+          { id: 'something', label: 'Something, see my note' },
+        ],
+      },
+      {
+        id: 'photo-library',
+        title: 'In the iPhone app, did Choose from library open your photos?',
+        why: 'Log food, tap Choose from library and pick a meal photo you saved.',
+        tryIt: 'fuel',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'yes', label: 'Yes' },
+          { id: 'no', label: 'No, see my note' },
+          { id: 'notYet', label: 'Not tried yet' },
+        ],
+      },
+      {
+        id: 'photo-recognised',
+        title: 'In the iPhone app, did it recognise the saved meal photo?',
+        why: 'The right food in the top 3 counts as yes.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'yes', label: 'Yes' },
+          { id: 'no', label: 'No, see my note' },
+          { id: 'noModel', label: 'No food model yet' },
+          { id: 'notYet', label: 'Not tried yet' },
+        ],
+      },
+    ],
+  },
   {
     id: 'one-arm-sets',
     title: 'One-arm sets',

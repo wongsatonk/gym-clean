@@ -80,6 +80,24 @@ export const LEARN_CARDS: readonly LearnCard[] = [
       'Progress comes from weeks of steady training, not from one perfect session. Missing a day is normal; the plan moves with you.\n\n' +
       'If a week keeps slipping, try fewer days you can keep rather than more you skip.',
   },
+  // M13c: opened by the Learning badge (day preview, Library) and the Camera sheet's note.
+  {
+    id: 'cameraLearning',
+    title: 'Camera still learning',
+    body:
+      'Counting with the camera is new for this exercise. While it learns, it may miss a rep or add one.\n\n' +
+      'If the count is off, fix it on the Rest screen. The number you save is the one that counts.',
+    why: 'Your fixes keep your saved numbers right, so your progress uses real counts.',
+  },
+  // M13c: the "Also add abs?" step's Why? in the focus flow (abs join a plan only when you choose).
+  {
+    id: 'coreTraining',
+    title: 'Why train your abs',
+    body:
+      'Your abs and the muscles around your middle hold your trunk steady when you squat, press, row and carry. Big lifts work them some; a few direct sets a week give them their own work.\n\n' +
+      'They grow like any other muscle: a few sets, a little harder over time.',
+    why: 'Yes adds abs sets on 2 or more days of the block. Your main focus stays the same, and the abs end with the block.',
+  },
 ];
 
 const byId = new Map(LEARN_CARDS.map((c) => [c.id, c]));

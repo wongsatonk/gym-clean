@@ -27,6 +27,40 @@ describe('intake options (data)', () => {
   });
 });
 
+describe('M13c: "Add abs to your plan?" (data)', () => {
+  it('one question after the go-easy step (the intake has no gym-kit step), No by default', () => {
+    expect(INTAKE_OPTIONS.wantsCore).toEqual({
+      id: 'wantsCore',
+      after: 'easyOn',
+      question: 'Add abs to your plan?',
+      hint: 'A few abs sets on 3 days a week. You can add them later with a focus block too.',
+      options: [
+        { id: 'no', value: false, label: 'No' },
+        { id: 'yes', value: true, label: 'Yes, add abs' },
+      ],
+      default: false,
+      learnId: 'coreTraining',
+    });
+    const copy = [
+      INTAKE_OPTIONS.wantsCore.question,
+      INTAKE_OPTIONS.wantsCore.hint,
+      ...INTAKE_OPTIONS.wantsCore.options.map((o) => o.label),
+    ];
+    for (const t of copy) {
+      expect(checkCopy(t), t).toEqual({ ok: true, hits: [] });
+      // Anyone-scan: the app talks to "you", never about he/she.
+      expect(t, t).not.toMatch(/\b(he|she|him|her|his|hers)\b/i);
+    }
+  });
+
+  it('normalizeIntake keeps a Yes / No answer and leaves it out when absent (= No)', () => {
+    expect(normalizeIntake(intake({ wantsCore: true })).wantsCore).toBe(true);
+    expect(normalizeIntake(intake({ wantsCore: false })).wantsCore).toBe(false);
+    expect('wantsCore' in normalizeIntake(intake())).toBe(false);
+    expect(normalizeIntake(intake({ wantsCore: 'yes' as never })).wantsCore).toBeUndefined();
+  });
+});
+
 describe('normalizeIntake', () => {
   it('keeps a valid answer set as is', () => {
     const i = intake({ easyOn: ['shoulders'], goalText: 'Stronger for hiking' });

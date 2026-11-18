@@ -1,0 +1,59 @@
+/* M13c task 14: the Search button (searchButton.ts) and the title row that holds it.
+   Tokens only. Neutral like the Coach button: orange stays Start's. */
+
+.search-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 0 14px;
+  margin-left: auto;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--surface-2);
+  border: var(--line-w) solid var(--line);
+}
+
+/* Title left, Search right; wraps (Search under the title) rather than scroll sideways. */
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.page-head > .page-title {
+  min-width: 0;
+}
+
+/* Today with Search: brand over the date on the left, Search on the right. */
+.appbar.has-search {
+  gap: 12px;
+}
+
+.appbar-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+/* Settings sections are search jump targets (app.ts scrolls to and focuses one). */
+.set-section[tabindex='-1'] {
+  scroll-margin-top: max(12px, env(safe-area-inset-top));
+}
+
+.set-section[tabindex='-1']:focus {
+  outline: none;
+}
+
+.set-section[tabindex='-1']:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: var(--r-card);
+}

@@ -29,6 +29,7 @@ export const dbShoulderPress: ExerciseRule = {
   },
   focus: learningFocus(),
   hints: { far: 'Press all the way up.', start: 'Lower the weights to your shoulders.' },
+  countsLine: 'Counts each press from your elbow angle.',
   placement: {
     view: 'front',
     facing: 'Facing the phone',

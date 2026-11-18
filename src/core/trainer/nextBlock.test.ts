@@ -102,6 +102,49 @@ describe('next group order (data)', () => {
   });
 });
 
+describe('"Keep abs in the next block" (M13c-q5 default)', () => {
+  const block = {
+    group: 'chest' as const,
+    startDate: '2026-10-26',
+    weeks: 3,
+    weekdays: [1, 3, 5],
+  };
+  const keep = {
+    label: 'Keep abs in the next block',
+    args: {
+      group: 'chest',
+      weeks: 3,
+      weekdays: [1, 3, 5],
+      lighterWeek: false,
+      startDate: '2026-11-16',
+      alsoCore: true,
+    },
+  };
+
+  it('a block with alsoCore: the two usual offers (abs end with the block) plus Keep abs', () => {
+    const offers = nextBlockOffers({ ...block, alsoCore: true });
+    expect(offers.slice(0, 2)).toEqual(nextBlockOffers(block));
+    for (const o of offers.slice(0, 2)) expect(o.args.alsoCore).toBeUndefined();
+    expect(offers[2]).toEqual(keep);
+    expect(offers).toHaveLength(3);
+    for (const o of offers) expect(checkCopy(o.label).hits).toEqual([]);
+  });
+
+  it('a core block: Keep abs goes with the next group', () => {
+    const offers = nextBlockOffers({ ...block, group: 'core' });
+    expect(offers.map((o) => o.label)).toEqual([
+      'Next: Abs & core',
+      'Next: Chest',
+      'Keep abs in the next block',
+    ]);
+    expect(offers[2]?.args).toMatchObject({ group: nextGroup('core'), alsoCore: true });
+  });
+
+  it('a block without abs: no Keep abs offer', () => {
+    expect(nextBlockOffers(block).map((o) => o.label)).toEqual(['Next: Chest', 'Next: Back']);
+  });
+});
+
 describe('proposeNextBlock', () => {
   const program = programJson as Program;
   const CATALOG = trainerCatalog();
@@ -170,6 +213,17 @@ describe('proposeNextBlock', () => {
     // Nothing is changed until Apply.
     expect(ctx.state.overrides).toEqual([]);
     expect(ctx.state.blocks ?? []).toEqual([]);
+  });
+
+  it('M13c: alsoCore carries into the next block (and its lighter-week path)', () => {
+    for (const lighterWeek of [true, false]) {
+      const p = ok(proposeNextBlock(ctxFor(), { ...ARGS, lighterWeek, alsoCore: true }, CATALOG));
+      expect(blockOf(p).alsoCore).toBe(true);
+      expect(p.title).toMatch(/Chest focus \+ abs: 3 weeks$/);
+      expectClean(p);
+      const plain = ok(proposeNextBlock(ctxFor(), { ...ARGS, lighterWeek }, CATALOG));
+      expect(blockOf(plain).alsoCore).toBeUndefined();
+    }
   });
 
   it('the next group in the order works the same way', () => {
