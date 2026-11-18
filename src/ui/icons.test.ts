@@ -37,10 +37,11 @@ describe('icon set', () => {
       'arrow-right',
       'plate',
       'spark',
+      'search',
     ] as const) {
       expect(ICON_NAMES).toContain(n);
     }
-    expect(ICON_NAMES.length).toBe(35); // M13 task 20: + arrow-right; task 22: + plate, spark
+    expect(ICON_NAMES.length).toBe(36); // M13 task 20: + arrow-right; task 22: + plate, spark; M13c: + search
     for (const n of ICON_NAMES) expect(ICON_PATHS[n]).toMatch(/^<(path|rect|circle) /);
   });
 

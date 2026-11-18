@@ -29,6 +29,8 @@
 // (`[data-notices]`, toggle `[data-notices-toggle]`, aria-expanded) that opens them in place
 // (`[data-notices-list]`). `noticesOpen` / `onNoticesToggle` let app.ts keep it open across a
 // re-render. The header Coach button is gone (the Coach tab is the way in).
+// M13c (optional): Search in the app bar (`[data-search-open]`, ../searchButton.ts) when
+// `onSearch` is set; the date moves under the brand so the bar stays one 56px row.
 // Only Start is a filled orange button here; today.css turns the cards' own CTAs into outlines.
 import type { WeekDot } from '../../core/stats';
 import type { MissedDay } from '../../core/progress/completion';
@@ -44,6 +46,7 @@ import { icon } from '../icons';
 import { countUp, enterScreen, staggerIn } from '../motion';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
+import { searchButton, type OnSearch } from '../searchButton';
 import { nudgeBanner } from '../fuel/links';
 import { dayMuscles, estimateMinutes, muscleLabel, type DayMuscles } from '../../core/dayInfo';
 import { gymPrompt, type MissingKit } from './gymPrompt';
@@ -208,6 +211,8 @@ export type TodayActions = ReadinessActions & {
   onSetGoal?: (() => void) | undefined;
   /** M12 1b: "Change" on the Goal card (opens Settings → Your goal). */
   onOpenGoal?: (() => void) | undefined;
+  /** M13c: Search in the app bar (opens the Library, field focused). Omitted → no button. */
+  onSearch?: OnSearch | undefined;
 };
 
 const WEEK_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -266,6 +271,22 @@ export function ymd(ms: number): string {
 function ymdToMs(date: string): number {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1).getTime();
+}
+
+/**
+ * The app bar: brand + date. M13c: with `onSearch`, the date sits under the brand and Search is
+ * on the right (one 56px row, so Start stays in the first viewport at 375×667).
+ */
+function appBar(props: TodayProps, actions: TodayActions): HTMLElement {
+  const brand = h('span', { class: 'brand' }, icon('logo', 'lg'), APP_NAME);
+  const date = h('span', { class: 'date' }, dateLabel(props.now));
+  if (!actions.onSearch) return h('header', { class: 'appbar' }, brand, date);
+  return h(
+    'header',
+    { class: 'appbar has-search' },
+    h('div', { class: 'appbar-id' }, brand, date),
+    searchButton(actions.onSearch),
+  );
 }
 
 /** The Coach button (Today and the preview top bars): icon + word, ≥ 56px. */
@@ -895,12 +916,7 @@ export function todayScreen(props: TodayProps, actions: TodayActions): HTMLEleme
   const el = h(
     'main',
     { class: `screen today has-tabbar ${moodClass('energy')}`, 'data-screen': 'today' },
-    h(
-      'header',
-      { class: 'appbar' },
-      h('span', { class: 'brand' }, icon('logo', 'lg'), APP_NAME),
-      h('span', { class: 'date' }, dateLabel(props.now)),
-    ),
+    appBar(props, actions),
     ...cards,
     tabBar('today', actions.onTab),
   );

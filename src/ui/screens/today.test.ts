@@ -1180,3 +1180,38 @@ describe('Today: hero first + "things to sort" (M13)', () => {
 });
 
 const MISSED_M13: MissedDay = { date: '2026-11-10', dayId: 'push-a', name: 'Push A' };
+
+describe('Today: Search in the app bar (M13c)', () => {
+  it('without onSearch the app bar is unchanged: brand + date, no Search', () => {
+    const { el } = render();
+    const bar = el.byClass('appbar')[0];
+    expect(bar?.classes).not.toContain('has-search');
+    expect(bar?.children.map((c) => c.classes[0])).toEqual(['brand', 'date']);
+    expect(el.find((e) => e.hasAttribute('data-search-open'))).toHaveLength(0);
+  });
+
+  it('with onSearch: brand over the date, then Search; a tap passes the button out', () => {
+    const got: unknown[] = [];
+    const el = asFake(
+      todayScreen(props(), {
+        onStart: () => undefined,
+        onOpenDay: () => undefined,
+        onTab: () => undefined,
+        onSearch: (opener) => got.push(opener),
+      }),
+    );
+    const bar = el.byClass('appbar')[0];
+    if (!bar) throw new Error('no app bar');
+    expect(bar.classes).toContain('has-search');
+    expect(bar.children[0]?.classes).toContain('appbar-id');
+    expect(bar.children[0]?.children.map((c) => c.classes[0])).toEqual(['brand', 'date']);
+    const btn = bar.children[1];
+    expect(btn?.hasAttribute('data-search-open')).toBe(true);
+    expect(btn?.textContent).toBe('Search');
+    // The app bar is still the first thing and the hero (Start) comes right after it.
+    expect(el.children[0]).toBe(bar);
+    expect(el.children[1]?.classes).toContain('hero');
+    btn?.click();
+    expect(got).toEqual([btn]);
+  });
+});

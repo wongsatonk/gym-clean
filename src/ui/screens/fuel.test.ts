@@ -341,3 +341,32 @@ describe('M12 1b: Measurements row', () => {
     );
   });
 });
+
+describe('Fuel: Search in the header (M13c)', () => {
+  const noop = () => undefined;
+  const base = { onLog: noop, onEditEntry: noop, onWeighIn: noop, onSetup: noop, onTab: noop };
+
+  it('without onSearch the header is unchanged (no Search, no has-search)', () => {
+    const { el } = render();
+    const head = el.byClass('fuel-head')[0];
+    expect(head?.classes).not.toContain('has-search');
+    expect(all(el, 'data-search-open')).toHaveLength(0);
+  });
+
+  it('with onSearch: Search in the header next to Weigh-in; a tap passes the button out', () => {
+    const got: unknown[] = [];
+    const el = asFake(fuelScreen(props(), { ...base, onSearch: (o) => got.push(o) }));
+    const head = el.byClass('fuel-head')[0];
+    if (!head) throw new Error('no header');
+    expect(head.classes).toContain('has-search');
+    expect(head.children.map((c) => c.classes[0])).toEqual([
+      'fuel-head-txt',
+      'search-btn',
+      'fuel-weigh-btn',
+    ]);
+    const btn = byAttr(head, 'data-search-open', '');
+    expect(btn.textContent).toBe('Search');
+    btn.click();
+    expect(got).toEqual([btn]);
+  });
+});

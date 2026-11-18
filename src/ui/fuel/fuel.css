@@ -18,6 +18,42 @@
   min-width: 0;
 }
 
+/* M13c: with Search, two rows: "Fuel" + Search, then the date + Weigh-in (both buttons right);
+   the title and date read as one block on the left. */
+.screen.fuel > .fuel-head.has-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title search'
+    'date weigh';
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.fuel-head.has-search > .fuel-head-txt {
+  display: contents;
+}
+
+.fuel-head.has-search .page-title {
+  grid-area: title;
+}
+
+.fuel-head.has-search .date {
+  grid-area: date;
+  /* Right under "Fuel", even when the Weigh-in button beside it is three lines tall. */
+  align-self: start;
+}
+
+.fuel-head.has-search > .search-btn {
+  grid-area: search;
+  justify-self: end;
+}
+
+.fuel-head.has-search > .fuel-weigh-btn {
+  grid-area: weigh;
+  justify-self: end;
+}
+
 .fuel-weigh-btn {
   flex: none;
   display: inline-flex;

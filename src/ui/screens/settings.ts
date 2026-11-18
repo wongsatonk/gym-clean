@@ -29,6 +29,10 @@
 // and Coach eval; About becomes one row (`[data-about-open]`) opening the About screen. On keeps
 // today's About lines and adds the same row when `onAbout` is set (the owner-tools switch lives
 // on the About screen, so it must stay reachable while owner mode is on).
+//
+// M13c task 14: Search next to the title (`[data-search-open]`, ../searchButton.ts) when
+// `onSearch` is set, and every section is a jump target: `id="settings-<key>"` (settingsSectionId)
+// + tabindex=-1. The search items for these sections are in ./settingsIndex.ts.
 import type { Accent, BackgroundStyle, BodyArea, Intake } from '../../core/types';
 import type { Unit } from '../../core/units';
 import { APP_NAME } from '../../core/brand';
@@ -40,6 +44,7 @@ import { h } from '../dom';
 import { icon, type IconName } from '../icons';
 import { AREA_LABEL, BODY_AREAS, intakeSummary } from '../intake/intake';
 import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
+import { pageHead, type OnSearch } from '../searchButton';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
 
@@ -128,7 +133,17 @@ export type SettingsActions = {
   onRerunWelcome?: (() => void) | undefined;
   /** 1.15.0: Self-check (is the app ready for the gym?). Omitted → no row. Shown owner on or off. */
   onSelfCheck?: (() => void) | undefined;
+  /** M13c: Search next to the title (opens the Library, field focused). Omitted → no button. */
+  onSearch?: OnSearch | undefined;
 };
+
+/**
+ * M13c: the element id of a Settings section (`data-section` key → `settings-<key>`). Each
+ * section also has tabindex=-1, so app.ts can scroll to it and focus it after a search hit.
+ */
+export function settingsSectionId(key: string): string {
+  return `settings-${key}`;
+}
 
 export const GOAL_NOT_SET = 'Not set yet.';
 export const GOAL_SET_LABEL = 'Set your goal';
@@ -410,7 +425,13 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
   ) =>
     h(
       'section',
-      { class: 'set-section', 'data-section': key, 'aria-labelledby': `set-${key}` },
+      {
+        class: 'set-section',
+        'data-section': key,
+        id: settingsSectionId(key),
+        tabindex: -1,
+        'aria-labelledby': `set-${key}`,
+      },
       sectionTitle(iconName, title, `set-${key}`),
       ...children,
     );
@@ -418,7 +439,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
   return h(
     'main',
     { class: `screen settings has-tabbar ${moodClass('pro')}`, 'data-screen': 'settings' },
-    h('h1', { class: 'page-title' }, 'Settings'),
+    pageHead('Settings', actions.onSearch),
     goalSection(props, actions, section),
     section(
       'accent',

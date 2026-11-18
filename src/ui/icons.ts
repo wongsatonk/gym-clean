@@ -55,6 +55,8 @@ export const ICON_PATHS = {
     '<circle cx="10" cy="12" r="7.5"/><circle cx="10" cy="12" r="3.5"/><path d="M19 4v4.5M21.5 4v4.5M19 8.5h2.5M20.25 8.5V20"/>',
   /** M13 empty states: a four-point spark (an empty Coach thread, "ask me"). */
   spark: '<path d="M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/><path d="M19 3.5v3M17.5 5h3"/>',
+  /** M13c search: a lens with a short handle (the Search button, the Library search field). */
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3l5.2 5.2"/>',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICON_PATHS;

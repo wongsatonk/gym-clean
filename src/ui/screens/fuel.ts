@@ -20,6 +20,8 @@
 // M12 slice 1b task 33 (optional): the protein-per-meal nudge (`[data-protein-nudge]`,
 // fuel/proteinNudge.ts) under Log food, right where the meal was just logged, when
 // `proteinNudge` and `onDismissProteinNudge` are both set; "Why?" shows with `onProteinWhy`.
+// M13c (optional): Search (`[data-search-open]`, ../searchButton.ts) when `onSearch` is set. The
+// header becomes two rows: "Fuel" + Search, then the date + Weigh-in (fuel.css `.has-search`).
 import type {
   FoodEntry,
   MacroSet,
@@ -35,6 +37,7 @@ import { measurementsEntryRow, type MeasurementsEntry } from '../fuel/measuremen
 import { proteinNudge, type ProteinNudgeProps } from '../fuel/proteinNudge';
 import { fuelRings } from '../fuel/rings';
 import { icon } from '../icons';
+import { searchButton, type OnSearch } from '../searchButton';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
 import { emptyState } from '../emptyState';
@@ -77,6 +80,8 @@ export type FuelActions = {
   /** M12 1b: "Why?" on the protein nudge: main opens the protein learn card from `opener`. */
   onProteinWhy?: ((opener: HTMLElement) => void) | undefined;
   onTab: (tab: TabId) => void;
+  /** M13c: Search in the header (opens the Library, field focused). Omitted → no button. */
+  onSearch?: OnSearch | undefined;
 };
 
 /** Entries grouped by slot; groups ordered by their first entry's time, rows by time. */
@@ -94,13 +99,14 @@ function header(props: FuelProps, actions: FuelActions): HTMLElement {
   const w = props.lastWeighInKg;
   return h(
     'header',
-    { class: 'fuel-head' },
+    { class: actions.onSearch ? 'fuel-head has-search' : 'fuel-head' },
     h(
       'div',
       { class: 'fuel-head-txt' },
       h('h1', { class: 'page-title' }, 'Fuel'),
       h('p', { class: 'date' }, dateLabel(props.now)),
     ),
+    actions.onSearch ? searchButton(actions.onSearch) : null,
     h(
       'button',
       {
