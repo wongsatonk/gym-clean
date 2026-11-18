@@ -104,7 +104,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Adds: `WorkSide = 'right' | 'left'`; `SideCount = { reps: number; partials: number }`; `SetLog.sides?: Partial<Record<WorkSide, SideCount>>` (doc: `reps` = the lower side when both exist); `OneSidedLimb = 'arm' | 'leg'`.
   - Done when: `npm run check` passes.
   - Deps: none.
-- [ ] 5. [core-engineer] One-sided exercises as data, tests first.
+- [x] 5. [core-engineer] One-sided exercises as data, tests first.
   - Files: `src/core/exercises/oneSided.ts`(+test), exported from `src/core/exercises/index.ts`.
   - `ONE_SIDED: Record<exerciseId, OneSidedLimb>` (the 3 arm + 4 leg ids in SPEC M13b goal 1), `oneSidedLimb(id)`, `FIRST_SIDE = 'right'`, copy as data: side label ("Right arm"/"Left leg"), button ("Next arm"/"Next leg"), spoken switch ("Left arm. Turn so your left arm faces the phone."), spoken start ("Right arm first."), idle reminder ("Tap Next arm when you're ready.").
   - Done when: tests check every id exists in `exercises.json`, lunges are not in the list, copy ≤ 8 words for labels/buttons.
@@ -229,7 +229,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `buildClaudeRequest(input, { model, maxTokens })` → the JSON body: `{ model, max_tokens, system: [instructions block (cache_control), context block], tools: propose* only from `TRAINER_TOOLS` → `{ name, description, input_schema }` (cache_control on the last), messages: the last ≤ 8 turns without `usedHealth` (each ≤ 600 chars, check-in turns dropped) + the new message (≤ 1,000 chars) }`; context = `serializeContext(…, { brain: 'claude', budgetChars: CLAUDE_CONTEXT_BUDGET_CHARS /* provisional 8,000 */ })` + the 4 read-only results (`readToolResults`) inline. The intake's own-words goal text is **not** included (M12-s3-q5 default; goal kind + lift goals only).
   - Done when tests cover: top-level keys are exactly the allow-list; tools = the propose* tools 1:1, schemas valid JSON Schema; **never-contains**: seed Health values, card reasons, a `usedHealth` turn, body fat, lean mass, weigh-ins, measurements, a progress photo, a check-in, a day-feel, a note, the goal's own words, a dev-log row, and a key-like string in settings → none of the sentinels in `JSON.stringify(body)`; budget on a heavy made-up history; deterministic output (same input → same body, so caching works); the lists in `sends.ts` pass `checkCopy` and name every field the builder emits (a test maps each emitted section to a `CLAUDE_SENDS` item).
   - Deps: 3.
-- [ ] 5. [core-engineer] Claude instructions (persona), **tests first**.
+- [x] 5. [core-engineer] Claude instructions (persona), **tests first**.
   - Files: src/core/trainer/brain/instructions.ts(+test).
   - `brainInstructions({ brain: 'claude', voice })`: builds on the 1.15.0 friendlier persona: talk like a human personal trainer (warm, plain, uses his own words back, one short clarifying question when something's missing), ≤ 4 short sentences, `say` line rules unchanged, every change only through a `propose*` tool (never promise a change in text: the 1.15.0 rule), facts only from the context block, the M10 safety lines verbatim (referral line, no medical content, no promises), English. May be longer than Apple's (`INSTRUCTIONS_MAX_CHARS` stays for Apple; Claude gets its own cap, provisional 3,000).
   - Done when tests cover: safety lines present verbatim for both brains; "never promise in text" present; Apple's text unchanged by this task (snapshot); `checkCopy` passes.
@@ -934,7 +934,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: fixtures/headmotion/README.md (format, filename rule, pointer to the SPEC guide), fixtures/headmotion/gen-synthetic.mjs, fixtures/headmotion/synthetic/** (made-up clips: still curl, curl with 3 side looks, push-up with chin drops, 12 calf raises clean + 2 half reps, 12 shrugs clean + 2 half, AirPods dropping out mid-set, and the still-curl + drift-curl + calf-raise clips again at a second rate with jittered timestamps). The AirPods rate is not documented: generate at 25 Hz as a placeholder and switch the main set to the rate task 2 measures; the rate is a generator parameter.
   - Done when: each clip is valid `HeadFrame[]` JSON with its rate and expected counts in the filename; regenerating gives the same files.
   - Deps: 3.
-- [ ] 5. [core-engineer] Watch protocol. Tests first.
+- [x] 5. [core-engineer] Watch protocol. Tests first.
   - Files: src/core/watch/protocol.ts(+test).
   - `watchSnapshot(state, ctx, rev, now)` → `WatchSnapshot` (texts in his unit, warm-up label, `rest.endsAt` from the rest clock, one-step `next` lookahead incl. its rest seconds, summary); `watchEventToSession(ev, state, seen, clock)` → `SessionEvent | null` (dedupe by id, stale `basedOnRev` dropped by exercise/set/phase, watch time → phone time via the offset, clamped like M5c); `clockOffset(hello/snapshot pairs)`; replay of a queued list in order.
   - Done when: tests cover every phase (warm-up, last set of an exercise, last set of the day, paused, summary), each event type, duplicate, stale, phone + watch double Set done → one log, offline Set done then reconnect, offset + clamp; `npm run check`.
@@ -1098,7 +1098,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: package.json (muxer per task 1; `@capacitor/filesystem` only if task 2 picks it), .gitignore (`story/clips/` for the Story pack's real clips), .claude/agents/pose-engineer.md ("Never record, store or upload frames" → the M15 exception, per CLAUDE.md Privacy).
   - Done when: `npm run check` + `npm run build` pass; `git check-ignore story/clips/x.mp4` matches.
   - Deps: 1, 2.
-- [ ] 5. [core-engineer] Trigger rules as data + decider. Tests first.
+- [x] 5. [core-engineer] Trigger rules as data + decider. Tests first.
   - Files: src/core/clips/rules.ts (data: lead-in ~1.5 s, tail ~0.5 s, clip 4–6 s, max 5 automatic per workout, priority `best` > `hard` > `form`, tempo bands from the M5 T1 numbers, buffer 8 s, fallback 540p/24 fps), src/core/clips/triggers.ts(+test).
   - `repWindow(repEvent)` → `RepWindow` clamped to 4–6 s; `isCleanRep(rep, cuesFired, rule)` (no cue, no partial, reached far threshold, tempo in band); `betterForm(a, b)`; `decideSet({ candidates, setLog, bests, effort?, manual? }, kept, rules)` → keep / replace / drop with trigger; cap + replacement; manual never counted toward the cap; warm-ups never trigger `best`.
   - Done when: tests cover each trigger, none firing, two triggers on one set (one clip, highest priority), cap full + higher priority replaces lowest, cap full + lower priority dropped, Hard tapped after the set, manual over cap, warm-up set; `npm run check`.

@@ -29,6 +29,15 @@ export type {
   ViewVariant,
 } from './types';
 export { COUNTER_DEFAULTS } from './types';
+export {
+  FIRST_SIDE,
+  ONE_SIDED,
+  ONE_SIDED_COPY,
+  isOneSided,
+  oneSidedLimb,
+  otherSide,
+  type OneSidedCopy,
+} from './oneSided';
 
 export const RULES: readonly ExerciseRule[] = [
   curl,
