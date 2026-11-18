@@ -2135,8 +2135,9 @@ arm avoid the error while lifting up".** Planner defaults are in PROGRESS Decisi
    sets. The set summary, Calendar day and History show both ("R 12 · L 11"); Fix corrects either side;
    backups round-trip `sides`; the developer log records the switch time and per-side counts.
 6. **Row counting fixed on real data.** His recordings become landmark fixtures
-   (`fixtures/landmarks/row/real-*`, landmarks only, never video); the row counts each clip exactly (reps and
-   partials). The cause of each symptom is written down. Fixes go in the rule data (`row.ts`) first.
+   (`fixtures/landmarks/row/real-*`, landmarks only, never video). **Revised 2026-11-17 (his words: "I count
+   by myself because the camera log wrong number"):** the clips are upper-bound / no-false-reps checks, not
+   exact counts (the app's overlays cover him in the recordings); exact tuning waits for dev-log landmarks. The cause of each symptom is written down. Fixes go in the rule data (`row.ts`) first.
 7. **He stays in view while bent over.** The pose settings (confidence thresholds, or the model, if the
    measurements justify it and the iPhone keeps ≥ 24 fps) are chosen from measured detection on his row
    clips; the row's placement lines/sentence change if the clips show a better phone spot.
@@ -2148,7 +2149,8 @@ arm avoid the error while lifting up".** Planner defaults are in PROGRESS Decisi
 
 #### Accept
 - `npm run check` and `npm run e2e` green; `npm run build` contains 1.15.1; iOS version synced.
-- Fixture suite: every `fixtures/landmarks/row/real-*` clip counts its labelled reps and partials exactly;
+- Fixture suite: every `fixtures/landmarks/row/real-*` clip stays within its labelled reps (a ceiling), counts
+  nothing while he isn't rowing, never changes side and never counts down (Decision 2026-11-17, revised);
   all synthetic folders unchanged; new left-arm synthetic clips for row and concentration curl count with the
   side locked to left and count 0 with it locked to right.
 - Unit: the counter never changes side or resets counts on its own (replay of the set-3 recording); session

@@ -83,6 +83,19 @@ test('curl camera: big video, "0 / 12" + set line, set-up card spoken once, 3D c
   const cam = page.getByRole('dialog', { name: 'Camera' });
   await expect(cam).toHaveAttribute('data-delegate', /GPU|CPU/, { timeout: 30_000 });
 
+  // Phone set-up card first: since M13b it closes itself 10 s after the camera starts, and under a
+  // full parallel run the layout checks below can take that long (it is spoken exactly once).
+  const card = cam.getByRole('region', { name: 'Set up your phone' });
+  await expect(card).toBeVisible();
+  await expect(card.locator('.setup-line').first()).toBeVisible();
+  expect(
+    await card
+      .locator('.setup-line')
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+  ).toBeGreaterThanOrEqual(22);
+  await expect(card.locator('svg.setup-pic')).toHaveAttribute('data-view', 'side');
+
   // Count + target, both big and on the video.
   await expect(cam.locator('[data-reps]')).toHaveText('0');
   await expect(cam.locator('.rep-target')).toHaveText('/ 12');
@@ -110,13 +123,6 @@ test('curl camera: big video, "0 / 12" + set line, set-up card spoken once, 3D c
   expect(doneBox?.height ?? 0).toBeGreaterThanOrEqual(56);
   expect((doneBox?.y ?? 0) + (doneBox?.height ?? 0)).toBeLessThanOrEqual(844);
 
-  // Phone set-up card (no person in the test pattern, so it stays up: 10 s at most since M13b),
-  // spoken exactly once.
-  const card = cam.getByRole('region', { name: 'Set up your phone' });
-  await expect(card).toBeVisible();
-  await expect(card.locator('.setup-line').first()).toBeVisible();
-  expect(await px('.setup-line')).toBeGreaterThanOrEqual(22);
-  await expect(card.locator('svg.setup-pic')).toHaveAttribute('data-view', 'side');
   const said = await speech(page);
   // The placement sentence is said exactly once. On a slow (GPU-less CI) runner the M5 low-fps
   // cue "Move closer to the light." may also be spoken; that's correct behaviour, so ignore it.

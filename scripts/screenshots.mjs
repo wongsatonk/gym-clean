@@ -40,6 +40,12 @@
 //   node scripts/screenshots.mjs m13         # M13 verify: fresh install welcome → intake → camera
 //                                            #   page → Today; Settings, Self-check, tour, About owner
 //                                            #   off; 7-tap unlock → owner on: m13-verify-*.png
+//   node scripts/screenshots.mjs m13b [manual|camera|tour]
+//                                            # M13b verify: manual one-arm row (Right → Next arm →
+//                                            #   Left → Rest Fix per side → Summary / Calendar day /
+//                                            #   History), camera row (fixture player: right count,
+//                                            #   top strip, left), 1.15.1 tour + K2 to-do:
+//                                            #   m13b-verify-*.png
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -4171,6 +4177,353 @@ async function m13(browser) {
   await ctx.close();
 }
 
+// ---------------------------------------------------------------------------------------------
+// M13b verify (task 20): one-arm sets in the wired app at 390×844. Manual row (Right → Next arm →
+// Left → Set done → Rest Fix per side → Summary / Calendar day / History), the camera view with the
+// row fixture player (right clip counts, "Step into frame" strip, Next arm → left), the 1.15.1
+// What's New pages + the K2 to-do guide. Writes docs/screenshots/m13b-verify-*.png.
+const M13B_ROW_CLIPS = {
+  right: '/fixtures/landmarks/row/synthetic-01__reps-4__partials-0.json',
+  left: '/fixtures/landmarks/row/synthetic-03-left__reps-4__partials-0.json',
+};
+
+async function m13bPhone(browser, { owner = false, handsFree = true, rowPlayer = false } = {}) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    ignoreHTTPSErrors: true,
+    permissions: ['camera'],
+    reducedMotion: 'reduce',
+  });
+  const offsite = [];
+  await ctx.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (url.hostname === 'localhost' || url.protocol === 'data:' || url.protocol === 'blob:')
+      return route.continue();
+    offsite.push(url.href);
+    return route.abort();
+  });
+  // Fresh-DB defaults as e2e/fixtures.ts: intake skipped, no warm-ups, owner as asked, hands-free.
+  await ctx.addInitScript((o) => {
+    const proto = IDBFactory.prototype;
+    const open = proto.open;
+    let fresh = false;
+    proto.open = function (name, version) {
+      const req = version === undefined ? open.call(this, name) : open.call(this, name, version);
+      if (name !== 'gym-clean') return req;
+      req.addEventListener('upgradeneeded', (e) => { if (e.oldVersion === 0) fresh = true; });
+      req.addEventListener('success', () => {
+        if (!fresh) return;
+        const db = req.result;
+        if (!db.objectStoreNames.contains('settings')) return;
+        fresh = false;
+        const s = db.transaction('settings', 'readwrite').objectStore('settings');
+        s.put({ key: 'intakeSkipped', value: Date.now() });
+        s.put({ key: 'permissionCatchUp', value: '1.15.1' });
+        s.put({ key: 'trainerKit', value: { warmups: 'off' } });
+        if (o.owner) s.put({ key: 'ownerMode', value: { on: true, setAt: Date.now(), by: 'existing' } });
+        if (!o.handsFree) s.put({ key: 'handsFree', value: false });
+      });
+      return req;
+    };
+  }, { owner, handsFree });
+  await ctx.addInitScript(() => {
+    window.__spoken = [];
+    window.__clip = 'right';
+    window.__noPerson = false;
+    window.__playing = false;
+    window.__clipDone = 0;
+    class FakeUtterance extends EventTarget {
+      constructor(text) { super(); this.text = text; this.lang = ''; this.rate = 1; this.volume = 1; this.voice = null; this.pitch = 1; }
+    }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: FakeUtterance, configurable: true });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => {
+          if (u.text && u.volume !== 0) window.__spoken.push(u.text);
+          setTimeout(() => u.dispatchEvent(new Event('end')), 300);
+        },
+        cancel: () => {}, pause: () => {}, resume: () => {}, getVoices: () => [],
+        addEventListener: () => {}, speaking: false, pending: false, paused: false,
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => {}, release: async () => {} }) },
+    });
+  });
+  if (rowPlayer)
+    await ctx.route(/\/src\/pose\/landmarker\.ts/, (route) =>
+      route.fulfill({
+        contentType: 'application/javascript',
+        body: `
+          export async function createPoseTracker() {
+            const clips = {
+              right: await (await fetch(${JSON.stringify(M13B_ROW_CLIPS.right)})).json(),
+              left: await (await fetch(${JSON.stringify(M13B_ROW_CLIPS.left)})).json(),
+            };
+            let idx = 0;
+            return {
+              delegate: 'CPU',
+              detect(_v, t) {
+                if (window.__noPerson) return null;
+                const frames = clips[window.__clip];
+                if (!window.__playing) { idx = 0; return { ...frames[0], t }; }
+                const f = frames[idx++];
+                if (idx >= frames.length) { window.__playing = false; window.__clipDone++; idx = 0; }
+                return { ...f, t };
+              },
+              close() {},
+            };
+          }`,
+      }),
+    );
+  const page = await ctx.newPage();
+  const log = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => log.push(`pageerror: ${e.message}`));
+  return { ctx, page, log, offsite };
+}
+
+/** Sizes that matter at 2 m: side label, count, buttons; plus small text and small targets. */
+async function m13bSizes(page, scope = 'body') {
+  return page.evaluate((scope) => {
+    const root = document.querySelector(scope) ?? document.body;
+    const vis = (e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';
+    const px = (e) => parseFloat(getComputedStyle(e).fontSize);
+    const pick = (sel) => [...root.querySelectorAll(sel)].filter(vis).map((e) => ({
+      text: e.textContent.trim().replace(/\s+/g, ' ').slice(0, 40), fontPx: px(e),
+      h: Math.round(e.getBoundingClientRect().height), w: Math.round(e.getBoundingClientRect().width),
+    }));
+    const smallText = [];
+    for (const el of root.querySelectorAll('*')) {
+      if (!vis(el)) continue;
+      const own = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+      if (own && px(el) < 20) smallText.push(`${el.tagName.toLowerCase()}.${el.className}: "${el.textContent.trim().slice(0, 30)}" ${px(el)}px`);
+    }
+    const smallTargets = [...root.querySelectorAll('button, [role=button], a, input, select')]
+      .filter(vis).filter((e) => { const r = e.getBoundingClientRect(); return r.height < 56 || r.width < 56; })
+      .map((e) => `${(e.getAttribute('aria-label') ?? e.textContent).trim().slice(0, 30)} ${Math.round(e.getBoundingClientRect().width)}x${Math.round(e.getBoundingClientRect().height)}`);
+    return {
+      sideLabel: pick('[data-side-label]'), sideDone: pick('[data-side-done]'),
+      reps: pick('[data-stepper="reps"] [aria-label="Reps"], .rep-num[data-reps]'),
+      nextArm: pick('button'), smallText: smallText.slice(0, 25), smallTargets: smallTargets.slice(0, 25),
+    };
+  }, scope);
+}
+
+async function m13bShot(p, name, extra = {}, opts = {}) {
+  await p.page.waitForTimeout(350);
+  const sizes = await m13bSizes(p.page, opts.scope);
+  sizes.nextArm = sizes.nextArm.filter((b) => /Next arm|Set done|Next leg/.test(b.text));
+  await shot(p.page, p.log, `m13b-verify-${name}`, { sizes, ...extra });
+  if (opts.fullPage)
+    await p.page.screenshot({ path: `${OUT}/m13b-verify-${name}-full.png`, fullPage: true });
+}
+
+async function m13bSetReps(page, n) {
+  const val = page.getByLabel('Reps', { exact: true });
+  const now = Number(await val.innerText());
+  const btn = page.getByRole('button', { name: n > now ? 'Reps plus' : 'Reps minus' });
+  for (let i = 0; i < Math.abs(n - now); i++) await btn.click();
+}
+
+async function m13bManual(browser) {
+  const p = await m13bPhone(browser);
+  const { page } = p;
+  const flow = { flow: 'm13b-manual', steps: [] };
+  const step = (s) => flow.steps.push(s);
+  await page.clock.install({ time: new Date(2026, 10, 17, 18, 0, 0) });
+  await page.goto(BASE + '/');
+  await page.clock.pauseAt(new Date(2026, 10, 17, 18, 0, 5));
+  await page.getByRole('button', { name: /Pull A/ }).first().waitFor();
+  await m13bShot(p, 'today', {}, { fullPage: true });
+  await page.getByRole('button', { name: /Pull A/ }).first().click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await page.getByRole('heading', { name: 'One-Arm Dumbbell Row' }).waitFor();
+  await page.clock.runFor(1500);
+  await m13bShot(p, 'right-manual', {
+    setDoneCount: await page.getByRole('button', { name: 'Set done' }).count(),
+    spoken: await page.evaluate(() => [...window.__spoken]),
+  });
+  await m13bSetReps(page, 12);
+  await page.clock.runFor(40_000);
+  await page.getByRole('button', { name: 'Next arm' }).click();
+  await page.clock.runFor(1000);
+  await m13bShot(p, 'left-manual', {
+    sideDone: (await page.locator('[data-side-done]').textContent())?.trim(),
+    nextArmCount: await page.getByRole('button', { name: 'Next arm' }).count(),
+  });
+  await m13bSetReps(page, 11);
+  await page.clock.runFor(35_000);
+  await page.getByRole('button', { name: 'Set done' }).click();
+  await page.locator('[data-rest-clock]').waitFor();
+  await page.clock.runFor(1000);
+  const restInfo = async () => ({
+    today: (await page.locator('[data-today]').allTextContents()).map((t) => t.trim()),
+    lastSet: (await page.locator('[data-lsc="panel"]').textContent())?.trim().replace(/\s+/g, ' '),
+  });
+  await m13bShot(p, 'rest', await restInfo(), { fullPage: true });
+  const fix = page.locator('[data-lsc="panel"]');
+  await fix.locator('[data-lsc="fix"]').click();
+  await fix.locator('[data-lsc="side-left"]').click();
+  await m13bShot(p, 'rest-fix-left', {
+    sideButtons: await fix.locator('[data-lsc^="side-"]').evaluateAll((els) => els.map((e) => ({
+      id: e.getAttribute('data-lsc'), pressed: e.getAttribute('aria-pressed'),
+      h: Math.round(e.getBoundingClientRect().height), w: Math.round(e.getBoundingClientRect().width) }))),
+  });
+  await fix.locator('[data-lsc="reps-minus"]').click();
+  await fix.locator('[data-lsc="save"]').click();
+  await page.waitForTimeout(300);
+  await m13bShot(p, 'rest-fixed', await restInfo());
+  step({ setsAfterFix: await page.evaluate(() => new Promise((res) => {
+    const o = indexedDB.open('gym-clean');
+    o.onsuccess = () => { const r = o.result.transaction('sets').objectStore('sets').getAll(); r.onsuccess = () => res(r.result.map((s) => ({ ex: s.exerciseId, reps: s.reps, sides: s.sides }))); };
+  })) });
+  // End workout → Summary.
+  await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  const sheet = page.getByRole('dialog', { name: 'Paused' });
+  await sheet.getByRole('button', { name: 'End workout' }).click();
+  await sheet.getByRole('button', { name: 'Tap again to end' }).click();
+  await page.getByRole('heading', { name: 'Workout done' }).waitFor();
+  await m13bShot(p, 'summary', {
+    rowLine: (await page.locator('main').innerText()).split('\n').filter((l) => /R \d+ · L \d+/.test(l)),
+  }, { fullPage: true });
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.locator('[data-tab="calendar"]').click();
+  await page.locator('[data-cal-day="2026-11-17"]').click();
+  const day = page.locator('main[data-screen="calendar-day"]');
+  await day.waitFor();
+  const rowEx = day.locator('[data-cal-ex="One-Arm_Dumbbell_Row"]');
+  await m13bShot(p, 'calendar-day', { rowText: (await rowEx.innerText()).replace(/\s+/g, ' ') }, { fullPage: true });
+  await rowEx.locator('[data-cal-history]').click();
+  await page.locator('main[data-screen="history"][data-view="detail"]').waitFor();
+  await m13bShot(p, 'history', {
+    first: (await page.locator('[data-history-session]').first().innerText()).replace(/\s+/g, ' ').slice(0, 200),
+  }, { fullPage: true });
+  flow.spoken = await page.evaluate(() => window.__spoken);
+  flow.offsite = p.offsite;
+  flow.console = [...p.log];
+  results.push(flow);
+  await p.ctx.close();
+}
+
+async function m13bCamera(browser) {
+  const p = await m13bPhone(browser, { handsFree: false, rowPlayer: true });
+  const { page } = p;
+  const flow = { flow: 'm13b-camera', steps: [] };
+  await page.goto(BASE + '/');
+  await page.getByRole('button', { name: /Pull A/ }).first().click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  await page.getByRole('heading', { name: 'One-Arm Dumbbell Row' }).waitFor();
+  await page.getByRole('button', { name: 'Camera', exact: true }).click();
+  const cam = page.getByRole('dialog', { name: 'Camera' });
+  await cam.locator('.rep-panel').waitFor();
+  await page.waitForFunction(() => document.querySelector('[role=dialog][data-person="true"]'), null, { timeout: 30_000 });
+  const camInfo = async () => ({
+    side: (await cam.locator('.rep-panel [data-side-label]').textContent())?.trim(),
+    reps: await cam.locator('.rep-num[data-reps]').getAttribute('data-reps'),
+    strip: await cam.locator('[data-frame-strip]').getAttribute('data-frame-strip'),
+    cardVisible: await cam.locator('.cam-setup').isVisible(),
+  });
+  await m13bShot(p, 'camera-right-start', await camInfo(), { scope: '[role=dialog]' });
+  await page.evaluate(() => { window.__clip = 'right'; window.__playing = true; });
+  await page.waitForFunction(() => window.__clipDone >= 1, null, { timeout: 90_000 });
+  await page.waitForTimeout(500);
+  await m13bShot(p, 'camera-right', await camInfo(), { scope: '[role=dialog]' });
+  await page.evaluate(() => { window.__noPerson = true; });
+  await page.waitForFunction(() => document.querySelector('[data-frame-strip="shown"]'), null, { timeout: 10_000 });
+  await page.waitForTimeout(3000);
+  const sb = await cam.locator('[data-frame-strip]').boundingBox();
+  const st = await cam.locator('.cam-stage').boundingBox();
+  await m13bShot(p, 'camera-strip', { ...(await camInfo()), stripBox: sb, stageBox: st,
+    stripFontPx: await cam.locator('[data-frame-strip]').evaluate((e) => parseFloat(getComputedStyle(e).fontSize)),
+    stripText: (await cam.locator('[data-frame-strip]').textContent())?.trim() }, { scope: '[role=dialog]' });
+  await page.evaluate(() => { window.__noPerson = false; });
+  await page.waitForFunction(() => document.querySelector('[data-frame-strip="hidden"]'), null, { timeout: 10_000 });
+  await cam.getByRole('button', { name: 'Next arm' }).click();
+  await page.waitForTimeout(900);
+  await page.evaluate(() => { window.__clip = 'left'; window.__playing = true; });
+  await page.waitForFunction(() => window.__clipDone >= 2, null, { timeout: 90_000 });
+  await page.waitForTimeout(500);
+  await m13bShot(p, 'camera-left', await camInfo(), { scope: '[role=dialog]' });
+  flow.spoken = await page.evaluate(() => window.__spoken);
+  flow.offsite = p.offsite;
+  flow.console = [...p.log];
+  results.push(flow);
+  await p.ctx.close();
+}
+
+async function m13bTour(browser) {
+  const p = await m13bPhone(browser, { owner: true });
+  const { page } = p;
+  const flow = { flow: 'm13b-tour', pages: [] };
+  await page.clock.install({ time: new Date(2026, 10, 17, 18, 0, 0) });
+  await page.goto(BASE + '/');
+  await page.locator('[data-cal]').first().waitFor();
+  // An update from 1.15.0: one finished session, the 1.15.0 tour seen.
+  const t0 = new Date(2026, 10, 13, 18, 0, 0).getTime();
+  await page.evaluate(({ t0 }) => new Promise((res, rej) => {
+    const o = indexedDB.open('gym-clean');
+    o.onerror = () => rej(o.error);
+    o.onsuccess = () => {
+      const tx = o.result.transaction(['sessions', 'sets', 'settings'], 'readwrite');
+      tx.objectStore('settings').put({ key: 'whatsNew', value: { seenRelease: '1.15.0' } });
+      tx.objectStore('sessions').put({ sessionId: 's1', dayId: 'push-a', startedAt: t0, endedAt: t0 + 2_400_000, setsDone: 1, totalVolumeKg: 0, restOverruns: 0 });
+      tx.objectStore('sets').put({ sessionId: 's1', exerciseId: 'Dumbbell_Bench_Press', setIndex: 0, reps: 10, weightKg: 20, startedAt: t0 + 60_000, endedAt: t0 + 90_000 });
+      tx.oncomplete = () => { o.result.close(); res(true); };
+      tx.onerror = () => rej(tx.error);
+    };
+  }), { t0 });
+  await page.reload();
+  const tour = page.locator('[data-tour="whats-new"]');
+  await tour.waitFor({ timeout: 15_000 });
+  for (let i = 1; i <= 8; i++) {
+    const c = (await tour.locator('[data-wn="count"]').textContent())?.trim();
+    const title = (await tour.locator('[data-wn="title"]').first().textContent().catch(() => ''))?.trim();
+    const version = (await tour.locator('[data-wn="version"]').textContent().catch(() => null))?.trim();
+    flow.pages.push({ c, title, version });
+    await m13bShot(p, `tour-${i}`, { count: c, title, version }, { scope: '[data-tour="whats-new"]' });
+    const next = tour.locator('[data-wn="next"]');
+    if (!(await next.count())) break;
+    const label = (await next.textContent())?.trim() ?? '';
+    await next.click();
+    if (/done/i.test(label)) break;
+    await page.waitForTimeout(250);
+  }
+  // Settings → To-dos → the K2 guide.
+  await page.locator('[data-tab="settings"]').click();
+  await page.locator('main[data-screen="settings"]').waitFor();
+  const todosOpen = page.locator('main[data-screen="settings"] [data-todos-open]').first();
+  await todosOpen.scrollIntoViewIfNeeded();
+  await todosOpen.click();
+  await page.waitForTimeout(500);
+  const topic = page.locator('[data-todo-topic="one-arm-sets"]');
+  flow.k2Topic = await topic.count();
+  if (flow.k2Topic) {
+    await topic.first().scrollIntoViewIfNeeded();
+    await m13bShot(p, 'todos', { text: (await topic.first().innerText()).replace(/\s+/g, ' ').slice(0, 200) });
+    await topic.first().click();
+    await page.waitForTimeout(400);
+    await m13bShot(p, 'todo-k2', { text: (await page.locator('main').innerText()).replace(/\s+/g, ' ').slice(0, 400) }, { fullPage: true });
+  }
+  flow.offsite = p.offsite;
+  flow.console = [...p.log];
+  results.push(flow);
+  await p.ctx.close();
+}
+
+async function m13b(browser, only) {
+  if (!only || only === 'manual') await m13bManual(browser);
+  if (!only || only === 'camera') await m13bCamera(browser);
+  if (!only || only === 'tour') await m13bTour(browser);
+}
+
 const milestone = (process.argv[2] ?? 'm4').replace(/^--/, '');
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -4211,6 +4564,7 @@ try {
   else if (milestone === 'm12b') await m12b(browser, process.argv[3]);
   else if (milestone === 'store') await store(browser);
   else if (milestone === 'm13') await m13(browser);
+  else if (milestone === 'm13b') await m13b(browser, process.argv[3]);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));

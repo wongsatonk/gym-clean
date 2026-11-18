@@ -179,7 +179,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Deps: 7, 16.
 - [x] 19. [reviewer] Review the branch diff against CLAUDE.md (ownership, tests first, sizes, voice over screen, no video staged, privacy).
   - Deps: 17, 18.
-- [ ] 20. [verifier] Verify milestone against SPEC M13b acceptance criteria: `npm run check`, `npm run e2e`, `npm run build` (1.15.1), fixture suite numbers, 390×844 screenshots `docs/screenshots/m13b-verify-*`, console clean; evidence into "Verification evidence → M13b".
+- [x] 20. [verifier] Verify milestone against SPEC M13b acceptance criteria: `npm run check`, `npm run e2e`, `npm run build` (1.15.1), fixture suite numbers, 390×844 screenshots `docs/screenshots/m13b-verify-*`, console clean; evidence into "Verification evidence → M13b".
   - Deps: 19.
 - [ ] 21. [main] Merge + ask to push (mention the committed `row/real-*` landmark JSON made from his recordings; no video).
   - Deps: 20.
@@ -4412,6 +4412,15 @@ Source: his 3 Safari screen recordings (`private/videos/`, 1206×2622, VFR 60/12
 | `real-05-right__reps-9__partials-0` | rec 3 136–176 s (set 4) | right (app label; not visible to us) | 9 / 0 | 4 reps, 4 partials | 730/1200 (61%) | bar 76% of 146–175 s | Phone on the floor, legs view. 9 bar cycles (147.2, 150.6, 152.7, 155.0, 157.1, 159.6, 162.1, 166.2, 170.0 s); setup bump 0.38 at 142 s, small wiggles at 148.6/172–173 s are not reps. |
 
 Findings: (1) **The app undercounted, it did not overcount**, in every set (live trace 9+15 / 12 / 5 / 9 vs shown 14 / 4 / 5 / 4); "14/12" in set 1 was a 24-rep set spread over two recordings. His own numbers (12, 10) are lower than the frames show; M13b-q3 should ask him. (2) Bent over in rec 1 he was **detected but gated** ("Step into frame" while the skeleton was drawn); in the phone-on-floor sets the bar dropped out only 0–27% of the time. (3) Arms alternated per set (L, L, R, L, R by the app label); no mid-set arm flip was seen in these recordings. (4) Clips 02–05 are screen recordings with the rep card over his torso and arm: their landmark JSON is weak (the upper body is a dark rectangle to MediaPipe) and the counter cannot be expected to recover 15/12/9 from them; clip 01 is the solid one. See the pose-engineer report for the recommendation on how task 8 should use them. Today's counter on these JSONs (`npx vitest run src/core/repCounter.fixtures.test.ts`, 5 fail as expected until task 8): 01 → 0/5, 02 → 4/1, 03 → 3/7, 04 → 2/2, 05 → 1/3 (reps/partials). `git status`: no video (`fixtures/videos/` ignored); 5 JSON, 2.0–2.4 MB each.
+
+### M13b (task 20, verifier, 2026-11-17, HEAD 881b16f; 5ca6551 adds only CI/agent docs/e2e:* scripts)
+- npm run check: tsc + eslint clean; Vitest 246 files, 5840 passed / 1 skipped; node --test 138/138.
+- npm run e2e: run 1 226 passed / 1 failed (camera-layout.spec.ts:72, set-up card closed by the 10 s cap under load — fixed by checking the card first; 3/3 at 4x CPU throttle, 13/13 spec) / 48 not run; run 2 275 passed / 1 skipped (19.9 m). repeat-each=5: one-arm + one-arm-screens 35/35; camera.spec one-arm 10/10.
+- npm run build: 1.15.1 in the main chunk (1,082.29 kB / gzip 341.15 kB). ios:sync → ios:check: version 1.15.1 (build 367).
+- Fixture suite (locked as labelled): row real-01-left 0/5 (ceiling 9), 02 0/0 (15), 03 0/0 (12), 04 0/0 (5), 05 0/0 (9); quiet spans silent; 0 side changes; never counts down. Synthetic row/concentration-curl 01 4/0, 02 3/2, 03-left 4/0; every other folder expected = counted. SPEC M13b goal 6 + Accept amended to the upper-bound Decision.
+- Scratch replay at conf 0.3: pose 95/71/76/80/87%; counts 0/5, 0/1, 0/0, 0/0, 0/0 — all within ceilings (02's one partial would break its partials:0 pin if fixtures are re-extracted at 0.3; note for the next tuning).
+- Screenshots 390×844: docs/screenshots/m13b-verify-*.png (today, right/left manual, rest + Fix, summary, calendar day, history, camera right/strip/left, tour 1–3, to-dos, K2); console clean apart from headless GPU warnings; no off-device request.
+- Known cosmetic gap: Rest "Today:" shows the lower side only. Manual left stepper is pre-filled (camera left starts at 0).
 
 ### M13b fixtures (task 2: bent-over detection, 2026-11-17)
 - Gate: `cameraView.ts` shows "Step into frame" when `!counter.tracking`; for the row that is only the chosen arm's shoulder/elbow/wrist below `minVisibility 0.5`. The wrist (holding the dumbbell) is weakest (mean 0.51–0.54 on clips 02–05). The target bar never showed in recording 1 because `.cam-stage.setup-open .cam-gauge-slot {display:none}` and the card only closed after 1.5 s unbroken in frame (task 14 removes this).
