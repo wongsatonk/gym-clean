@@ -97,4 +97,14 @@ export const test = base.extend<{
     });
     await use(context);
   },
+  // E2E_CPU_THROTTLE=6 slows every page's CPU (Chromium DevTools throttling) to replay the CI
+  // runner (2 cores, no GPU) locally: late re-renders and slow loads show up the way they do there.
+  page: async ({ page, browserName }, use) => {
+    const rate = Number(process.env.E2E_CPU_THROTTLE ?? 0);
+    if (rate > 1 && browserName === 'chromium') {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send('Emulation.setCPUThrottlingRate', { rate });
+    }
+    await use(page);
+  },
 });
