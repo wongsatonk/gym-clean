@@ -280,7 +280,7 @@ import {
   shareStoryLayout,
   type ShareSize,
 } from './shareMonth';
-import { enterScreen, reducedMotion, type EnterDir } from './motion';
+import { reducedMotion, screenEntrance, type EnterDir } from './motion';
 import { undoToast, type UndoToast } from './coach/undoToast';
 import { planChangesScreen } from './screens/planChanges';
 import { myGymScreen } from './screens/myGym';
@@ -998,14 +998,16 @@ export function mountApp(root: HTMLElement): void {
     // Settings shows "Restore undone." inline: the notice would say it twice.
     if (view.screen === 'settings' && toast?.dataset.notice === 'restore') removeToast();
     placeToast();
-    if (pendingEnter) {
-      // The screen's parts slide, not the screen: a transform on it would carry the fixed tab
-      // bar along for the slide.
-      for (const part of screen.children)
-        if (part instanceof HTMLElement && !part.matches('[data-tabbar]'))
-          enterScreen(part, pendingEnter);
-      pendingEnter = null;
-    }
+    // The screen's parts slide, not the screen: a transform on it would carry the fixed tab
+    // bar along for the slide. A re-render while it plays (data arriving) continues the slide.
+    entrance.apply(
+      [...screen.children].filter(
+        (p): p is HTMLElement => p instanceof HTMLElement && !p.matches('[data-tabbar]'),
+      ),
+      view.screen,
+      pendingEnter,
+    );
+    pendingEnter = null;
   }
 
   function screenFor(v: View): HTMLElement {
@@ -1090,6 +1092,8 @@ export function mountApp(root: HTMLElement): void {
 
   /** The next render enters in the direction of travel along the tab bar (motion.ts). */
   let pendingEnter: EnterDir | null = null;
+  /** The tab entrance, carried across re-renders that land while it plays (motion.ts). */
+  const entrance = screenEntrance();
   function setEnter(to: TabId): void {
     const from = tabOf(view);
     if (from === to) return;

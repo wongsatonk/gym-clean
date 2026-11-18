@@ -6,11 +6,35 @@ import { at, guardNetwork, noHorizontalOverflow, openApp, record } from './app.h
 
 const scrollY = (page: Page) => page.evaluate(() => Math.round(window.scrollY));
 
-/** Scrolls the page down by `px` (as a thumb would) and waits until it moved. */
+/**
+ * Scrolls the page down by `px` (as a thumb would) and waits until it moved and the scroll ended
+ * (`scrollend`): a wheel scroll glides, and a tab tapped mid-glide (more likely on a slow machine
+ * like CI) lands the new screen a px or a few down as the glide's last step applies.
+ */
 async function scrollDown(page: Page, px: number): Promise<number> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __scrollEnded: boolean };
+    w.__scrollEnded = false;
+    // Only this scroll's end: the tab switch's own scroll to the top can end just after.
+    const onEnd = () => {
+      if (window.scrollY <= 100) return;
+      w.__scrollEnded = true;
+      removeEventListener('scrollend', onEnd);
+    };
+    addEventListener('scrollend', onEnd);
+  });
   await page.mouse.wheel(0, px);
-  await expect.poll(() => scrollY(page)).toBeGreaterThan(100);
+  await expect
+    .poll(() =>
+      page.evaluate(() => (window as unknown as { __scrollEnded: boolean }).__scrollEnded),
+    )
+    .toBe(true);
   return scrollY(page);
+}
+
+/** The Calendar once its month is loaded (the Loading line before it is shorter than the phone). */
+async function calendarLoaded(page: Page) {
+  await expect(page.locator('main[data-screen="calendar"] .cal-grid')).toBeVisible();
 }
 
 async function tab(page: Page, id: string) {
@@ -27,7 +51,7 @@ test('a tab switch opens the new screen at the top (Calendar → Coach → Calen
 
   // Calendar is longer than the phone: scroll it, then leave for Coach.
   await tab(page, 'calendar');
-  await expect(page.locator('main[data-screen="calendar"]')).toBeVisible();
+  await calendarLoaded(page);
   await scrollDown(page, 600);
   await tab(page, 'coach');
   await expect(page.locator('[data-screen="coach"]')).toBeVisible();
@@ -35,7 +59,7 @@ test('a tab switch opens the new screen at the top (Calendar → Coach → Calen
 
   // Back to Calendar: at the top again, not where it was left.
   await tab(page, 'calendar');
-  await expect(page.locator('main[data-screen="calendar"]')).toBeVisible();
+  await calendarLoaded(page);
   await expect.poll(() => scrollY(page)).toBe(0);
   // It still scrolls normally afterwards.
   await scrollDown(page, 600);

@@ -79,16 +79,54 @@ function from(dir: EnterDir): string {
   return `translateY(${SLIDE_PX}px)`;
 }
 
-/** A screen or tab panel arriving: fade + 8px slide in the direction of travel. */
-export function enterScreen(el: HTMLElement, dir: EnterDir): Stop {
+/**
+ * A screen or tab panel arriving: fade + 8px slide in the direction of travel. `elapsed` (ms)
+ * starts it that far along (screenEntrance: a re-render mid-entrance picks the slide up).
+ */
+export function enterScreen(el: HTMLElement, dir: EnterDir, elapsed = 0): Stop {
   return play(
     el,
     [
       { opacity: 0, transform: from(dir) },
       { opacity: 1, transform: 'none' },
     ],
-    { duration: DUR.base, easing: EASE.standard },
+    { duration: DUR.base, easing: EASE.standard, delay: -elapsed },
   );
+}
+
+/** The animation clock (document timeline), so a faked Date/performance clock can't stall it. */
+function timelineNow(): number {
+  const t = (globalThis as { document?: Document }).document?.timeline?.currentTime;
+  return typeof t === 'number' ? t : performance.now();
+}
+
+export type ScreenEntrance = {
+  /**
+   * Call on every render with the new screen's parts (not the fixed tab bar), the screen's key,
+   * and the direction when this render is a tab switch (null otherwise).
+   */
+  apply(parts: readonly HTMLElement[], key: string, start: EnterDir | null): void;
+};
+
+/**
+ * A tab's entrance that survives the re-renders landing while it plays. The app rebuilds the
+ * whole screen when data arrives (Calendar's grid replacing its Loading line, Today's cards
+ * filling in), which on a slow phone happens mid-slide; without this the new parts pop in and
+ * the slide is cut. A re-render of the same screen within DUR.base continues the slide from where
+ * it was (negative delay), so it reads as one movement. Any other screen ends it.
+ */
+export function screenEntrance(clock: () => number = timelineNow): ScreenEntrance {
+  let cur: { key: string; dir: EnterDir; t0: number } | null = null;
+  return {
+    apply(parts, key, start) {
+      const t = clock();
+      if (start) cur = { key, dir: start, t0: t };
+      else if (cur && (cur.key !== key || t - cur.t0 >= DUR.base)) cur = null;
+      if (!cur) return;
+      const elapsed = t - cur.t0;
+      for (const p of parts) enterScreen(p, cur.dir, elapsed);
+    },
+  };
 }
 
 /** Cards / list items rising in one after another (first load of Today, a new chat bubble). */

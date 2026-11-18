@@ -15,6 +15,7 @@ import {
   motionAllowed,
   reducedMotion,
   ringFill,
+  screenEntrance,
   staggerIn,
 } from './motion';
 
@@ -187,6 +188,53 @@ describe('enterScreen', () => {
     const stop = enterScreen(as(el), 'up');
     stop();
     expect(el.cancelled).toBe(1);
+  });
+});
+
+describe('screenEntrance', () => {
+  it('a re-render of the same screen mid-entrance continues the slide where it was', () => {
+    let t = 1000;
+    const entrance = screenEntrance(() => t);
+    const first = [new El(), new El()];
+    entrance.apply(first.map(as), 'calendar', 'next');
+    expect(first[0]?.calls[0]?.opts).toMatchObject({ duration: DUR.base, delay: -0 });
+    expect(first[0]?.calls[0]?.keyframes[0]).toEqual({ opacity: 0, transform: 'translateX(8px)' });
+    // The data arrives 80 ms in: the new parts pick the slide up 80 ms along, same direction.
+    t = 1080;
+    const again = [new El()];
+    entrance.apply(again.map(as), 'calendar', null);
+    expect(again[0]?.calls[0]?.opts).toMatchObject({ duration: DUR.base, delay: -80 });
+    expect(again[0]?.calls[0]?.keyframes[0]).toEqual({ opacity: 0, transform: 'translateX(8px)' });
+  });
+
+  it('no motion once the entrance is over, on another screen, or without one', () => {
+    let t = 0;
+    const entrance = screenEntrance(() => t);
+    const none = new El();
+    entrance.apply([as(none)], 'today', null);
+    expect(none.calls).toEqual([]);
+    entrance.apply([as(new El())], 'calendar', 'up');
+    t = 50;
+    const other = new El();
+    entrance.apply([as(other)], 'about', null);
+    expect(other.calls).toEqual([]);
+    // Another screen ended it: back on the first one, nothing replays.
+    const back = new El();
+    entrance.apply([as(back)], 'calendar', null);
+    expect(back.calls).toEqual([]);
+    entrance.apply([as(new El())], 'fuel', 'prev');
+    t = 50 + DUR.base;
+    const late = new El();
+    entrance.apply([as(late)], 'fuel', null);
+    expect(late.calls).toEqual([]);
+  });
+
+  it('respects reduced motion like every other helper', () => {
+    reduce = true;
+    const entrance = screenEntrance(() => 0);
+    const el = new El();
+    entrance.apply([as(el)], 'calendar', 'next');
+    expect(el.calls).toEqual([]);
   });
 });
 

@@ -17,9 +17,12 @@ test('renders the Gym Clean home with no console errors', async ({ page }) => {
   await expect(heading).toHaveText('Push A');
   await expect(page.locator('[data-hero] [data-start]')).toBeEnabled();
 
-  // Readable at 2 m: main title ≥ 64px, tap targets ≥ 56px.
-  const fontSize = await heading.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
-  expect(fontSize).toBeGreaterThanOrEqual(64);
+  // Readable at 2 m: main title ≥ 64px, tap targets ≥ 56px. Polled: on a slow machine (CI) the
+  // startup loads still re-render Today after "Push A" shows, and an h1 replaced between finding
+  // it and reading it has no computed size (NaN) until the next read finds the new one.
+  await expect
+    .poll(() => heading.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)))
+    .toBeGreaterThanOrEqual(64);
   for (const box of await page
     .locator('button')
     .evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) {
