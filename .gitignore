@@ -30,3 +30,6 @@ ml/models/
 # Exception: the M3 curl clip feeds the e2e fake camera.
 fixtures/synthetic/**/*.webm
 !fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm
+
+# Rendered social media story packs (large media; review locally)
+marketing/out/

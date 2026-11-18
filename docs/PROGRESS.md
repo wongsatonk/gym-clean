@@ -20,8 +20,11 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 - [~] M4 Rep counter: provisionally done on synthetic fixtures; real clips pending (Checkpoint B)
 - [ ] M5 Focus & form cues → 🧍 Checkpoint C (gym test with camera)
 - [ ] M6 Polish & install
+- [ ] M6c Story clip recorder with adjustable background blur (for Instagram Stories)
 - [ ] M7 Fuel: food & nutrition (independent of the camera; can be built while waiting on Checkpoint B with `/build M7`)
 - [ ] M7b Food photo recognition: on-device Thai food classifier + optional Claude backup (after M7) → 🧍 Checkpoint D (my meal photos, train, test a week)
+- [ ] M8 Wearables: voice over music, push-to-talk via AirPods, Apple Watch Shortcut import, (Watch rest alerts after M6 + decision) → 🧍 Checkpoint E
+- [ ] M9 Native iPhone shell + AirPods head motion: 🧍 feasibility spike first, then nod/shake gestures, head-motion reps, neck cue, auto set start/end, Apple Health + Watch notifications → 🧍 Checkpoint F
 
 ## Current milestone plan
 
@@ -83,6 +86,9 @@ Scope: the six `tracking: "pose"` exercises in `program.json` (Dumbbell_Bicep_Cu
 
 ## Decisions
 
+- 2026-11-13 — Wongsaton: the app may record video **only** through the opt-in M6c Story clip recorder, so he can share clips of himself training. Background blur keeps him sharp and hides everyone else, and he wants it **adjustable**: modes (blur / pixelate / solid colour / dim / off), strength, edge softness, background brightness, mask expand/shrink, presets. Blur on by default, full-frame blur when tracking is lost, mic off by default, saved only via the share sheet, never stored or uploaded by the app. CLAUDE.md privacy rule updated.
+- 2026-11-13 — M9 (Wongsaton): wrap the web app in a native iOS shell (Capacitor) for AirPods Pro head motion (CMHeadphoneMotionManager), Apple Health, local notifications and haptics. Personal install from Xcode only (free team, 7-day re-sign; paid program is his call later), no App Store. Starts with an on-device feasibility spike (music from another app, AirPods mic + motion conflict, camera in WKWebView). Web app stays fully working; native features are feature-detected. Head-motion fixtures (numbers only) may be committed.
+- 2026-11-13 — M8 Wearables (Wongsaton): trains with AirPods Pro + Apple Watch and **plays music** the whole time. Spoken cues must work over music; push-to-talk voice commands (no always-on mic); Apple Watch data comes in through an Apple Shortcut that opens the app with the workout in the URL fragment (never the query string). AirPods stem-squeeze controls dropped (iOS gives them to the music app). Watch rest alerts need Web Push + a tiny server: open decision. Native iOS/watchOS app is out of scope for now.
 - 2026-11-13 — M7b design (Wongsaton): photo recognition is local first: a small Thai food image classifier on the phone (MediaPipe Image Classifier, top 3 + confirm), with Claude Haiku as an optional, off-by-default backup for unsure/unknown dishes. Wongsaton uses an **iPhone** (Safari/PWA), so no WebGPU vision models or Chrome built-in AI. Datasets (THFOOD-50/100 are non-commercial), his photos and the trained model never go in the public repo; the model is imported into the app on the phone. Open: API key handling for the Claude backup (proxy vs key stored on the phone).
 - 2026-11-13 — Wongsaton wants food & nutrition in the app → M7 "Fuel". Quick tracking (kcal + protein + weight) is the default, Full (carbs + fat) is an option. Main food is home-cooked Thai, sometimes restaurant/takeout at work → recipes, a Thai dish estimate list and quick estimates come first. AI photo recognition is later (M7b). All nutrition data stays on the phone; no personal numbers in the public repo.
 - 2026-11-13 — Vite 8, TS 6, Vitest 5, ESLint 10 (flat config + typescript-eslint strict), Playwright 1.65 — latest stable at scaffold time.

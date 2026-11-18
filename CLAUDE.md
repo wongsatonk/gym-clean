@@ -45,10 +45,13 @@ push or switch branches.**
 |---|---|
 | `planner` | Task plans + Decisions in `docs/PROGRESS.md`, scope edits in `docs/SPEC.md` (no code) |
 | `core-engineer` | `src/core/**` (incl. `src/core/nutrition/**`), `src/data/**` (pure logic, exercises/thresholds, nutrition math, food data, Dexie, JSON data), `scripts/build-foods.mjs` |
-| `pose-engineer` | `src/pose/**`, `tools/**`, `scripts/{landmarks,synthetic,copy-mediapipe-wasm}.mjs`, `public/models/**`, `fixtures/landmarks/**`, `fixtures/synthetic/**`, `e2e/camera.spec.ts` |
+| `pose-engineer` | `src/pose/**`, `src/capture/**` (M6c recorder: segmentation mask, WebGL blur compositor, MediaRecorder), `tools/**`, `scripts/{landmarks,synthetic,copy-mediapipe-wasm}.mjs`, `public/models/**`, `fixtures/landmarks/**`, `fixtures/synthetic/**`, `e2e/camera.spec.ts` |
 | `ui-engineer` | `src/ui/**` except 3D modules, `src/styles.css`, `index.html`, other `e2e/*.spec.ts` |
 | `anatomy-3d-engineer` | `src/ui/body3d/**`, `src/ui/bodyMap.ts`, `src/ui/skeleton3d.ts`, `src/ui/demo3d/**` |
 | `ml-engineer` | `ml/**` (Python training pipeline for the M7b food classifier), `src/food-vision/**` (classifier + Claude-backup client in the app) |
+| `ui-engineer` (M8) | also `server/**` (the optional M8.4 push sender, only after Wongsaton approves it) and `docs/watch-shortcut.md` |
+| `ios-engineer` | `ios/**` (Capacitor iOS project + Swift plugins), `capacitor.config.ts`, `src/native/**` (JS bridge + `isNative()`), `docs/ios-setup.md`, `fixtures/headmotion/**` |
+| `social-media` | `marketing/**` (Instagram Story packs: templates, capture scripts, captions, shot lists; output in `marketing/out/`, gitignored). Run with `/story`. |
 | `reviewer` | Read-only review of diffs against these rules |
 | `verifier` | Read-only on app code; runs check/e2e/build, owns `scripts/screenshots.mjs`, `docs/screenshots/**` |
 | main session | `src/core/types.ts` changes others consume, `src/ui/app.ts` routing, `src/main.ts`, configs, `package.json`, git |
@@ -91,8 +94,11 @@ Keep these script names stable; add them in milestone 0.
 
 ## Hard rules
 
-- **Privacy:** all video and inference stays on the device. Never upload frames, never record
-  video in the app, never add analytics. Other people use this gym.
+- **Privacy:** all video and inference stays on the device. Never upload frames, never add
+  analytics. Other people use this gym. **Video is recorded only when I tap Record** in the
+  M6c Story clip recorder: it stays on my phone (shared only through the iOS share sheet by me),
+  is never uploaded or stored by the app, the microphone is off by default, and **background
+  blur is on by default** with a fail-safe (tracking lost → whole frame blurred).
 - **Fixtures:** raw videos in `fixtures/videos/` are gitignored (they show me). Only the
   extracted landmark JSON in `fixtures/landmarks/` is committed.
 - **Readable at 2 m:** main numbers ≥ 64px, body text ≥ 20px, high contrast, dark theme,
