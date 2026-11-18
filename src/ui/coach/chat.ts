@@ -37,6 +37,9 @@
 // Task 21: `onInputFocus` fires when the text box gets focus (main warms Apple's model then).
 // Task 17: `card.kind === 'checkIn'` draws the weekly check-in card (checkInCard.ts) with
 // `checkInQuestions` / `checkIns` from props and `onCheckInDone` / `onCheckInSkip`.
+// M13c task 6d: one optional slot under a coach reply, the Claude explain card
+// (claudeOfferCard.ts): prop `claudeOffer: { messageId }`, callbacks `onClaudeWanted` /
+// `onClaudeDismiss`. Tab only, never beside a red flag, never on a message with its own card.
 import { dateText } from '../../core/trainer/actions/lighter';
 import {
   QUICK_CHIPS,
@@ -51,6 +54,7 @@ import { h } from '../dom';
 import { emptyState } from '../emptyState';
 import { icon, type IconName } from '../icons';
 import { moodClass } from '../tokens';
+import { buildClaudeOfferCard } from './claudeOfferCard';
 import { buildCheckInCard, type CheckInAnswers, type CheckInQuestionView } from './checkInCard';
 import { buildFoodCard } from './foodCard';
 import { buildFocusBlockCard, buildMissingBlockCard } from './focusBlockCard';
@@ -168,6 +172,12 @@ export type ChatProps = {
   checkInQuestions?: readonly CheckInQuestionView[] | undefined;
   /** M12 slice 2: saved check-ins by weekStart (the summary line of a done card). */
   checkIns?: Readonly<Record<string, CheckIn>> | undefined;
+  /**
+   * M13c: the Claude explain card under this coach message (main decides with core
+   * `claudeOfferFor`). Drawn only in the tab, with both `onClaudeWanted` and `onClaudeDismiss`,
+   * on a coach message without a card, and not while a red flag is the newest message.
+   */
+  claudeOffer?: { messageId: number } | undefined;
 };
 
 export type ChatActions = {
@@ -209,6 +219,10 @@ export type ChatActions = {
   onCheckInSkip?: ((messageId: number) => void) | undefined;
   /** M12 slice 2: the text box got focus (a question is likely coming: main prewarms). */
   onInputFocus?: (() => void) | undefined;
+  /** M13c: the Claude card's "Tell me when it's ready" (main: `coach.claudeWanted = 'yes'`). */
+  onClaudeWanted?: (() => void) | undefined;
+  /** M13c: the Claude card's "Not now" (main: saves the shown date, drops `claudeOffer`). */
+  onClaudeDismiss?: (() => void) | undefined;
 };
 
 // ---------- pure selectors ----------
@@ -522,6 +536,12 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   const waiting = awaitingAnswer(p.messages);
   const quiet = red || waiting;
   const undoable = p.undoable ? new Set(p.undoable) : null;
+  const onClaudeWanted = a.onClaudeWanted;
+  const onClaudeDismiss = a.onClaudeDismiss;
+  const claudeFor =
+    !sheet && !red && p.claudeOffer && onClaudeWanted && onClaudeDismiss
+      ? p.claudeOffer.messageId
+      : undefined;
 
   // Header: title + Close (sheet) or Clear chat (tab).
   const headEnd: HTMLElement[] = [];
@@ -709,6 +729,14 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       cycle.push(...built.controls);
     }
     if (m.note) item.append(noteLine(m.note));
+    if (claudeFor !== undefined && m.id === claudeFor && m.role === 'coach' && !card) {
+      const offer = buildClaudeOfferCard({
+        onWanted: () => onClaudeWanted?.(),
+        onDismiss: () => onClaudeDismiss?.(),
+      });
+      item.append(h('div', { class: 'cs-card-item chat-card chat-claude' }, offer.el));
+      cycle.push(...offer.controls);
+    }
     list.append(item);
   });
   if (p.typing) list.append(typingIndicator());
