@@ -1,4 +1,5 @@
 import AVFAudio
+import AVFoundation
 import Capacitor
 import Foundation
 import GymSpeechCore
@@ -12,8 +13,9 @@ import UIKit
 /// - Swift stays thin: session rules (when to ask, when to stop, the 60 s cap, what the text is)
 ///   live in the GymSpeechCore package and are tested with a fake recognizer. Where the mic may be
 ///   used (never in a set, never on the camera) is TypeScript's call (src/core/trainer/speakRules).
-/// - The microphone prompt appears on the first `start` only. Loading the plugin and
-///   `availability()` never prompt.
+/// - The microphone prompt appears only from `start` or `requestMic` (M13 first-open ask), and
+///   only while the mic is undecided. Loading the plugin, `availability()` and `permissions()`
+///   never prompt.
 /// - No audio is written to disk, kept or sent. The plugin makes no network request.
 ///
 /// Events: `partial { text }`, `level { rms }`, `final { text, capped? }`, `error { code }`.
@@ -26,6 +28,8 @@ public class GymSpeechPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "installModel", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "permissions", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestMic", returnType: CAPPluginReturnPromise),
     ]
 
     private static let defaultLocale = "en"
@@ -90,6 +94,44 @@ public class GymSpeechPlugin: CAPPlugin, CAPBridgedPlugin {
         let session = self.session
         Task {
             call.resolve(["text": await session.stop()])
+        }
+    }
+
+    /// M13: the app's real camera + microphone permission (WKWebView's navigator.permissions does
+    /// not reflect it). Reads only; never shows a prompt.
+    /// Reply: `{ camera, mic }`, each "granted" | "denied" | "prompt".
+    @objc func permissions(_ call: CAPPluginCall) {
+        call.resolve([
+            "camera": Self.cameraState(),
+            "mic": Self.micState(),
+        ])
+    }
+
+    /// M13: asks for the microphone. iOS shows its prompt only while the mic is undecided;
+    /// otherwise this just reports the stored answer. Reply: `{ mic }`.
+    @objc func requestMic(_ call: CAPPluginCall) {
+        Task {
+            _ = await AVAudioApplication.requestRecordPermission()
+            call.resolve(["mic": Self.micState()])
+        }
+    }
+
+    private static func cameraState() -> String {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized: return "granted"
+        case .notDetermined: return "prompt"
+        case .denied, .restricted: return "denied"
+        @unknown default: return "denied"
+        }
+    }
+
+    /// Deployment target is iOS 26, so AVAudioApplication (iOS 17+) is always there.
+    private static func micState() -> String {
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted: return "granted"
+        case .undetermined: return "prompt"
+        case .denied: return "denied"
+        @unknown default: return "denied"
         }
     }
 

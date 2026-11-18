@@ -98,3 +98,46 @@ export function closeOnboarding(prev: unknown, how: 'done' | 'skipped', at: numb
   if (kept) return kept;
   return how === 'done' ? { doneAt: at } : { skippedAt: at };
 }
+
+export type PermissionPromptState = 'granted' | 'denied' | 'prompt';
+
+/** Input for the once-per-release permission catch-up on an updated install. */
+export type PermissionCatchUpInput = {
+  platform: OnboardingPlatform;
+  /** This build's release, e.g. '1.15.0'. */
+  release: string;
+  /** settings 'permissionCatchUp': the release the catch-up last ran in (undefined = never). */
+  seenRelease: string | undefined;
+  /** The full onboarding flow is running (it has its own permission pages). */
+  onboarding: boolean;
+  /** Current states; an undefined state can't be told and is not asked. */
+  states: {
+    camera?: PermissionPromptState;
+    mic?: PermissionPromptState;
+    notifications?: PermissionPromptState | 'unavailable';
+    health?: 'connected' | 'not-connected' | 'unavailable';
+  };
+  /** On-device speech recognition is installed (false = the mic page's Allow downloads it). */
+  speechInstalled?: boolean | undefined;
+};
+
+/**
+ * Permission catch-up (Decision "permission catch-up", M13): on the first open of each release
+ * in the iPhone app, an install not being onboarded is shown only the permission pages for what
+ * is still undecided, in PERMISSION_ORDER. Denied permissions are not asked (iOS can't re-ask;
+ * Self-check covers them). The mic page also comes up when speech isn't installed.
+ */
+export function permissionCatchUpSteps(input: PermissionCatchUpInput): OnboardingStep[] {
+  const { platform, release, seenRelease, onboarding, states, speechInstalled } = input;
+  if (platform !== 'native' || onboarding || seenRelease === release) return [];
+  const missing: Record<OnboardingPermission, boolean> = {
+    camera: states.camera === 'prompt',
+    health: states.health === 'not-connected',
+    mic: states.mic === 'prompt' || speechInstalled === false,
+    notifications: states.notifications === 'prompt',
+  };
+  return PERMISSION_ORDER.filter((p) => missing[p]).map((permission) => ({
+    kind: 'permission',
+    permission,
+  }));
+}

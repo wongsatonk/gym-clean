@@ -29,6 +29,9 @@
  *
  * Weekly check-in (M12 slice 2): `checkIns` is backed up (ratings 1–5 checked); the settings row
  * 'reminders' rides along with `settings`. A v10 file has no `checkIns`: the restore empties it.
+ *
+ * Permission catch-up (M13): the settings row 'permissionCatchUp' is phone-only (never backed up,
+ * a restore keeps this phone's row); the 'onboarding' row rides along.
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';
@@ -36,6 +39,7 @@ import { APP_NAME } from '../core/brand';
 import { HEALTH_SETTINGS_KEY, clearDisabledHealthTypes } from './health/store';
 import { compareReleases } from '../core/todo/whatsNew';
 import { WHATS_NEW_KEY } from './todos/store';
+import { PERMISSION_CATCH_UP_KEY } from './onboarding';
 
 export const BACKUP_FORMAT = 'gym-clean-backup';
 /** The file layout's own version (bump when the header or table encoding changes). */
@@ -224,13 +228,22 @@ function stripWhatsNewLocal(row: unknown): unknown {
 }
 
 /**
- * Backed-up rows of one table: only settings rows are touched (secret rows and fields removed,
- * the health and whatsNew rows lose their phone-only fields).
+ * Whole settings rows that belong to this phone (M13 permission catch-up: the release it last
+ * asked this phone's permissions in). Never backed up; a restore keeps this phone's row.
+ */
+const PHONE_ONLY_SETTINGS: readonly string[] = [PERMISSION_CATCH_UP_KEY];
+
+const isPhoneOnlySetting = (row: unknown): boolean =>
+  isObj(row) && typeof row.key === 'string' && PHONE_ONLY_SETTINGS.includes(row.key);
+
+/**
+ * Backed-up rows of one table: only settings rows are touched (secret and phone-only rows and
+ * secret fields removed, the health and whatsNew rows lose their phone-only fields).
  */
 function cleanRows(name: BackupTable, rows: unknown[]): unknown[] {
   if (name !== 'settings') return rows;
   return rows
-    .filter((r) => !isSecretSetting(r))
+    .filter((r) => !isSecretSetting(r) && !isPhoneOnlySetting(r))
     .map(stripSecrets)
     .map(stripHealthLocal)
     .map(stripWhatsNewLocal);
@@ -518,6 +531,7 @@ export async function importAll(
       const undo: BackupFile = { ...header(db, opts), tables: await readTables(db) };
       const localRows = await db.settings.toArray();
       const localSecrets = localRows.filter(isSecretSetting);
+      const localPhoneOnly = localRows.filter(isPhoneOnlySetting);
       const fileRows = file.tables.settings ?? [];
       const fileHasHealth = fileRows.some(isHealthSetting);
       const localHealth = fileHasHealth ? [] : localRows.filter(isHealthSetting);
@@ -533,6 +547,7 @@ export async function importAll(
         counts[name] = rows.length;
       }
       if (localSecrets.length > 0) await db.settings.bulkPut(localSecrets);
+      if (localPhoneOnly.length > 0) await db.settings.bulkPut(localPhoneOnly);
       if (localHealth.length > 0) await db.settings.bulkPut(localHealth);
       if (localReadiness !== undefined) {
         const row = await db.settings.get(HEALTH_SETTINGS_KEY);

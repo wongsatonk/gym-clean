@@ -58,14 +58,11 @@ describe('permissionPage', () => {
     );
   });
 
-  it('mic explains only: no Allow and no Not now, the note says when the phone asks', () => {
-    const { page, body } = render('mic');
-    expect(page.allow).toBeNull();
-    expect(page.notNow).toBeNull();
-    const action = PERMISSION_PAGES.mic.action;
-    expect(action.kind).toBe('none');
-    if (action.kind === 'none') expect(ob(body, 'note')[0]?.textContent).toBe(action.note);
-    expect(body.byTag('button')).toHaveLength(0);
+  it('mic asks too: Allow microphone (it also sets up speech) and Not now', () => {
+    const { page } = render('mic');
+    expect(asFake(page.allow).getAttribute('data-action-kind')).toBe('ask');
+    expect(page.allow?.textContent).toContain('Allow microphone');
+    expect(page.notNow).not.toBeNull();
   });
 
   it('an allowed permission shows "Allowed" (icon + word) and no ask', () => {

@@ -376,7 +376,19 @@ export function defaultSelfCheckDeps(
       const { createPoseTracker } = await import('../pose/landmarker');
       return createPoseTracker('GPU');
     },
-    cameraPermission: perms ? async () => (await perms.query({ name: 'camera' })).state : undefined,
+    // The iPhone app reads iOS's own answer (the WebView's permissions.query says "prompt" until
+    // the camera opens this launch); the web reads the browser's stored answer.
+    cameraPermission:
+      env.native || perms
+        ? async () => {
+            if (env.native) {
+              const p = await (await import('../native/permissions')).nativePermissions();
+              if (p) return p.camera;
+            }
+            if (!perms) throw new Error('no permissions API');
+            return (await perms.query({ name: 'camera' })).state;
+          }
+        : undefined,
     brain: async () => (await import('../native/gymBrain')).loadGymBrain(),
     speech: async () => (await import('../native/speech')).loadSpeech(),
     reminders: async () => (await import('../native/reminders')).loadReminders(),

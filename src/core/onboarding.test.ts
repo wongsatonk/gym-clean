@@ -5,8 +5,10 @@ import {
   closeOnboarding,
   onboardingSteps,
   parseOnboarding,
+  permissionCatchUpSteps,
   shouldOnboard,
   type OnboardingInput,
+  type PermissionCatchUpInput,
 } from './onboarding';
 
 // Made-up times only (public repo).
@@ -146,5 +148,81 @@ describe('parseOnboarding', () => {
     expect(parseOnboarding({})).toBeUndefined();
     expect(parseOnboarding(null)).toBeUndefined();
     expect(parseOnboarding([T0])).toBeUndefined();
+  });
+});
+
+describe('permissionCatchUpSteps (an updated install is asked for what is missing)', () => {
+  const base: PermissionCatchUpInput = {
+    platform: 'native',
+    release: '1.15.0',
+    seenRelease: '1.14.0',
+    onboarding: false,
+    states: { camera: 'granted', mic: 'granted', notifications: 'granted', health: 'connected' },
+    speechInstalled: true,
+  };
+  const perms = (i: PermissionCatchUpInput) =>
+    permissionCatchUpSteps(i).map((s) => (s.kind === 'permission' ? s.permission : s.kind));
+
+  it('everything decided → nothing to ask', () => {
+    expect(permissionCatchUpSteps(base)).toEqual([]);
+  });
+
+  it('asks every undecided permission, in PERMISSION_ORDER, as permission steps', () => {
+    const steps = permissionCatchUpSteps({
+      ...base,
+      states: { camera: 'prompt', mic: 'prompt', notifications: 'prompt', health: 'not-connected' },
+    });
+    expect(steps).toEqual(
+      PERMISSION_ORDER.map((permission) => ({ kind: 'permission', permission })),
+    );
+  });
+
+  it('never asks on the web, while the full flow runs, or twice in one release', () => {
+    const all = {
+      ...base,
+      states: { camera: 'prompt', mic: 'prompt', notifications: 'prompt', health: 'not-connected' },
+    } as const;
+    expect(permissionCatchUpSteps({ ...all, platform: 'web' })).toEqual([]);
+    expect(permissionCatchUpSteps({ ...all, onboarding: true })).toEqual([]);
+    expect(permissionCatchUpSteps({ ...all, seenRelease: '1.15.0' })).toEqual([]);
+    // Never seen (first catch-up ever) and a new release both ask.
+    expect(perms({ ...all, seenRelease: undefined })).toEqual([...PERMISSION_ORDER]);
+    expect(perms({ ...all, seenRelease: '1.15.0', release: '1.16.0' })).toEqual([
+      ...PERMISSION_ORDER,
+    ]);
+  });
+
+  it('denied, unavailable or unknown states are not asked (iOS cannot re-ask; Self-check covers them)', () => {
+    expect(
+      perms({
+        ...base,
+        states: {
+          camera: 'denied',
+          mic: 'denied',
+          notifications: 'unavailable',
+          health: 'unavailable',
+        },
+      }),
+    ).toEqual([]);
+    expect(perms({ ...base, states: { notifications: 'denied' } })).toEqual([]);
+    expect(perms({ ...base, states: {} })).toEqual([]);
+  });
+
+  it('the mic page is asked when speech is not installed, even with the mic granted', () => {
+    expect(perms({ ...base, speechInstalled: false })).toEqual(['mic']);
+    expect(perms({ ...base, speechInstalled: undefined })).toEqual([]);
+    expect(
+      perms({ ...base, states: { ...base.states, mic: 'denied' }, speechInstalled: false }),
+    ).toEqual(['mic']);
+  });
+
+  it('asks only what is missing', () => {
+    expect(perms({ ...base, states: { ...base.states, camera: 'prompt' } })).toEqual(['camera']);
+    expect(
+      perms({
+        ...base,
+        states: { ...base.states, notifications: 'prompt', health: 'not-connected' },
+      }),
+    ).toEqual(['health', 'notifications']);
   });
 });

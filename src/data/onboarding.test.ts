@@ -9,11 +9,14 @@ import {
   INTAKE_SKIPPED_KEY,
   ONBOARDING_BUTTONS,
   ONBOARDING_KEY,
+  PERMISSION_CATCH_UP_KEY,
   PERMISSION_PAGES,
   WELCOME_PAGES,
   getOnboarding,
   loadOnboardingFacts,
+  loadPermissionCatchUp,
   markOnboarding,
+  markPermissionCatchUp,
 } from './onboarding';
 import { saveIntake } from './trainerKit/store';
 
@@ -83,14 +86,21 @@ describe('onboarding copy (data)', () => {
     expect(PERMISSION_PAGES.notifications.why).toMatch(/off/i);
   });
 
-  it('keeps the slice 2 rules: mic explains only, notifications switch the session reminder on, Health connects', () => {
-    expect(PERMISSION_PAGES.camera.action.kind).toBe('ask');
+  it('every permission page has one button: camera and mic ask, notifications switch the session reminder on, Health connects', () => {
+    expect(PERMISSION_PAGES.camera.action).toEqual({ kind: 'ask', label: 'Allow camera' });
     expect(PERMISSION_PAGES.health.action.kind).toBe('connect');
-    expect(PERMISSION_PAGES.mic.action.kind).toBe('none');
+    expect(PERMISSION_PAGES.mic.action).toEqual({ kind: 'ask', label: 'Allow microphone' });
     expect(PERMISSION_PAGES.notifications.action.kind).toBe('reminder');
-    // The mic page has no Allow button: its note says when the phone asks.
-    const mic = PERMISSION_PAGES.mic.action;
-    expect(mic.kind === 'none' && mic.note).toMatch(/first time/i);
+    for (const p of Object.values(PERMISSION_PAGES)) expect(p.action.kind).not.toBe('none');
+  });
+
+  it('the mic page says Allow also sets up on-phone speech, how long it takes, and that audio stays put', () => {
+    const why = PERMISSION_PAGES.mic.why;
+    expect(why).toMatch(/allow/i);
+    expect(why).toMatch(/speech/i);
+    expect(why).toMatch(/on this phone/i);
+    expect(why).toMatch(/about a minute on wi-fi/i);
+    expect(why).toMatch(/never stored or sent/i);
   });
 
   it('every permission page has "Not now"; buttons have Skip, Back, Next', () => {
@@ -171,6 +181,47 @@ describe('onboarding store', () => {
     try {
       await importAll(other, file, { now: T0 });
       expect(await getOnboarding(other)).toEqual({ skippedAt: T0 });
+    } finally {
+      other.close();
+      await other.delete();
+    }
+  });
+});
+
+describe('permission catch-up store (seen release, phone-only)', () => {
+  it('undefined until marked; marking stores the release; a later release replaces it', async () => {
+    expect(await loadPermissionCatchUp(db)).toBeUndefined();
+    await markPermissionCatchUp(db, '1.15.0');
+    expect(await loadPermissionCatchUp(db)).toBe('1.15.0');
+    expect((await db.settings.get(PERMISSION_CATCH_UP_KEY))?.value).toBe('1.15.0');
+    await markPermissionCatchUp(db, '1.16.0');
+    expect(await loadPermissionCatchUp(db)).toBe('1.16.0');
+  });
+
+  it('a damaged row reads as never seen', async () => {
+    await db.settings.put({ key: PERMISSION_CATCH_UP_KEY, value: 42 });
+    expect(await loadPermissionCatchUp(db)).toBeUndefined();
+    await db.settings.put({ key: PERMISSION_CATCH_UP_KEY, value: '' });
+    expect(await loadPermissionCatchUp(db)).toBeUndefined();
+  });
+
+  it("is not backed up, and a restore keeps this phone's row (permissions belong to the phone)", async () => {
+    await markPermissionCatchUp(db, '1.15.0');
+    const file = JSON.parse(JSON.stringify(await exportAll(db, { now: T0 }))) as {
+      tables: { settings: { key: string }[] };
+    };
+    expect(file.tables.settings.map((r) => r.key)).not.toContain(PERMISSION_CATCH_UP_KEY);
+
+    // A file that does carry the row (hand-made) does not overwrite this phone's.
+    file.tables.settings.push({ key: PERMISSION_CATCH_UP_KEY, value: '9.9.9' } as never);
+    const other = new GymDb(`onboarding-restore-${n++}`);
+    await other.open();
+    try {
+      await importAll(other, file, { now: T0 });
+      expect(await loadPermissionCatchUp(other)).toBeUndefined();
+      await markPermissionCatchUp(other, '1.14.0');
+      await importAll(other, file, { now: T0 });
+      expect(await loadPermissionCatchUp(other)).toBe('1.14.0');
     } finally {
       other.close();
       await other.delete();

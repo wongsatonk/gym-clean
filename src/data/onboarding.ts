@@ -3,9 +3,11 @@
  *
  * Copy rules (tested): at most 2 short sentences a page, written to "you", no goal assumed, every
  * string passes `checkCopy`, the name comes from APP_NAME. The permission pages keep the slice 2
- * rules: the mic page only explains (the phone asks on the first hold); the notifications button
- * switches the session reminder on (that switch asks for permission); Health goes through the M11
- * connect flow; the camera asks on its button.
+ * rules: the notifications button switches the session reminder on (that switch asks for
+ * permission); Health goes through the M11 connect flow; the camera asks on its button. The mic
+ * page's Allow (permission catch-up decision, M13) asks for the microphone and then downloads the
+ * on-phone speech model (about a minute on Wi-Fi); audio is never stored and nothing leaves the
+ * phone.
  *
  * The row is stored once (the first finish or skip stays) and is backed up with the other settings
  * rows. No Dexie change.
@@ -25,6 +27,11 @@ import { getIntake } from './trainerKit/store';
 export const ONBOARDING_KEY = 'onboarding';
 /** The 1.13 first-run intake skip marker (same key src/ui/app.ts writes). */
 export const INTAKE_SKIPPED_KEY = 'intakeSkipped';
+/**
+ * The release the permission catch-up last ran in (a string like '1.15.0'). Phone-only: it is
+ * about this phone's permissions, so it is never backed up and a restore keeps this phone's row.
+ */
+export const PERMISSION_CATCH_UP_KEY = 'permissionCatchUp';
 
 export type WelcomePage = {
   title: string;
@@ -34,13 +41,13 @@ export type WelcomePage = {
 };
 
 export type PermissionAction =
-  /** The button asks the system right away (camera). */
+  /** The button asks the system right away (camera; mic, which then downloads on-phone speech). */
   | { kind: 'ask'; label: string }
   /** The button opens the M11 Apple Health connect flow. */
   | { kind: 'connect'; label: string }
   /** The button switches the session reminder on; that switch asks for notifications. */
   | { kind: 'reminder'; label: string }
-  /** No Allow button: the page explains; `note` says when the phone asks. */
+  /** No Allow button: the page explains; `note` says when the phone asks. No page uses it now. */
   | { kind: 'none'; note: string };
 
 export type PermissionPage = {
@@ -81,8 +88,8 @@ export const PERMISSION_PAGES: Record<OnboardingPermission, PermissionPage> = {
   },
   mic: {
     title: 'Microphone',
-    why: 'Hold the mic button to talk to the coach. The audio is never stored.',
-    action: { kind: 'none', note: 'Your phone asks the first time you hold the mic.' },
+    why: 'Hold the mic to talk to the coach; audio is never stored or sent. Allow also sets up speech on this phone, about a minute on Wi-Fi.',
+    action: { kind: 'ask', label: 'Allow microphone' },
     notNow: 'Not now',
   },
   notifications: {
@@ -141,4 +148,15 @@ export async function loadOnboardingFacts(
     intakeSkipped: skipped !== undefined,
     intakeDone: intake !== undefined,
   };
+}
+
+/** The release the permission catch-up last ran in; undefined when never (or a damaged row). */
+export async function loadPermissionCatchUp(db: GymDb): Promise<string | undefined> {
+  const v = (await db.settings.get(PERMISSION_CATCH_UP_KEY))?.value;
+  return typeof v === 'string' && v !== '' ? v : undefined;
+}
+
+/** Marks the catch-up as run for `release` (Allow or Not now alike: once per release). */
+export async function markPermissionCatchUp(db: GymDb, release: string): Promise<void> {
+  await db.settings.put({ key: PERMISSION_CATCH_UP_KEY, value: release });
 }

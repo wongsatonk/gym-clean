@@ -183,13 +183,15 @@ describe('onboardingScreen: permission pages', () => {
     expect(calls.next + calls.allow.length + calls.notNow.length).toBe(0);
   });
 
-  it('the mic page has no Allow and no Not now: Next only', () => {
+  it('the mic page asks (mic + speech download): Allow microphone, then Not now', () => {
     const { el, calls } = render({ index: at('mic') });
-    expect(ob(el, 'not-now')).toHaveLength(0);
     const primary = one(el, 'primary');
-    expect(primary.textContent).toBe(ONBOARDING_BUTTONS.next);
+    expect(primary.textContent).toBe('Allow microphone');
     primary.click();
-    expect(calls).toMatchObject({ next: 1, allow: [] });
+    expect(calls.allow).toEqual(['mic']);
+    one(el, 'not-now').click();
+    expect(calls.notNow).toEqual(['mic']);
+    expect(calls.next).toBe(0);
   });
 
   it('an allowed permission moves on with Next (or Go to Today on the last page)', () => {

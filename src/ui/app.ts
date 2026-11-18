@@ -49,8 +49,20 @@ import { defaultSelfCheckDeps, selfCheckRuns } from './selfCheckRuns';
 import { resolveOwnerMode, setOwnerMode } from '../data/ownerMode';
 import { aboutScreen } from './screens/about';
 import { licensesView } from './screens/licenses';
-import { onboardingSteps, shouldOnboard, type OnboardingPermission } from '../core/onboarding';
-import { INTAKE_SKIPPED_KEY, loadOnboardingFacts, markOnboarding } from '../data/onboarding';
+import {
+  onboardingSteps,
+  permissionCatchUpSteps,
+  shouldOnboard,
+  type OnboardingPermission,
+} from '../core/onboarding';
+import { nativePermissions, requestMicPermission } from '../native/permissions';
+import {
+  INTAKE_SKIPPED_KEY,
+  loadOnboardingFacts,
+  loadPermissionCatchUp,
+  markOnboarding,
+  markPermissionCatchUp,
+} from '../data/onboarding';
 import { onboardingScreen, type OnboardingScreen } from './onboarding/welcome';
 import { leadOptions, pickLead, shareStats } from '../core/progress/shareStats';
 import { sharePreview } from './sharePreview';
@@ -2949,6 +2961,8 @@ export function mountApp(root: HTMLElement): void {
     index: number;
     dir?: 'next' | 'prev' | undefined;
     granted: Partial<Record<OnboardingPermission, boolean>>;
+    /** The first open of a release asking only what's still missing (not the welcome). */
+    catchUp?: boolean;
   };
   let onboarding: OnboardingRun | null = null;
   let onboardingEl: OnboardingScreen | null = null;
@@ -2969,6 +2983,57 @@ export function mountApp(root: HTMLElement): void {
         has: { health: native, mic: native, notifications: native },
       });
       onboarding = { steps, index: 0, granted: {} };
+      showOnboardingStep();
+      return true;
+    } catch (err) {
+      logDbError(err);
+      return false;
+    }
+  }
+
+  /**
+   * iPhone app, first open of each release: the permission pages for what's still undecided
+   * (camera, Health, mic + speech download, notifications) when the welcome didn't run. Once per
+   * release, Allow or Not now; denied ones stay in Self-check (iOS can't ask again).
+   */
+  async function startPermissionCatchUp(): Promise<boolean> {
+    if (!native) return false;
+    try {
+      // Already asked this release: return before any native call, so launches stay fast.
+      const seen = await loadPermissionCatchUp(db);
+      if (seen === APP_RELEASE) return false;
+      await slice2Ready;
+      const [perms, notif, healthOn, sp] = await Promise.all([
+        nativePermissions(),
+        reminders?.available ? reminders.permission().catch(() => undefined) : undefined,
+        import('../data/health/store')
+          .then(async (m) => Object.values((await m.getHealthSettings(db)).enabled).some(Boolean))
+          .catch(() => undefined),
+        speech ? speech.availability().catch(() => undefined) : undefined,
+      ]);
+      const steps = permissionCatchUpSteps({
+        platform: 'native',
+        release: APP_RELEASE,
+        seenRelease: seen,
+        onboarding: onboarding !== null,
+        states: {
+          ...(perms ? { camera: perms.camera, mic: perms.mic } : {}),
+          ...(notif ? { notifications: notif } : {}),
+          ...(healthOn === undefined ? {} : { health: healthOn ? 'connected' : 'not-connected' }),
+        },
+        // A mic turned off in iOS Settings can't be asked again: Self-check says where to turn it on.
+        speechInstalled:
+          sp && perms?.mic !== 'denied'
+            ? sp.available || sp.reason !== 'modelNotInstalled'
+            : undefined,
+      });
+      if (steps.length === 0) {
+        await markPermissionCatchUp(db, APP_RELEASE);
+        return false;
+      }
+      // Leave a tour (or a workout) that opened while we waited; the next launch asks (nothing is marked).
+      if (view.screen !== 'today' || onboarding || tour || tourChecking) return false;
+      onboarding = { steps, index: 0, granted: {}, catchUp: true };
       showOnboardingStep();
       return true;
     } catch (err) {
@@ -3003,11 +3068,14 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function finishOnboarding(how: 'done' | 'skipped'): void {
+    const catchUp = onboarding?.catchUp === true;
     onboarding = null;
     onboardingEl?.dispose();
     onboardingEl = null;
-    void markOnboarding(db, how, now()).catch(logDbError);
+    if (catchUp) void markPermissionCatchUp(db, APP_RELEASE).catch(logDbError);
+    else void markOnboarding(db, how, now()).catch(logDbError);
     goToday();
+    if (catchUp) void maybeShowTour();
   }
 
   /** The permission page's action: ask (or connect / switch on), then show it as allowed. */
@@ -3021,6 +3089,15 @@ export function mountApp(root: HTMLElement): void {
       } else if (p === 'health') {
         await health.connect();
         ok = true;
+      } else if (p === 'mic') {
+        // Ask for the mic only while iOS hasn't decided; then fetch the on-phone speech model.
+        // null = an older native build without the read: move on, the first mic hold still asks.
+        const before = await nativePermissions();
+        const mic = before?.mic === 'prompt' ? (await requestMicPermission())?.mic : before?.mic;
+        await slice2Ready;
+        const a = speech ? await speech.availability().catch(() => null) : null;
+        if (a && !a.available && a.reason === 'modelNotInstalled') void installSpeech();
+        ok = mic === 'granted';
       } else if (p === 'notifications') {
         await toggleReminder('session', true); // the switch asks iOS the first time
         ok = notifPermission === 'granted';
@@ -5548,7 +5625,7 @@ export function mountApp(root: HTMLElement): void {
   // M10: the trainer state first (Today's calendar and up next read it).
   const trainerReady = loadTrainer();
   // M12 slice 2: settings, then (iPhone app) Apple's brain, the mic and reminders.
-  void trainerReady.then(() => initSlice2()).catch(logDbError);
+  const slice2Ready = trainerReady.then(() => initSlice2()).catch(logDbError);
   document.addEventListener('visibilitychange', () => {
     // Leaving the app ends a hold: nothing heard is sent (the plugin also stops itself).
     if (document.visibilityState === 'hidden') void micCancel();
@@ -5573,7 +5650,11 @@ export function mountApp(root: HTMLElement): void {
   const kitReady = loadTrainerKitState();
   // M11: the first Health sync once Today's plan and sessions are known.
   void kitReady
-    .then(() => (view.screen === 'today' ? startOnboarding(false) : false))
+    .then(async () =>
+      view.screen === 'today'
+        ? (await startOnboarding(false)) || (await startPermissionCatchUp())
+        : false,
+    )
     .then(() => loadUpNext())
     .then(() => {
       health.start();
