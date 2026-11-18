@@ -48,4 +48,6 @@ milestone and GitHub runs it again after a push. While working, run the specs yo
 `npm run e2e:changed`; before you report, `npm run e2e:fast` (the parallel phase, ~1.5 min).
 Re-check a failure with `npm run e2e:failed`, not a full run. Another run may share this
 checkout: ports are picked per run automatically; pass `--output=test-results-<you>` so the two
-runs don't wipe each other's results.
+runs don't wipe each other's results. Never leave a background wait behind: a loop that waits for a
+log line or phase has a time limit (`for i in $(seq 360); do …; sleep 5; done`, 30 min) and you
+stop it before you report.
