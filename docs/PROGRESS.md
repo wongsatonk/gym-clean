@@ -183,7 +183,8 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Deps: 19.
 - [ ] 21. [main] Merge + ask to push (mention the committed `row/real-*` landmark JSON made from his recordings; no video).
   - Deps: 20.
-- [ ] 22. [main] Install on his iPhone: push-notify him to plug the phone in, `npm run ios:install` (bundle check included), then Settings → Self-check all ✓ on the phone; paste the result here.
+- [x] 22. [main] Install on his iPhone: push-notify him to plug the phone in, `npm run ios:install` (bundle check included), then Settings → Self-check all ✓ on the phone; paste the result here.
+  - 2026-11-17: installed a827b8f (1.15.1 build 367) via `npm run ios:install` (both bundle gates pass); Settings → Self-check **All 8 ready** (docs/screenshots/m13b-iphone-selfcheck-all-ready.png).
   - Deps: 21 (or 20, if he wants it on the phone before the merge).
 - [ ] 23. 🧍 **Checkpoint K2** (gym, iPhone app): a one-arm row session. He reports whether it keeps him in view bent over, whether each arm's count matches, whether Next arm is easy to hit with a dumbbell in hand, and whether the set-up card stays out of the way. If he has the developer log on, an export of that session is the best next fixture.
   - Deps: 22.
