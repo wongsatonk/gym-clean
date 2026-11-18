@@ -23,6 +23,7 @@ export const bentOverRow: ExerciseRule = {
   sideMode: 'best',
   focus: learningFocus(),
   hints: { far: 'Pull your elbows higher.', start: 'Let the arms hang straight.' },
+  countsLine: 'Counts each row from your elbow angle.',
   placement: {
     view: 'side',
     facing: 'Side-on, hinged with your side to the phone',

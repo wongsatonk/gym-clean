@@ -32,6 +32,7 @@ export const lateralRaise: ExerciseRule = {
     raiseTooHigh: true,
   },
   hints: { far: 'Raise to shoulder height.', start: 'Lower your arms fully.' },
+  countsLine: 'Counts each raise from your shoulder angle.',
   placement: {
     view: 'front',
     facing: 'Facing the phone',

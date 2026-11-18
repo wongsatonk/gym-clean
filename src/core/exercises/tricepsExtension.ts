@@ -38,6 +38,7 @@ export const tricepsExtension: ExerciseRule = {
   },
   focus: learningFocus(),
   hints: { far: 'Lower it further behind your head.', start: 'Straighten your arms overhead.' },
+  countsLine: 'Counts each extension from your elbow angle.',
   placement: {
     view: 'side',
     facing: 'Side-on, arms overhead',

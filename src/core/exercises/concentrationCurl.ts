@@ -31,6 +31,7 @@ export const concentrationCurl: ExerciseRule = {
   maxHipAngleDeg: 130,
   focus: learningFocus(),
   hints: { far: 'Curl up to your shoulder.', start: 'Lower until your arm is straight.' },
+  countsLine: 'Counts each curl from your elbow angle.',
   placement: {
     view: 'side',
     facing: 'Turned a little toward the phone, working arm nearest',

@@ -132,7 +132,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Data: `personalSearch(db, query, { today, perKind: 10, offset })` reads `sessions` + `sets`, `chatMessages`, `foodEntries` (+ `foods` / `recipes` names) on demand, newest first, capped per kind with a "more" flag; no cache table, no stored queries.
   - Done when tests cover: each date phrase (incl. month/year edges and a Thai weekday), workouts by exercise and day name, chat by words, meals by food and date, caps + offset, empty data; a test that spies the Dexie tables and fails if `progressPhotos`, `measurements`, `healthDays`, `checkIns`, `dayFeels`, `weighIns` or any `devlog*` table is touched; `npm run check`.
   - Deps: 1, 3.
-- [ ] 4. [core-engineer] Camera info as data, **tests first**.
+- [x] 4. [core-engineer] Camera info as data, **tests first**. **Done 2026-11-18:** `cameraInfo(id)` → `CameraInfo | null` in src/core/exercises (counts, lines, view, facing, distanceM, heightHint, oneSided, learning); `countsLine` on all 12 rules; 30 new tests, folder 225/225.
   - Files: src/core/exercises/cameraInfo.ts(+test), src/core/exercises/types.ts (`countsLine` on the rule), each rule file in src/core/exercises/ (one `countsLine`, e.g. "Counts each curl from your elbow angle."), src/core/exercises/index.ts (export).
   - `cameraInfo(exerciseId)` → `CameraInfo | null` (counts line, placement lines, view, distanceM, heightHint, facing, `oneSided` from `oneSided.ts`, `learning` from the rule status); null for manual exercises.
   - Done when: every rule has a counts line ≤ 10 words passing `checkCopy`; manual ids → null; learning flag equals `ruleStatus`; existing counter/fixture tests unchanged; `npm run check`.

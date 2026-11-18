@@ -24,6 +24,7 @@ export const gobletSquat: ExerciseRule = {
     lowFps: true,
   },
   hints: { far: 'Sit deeper.', start: 'Stand all the way up.' },
+  countsLine: 'Counts each squat from your knee angle.',
   placement: {
     view: 'side',
     facing: 'Side-on',

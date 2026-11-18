@@ -32,6 +32,7 @@ export const row: ExerciseRule = {
     bodySwing: false,
   },
   hints: { far: 'Pull your elbow higher.', start: 'Let the arm hang straight.' },
+  countsLine: 'Counts each row from your elbow angle.',
   // M13b task 9: at bench height the pose was found on 97% of frames, on the floor 52–66% (task
   // 2), and the hinge gate needs the hips and knees in view. Either arm (the session says which).
   placement: {
