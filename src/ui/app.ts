@@ -280,6 +280,7 @@ import {
   shareStoryLayout,
   type ShareSize,
 } from './shareMonth';
+import { saveFile } from './saveFile';
 import { reducedMotion, screenEntrance, type EnterDir } from './motion';
 import { undoToast, type UndoToast } from './coach/undoToast';
 import { planChangesScreen } from './screens/planChanges';
@@ -3294,21 +3295,15 @@ export function mountApp(root: HTMLElement): void {
   }
 
   /** The eval report (ids, actions, pass/safe, latency; no text) as a file on this phone. */
+  /** The share sheet in the iPhone app (an <a download> click does nothing there). */
   function exportEval(): void {
     const report = evalState.report;
     if (!report) return;
-    const url = URL.createObjectURL(
+    void saveFile(
       new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }),
-    );
-    const a = h('a', {
-      href: url,
-      download: `gym-clean-coach-eval-${localDate(report.at)}.json`,
-      hidden: true,
-    });
-    document.body.append(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      `gym-clean-coach-eval-${localDate(report.at)}.json`,
+      'Coach eval',
+    ).catch(logDbError);
   }
 
   // ---------- M12 slice 1c: What's New tour + to-dos (todo/todoHost.ts) ----------
@@ -4590,15 +4585,16 @@ export function mountApp(root: HTMLElement): void {
     try {
       const t = now();
       const file = await exportAll(db, { now: t });
-      const url = URL.createObjectURL(
+      // The share sheet in the iPhone app (an <a download> click does nothing there).
+      const res = await saveFile(
         new Blob([JSON.stringify(file)], { type: 'application/json' }),
+        backupFileName(t),
+        'Gym Clean backup',
       );
-      const a = h('a', { href: url, download: backupFileName(t), hidden: true });
-      document.body.append(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      restoreStep = { kind: 'message', text: 'Backup saved to this phone.', error: false };
+      restoreStep =
+        res === 'cancelled'
+          ? { kind: 'message', text: 'Backup not saved.', error: false }
+          : { kind: 'message', text: 'Backup ready. Keep the file somewhere safe.', error: false };
     } catch (err) {
       logDbError(err);
       restoreStep = { kind: 'message', text: "Couldn't make the backup. Try again.", error: true };
