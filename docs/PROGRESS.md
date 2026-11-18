@@ -237,7 +237,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Fake camera, a synthetic curl clip: preview → Camera badge → Practice counts the clip's reps, speaks them, and after Close there is no session/set row and no dev-log session; hands-free never proposes Set done.
   - Done when: green `--repeat-each 3` with `npm run e2e:camera`.
   - Deps: 17.
-- [ ] 20. [reviewer] Review the branch diff against CLAUDE.md (ownership, tests first, sizes, voice over screen, nothing new mid-set, vendored data verbatim + Unlicense, no network and no Claude request path, search never reads the excluded tables, abs never added without a pick, copy rules incl. the anyone-scan).
+- [x] 20. [reviewer] **PASS 2026-11-18** (after 2 blocking fixes: Fuel past-day rows on Delete/Undo/Save, search → chat highlight across Coach re-renders). Review the branch diff against CLAUDE.md (ownership, tests first, sizes, voice over screen, nothing new mid-set, vendored data verbatim + Unlicense, no network and no Claude request path, search never reads the excluded tables, abs never added without a pick, copy rules incl. the anyone-scan).
   - Deps: 18, 19.
 - [ ] 21. [verifier] Verify milestone against SPEC M13c acceptance criteria: `npm run check`, the **one full** `npm run e2e`, `npm run build` (1.16.0), contrast numbers and the moving-glow perf trace from task 9 (re-run once), the 390×844 screenshots listed in SPEC as `docs/screenshots/m13c-verify-*`, console clean; re-run the store set in `scripts/screenshots.mjs` so it shows the new background; evidence into "Verification evidence → M13c".
   - Deps: 20.
