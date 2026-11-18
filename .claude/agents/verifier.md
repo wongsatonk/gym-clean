@@ -14,7 +14,8 @@ under `test-results/`.
    - `npm run check` (typecheck + lint + Vitest; note file/test counts)
    - `npm run e2e` **once** (the only full run in a milestone; ~20 min, so nothing else runs
      in the checkout meanwhile). Re-check failures with `npm run e2e:failed`, not a second full
-     run. Then `npx playwright test <new specs> --repeat-each=5` (add `--no-deps` for camera/clip
+     run. Never leave a background wait behind: any loop that waits for a phase has a time limit
+     (30 min) and is stopped before you report. Then `npx playwright test <new specs> --repeat-each=5` (add `--no-deps` for camera/clip
      specs) as the flakiness check.
    - `npm run build` (note main and lazy chunk sizes)
 3. **Screenshots at 390×844** of every screen the milestone touched. The Playwright MCP browser
