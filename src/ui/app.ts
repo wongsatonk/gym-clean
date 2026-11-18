@@ -4490,7 +4490,7 @@ export function mountApp(root: HTMLElement): void {
             coachVoice = { ...v };
             voice.configure(coachVoice);
             void setCoachVoice(db, coachVoice).catch(logDbError);
-            render();
+            // No render(): the picker redraws itself, and a full Settings rebuild would fold the voice list (M13c task 10).
           },
           onTest: (v) => {
             voice.unlock(); // inside the tap (iOS)
