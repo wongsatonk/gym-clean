@@ -58,7 +58,9 @@ const CLIPS: Clip[] = Object.entries(FIXTURES)
 const clipsWhere = (re: RegExp) => CLIPS.filter((c) => re.test(c.key));
 const REAL = clipsWhere(/^lateral-raise\/real-2026-11-13-s1-/);
 const CLEAN = clipsWhere(/\/synthetic-0[12]__/);
-const FLAWED = clipsWhere(/\/synthetic-03-/);
+// M13b: synthetic-03-left is a clean left-arm clip (one-sided exercises), not a flaw clip.
+const FLAWED = clipsWhere(/\/synthetic-03-(?!left__)/);
+const LEFT = clipsWhere(/\/synthetic-03-left__/);
 
 /** One counted rep: its event, form measures and focus ratios against the set's baseline. */
 type RepRow = {
@@ -209,6 +211,10 @@ describe('replay inventory', () => {
     const perRule = RULES.flatMap((r) => [`${r.folder}/synthetic-01`, `${r.folder}/synthetic-02`]);
     expect(cleanKeys).toEqual(perRule.sort());
     expect(FLAWED.length).toBe(6);
+    expect(LEFT.map((c) => `${c.folder}/${c.label}`).sort()).toEqual([
+      'concentration-curl/synthetic-03-left',
+      'row/synthetic-03-left',
+    ]);
   });
 
   it('every flaw clip has ground truth in fixtures/synthetic/flaws.json, and back', () => {
