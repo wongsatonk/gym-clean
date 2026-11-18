@@ -132,7 +132,7 @@ test('Hammer Curls offers the camera; Dumbbell Bench Press does not', async ({ p
 // M13b task 18: one-arm sets on the camera (SPEC M13b, Decision "One-arm sets"). The pose model
 // is replaced by a fixture player served in place of src/pose/landmarker.ts (as in
 // hands-free.spec.ts) that plays the synthetic row clips: synthetic-01 rows with the right arm,
-// synthetic-03-left with the left. Hooks: window.__clip picks the clip, window.__play() plays it
+// synthetic-03-left with the left. Hooks: window.__clip picks the clip, window.__playClip() plays it
 // once from frame 0 and then holds frame 0 (arm hanging, the start position), window.__noPerson
 // returns no pose. The player gives one fixture frame per camera frame, every frame, whatever the
 // page's fps: the counter sees exactly the frames the fixture suite counts (a starved page plays
@@ -156,7 +156,7 @@ type RowWindow = Window & {
   __clipDoneAt: number;
   /** Wall-clock time each count was first shown on the camera (page side, no test latency). */
   __repsAt: Record<number, number>;
-  __play: (clip: 'right' | 'left') => void;
+  __playClip: (clip: 'right' | 'left') => void;
 };
 
 async function installRowPlayer(page: Page): Promise<void> {
@@ -177,7 +177,7 @@ async function installRowPlayer(page: Page): Promise<void> {
         if (n > 0 && !(n in w.__repsAt)) w.__repsAt[n] = Date.now();
       }
     }).observe(document, { subtree: true, attributes: true, attributeFilter: ['data-reps'] });
-    w.__play = (clip) => {
+    w.__playClip = (clip) => {
       w.__clip = clip;
       w.__playing = true;
     };
@@ -280,7 +280,7 @@ function rowSetRows(page: Page): Promise<RowSetRow[]> {
 const said = (page: Page) =>
   page.evaluate(() => (window as unknown as RowWindow).__said.map((s) => s.text));
 const playClip = (page: Page, clip: 'right' | 'left') =>
-  page.evaluate((c) => (window as unknown as RowWindow).__play(c), clip);
+  page.evaluate((c) => (window as unknown as RowWindow).__playClip(c), clip);
 const setNoPerson = (page: Page, on: boolean) =>
   page.evaluate((v) => ((window as unknown as RowWindow).__noPerson = v), on);
 /** Waits until the clip played once to the end (count settles on its last rep before that). */
