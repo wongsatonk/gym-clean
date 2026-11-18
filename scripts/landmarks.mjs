@@ -5,6 +5,9 @@
 // --out=<dir> writes under <dir> instead of fixtures/landmarks (staging clips whose exercise
 // rule doesn't exist yet: the fixture suite fails on a landmarks folder without a rule).
 // Clips whose JSON already exists are skipped unless --force.
+// Sweep flags (M13b task 2; defaults = fixture settings): --model=<file in public/models>,
+// --delegate=GPU, --conf=<n> (detection + presence + tracking), or --det= --pres= --track=.
+// Use them only with --out=<scratch dir>: fixtures stay lite / CPU / default confidences.
 // Raw videos never leave this machine; only the landmark JSON is committed (CLAUDE.md).
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -20,6 +23,22 @@ const force = args.includes('--force');
 const inputDir = resolve(args.find((a) => !a.startsWith('--')) ?? 'fixtures/videos');
 const outArg = args.find((a) => a.startsWith('--out='));
 const outDir = resolve(outArg ? outArg.slice('--out='.length) : 'fixtures/landmarks');
+const flag = (name) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+const num = (v) => (v === undefined ? undefined : Number(v));
+const conf = num(flag('conf'));
+const extractOpts = Object.fromEntries(
+  Object.entries({
+    model: flag('model'),
+    delegate: flag('delegate'),
+    minPoseDetectionConfidence: num(flag('det')) ?? conf,
+    minPosePresenceConfidence: num(flag('pres')) ?? conf,
+    minTrackingConfidence: num(flag('track')) ?? conf,
+  }).filter(([, v]) => v !== undefined),
+);
+if (Object.keys(extractOpts).length && !outArg) {
+  console.error('landmarks: sweep flags need --out=<dir> (fixtures keep the default settings)');
+  process.exit(2);
+}
 const SOURCE_ROOTS = ['fixtures/videos', 'fixtures/synthetic'].map((d) => resolve(d));
 
 /** Path of `file` relative to the fixtures/videos or fixtures/synthetic folder that holds it. */
@@ -70,7 +89,7 @@ for (const file of videos) {
     continue;
   }
   process.stdout.write(`${rel} … `);
-  let result = await page.evaluate((u) => window.__extract(u), toUrl(file));
+  let result = await page.evaluate(([u, o]) => window.__extract(u, 30, o), [toUrl(file), extractOpts]);
   if (result.error) {
     // Fall back to a VP9 transcode the browser can always decode.
     const webm = join(tmp, rel.replace(/[/\\]/g, '_') + '.webm');
@@ -93,7 +112,7 @@ for (const file of videos) {
       const served = join(root, 'node_modules/.landmarks-tmp', 'clip.webm');
       mkdirSync(dirname(served), { recursive: true });
       execFileSync('cp', [webm, served]);
-      result = await page.evaluate((u) => window.__extract(u), toUrl(served));
+      result = await page.evaluate(([u, o]) => window.__extract(u, 30, o), [toUrl(served), extractOpts]);
     } catch (err) {
       result = {
         frames: [],
@@ -110,7 +129,7 @@ for (const file of videos) {
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, JSON.stringify(result.frames));
   console.log(
-    `${result.frames.length}/${result.total} frames with a pose → ${relative(root, out)}`,
+    `${result.frames.length}/${result.total} frames with a pose, ${result.ms?.toFixed(1)} ms/frame → ${relative(root, out)}`,
   );
 }
 
