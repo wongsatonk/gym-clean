@@ -87,6 +87,9 @@ jobs:
           path: node_modules/.cache/e2e-fake-camera/person.mjpeg
           key: fake-camera-${{ hashFiles('fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm', 'e2e/fake-camera.setup.ts') }}
           fail-on-cache-miss: true
+      # The container's user differs from the checkout's owner; without this git refuses the repo
+      # and the app builds with no build hash (owner-mode / Self-check / What's New specs fail).
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: npx playwright test ${{ matrix.args }}
       - uses: actions/upload-artifact@v4
         if: failure()
