@@ -538,5 +538,95 @@
     ],
     "focus": "Focus: thighs (quads). Glutes and hamstrings help.",
     "tempo": "Down 2 s · Up 1 s"
+  },
+  "Crunches": {
+    "lines": [
+      "Lie on your back, knees bent, hands lightly by your head.",
+      "Curl your shoulders off the floor, lower back stays down.",
+      "Squeeze for a second at the top, then lower slowly."
+    ],
+    "focus": "Focus: abs.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Reverse_Crunch": {
+    "lines": [
+      "Lie on your back, arms by your sides, knees bent up high.",
+      "Roll your hips off the floor, knees toward your chest.",
+      "Lower your hips slowly until they touch down."
+    ],
+    "focus": "Focus: abs, mostly the lower part.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Flat_Bench_Lying_Leg_Raise": {
+    "lines": [
+      "Lie on a bench, legs straight off the end, hold its sides.",
+      "Raise your legs until they point straight up.",
+      "Lower them slowly, keep your lower back on the bench."
+    ],
+    "focus": "Focus: abs, mostly the lower part.",
+    "tempo": "Lift 1 s · Lower 2 s"
+  },
+  "Dead_Bug": {
+    "lines": [
+      "Lie on your back, arms up, hips and knees bent to 90°.",
+      "Reach one leg long until it hovers, back flat on the floor.",
+      "Bring it back, switch legs; count both sides as one."
+    ],
+    "focus": "Focus: abs.",
+    "tempo": "Lower 2 s · Return 1 s"
+  },
+  "Air_Bike": {
+    "lines": [
+      "Lie on your back, hands by your head, shoulders lifted.",
+      "Pull one knee in and turn the other elbow toward it.",
+      "Switch sides like pedalling; count both sides as one."
+    ],
+    "focus": "Focus: abs and the sides of your waist.",
+    "tempo": "Twist 1 s · Return 2 s"
+  },
+  "Russian_Twist": {
+    "lines": [
+      "Sit with knees bent, lean back into a V, arms out in front.",
+      "Turn your chest to one side, then to the other.",
+      "One turn each way is one rep: count both sides as one."
+    ],
+    "focus": "Focus: abs and the sides of your waist.",
+    "tempo": "Twist 1 s · Return 2 s"
+  },
+  "Dumbbell_Side_Bend": {
+    "lines": [
+      "Stand tall, a dumbbell in one hand, other hand on your waist.",
+      "Lean toward the dumbbell, then come back up to tall.",
+      "All reps on one side, then the other; log reps per side."
+    ],
+    "focus": "Focus: the sides of your waist.",
+    "tempo": "Down 2 s · Up 1 s"
+  },
+  "Cable_Crunch": {
+    "lines": [
+      "Kneel under a high pulley, rope or lat bar by your head.",
+      "Curl your elbows toward your thighs, hips stay still.",
+      "Come back up slowly until your abs are long again."
+    ],
+    "focus": "Focus: abs.",
+    "tempo": "Crunch 1 s · Return 2 s"
+  },
+  "Pallof_Press": {
+    "lines": [
+      "Side to the cable, D-handle at chest height, both hands.",
+      "Press straight out, hold, bring it back without turning.",
+      "All reps on one side, then the other; log reps per side."
+    ],
+    "focus": "Focus: abs. Shoulders and arms help.",
+    "tempo": "Push 1 s · Hold 1 s · Return 2 s"
+  },
+  "Hanging_Leg_Raise": {
+    "lines": [
+      "Hang from a pull-up bar, arms straight, legs down.",
+      "Raise your legs until they are level with your hips.",
+      "Lower slowly and stop the swing before the next rep."
+    ],
+    "focus": "Focus: abs, mostly the lower part.",
+    "tempo": "Lift 1 s · Lower 2 s"
   }
 }

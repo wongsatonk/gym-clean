@@ -201,5 +201,39 @@
   },
   "Wide-Grip_Lat_Pulldown": {
     "needs": [["cable-lat-pulldown", "cable-lat-bar"]]
+  },
+  "Crunches": {
+    "needs": [[]]
+  },
+  "Reverse_Crunch": {
+    "needs": [[]]
+  },
+  "Flat_Bench_Lying_Leg_Raise": {
+    "needs": [["adjustable-bench"]]
+  },
+  "Dead_Bug": {
+    "needs": [[]]
+  },
+  "Air_Bike": {
+    "needs": [[]]
+  },
+  "Russian_Twist": {
+    "needs": [[]]
+  },
+  "Dumbbell_Side_Bend": {
+    "needs": [["dumbbells"], ["kettlebell"]]
+  },
+  "Cable_Crunch": {
+    "needs": [
+      ["cable-pulley", "cable-rope"],
+      ["cable-pulley", "cable-lat-bar"]
+    ]
+  },
+  "Pallof_Press": {
+    "needs": [["cable-pulley", "cable-d-handle"]]
+  },
+  "Hanging_Leg_Raise": {
+    "needs": [["pull-up-bar"]],
+    "replaceWith": ["Flat_Bench_Lying_Leg_Raise", "Reverse_Crunch"]
   }
 }
