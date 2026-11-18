@@ -173,7 +173,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Manual One-Arm row: Right → Next arm (speech fake hears the switch line) → Left → Set done → Rest; summary and Calendar day show both sides; a two-arm exercise still shows Set done from the start.
   - Done when: green 3× (`--repeat-each 3`), full e2e green.
   - Deps: 16.
-- [ ] 18. [pose-engineer] Camera e2e in `e2e/camera.spec.ts`.
+- [x] 18. [pose-engineer] Camera e2e in `e2e/camera.spec.ts`.
   - Fake camera: right synthetic row clip counts 4 with the "Right arm" label, one Next arm tap, the left clip counts 4; the side never changes without the tap; after the first rep an out-of-frame stretch shows the top strip, not the card.
   - Done when: green 3×.
   - Deps: 7, 16.

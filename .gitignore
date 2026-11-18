@@ -60,3 +60,6 @@ ios/App/Signing.local.xcconfig
 
 # Rendered social media story packs (large media; review locally)
 marketing/out/
+
+# Per-run Playwright output folders (parallel helpers use --output=test-results-<n>)
+test-results-*/
