@@ -453,14 +453,56 @@ describe('router with the Apple brain (notes once per reason, errors every time)
     it(`error ${code}: rules + a one-line note, every time`, async () => {
       const b = failing(code);
       const router = createRouter([appleBrain(b), rulesBrain], { notes: memoryNoteStore() });
+      // Open chat (a change request never reaches the model since 1.15.2).
       for (let i = 0; i < 2; i++) {
-        const r = await router.ask({ text: 'lighter today' }, ctx());
-        expect(r.source).toBe('rules');
-        expect(r.proposal?.action).toBe('lighter');
+        const r = await router.ask({ text: 'what first?' }, ctx());
+        expect(r).toMatchObject({ ...handle({ text: 'what first?' }, coach), source: 'rules' });
         expect(r.note).toBe(errorNote(code, 'apple', 'rules'));
       }
       expect(b.asked).toBe(2);
     });
+
+  // 1.15.2: the Apple adapter answers change requests with the rules; the badge says so.
+  it('a change request the Apple brain hands to the rules keeps source rules, no note', async () => {
+    const b = { ...failing('other') };
+    const r = await createRouter([appleBrain(b), rulesBrain], { notes: memoryNoteStore() }).ask(
+      { text: 'lighter today' },
+      ctx(),
+    );
+    expect(b.asked).toBe(0);
+    expect(r.source).toBe('rules');
+    expect(r.proposal?.action).toBe('lighter');
+    expect(r.note).toBeUndefined();
+  });
+
+  it('a fake Apple brain cannot claim another brain: only rules is kept, else its own id', async () => {
+    for (const [claimed, shown] of [
+      ['rules', 'rules'],
+      ['claude', 'apple'],
+      ['chip', 'apple'],
+    ] as const) {
+      const apple = fake('apple', {
+        answer: () =>
+          Promise.resolve({
+            reply: 'x',
+            chips: [],
+            safety: 'none',
+            intent: 'help',
+            source: claimed,
+          }),
+      });
+      const r = await createRouter([apple]).ask({ text: 'what first?' }, ctx());
+      expect([claimed, r.source]).toEqual([claimed, shown]);
+    }
+    // A Claude brain's answer is always badged Claude.
+    const claude = fake('claude', {
+      answer: () =>
+        Promise.resolve({ reply: 'x', chips: [], safety: 'none', intent: 'help', source: 'rules' }),
+    });
+    expect((await createRouter([claude]).ask({ text: 'what first?' }, ctx())).source).toBe(
+      'claude',
+    );
+  });
 
   it('an Apple answer carries no note', async () => {
     const b: GymBrainBridge = {

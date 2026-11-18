@@ -486,6 +486,21 @@ function exerciseOf(text: string, ctx: MatchContext): string | undefined {
     (n) => n.tokens.length > 0 && words.has(n.tokens[n.tokens.length - 1] ?? ''),
   );
   const todayHeads = [...new Set(heads.filter((n) => today.has(n.id)).map((n) => n.id))];
+  // A full multi-word name he typed ("leg extension") beats today's exercise that only shares its
+  // last word (Standing Dumbbell Triceps Extension) unless today's name has every typed word too
+  // (1.15.2 eval req-095). Aliases keep the head-word preference ("curls" → today's curl).
+  const fullName = named.find((n) => n.id === best)?.tokens;
+  if (
+    best !== undefined &&
+    fullName !== undefined &&
+    fullName.length >= 2 &&
+    fullName.every((w) => words.has(w)) &&
+    !todayHeads.some((id) => {
+      const t = named.find((n) => n.id === id)?.tokens ?? [];
+      return fullName.every((w) => t.includes(w));
+    })
+  )
+    return best;
   if (todayHeads.length === 1) return todayHeads[0];
   if (best !== undefined) return best;
   return pick(heads.map((n) => n.id));

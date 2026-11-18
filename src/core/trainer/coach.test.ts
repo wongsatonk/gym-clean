@@ -6,6 +6,7 @@ import evals from './evals/requests.json';
 import { wordCount } from '../advice';
 import { applyProposal, undoLast, type TrainerChange } from './changes';
 import { addDate, effectiveDay, seedPlan } from './plan';
+import { matchIntent } from './intents';
 import { estimateMinutes } from './estimate';
 import { nextBlockOffers, proposeNextBlock } from './nextBlock';
 import type { StallSession } from './actions/stall';
@@ -25,6 +26,8 @@ import {
   SHORT_ON_TIME_CHIP,
   FULL_DAY_REPLY,
   handle,
+  matchText,
+  resolveDay,
   type CoachContext,
   type CoachInput,
   type CoachResponse,
@@ -1681,5 +1684,45 @@ describe('M12 1b learn cards on replies', () => {
     expect(handle(text('my knee hurts'), ctxFor('legs-a')).learnId).toBeUndefined();
     expect(handle(text('chest pain and dizzy'), ctxFor('push-a')).learnId).toBeUndefined();
     expect(handle({ chip: 'lighter' }, workoutCtx('push-a', [])).learnId).toBeUndefined();
+  });
+});
+
+// 1.15.2 "Coach acts": the Apple adapter routes on the same match handleText uses.
+describe('matchText (the match handle() acts on)', () => {
+  it("uses the plan day names, today's rows and the catalog", () => {
+    const c = ctxFor('push-a');
+    expect(matchText('do push b today', c)).toMatchObject({
+      intent: 'doToday',
+      slots: { dayName: 'Push B' },
+    });
+    expect(matchText('do push b today', c)).toEqual(
+      matchIntent('do push b today', {
+        exercises: c.catalog.exercises.map(({ id, name }) => ({ id, name })),
+        todayExerciseIds: (effectiveDay(c.state, c.sessions, c.today).day?.exercises ?? []).map(
+          (p) => p.exerciseId,
+        ),
+        dayNames: c.state.plan.days.map((d) => d.name),
+      }),
+    );
+  });
+
+  it('agrees with handle() on every committed eval item', () => {
+    const c = ctxFor('push-a');
+    for (const it of evals.items) {
+      const m = matchText(it.text, c);
+      const r = handle(text(it.text), c);
+      expect([it.text, r.safety]).toEqual([it.text, m.safety]);
+      if (m.safety !== 'redFlag') expect([it.text, r.intent]).toEqual([it.text, m.intent]);
+    }
+  });
+});
+
+describe('resolveDay', () => {
+  it('today, tomorrow, and a weekday = the next one 1-7 days ahead', () => {
+    expect(resolveDay('today', TODAY)).toBe(TODAY);
+    expect(resolveDay('tomorrow', TODAY)).toBe('2026-11-12');
+    expect(resolveDay('fri', TODAY)).toBe('2026-11-13');
+    expect(resolveDay('wed', TODAY)).toBe('2026-11-18'); // today is a Wednesday: next week's
+    expect(resolveDay('tue', TODAY)).toBe('2026-11-17');
   });
 });

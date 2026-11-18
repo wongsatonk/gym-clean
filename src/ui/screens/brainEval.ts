@@ -36,6 +36,10 @@ export type BrainEvalRow = {
   /** Facts items only. */
   factsMatch?: boolean | undefined;
   latencyMs: number;
+  /** 1.15.2: who answered ('rules' = a rule-matched change or a red flag; the model wasn't asked). */
+  route?: 'rules' | 'model' | undefined;
+  /** 1.15.2: sanitize hit ids when `safe` is false (ids only, never text). */
+  hits?: readonly string[] | undefined;
 };
 
 export type BrainEvalReport = {

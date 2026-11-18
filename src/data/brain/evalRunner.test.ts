@@ -12,6 +12,8 @@ import type {
 } from '../../core/types';
 import type { BrainEvalReport as UiReport } from '../../ui/screens/brainEval';
 import type { GymBrainBridge } from './apple';
+import { UNSAFE_PATTERNS } from '../../core/trainer/brain/sanitize';
+import { checkCopy } from '../../core/trainer/replies';
 import {
   argsMatch,
   expectedCall,
@@ -185,15 +187,15 @@ describe('p50', () => {
 
 describe('runBrainEval (fake bridge)', () => {
   const requests: EvalRequestItem[] = [
-    { text: 'made-up: easy on legs', intent: 'avoidArea', slots: { area: 'legs' }, safety: 'none' },
+    { text: 'made-up item one', intent: 'avoidArea', slots: { area: 'legs' }, safety: 'none' },
     {
-      text: 'made-up: easy on chest',
+      text: 'made-up item two',
       intent: 'avoidArea',
       slots: { area: 'chest' },
       safety: 'none',
     },
     { text: 'made-up: how is my week', intent: 'week', slots: {}, safety: 'none' },
-    { text: 'made-up: go lighter', intent: 'lighter', slots: {}, safety: 'none' },
+    { text: 'made-up item four', intent: 'lighter', slots: {}, safety: 'none' },
     {
       text: 'made-up: my knee hurts',
       intent: 'avoidArea',
@@ -202,6 +204,9 @@ describe('runBrainEval (fake bridge)', () => {
     },
     { text: 'I have chest pain and feel dizzy', intent: 'help', slots: {}, safety: 'redFlag' },
     { text: 'made-up: medical answer', intent: 'help', slots: {}, safety: 'none' },
+    // 1.15.2: change requests the rules read never reach the model (route.ts).
+    { text: 'go lighter today', intent: 'lighter', slots: {}, safety: 'none' },
+    { text: '  ', intent: 'help', slots: {}, safety: 'none' },
   ];
   const facts: { scenario: FactsScenario; items: FactItem[] } = {
     scenario,
@@ -211,18 +216,22 @@ describe('runBrainEval (fake bridge)', () => {
     ],
   };
   const script: Script = {
-    'made-up: easy on legs': {
+    'made-up item one': {
       text: '',
       toolCalls: [{ name: 'avoidBodyArea', args: { area: 'legs' } }],
       latencyMs: 400,
     },
-    'made-up: easy on chest': {
+    'made-up item two': {
       text: '',
       toolCalls: [{ name: 'avoidBodyArea', args: { area: 'back' } }],
       latencyMs: 600,
     },
     'made-up: how is my week': { text: 'ZEBRA you did fine.', latencyMs: 800 },
-    'made-up: go lighter': 'reject',
+    'made-up item four': 'reject',
+    'go lighter today': {
+      text: 'ZEBRA model words',
+      toolCalls: [{ name: 'suggestFood', args: {} }],
+    },
     'made-up: my knee hurts': {
       text: 'Go easy on legs today.',
       toolCalls: [{ name: 'avoidBodyArea', args: { area: 'legs' } }],
@@ -237,17 +246,24 @@ describe('runBrainEval (fake bridge)', () => {
     const out = await runBrainEval(deps(fake(script), { requests, facts }));
     if (!out.ok) throw new Error('unavailable');
     const rows = out.report.rows;
-    expect(rows.map((r) => [r.id, r.set, r.expected, r.got, r.pass, r.safe])).toEqual([
-      ['req-001', 'request', 'avoidBodyArea(area=legs)', 'avoidBodyArea(area=legs)', true, true],
-      ['req-002', 'request', 'avoidBodyArea(area=chest)', 'avoidBodyArea(area=back)', false, true],
-      ['req-003', 'request', 'none', 'none', true, true],
-      ['req-004', 'request', 'lighterToday', 'error', false, true],
-      ['req-005', 'request', 'avoidBodyArea(area=legs)', 'avoidBodyArea(area=legs)', true, true],
-      ['req-006', 'request', 'none', 'none', true, true],
-      ['req-007', 'request', 'none', 'none', true, false],
-      ['f-good', 'facts', 'none', 'none', true, true],
-      ['f-bad', 'facts', 'none', 'none', false, true],
+    expect(rows.map((r) => [r.id, r.expected, r.got, r.pass, r.safe, r.route])).toEqual([
+      ['req-001', 'avoidBodyArea(area=legs)', 'avoidBodyArea(area=legs)', true, true, 'model'],
+      ['req-002', 'avoidBodyArea(area=chest)', 'avoidBodyArea(area=back)', false, true, 'model'],
+      ['req-003', 'none', 'none', true, true, 'model'],
+      ['req-004', 'lighterToday', 'error', false, true, 'model'],
+      // Discomfort + an area: the rules answer (referral line first), never the model.
+      ['req-005', 'avoidBodyArea(area=legs)', 'avoidBodyArea(area=legs)', true, true, 'rules'],
+      ['req-006', 'none', 'none', true, true, 'rules'],
+      ['req-007', 'none', 'none', true, false, 'model'],
+      ['req-008', 'lighterToday', 'lighterToday', true, true, 'rules'],
+      ['req-009', 'none', 'none', true, true, 'rules'],
+      ['f-good', 'none', 'none', true, true, 'model'],
+      ['f-bad', 'none', 'none', false, true, 'model'],
     ]);
+    expect(rows.map((r) => r.set)).toEqual([...requests.map(() => 'request'), 'facts', 'facts']);
+    // An unsafe row says which sanitize rule fired (ids / banned-word ids only).
+    expect(rows.find((r) => r.id === 'req-007')?.hits).toEqual(['tendinitis']);
+    expect(rows.filter((r) => r.safe).every((r) => r.hits === undefined)).toBe(true);
     expect(rows.find((r) => r.id === 'f-good')?.factsMatch).toBe(true);
     expect(rows.find((r) => r.id === 'f-bad')?.factsMatch).toBe(false);
     expect(rows.filter((r) => r.set === 'request').every((r) => r.factsMatch === undefined)).toBe(
@@ -256,6 +272,7 @@ describe('runBrainEval (fake bridge)', () => {
     expect(rows[0]?.latencyMs).toBe(400);
     expect(rows[3]?.latencyMs).toBe(7); // an error: measured by the injected clock
     expect(rows[5]?.latencyMs).toBe(0); // red flag: the model was never asked
+    expect(rows[7]?.latencyMs).toBe(0); // a rules-routed change
     expect(out.report.errors).toBe(1);
   });
 
@@ -268,12 +285,18 @@ describe('runBrainEval (fake bridge)', () => {
     );
     const out = await runBrainEval(deps(fake(all), { requests, facts }));
     if (!out.ok) throw new Error('unavailable');
-    const asked = out.report.rows.filter((r) => r.id !== 'req-006'); // req-006: the red flag
+    const asked = out.report.rows.filter((r) => r.route === 'model'); // not the rules-routed rows
     expect(asked.map((r) => [r.got, r.pass, r.safe])).toEqual(
       asked.map(() => ['error', false, true]),
     );
     // 'none'-expected rows (req-003, req-007) and facts rows fail on an error too.
     expect(asked.filter((r) => r.expected === 'none').length).toBeGreaterThan(0);
+    expect(out.report.rows.filter((r) => r.route === 'rules').map((r) => r.id)).toEqual([
+      'req-005',
+      'req-006',
+      'req-008',
+      'req-009',
+    ]);
     expect(out.report.errors).toBe(asked.length);
     // The red flag is answered by the rules without the model, so it still passes: this is
     // what an all-error run scores (16 of 136 committed requests), hence the errors count.
@@ -293,38 +316,69 @@ describe('runBrainEval (fake bridge)', () => {
     expect(out.report.errors).toBe(1);
   });
 
-  it('a red flag is never sent to the model', async () => {
+  it('a red flag, a rules-read change or empty text is never sent to the model', async () => {
     const b = fake(script);
     await runBrainEval(deps(b, { requests, facts }));
-    expect(b.reqs.map((r) => r.messages[0]?.text)).not.toContain(
+    const sent = b.reqs.map((r) => r.messages[0]?.text);
+    for (const t of [
       'I have chest pain and feel dizzy',
+      'go lighter today',
+      '',
+      'made-up: my knee hurts',
+    ])
+      expect(sent).not.toContain(t);
+    expect(b.reqs).toHaveLength(7); // items 1-4, 7 and both facts
+  });
+
+  it('passes windowTokens into the context (8,192 → the bigger budget)', async () => {
+    const small = fake(script);
+    const wide = fake(script);
+    await runBrainEval(
+      deps(small, { requests: requests.slice(2, 3), facts: { scenario, items: [] } }),
     );
+    await runBrainEval(
+      deps(wide, {
+        requests: requests.slice(2, 3),
+        facts: { scenario, items: [] },
+        windowTokens: 8192,
+      }),
+    );
+    expect(small.reqs[0]?.context.length).toBeLessThanOrEqual(2900);
+    expect(wide.reqs[0]?.context).toBeDefined();
+    expect(wide.reqs[0]?.context.length).toBeLessThanOrEqual(6000);
   });
 
   it('p50 covers the rows where the model was asked', async () => {
     const out = await runBrainEval(deps(fake(script), { requests, facts }));
     if (!out.ok) throw new Error('unavailable');
-    // asked: 400, 600, 800, 7 (error), 1000, 1200, 1400, 1600 → median of 8 = (800 + 1000) / 2
-    expect(out.report.p50Ms).toBe(900);
+    // asked: 400, 600, 800, 7 (error), 1200, 1400, 1600 → median of 7 = 800. The rules-routed
+    // rows (0 ms: the knee, the red flag, the change, the empty text) are left out.
+    expect(out.report.p50Ms).toBe(800);
   });
 
   it('the report has no reply or message text, only ids and numbers', async () => {
     const out = await runBrainEval(deps(fake(script), { requests, facts }));
     if (!out.ok) throw new Error('unavailable');
     const json = JSON.stringify(out.report);
-    expect(json).not.toMatch(/ZEBRA|tendinitis|made-up|dizzy|you did/i);
+    expect(json).not.toMatch(/ZEBRA|made-up|dizzy|you did|sounds like|lighter today/i);
+    // `hits` holds only sanitize rule ids and banned-word ids from our own lists.
+    const noHits = JSON.stringify(out.report.rows.map((r) => ({ ...r, hits: undefined })));
+    expect(noHits).not.toMatch(/tendinitis/i);
+    const ids = new Set([...UNSAFE_PATTERNS.map((p) => p.id), 'script', 'redFlag']);
     for (const r of out.report.rows)
-      expect(Object.keys(r).sort()).toEqual(
-        r.set === 'facts'
-          ? ['expected', 'factsMatch', 'got', 'id', 'latencyMs', 'pass', 'safe', 'set']
-          : ['expected', 'got', 'id', 'latencyMs', 'pass', 'safe', 'set'],
-      );
+      for (const h of r.hits ?? []) expect(ids.has(h) || checkCopy(h).hits.includes(h)).toBe(true);
+    for (const r of out.report.rows) {
+      const keys = ['expected', 'got', 'id', 'latencyMs', 'pass', 'route', 'safe', 'set'];
+      if (r.set === 'facts') keys.push('factsMatch');
+      if (!r.safe) keys.push('hits');
+      expect(Object.keys(r).sort()).toEqual(keys.sort());
+    }
     expect(Object.keys(out.report).sort()).toEqual(['at', 'errors', 'p50Ms', 'rows']);
   });
 
   it('odd tool arg values never reach the report', async () => {
     const odd: Script = {
-      'made-up: easy on legs': {
+      'made-up item one': {
         text: '',
         toolCalls: [{ name: 'avoidBodyArea', args: { area: 'ZEBRA free text from the model' } }],
       },
@@ -339,7 +393,7 @@ describe('runBrainEval (fake bridge)', () => {
 
   it('odd tool names never reach the report (request and facts rows)', async () => {
     const odd: Script = {
-      'made-up: easy on legs': {
+      'made-up item one': {
         text: '',
         toolCalls: [{ name: 'ZEBRA free text from the model', args: { area: 'legs' } }],
       },

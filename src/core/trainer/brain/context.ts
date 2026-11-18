@@ -28,6 +28,11 @@
  * Over budget, older top sets go first, then older turns, then the plan line, then a hard cut.
  * The plan line (~110–130 characters for a six-day rotation) lives inside this budget: it takes
  * room from the top sets, so the budget arithmetic above is unchanged.
+ *
+ * 1.15.2 (lever 3): when the bridge reports a window of ≥ 8,192 tokens (his iOS does), the
+ * context gets 6,000 characters (`contextBudgetChars`): the same sum is then ~4,870 tokens, well
+ * under 8,192, and under BIG_WINDOW.maxPromptTokens so prefill stays fast; we don't fill the
+ * window just because it's there. An unknown window keeps the 4,096 arithmetic.
  */
 import type {
   BodyArea,
@@ -57,6 +62,21 @@ export const BUDGET = {
 
 export const CONTEXT_BUDGET_CHARS = 2900;
 
+/** 1.15.2: the bigger budget and the window it needs (checked in context.test.ts). */
+export const BIG_WINDOW = {
+  minWindowTokens: 8192,
+  contextChars: 6000,
+  /** The whole prompt + reply stays under this, so a bigger window doesn't slow prefill much. */
+  maxPromptTokens: 5000,
+} as const;
+
+/** The context's character budget for a model window of `windowTokens` (undefined = unknown). */
+export function contextBudgetChars(windowTokens?: number): number {
+  return windowTokens !== undefined && windowTokens >= BIG_WINDOW.minWindowTokens
+    ? BIG_WINDOW.contextChars
+    : CONTEXT_BUDGET_CHARS;
+}
+
 export const MAX_TURNS = 8;
 /** One chat turn in the context is cut to this many characters. */
 export const TURN_MAX_CHARS = 140;
@@ -82,7 +102,12 @@ export type BrainInput = {
 /** The "Lighter today?" card as a brain may see it: signal ids and reason sentences only. */
 export type LighterCard = { signals: readonly ReadinessSignal[]; reasons: readonly string[] };
 
-export type ContextOpts = { brain: 'apple' | 'claude'; appleCardReasons?: boolean | undefined };
+export type ContextOpts = {
+  brain: 'apple' | 'claude';
+  appleCardReasons?: boolean | undefined;
+  /** The model's context window in tokens, as the bridge reports it (1.15.2). */
+  windowTokens?: number | undefined;
+};
 
 const SHORT_DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const dayText = (date: string) =>
@@ -335,6 +360,7 @@ export function serializeContext(
 ): { text: string; usedHealth: boolean } {
   const ctx = input.coach;
   const healthOk = opts.brain === 'apple' && opts.appleCardReasons !== false;
+  const budget = contextBudgetChars(opts.windowTokens);
   const reasons = healthOk && input.lighterCard ? reasonLines(input.lighterCard) : [];
   const plan = planLine(ctx);
   const all = [
@@ -368,10 +394,10 @@ export function serializeContext(
   let text = '';
   for (const [k, t, withPlan] of tries) {
     text = build(k, t, withPlan);
-    if (text.length <= CONTEXT_BUDGET_CHARS) break;
+    if (text.length <= budget) break;
   }
-  if (text.length > CONTEXT_BUDGET_CHARS) {
-    const cut = text.slice(0, CONTEXT_BUDGET_CHARS);
+  if (text.length > budget) {
+    const cut = text.slice(0, budget);
     text = cut.slice(0, Math.max(cut.lastIndexOf('\n'), cut.lastIndexOf('; '), 0)) || cut;
   }
   return { text, usedHealth: reasons.length > 0 && text.includes('Lighter today? card:') };

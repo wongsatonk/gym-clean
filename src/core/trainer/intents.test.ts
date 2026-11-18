@@ -102,6 +102,25 @@ describe('matchIntent basics', () => {
     expect(matchIntent('swap rows', rows).slots.exerciseId).toBe('Seated_Cable_Rows');
   });
 
+  // 1.15.2 eval req-095: "leg extension" resolved to today's Standing_Dumbbell_Triceps_Extension.
+  it("a fully named exercise beats today's exercise that only shares its last word", () => {
+    const today: MatchContext = {
+      ...evalCtx,
+      todayExerciseIds: ['Standing_Dumbbell_Triceps_Extension', 'Hammer_Curls'],
+    };
+    expect(matchIntent("We don't have a leg extension machine", today)).toEqual({
+      intent: 'swap',
+      slots: { exerciseId: 'Leg_Extensions' },
+      safety: 'none',
+    });
+    expect(matchIntent('swap the leg extensions', today).slots.exerciseId).toBe('Leg_Extensions');
+    // A bare head word still picks today's.
+    expect(matchIntent('swap the extensions', today).slots.exerciseId).toBe(
+      'Standing_Dumbbell_Triceps_Extension',
+    );
+    expect(matchIntent('swap the curls', today).slots.exerciseId).toBe('Hammer_Curls');
+  });
+
   it('an ambiguous generic word without context leaves exerciseId empty', () => {
     expect(matchIntent('swap rows', ctx).slots.exerciseId).toBeUndefined();
   });

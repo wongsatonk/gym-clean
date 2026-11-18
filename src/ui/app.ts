@@ -3032,6 +3032,11 @@ export function mountApp(root: HTMLElement): void {
   let brainChecking = native;
   /** The Apple turn just answered (dev log: ids and numbers only). */
   let lastAppleTrace: AppleTrace | null = null;
+  /**
+   * 1.15.2: the model's context window as the phone reports it (GymBrain `measure().contextSize`,
+   * iOS 26.4+; 8192 on his iPhone, 4096 before). Unknown → the 4096-token budget (context.ts).
+   */
+  let appleWindowTokens: number | undefined;
   let checkInRows: CheckIn[] = [];
   let coachTabEl: HTMLElement | null = null;
   let evalState: BrainEvalProps = { state: 'idle' };
@@ -3094,7 +3099,24 @@ export function mountApp(root: HTMLElement): void {
         voice: coachVoice.persona,
       };
     },
+    windowTokens: () => appleWindowTokens,
   };
+
+  /** Reads the window size once per launch (a token count, no reply); a failure keeps 4096. */
+  async function measureAppleWindow(gb: GymBrain): Promise<void> {
+    try {
+      const { request } = await buildAppleRequest(
+        'Hi',
+        { coach: coachContext(phaseNow()), turns: [] },
+        appleDeps,
+      );
+      const counts = await gb.measure(request);
+      if (counts && Number.isFinite(counts.contextSize) && counts.contextSize > 0)
+        appleWindowTokens = counts.contextSize;
+    } catch {
+      // No count (older iOS, Apple Intelligence off): keep the 4096-token budget, quietly.
+    }
+  }
 
   /** iPhone app: load the plugins, put Apple's brain before the rules, plan reminders. */
   async function initSlice2(): Promise<void> {
@@ -3132,6 +3154,7 @@ export function mountApp(root: HTMLElement): void {
       { notes: coachNoteStore(db) },
     );
     void refreshBrainStatus();
+    void measureAppleWindow(gb);
     void syncReminders();
     if (view.screen === 'coach') void refreshMic();
   }
@@ -3140,7 +3163,12 @@ export function mountApp(root: HTMLElement): void {
 
   /** Dev log: which brain answered, the action, latency, mic yes/no. Never any text. */
   function brainLog(source: string, mic: boolean): void {
-    const t = source === 'apple' ? lastAppleTrace : null;
+    // 1.15.2: a rule-matched change answered inside the Apple brain has source 'rules' and a
+    // trace with route 'rules' (no model call), so the log can tell it from an Apple fallback.
+    const t =
+      source === 'apple' || (source === 'rules' && lastAppleTrace?.route === 'rules')
+        ? lastAppleTrace
+        : null;
     rec((r) =>
       r.logEvent('coachBrain', {
         brain: source,
@@ -3152,6 +3180,8 @@ export function mountApp(root: HTMLElement): void {
               calls: t.calls.map((c) => (TOOL_NAMES.has(c.name) ? c.name : '?')),
               latencyMs: t.latencyMs,
               replaced: t.replaced,
+              route: t.route,
+              ...(t.why ? { why: t.why } : {}),
             }
           : {}),
       }),
@@ -3794,6 +3824,8 @@ export function mountApp(root: HTMLElement): void {
         appleDeps,
       );
       evalTokens = await gb.measure(request);
+      if (evalTokens && Number.isFinite(evalTokens.contextSize) && evalTokens.contextSize > 0)
+        appleWindowTokens = evalTokens.contextSize;
     } catch (err) {
       logDbError(err);
       evalTokens = null;
@@ -3830,6 +3862,7 @@ export function mountApp(root: HTMLElement): void {
         program,
         catalog: trainerCatalog,
         now: () => now(),
+        ...(appleWindowTokens !== undefined && { windowTokens: appleWindowTokens }),
         onProgress: (done, total) => {
           if (total <= 0) return;
           evalState = { ...evalState, progress: { done, total } };

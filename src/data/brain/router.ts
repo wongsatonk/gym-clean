@@ -251,7 +251,10 @@ export function createRouter(brains: readonly CoachBrain[], opts: RouterOptions 
       try {
         const raw = await within(askMs, () => brain.ask(text, contextFor(brain.id, ctx)));
         if (!isAnswer(raw)) throw new Error('empty answer');
-        const reply: BrainReply = { ...raw, source: brain.id };
+        // 1.15.2: the Apple adapter answers change requests with the rules (route.ts); the chat
+        // badge then honestly says Quick replies. Any other claim is the brain's own id.
+        const source = brain.id === 'apple' && raw.source === 'rules' ? 'rules' : brain.id;
+        const reply: BrainReply = { ...raw, source };
         if (brain.id === 'claude') delete reply.usedHealth;
         const note = noteFor(misses, brain.id as NoteBrain);
         if (note) reply.note = note;
