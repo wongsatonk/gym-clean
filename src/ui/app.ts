@@ -374,7 +374,7 @@ import { applyBackground, backgroundStyle } from './backgroundPicker';
 import { watchAmbient } from './motion';
 import { claudeOfferFor, claudeOfferShown, claudeOutcomeOf } from '../core/trainer/claude/offer';
 import { COULDNT_DO } from '../data/brain/apple';
-import { revealMessage } from './coach/chat';
+import { REVEAL_MS, revealMessage } from './coach/chat';
 import type { BackgroundStyle, ClaudeOffer, LibraryGroupBy, SearchHit } from '../core/types';
 import { h } from './dom';
 import { createCoachVoiceSettings } from './coachVoiceSettings';
@@ -497,6 +497,9 @@ export function mountApp(root: HTMLElement): void {
   } | null = null;
   let libIndex: SearchIndex | null = null;
   let libDoneIds: ReadonlySet<string> = new Set();
+  /** One counter for every Library, so a late personal result never matches a newer Library. */
+  let libSeq = 0;
+  let pendingReveal: { id: string; until: number } | null = null;
   let unit: Unit = 'kg';
   let spokenCount = true;
   let coachTips = true;
@@ -933,14 +936,19 @@ export function mountApp(root: HTMLElement): void {
     view = view.back;
     render();
     window.scrollTo(0, scrollY);
-    if (opener?.isConnected) opener.focus({ preventScroll: true });
+    // The opener's screen was rebuilt: focus the new screen's Search button instead.
+    const target = opener?.isConnected
+      ? opener
+      : root.querySelector<HTMLElement>('[data-search-open]');
+    target?.focus({ preventScroll: true });
   }
 
   /** Bundled hits now; this phone's workouts, meals and chat after a short pause (on device). */
   function libQuery(q: string): void {
     if (!lib || !libIndex) return;
     lib.query = q;
-    const seq = ++lib.seq;
+    const seq = ++libSeq;
+    lib.seq = seq;
     if (lib.timer) clearTimeout(lib.timer);
     const usable = personalQueryUsable(q, todayDate());
     lib.personal = undefined;
@@ -1018,7 +1026,9 @@ export function mountApp(root: HTMLElement): void {
       case 'food': {
         const q = hit.keywords[0] ?? '';
         setEnter('fuel');
+        const seq = ++navSeq;
         void fuel.open().then(() => {
+          if (seq !== navSeq || view.screen !== 'library') return; // another tab was chosen
           view = { screen: 'fuel' };
           render();
           window.scrollTo(0, 0);
@@ -1040,7 +1050,9 @@ export function mountApp(root: HTMLElement): void {
       case 'meal': {
         const date = hit.date ?? hit.id;
         setEnter('fuel');
+        const seq = ++navSeq;
         void fuel.openDay(date).then(() => {
+          if (seq !== navSeq || view.screen !== 'library') return; // another tab was chosen
           view = { screen: 'fuel' };
           render();
           window.scrollTo(0, 0);
@@ -1048,19 +1060,30 @@ export function mountApp(root: HTMLElement): void {
         return;
       }
       case 'chat': {
-        const id = hit.id;
-        void openCoachTab(tabPhase).then(() => {
-          const coachRoot = coachTabEl;
-          if (coachRoot) revealMessage(coachRoot, id);
-        });
+        // Re-applied after every Coach render while it lasts (a late mic refresh rebuilds the tab).
+        pendingReveal = { id: hit.id, until: now() + REVEAL_MS };
+        void openCoachTab(tabPhase).then(() => applyPendingReveal());
         return;
       }
     }
   }
 
+  /** Search → a chat message: outline it again if the Coach tab was rebuilt meanwhile. */
+  function applyPendingReveal(): void {
+    if (!pendingReveal) return;
+    if (view.screen !== 'coach' || now() > pendingReveal.until) {
+      pendingReveal = null;
+      return;
+    }
+    const coachRoot = coachTabEl;
+    if (coachRoot?.isConnected && !revealMessage(coachRoot, pendingReveal.id)) pendingReveal = null;
+  }
+
   function libraryView(): HTMLElement {
     if (!lib) {
       // Lost its state (e.g. a restore re-render): back to Today rather than an empty screen.
+      view = { screen: 'today', upNextDayId: null, stats: null };
+      queueMicrotask(goToday);
       return todayScreen(null, null);
     }
     return lib.handle.el;
@@ -1118,7 +1141,13 @@ export function mountApp(root: HTMLElement): void {
       {
         onBack: () => {
           if (view.screen !== 'exerciseDetail') return;
-          view = view.back;
+          const back = view.back;
+          // A preview left while loading never finishes: open it again.
+          if (back.screen === 'preview' && back.loading) {
+            void openPreview(back.planDay);
+            return;
+          }
+          view = back;
           render();
         },
         onBadge: (kind, exId, opener) => openBadge(kind, exId, opener),
@@ -1427,10 +1456,13 @@ export function mountApp(root: HTMLElement): void {
     if (view.screen !== 'intake') intakeEl = null;
     // M13c: leaving the Library (and a detail opened from it) drops its state.
     if (
+      lib &&
       view.screen !== 'library' &&
       !(view.screen === 'exerciseDetail' && view.back.screen === 'library')
-    )
+    ) {
+      if (lib.timer) clearTimeout(lib.timer);
       lib = null;
+    }
     // M13: leaving the Calendar drops an open share preview (and its image URL).
     if (view.screen !== 'calendar' && sharePrev) {
       if (sharePrev.url) URL.revokeObjectURL(sharePrev.url);
@@ -1468,6 +1500,7 @@ export function mountApp(root: HTMLElement): void {
       ensureBody3d();
       placeBody3d();
     }
+    if (pendingReveal && view.screen === 'coach') applyPendingReveal();
     // Settings shows "Restore undone." inline: the notice would say it twice.
     if (view.screen === 'settings' && toast?.dataset.notice === 'restore') removeToast();
     placeToast();
