@@ -96,7 +96,9 @@ test('free text → Apple answers with the "On-device AI" badge; shown, not spok
   await openNative(page);
   await goCoach(page);
 
-  const reply = await ask(page, 'What should I focus on today?');
+  // Open chat (the rules read it as help), so it reaches the model. Since 1.15.2 a message the
+  // rules read as a change ("What should I focus on…" → focus block) never does.
+  const reply = await ask(page, 'Any thoughts on how today should go?');
   await expect(reply.locator('.cs-msg-coach')).toContainText(DEFAULT_BRAIN_TEXT);
   await expect(reply.locator('[data-chat-source="apple"]')).toHaveText('Answered by On-device AI');
   await expect(reply.locator('[data-chat-note]')).toHaveCount(0);
@@ -106,7 +108,10 @@ test('free text → Apple answers with the "On-device AI" badge; shown, not spok
   // and the read-only tool results.
   const [req] = (await brainState(page)).requests;
   expect(req?.instructions.length).toBeGreaterThan(0);
-  expect(req?.messages.at(-1)).toEqual({ role: 'user', text: 'What should I focus on today?' });
+  expect(req?.messages.at(-1)).toEqual({
+    role: 'user',
+    text: 'Any thoughts on how today should go?',
+  });
   expect(req?.context).toContain("Today's plan");
   expect(Object.keys(req?.toolResults ?? {})).toEqual(
     expect.arrayContaining(['weekSummary', 'progressSummary', 'foodIdeas']),
@@ -135,7 +140,8 @@ test('a tool call → a proposal card → Apply → Undo; nothing changes before
     text: 'A lighter day makes sense.',
     toolCalls: [{ name: 'lighterToday', args: {} }],
   });
-  const reply = await ask(page, "I'm wiped out, can we go easier today?");
+  // Open chat the rules leave as help (a plain "easier today" is a rules change since 1.15.2).
+  const reply = await ask(page, 'What do you think, should I hold back a bit today?');
   await expect(reply.locator('.cs-msg-coach')).toContainText('A lighter day makes sense.');
   await expect(reply.locator('[data-chat-source="apple"]')).toBeVisible();
   const card = reply.locator('[data-proposal]');
@@ -171,6 +177,43 @@ test('a tool call → a proposal card → Apply → Undo; nothing changes before
   await card.getByRole('button', { name: 'Undo' }).click();
   await expect(card.locator('[data-card-status="undone"]')).toBeVisible();
 
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+// 1.15.2 "Coach acts" (src/core/trainer/brain/route.ts): a message the rules read as a change
+// goes straight to the rules' proposal (the chips' Apply card) with the quick-replies badge;
+// Apple's model is not asked at all.
+test("a rule-matched change → the rules' proposal card, quick-replies badge, model not asked", async ({
+  page,
+}, testInfo) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  await openNative(page);
+  await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
+  await goCoach(page);
+
+  const reply = await ask(page, 'Make today lighter');
+  await expect(reply.locator('[data-chat-source="rules"]')).toHaveText('Answered by Quick replies');
+  await expect(reply.locator('[data-chat-source="apple"]')).toHaveCount(0);
+  await expect(reply.locator('[data-chat-note]')).toHaveCount(0);
+  const card = reply.locator('[data-proposal]');
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Apply' })).toBeVisible();
+  await expectTapTargets(page, '[data-screen="coach"]');
+  await noHorizontalOverflow(page);
+  await page.screenshot({ path: testInfo.outputPath('m1152-rules-proposal.png') });
+
+  // The model got no respond request for it.
+  expect((await brainState(page)).requests).toEqual([]);
+
+  await card.getByRole('button', { name: 'Apply' }).click();
+  await expect(card.locator('[data-card-status="applied"]')).toContainText('Applied.');
+  await card.getByRole('button', { name: 'Undo' }).click();
+  await expect(card.locator('[data-card-status="undone"]')).toBeVisible();
+
+  expect((await brainState(page)).requests).toEqual([]);
   expect(await page.evaluate(() => window.__spoken)).toEqual([]);
   expect(offsite).toEqual([]);
   expect(errors).toEqual([]);

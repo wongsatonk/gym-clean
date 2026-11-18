@@ -4,7 +4,7 @@
 // mark the release seen, so a reload shows nothing. A fresh profile never sees it (marked seen
 // silently). Settings → What's new replays it. Page 1 and Settings → About show the same
 // "Version <package.json version> (build …)" label; About has the credit line. Reduced motion →
-// no page animation. The tour's pages are read from src/data/whatsNew/pages.ts (this release's). Nothing is spoken; no request leaves the dev server (route-asserted).
+// no page animation. The tour's pages are read from src/data/whatsNew/pages.ts. Nothing is spoken; no request leaves the dev server (route-asserted).
 import { expect, test, type Page } from './fixtures';
 import {
   APP_RELEASE,
@@ -33,33 +33,54 @@ const TOUR = '[data-tour="whats-new"]';
 const tour = (page: Page) => page.locator(TOUR);
 const wn = (page: Page, part: string) => tour(page).locator(`[data-wn="${part}"]`);
 
-// The tour's shape comes from the page and topic data, so a new release doesn't break this spec:
-// an update from the release before APP_RELEASE shows APP_RELEASE's pages, then "Added to your
-// to-dos" only when this release added a topic. The tour lists every added topic on either
-// platform (on the web an iPhone-only one sits under "In the iPhone app" in the list), so the
-// count comes from `since` alone, as todoHost's `addedTopics` does.
+// The tour's shape comes from the page and topic data, so a new release doesn't break this spec.
+// An update shows every release after the one he last saw, up to APP_RELEASE (newest first, data
+// order within a release; core/todo/whatsNew.ts `tourToShow`), then "Added to your to-dos" only
+// when those releases added a topic. A patch release can have a single page (1.15.2), so the
+// updated profile last saw a release far enough back for at least MIN_PAGES pages (Next / Back
+// and Skip on page 3 need them). Settings → What's new replays only the newest release with pages
+// (`replayPages`). The tour lists every added topic on either platform (on the web an iPhone-only
+// one sits under "In the iPhone app" in the list), so the count comes from `since` alone, as
+// todoHost's `addedTopics` does.
 const byNum = (a: string, b: string) => {
   const [x, y] = [a.split('.').map(Number), b.split('.').map(Number)];
   for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
   return 0;
 };
-const CURRENT_PAGES = WHATS_NEW_PAGES.filter((p) => p.release === APP_RELEASE);
-/** The release with pages just before this one (what an updated profile last saw). */
-const PREV_RELEASE = [...new Set(WHATS_NEW_PAGES.map((p) => p.release))]
-  .filter((r) => byNum(r, APP_RELEASE) < 0)
-  .sort(byNum)
-  .at(-1) as string;
+const MIN_PAGES = 3;
+/** Releases with pages up to this one, newest first. */
+const RELEASES = [...new Set(WHATS_NEW_PAGES.map((p) => p.release))]
+  .filter((r) => byNum(r, APP_RELEASE) <= 0)
+  .sort((a, b) => byNum(b, a));
+const pagesOf = (r: string) => WHATS_NEW_PAGES.filter((p) => p.release === r);
+/** The releases an update tour covers: the newest ones until there are MIN_PAGES pages. */
+const TOUR_RELEASES: string[] = [];
+for (const r of RELEASES) {
+  TOUR_RELEASES.push(r);
+  if (TOUR_RELEASES.flatMap(pagesOf).length >= MIN_PAGES) break;
+}
+/** What the updated profile last saw: the release with pages just before the tour's oldest. */
+const SEEN_FROM = RELEASES[TOUR_RELEASES.length] as string;
+/** The update tour's feature pages, in the order the tour shows them. */
+const TOUR_PAGES = TOUR_RELEASES.flatMap(pagesOf);
+/** Settings → What's new: the newest release with pages. */
+const REPLAY_RELEASE = RELEASES[0] as string;
+const REPLAY_PAGES = pagesOf(REPLAY_RELEASE);
 /**
- * Ids of the topics this release added to the to-dos (the tour's last page lists them; none → no
- * such page). Read from src/data/todos/topics.ts through the dev server in beforeAll: that module
- * imports program.json, which Node can't load without an import attribute.
+ * Ids of the topics the tour's releases added to the to-dos (the tour's last page lists them;
+ * none → no such page). Read from src/data/todos/topics.ts through the dev server in beforeAll:
+ * that module imports program.json, which Node can't load without an import attribute.
  */
 let ADDED: string[] = [];
 let HAS_TODO_PAGE = false;
-/** This release's feature pages (+ "Added to your to-dos" when it added a topic). */
-let TOTAL = CURRENT_PAGES.length;
+/** The update tour's pages (+ "Added to your to-dos" when its releases added a topic). */
+let TOTAL = TOUR_PAGES.length;
+let REPLAY_HAS_TODO_PAGE = false;
+/** The replay's pages (+ "Added to your to-dos" when the replayed release added a topic). */
+let REPLAY_TOTAL = REPLAY_PAGES.length;
 
 test.beforeAll(async ({ browser }, testInfo) => {
+  expect(SEEN_FROM, `a release before the newest ${MIN_PAGES} tour pages`).toBeDefined();
   const baseURL = testInfo.project.use.baseURL;
   const ctx = await browser.newContext({
     ignoreHTTPSErrors: true,
@@ -67,28 +88,31 @@ test.beforeAll(async ({ browser }, testInfo) => {
   });
   const p = await ctx.newPage();
   await p.goto('/');
-  ADDED = await p.evaluate(async (release) => {
+  const topics = await p.evaluate(async () => {
     const path = '/src/data/todos/topics.ts';
     const m = (await import(/* @vite-ignore */ path)) as {
       TODO_TOPICS: { id: string; since: string }[];
     };
-    return m.TODO_TOPICS.filter((t) => t.since === release).map((t) => t.id);
-  }, APP_RELEASE);
+    return m.TODO_TOPICS.map(({ id, since }) => ({ id, since }));
+  });
   await ctx.close();
+  ADDED = topics.filter((t) => TOUR_RELEASES.includes(t.since)).map((t) => t.id);
   HAS_TODO_PAGE = ADDED.length > 0;
-  TOTAL = CURRENT_PAGES.length + (HAS_TODO_PAGE ? 1 : 0);
+  TOTAL = TOUR_PAGES.length + (HAS_TODO_PAGE ? 1 : 0);
+  REPLAY_HAS_TODO_PAGE = topics.some((t) => t.since === REPLAY_RELEASE);
+  REPLAY_TOTAL = REPLAY_PAGES.length + (REPLAY_HAS_TODO_PAGE ? 1 : 0);
 });
 /** The last feature page's title (the tour's last page when nothing was added). */
-const LAST_FEATURE = CURRENT_PAGES.at(-1)?.title ?? '';
+const LAST_FEATURE = TOUR_PAGES.at(-1)?.title ?? '';
 /** The first page whose Try it opens another tab (else one that opens Today), for the Try it test. */
-const TAB_IDX = CURRENT_PAGES.findIndex((p) =>
+const TAB_IDX = TOUR_PAGES.findIndex((p) =>
   ['calendar', 'coach', 'fuel', 'settings'].includes(p.tryIt ?? ''),
 );
 // 1.15.1's pages (Next arm, set-up card) both try it on Today: then Today's tab is the check.
-const TRY_IDX = TAB_IDX >= 0 ? TAB_IDX : CURRENT_PAGES.findIndex((p) => p.tryIt === 'today');
-const TRY_PAGE = CURRENT_PAGES[TRY_IDX];
+const TRY_IDX = TAB_IDX >= 0 ? TAB_IDX : TOUR_PAGES.findIndex((p) => p.tryIt === 'today');
+const TRY_PAGE = TOUR_PAGES[TRY_IDX];
 
-/** A profile updated from the previous release: one finished session, that tour seen. */
+/** A profile updated from SEEN_FROM: one finished session, that release's tour seen. */
 async function openUpdated(page: Page) {
   await openApp(page, at(16, 18));
   await seed(
@@ -104,7 +128,7 @@ async function openUpdated(page: Page) {
         startedAt: at(13, 18) + MIN,
       },
     ],
-    { whatsNewSeen: PREV_RELEASE },
+    { whatsNewSeen: SEEN_FROM },
   );
   await expect(tour(page)).toBeVisible();
 }
@@ -123,7 +147,7 @@ test('an update shows the tour once: version on page 1, Next / Back, last page, 
   // Over Today (the screen underneath), never anything else.
   await expect(page.locator('[data-cal]').first()).toBeAttached();
   await expect(wn(page, 'count')).toHaveText(`1 of ${TOTAL}`);
-  await expect(wn(page, 'title')).toHaveText(CURRENT_PAGES[0]?.title ?? '');
+  await expect(wn(page, 'title')).toHaveText(TOUR_PAGES[0]?.title ?? '');
   await expect(wn(page, 'version')).toHaveText(
     new RegExp(`^Version ${APP_RELEASE.replace(/\./g, '\\.')} \\(build [0-9a-z-]+\\)$`),
   );
@@ -212,9 +236,9 @@ test('Try it closes the tour and opens the feature; Open to-dos (when a topic wa
   await page.locator('[data-tab="settings"]').click();
   await page.locator('[data-whats-new-open]').click();
   await expect(tour(page)).toBeVisible();
-  for (let i = 1; i < TOTAL; i++) await wn(page, 'next').click();
-  await expect(wn(page, 'count')).toHaveText(`${TOTAL} of ${TOTAL}`);
-  if (HAS_TODO_PAGE) {
+  for (let i = 1; i < REPLAY_TOTAL; i++) await wn(page, 'next').click();
+  await expect(wn(page, 'count')).toHaveText(`${REPLAY_TOTAL} of ${REPLAY_TOTAL}`);
+  if (REPLAY_HAS_TODO_PAGE) {
     await wn(page, 'open-todos').click();
     await expect(tour(page)).toHaveCount(0);
     await expect(page.locator('main[data-screen="todos"]')).toBeVisible();
@@ -249,7 +273,7 @@ test("a fresh profile never sees the tour (marked seen); Settings → What's new
 
   await page.locator('[data-whats-new-open]').click();
   await expect(tour(page)).toBeVisible();
-  await expect(wn(page, 'count')).toHaveText(`1 of ${TOTAL}`);
+  await expect(wn(page, 'count')).toHaveText(`1 of ${REPLAY_TOTAL}`);
   // The same label as About.
   await expect(wn(page, 'version')).toHaveText(versionText ?? '');
   await page.keyboard.press('Escape'); // = Skip
@@ -300,7 +324,7 @@ test('never over a workout or its preview, even on foreground; back on Today it 
   // foreground: facts refresh, but no tour over the preview.
   await page.locator('[data-start]').first().click();
   await expect(page.locator('[data-screen="preview"]')).toBeVisible();
-  await putSetting(page, 'whatsNew', { seenRelease: PREV_RELEASE });
+  await putSetting(page, 'whatsNew', { seenRelease: SEEN_FROM });
   const before = await todoCounts(page);
   await foreground(page);
   await expect
