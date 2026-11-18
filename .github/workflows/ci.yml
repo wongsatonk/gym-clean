@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,21 +23,52 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+
+  # The e2e run used to be one 27-minute job: the parallel phase, then the two camera phases one
+  # test at a time (playwright.config.ts). Each phase now gets its own runner at the same time, and
+  # the parallel phase is sharded, so the wall time is the slowest job instead of the sum. Every
+  # test still runs exactly once: shards 1-4 cover `mobile` + `pwa`, then one job per camera phase
+  # (`--no-deps`: alone on its runner, which is what the phase order was protecting).
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: parallel-1, args: '--project=mobile --project=pwa --shard=1/4' }
+          - { name: parallel-2, args: '--project=mobile --project=pwa --shard=2/4' }
+          - { name: parallel-3, args: '--project=mobile --project=pwa --shard=3/4' }
+          - { name: parallel-4, args: '--project=mobile --project=pwa --shard=4/4' }
+          - { name: person-camera, args: '--project=mobile-person-camera --no-deps' }
+          - { name: clips, args: '--project=mobile-clips --no-deps' }
+    name: e2e (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - name: Playwright browser cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
       - name: ffmpeg (fake camera clip for e2e)
         run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-      - run: npm run e2e
+      - run: npx playwright test ${{ matrix.args }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.name }}
           path: |
             playwright-report/
             test-results/
           retention-days: 7
 
   build:
-    needs: test
+    needs: [check, e2e]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:

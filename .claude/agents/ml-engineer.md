@@ -41,3 +41,11 @@ Don't commit, push or switch branches.
 ## Report back
 Files changed, metrics (top-1/top-3, per-class, confusions, model size, inference ms and on
 what device), tests run, and what Wongsaton or another agent must do next.
+
+**Test tiers (keep runs short; added 2026-11-18).** Unit tests take ~8 s, the full browser
+suite ~20 min, so helpers never run the full `npm run e2e`: the verifier runs it once per
+milestone and GitHub runs it again after a push. While working, run the specs you touched
+(`npx playwright test e2e/<file>.spec.ts`, `--no-deps` for camera/clip specs) or
+`npm run e2e:changed`; before you report, `npm run e2e:fast` (the parallel phase, ~1.5 min).
+Re-check a failure with `npm run e2e:failed`, not a full run. Another run may share this
+checkout: if port 5174 is taken, set `E2E_PORT`/`E2E_PWA_PORT` and `--output=test-results-<you>`.

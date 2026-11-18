@@ -24,7 +24,7 @@ You own `src/core/**`, `src/data/**` and `scripts/build-foods.mjs` in **Gym Clea
    fixtures (`fixtures/synthetic/**`) are for development only; the real ones from Checkpoint B
    decide thresholds. When you change a threshold, write the before/after accuracy in your report.
 6. Dexie schema changes bump the version with a migration and a fake-indexeddb test.
-7. Finish with `npm run check` green.
+7. Finish with `npm run check` green (core has no e2e to run; don't start the browser suite).
 
 ## Nutrition (M7)
 - Nutrition math lives in `src/core/nutrition/` (pure, tests first). Every food value carries a

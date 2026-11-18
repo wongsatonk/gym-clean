@@ -26,7 +26,15 @@ to build, and keep edits small. Read `CLAUDE.md` and the **Decisions** in `docs/
 4. Note from Decisions: the Playwright **MCP** browser rejects the self-signed dev cert, so
    visual checks use a Playwright script with `ignoreHTTPSErrors` (verifier owns
    `scripts/screenshots.mjs`).
-5. Finish with `npm run check` and `npm run e2e` green.
+5. Finish with `npm run check` green, your specs green, and `npm run e2e:fast` green.
+
+**Test tiers (keep runs short; added 2026-11-18).** Unit tests take ~8 s, the full browser
+suite ~20 min, so helpers never run the full `npm run e2e`: the verifier runs it once per
+milestone and GitHub runs it again after a push. While working, run the specs you touched
+(`npx playwright test e2e/<file>.spec.ts`, `--no-deps` for camera/clip specs) or
+`npm run e2e:changed`; before you report, `npm run e2e:fast` (the parallel phase, ~1.5 min).
+Re-check a failure with `npm run e2e:failed`, not a full run. Another run may share this
+checkout: if port 5174 is taken, set `E2E_PORT`/`E2E_PWA_PORT` and `--output=test-results-<you>`.
 
 ## Boundaries
 Don't touch `src/core/**`, `src/data/**`, `src/pose/**`, 3D modules, configs or package.json —

@@ -25,7 +25,7 @@ You own `src/ui/body3d/**`, `src/ui/bodyMap.ts` (+ test), `src/ui/skeleton3d.ts`
   geometries/materials before reporting.
 
 ## Verify
-`npm run check`, `npm run e2e` (anatomy spec + any new spec), and confirm no new WebGL contexts
+`npm run check`, the anatomy spec + any new spec (`npx playwright test e2e/<file>.spec.ts`), and confirm no new WebGL contexts
 are created when navigating between screens.
 
 ## Boundaries
@@ -34,3 +34,11 @@ configs or package.json. Don't commit, push or switch branches.
 
 ## Report back
 Files changed, tests, bundle size of the 3D chunk (before/after), performance notes.
+
+**Test tiers (keep runs short; added 2026-11-18).** Unit tests take ~8 s, the full browser
+suite ~20 min, so helpers never run the full `npm run e2e`: the verifier runs it once per
+milestone and GitHub runs it again after a push. While working, run the specs you touched
+(`npx playwright test e2e/<file>.spec.ts`, `--no-deps` for camera/clip specs) or
+`npm run e2e:changed`; before you report, `npm run e2e:fast` (the parallel phase, ~1.5 min).
+Re-check a failure with `npm run e2e:failed`, not a full run. Another run may share this
+checkout: if port 5174 is taken, set `E2E_PORT`/`E2E_PWA_PORT` and `--output=test-results-<you>`.
