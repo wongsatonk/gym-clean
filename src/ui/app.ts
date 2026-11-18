@@ -3,7 +3,9 @@
 import { restCueText, restCuesBetween } from '../core/restCues';
 import {
   currentPlanned,
+  currentSide,
   currentWarmup,
+  sideTurn,
   next,
   next as nextState,
   restElapsedMs,
@@ -281,6 +283,8 @@ import {
   type ShareSize,
 } from './shareMonth';
 import { saveFile } from './saveFile';
+import { ONE_SIDED_COPY, otherSide } from '../core/exercises/oneSided';
+import { oneSidedView } from './oneArm';
 import { APP_NAME } from '../core/brand';
 import { reducedMotion, screenEntrance, type EnterDir } from './motion';
 import { undoToast, type UndoToast } from './coach/undoToast';
@@ -820,6 +824,10 @@ export function mountApp(root: HTMLElement): void {
               if (!cameraHandsFree) closeCameraView();
               dispatch({ type: 'SET_DONE', now: now() });
             },
+            // M13b: Next arm on the first side of a one-sided set (it takes Set done's place).
+            onNextSide: () => {
+              if (view.screen === 'session') nextSide(view.s);
+            },
             ...(handsFree ? { handsFree: handsFreeOptions() } : {}),
           }),
     });
@@ -905,6 +913,8 @@ export function mountApp(root: HTMLElement): void {
       paused: s.paused,
       restElapsedMs: restElapsedMs(s, now()),
       ...cameraTarget(),
+      // M13b: locks the counter to the right arm, then the left after Next arm (null: two-sided).
+      sideTurn: sideTurn(s),
     });
     if (s.phase === 'exercise' && pendingSet) {
       cameraThisSet = true;
@@ -4967,6 +4977,11 @@ export function mountApp(root: HTMLElement): void {
       root.querySelector<HTMLElement>(`[data-effort-opt="${e.effort}"]`)?.focus();
     speakFocusCue(prev, s);
     speakBetweenSets(s);
+    // M13b: a one-sided set starts on the right, said out loud (voice over screen).
+    if (e.type === 'START_SET' && s.phase === 'exercise' && prev.phase !== 'exercise') {
+      const limb = oneSidedLimb(currentPlanned(s)?.exerciseId ?? '');
+      if (limb) voice.speak(ONE_SIDED_COPY[limb].spokenStart, { kind: 'cue' });
+    }
   }
 
   /**
@@ -5216,6 +5231,7 @@ export function mountApp(root: HTMLElement): void {
         today: today || undefined,
         last: last || undefined,
         warmup: warm ? { index: warm.index, total: warm.of } : undefined,
+        side: oneSidedView(id, s),
       },
       {
         onList: () => setSheet({ kind: 'list' }),
@@ -5231,8 +5247,26 @@ export function mountApp(root: HTMLElement): void {
             delta: dir * (field === 'reps' ? 1 : stepFor(s.unit)),
           }),
         onSetDone: () => dispatch({ type: 'SET_DONE', now: now() }),
+        onNextSide: () => nextSide(s),
       },
     );
+  }
+
+  /** M13b: the first side is done: log it, then NEXT_SIDE (the counter flips via syncCamera). */
+  function nextSide(s: SessionState): void {
+    const from = currentSide(s);
+    if (!from || s.doneSide || s.phase !== 'exercise') return;
+    const counts = { reps: s.reps, partials: s.partials };
+    rec(
+      (r) =>
+        void r.nextSide({
+          from,
+          to: otherSide(from),
+          logged: counts,
+          ...(cameraThisSet ? { counted: counts } : {}),
+        }),
+    );
+    dispatch({ type: 'NEXT_SIDE', now: now() });
   }
 
   /**

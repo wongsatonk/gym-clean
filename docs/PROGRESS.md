@@ -165,7 +165,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: `src/ui/screens/summary.ts`, `src/ui/screens/calendarDay.ts`, `src/ui/screens/history.ts`, `src/ui/lastSetCorrection.ts` (+tests).
   - Done when: a `sides` set reads "R 12 · L 11 × 20 kg" (≥ 20px), older sets unchanged, Fix edits either side; screenshots.
   - Deps: 10, 12.
-- [ ] 16. [main] Wiring + version.
+- [x] 16. [main] Wiring + version.
   - Files: `src/ui/app.ts` (dispatch `NEXT_SIDE`, pass the side to the exercise screen, camera view and counter, voice lines, dev log event), `package.json` 1.15.1 + `node scripts/sync-ios-version.mjs`.
   - Done when: `npm run check` passes; a manual click-through at 390×844 does Right → Next arm → Left → Set done with no console errors.
   - Deps: 3, 9, 11, 12, 13, 14, 15.
