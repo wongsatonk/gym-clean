@@ -92,7 +92,7 @@ test('fresh install: owner surfaces hidden and the dev log records nothing; 7 ta
   // About: no build hash, no switch. Six taps, a pause over 3 s, one tap: still no switch.
   await openAbout(page);
   const version = about(page).locator('[data-about-version]');
-  await expect(version).toHaveText(/^Version \d+\.\d+$/);
+  await expect(version).toHaveText(/^Version \d+\.\d+(\.[1-9]\d*)?$/);
   await expect(ownerSwitch(page)).toHaveCount(0);
   for (let i = 0; i < 6; i++) await version.click();
   await page.clock.fastForward(3500);

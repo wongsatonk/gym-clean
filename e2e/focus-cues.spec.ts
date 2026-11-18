@@ -370,7 +370,10 @@ test('(1, 6, 7, 8) rushed sets: cue after a count word; rows scored; Summary Foc
   await seedHandsFreeOff(page); // per-set camera: Set done closes the sheet
   await startPullA(page);
 
-  // A manual set (no camera): no focus score.
+  // A manual set (no camera): no focus score. M13b: the row is one-arm, so Next arm first; Set
+  // done within 700 ms of it is ignored (the double-tap guard).
+  await page.getByRole('button', { name: 'Next arm' }).click();
+  await page.waitForTimeout(800);
   await page.getByRole('button', { name: 'Set done' }).click();
   await expect(page.locator('[data-rest-clock]')).toBeVisible();
   await goToCurl(page);

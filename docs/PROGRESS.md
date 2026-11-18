@@ -169,7 +169,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: `src/ui/app.ts` (dispatch `NEXT_SIDE`, pass the side to the exercise screen, camera view and counter, voice lines, dev log event), `package.json` 1.15.1 + `node scripts/sync-ios-version.mjs`.
   - Done when: `npm run check` passes; a manual click-through at 390×844 does Right → Next arm → Left → Set done with no console errors.
   - Deps: 3, 9, 11, 12, 13, 14, 15.
-- [ ] 17. [ui-engineer] e2e: `e2e/one-arm.spec.ts`.
+- [x] 17. [ui-engineer] e2e: `e2e/one-arm.spec.ts`.
   - Manual One-Arm row: Right → Next arm (speech fake hears the switch line) → Left → Set done → Rest; summary and Calendar day show both sides; a two-arm exercise still shows Set done from the start.
   - Done when: green 3× (`--repeat-each 3`), full e2e green.
   - Deps: 16.
@@ -299,7 +299,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - About: the exception block lists **two** exceptions, both off until you turn them on: the barcode lookup (as now) and "Claude coach (Settings > Coach) uses your own Anthropic key. When on, it sends your chat messages, your plan and workout numbers and today's food totals to Anthropic to answer. Never Health data, body numbers, photos, check-ins, notes or video." (exact list from `CLAUDE_SENDS`). The about.test pin changes from "one exception" to the two. Landing page: the same two lines, static text.
   - Done when: about.test asserts both exceptions and that the Claude line names every `CLAUDE_NEVER_SENDS` group; landing page screenshot; `checkCopy` passes.
   - Deps: 4.
-- [ ] 17. [ui-engineer] Eval screen: brain picker.
+- [x] 17. [ui-engineer] Eval screen: brain picker.
   - Files: src/ui/screens/brainEval.ts(+test).
   - Owner mode only: Apple / Claude choice; Claude shows the cost estimate and needs a confirm tap before running; report shows tokens + estimated cost for Claude.
   - Done when: render tests + a 390×844 screenshot of the confirm.

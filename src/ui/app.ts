@@ -4846,6 +4846,7 @@ export function mountApp(root: HTMLElement): void {
     startTicker();
     render();
     speakFocusCue(null, s);
+    speakSideStart(null, s);
     speakBetweenSets(s);
   }
 
@@ -4977,11 +4978,17 @@ export function mountApp(root: HTMLElement): void {
       root.querySelector<HTMLElement>(`[data-effort-opt="${e.effort}"]`)?.focus();
     speakFocusCue(prev, s);
     speakBetweenSets(s);
-    // M13b: a one-sided set starts on the right, said out loud (voice over screen).
-    if (e.type === 'START_SET' && s.phase === 'exercise' && prev.phase !== 'exercise') {
-      const limb = oneSidedLimb(currentPlanned(s)?.exerciseId ?? '');
-      if (limb) voice.speak(ONE_SIDED_COPY[limb].spokenStart, { kind: 'cue' });
-    }
+    speakSideStart(prev, s);
+  }
+
+  /**
+   * M13b: a one-sided set starts on the right, said out loud (voice over screen) whenever a set
+   * comes up: workout start, after rest, the exercise list or Skip.
+   */
+  function speakSideStart(prev: SessionState | null, s: SessionState): void {
+    if (!shouldSpeakFocusCue(prev, s) || s.doneSide) return;
+    const limb = oneSidedLimb(currentPlanned(s)?.exerciseId ?? '');
+    if (limb) voice.speak(ONE_SIDED_COPY[limb].spokenStart, { kind: 'cue' });
   }
 
   /**
@@ -5267,6 +5274,8 @@ export function mountApp(root: HTMLElement): void {
         }),
     );
     dispatch({ type: 'NEXT_SIDE', now: now() });
+    // The camera counts the left from 0: nothing counted there must not log the right's reps.
+    if (camera && cameraThisSet) dispatch({ type: 'SET_COUNTED', reps: 0, partials: 0 });
   }
 
   /**

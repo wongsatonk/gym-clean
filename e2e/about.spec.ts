@@ -38,7 +38,9 @@ test('About: version without build, privacy promise, no links; credits open as p
   await openAbout(page);
 
   // Owner off: the plain version line, no build hash, no Owner tools switch yet.
-  await expect(about(page).locator('[data-about-version]')).toHaveText(/^Version \d+\.\d+$/);
+  await expect(about(page).locator('[data-about-version]')).toHaveText(
+    /^Version \d+\.\d+(\.[1-9]\d*)?$/,
+  );
   await expect(about(page)).not.toContainText('build');
   await expect(page.locator('[data-setting="owner-tools"]')).toHaveCount(0);
   await expect(about(page).locator('[data-about-privacy]')).toContainText(

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import {
+  APP_RELEASE,
   at,
   expectTapTargets,
   getSetting,
@@ -8,6 +9,10 @@ import {
   installMocks,
   record,
 } from './app.helpers';
+
+/** package.json's release, for the version row ("1.15.1, web app"). */
+const REL = APP_RELEASE;
+const REL_RE = REL.replace(/\./g, '\\.');
 
 /**
  * 1.15.0 Settings → Self-check (src/ui/screens/selfCheck.ts + src/ui/selfCheckRuns.ts), mounted
@@ -334,7 +339,7 @@ async function wiredCommon(page: Page, offsite: string[], errors: string[]): Pro
 test.describe('wired in the app, owner off (a fresh install)', () => {
   test.use({ owner: 'off' });
 
-  test('Settings → Self-check: no build hash on the screen or in the copy; version 1.15.0', async ({
+  test('Settings → Self-check: no build hash on the screen or in the copy; the release version', async ({
     page,
   }, testInfo) => {
     test.setTimeout(90_000);
@@ -342,11 +347,11 @@ test.describe('wired in the app, owner off (a fresh install)', () => {
     const { errors } = record(page);
     await openWired(page);
     await expect.poll(() => getSetting(page, 'ownerMode')).toMatchObject({ on: false });
-    await expect(row(page, 'version')).toContainText('1.15.0, web app');
+    await expect(row(page, 'version')).toContainText(`${REL}, web app`);
     const text = await wiredCommon(page, offsite, errors);
     await expect(screen(page)).not.toContainText('(build');
     expect(text).not.toContain('(build');
-    expect(text).toContain('App version: Info. 1.15.0, web app');
+    expect(text).toContain(`App version: Info. ${REL}, web app`);
     await shot(page, 'selfcheck-wired-owner-off', (n) => testInfo.outputPath(n));
   });
 });
@@ -361,10 +366,12 @@ test.describe('wired in the app, owner on', () => {
     const offsite = await guardNetwork(page);
     const { errors } = record(page);
     await openWired(page);
-    await expect(row(page, 'version')).toContainText(/1\.15\.0 \(build \w+\), web app/);
+    await expect(row(page, 'version')).toContainText(
+      new RegExp(`${REL_RE} \\(build \\w+\\), web app`),
+    );
     const text = await wiredCommon(page, offsite, errors);
-    expect(text).toMatch(/Version 1\.15\.0 \(build \w+\)/);
-    expect(text).toMatch(/App version: Info\. 1\.15\.0 \(build \w+\), web app/);
+    expect(text).toMatch(new RegExp(`Version ${REL_RE} \\(build \\w+\\)`));
+    expect(text).toMatch(new RegExp(`App version: Info\\. ${REL_RE} \\(build \\w+\\), web app`));
     await shot(page, 'selfcheck-wired-owner-on', (n) => testInfo.outputPath(n));
   });
 });
