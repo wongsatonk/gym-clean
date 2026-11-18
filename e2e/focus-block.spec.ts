@@ -44,6 +44,11 @@ test('"This month I want to build my chest" → days question → card → edit 
   await expectTapTargets(page, '[data-screen="coach"]');
   await options.filter({ hasText: '5 days' }).click();
 
+  // M13c: the plan has no abs, so one more step before the card. "No" keeps a chest-only block.
+  await expect(coachTab(page)).toContainText('Also add abs?');
+  await expect(coachTab(page).locator('[data-focus-block-card]')).toHaveCount(0);
+  await options.filter({ hasText: /^No$/ }).click();
+
   // The card: 4 weeks, collapsed, Apply / Not now.
   await expect(block(page)).toBeVisible();
   await expect(block(page)).toHaveAttribute('data-proposal-status', 'pending');
