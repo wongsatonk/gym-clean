@@ -464,7 +464,10 @@ for (const vp of [
     await openApp(page, at(13, 18));
     const start = page.locator('main[data-screen="today"] [data-start]').first();
     await expect(start).toBeInViewport({ ratio: 1 });
-    expect((await start.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(56);
+    // Polled: Today re-renders once its data lands, so a one-shot read can catch the swap (CI).
+    await expect
+      .poll(async () => (await start.boundingBox())?.height ?? 0)
+      .toBeGreaterThanOrEqual(56);
     expect(await filledButtons(page)).toEqual(['Start workout']);
 
     const labels = page.locator('[data-tabbar] .tab-label');
