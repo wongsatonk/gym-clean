@@ -12,7 +12,7 @@ import {
   type AutoStopReason,
 } from '../core/autoSet';
 import { autoSetConfigFor, focusFlagsFor, ruleFor } from '../core/exercises';
-import { createFocusTracker, type FocusCue, type FocusTracker } from '../core/focus';
+import { CUE_TEXT, createFocusTracker, type FocusCue, type FocusTracker } from '../core/focus';
 import { FpsMeter } from '../core/fps';
 import {
   createCoachSpeech,
@@ -29,6 +29,7 @@ import { openCamera, stopStream, type Facing } from '../pose/camera';
 import type { PoseTracker } from '../pose/landmarker';
 import { describeLoadError } from '../pose/loadError';
 import { createAutoStopBanner, type AutoStopBannerHandle } from './autoStopBanner';
+import { createFrameStrip, createSetupControl } from './cameraSetup';
 import { createHoldPanel, type HoldPanelHandle } from './holdPanel';
 import {
   createCameraRestPanel,
@@ -283,6 +284,8 @@ export type RepPanel = {
   readonly el: HTMLElement;
   /** False while the person is missing or not tracked yet (the "Step into frame" state). */
   readonly inFrame: boolean;
+  /** Reps shown for this set (after setBase / freeze). */
+  readonly reps: number;
   /** Feed one detector result (null = no person found). Returns the counter's events. */
   update(frame: LandmarkFrame | null): RepEvent[];
   reset(): void;
@@ -435,6 +438,8 @@ export function createRepPanel(
     clock?: () => number;
     /** Every rep/partial event, in order (developer log). */
     onRepEvent?: (ev: RepEvent) => void;
+    /** A hint was handed to the voice (its own words, before any persona rewrite). */
+    onHintSpoken?: (text: string) => void;
   },
 ): RepPanel {
   let target = opts.target;
@@ -557,6 +562,7 @@ export function createRepPanel(
       const u = voice.speak(d.text, { kind: d.kind, cancel });
       // u.text is the line actually spoken (the drill persona may rewrite hints).
       report({ t, text: u?.text ?? d.text, kind: d.kind });
+      if (d.kind === 'hint') opts.onHintSpoken?.(d.text);
       if (u) {
         const done = () => apply(policy.ended(d.id, clock()));
         u.addEventListener('end', done);
@@ -592,6 +598,9 @@ export function createRepPanel(
   return {
     el,
     gauge: gauge.el,
+    get reps() {
+      return shownCounts().reps;
+    },
     get inFrame() {
       return inFrame;
     },
@@ -713,13 +722,6 @@ function placementPictogram(view: 'side' | 'front'): SVGSVGElement {
     `<g class="pic-person">${person}</g>`;
   return svg;
 }
-
-/** Card stays up until tracking has held this long. */
-const SETUP_STABLE_MS = 1500;
-/** Card comes back after the person has been out of frame this long. */
-const SETUP_LOST_MS = 1000;
-/** "Phone position" tapped: keep the card up at least this long even while tracking. */
-const SETUP_MANUAL_MS = 8000;
 
 export function createCameraView(opts: CameraViewOptions): CameraView {
   let facing: Facing = 'user';
@@ -906,6 +908,10 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
       ? createRepPanel(repCounter, rule.limb, {
           ...opts,
           onRepEvent: (ev) => rec((r) => r.repEvent(ev)),
+          // The focus cue said it (not rate-dropped): the strip won't say it again this loss.
+          onHintSpoken: (text) => {
+            if (text === CUE_TEXT.outOfFrame) setup.heardOutOfFrame();
+          },
           onSpeech: (e) => {
             opts.onSpeech?.(e);
             rec((r) =>
@@ -931,13 +937,10 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   const overlay = h('canvas', { class: 'cam-overlay' });
   const status = h('p', { class: 'cam-status', 'aria-live': 'polite' }, 'Starting camera…');
 
-  // ---- "Set up your phone" card ----
-  let setupOpen = Boolean(placement);
-  let stableSince: number | null = null;
-  let lostSince: number | null = null;
-  let holdUntil = 0;
-  // "Got it" tapped: don't bring the card back until the person has been in frame and lost again.
-  let dismissed = false;
+  // ---- "Set up your phone" card + "Step into frame" strip (M13b: timing in cameraSetup.ts) ----
+  const setup = createSetupControl(Boolean(placement));
+  let setupOpen = setup.card;
+  const frameStrip = counter ? createFrameStrip() : null;
   const setupCard = placement
     ? h(
         'section',
@@ -960,7 +963,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           {
             class: 'ghost-btn setup-hide',
             onclick: () => {
-              dismissed = true;
+              setup.dismiss();
               showSetup(false);
               setupBtn?.focus();
             },
@@ -976,7 +979,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           class: 'cam-chip setup-open',
           hidden: true,
           onclick: () => {
-            holdUntil = performance.now() + SETUP_MANUAL_MS;
+            setup.openManual(performance.now());
             showSetup(true);
           },
         },
@@ -993,19 +996,30 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     setupBtn.hidden = open;
   }
 
-  /** Auto show/hide: hides once tracking is stable, comes back when the person is lost. */
-  function updateSetup(inFrame: boolean, now: number): void {
-    if (!setupCard) return;
-    if (inFrame) {
-      lostSince = null;
-      dismissed = false;
-      stableSince ??= now;
-      if (setupOpen && now - stableSince >= SETUP_STABLE_MS && now >= holdUntil) showSetup(false);
-    } else {
-      stableSince = null;
-      lostSince ??= now;
-      if (!setupOpen && !dismissed && now - lostSince >= SETUP_LOST_MS) showSetup(true);
-    }
+  /**
+   * One tick: the card closes (stable tracking, first rep, 10 s) and never re-opens by itself; a
+   * loss shows the strip, spoken once per loss mid-set unless the focus cue already said it.
+   */
+  function updateSetup(frame: LandmarkFrame | null, now: number): void {
+    const inFrame = counter ? counter.inFrame : frame !== null;
+    const reps = counter?.reps ?? 0;
+    const autoState = auto?.state ?? 'off';
+    // Like the focus outOfFrame rule: nobody in view with a hands-free stop to follow is the set
+    // ending, not something to call him back for.
+    const present = frame !== null && personInFrame(frame);
+    const autoStopFollows =
+      autoState === 'set' && autoConfig !== null && reps >= autoConfig.stopMinReps;
+    const v = setup.tick({
+      t: now,
+      inFrame,
+      counted: reps > 0,
+      live: mode === 'set' && (autoState === 'off' || autoState === 'set'),
+      speakable: present || !autoStopFollows,
+    });
+    if (v.card !== setupOpen) showSetup(v.card);
+    frameStrip?.show(v.strip);
+    stage.classList.toggle('frame-lost', v.strip);
+    if (v.speak) say(CUE_TEXT.outOfFrame);
   }
 
   // ---- 3D live skeleton: collapsed by default, loaded on first open ----
@@ -1125,6 +1139,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
     overlay,
     hud,
     gaugeSlot,
+    frameStrip?.el,
     setupCard,
     h('div', { class: 'cam-stage-bottom' }, setupBtn, switchBtn),
   );
@@ -1469,7 +1484,7 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
           }
         });
       }
-      updateSetup(counter ? counter.inFrame : frame !== null, now);
+      updateSetup(frame, now);
       skeleton?.update(frame?.world, facing === 'user');
       if (now - lastStatus > 250) {
         lastStatus = now;

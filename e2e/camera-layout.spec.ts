@@ -110,7 +110,8 @@ test('curl camera: big video, "0 / 12" + set line, set-up card spoken once, 3D c
   expect(doneBox?.height ?? 0).toBeGreaterThanOrEqual(56);
   expect((doneBox?.y ?? 0) + (doneBox?.height ?? 0)).toBeLessThanOrEqual(844);
 
-  // Phone set-up card (no person in the test pattern, so it stays up), spoken exactly once.
+  // Phone set-up card (no person in the test pattern, so it stays up: 10 s at most since M13b),
+  // spoken exactly once.
   const card = cam.getByRole('region', { name: 'Set up your phone' });
   await expect(card).toBeVisible();
   await expect(card.locator('.setup-line').first()).toBeVisible();
@@ -284,6 +285,12 @@ test('short phone (375×667): the set-up card never covers the count', async ({ 
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 375, height: 667 });
   await mockSpeech(page);
+  // Nobody in view, from a fast fake tracker: the card closes by itself after 10 s (M13b), and the
+  // real CPU model on a loaded runner can spend that long between frames.
+  await fakeTrackerFromFixture(page, FIXTURE);
+  await page.addInitScript(() => {
+    (window as unknown as { __lost: boolean }).__lost = true;
+  });
   await page.goto('/');
   await mountCurlCamera(page, false);
   const cam = page.getByRole('dialog', { name: 'Camera' });
@@ -549,6 +556,7 @@ async function fakeTrackerFromFixture(page: Page, fixture: string): Promise<void
             delegate: 'CPU',
             detect(_video, t) {
               first ??= t;
+              if (window.__lost) return null; // M13b: nobody in view (bent over, out of frame)
               const i = Math.floor((t - first) / 33.333);
               window.__gaugeIdx = i % frames.length;
               if (window.__gaugeFreezeAt != null && i >= window.__gaugeFreezeAt)
@@ -695,3 +703,72 @@ for (const vp of [
     expect(errors).toEqual([]);
   });
 }
+
+// M13b task 14 (gym videos 2026-11-17): the set-up card kept re-opening over the lower half of the
+// video every time tracking lost him bent over. Now: after the first rep a loss shows a one-line
+// "Step into frame" strip at the top (under the count), spoken once, and never the card.
+test('after the first rep, 3 s out of frame: "Step into frame" strip at the top, spoken once, no card', async ({
+  page,
+}, info) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await mockSpeech(page);
+  await fakeTrackerFromFixture(page, FIXTURE);
+  await page.addInitScript(() => {
+    const w = window as unknown as { __lost: boolean; __gaugeFreezeAt: number | null };
+    w.__lost = false;
+    w.__gaugeFreezeAt = null;
+  });
+  await page.goto('/');
+  await mountCurlCamera(page, false);
+  const cam = page.getByRole('dialog', { name: 'Camera' });
+  const card = cam.getByRole('region', { name: 'Set up your phone' });
+  const strip = cam.locator('[data-frame-strip]');
+  await expect(card).toBeHidden({ timeout: 30_000 });
+  await expect(strip).toBeHidden();
+  await expect
+    .poll(async () => Number(await cam.locator('[data-reps]').getAttribute('data-reps')), {
+      timeout: 20_000,
+    })
+    .toBeGreaterThanOrEqual(1);
+
+  await page.evaluate(() => {
+    (window as unknown as { __lost: boolean }).__lost = true;
+  });
+  await expect(strip).toBeVisible({ timeout: 5_000 });
+  await page.waitForTimeout(3_000);
+  await expect(strip).toBeVisible();
+  await expect(strip).toHaveText('Step into frame');
+  await expect(card).toBeHidden();
+  // The panel doesn't repeat the words (frame hint, or the focus cue in the coach line).
+  await expect(cam.locator('.rep-hint')).toBeHidden();
+  await expect(cam.locator('.rep-coach[data-cue="outOfFrame"]')).toBeHidden();
+  await page.screenshot({ path: info.outputPath('m13b-frame-strip-390x844.png') });
+
+  // At the top: under the count, one line, wholly in the upper half of the video.
+  const stage = await rect(page, '.cam-stage');
+  const panel = await rect(page, '.rep-panel');
+  const s = await rect(page, '[data-frame-strip]');
+  expect(s.top).toBeGreaterThanOrEqual(panel.bottom);
+  expect(s.bottom).toBeLessThanOrEqual(stage.top + stage.height / 2);
+  const style = await strip.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { font: parseFloat(cs.fontSize), lineH: parseFloat(cs.lineHeight) };
+  });
+  expect(style.font).toBeGreaterThanOrEqual(20);
+  expect(s.height).toBeLessThan(style.lineH * 2 + 20); // one line
+
+  // Spoken once for this loss (by the focus cue or the strip, never both).
+  const said = (await speech(page)).filter((t) => t === 'Step back into frame.');
+  expect(said).toHaveLength(1);
+
+  // Back in view: the strip goes, the card stays closed.
+  await page.evaluate(() => {
+    (window as unknown as { __lost: boolean }).__lost = false;
+  });
+  await expect(strip).toBeHidden({ timeout: 5_000 });
+  await expect(card).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  expect(errors).toEqual([]);
+});

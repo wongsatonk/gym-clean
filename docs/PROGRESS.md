@@ -146,7 +146,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Side label ("Right arm", ≥ 20px) over the count (≥ 64px); on the first side the full-width primary button is **Next arm** (≥ 56px; no Set done there); on the second side Set done; Next arm speaks the switch line (cuts count speech) and calls back `onNextSide`; the camera view takes the side as a prop and shows it; manual one-sided exercises get per-side +/-; "leg" wording from task 5's data. Nothing else new reachable mid-set.
   - Done when: render tests (both sides, manual + camera, leg wording) and 390×844 screenshots `docs/screenshots/m13b-*` (right, left, camera with label).
   - Deps: 6, 10, 11.
-- [ ] 14. [ui-engineer] The set-up card gets out of the way.
+- [x] 14. [ui-engineer] The set-up card gets out of the way.
   - Files: `src/ui/cameraView.ts`(+test), `src/styles.css`.
   - Full card only before the set's first rep; closes after 1.5 s tracked (today) **or 10 s**; after the first rep, a loss shows a one-line "Step into frame" strip at the top of the stage (spoken once per loss if the outOfFrame cue doesn't already say it), never the full card; "Phone position" still opens the card.
   - Done when: render test (first rep, then 3 s out of frame → strip shown, card hidden, nothing over the lower half); screenshot of the strip.
@@ -274,7 +274,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - `runBrainEval` takes the brain (Apple or Claude) instead of only the Apple bridge; for Claude it first returns an estimate (`requests × average tokens × price`, task 7) for a confirm; the report keeps ids and numbers only (plus tokens and estimated cost for Claude). Replaces the M10 C3 plan of a Mac script with his key in an env var: **the key never leaves the phone**, so the eval runs on the phone (owner mode).
   - Done when tests (fake brains) cover both brains, the estimate, and a report with no reply text.
   - Deps: 10.
-- [ ] 14. [ui-engineer] Settings → Claude coach screen.
+- [x] 14. [ui-engineer] Settings → Claude coach screen.
   - Files: src/ui/screens/claudeSettings.ts(+test), src/ui/screens/claudeSettings.css, src/ui/screens/coachSettings.ts(+test) (a row "Claude coach: Off / On / No key" → the screen).
   - Props in / callbacks out. Off state: what Claude is, cost is paid by you to Anthropic, the **"What is sent" card** rendering `CLAUDE_SENDS` / `CLAUDE_NEVER_SENDS` (props), and "Turn on" that first shows the explainer again with **I understand** (sets `explainerOkAt`). Key: a paste field (`type=password`, `autocomplete=off`, `autocapitalize=off`, `spellcheck=false`), Save (the field clears at once), "Key saved" + Test key + **Remove key** (two taps). Model picker (labels + "about US$x per 100 questions" from props), daily limit 10 / 30 / 60, order (Claude first / Apple first, if M12-s3-q1 keeps it), usage: today "12 questions · about US$0.04", this month the same. A tip line: "You can also set a monthly spend limit in your Anthropic account." PWA: one line "Claude coach is in the iPhone app." and nothing else.
   - Done when: render tests (each state; the key never rendered back; two-tap remove; keyboard) + 390×844 screenshots (off with the What is sent card, explainer, key saved with usage, PWA line).
@@ -1141,7 +1141,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: src/ui/screens/preview.ts(+test) ("Record best reps" switch, off each workout, one line "Clips stay on this phone. Others are blurred."), the camera screen module under src/ui (dot + "Clips" text while armed, top corner, not over the count), src/ui/screens/rest.ts(+test) ("Save last rep" ≥ 56px, "Saved" state; shown only when armed and a candidate exists).
   - Done when: render tests (off by default, dot only when armed, Save last rep hidden when not armed); 390×844 screenshots of preview, camera with the dot, Rest with the button.
   - Deps: 3.
-- [ ] 14. [ui-engineer] Clips screen + clip detail + Summary card.
+- [x] 14. [ui-engineer] Clips screen + clip detail + Summary card.
   - Files: src/ui/screens/clips.ts(+test), src/ui/screens/clip.ts(+test), src/ui/screens/summary.ts(+test), a css file.
   - List newest first (thumbnail, exercise, date, trigger label, star, "Deletes in N days" unless starred); detail: player (muted, loop), Star, Delete (confirm), **Share**, the Save Video / iCloud Photos line; empty state; Summary card "2 clips saved" → Clips.
   - Done when: render tests (empty, list, starred, expiring); 390×844 screenshots of list, detail, Summary card.
