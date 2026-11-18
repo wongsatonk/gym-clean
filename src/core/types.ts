@@ -470,6 +470,8 @@ export type FocusBlockParams = {
   weekdays: number[];
   /** Local YYYY-MM-DD. */
   startDate: string;
+  /** M13c: "Also add abs?" answered Yes — abs rows join the block and end with it. */
+  alsoCore?: true;
 };
 
 /** A dated, deterministic block the app builds; a brain only picks the params. */
@@ -801,6 +803,8 @@ export type Intake = {
   sessionMin: 30 | 45 | 60 | 75;
   experience: 'new' | 'some' | 'years';
   easyOn: BodyArea[];
+  /** M13c: "Add abs to your plan?" (default No). */
+  wantsCore?: boolean;
   at: number;
 };
 
@@ -852,3 +856,30 @@ export type ShareLead = 'sessions' | 'volume' | 'streak';
 
 /** Story-size share numbers; warm-ups excluded. */
 export type ShareStats = { sessionsDone: number; volumeKg: number; streakWeeks: number };
+
+// ---- M13c: Library, abs and home polish (SPEC M13c data model) ----
+
+export type LibraryGroupBy = 'muscle' | 'equipment' | 'day' | 'movement' | 'az';
+
+export type SearchKind = 'exercise' | 'setting' | 'learn' | 'food' | 'workout' | 'chat' | 'meal';
+
+export type SearchItem = {
+  kind: SearchKind;
+  id: string;
+  title: string;
+  subtitle?: string;
+  keywords: string[];
+  /** Local YYYY-MM-DD, for workout / chat / meal items. */
+  date?: string;
+};
+
+export type SearchHit = SearchItem & { score: number };
+
+/** A parsed date phrase ("yesterday", "last week", "12 nov"), inclusive local dates. */
+export type DateQuery = { from: string; to: string } | null;
+
+/** settings 'background'. */
+export type BackgroundStyle = 'glow' | 'plain';
+
+/** settings 'claudeOffer': the explain card shows at most once a day. */
+export type ClaudeOffer = { lastShownDate?: string };

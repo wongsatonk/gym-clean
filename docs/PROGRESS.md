@@ -108,7 +108,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
 
 - [x] 0a. [main] Ask Wongsaton M13c-q1…q4. **Answered 2026-11-18** (Decision "M13c answers").
 - [x] 0b. [planner] Renumber releases: M13c 1.16.0, M12 slice 3 1.17.0, M14 1.18.0, M15 1.19.0 in SPEC and PROGRESS headings, tasks and Status (2026-11-18).
-- [ ] 1. [main] Shared types, no behaviour change.
+- [x] 1. [main] Shared types, no behaviour change. **Done 2026-11-18:** all listed types except the `library` routes (added with their handler in task 16, since `AppRoute` is exhaustive in app.ts/routes.ts) and `libraryOpened` (task 5 didn't need it).
   - Files: src/core/types.ts.
   - Adds: `AppRoute` + `'library' | 'library/exercise'`; `LibraryGroupBy = 'muscle' | 'equipment' | 'day' | 'movement' | 'az'`; `SearchKind = 'exercise' | 'setting' | 'learn' | 'food' | 'workout' | 'chat' | 'meal'`; `SearchItem = { kind; id; title; subtitle?; keywords: string[]; date?: string }`; `SearchHit = SearchItem & { score: number }`; `DateQuery = { from: string; to: string } | null`; `BackgroundStyle = 'glow' | 'plain'`; `FocusBlockParams.alsoCore?: true`; `Intake.wantsCore?: boolean`; `ClaudeOffer = { lastShownDate?: string }` (settings `'claudeOffer'`); `TodoDetectorId` + `'libraryOpened'` if task 5 needs it. **No** `addCore` action (dropped by his q3 answer).
   - Done when: `npm run check` passes; no runtime change.
