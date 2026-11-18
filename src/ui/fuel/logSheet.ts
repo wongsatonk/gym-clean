@@ -29,7 +29,7 @@ import {
   stepper,
 } from './common';
 import { GRAM_STEP, SERVING_STEP, slotChips } from './entrySheet';
-import { photoButton } from './photoCapture';
+import { photoButtons } from './photoCapture';
 
 /** M7b-q4: shown in place of the Photo button until a food model is imported. */
 export const PHOTO_HINT = 'Log from a photo: add a food model in Settings.';
@@ -242,8 +242,14 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
     ? p.photoAvailable
       ? h(
           'div',
-          { class: 'log-photo', 'data-log-photo': true },
-          photoButton({ onFile: (f) => onPhoto(f), label: 'Log from a photo' }),
+          // M13c task 15: Take photo + Choose from library, one handler.
+          {
+            class: 'log-photo',
+            'data-log-photo': true,
+            role: 'group',
+            'aria-label': 'Log from a photo',
+          },
+          photoButtons({ onFile: (f) => onPhoto(f) }),
         )
       : h('p', { class: 'fuel-hint log-photo-hint', 'data-photo-hint': true }, PHOTO_HINT)
     : null;

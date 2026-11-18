@@ -1,11 +1,14 @@
 // M7b task 12: take or pick a meal photo and shrink it for the food classifier.
-// A ≥ 56px "Photo" button over a hidden `<input type="file" accept="image/*" capture="environment">`
-// (the iPhone camera opens; Photos is still offered). The photo is decoded the right way up
+// M13c task 15: two ≥ 56px buttons, each over its own hidden file input (the Progress-photos
+// pattern): **Take photo** (`capture="environment"`, the iPhone camera opens) and **Choose from
+// library** (no `capture`: the iOS photo picker, no Photos permission prompt). Both hand the file
+// to the same `onFile`, so a library photo takes exactly the camera path. The photo is decoded the right way up
 // (EXIF orientation), drawn to a canvas with a ≤ 512 px long edge, and handed back in memory.
 // Nothing is stored or sent from here: a JPEG blob is made only when the caller asks for one
 // (save-photos on), and the caller drops the canvas after logging or cancelling.
 //
-// e2e hooks: `[data-photo-open]` (the button), `[data-photo-input]` (the file input).
+// e2e hooks: `[data-photo-open]` / `[data-photo-input]` (Take photo: button / camera input),
+// `[data-photo-library]` / `[data-photo-library-input]` (Choose from library: button / input).
 import { h } from '../dom';
 import { icon } from '../icons';
 import './photo.css';
@@ -137,23 +140,30 @@ function toJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
   );
 }
 
+export const PHOTO_TAKE_LABEL = 'Take photo';
+export const PHOTO_LIBRARY_LABEL = 'Choose from library';
+
 /**
- * The "Photo" button: a visible ≥ 56px button that opens the hidden camera/file input. `onFile`
- * gets the picked file; the input is cleared right after, so the same photo can be picked again
- * and the input doesn't hold on to it.
+ * One hidden file input + the visible button that opens it. `onFile` gets the picked file; the
+ * input is cleared right after, so the same photo can be picked again and the input doesn't hold
+ * on to it.
  */
-export function photoButton(o: {
+function picker(o: {
+  capture: 'environment' | undefined;
+  inputHook: string;
+  buttonHook: string;
+  iconName: 'camera' | 'plus';
+  label: string;
   onFile: (file: File) => void;
-  label?: string | undefined;
-}): HTMLElement {
+}): { btn: HTMLElement; input: HTMLInputElement } {
   const input = h('input', {
     type: 'file',
     accept: 'image/*',
-    capture: 'environment',
+    capture: o.capture,
     class: 'photo-input',
     tabindex: '-1',
     'aria-hidden': 'true',
-    'data-photo-input': true,
+    [o.inputHook]: true,
   });
   input.addEventListener('change', () => {
     const file = input.files?.[0];
@@ -165,11 +175,36 @@ export function photoButton(o: {
     {
       type: 'button',
       class: 'fuel-secondary photo-open',
-      'data-photo-open': true,
+      [o.buttonHook]: true,
       onclick: () => input.click(),
     },
-    icon('camera', 'md'),
-    h('span', {}, o.label ?? 'Photo'),
+    icon(o.iconName, 'md'),
+    h('span', {}, o.label),
   );
-  return h('div', { class: 'photo-pick' }, btn, input);
+  return { btn, input };
+}
+
+/**
+ * The Log food photo row: **Take photo** and **Choose from library**, side by side. Both inputs
+ * reach the same `onFile` (EXIF-upright decode, ≤ 512 px, recognition, top 3 + confirm happen in
+ * the caller, the same for either source).
+ */
+export function photoButtons(o: { onFile: (file: File) => void }): HTMLElement {
+  const take = picker({
+    capture: 'environment',
+    inputHook: 'data-photo-input',
+    buttonHook: 'data-photo-open',
+    iconName: 'camera',
+    label: PHOTO_TAKE_LABEL,
+    onFile: o.onFile,
+  });
+  const library = picker({
+    capture: undefined,
+    inputHook: 'data-photo-library-input',
+    buttonHook: 'data-photo-library',
+    iconName: 'plus',
+    label: PHOTO_LIBRARY_LABEL,
+    onFile: o.onFile,
+  });
+  return h('div', { class: 'photo-pick' }, take.btn, library.btn, take.input, library.input);
 }
