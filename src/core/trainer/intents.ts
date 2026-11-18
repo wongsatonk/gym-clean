@@ -512,6 +512,30 @@ export function namesExercise(text: string, ctx: MatchContext = {}): boolean {
 }
 
 /**
+ * 1.16.2 (brain/facts.ts): the exercise(s) a text names. The one the rules would pick when they can
+ * pin it down; otherwise every best-scoring full-name/alias candidate, else every exercise whose
+ * last name word was typed ("row" → all rows); none → []. Never guesses between them.
+ */
+export function exercisesNamed(text: string, ctx: MatchContext = {}): string[] {
+  const t = normalizeText(text);
+  const one = exerciseOf(t, ctx);
+  if (one !== undefined) return [one];
+  const { candidates, heads } = exerciseHits(t, ctx);
+  const top = Math.max(0, ...candidates.map((c) => c.score));
+  const ids =
+    candidates.length > 0
+      ? candidates.filter((c) => c.score === top).map((c) => c.id)
+      : heads.map((n) => n.id);
+  return [...new Set(ids)];
+}
+
+/** A phrase list matched the way phrases.json is (whole words, trailing s, '*' endings). */
+export function phraseMatcher(list: readonly string[]): (text: string) => boolean {
+  const m = compileList(list);
+  return (text) => has(m, normalizeText(text));
+}
+
+/**
  * In "X instead of Y" the exercise being replaced is Y (1.15.2 eval req-058). When Y names an
  * exercise only Y is read: `{ id }` (undefined when Y is unclear, so route.ts asks the model),
  * never X. No marker, or nothing named after it: undefined (the usual reading of the whole text).

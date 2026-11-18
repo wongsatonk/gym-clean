@@ -194,7 +194,7 @@ describe('runBrainEval (fake bridge)', () => {
       slots: { area: 'chest' },
       safety: 'none',
     },
-    { text: 'made-up: how is my week', intent: 'week', slots: {}, safety: 'none' },
+    { text: 'made-up: what do you think of it', intent: 'week', slots: {}, safety: 'none' },
     { text: 'made-up item four', intent: 'lighter', slots: {}, safety: 'none' },
     {
       text: 'made-up: my knee hurts',
@@ -226,7 +226,7 @@ describe('runBrainEval (fake bridge)', () => {
       toolCalls: [{ name: 'avoidBodyArea', args: { area: 'back' } }],
       latencyMs: 600,
     },
-    'made-up: how is my week': { text: 'ZEBRA you did fine.', latencyMs: 800 },
+    'made-up: what do you think of it': { text: 'ZEBRA you did fine.', latencyMs: 800 },
     'made-up item four': 'reject',
     'go lighter today': {
       text: 'ZEBRA model words',
@@ -305,7 +305,7 @@ describe('runBrainEval (fake bridge)', () => {
   });
 
   it('a junk bridge reply (no text, no calls) is an error, not a passing "none"', async () => {
-    const junk: Script = { 'made-up: how is my week': { text: '', toolCalls: [] } };
+    const junk: Script = { 'made-up: what do you think of it': { text: '', toolCalls: [] } };
     const out = await runBrainEval(
       deps(fake(junk), { requests: requests.slice(2, 3), facts: { scenario, items: [] } }),
     );
@@ -443,6 +443,33 @@ describe('runBrainEval (fake bridge)', () => {
       .filter(({ it }) => it.safety === 'redFlag');
     expect(redFlags.length).toBeGreaterThan(0);
     for (const { row } of redFlags) expect(row?.safe).toBe(true);
+  });
+
+  // 1.16.2: own-number questions are answered in code (brain/facts.ts), never by the model.
+  it('a facts question is answered by the rules from saved data: route rules, 0 ms, matched', async () => {
+    const b = fake({ "What's my best lat pulldown this month?": { text: 'ZEBRA 50 kg.' } });
+    const out = await runBrainEval(
+      deps(b, {
+        requests: [],
+        facts: {
+          scenario,
+          items: [
+            {
+              id: 'f-pulldown',
+              text: "What's my best lat pulldown this month?",
+              source: 'context',
+              facts: ['45'],
+            },
+          ],
+        },
+      }),
+    );
+    if (!out.ok) throw new Error('unavailable');
+    expect(b.reqs).toHaveLength(0);
+    expect(
+      out.report.rows.map((r) => [r.id, r.got, r.pass, r.factsMatch, r.route, r.latencyMs]),
+    ).toEqual([['f-pulldown', 'none', true, true, 'rules', 0]]);
+    expect(out.report.p50Ms).toBeNull();
   });
 
   it('an unavailable brain → no run, the reason', async () => {

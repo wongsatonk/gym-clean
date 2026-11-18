@@ -1,0 +1,485 @@
+{
+  "note": "Release 1.16.2 facts answerer (brain/facts.ts): which kind of question about the user's own saved numbers a message is. Matched like phrases.json (whole words on normalized text, a trailing 's' always allowed, '*' = any word ending). A message is a fact question only when it has a '?' or doesn't start with a 'statementStarts' word ('I had a big lunch' is a statement; 'tip for the dumbbell row' and 'calories remaining' are questions), doesn't start with an 'adviceStarts' phrase, has no 'block', 'advice' or 'otherPeople' phrase, and a kind's every 'all' group has a hit and none of its 'none' phrases. Kinds are tried in order; the first hit wins. 'exercise': 'required' = the message must name an exercise, 'none' = it must not, 'any' = either. 'day': 'required' = it must name a day (today, tomorrow, a weekday). Unknown → no kind → the model answers as before. Advice and judgement questions ('Should I train hard today?', 'what should I do', 'is my form ok', 'too heavy') and 'plan my…' requests go to the model, which has the plan line and the Lighter-today reasons; a question about someone else's numbers ('my wife', 'she') never gets the user's. 'What weight should I use on X' is a lookup (planned), not advice. Someone else's numbers are also caught structurally: an 'auxiliaries' word followed by a subject that isn't I / you / my / me (facts.ts) and isn't a 'notSubjects' word, a day, a number or an exercise ('What did she lift…', 'how much has he eaten') → null.",
+  "statementStarts": ["i", "im", "ive", "id", "my", "we", "please", "let", "lets"],
+  "block": [
+    "why",
+    "how do i",
+    "how to",
+    "how should i",
+    "is it ok",
+    "is it okay",
+    "is it bad",
+    "is it safe",
+    "is it normal",
+    "what if",
+    "could you",
+    "can you",
+    "would you",
+    "will you",
+    "please"
+  ],
+  "advice": [
+    "what should",
+    "what can i",
+    "how can i",
+    "how hard",
+    "how heavy should",
+    "is my form",
+    "too heavy",
+    "too light",
+    "good",
+    "mean",
+    "ready",
+    "worth",
+    "thoughts",
+    "what do you think",
+    "do you think",
+    "again",
+    "plan my",
+    "plan out",
+    "max",
+    "maximum",
+    "protein in",
+    "protein is in",
+    "calories in",
+    "calories are in",
+    "kcal in"
+  ],
+  "otherPeople": [
+    "wife",
+    "husband",
+    "partner",
+    "friend",
+    "girlfriend",
+    "boyfriend",
+    "brother",
+    "sister",
+    "mom",
+    "dad",
+    "son",
+    "daughter",
+    "they",
+    "their",
+    "them"
+  ],
+  "auxiliaries": ["did", "does", "has", "have", "is", "was", "were"],
+  "notSubjects": [
+    "the",
+    "a",
+    "an",
+    "this",
+    "that",
+    "these",
+    "those",
+    "it",
+    "its",
+    "there",
+    "up",
+    "on",
+    "any",
+    "anything",
+    "something",
+    "what",
+    "which",
+    "how",
+    "much",
+    "many",
+    "so",
+    "still",
+    "left",
+    "next",
+    "today",
+    "todays",
+    "tomorrow",
+    "tomorrows",
+    "tonight",
+    "week",
+    "month",
+    "streak",
+    "goal",
+    "target",
+    "calorie*",
+    "kcal",
+    "protein",
+    "rest",
+    "plan",
+    "workout",
+    "session"
+  ],
+  "windows": {
+    "month": ["this month", "in the month", "month so far"],
+    "all": [
+      "ever",
+      "all time",
+      "of all time",
+      "overall",
+      "since i started",
+      "pr",
+      "personal best",
+      "personal record"
+    ]
+  },
+  "kinds": [
+    {
+      "kind": "cue",
+      "exercise": "required",
+      "all": [
+        [
+          "tip",
+          "cue",
+          "pointer*",
+          "form",
+          "technique",
+          "key point",
+          "focus on",
+          "remember",
+          "advice",
+          "think about"
+        ]
+      ],
+      "none": ["weight", "set", "rep", "last", "best", "goal"]
+    },
+    {
+      "kind": "muscles",
+      "exercise": "required",
+      "all": [
+        [
+          "work",
+          "works",
+          "working",
+          "train",
+          "trains",
+          "hit",
+          "hits",
+          "target",
+          "targets",
+          "muscle*",
+          "build",
+          "builds"
+        ]
+      ],
+      "none": [
+        "goal",
+        "weight",
+        "how many",
+        "how much",
+        "set",
+        "rep",
+        "best",
+        "last",
+        "heaviest",
+        "did i",
+        "have i"
+      ]
+    },
+    {
+      "kind": "goalProgress",
+      "exercise": "any",
+      "all": [
+        ["goal"],
+        [
+          "close",
+          "far",
+          "progress",
+          "how much",
+          "percent",
+          "along",
+          "on track",
+          "there yet",
+          "near",
+          "nearly",
+          "almost"
+        ]
+      ],
+      "none": ["set a", "new", "change", "make", "add", "edit", "delete", "remove", "should"]
+    },
+    {
+      "kind": "goalTarget",
+      "exercise": "any",
+      "all": [["goal"]],
+      "none": [
+        "set a",
+        "new",
+        "change",
+        "make",
+        "add",
+        "edit",
+        "delete",
+        "remove",
+        "should",
+        "protein",
+        "calorie*",
+        "kcal"
+      ]
+    },
+    {
+      "kind": "trend",
+      "exercise": "required",
+      "all": [
+        [
+          "gone up",
+          "going up",
+          "go up",
+          "went up",
+          "moving up",
+          "moved up",
+          "gone down",
+          "going down",
+          "went down",
+          "improv*",
+          "progress*",
+          "trend*",
+          "increas*",
+          "stronger",
+          "come along",
+          "coming along",
+          "stall*",
+          "stuck",
+          "plateau*"
+        ]
+      ]
+    },
+    {
+      "kind": "bestSet",
+      "exercise": "required",
+      "all": [
+        ["best", "heaviest", "top set", "pr", "personal best", "personal record", "most weight"]
+      ]
+    },
+    {
+      "kind": "lastSet",
+      "exercise": "required",
+      "all": [
+        [
+          "last time",
+          "last session",
+          "last workout",
+          "last week",
+          "previous*",
+          "most recent",
+          "recently",
+          "did i",
+          "have i"
+        ]
+      ],
+      "none": ["stall*", "stuck", "plateau*", "today"]
+    },
+    {
+      "kind": "planned",
+      "exercise": "required",
+      "all": [
+        [
+          "weight",
+          "how heavy",
+          "heavy",
+          "how much",
+          "how many",
+          "sets",
+          "reps",
+          "kg",
+          "lb",
+          "load",
+          "plan",
+          "planned",
+          "supposed to"
+        ]
+      ],
+      "none": ["lighter", "heavier", "less", "more", "drop", "add", "swap", "instead"]
+    },
+    {
+      "kind": "kcalLeft",
+      "exercise": "none",
+      "all": [
+        ["calorie*", "kcal", "cals"],
+        ["left", "remaining", "still need", "still have", "to go", "budget"]
+      ],
+      "none": ["yesterday", "last night", "this week", "last week", "did i"]
+    },
+    {
+      "kind": "proteinLeft",
+      "exercise": "none",
+      "all": [
+        ["protein"],
+        ["left", "remaining", "still need", "still have", "to go", "more do i need"]
+      ],
+      "none": ["yesterday", "last night", "this week", "last week", "did i"]
+    },
+    {
+      "kind": "kcalTarget",
+      "exercise": "none",
+      "all": [
+        ["calorie*", "kcal", "cals"],
+        ["target", "goal", "aim", "supposed to", "meant to", "a day", "per day", "daily", "limit"]
+      ],
+      "none": [
+        "yesterday",
+        "last night",
+        "this week",
+        "last week",
+        "did i",
+        "below",
+        "above",
+        "over",
+        "under",
+        "hit"
+      ]
+    },
+    {
+      "kind": "proteinTarget",
+      "exercise": "none",
+      "all": [
+        ["protein"],
+        ["target", "goal", "aim", "supposed to", "meant to", "a day", "per day", "daily"]
+      ],
+      "none": [
+        "yesterday",
+        "last night",
+        "this week",
+        "last week",
+        "did i",
+        "below",
+        "above",
+        "over",
+        "under",
+        "hit"
+      ]
+    },
+    {
+      "kind": "kcalEaten",
+      "exercise": "none",
+      "all": [
+        ["calorie*", "kcal", "cals"],
+        ["eaten", "ate", "had", "have i", "consumed", "so far", "logged", "taken in", "in today"]
+      ],
+      "none": ["yesterday", "last night", "this week", "last week", "did i"]
+    },
+    {
+      "kind": "proteinEaten",
+      "exercise": "none",
+      "all": [
+        ["protein"],
+        ["eaten", "ate", "had", "have i", "consumed", "so far", "logged", "taken in", "got in"]
+      ],
+      "none": ["yesterday", "last night", "this week", "last week", "did i"]
+    },
+    {
+      "kind": "nextSession",
+      "exercise": "none",
+      "all": [
+        [
+          "next workout*",
+          "next session",
+          "next training",
+          "next gym",
+          "next day",
+          "next one",
+          "whats next",
+          "what is next",
+          "up next",
+          "train next",
+          "training next",
+          "workout next",
+          "next lift*"
+        ]
+      ]
+    },
+    {
+      "kind": "restDay",
+      "exercise": "none",
+      "all": [["rest day", "day off", "off day", "free day"]]
+    },
+    {
+      "kind": "streak",
+      "exercise": "none",
+      "all": [["streak*", "in a row"]]
+    },
+    {
+      "kind": "month",
+      "exercise": "none",
+      "all": [["month", "monthly"]],
+      "none": [
+        "next month",
+        "last month",
+        "skip*",
+        "miss*",
+        "calorie*",
+        "kcal",
+        "cals",
+        "protein",
+        "carb*",
+        "fat",
+        "cut",
+        "drop*"
+      ]
+    },
+    {
+      "kind": "week",
+      "exercise": "none",
+      "all": [["week", "weekly"]],
+      "none": [
+        "next week",
+        "last week",
+        "skip*",
+        "miss*",
+        "rest",
+        "calorie*",
+        "kcal",
+        "cals",
+        "protein",
+        "carb*",
+        "fat",
+        "cut",
+        "drop*"
+      ]
+    },
+    {
+      "kind": "dayPlan",
+      "exercise": "none",
+      "day": "required",
+      "all": [
+        [
+          "train*",
+          "doing",
+          "do i have",
+          "do i do",
+          "workout",
+          "session",
+          "plan",
+          "planned",
+          "schedule*",
+          "lifting",
+          "program",
+          "whats on",
+          "what is on",
+          "anything on"
+        ]
+      ],
+      "none": [
+        "move",
+        "skip",
+        "swap",
+        "instead",
+        "last",
+        "did i",
+        "push",
+        "postpone",
+        "put",
+        "change",
+        "open",
+        "closed",
+        "weather"
+      ]
+    }
+  ],
+  "adviceStarts": [
+    "should",
+    "can",
+    "could",
+    "am i",
+    "is it ok",
+    "is it okay",
+    "do you think",
+    "would",
+    "will"
+  ]
+}

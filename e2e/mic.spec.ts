@@ -145,10 +145,10 @@ test('hold → live words → release sends; the reply is spoken (Mic only); per
       return !!n && cx > n.x && cx < n.x + n.width && cy > n.y && cy < n.y + n.height;
     })
     .toBe(true);
-  await speechEmit(page, 'partial', { text: 'how is' });
-  await expect(tab.getByLabel('Ask the coach')).toHaveValue('how is');
-  await speechEmit(page, 'partial', { text: 'how is my week' });
-  await expect(tab.getByLabel('Ask the coach')).toHaveValue('how is my week');
+  await speechEmit(page, 'partial', { text: 'give me' });
+  await expect(tab.getByLabel('Ask the coach')).toHaveValue('give me');
+  await speechEmit(page, 'partial', { text: 'give me a quick pep talk' });
+  await expect(tab.getByLabel('Ask the coach')).toHaveValue('give me a quick pep talk');
   await expect(tab.locator('[data-mic-hint]')).toBeVisible();
   // Longer words: the narrow text box shows only their tail, so they also show whole above the
   // row, wrapping across the full width, and the button is still under the finger.
@@ -184,10 +184,11 @@ test('hold → live words → release sends; the reply is spoken (Mic only); per
   // Mic down is a strong signal a question follows: Apple's model is warmed.
   expect((await brainState(page)).prewarms).toBeGreaterThan(prewarmsBefore);
   await page.evaluate(() => {
-    window.__gymSpeech.final = 'How is my week';
+    // Open chat, so it reaches the model (since 1.16.2 "How is my week" is a facts question).
+    window.__gymSpeech.final = 'Give me a quick pep talk';
   });
   await page.mouse.up();
-  await expect(userBubbles(tab).last()).toContainText('How is my week');
+  await expect(userBubbles(tab).last()).toContainText('Give me a quick pep talk');
   await expect(coachItems(tab)).toHaveCount(replies + 1);
   await expect(coachItems(tab).last().locator('.cs-msg-coach')).toContainText(DEFAULT_BRAIN_TEXT);
   // Said with the mic → spoken (Speak replies: Mic only, the default).
@@ -197,7 +198,9 @@ test('hold → live words → release sends; the reply is spoken (Mic only); per
     page,
     'chatMessages',
   );
-  expect(msgs.find((m) => m.role === 'user' && m.text === 'How is my week')?.viaMic).toBe(true);
+  expect(msgs.find((m) => m.role === 'user' && m.text === 'Give me a quick pep talk')?.viaMic).toBe(
+    true,
+  );
   s = await speechState(page);
   expect(s.prompts).toBe(1);
   expect(s.calls.filter((c) => c === 'start')).toHaveLength(1);
@@ -208,7 +211,7 @@ test('hold → live words → release sends; the reply is spoken (Mic only); per
   expect(await spoken(page)).toEqual([DEFAULT_BRAIN_TEXT]);
 
   // The second hold doesn't ask again.
-  await holdAndSay(page, tab, ['next'], 'Next session?');
+  await holdAndSay(page, tab, ['any other'], 'Any other tips?');
   expect((await speechState(page)).prompts).toBe(1);
   await expect.poll(async () => (await spoken(page)).length).toBe(2);
 
@@ -226,7 +229,7 @@ test('Speak replies: Off keeps mic replies quiet; Always also speaks typed ones'
   await setSpeakReplies(page, 'off');
   await goCoach(page);
   const tab = coachTab(page);
-  await holdAndSay(page, tab, ['plan for'], 'Plan for tomorrow');
+  await holdAndSay(page, tab, ['help me'], 'Help me stay focused');
   await expect(coachItems(tab).last().locator('.cs-msg-coach')).toContainText(DEFAULT_BRAIN_TEXT);
   expect(await spoken(page)).toEqual([]);
 

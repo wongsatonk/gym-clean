@@ -16,6 +16,11 @@
  *   one or Thai is answered by `handle()` (the chips' proposals: clarifying questions, kit-aware
  *   swaps, the mid-workout block), sanitized, `source: 'rules'`, no model call. The 1.15.0 phone
  *   eval: the model made the right call for 28 of 109 change requests, the rules for 103.
+ * - 1.16.2 "Coach facts" (core brain/facts.ts): a question about the user's own saved numbers
+ *   (route `why: 'facts'`) is answered in code from the same BrainInput the model would get,
+ *   sanitized, `source: 'rules'`, latency 0, no tool call; the trace has route/why only, never the
+ *   text. No data for it (the answerer returns null) → the model, as before. His 1.16.1 phone
+ *   eval: all six facts misses were the model quoting wrong numbers from a correct context.
  * - Errors: rejects with `BrainError(code)`; the router falls back to the rules with a note.
  *
  * The bridge is injected (task 7's src/native/gymBrain.ts fits `GymBrainBridge`). Its
@@ -41,6 +46,8 @@ import {
 } from '../../core/trainer/brain/context';
 import { sanitizeReply } from '../../core/trainer/brain/sanitize';
 import { readToolResults } from '../../core/trainer/brain/readTools';
+import { answerFact } from '../../core/trainer/brain/facts';
+import { normalizeText } from '../../core/trainer/intents';
 import { sayFor } from '../../core/trainer/speakRules';
 import type {
   BodyArea,
@@ -284,12 +291,12 @@ function goodResponse(r: unknown): { text: string; calls: ToolCall[] } {
   return { text, calls };
 }
 
-/** Builds the request for `text` (exported for the eval runner and main's tests). */
-export async function buildAppleRequest(
+/** The BrainInput both the model request and the facts answerer read. */
+async function inputFor(
   text: string,
   ctx: BrainContext,
-  deps: AppleDeps = {},
-): Promise<{ request: GymBrainRequest; usedHealth: boolean; input: BrainInput }> {
+  deps: AppleDeps,
+): Promise<{ input: BrainInput; extras: AppleExtras }> {
   const extras = (await deps.extras?.(ctx)) ?? {};
   const input: BrainInput = {
     coach: ctx.coach,
@@ -301,6 +308,17 @@ export async function buildAppleRequest(
     ...(extras.goalText ? { goalText: extras.goalText } : {}),
     ...(extras.goals ? { goals: extras.goals } : {}),
   };
+  return { input, extras };
+}
+
+/** Builds the request for `text` (exported for the eval runner and main's tests). */
+export async function buildAppleRequest(
+  text: string,
+  ctx: BrainContext,
+  deps: AppleDeps = {},
+  built?: { input: BrainInput; extras: AppleExtras },
+): Promise<{ request: GymBrainRequest; usedHealth: boolean; input: BrainInput }> {
+  const { input, extras } = built ?? (await inputFor(text, ctx, deps));
   const context = serializeContext(input, {
     brain: 'apple',
     appleCardReasons: extras.appleCardReasons,
@@ -355,7 +373,40 @@ export async function askApple(
     };
   }
 
-  if (route.to === 'rules') {
+  let built: { input: BrainInput; extras: AppleExtras } | undefined;
+  if (route.to === 'rules' && route.why === 'facts') {
+    built = await inputFor(text, ctx, deps);
+    const answer = answerFact(route.fact, built.input, normalizeText(text));
+    if (answer !== null) {
+      const clean = sanitizeReply(answer, safety, { phase });
+      const reply: BrainReply = {
+        reply: clean.text,
+        chips: [],
+        safety,
+        intent: match.intent,
+        source: 'rules',
+      };
+      const say = sayFor({ reply: clean.text }, phase);
+      if (say !== undefined) reply.say = say;
+      return {
+        reply,
+        trace: {
+          latencyMs: 0,
+          action: 'none',
+          calls: [],
+          replaced: clean.replaced,
+          hits: clean.hits,
+          usedHealth: false,
+          redFlag: false,
+          route: 'rules',
+          why: 'facts',
+        },
+      };
+    }
+    // No saved data behind the answer: the model answers, as before.
+  }
+
+  if (route.to === 'rules' && route.why !== 'facts') {
     const rules = handle({ text }, coach);
     const clean = sanitizeReply(rules.reply, safety, { phase });
     const reply: BrainReply = { ...rules, reply: clean.text, source: 'rules' };
@@ -379,7 +430,7 @@ export async function askApple(
     };
   }
 
-  const { request, usedHealth } = await buildAppleRequest(text, ctx, deps);
+  const { request, usedHealth } = await buildAppleRequest(text, ctx, deps, built);
   const now = deps.now ?? Date.now;
   const started = now();
   let raw: unknown;

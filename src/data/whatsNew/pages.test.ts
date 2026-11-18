@@ -298,7 +298,30 @@ describe('WHATS_NEW_PAGES', () => {
     expect(addedTopics(TODO_TOPICS, tourReleases(r1161), true)).toEqual([]);
   });
 
-  it('holds only releases 1.12.0 to 1.16.1, every page in one of them', () => {
+  const r1162 = WHATS_NEW_PAGES.filter((p) => p.release === '1.16.2');
+
+  // 1.16.2 "Coach facts": own-number questions answered from saved data in code (brain/facts.ts).
+  it('has one page for 1.16.2: the coach gets your numbers right, for everyone, Try it in Coach', () => {
+    expect(r1162.map((p) => [p.id, p.tryIt, p.owner, p.title])).toEqual([
+      ['coach-facts', 'coach', undefined, 'Coach gets your numbers right'],
+    ]);
+    const text = `${r1162[0]?.what} ${r1162[0]?.why}`;
+    expect(text).toMatch(/your own logs/);
+    expect(text).toMatch(/on this phone/);
+    expect(text).not.toMatch(/\b(he|she|his|her)\b/i);
+  });
+
+  it('1.16.2 is shown after 1.16.1; from 1.16.0 both show, newest first; no new to-do topic', () => {
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.1' }, '1.16.2', true)).toEqual(r1162);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.0' }, '1.16.2', true, false)).toEqual([
+      ...r1162,
+      ...r1161,
+    ]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.16.2')).toEqual(r1162);
+    expect(addedTopics(TODO_TOPICS, tourReleases(r1162), true)).toEqual([]);
+  });
+
+  it('holds only releases 1.12.0 to 1.16.2, every page in one of them', () => {
     expect(
       r112.length +
         r113.length +
@@ -306,7 +329,8 @@ describe('WHATS_NEW_PAGES', () => {
         r115.length +
         r1151.length +
         r116.length +
-        r1161.length,
+        r1161.length +
+        r1162.length,
     ).toBe(WHATS_NEW_PAGES.length);
   });
 
@@ -382,9 +406,9 @@ describe('WHATS_NEW_PAGES', () => {
     for (const p of WHATS_NEW_PAGES) {
       expect(p.release).toMatch(/^\d+\.\d+\.\d+$/);
       // A release with pages is a new MINOR (patch 0); the exceptions are 1.15.1 (M13b, Decision
-      // "One-arm sets": Next arm ships as a patch so M12 slice 3 keeps 1.16.0) and 1.16.1
+      // "One-arm sets": Next arm ships as a patch so M12 slice 3 keeps 1.16.0), 1.16.1 and 1.16.2
       // ("Coach acts", a fix on top of 1.16.0).
-      if (p.release !== '1.15.1' && p.release !== '1.16.1')
+      if (p.release !== '1.15.1' && p.release !== '1.16.1' && p.release !== '1.16.2')
         expect(p.release.endsWith('.0'), p.release).toBe(true);
       expect(compareReleases(p.release, '1.12.0')).toBeGreaterThanOrEqual(0);
     }

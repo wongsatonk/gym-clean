@@ -56,7 +56,12 @@ describe('routeMessage', () => {
   });
 
   it('open chat goes to the model', () => {
-    for (const t of ['What am I training today?', 'how is my week', 'tell me a joke']) {
+    for (const t of [
+      "what's the weather",
+      'tell me a joke',
+      'How am I doing?',
+      'how do I brace for squats?',
+    ]) {
       const r = routeMessage(t, coach);
       expect([t, r.to]).toEqual([t, 'model']);
       expect(r).not.toHaveProperty('call');
@@ -92,28 +97,106 @@ describe('routeMessage', () => {
     expect(hi).not.toHaveProperty('call');
   });
 
-  // 1.15.2 phone eval: facts dropped 17 → 13 of 24 because these six questions got action cards.
-  it('a question about the user’s own numbers goes to the model, with the match', () => {
-    for (const [id, want] of [
-      ['monthSessions', 'focusEdit'],
-      ['pulldownBest', 'focusEdit'],
-      ['kcalEaten', 'food'],
-      ['proteinTarget', 'food'],
-      ['kcalLeft', 'food'],
-      ['proteinLeft', 'food'],
+  // 1.15.2 phone eval: facts dropped 17 → 13 of 24 because these six questions got action cards;
+  // 1.16.1: the model then quoted wrong numbers. 1.16.2: they take the facts route (no call).
+  it('a question about the user’s own numbers takes the facts route, with the match', () => {
+    for (const [id, want, kind] of [
+      ['monthSessions', 'focusEdit', 'month'],
+      ['pulldownBest', 'focusEdit', 'bestSet'],
+      ['kcalEaten', 'food', 'kcalEaten'],
+      ['proteinTarget', 'food', 'proteinTarget'],
+      ['kcalLeft', 'food', 'kcalLeft'],
+      ['proteinLeft', 'food', 'proteinLeft'],
     ] as const) {
       const text = facts.items.find((f) => f.id === id)?.text ?? '';
       expect(text).not.toBe('');
       const r = routeMessage(text, coach);
-      expect([id, r.to]).toEqual([id, 'model']);
+      expect([id, r]).toMatchObject([id, { to: 'rules', why: 'facts', fact: { kind } }]);
       expect(r).not.toHaveProperty('call');
       expect([id, r.match.intent]).toEqual([id, want]);
     }
   });
 
-  it('every facts question goes to the model', () => {
-    for (const f of facts.items)
-      expect([f.id, routeMessage(f.text, coach).to]).toEqual([f.id, 'model']);
+  it('every facts question takes the facts route, with no call', () => {
+    for (const f of facts.items) {
+      const r = routeMessage(f.text, coach);
+      expect([f.id, r.to, r.to === 'rules' ? r.why : undefined]).toEqual([f.id, 'rules', 'facts']);
+      expect(r).not.toHaveProperty('call');
+    }
+  });
+
+  it('red flags, empty text and Thai win over the facts route', () => {
+    expect(routeMessage('how much protein is left? I have chest pain', coach)).toMatchObject({
+      to: 'rules',
+      why: 'redFlag',
+    });
+    expect(routeMessage('โปรตีนเหลือเท่าไหร่', coach)).toMatchObject({ to: 'rules', why: 'thai' });
+    expect(routeMessage('  ', coach)).toMatchObject({ to: 'rules', why: 'empty' });
+  });
+
+  it('change requests phrased as questions keep their rules action, never facts', () => {
+    for (const [text, name] of [
+      ['How much lighter should I go today?', 'lighterToday'],
+      ['What should I do with 20 minutes left?', 'shortOnTime'],
+      ['how much protein is left for dinner', 'suggestFood'],
+      ['How much weight should I drop on bench, it stalled', 'adjustStalledExercise'],
+      ['Can I do lunges instead of the goblet squat?', 'swapExercise'],
+      ['how many fewer sets today', 'lighterToday'],
+    ] as const)
+      expect([text, routeMessage(text, coach)]).toMatchObject([
+        text,
+        { to: 'rules', why: 'action', call: { name } },
+      ]);
+  });
+
+  it('"why" questions are never facts ("why do I need protein" is a rules food answer)', () => {
+    const r = routeMessage('why do I need protein', coach);
+    expect(r).toMatchObject({ to: 'rules', why: 'action', match: { intent: 'food' } });
+    expect(routeMessage('why is my bench going up so slowly?', coach).to).toBe('model');
+  });
+
+  // Coach decision (1.16.2 review): advice / judgement / "plan my…" go to the model, never facts.
+  it('advice and judgement questions never take the facts route; open ones go to the model', () => {
+    for (const text of [
+      'Should I train hard today?',
+      'Any thoughts on how today should go?',
+      'Plan my week again',
+      'How hard should I go today?',
+      'what should I do this week?',
+      'Am I ready to train today?',
+      'Should I go to the gym today?',
+      'What weight did my wife use on bench?',
+    ]) {
+      const r = routeMessage(text, coach);
+      expect([text, r.to]).toEqual([text, 'model']);
+    }
+    // A rules action is fine, just never facts: deload; "two days" reads as a focusEdit; "focus"
+    // reads as a focusBlock (pre-existing rules routing, unchanged here).
+    for (const text of [
+      'Do you think I should deload?',
+      'Is it OK to train legs two days in a row?',
+      'What should I focus on today?',
+    ]) {
+      const r = routeMessage(text, coach);
+      expect([text, r.to === 'rules' && r.why === 'facts']).toEqual([text, false]);
+    }
+    for (const text of ['วันนี้ควรเล่นหนักไหม', 'ควรพักไหม']) {
+      const r = routeMessage(text, coach);
+      expect([text, r.to, r.to === 'rules' ? r.why : undefined]).toEqual([text, 'rules', 'thai']);
+    }
+  });
+
+  it('"Plan for tomorrow" and "Next session?" are lookups: facts', () => {
+    for (const text of ['Plan for tomorrow', 'Next session?', 'How is my week going?'])
+      expect([text, routeMessage(text, coach)]).toMatchObject([
+        text,
+        { to: 'rules', why: 'facts' },
+      ]);
+  });
+
+  it('a discomfort word never takes the facts route', () => {
+    const r = routeMessage('my knee hurts, how heavy is the goblet squat today?', coach);
+    expect(r.to === 'rules' && r.why === 'facts').toBe(false);
   });
 
   it('the own-numbers guard stays narrow: change requests still go to the rules', () => {
@@ -158,11 +241,7 @@ describe('routeMessage', () => {
       ['Did I stall on bench? swap it', 'swapExercise', 'Dumbbell_Bench_Press'],
     ] as const) {
       const r = routeMessage(text, coach);
-      expect([text, r.to, r.to === 'rules' ? r.call?.name : undefined]).toEqual([
-        text,
-        'rules',
-        name,
-      ]);
+      expect([text, r.to, 'call' in r ? r.call?.name : undefined]).toEqual([text, 'rules', name]);
       if (exerciseId) expect([text, r.match.slots.exerciseId]).toEqual([text, exerciseId]);
     }
   });
@@ -289,12 +368,13 @@ describe('routeMessage', () => {
  * are not truly held out. Grow this list from his real phone eval exports (made-up wording, no
  * personal data). [text, route, intent the match must have].
  */
-const REGRESSION_PARAPHRASES: readonly [string, 'rules' | 'model', string][] = [
-  // Questions about the user's own numbers → the model.
-  ['How many workouts have I done this month?', 'model', 'focusEdit'],
-  ["What's my calorie target?", 'model', 'food'],
-  ['How much protein have I had today?', 'model', 'food'],
-  ['How many calories are left for me today?', 'model', 'food'],
+const REGRESSION_PARAPHRASES: readonly [string, 'rules' | 'model' | 'facts', string][] = [
+  // Questions about the user's own numbers → the facts answerer (1.16.2; the model before).
+  ['How many workouts have I done this month?', 'facts', 'focusEdit'],
+  ["What's my calorie target?", 'facts', 'food'],
+  ['How much protein have I had today?', 'facts', 'food'],
+  ['How many calories are left for me today?', 'facts', 'food'],
+  // ... and the ones it has no answer for (history it can't compute) → the model.
   ['When did I last do legs?', 'model', 'doToday'],
   ['Did I hit my protein yesterday?', 'model', 'food'],
   // Change requests → the rules.
@@ -337,7 +417,7 @@ describe('regression paraphrases', () => {
   it('route as pinned', () => {
     const got = REGRESSION_PARAPHRASES.map(([text]) => {
       const r = routeMessage(text, coach);
-      return [text, r.to, r.match.intent];
+      return [text, r.to === 'rules' && r.why === 'facts' ? 'facts' : r.to, r.match.intent];
     });
     expect(got).toEqual(REGRESSION_PARAPHRASES.map((h) => [...h]));
   });

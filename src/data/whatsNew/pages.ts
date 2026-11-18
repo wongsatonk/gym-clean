@@ -318,4 +318,15 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     tryIt: 'coach',
     icon: 'coach',
   },
+  // 1.16.2 "Coach facts": questions about your own numbers (last time, best set, trend, protein
+  // left…) are answered from your saved logs in code (core brain/facts.ts), not by the model.
+  {
+    release: '1.16.2',
+    id: 'coach-facts',
+    title: 'Coach gets your numbers right',
+    what: 'Ask what you lifted last time or how much protein is left, and the answer comes from your own logs.',
+    why: 'The numbers are worked out on this phone, so they match your history.',
+    tryIt: 'coach',
+    icon: 'coach',
+  },
 ];
