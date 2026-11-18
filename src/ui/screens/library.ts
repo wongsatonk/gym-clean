@@ -14,23 +14,30 @@
 // only shape the groups).
 //
 // Search sections come in SPEC order (Exercises, Workouts, Meals, Coach, Settings, Why? cards,
-// Foods). Workouts / Meals / Coach have no hits until task 12b/17b feed personal results; a
-// section renders only when it has hits, so 12b only adds hits (and its "Show more" / loading
-// extras) without touching the bundled ones.
+// Foods). A section renders only when it has hits.
+//
+// M13c task 12b: your own data. `personal` (task 3b's `personalSearch` result) fills Workouts /
+// Meals / Coach: each row is a hit button (title with the date, e.g. "Push A · Tue 17 Nov";
+// chat rows "You · Tue 17 Nov" underneath), the header pill shows the section's `total`, and a
+// "Show more" button (`[data-search-more=<kind>]` → `onMore(kind)`) follows the rows while
+// `more`. Main appends each next page to the same section's `hits` (keep `offset` at 0), so the
+// rows already shown stay put. While `personalLoading`, a quiet "Searching your history…" line
+// (role=status, polite) sits where those sections go; "No match" waits until it's done.
 //
 // Taps: a row's name (stretched over the row) → `onOpenExercise(id)`, a badge →
 // `onBadge(kind, id, opener)`, an exercise hit → `onOpenExercise(id)` (same row look), any other
-// hit (setting / learn / food / later workout, chat, meal) → `onHit(hit, opener)`.
+// hit (setting / learn / food / workout / chat / meal) → `onHit(hit, opener)`.
 //
 // e2e hooks: `[data-screen="library"]`, `[data-library-back]`, `[data-library-count]`,
 // `[data-library-search]` (the input), `[data-library-clear]`, `[data-group-by=<by>]`
 // (aria-pressed), `[data-library-mygym]` (role=switch, aria-checked), `[data-library-group=<key>]`
 // (the fold button, aria-expanded), `[data-library-list=<key>]`, `[data-library-ex=<id>]` rows,
 // `[data-ex-open=<id>]`, `[data-badge-open=<kind>]`, `[data-library-needs]`,
-// `[data-search-section=<kind>]`, `[data-search-hit=<kind>:<id>]`,
-// `[data-empty-state="library-search"]`, `[data-empty-state="library-gym"]`.
+// `[data-search-section=<kind>]`, `[data-search-hit=<kind>:<id>]`, `[data-search-more=<kind>]`,
+// `[data-search-loading]`, `[data-empty-state="library-search"]`, `[data-empty-state="library-gym"]`.
 import type { LibraryGroup } from '../../core/library';
 import { foodSearchHit } from '../../core/search';
+import type { PersonalKind, PersonalResults } from '../../core/searchPersonal';
 import type {
   BodyArea,
   LibraryGroupBy,
@@ -84,6 +91,13 @@ export type LibraryProps = {
   backLabel?: string | undefined;
   /** Mark the field `autofocus`; still call `focusSearch()` inside the opening tap (iOS keyboard). */
   autofocus?: boolean | undefined;
+  /**
+   * Task 12b: `personalSearch(db, query, …)` for the current query (workouts, meals, coach
+   * chat). "Show more" pages are appended to the section's `hits` by main. Omitted = none yet.
+   */
+  personal?: PersonalResults | undefined;
+  /** Task 12b: the personal query is running → "Searching your history…". */
+  personalLoading?: boolean | undefined;
 };
 
 export type LibraryActions = {
@@ -94,8 +108,10 @@ export type LibraryActions = {
   onOpenExercise: (exerciseId: string) => void;
   /** 3D demo / Info → How-to sheet, Camera → Camera sheet, Learning → learn card. */
   onBadge: (kind: BadgeKind, exerciseId: string, opener: HTMLElement) => void;
-  /** A setting / Why? card / food (later workout, chat, meal) hit. */
+  /** A setting / Why? card / food / workout / chat / meal hit. */
   onHit: (hit: SearchHit, opener: HTMLElement) => void;
+  /** Task 12b: "Show more" under Workouts / Meals / Coach (main asks for the next page). */
+  onMore?: ((kind: PersonalKind) => void) | undefined;
   onBack: () => void;
 };
 
@@ -114,6 +130,15 @@ export const SEARCH_PLACEHOLDER = 'Search: abs, cable, Push A';
 export const SEARCH_HINT = 'Try a muscle like abs or chest, or kit like cable.';
 export const MY_GYM_LABEL = 'My gym only';
 export const NO_GYM_FIT = 'No exercise here fits your gym.';
+export const SEARCHING_HISTORY = 'Searching your history…';
+export const SHOW_MORE = 'Show more';
+
+/** Screen-reader name of a section's Show more ("Show more workouts"). */
+export const SHOW_MORE_LABEL: Readonly<Record<PersonalKind, string>> = {
+  workout: 'Show more workouts',
+  meal: 'Show more meals',
+  chat: 'Show more coach messages',
+};
 
 /** The group-by choices, in display order. */
 export const GROUP_BY_OPTIONS: readonly { by: LibraryGroupBy; label: string }[] = [
@@ -143,6 +168,29 @@ export function hitSections(hits: readonly SearchHit[]): HitSection[] {
     const list = hits.filter((x) => x.kind === kind);
     return list.length === 0 ? [] : [{ kind, title, hits: list }];
   });
+}
+
+const PERSONAL_SEARCH_KINDS: ReadonlySet<SearchKind> = new Set(['workout', 'meal', 'chat']);
+
+/**
+ * The bundled hits plus the personal sections' hits (bundled first; a kind:id already there is
+ * not repeated). Blank query or no `personal` → the bundled hits as given.
+ */
+export function withPersonal(
+  hits: readonly SearchHit[],
+  personal: PersonalResults | undefined,
+): SearchHit[] {
+  if (!personal) return [...hits];
+  const seen = new Set(hits.map((x) => `${x.kind}:${x.id}`));
+  const extra = personal.sections.flatMap((s) =>
+    s.hits.filter((x) => {
+      const key = `${x.kind}:${x.id}`;
+      if (x.kind !== s.kind || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }),
+  );
+  return [...hits, ...extra];
 }
 
 /** The bundled hits plus the "Search foods for '…'" row (once). Blank query → []. */
@@ -331,10 +379,11 @@ export function createLibraryScreen(initial: LibraryProps, actions: LibraryActio
 
   function searchResults(): HTMLElement[] {
     const q = props.query;
-    const all = hitsWithFood(q, props.hits);
+    const all = hitsWithFood(q, withPersonal(props.hits, props.personal));
     const found = all.filter((x) => x.kind !== 'food');
     const rows = rowById();
-    if (found.length === 0) {
+    const loading = props.personalLoading === true;
+    if (found.length === 0 && !loading) {
       const food = all.find((x) => x.kind === 'food');
       return [
         emptyState({
@@ -347,31 +396,49 @@ export function createLibraryScreen(initial: LibraryProps, actions: LibraryActio
         h('p', { class: 'lib-hint muted' }, SEARCH_HINT),
       ];
     }
-    return hitSections(all).map((s) =>
+    const out = hitSections(all).map((s) => sectionBlock(s, rows));
+    if (loading) {
+      // Where Workouts / Meals / Coach go: after Exercises and any personal section so far.
+      const before = new Set<SearchKind>(['exercise', ...PERSONAL_SEARCH_KINDS]);
+      const at = out.filter((el) =>
+        before.has(el.getAttribute('data-search-section') as SearchKind),
+      ).length;
+      out.splice(at, 0, loadingLine());
+    }
+    return out;
+  }
+
+  function sectionBlock(s: HitSection, rows: Map<string, LibraryRow>): HTMLElement {
+    const section = props.personal?.sections.find((x) => x.kind === s.kind);
+    const total = section ? Math.max(section.total, s.hits.length) : s.hits.length;
+    const more =
+      section?.more === true && actions.onMore !== undefined
+        ? moreButton(section.kind, actions.onMore)
+        : null;
+    return h(
+      'section',
+      {
+        class: 'lib-section',
+        'data-search-section': s.kind,
+        'aria-labelledby': `lib-s-${uid}-${s.kind}`,
+      },
       h(
-        'section',
-        {
-          class: 'lib-section',
-          'data-search-section': s.kind,
-          'aria-labelledby': `lib-s-${uid}-${s.kind}`,
-        },
-        h(
-          'h2',
-          { class: 'lib-section-title', id: `lib-s-${uid}-${s.kind}` },
-          s.title,
-          h('span', { class: 'lib-group-count' }, String(s.hits.length)),
-        ),
-        h(
-          'ul',
-          { class: 'lib-list' },
-          ...s.hits.map((hit) => {
-            const r = hit.kind === 'exercise' ? rows.get(hit.id) : undefined;
-            return r
-              ? libraryRow(r, actions, `${hit.kind}:${hit.id}`)
-              : h('li', { class: 'lib-hit-item' }, hitButton(hit));
-          }),
-        ),
+        'h2',
+        { class: 'lib-section-title', id: `lib-s-${uid}-${s.kind}` },
+        s.title,
+        h('span', { class: 'lib-group-count' }, String(total)),
       ),
+      h(
+        'ul',
+        { class: 'lib-list' },
+        ...s.hits.map((hit) => {
+          const r = hit.kind === 'exercise' ? rows.get(hit.id) : undefined;
+          return r
+            ? libraryRow(r, actions, `${hit.kind}:${hit.id}`)
+            : h('li', { class: 'lib-hit-item' }, hitButton(hit));
+        }),
+      ),
+      more,
     );
   }
 
@@ -409,6 +476,31 @@ export function createLibraryScreen(initial: LibraryProps, actions: LibraryActio
       input.focus();
     },
   };
+}
+
+/** "Searching your history…": quiet (polite status), shown while the personal query runs. */
+function loadingLine(): HTMLElement {
+  return h(
+    'p',
+    { class: 'lib-loading muted', role: 'status', 'data-search-loading': true },
+    icon('clock', 'md'),
+    h('span', {}, SEARCHING_HISTORY),
+  );
+}
+
+function moreButton(kind: PersonalKind, onMore: (kind: PersonalKind) => void): HTMLElement {
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: 'lib-more',
+      'aria-label': SHOW_MORE_LABEL[kind],
+      'data-search-more': kind,
+      onclick: () => onMore(kind),
+    },
+    h('span', {}, SHOW_MORE),
+    icon('back', 'sm', { class: 'lib-more-chev' }),
+  );
 }
 
 function groupByControl(

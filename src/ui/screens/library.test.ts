@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { equipmentGroupLabel, groupExercises, type LibraryGroup } from '../../core/library';
 import { buildSearchIndex, exerciseSearchItems, search } from '../../core/search';
 import { checkCopy } from '../../core/trainer/replies';
+import type { PersonalResults, PersonalSection } from '../../core/searchPersonal';
 import type { LibraryGroupBy, SearchHit } from '../../core/types';
 import {
   bodyAreaLabel,
@@ -20,9 +21,12 @@ import {
   LIBRARY_TITLE,
   MY_GYM_LABEL,
   NO_GYM_FIT,
+  SEARCHING_HISTORY,
   SEARCH_HINT,
   SEARCH_PLACEHOLDER,
   SEARCH_SECTIONS,
+  SHOW_MORE,
+  SHOW_MORE_LABEL,
   createLibraryScreen,
   exerciseCount,
   hitSections,
@@ -30,6 +34,7 @@ import {
   needsLine,
   noMatchLine,
   uniqueIds,
+  withPersonal,
   type LibraryActions,
   type LibraryProps,
   type LibraryRow,
@@ -90,6 +95,7 @@ function setup(over: Partial<LibraryProps> = {}) {
     onOpenExercise: (id) => calls.push(`open:${id}`),
     onBadge: (kind, id, opener) => calls.push(`badge:${kind}:${id}:${asFake(opener).tag}`),
     onHit: (hit, opener) => calls.push(`hit:${hit.kind}:${hit.id}:${asFake(opener).tag}`),
+    onMore: (kind) => calls.push(`more:${kind}`),
     onBack: () => calls.push('back'),
   };
   const props: LibraryProps = {
@@ -179,6 +185,9 @@ describe('pure helpers', () => {
       'Clear search',
       'Search the app',
       noMatchLine('abs'),
+      SEARCHING_HISTORY,
+      SHOW_MORE,
+      ...Object.values(SHOW_MORE_LABEL),
       needsLine(['Pull-up bar']) ?? '',
       ...GROUP_BY_OPTIONS.map((o) => o.label),
       ...SEARCH_SECTIONS.map((o) => o.title),
@@ -502,5 +511,222 @@ describe('Library screen: the real catalog', () => {
     first?.click();
     expect(onBadge).toHaveBeenCalledTimes(1);
     expect(['3d', 'info']).toContain(onBadge.mock.calls[0]?.[0]);
+  });
+});
+
+// ---------- task 12b: your own data (workouts, meals, coach chat) ----------
+
+const sec = (
+  kind: PersonalSection['kind'],
+  hits: SearchHit[],
+  over: Partial<PersonalSection> = {},
+): PersonalSection => ({ kind, hits, total: hits.length, offset: 0, more: false, ...over });
+
+const personal = (sections: PersonalSection[]): PersonalResults => ({
+  range: null,
+  words: 'bench',
+  sections,
+});
+
+const WORKOUT = hit('workout', 'sess-1', 'Push A · Tue 17 Nov', 'Dumbbell Bench Press, Pushups');
+const MEAL = hit('meal', '2026-11-16', 'Meals · Mon 16 Nov', 'Rice, Chicken breast');
+const CHAT = hit('chat', '42', 'How heavy should my bench be?', 'You · Tue 17 Nov');
+
+describe('Library screen: personal results (task 12b)', () => {
+  it('withPersonal appends section hits after the bundled ones, without repeats', () => {
+    const bundled = [hit('exercise', 'a', 'A'), hit('workout', 'sess-1', 'Old title')];
+    const merged = withPersonal(
+      bundled,
+      personal([sec('workout', [WORKOUT]), sec('meal', [MEAL]), sec('chat', [CHAT])]),
+    );
+    expect(merged.map((x) => `${x.kind}:${x.id}`)).toEqual([
+      'exercise:a',
+      'workout:sess-1',
+      'meal:2026-11-16',
+      'chat:42',
+    ]);
+    expect(merged[1]?.title).toBe('Old title');
+    expect(withPersonal(bundled, undefined)).toEqual(bundled);
+  });
+
+  it('each kind renders as its own section in SPEC order, with the date line', () => {
+    const { el } = setup({
+      query: 'bench',
+      hits: [hit('exercise', 'Crunches', 'Crunches'), hit('setting', 'voice', 'Voice')],
+      personal: personal([sec('workout', [WORKOUT]), sec('meal', [MEAL]), sec('chat', [CHAT])]),
+    });
+    expect(
+      hook(el, 'data-search-section').map((s) => s.getAttribute('data-search-section')),
+    ).toEqual(['exercise', 'workout', 'meal', 'chat', 'setting', 'food']);
+    expect(one(el, 'data-search-section', 'workout').textContent).toContain('Workouts');
+    expect(one(el, 'data-search-section', 'meal').textContent).toContain('Meals');
+    expect(one(el, 'data-search-section', 'chat').textContent).toContain('Coach');
+    const w = one(el, 'data-search-hit', 'workout:sess-1');
+    expect(w.tag).toBe('button');
+    expect(w.textContent).toContain('Push A · Tue 17 Nov');
+    expect(w.textContent).toContain('Dumbbell Bench Press, Pushups');
+    expect(one(el, 'data-search-hit', 'meal:2026-11-16').textContent).toContain(
+      'Meals · Mon 16 Nov',
+    );
+    const c = one(el, 'data-search-hit', 'chat:42');
+    expect(c.textContent).toContain('How heavy should my bench be?');
+    expect(c.textContent).toContain('You · Tue 17 Nov');
+    expect(hook(el, 'data-search-loading')).toHaveLength(0);
+    expect(hook(el, 'data-search-more')).toHaveLength(0);
+  });
+
+  it('a tap on a workout, meal or chat row calls onHit with the hit and its button', () => {
+    const { el, calls } = setup({
+      query: 'bench',
+      personal: personal([sec('workout', [WORKOUT]), sec('meal', [MEAL]), sec('chat', [CHAT])]),
+    });
+    one(el, 'data-search-hit', 'workout:sess-1').click();
+    one(el, 'data-search-hit', 'meal:2026-11-16').click();
+    one(el, 'data-search-hit', 'chat:42').click();
+    expect(calls).toEqual([
+      'hit:workout:sess-1:button',
+      'hit:meal:2026-11-16:button',
+      'hit:chat:42:button',
+    ]);
+  });
+
+  it('empty personal sections are hidden', () => {
+    const { el } = setup({
+      query: 'bench',
+      hits: [hit('exercise', 'Crunches', 'Crunches')],
+      personal: personal([sec('workout', []), sec('meal', []), sec('chat', [CHAT])]),
+    });
+    expect(
+      hook(el, 'data-search-section').map((s) => s.getAttribute('data-search-section')),
+    ).toEqual(['exercise', 'chat', 'food']);
+  });
+
+  it('Show more: one button per section with more, the total in the header, onMore(kind)', () => {
+    const { el, calls } = setup({
+      query: 'bench',
+      personal: personal([
+        sec('workout', [WORKOUT], { total: 14, more: true }),
+        sec('meal', [MEAL]),
+        sec('chat', [CHAT], { total: 3, more: true }),
+      ]),
+    });
+    expect(hook(el, 'data-search-more').map((b) => b.getAttribute('data-search-more'))).toEqual([
+      'workout',
+      'chat',
+    ]);
+    const more = one(el, 'data-search-more', 'workout');
+    expect(more.tag).toBe('button');
+    expect(more.textContent).toBe(SHOW_MORE);
+    expect(more.getAttribute('aria-label')).toBe('Show more workouts');
+    // The button sits inside its own section, after the rows.
+    const section = one(el, 'data-search-section', 'workout');
+    expect(section.children.at(-1)).toBe(more);
+    expect(section.oneByClass('lib-group-count').textContent).toBe('14');
+    expect(one(el, 'data-search-section', 'meal').oneByClass('lib-group-count').textContent).toBe(
+      '1',
+    );
+    more.click();
+    one(el, 'data-search-more', 'chat').click();
+    expect(calls).toEqual(['more:workout', 'more:chat']);
+  });
+
+  it('a next page appended by main keeps the shown rows and drops Show more at the end', () => {
+    const second = hit('workout', 'sess-0', 'Pull A · Sat 14 Nov');
+    const { el, handle } = setup({
+      query: 'bench',
+      personal: personal([sec('workout', [WORKOUT], { total: 2, more: true })]),
+    });
+    handle.update({ personal: personal([sec('workout', [WORKOUT, second], { total: 2 })]) });
+    const ids = hook(one(el, 'data-search-section', 'workout'), 'data-search-hit').map((x) =>
+      x.getAttribute('data-search-hit'),
+    );
+    expect(ids).toEqual(['workout:sess-1', 'workout:sess-0']);
+    expect(hook(el, 'data-search-more')).toHaveLength(0);
+  });
+
+  it('no onMore → no Show more button', () => {
+    const handle = createLibraryScreen(
+      {
+        rows: ROWS,
+        groups: GROUPS,
+        groupBy: 'muscle',
+        query: 'bench',
+        hits: [],
+        myGymOnly: false,
+        personal: personal([sec('workout', [WORKOUT], { total: 5, more: true })]),
+      },
+      {
+        onQuery() {},
+        onGroupBy() {},
+        onMyGym() {},
+        onOpenExercise() {},
+        onBadge() {},
+        onHit() {},
+        onBack() {},
+      },
+    );
+    expect(hook(asFake(handle.el), 'data-search-more')).toHaveLength(0);
+  });
+
+  it('loading: a quiet status line where the personal sections go, no "No match" yet', () => {
+    const { el, handle } = setup({
+      query: 'bench',
+      hits: [hit('exercise', 'Crunches', 'Crunches'), hit('setting', 'voice', 'Voice')],
+      personalLoading: true,
+    });
+    const line = one(el, 'data-search-loading');
+    expect(line.textContent).toBe(SEARCHING_HISTORY);
+    expect(line.getAttribute('role')).toBe('status');
+    expect(line.getAttribute('aria-live')).not.toBe('assertive');
+    const results = el.oneByClass('lib-results');
+    expect(results.children.map((c) => c.getAttribute('data-search-section') ?? 'loading')).toEqual(
+      ['exercise', 'loading', 'setting', 'food'],
+    );
+
+    // Nothing bundled matched: still searching, so no empty state yet; the food row stays.
+    handle.update({ query: 'zzz', hits: [] });
+    expect(hook(el, 'data-empty-state')).toHaveLength(0);
+    expect(hook(el, 'data-search-loading')).toHaveLength(1);
+    expect(hook(el, 'data-search-hit', 'food:food')).toHaveLength(1);
+
+    // Done with nothing found: the empty state.
+    handle.update({ personalLoading: false, personal: personal([sec('workout', [])]) });
+    expect(hook(el, 'data-search-loading')).toHaveLength(0);
+    expect(one(el, 'data-empty-state', 'library-search').textContent).toContain(
+      "No match for 'zzz'",
+    );
+
+    // Done with only personal hits: their sections, no empty state.
+    handle.update({ personal: personal([sec('meal', [MEAL])]) });
+    expect(hook(el, 'data-empty-state')).toHaveLength(0);
+    expect(
+      hook(el, 'data-search-section').map((s) => s.getAttribute('data-search-section')),
+    ).toEqual(['meal', 'food']);
+  });
+
+  it('loading after personal sections already shown (Show more): the line follows them', () => {
+    const { el } = setup({
+      query: 'bench',
+      hits: [hit('setting', 'voice', 'Voice')],
+      personal: personal([sec('workout', [WORKOUT], { total: 9, more: true })]),
+      personalLoading: true,
+    });
+    expect(
+      el
+        .oneByClass('lib-results')
+        .children.map((c) => c.getAttribute('data-search-section') ?? 'loading'),
+    ).toEqual(['workout', 'loading', 'setting', 'food']);
+  });
+
+  it('the search field survives personal updates (focus and caret stay)', () => {
+    const { el, handle } = setup({ query: 'bench' });
+    const input = one(el, 'data-library-search');
+    handle.focusSearch();
+    handle.update({ personalLoading: true });
+    handle.update({ personalLoading: false, personal: personal([sec('chat', [CHAT])]) });
+    expect(one(el, 'data-library-search')).toBe(input);
+    expect(
+      (globalThis as unknown as { document: { activeElement: unknown } }).document.activeElement,
+    ).toBe(input);
   });
 });

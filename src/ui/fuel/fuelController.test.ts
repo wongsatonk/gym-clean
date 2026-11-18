@@ -26,6 +26,7 @@ import {
   getNutritionSettings,
   listWeeklyChecks,
   saveFood,
+  saveEntry,
   saveNutritionSettings,
   saveWeeklyCheck,
   saveWeighIn,
@@ -784,5 +785,56 @@ describe('M11 health pass-through', () => {
     await app.openFuel();
     app.onScreen('data-weigh-in').click();
     expect(app.root.find((e) => e.hasAttribute('data-activity-suggest'))).toHaveLength(0);
+  });
+});
+
+describe('M13c 12b: openDay (search → a Fuel day)', () => {
+  const entry = (id: string, date: string, label: string): Parameters<typeof saveEntry>[1] => ({
+    id,
+    date,
+    time: new Date(`${date}T12:00:00`).getTime(),
+    slot: 'lunch',
+    label,
+    amount: { servings: 1 },
+    estimate: false,
+    kcal: 500,
+    proteinG: 30,
+  });
+
+  it('opens a day in the 30-day window, then Back to today', async () => {
+    await setUp();
+    const yesterday = localDate(EVENING - DAY);
+    await saveEntry(db, entry('a', yesterday, 'Rice'));
+    await saveEntry(db, entry('b', localDate(EVENING), 'Shake'));
+    const app = makeApp();
+    await app.ctrl.openDay(yesterday);
+    app.ctrl.screen();
+    await app.openFuel(); // open() resets to today…
+    expect(app.ctrl.viewDay()).toBeNull();
+    await app.ctrl.openDay(yesterday); // …openDay shows that day
+    app.root.replaceChildren(asFake(app.ctrl.screen()));
+    expect(app.ctrl.viewDay()).toBe(yesterday);
+    expect(app.onScreen('data-fuel-day', yesterday).textContent).toBe('Tue 17 Nov');
+    expect(
+      app.root.find((e) => e.hasAttribute('data-entry')).map((e) => e.getAttribute('data-entry')),
+    ).toEqual(['a']);
+    app.onScreen('data-fuel-today').click();
+    expect(app.ctrl.viewDay()).toBeNull();
+    app.root.replaceChildren(asFake(app.ctrl.screen()));
+    expect(
+      app.root.find((e) => e.hasAttribute('data-entry')).map((e) => e.getAttribute('data-entry')),
+    ).toEqual(['b']);
+  });
+
+  it('a day older than the window is read on its own; today or later opens today', async () => {
+    await setUp();
+    const old = localDate(EVENING - 90 * DAY);
+    await saveEntry(db, entry('old', old, 'Khao man gai'));
+    const app = makeApp();
+    await app.ctrl.openDay(old);
+    app.root.replaceChildren(asFake(app.ctrl.screen()));
+    expect(app.onScreen('data-entry', 'old').textContent).toContain('Khao man gai');
+    await app.ctrl.openDay(localDate(EVENING + DAY));
+    expect(app.ctrl.viewDay()).toBeNull();
   });
 });

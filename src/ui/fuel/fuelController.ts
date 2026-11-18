@@ -53,6 +53,7 @@ import { measurementsEntry, measurementsScreen } from './measurements';
 import type { CoachFuel } from '../../core/trainer/coach';
 import { entryFromSuggestion } from '../../core/trainer/actions/food';
 import { addDate } from '../../core/trainer/plan';
+import { searchDateLabel } from '../../core/searchPersonal';
 import type {
   Favorite,
   Food,
@@ -277,6 +278,10 @@ export function createFuel(host: FuelHost) {
   /** Bumps on every new photo and on close, so a slow classify can't fill a newer sheet. */
   let photoSeq = 0;
   let sub: Sub = { kind: 'main' };
+  /** M13c 12b: a past day opened from search (null: today). */
+  let viewDate: string | null = null;
+  /** That day's entries when it is older than the loaded window (else null: `entries` has it). */
+  let viewEntries: FoodEntry[] | null = null;
   let sheet: HTMLElement | null = null;
   /** Cleanup for the open sheet (the scanner stops its camera). */
   let sheetDispose: (() => void) | null = null;
@@ -367,6 +372,7 @@ export function createFuel(host: FuelHost) {
     nudgeShownDate = shown;
     index = null;
     loaded = true;
+    await loadViewDay();
     evaluateNudge();
     // M12 1b: tape measurements and the dismissed protein nudges (small; read apart from the
     // retried batch above, so a failure here never blocks Fuel).
@@ -377,6 +383,15 @@ export function createFuel(host: FuelHost) {
     } catch (err) {
       host.logError(err);
     }
+  }
+
+  /** M13c 12b: a past day older than the 30-day window is read on its own (one day's rows). */
+  async function loadViewDay(): Promise<void> {
+    const d = today();
+    viewEntries =
+      viewDate !== null && viewDate < addDate(d, -(ENTRY_DAYS - 1))
+        ? await entriesBetween(db, viewDate, viewDate)
+        : null;
   }
 
   /** Re-reads everything (cheap: small tables). Errors are logged, the old data stays. */
@@ -439,6 +454,9 @@ export function createFuel(host: FuelHost) {
 
   const todayEntries = () => entries.filter((e) => e.date === today());
   const totals = () => dayTotals(entries, today());
+  /** M13c 12b: the day the main view shows (a past day from search, else today). */
+  const shownDate = () => viewDate ?? today();
+  const shownEntries = () => viewEntries ?? entries.filter((e) => e.date === shownDate());
 
   function lastSessionEnd(): number | undefined {
     let end: number | undefined;
@@ -1203,8 +1221,9 @@ export function createFuel(host: FuelHost) {
         now: host.now(),
         mode,
         targets: targets(),
-        totals: totals(),
-        entries: todayEntries(),
+        totals: viewDate === null ? totals() : dayTotals(shownEntries(), shownDate()),
+        entries: viewDate === null ? todayEntries() : shownEntries(),
+        day: viewDate === null ? null : { date: viewDate, label: searchDateLabel(viewDate, today()) },
         unit: host.unit(),
         lastWeighInKg: latestKg(),
         lastWeighInSource: latestWeighIn()?.source,
@@ -1228,6 +1247,11 @@ export function createFuel(host: FuelHost) {
         },
         onSetup: () => openSetup('fuel'),
         onDismissNudge: () => dismissNudge(),
+        onToday: () => {
+          viewDate = null;
+          viewEntries = null;
+          host.render();
+        },
         onTab: (t) => host.goTab(t),
       },
     );
@@ -1480,7 +1504,23 @@ export function createFuel(host: FuelHost) {
       await ensureSeeded();
       evaluateNudge();
       sub = { kind: 'main' };
+      viewDate = null;
+      viewEntries = null;
     },
+    /**
+     * M13c 12b: the Fuel tab on a given day (search → "Meals · Mon 16 Nov"); today or a future
+     * date opens today. Call it instead of `open()`, then show Fuel as `open()` does.
+     */
+    async openDay(date: string): Promise<void> {
+      await ensureLoaded();
+      await ensureSeeded();
+      evaluateNudge();
+      sub = { kind: 'main' };
+      viewDate = date < today() ? date : null;
+      await loadViewDay();
+    },
+    /** M13c 12b: the past day on show, or null (today). */
+    viewDay: (): string | null => viewDate,
     screen(): HTMLElement {
       switch (sub.kind) {
         case 'main':

@@ -75,6 +75,7 @@ function render(over: Partial<FuelProps> = {}) {
     setup: 0,
     dismiss: 0,
     tab: [] as TabId[],
+    today: 0,
   };
   const el = asFake(
     fuelScreen(props(over), {
@@ -83,6 +84,7 @@ function render(over: Partial<FuelProps> = {}) {
       onWeighIn: () => calls.weigh++,
       onSetup: () => calls.setup++,
       onDismissNudge: () => calls.dismiss++,
+      onToday: () => calls.today++,
       onTab: (t) => calls.tab.push(t),
     }),
   );
@@ -368,5 +370,51 @@ describe('Fuel: Search in the header (M13c)', () => {
     expect(btn.textContent).toBe('Search');
     btn.click();
     expect(got).toEqual([btn]);
+  });
+});
+
+describe('M13c 12b: a past day (search → Meals · Wed 11 Nov)', () => {
+  const DAY = { date: '2026-11-11', label: 'Wed 11 Nov' };
+  const old = ENTRIES.map((e) => ({ ...e, date: DAY.date }));
+
+  it('the header, the rows and the heading are that day; Back to today replaces Log food', () => {
+    const { el, calls } = render({
+      day: DAY,
+      entries: old,
+      nudge: '40 g protein to go today',
+      proteinNudge: { mealKey: 'k', text: 'More protein?' },
+    });
+    expect(byAttr(el, 'data-fuel-day', DAY.date).textContent).toBe('Wed 11 Nov');
+    expect(el.oneByClass('fuel-entries').getAttribute('aria-label')).toBe('Food on Wed 11 Nov');
+    expect(all(el, 'data-entry')).toHaveLength(3);
+    expect(all(el, 'data-log-open')).toHaveLength(0);
+    expect(all(el, 'data-fuel-nudge')).toHaveLength(0);
+    expect(all(el, 'data-protein-nudge')).toHaveLength(0);
+    const back = byAttr(el, 'data-fuel-today');
+    expect(back.tag).toBe('button');
+    expect(back.textContent).toBe('Back to today');
+    back.click();
+    expect(calls.today).toBe(1);
+    // Rows still open the entry sheet.
+    byAttr(el, 'data-entry-edit', 'e1').click();
+    expect(calls.edit).toEqual(['e1']);
+    expectCleanCopy(el);
+  });
+
+  it('an empty past day names the day and offers Back to today, not Log food', () => {
+    const { el, calls } = render({ day: DAY, entries: [], totals: { kcal: 0, proteinG: 0 } });
+    const empty = byAttr(el, 'data-empty-state', 'fuel-day');
+    expect(empty.oneByClass('empty-state-line').textContent).toBe('Nothing logged on Wed 11 Nov.');
+    expect(el.byTag('h2').map((x) => x.textContent)).toContain('Wed 11 Nov');
+    expect(all(el, 'data-log-open')).toHaveLength(0);
+    byAttr(empty, 'data-fuel-today').click();
+    expect(calls.today).toBe(1);
+  });
+
+  it('day: null is today (unchanged screen)', () => {
+    const { el } = render({ day: null });
+    expect(all(el, 'data-fuel-day')).toHaveLength(0);
+    expect(all(el, 'data-log-open')).toHaveLength(1);
+    expect(all(el, 'data-fuel-today')).toHaveLength(0);
   });
 });

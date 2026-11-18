@@ -354,6 +354,50 @@
   font-size: var(--fs-body);
 }
 
+/* Task 12b: "Show more" under Workouts / Meals / Coach — a quiet full-width outline button,
+   so the next section's rows never read as part of it. */
+.lib-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.lib-more-chev {
+  flex: none;
+  color: var(--text-2);
+  transform: rotate(-90deg);
+}
+
+.lib-more:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* "Searching your history…": one muted line, no spinner (nothing moves). */
+.lib-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap-min);
+  margin: 0;
+  padding: 0 4px;
+  font-size: var(--fs-body);
+}
+
+.lib-loading .ic {
+  flex: none;
+}
+
 /* The empty state's food row keeps the hit look, full width. */
 .library .empty-state .lib-hit {
   margin-top: 8px;

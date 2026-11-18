@@ -40,6 +40,10 @@
 // M13c task 6d: one optional slot under a coach reply, the Claude explain card
 // (claudeOfferCard.ts): prop `claudeOffer: { messageId }`, callbacks `onClaudeWanted` /
 // `onClaudeDismiss`. Tab only, never beside a red flag, never on a message with its own card.
+// M13c task 12b: `revealMessage(root, id)` (root = what `chat()` or `coachTabScreen()` returned)
+// scrolls the thread to a message (search → Coach) and outlines it for `REVEAL_MS`
+// (`[data-chat-reveal]`: the outline fades; under reduced motion it is static, then removed).
+// It stops the thread following the newest message for that render, so the pin can't undo it.
 import { dateText } from '../../core/trainer/actions/lighter';
 import {
   QUICK_CHIPS,
@@ -334,16 +338,26 @@ export function pinNewest(scroll: ScrollBox, newest: ThreadItem | null): number 
 /** How far above the bottom he must scroll before the thread stops following new layout. */
 const FOLLOW_SLACK = 48;
 
+/** Lets `revealMessage` stop the newest-pin for this render (it scrolled somewhere on purpose). */
+type Follow = { hold: () => void };
+
 /**
  * Keeps the newest item in view: once after mount (next frame), then whenever the thread box or
- * its content changes size (keyboard, dock rows, fonts), until he scrolls up himself.
+ * its content changes size (keyboard, dock rows, fonts), until he scrolls up himself or a message
+ * is revealed (`hold`).
  */
-function followNewest(scroll: HTMLElement, list: HTMLElement): void {
-  if (typeof requestAnimationFrame !== 'function') return;
+function followNewest(scroll: HTMLElement, list: HTMLElement): Follow {
+  let held = false;
+  const follow: Follow = {
+    hold: () => {
+      held = true;
+    },
+  };
+  if (typeof requestAnimationFrame !== 'function') return follow;
   let following = true;
   let mine = -1; // the scrollTop we last set (scroll events at it are ours)
   const pin = () => {
-    if (!following || !scroll.isConnected) return;
+    if (held || !following || !scroll.isConnected) return;
     mine = pinNewest(scroll, list.lastElementChild as HTMLElement | null);
   };
   requestAnimationFrame(pin);
@@ -365,6 +379,88 @@ function followNewest(scroll: HTMLElement, list: HTMLElement): void {
     ro.observe(scroll);
     ro.observe(list);
   }
+  return follow;
+}
+
+// ---------- reveal a message (search → Coach, M13c task 12b) ----------
+
+/** How long a revealed message keeps its outline. */
+export const REVEAL_MS = 2400;
+/** Gap kept above a revealed message taller than the thread's box. */
+const REVEAL_GAP = 8;
+
+/**
+ * Where the thread scrolls to reveal a message: centred in the box, or from its top (minus a
+ * small gap) when it is taller than the box; clamped to what the thread can scroll.
+ */
+export function revealScrollTop(o: {
+  itemTop: number;
+  itemHeight: number;
+  clientHeight: number;
+  scrollHeight: number;
+}): number {
+  const max = Math.max(0, o.scrollHeight - o.clientHeight);
+  const top =
+    o.itemHeight + 2 * REVEAL_GAP > o.clientHeight
+      ? o.itemTop - REVEAL_GAP
+      : o.itemTop - (o.clientHeight - o.itemHeight) / 2;
+  return Math.round(Math.min(max, Math.max(0, top)));
+}
+
+/** A rendered thread: its scroll box, its messages by id, and its newest-pin. */
+type Thread = { scroll: HTMLElement; items: Map<string, HTMLElement>; follow: Follow };
+const threads = new WeakMap<object, Thread>();
+const revealTimers = new WeakMap<object, ReturnType<typeof setTimeout>>();
+
+function prefersReducedMotion(): boolean {
+  const mm = (globalThis as { matchMedia?: (q: string) => { matches: boolean } }).matchMedia;
+  return typeof mm === 'function' && mm('(prefers-reduced-motion: reduce)').matches;
+}
+
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+
+/**
+ * Scrolls the chat built by `chat()` / `coachTabScreen()` (pass either root, after it is mounted)
+ * to the message with this id (a `ChatMessage.id`, or search's string form of it), outlines it
+ * for `REVEAL_MS` and moves focus to it (no scroll jump) so a screen reader reads it. Smooth
+ * scroll and a fading outline; under reduced motion (or `reducedMotion: true`) an instant jump
+ * and a static outline. Returns false when the chat or the message isn't there (e.g. cleared).
+ */
+export function revealMessage(
+  root: HTMLElement,
+  id: number | string,
+  opts: { reducedMotion?: boolean } = {},
+): boolean {
+  const thread = threads.get(root);
+  const item = thread?.items.get(String(id));
+  if (!thread || !item || !thread.scroll.isConnected) return false;
+  const reduced = opts.reducedMotion ?? prefersReducedMotion();
+  thread.follow.hold();
+  const { scroll } = thread;
+  const top = revealScrollTop({
+    itemTop: num(item.offsetTop),
+    itemHeight: num(item.offsetHeight),
+    clientHeight: num(scroll.clientHeight),
+    scrollHeight: num(scroll.scrollHeight),
+  });
+  if (typeof scroll.scrollTo === 'function') {
+    scroll.scrollTo({ top, behavior: reduced ? 'auto' : 'smooth' });
+  } else {
+    scroll.scrollTop = top;
+  }
+  item.setAttribute('data-chat-reveal', reduced ? 'static' : 'fade');
+  item.setAttribute('tabindex', '-1');
+  item.focus({ preventScroll: true });
+  const prev = revealTimers.get(item);
+  if (prev !== undefined) clearTimeout(prev);
+  revealTimers.set(
+    item,
+    setTimeout(() => {
+      item.removeAttribute('data-chat-reveal');
+      revealTimers.delete(item);
+    }, REVEAL_MS),
+  );
+  return true;
 }
 
 // ---------- the page after the iOS keyboard ----------
@@ -630,6 +726,8 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   // The thread.
   const list = h('ol', { class: 'cs-list chat-list', role: 'log', 'aria-live': 'polite' });
   const lastIndex = p.messages.length - 1;
+  /** Stored messages by id (as a string), for `revealMessage`. */
+  const itemsById = new Map<string, HTMLElement>();
   p.messages.forEach((m, i) => {
     const id = m.id ?? -1 - i;
     const isNew = p.animateAfter !== undefined && (m.id === undefined || m.id > p.animateAfter);
@@ -637,6 +735,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       class: `chat-item chat-item-${m.role}${isNew ? ' chat-rise' : ''}`,
       'data-msg-id': m.id,
     });
+    if (m.id !== undefined) itemsById.set(String(m.id), item);
     const card = m.card;
     let built: Built | null = null;
     if (card?.kind === 'redFlag') {
@@ -875,7 +974,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
   // Newest message in view once the caller has mounted the chat (chat convention); a card
   // taller than the thread shows from its top. Checkpoint J: it also stays in view after that
   // (keyboard opening or closing, the dock growing a chip row, late layout) until he scrolls up.
-  followNewest(scroll, list);
+  const thread: Thread = { scroll, items: itemsById, follow: followNewest(scroll, list) };
 
   const dock = h(
     'div',
@@ -902,6 +1001,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
       ...body,
     );
     micHandles.set(tab, handle);
+    threads.set(tab, thread);
     settlePageAfterKeyboard(tab);
     return tab;
   }
@@ -943,6 +1043,7 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     live[next]?.focus();
   });
   micHandles.set(root, handle);
+  threads.set(root, thread);
   settlePageAfterKeyboard(root);
   return root;
 }
@@ -1026,5 +1127,7 @@ export function coachTabScreen(
   );
   const handle = micHandles.get(c);
   if (handle) micHandles.set(screen, handle);
+  const thread = threads.get(c);
+  if (thread) threads.set(screen, thread);
   return screen;
 }

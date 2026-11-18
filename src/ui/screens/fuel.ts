@@ -22,6 +22,10 @@
 // `proteinNudge` and `onDismissProteinNudge` are both set; "Why?" shows with `onProteinWhy`.
 // M13c (optional): Search (`[data-search-open]`, ../searchButton.ts) when `onSearch` is set. The
 // header becomes two rows: "Fuel" + Search, then the date + Weigh-in (fuel.css `.has-search`).
+// M13c task 12b (optional): `day` opens a past day (search → "Meals · Mon 16 Nov"): the header
+// date, the rings and the rows are that day's, the food heading / empty line name it, nudges and
+// the measurements row hide, and Log food (which logs now) gives way to "Back to today"
+// (`[data-fuel-today]`, `onToday`). Rows still open the entry sheet (Edit / Delete).
 import type {
   FoodEntry,
   MacroSet,
@@ -63,6 +67,11 @@ export type FuelProps = {
   measurements?: MeasurementsEntry | null | undefined;
   /** M12 1b: core's protein-per-meal nudge for the latest light meal, or null (none / dismissed). */
   proteinNudge?: ProteinNudgeProps | null | undefined;
+  /**
+   * M13c 12b: a past day (`date` YYYY-MM-DD, `label` "Mon 16 Nov"); `totals` / `entries` are that
+   * day's. Omitted / null = today.
+   */
+  day?: { date: string; label: string } | null | undefined;
 };
 
 export type FuelActions = {
@@ -82,6 +91,8 @@ export type FuelActions = {
   onTab: (tab: TabId) => void;
   /** M13c: Search in the header (opens the Library, field focused). Omitted → no button. */
   onSearch?: OnSearch | undefined;
+  /** M13c 12b: "Back to today" on a past day. */
+  onToday?: (() => void) | undefined;
 };
 
 /** Entries grouped by slot; groups ordered by their first entry's time, rows by time. */
@@ -104,7 +115,11 @@ function header(props: FuelProps, actions: FuelActions): HTMLElement {
       'div',
       { class: 'fuel-head-txt' },
       h('h1', { class: 'page-title' }, 'Fuel'),
-      h('p', { class: 'date' }, dateLabel(props.now)),
+      h(
+        'p',
+        { class: 'date', 'data-fuel-day': props.day?.date },
+        props.day ? props.day.label : dateLabel(props.now),
+      ),
     ),
     actions.onSearch ? searchButton(actions.onSearch) : null,
     h(
@@ -200,31 +215,57 @@ function entryRow(e: FoodEntry, mode: NutritionMode, actions: FuelActions): HTML
   );
 }
 
+/** M13c 12b: "Back to today" on a past day (outline: the day's rows stay the content). */
+function todayButton(onToday: () => void): HTMLElement {
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: 'fuel-secondary fuel-today-btn',
+      'data-fuel-today': true,
+      onclick: () => onToday(),
+    },
+    icon('back', 'md'),
+    h('span', {}, 'Back to today'),
+  );
+}
+
 function entriesSection(props: FuelProps, actions: FuelActions): HTMLElement {
   const groups = groupBySlot(props.entries);
+  const day = props.day ?? null;
   if (groups.length === 0) {
+    const { onToday } = actions;
     return h(
       'section',
       { class: 'fuel-entries', 'data-entries': 'none' },
-      h('h2', { class: 'fuel-h2' }, 'Today'),
+      h('h2', { class: 'fuel-h2' }, day ? day.label : 'Today'),
       // M13 task 22: icon + one line + one action; Log food moves in here (no second button).
       emptyState({
         kind: 'fuel-day',
         icon: 'plate',
-        line: 'Nothing logged yet today.',
-        action: {
-          label: 'Log food',
-          icon: 'plus',
-          primary: props.targets !== null,
-          onClick: () => actions.onLog(),
-          hooks: { 'data-log-open': true },
-        },
+        line: day ? `Nothing logged on ${day.label}.` : 'Nothing logged yet today.',
+        action: day
+          ? onToday
+            ? {
+                label: 'Back to today',
+                icon: 'back',
+                onClick: () => onToday(),
+                hooks: { 'data-fuel-today': true },
+              }
+            : null
+          : {
+              label: 'Log food',
+              icon: 'plus',
+              primary: props.targets !== null,
+              onClick: () => actions.onLog(),
+              hooks: { 'data-log-open': true },
+            },
       }),
     );
   }
   return h(
     'section',
-    { class: 'fuel-entries', 'aria-label': 'Today’s food' },
+    { class: 'fuel-entries', 'aria-label': day ? `Food on ${day.label}` : 'Today’s food' },
     ...groups.map((g) => {
       const kcal = g.entries.reduce((s, e) => s + e.kcal, 0);
       const protein = g.entries.reduce((s, e) => s + e.proteinG, 0);
@@ -244,15 +285,16 @@ function entriesSection(props: FuelProps, actions: FuelActions): HTMLElement {
 }
 
 export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement {
-  const { onMeasurements } = actions;
+  const { onMeasurements, onToday } = actions;
+  const past = props.day != null;
   const measure =
-    props.measurements && onMeasurements
+    !past && props.measurements && onMeasurements
       ? measurementsEntryRow(props.measurements, onMeasurements)
       : null;
   const measureDue = props.measurements?.due === true;
   const onNudgeDismiss = actions.onDismissProteinNudge;
   const mealNudge =
-    props.proteinNudge && onNudgeDismiss
+    !past && props.proteinNudge && onNudgeDismiss
       ? proteinNudge(props.proteinNudge, {
           onDismiss: onNudgeDismiss,
           onWhy: actions.onProteinWhy,
@@ -262,10 +304,18 @@ export function fuelScreen(props: FuelProps, actions: FuelActions): HTMLElement 
     'main',
     { class: `screen fuel has-tabbar ${moodClass('pro')}`, 'data-screen': 'fuel' },
     header(props, actions),
-    props.nudge ? nudgeBanner(props.nudge, actions.onDismissNudge ?? (() => undefined)) : null,
+    !past && props.nudge
+      ? nudgeBanner(props.nudge, actions.onDismissNudge ?? (() => undefined))
+      : null,
     measureDue ? measure : null,
     props.targets ? fuelRings(props.mode, props.totals, props.targets) : setupCard(actions.onSetup),
-    props.entries.length > 0 ? logButton(props.targets !== null, actions.onLog) : null,
+    props.entries.length === 0
+      ? null
+      : past
+        ? onToday
+          ? todayButton(onToday)
+          : null
+        : logButton(props.targets !== null, actions.onLog),
     mealNudge,
     entriesSection(props, actions),
     measureDue ? null : measure,
