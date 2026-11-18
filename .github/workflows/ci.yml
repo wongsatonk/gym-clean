@@ -30,8 +30,32 @@ jobs:
   # test still runs exactly once: shards 1-4 cover `mobile` + `pwa`, one job for the live camera,
   # and the wall-clock clip specs (one 20-min job on 2026-11-17) split over 8 runners. `--no-deps`:
   # each runs alone on its own runner, which is what the phase order was protecting.
-  e2e:
+  # The fake camera video (2 MB MJPEG, made from a committed synthetic clip by ffmpeg) is built once
+  # and cached; e2e jobs restore it, so none of them installs ffmpeg (apt took 7-12 min a job on
+  # 2026-11-18). It is rebuilt only when the clip or the setup script changes.
+  fake-camera:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: test-results/fake-camera/person.mjpeg
+          key: fake-camera-${{ hashFiles('fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm', 'e2e/fake-camera.setup.ts') }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Build the fake camera video
+        run: |
+          command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+          mkdir -p test-results/fake-camera
+          ffmpeg -y -loglevel error -i fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm -vf scale=480:640 -q:v 5 -r 30 test-results/fake-camera/person.mjpeg
+
+  e2e:
+    needs: fake-camera
+    runs-on: ubuntu-latest
+    # Playwright's image has Chromium and its system libraries, so no `install --with-deps` (apt).
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
+      options: --ipc=host
     strategy:
       fail-fast: false
       matrix:
@@ -57,14 +81,12 @@ jobs:
           node-version: lts/*
           cache: npm
       - run: npm ci
-      - name: Playwright browser cache
-        uses: actions/cache@v4
+      - name: Fake camera video (built by the fake-camera job)
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - run: npx playwright install --with-deps chromium
-      - name: ffmpeg (fake camera clip for e2e)
-        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
+          path: test-results/fake-camera/person.mjpeg
+          key: fake-camera-${{ hashFiles('fixtures/synthetic/curl/synthetic-01__reps-3__partials-1.webm', 'e2e/fake-camera.setup.ts') }}
+          fail-on-cache-miss: true
       - run: npx playwright test ${{ matrix.args }}
       - uses: actions/upload-artifact@v4
         if: failure()
