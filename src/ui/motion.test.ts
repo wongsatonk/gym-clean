@@ -5,9 +5,13 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  AMBIENT_COVER,
   DUR,
   EASE,
   MOTION_OFF,
+  ambientPaused,
+  pauseAmbient,
+  watchAmbient,
   STAGGER_MS,
   checkMorph,
   countUp,
@@ -391,5 +395,182 @@ describe('ringFill', () => {
     ringFill(as(ring), 75);
     expect(ring.style['strokeDashoffset']).toBe('25');
     expect(ring.calls).toEqual([]);
+  });
+});
+
+// M13c task 9: the moving glow pauses (html[data-ambient='paused'], CSS animation-play-state)
+// while the app is hidden, while a sheet / the camera / the How-to sheet covers the screen, and
+// on every motion-off screen. Reasons stack: one ending never resumes it while another holds.
+describe('pauseAmbient / watchAmbient', () => {
+  class Root {
+    attrs: Record<string, string> = {};
+    setAttribute(k: string, v: string) {
+      this.attrs[k] = v;
+    }
+    removeAttribute(k: string) {
+      this.attrs = Object.fromEntries(Object.entries(this.attrs).filter(([key]) => key !== k));
+    }
+    getAttribute(k: string) {
+      return this.attrs[k] ?? null;
+    }
+  }
+  const root = () => new Root() as unknown as HTMLElement;
+  const state = (r: HTMLElement) => (r as unknown as Root).attrs['data-ambient'];
+
+  it('marks html paused while any reason holds, and clears it when none is left', () => {
+    const r = root();
+    expect(ambientPaused(r)).toBe(false);
+    pauseAmbient(true, 'hidden', r);
+    expect(state(r)).toBe('paused');
+    pauseAmbient(true, 'covered', r);
+    pauseAmbient(false, 'hidden', r);
+    expect(state(r)).toBe('paused');
+    expect(ambientPaused(r)).toBe(true);
+    pauseAmbient(false, 'covered', r);
+    expect(state(r)).toBeUndefined();
+    expect(ambientPaused(r)).toBe(false);
+    // Releasing a reason that never held is harmless.
+    pauseAmbient(false, 'covered', r);
+    expect(state(r)).toBeUndefined();
+  });
+
+  it('a plain pauseAmbient(on) uses one caller reason', () => {
+    const r = root();
+    pauseAmbient(true, undefined, r);
+    expect(state(r)).toBe('paused');
+    pauseAmbient(false, undefined, r);
+    expect(state(r)).toBeUndefined();
+  });
+
+  it('is a no-op without a DOM', () => {
+    expect(() => pauseAmbient(true)).not.toThrow();
+    expect(ambientPaused()).toBe(false);
+  });
+
+  it('covers sheets, overlays and every motion-off screen, never a hidden one', () => {
+    const parts = AMBIENT_COVER.split(/,\s*/);
+    for (const hook of ["[aria-modal='true']", '.overlay', ...MOTION_OFF.split(/,\s*/)])
+      expect(parts, hook).toContain(`${hook.replace(/"/g, "'")}:not([hidden])`);
+  });
+
+  type Listener = () => void;
+  function fakeDoc() {
+    const html = new Root();
+    let covered = false;
+    const listeners: Record<string, Listener[]> = {};
+    const doc = {
+      hidden: false,
+      documentElement: html,
+      body: {},
+      querySelector: vi.fn((sel: string) => {
+        expect(sel).toBe(AMBIENT_COVER);
+        return covered ? {} : null;
+      }),
+      addEventListener: (t: string, cb: Listener) => (listeners[t] ??= []).push(cb),
+      removeEventListener: (t: string, cb: Listener) => {
+        listeners[t] = (listeners[t] ?? []).filter((x) => x !== cb);
+      },
+    };
+    return {
+      doc: doc as unknown as Document,
+      html,
+      raw: doc,
+      cover: (on: boolean) => (covered = on),
+      fire: (t: string) => (listeners[t] ?? []).forEach((cb) => cb()),
+      count: (t: string) => (listeners[t] ?? []).length,
+    };
+  }
+  const mo = globalThis as { MutationObserver?: unknown };
+  let savedMO: unknown;
+  let observers: { cb: () => void; observed: unknown[]; disconnected: boolean }[] = [];
+  beforeEach(() => {
+    savedMO = mo.MutationObserver;
+    observers = [];
+    mo.MutationObserver = class {
+      rec: { cb: () => void; observed: unknown[]; disconnected: boolean };
+      constructor(cb: () => void) {
+        this.rec = { cb, observed: [], disconnected: false };
+        observers.push(this.rec);
+      }
+      observe(target: unknown, opts: MutationObserverInit) {
+        expect(opts).toMatchObject({ childList: true, subtree: true });
+        this.rec.observed.push(target);
+      }
+      disconnect() {
+        this.rec.disconnected = true;
+      }
+    };
+  });
+  afterEach(() => {
+    mo.MutationObserver = savedMO;
+  });
+  const flush = () => new Promise<void>((r) => queueMicrotask(r));
+
+  it('pauses while the page is hidden and resumes when it is shown', () => {
+    const f = fakeDoc();
+    const stop = watchAmbient(f.doc);
+    expect(f.html.attrs['data-ambient']).toBeUndefined();
+    f.raw.hidden = true;
+    f.fire('visibilitychange');
+    expect(f.html.attrs['data-ambient']).toBe('paused');
+    f.raw.hidden = false;
+    f.fire('visibilitychange');
+    expect(f.html.attrs['data-ambient']).toBeUndefined();
+    stop();
+  });
+
+  it('starts paused when a cover is already open, and follows DOM changes (batched)', async () => {
+    const f = fakeDoc();
+    f.cover(true);
+    const stop = watchAmbient(f.doc);
+    expect(f.html.attrs['data-ambient']).toBe('paused');
+    expect(observers[0]?.observed).toEqual([f.raw.body]);
+    f.cover(false);
+    const calls = f.raw.querySelector.mock.calls.length;
+    observers[0]?.cb();
+    observers[0]?.cb();
+    observers[0]?.cb();
+    await flush();
+    expect(f.raw.querySelector.mock.calls.length).toBe(calls + 1);
+    expect(f.html.attrs['data-ambient']).toBeUndefined();
+    f.cover(true);
+    observers[0]?.cb();
+    await flush();
+    expect(f.html.attrs['data-ambient']).toBe('paused');
+    stop();
+  });
+
+  it('hidden and covered hold independently', async () => {
+    const f = fakeDoc();
+    const stop = watchAmbient(f.doc);
+    f.cover(true);
+    observers[0]?.cb();
+    await flush();
+    f.raw.hidden = true;
+    f.fire('visibilitychange');
+    f.raw.hidden = false;
+    f.fire('visibilitychange');
+    expect(f.html.attrs['data-ambient']).toBe('paused');
+    f.cover(false);
+    observers[0]?.cb();
+    await flush();
+    expect(f.html.attrs['data-ambient']).toBeUndefined();
+    stop();
+  });
+
+  it('stop() removes the listener, disconnects and releases its reasons', () => {
+    const f = fakeDoc();
+    f.cover(true);
+    const stop = watchAmbient(f.doc);
+    expect(f.count('visibilitychange')).toBe(1);
+    stop();
+    stop();
+    expect(f.count('visibilitychange')).toBe(0);
+    expect(observers[0]?.disconnected).toBe(true);
+    expect(f.html.attrs['data-ambient']).toBeUndefined();
+  });
+
+  it('is a no-op stop without a DOM', () => {
+    expect(() => watchAmbient(undefined)()).not.toThrow();
   });
 });

@@ -29,12 +29,13 @@
 // and Coach eval; About becomes one row (`[data-about-open]`) opening the About screen. On keeps
 // today's About lines and adds the same row when `onAbout` is set (the owner-tools switch lives
 // on the About screen, so it must stay reachable while owner mode is on).
-import type { Accent, BodyArea, Intake } from '../../core/types';
+import type { Accent, BackgroundStyle, BodyArea, Intake } from '../../core/types';
 import type { Unit } from '../../core/units';
 import { APP_NAME } from '../../core/brand';
 import { CREDIT, versionLabel } from '../../core/version';
 import { ONBOARDING_BUTTONS } from '../../data/onboarding';
 import { accentPicker } from '../accentPicker';
+import { backgroundPicker } from '../backgroundPicker';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
 import { AREA_LABEL, BODY_AREAS, intakeSummary } from '../intake/intake';
@@ -44,6 +45,8 @@ import { moodClass } from '../tokens';
 
 export type SettingsProps = {
   accent: Accent;
+  /** M13c: settings 'background' (Moving glow / Plain). Missing → Moving glow. */
+  background?: BackgroundStyle | undefined;
   spokenCount: boolean;
   coachTips: boolean;
   handsFree: boolean;
@@ -80,6 +83,11 @@ export type SettingsProps = {
 export type SettingsActions = {
   /** A different accent was picked: save it (setAccent) and apply it (applyAccent). */
   onAccent: (accent: Accent) => void;
+  /**
+   * M13c: the other background was picked: save it (settings 'background') and apply it
+   * (applyBackground). Omitted → no Background row.
+   */
+  onBackground?: ((style: BackgroundStyle) => void) | undefined;
   onSpokenCount: (on: boolean) => void;
   onCoachTips: (on: boolean) => void;
   onHandsFree: (on: boolean) => void;
@@ -412,7 +420,15 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
     { class: `screen settings has-tabbar ${moodClass('pro')}`, 'data-screen': 'settings' },
     h('h1', { class: 'page-title' }, 'Settings'),
     goalSection(props, actions, section),
-    section('accent', 'palette', 'Accent colour', accentPicker(props.accent, actions.onAccent)),
+    section(
+      'accent',
+      'palette',
+      'Accent colour',
+      accentPicker(props.accent, actions.onAccent),
+      actions.onBackground
+        ? backgroundPicker(props.background ?? 'glow', actions.onBackground)
+        : null,
+    ),
     section(
       'voice',
       'speaker',

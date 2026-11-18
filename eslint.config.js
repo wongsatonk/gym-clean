@@ -4,7 +4,7 @@ import globals from 'globals';
 import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
-  { ignores: ['docs/design/**', 'dist', 'coverage', 'playwright-report', 'test-results', 'node_modules', 'public/mediapipe', 'ml/.venv', 'ml/data', 'ml/runs', 'ml/models', 'ios'] },
+  { ignores: ['docs/design/**', 'dist', 'coverage', 'playwright-report', 'test-results', 'test-results-*', 'node_modules', 'public/mediapipe', 'ml/.venv', 'ml/data', 'ml/runs', 'ml/models', 'ios'] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {
