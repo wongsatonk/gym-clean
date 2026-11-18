@@ -99,7 +99,7 @@ Claude Code updates this file at the end of every task. A fresh session resumes 
   - Files: `src/pose/landmarker.ts`(+test); `public/models/**` only if main approved the full model in 2.
   - Done when: a unit test pins the options passed to `createFromOptions`; detection on the bent-over spans ≥ the measured winner and never below today's; `e2e/camera.spec.ts` still green; `npm run ios:check` passes if a model file was added.
   - Deps: 2.
-- [ ] 4. [main] Shared types, no behaviour change.
+- [x] 4. [main] Shared types, no behaviour change.
   - Files: `src/core/types.ts`.
   - Adds: `WorkSide = 'right' | 'left'`; `SideCount = { reps: number; partials: number }`; `SetLog.sides?: Partial<Record<WorkSide, SideCount>>` (doc: `reps` = the lower side when both exist); `OneSidedLimb = 'arm' | 'leg'`.
   - Done when: `npm run check` passes.

@@ -70,9 +70,23 @@ export type SetLog = {
   effort?: SetEffort;
   /** M12 1b: a warm-up set (left out of volume, bests, stalls, e1RM and completion). */
   warmup?: true;
+  /**
+   * M13b: a one-sided exercise's per-side counts (right first, then left). When both sides exist,
+   * `reps` / `partials` are the lower side's, so totals, bests and stats stay one number per set.
+   */
+  sides?: Partial<Record<WorkSide, SideCount>>;
   startedAt: number;
   endedAt: number;
 };
+
+/** M13b: the side a one-sided exercise works this part of the set (right first, then left). */
+export type WorkSide = 'right' | 'left';
+
+/** M13b: one side's count within a one-sided set. */
+export type SideCount = { reps: number; partials: number };
+
+/** M13b: what a one-sided exercise works one at a time (labels "Next arm" / "Next leg"). */
+export type OneSidedLimb = 'arm' | 'leg';
 
 /** Emitted by the rep counter (SPEC §3). Angles in degrees, times in ms (frame clock). */
 export type RepEvent = {
