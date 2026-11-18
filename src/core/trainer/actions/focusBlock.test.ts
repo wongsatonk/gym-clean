@@ -22,6 +22,10 @@ import type {
 // Made-up history; the repo's default program. 2026-11-16 is a Monday.
 const program = programJson as Program;
 const CATALOG = trainerCatalog();
+const isAbs = (id: string) =>
+  CATALOG.exercises.find((e) => e.id === id)?.primaryMuscles.includes('abdominals') ?? false;
+/** A made-up gym that can do no abs exercise. */
+const NO_ABS = { ...CATALOG, canDo: (id: string) => !isAbs(id) && CATALOG.canDo(id) };
 const TODAY = '2026-11-16';
 const NOW = new Date(2026, 10, 16, 9, 0).getTime();
 const at = (date: string, h = 18) => {
@@ -110,15 +114,57 @@ describe('proposeFocusBlock', () => {
     expect(blockOf(ok(proposeFocusBlock(ctx, b, CATALOG)))).toEqual(b);
   });
 
-  it('refuses params outside the rules, and a group with no exercises', () => {
+  it('refuses params outside the rules, and a group the gym has no exercises for', () => {
     const ctx = ctxFor();
     for (const bad of [{ weeks: 8 }, { weekdays: [1, 2] }]) {
       const r = proposeFocusBlock(ctx, { ...PARAMS, ...bad }, CATALOG);
       expect(r.ok).toBe(false);
       if (!r.ok) expect(checkCopy(r.reply).ok).toBe(true);
     }
-    const r = proposeFocusBlock(ctx, { ...PARAMS, group: 'core' }, CATALOG);
+    // M13c: a gym that can do no abs exercise can't build a core block.
+    const r = proposeFocusBlock(ctx, { ...PARAMS, group: 'core' }, NO_ABS);
     expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.reason).toBe('noCandidate');
+      expect(r.reply).toBe("I don't have abs exercises your gym can do yet, so I can't build that block.");
+      expect(checkCopy(r.reply).ok).toBe(true);
+    }
+  });
+
+  it('M13c: a core block is "Abs & core" once the gym can do an abs exercise', () => {
+    const ctx = ctxFor();
+    const p = ok(proposeFocusBlock(ctx, { ...PARAMS, group: 'core' }, CATALOG));
+    expect(p.title).toBe('Abs & core focus: 3 weeks');
+    expect(p.lines[0]?.before).toMatch(/^Week 1: 7 days, abs 0 sets$/);
+    expect(p.lines[0]?.after).toMatch(/^5 days, abs \d+ sets$/);
+    expect(p.why).toMatch(/^Abs & core gets/);
+    expect(p.say).toBe('Done. Abs & core focus block is on.');
+    expectClean(p);
+  });
+
+  it('M13c alsoCore: lines and title name the abs; the main group lines are unchanged', () => {
+    const ctx = ctxFor();
+    const plain = ok(proposeFocusBlock(ctx, PARAMS, CATALOG));
+    const p = ok(proposeFocusBlock(ctx, { ...PARAMS, alsoCore: true }, CATALOG));
+    const b = blockOf(p);
+    expect(b.alsoCore).toBe(true);
+    expect(p.title).toBe('Chest focus + abs: 3 weeks');
+    expect(p.lines).toHaveLength(plain.lines.length);
+    p.lines.forEach((l, w) => {
+      const abs = b.days
+        .slice(w * 7, w * 7 + 7)
+        .reduce((n, d) => n + focusSetsOf(d.day?.exercises ?? [], 'core', CATALOG), 0);
+      expect(l.before).toBe(`${plain.lines[w]?.before ?? ''}, abs 0 sets`);
+      const light = w === b.weeks - 1 ? ', lighter week' : '';
+      expect(l.after).toBe(
+        `${(plain.lines[w]?.after ?? '').replace(/, lighter week$/, '')}, abs ${abs} sets${light}`,
+      );
+    });
+    expect(p.lines[0]?.after).toMatch(/, abs 6 sets$/);
+    expect(p.why).toBe(
+      `${plain.why} Abs get 6 sets a week on 2 days, and they end with the block.`,
+    );
+    expectClean(p);
   });
 
   it('replaces an overlapping block and keeps the others', () => {
@@ -230,6 +276,29 @@ describe('Apply → calendar → Undo', () => {
     expect(calendar(u2.state, ctx.sessions, TODAY, 21)).toEqual(
       calendar(s0, ctx.sessions, TODAY, 21),
     );
+  });
+
+  it('M13c: Undo of an alsoCore block takes the abs out with it', () => {
+    const ctx = ctxFor();
+    const s0 = ctx.state;
+    const p = ok(proposeFocusBlock(ctx, { ...PARAMS, alsoCore: true }, CATALOG));
+    const { state: s1, change } = apply(s0, p);
+    const absOn = calendar(s1, ctx.sessions, TODAY, 21).filter((e) =>
+      effectiveDay(s1, ctx.sessions, e.date).day?.exercises.some((x) => isAbs(x.exerciseId)),
+    );
+    expect(absOn.length).toBeGreaterThanOrEqual(6);
+    const u = undoLast(s1, [{ ...change, id: 1 }], NOW + 1000);
+    if (!u.ok) throw new Error(u.reason);
+    expect(u.state.blocks ?? []).toEqual([]);
+    expect(calendar(u.state, ctx.sessions, TODAY, 21)).toEqual(calendar(s0, ctx.sessions, TODAY, 21));
+    // After the block, the usual plan comes back without abs.
+    const after = addDate(blockEnd(blockOf(p)), 1);
+    for (const e of calendar(s1, ctx.sessions, after, 14))
+      expect(
+        effectiveDay(s1, ctx.sessions, e.date).day?.exercises.some((x) => isAbs(x.exerciseId)) ??
+          false,
+        e.date,
+      ).toBe(false);
   });
 
   it('undo refuses when the blocks changed without a record', () => {

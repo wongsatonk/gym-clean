@@ -29,6 +29,12 @@
  *   (actions/focusBlock.ts); edits ("only 4 days a week", "make it 3 weeks", "swap Thursday's
  *   flyes") revise `focusDraft` (the block proposed last). Without a draft a count starts the
  *   flow and a weekday swap is a plain swap. None of these mid-workout.
+ * - M13c abs (Decision "M13c answers", q3): abs join a plan only through a choice. The group
+ *   chips list "Abs & core" once the gym can do an abs exercise. After another group's weeks and
+ *   days, one more step when the plan has no abs, core isn't on the go-easy list and the gym can
+ *   do abs: "Also add abs?" (`ASK_ALSO_CORE`) with Yes / No chips (`args.alsoCore`) and the
+ *   `coreTraining` card as its Why?; Yes builds the block with `alsoCore`. Edits keep the answer.
+ *   "add abs" / "six pack" / "หน้าท้อง" arrive as a focusBlock intent with group core.
  * - M12 Do it today / Move (Calendar day, Today's missed-day "Move it"; actions/move.ts):
  *   `doToday` {dayId} → run that plan day today (a dated override; the block's version on a block
  *   date); without a day it asks "Which day?" with one chip per other plan day. `moveDay`
@@ -75,6 +81,7 @@ import {
 } from './plan';
 import {
   blockEnd,
+  groupSetsOf,
   isFocusExercise,
   keepMyWeekdays,
   reviseFocusBlock,
@@ -85,7 +92,7 @@ import {
 } from './focusBlock';
 import { FOCUS_RULES } from './focusRules';
 import { proposeNextBlock } from './nextBlock';
-import { groupLabel, proposeFocusBlock } from './actions/focusBlock';
+import { groupLabel, groupWord, proposeFocusBlock } from './actions/focusBlock';
 import { monthScore, periodScore, weekScore, type CompletionInput } from '../progress/completion';
 import { pctOf } from '../progress/recap';
 import { weeklyStreak } from '../stats';
@@ -195,6 +202,8 @@ export type CoachArgs = {
   lighterWeek?: boolean;
   /** M12 1b nextBlock: the earliest start (local YYYY-MM-DD). */
   startDate?: string;
+  /** M13c focusBlock / nextBlock: "Also add abs?" answered (true = Yes, false = No). */
+  alsoCore?: boolean;
 };
 
 export type CoachChip = { id: CoachChipId; label: string; args?: CoachArgs };
@@ -291,6 +300,12 @@ export const ASK_GROUP = 'Which area should the block build?';
 export const ASK_WEEKS = 'For how many weeks?';
 export const ASK_DAYS = 'How many days a week?';
 export const ASK_MINUTES = 'How much time do you have?';
+/** M13c: the "Also add abs?" step after another focus group (its Why? is `ALSO_CORE_LEARN_ID`). */
+export const ASK_ALSO_CORE =
+  `Also add abs? About ${FOCUS_RULES.emptyBaseSets} sets a week on ` +
+  `${FOCUS_RULES.alsoCore.minDays} days, just for this block.`;
+/** M13c: the learn card (src/data/learnCards.ts) the "Also add abs?" step links as its Why?. */
+export const ALSO_CORE_LEARN_ID = 'coreTraining';
 /** M12 1b: more time than the whole planned day takes, after a shorter version. */
 export const FULL_DAY_REPLY = 'Your whole day fits. Here it is.';
 /** M12 1b: the "Short on time" quick chip (asks how long, then proposes). */
@@ -333,6 +348,8 @@ type Body = {
   say?: string;
   foods?: FoodSuggestion[];
   focusBlock?: FocusBlock;
+  /** A learn card for this answer, over the intent's default. */
+  learnId?: string;
 };
 
 const isArea = (id: string): id is BodyArea => (AREA_CHIP_IDS as readonly string[]).includes(id);
@@ -368,7 +385,7 @@ function finish(ctx: CoachContext, safety: Safety, intent: Intent, body: Body): 
   if (body.say) out.say = body.say;
   if (body.foods && body.foods.length > 0) out.foods = body.foods;
   if (body.focusBlock) out.focusBlock = body.focusBlock;
-  const learnId = LEARN_FOR_INTENT[intent];
+  const learnId = body.learnId ?? LEARN_FOR_INTENT[intent];
   if (learnId && safety === 'none' && !isWorkout(ctx)) out.learnId = learnId;
   return out;
 }
@@ -813,7 +830,7 @@ function progressAnswer(ctx: CoachContext): Body {
     const week = Math.floor(daysFrom(block.startDate, ctx.today) / 7) + 1;
     if (focus)
       parts.push(
-        `${groupLabel(block.group)} block: week ${week} of ${block.weeks}, ${focus.sets} of ${focus.target} ${block.group} sets so far.`,
+        `${groupLabel(block.group)} block: week ${week} of ${block.weeks}, ${focus.sets} of ${focus.target} ${groupWord(block.group)} sets so far.`,
       );
   }
   return { reply: parts.join(' ') };
@@ -860,6 +877,17 @@ function blockBody(r: ReturnType<typeof proposeFocusBlock>, reply: string): Body
   return { reply, proposal: r.proposal, ...(block ? { focusBlock: block } : {}) };
 }
 
+/**
+ * M13c: whether to ask "Also add abs?" for a block on `group`: another group, the plan has no
+ * abs sets, core isn't on the go-easy list and the gym can do an abs exercise.
+ */
+function offersAlsoCore(ctx: CoachContext, group: BodyArea): boolean {
+  const core = FOCUS_RULES.alsoCore.group;
+  if (group === core || (ctx.state.easyOn ?? []).includes(core)) return false;
+  if (!focusGroups(ctx).includes(core)) return false;
+  return ctx.state.plan.days.every((d) => groupSetsOf(d.exercises, core, ctx.catalog) === 0);
+}
+
 function focusFlow(ctx: CoachContext, args: CoachArgs): Body {
   const { group } = args;
   const first = easyFirst(ctx, group);
@@ -870,16 +898,24 @@ function focusFlow(ctx: CoachContext, args: CoachArgs): Body {
   if (args.days !== undefined && validDaysPerWeek(args.days)) known.days = args.days;
   if (args.keepDays) known.keepDays = true;
   if (args.weekdays) known.weekdays = [...args.weekdays];
+  if (args.alsoCore !== undefined) known.alsoCore = args.alsoCore;
   let lead = '';
   if (args.weeks !== undefined && !validWeeks(args.weeks))
     lead = 'A focus block runs 2 to 6 weeks. ';
   else if (args.days !== undefined && !validDaysPerWeek(args.days))
     lead = 'A focus block trains 3 to 6 days a week. ';
+  const groups = focusGroups(ctx);
+  const groupChips = () => {
+    const { group: _g, ...rest } = known;
+    void _g;
+    return groups.map((a) => focusChip(groupLabel(a), { ...rest, group: a }));
+  };
 
-  if (!group)
+  if (!group) return { reply: `${lead}${ASK_GROUP}`, chips: groupChips() };
+  if (!groups.includes(group))
     return {
-      reply: `${lead}${ASK_GROUP}`,
-      chips: focusGroups(ctx).map((a) => focusChip(AREA_LABEL[a], { ...known, group: a })),
+      reply: `I don't have ${groupWord(group)} exercises your gym can do yet. ${ASK_GROUP}`,
+      chips: groupChips(),
     };
   if (known.weeks === undefined) return { reply: `${lead}${ASK_WEEKS}`, chips: weekChips(known) };
   const hasDays = known.days !== undefined || known.keepDays || known.weekdays !== undefined;
@@ -891,17 +927,35 @@ function focusFlow(ctx: CoachContext, args: CoachArgs): Body {
         ...[3, 4, 5, 6].map((n) => focusChip(`${n} days`, { ...known, days: n })),
       ],
     };
+  if (known.alsoCore === undefined && offersAlsoCore(ctx, group))
+    return {
+      reply: ASK_ALSO_CORE,
+      chips: [
+        focusChip('Yes', { ...known, alsoCore: true }),
+        focusChip('No', { ...known, alsoCore: false }),
+      ],
+      learnId: ALSO_CORE_LEARN_ID,
+    };
   const weekdays =
     known.weekdays ??
     (known.days !== undefined
       ? weekdaysFor(known.days)
       : keepMyWeekdays(ctx.state, ctx.sessions, ctx.today));
+  const alsoCore = known.alsoCore === true && offersAlsoCore(ctx, group);
   const r = proposeFocusBlock(
     actionCtx(ctx),
-    { group, weeks: known.weeks, weekdays, startDate: blockStart(ctx) },
+    {
+      group,
+      weeks: known.weeks,
+      weekdays,
+      startDate: blockStart(ctx),
+      ...(alsoCore ? { alsoCore: true as const } : {}),
+    },
     ctx.catalog,
   );
-  return blockBody(r, `Here's a ${known.weeks}-week ${group} block.`);
+  const block = r.ok ? r.proposal.next.blocks?.at(-1) : undefined;
+  const withAbs = block?.alsoCore ? ', with abs' : '';
+  return blockBody(r, `Here's a ${known.weeks}-week ${groupWord(group)} block${withAbs}.`);
 }
 
 function focusEdit(ctx: CoachContext, s: IntentSlots): Body {
@@ -931,7 +985,12 @@ function focusEdit(ctx: CoachContext, s: IntentSlots): Body {
     return {
       reply: ASK_DAYS,
       chips: [3, 4, 5, 6].map((n) =>
-        focusChip(`${n} days`, { group: draft.group, weeks: draft.weeks, days: n }),
+        focusChip(`${n} days`, {
+          group: draft.group,
+          weeks: draft.weeks,
+          days: n,
+          alsoCore: draft.alsoCore === true,
+        }),
       ),
     };
   const r = reviseFocusBlock(draft, edit, ctx.state, ctx.catalog, ctx.sessions);
@@ -956,10 +1015,13 @@ function nextBlock(ctx: CoachContext, args: CoachArgs): Body {
       weekdays: [...weekdays],
       ...(args.lighterWeek !== undefined ? { lighterWeek: args.lighterWeek } : {}),
       ...(args.startDate !== undefined ? { startDate: args.startDate } : {}),
+      ...(args.alsoCore === true ? { alsoCore: true as const } : {}),
     },
     ctx.catalog,
   );
-  return blockBody(r, `Here's the next ${weeks}-week ${group} block.`);
+  const block = r.ok ? r.proposal.next.blocks?.at(-1) : undefined;
+  const withAbs = block?.alsoCore ? ', with abs' : '';
+  return blockBody(r, `Here's the next ${weeks}-week ${groupWord(group)} block${withAbs}.`);
 }
 
 /** M12: the starters, the swap one naming today's first exercise that can still change. */

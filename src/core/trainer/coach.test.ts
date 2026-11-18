@@ -13,6 +13,7 @@ import type { TrainerCatalog } from './swapCandidates';
 import {
   AREA_CHIP_IDS,
   ASK_DAYS,
+  ASK_ALSO_CORE,
   ASK_GROUP,
   ASK_MINUTES,
   ASK_WEEKS,
@@ -47,6 +48,10 @@ import { FOOD_DONE, FOOD_NONE, FOOD_SETUP } from './replies';
 // Made-up history; the program is the repo's default program (public, no personal numbers).
 // The catalog with his gym's default kit (M10e), wired like src/ui/app.ts.
 const CATALOG: TrainerCatalog = trainerCatalog();
+const isAbsId = (id: string) =>
+  CATALOG.exercises.find((e) => e.id === id)?.primaryMuscles.includes('abdominals') ?? false;
+/** A made-up gym that can do no abs exercise. */
+const NO_ABS: TrainerCatalog = { ...CATALOG, canDo: (id) => !isAbsId(id) && CATALOG.canDo(id) };
 const program = programJson as Program;
 const ROTATION = program.days.map((d) => d.id);
 
@@ -1084,7 +1089,7 @@ describe('M12 week and progress answers (gym sessions only)', () => {
   it('progress during a focus block adds its focus sets', () => {
     const c = ctx();
     const p = handle(
-      { chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5 } },
+      { chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5, alsoCore: false } },
       ctxFor('legs-a'),
     );
     if (!p.proposal) throw new Error('no proposal');
@@ -1119,16 +1124,25 @@ describe('M12 week and progress answers (gym sessions only)', () => {
 describe('M12 focus block flow', () => {
   const c = () => ctxFor('legs-a');
 
-  it('asks only what is missing: group → weeks → days, then the proposal', () => {
+  it('asks only what is missing: group → weeks → days → abs, then the proposal', () => {
     const r1 = handle({ chip: 'focusBlock' }, c());
     expect(r1.reply).toBe(ASK_GROUP);
-    // Core has no exercises the gym can do: not offered.
+    // M13c: the gym can do abs exercises, so Abs & core is offered.
     expect(r1.chips.map((x) => x.args?.group)).toEqual([
       'arms',
       'shoulders',
       'chest',
       'back',
       'legs',
+      'core',
+    ]);
+    expect(r1.chips.map((x) => x.label)).toEqual([
+      'Arms',
+      'Shoulders',
+      'Chest',
+      'Back',
+      'Legs',
+      'Abs & core',
     ]);
     const r2 = handle({ chip: 'focusBlock', args: { group: 'chest' } }, c());
     expect(r2.reply).toBe(ASK_WEEKS);
@@ -1143,12 +1157,87 @@ describe('M12 focus block flow', () => {
       '5 days',
       '6 days',
     ]);
+    // M13c: the plan has no abs, so one more step: "Also add abs?" Yes / No (+ Why? card).
     const r4 = handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5 } }, c());
-    expect(r4.proposal?.action).toBe('focusBlock');
-    expect(r4.focusBlock?.weekdays).toEqual([1, 2, 3, 4, 5]);
-    expect(r4.focusBlock?.startDate).toBe(TODAY);
-    expect(r4.proposal?.next.blocks?.at(-1)).toEqual(r4.focusBlock);
-    for (const r of [r1, r2, r3, r4]) expectClean(r, 'focus flow');
+    expect(r4.reply).toBe(ASK_ALSO_CORE);
+    expect(r4.proposal).toBeUndefined();
+    expect(r4.learnId).toBe('coreTraining');
+    expect(r4.chips).toEqual([
+      { id: 'focusBlock', label: 'Yes', args: { group: 'chest', weeks: 4, days: 5, alsoCore: true } },
+      { id: 'focusBlock', label: 'No', args: { group: 'chest', weeks: 4, days: 5, alsoCore: false } },
+    ]);
+    const r5 = handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5, alsoCore: false } }, c());
+    expect(r5.proposal?.action).toBe('focusBlock');
+    expect(r5.focusBlock?.weekdays).toEqual([1, 2, 3, 4, 5]);
+    expect(r5.focusBlock?.startDate).toBe(TODAY);
+    expect(r5.focusBlock?.alsoCore).toBeUndefined();
+    expect(r5.proposal?.next.blocks?.at(-1)).toEqual(r5.focusBlock);
+    for (const r of [r1, r2, r3, r4, r5]) expectClean(r, 'focus flow');
+  });
+
+  it('M13c: "Also add abs?" Yes → the same block plus abs rows; nothing changes before Apply', () => {
+    const args = { group: 'chest' as const, weeks: 4, days: 5 };
+    const no = handle({ chip: 'focusBlock', args: { ...args, alsoCore: false } }, c());
+    const yes = handle({ chip: 'focusBlock', args: { ...args, alsoCore: true } }, c());
+    expect(yes.focusBlock?.alsoCore).toBe(true);
+    expect(yes.proposal?.title).toBe('Chest focus + abs: 4 weeks');
+    expect(yes.reply).toBe("Here's a 4-week chest block, with abs.");
+    expect(yes.focusBlock?.targetSetsPerWeek).toBe(no.focusBlock?.targetSetsPerWeek);
+    const abs = (r: CoachResponse) =>
+      (r.focusBlock?.days ?? []).flatMap(
+        (d) => d.day?.exercises.filter((p) => isAbsId(p.exerciseId)) ?? [],
+      );
+    expect(abs(no)).toEqual([]);
+    expect(abs(yes).length).toBeGreaterThan(0);
+    // The plan itself is untouched until Apply.
+    expect(c().state).toEqual(baseState());
+    expectClean(yes, 'also abs');
+  });
+
+  it('M13c: no "Also add abs?" step for a core block, with abs in the plan, with go-easy core or no abs kit', () => {
+    const args = { weeks: 4, days: 5 };
+    const core = handle({ chip: 'focusBlock', args: { group: 'core', ...args } }, c());
+    expect(core.proposal?.title).toBe('Abs & core focus: 4 weeks');
+    expect(core.reply).toBe("Here's a 4-week abs block.");
+    // A plan that already has abs.
+    const base = c();
+    const withAbs: TrainerState = structuredClone(base.state);
+    withAbs.plan.days[0]?.exercises.push({
+      exerciseId: 'Crunches',
+      sets: 3,
+      targetReps: [10, 15],
+      restSec: 60,
+      tracking: 'manual',
+    });
+    const r1 = handle({ chip: 'focusBlock', args: { group: 'chest', ...args } }, { ...base, state: withAbs });
+    expect(r1.proposal?.action).toBe('focusBlock');
+    // Go easy on core.
+    const easy = { ...base.state, easyOn: ['core' as const] };
+    const r2 = handle({ chip: 'focusBlock', args: { group: 'chest', ...args } }, { ...base, state: easy });
+    expect(r2.proposal?.action).toBe('focusBlock');
+    // A gym that can do no abs exercise: no step, and no Abs & core chip.
+    const noAbs = { ...base, catalog: NO_ABS };
+    const r3 = handle({ chip: 'focusBlock', args: { group: 'chest', ...args } }, noAbs);
+    expect(r3.proposal?.action).toBe('focusBlock');
+    const groups = handle({ chip: 'focusBlock' }, noAbs);
+    expect(groups.chips.map((x) => x.args?.group)).toEqual(['arms', 'shoulders', 'chest', 'back', 'legs']);
+    // Asking for abs there says so, with the groups it can build.
+    const ask = handle({ chip: 'focusBlock', args: { group: 'core' } }, noAbs);
+    expect(ask.reply).toBe(`I don't have abs exercises your gym can do yet. ${ASK_GROUP}`);
+    expect(ask.chips.map((x) => x.args?.group)).toEqual(['arms', 'shoulders', 'chest', 'back', 'legs']);
+    for (const r of [core, r1, r2, r3, ask]) expectClean(r, 'no abs step');
+  });
+
+  it('M13c: "add abs" (English and Thai) opens the focus flow with Abs & core, never a change', () => {
+    for (const t of ['add abs', 'I want a six pack', 'abs', 'core', 'เพิ่มหน้าท้อง', 'หน้าท้อง', 'ท้อง']) {
+      const r = handle(text(t), c());
+      expect(r.intent, t).toBe('focusBlock');
+      expect(r.proposal, t).toBeUndefined();
+      expect(r.reply, t).toBe(ASK_WEEKS);
+      for (const ch of r.chips) expect(ch.args?.group, t).toBe('core');
+    }
+    // Mid-workout: not offered.
+    expect(handle(text('add abs'), workoutCtx('pull-a', [])).reply).toBe(MID_SESSION_REPLY);
   });
 
   it('"This month I want to build my chest" → asks the days only', () => {
@@ -1163,13 +1252,20 @@ describe('M12 focus block flow', () => {
     const chip = r.chips[0];
     if (!chip) throw new Error('no chip');
     const keep = handle({ chip: chip.id, ...(chip.args ? { args: chip.args } : {}) }, c());
-    expect(keep.proposal?.action).toBe('focusBlock');
+    expect(keep.reply).toBe(ASK_ALSO_CORE);
+    const no = keep.chips[1];
+    if (!no?.args) throw new Error('no chip');
+    expect(handle({ chip: no.id, args: no.args }, c()).proposal?.action).toBe('focusBlock');
   });
 
-  it('everything typed at once → the proposal straight away', () => {
+  it('everything typed at once → only the abs question, then the proposal', () => {
     const r = handle(text('Focus on legs for 3 weeks, 4 days a week'), c());
-    expect(r.proposal?.title).toBe('Legs focus: 3 weeks');
-    expect(r.focusBlock?.weekdays).toEqual([1, 2, 4, 5]);
+    expect(r.reply).toBe(ASK_ALSO_CORE);
+    const no = r.chips.find((x) => x.label === 'No');
+    expect(no?.args).toEqual({ group: 'legs', weeks: 3, days: 4, alsoCore: false });
+    const p = handle({ chip: 'focusBlock', args: no?.args ?? {} }, c());
+    expect(p.proposal?.title).toBe('Legs focus: 3 weeks');
+    expect(p.focusBlock?.weekdays).toEqual([1, 2, 4, 5]);
   });
 
   it('out-of-range weeks or days → says the range and asks again', () => {
@@ -1187,15 +1283,21 @@ describe('M12 focus block flow', () => {
       { sessionId: 'today', dayId: 'legs-a', startedAt: t, endedAt: t + 3_600_000 },
     ];
     const r = handle(
-      { chip: 'focusBlock', args: { group: 'back', weeks: 2, days: 4 } },
+      { chip: 'focusBlock', args: { group: 'back', weeks: 2, days: 4, alsoCore: false } },
       { ...base, sessions },
     );
     expect(r.focusBlock?.startDate).toBe('2026-11-12');
   });
 
   it('Keep going (recap chip args) → a new block with the same params', () => {
-    const r = handle(
+    const ask = handle(
       { chip: 'focusBlock', args: { group: 'chest', weeks: 3, weekdays: [1, 3, 5] } },
+      c(),
+    );
+    expect(ask.reply).toBe(ASK_ALSO_CORE);
+    expect(ask.chips[0]?.args).toEqual({ group: 'chest', weeks: 3, weekdays: [1, 3, 5], alsoCore: true });
+    const r = handle(
+      { chip: 'focusBlock', args: { group: 'chest', weeks: 3, weekdays: [1, 3, 5], alsoCore: false } },
       c(),
     );
     expect(r.focusBlock?.weekdays).toEqual([1, 3, 5]);
@@ -1203,7 +1305,10 @@ describe('M12 focus block flow', () => {
   });
 
   it('edits with a block on the table: fewer days, weeks, a weekday swap', () => {
-    const first = handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5 } }, c());
+    const first = handle(
+      { chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5, alsoCore: false } },
+      c(),
+    );
     const draft = first.focusBlock;
     if (!draft) throw new Error('no block');
     const ctx = { ...c(), focusDraft: draft };
@@ -1219,6 +1324,21 @@ describe('M12 focus block flow', () => {
     for (const d of thursdays)
       expect(d.day?.exercises.some((p) => p.exerciseId === 'Dumbbell_Flyes')).toBe(false);
     for (const r of [days, swap]) expectClean(r, 'focus edit');
+  });
+
+  it('M13c: edits keep the abs answer (no second question)', () => {
+    const first = handle(
+      { chip: 'focusBlock', args: { group: 'chest', weeks: 4, days: 5, alsoCore: true } },
+      c(),
+    );
+    const draft = first.focusBlock;
+    if (!draft) throw new Error('no block');
+    const ctx = { ...c(), focusDraft: draft };
+    expect(handle(text('only 4 days a week'), ctx).focusBlock?.alsoCore).toBe(true);
+    // "Change the days" without a count: the day chips carry the answer.
+    const ask = handle(text('change the days'), ctx);
+    if (ask.reply === ASK_DAYS)
+      for (const ch of ask.chips) expect(ch.args?.alsoCore).toBe(true);
   });
 
   it('edits without a block: counts start a focus block, a weekday swap is a plain swap', () => {
@@ -1403,10 +1523,12 @@ describe('M12 1b next block chip', () => {
   it('runs the recap chip args through proposeNextBlock; Apply and Undo round trip', () => {
     const c = ctxFor('push-a');
     const block = handle(
-      { chip: 'focusBlock', args: { group: 'chest', weeks: 2, days: 4 } },
+      { chip: 'focusBlock', args: { group: 'chest', weeks: 2, days: 4, alsoCore: true } },
       c,
     ).focusBlock;
     if (!block) throw new Error('no block');
+    // M13c: an alsoCore block's offers include "Keep abs in the next block".
+    expect(nextBlockOffers(block).map((o) => o.label)).toContain('Keep abs in the next block');
     for (const offer of nextBlockOffers(block)) {
       const args = { ...offer.args, startDate: addDate(TODAY, 2) };
       const r = handle({ chip: 'nextBlock', args }, c);
@@ -1432,6 +1554,7 @@ describe('M12 1b next block chip', () => {
       const applied = applyProposal(c.state, r.proposal, at(11, 11), 'chip');
       if (!applied.ok) throw new Error(applied.reason);
       expect(applied.state.blocks?.at(-1)?.group).toBe(offer.args.group);
+      expect(applied.state.blocks?.at(-1)?.alsoCore).toBe(offer.args.alsoCore);
       const undone = undoLast(applied.state, [applied.change], at(11, 11) + 1000);
       if (!undone.ok) throw new Error(undone.reason);
       expect(undone.state.blocks).toEqual(c.state.blocks);
@@ -1545,7 +1668,8 @@ describe('M12 1b learn cards on replies', () => {
     expect(handle({ chip: 'lighter' }, c).learnId).toBe('deloads');
     expect(handle({ chip: 'week' }, c).learnId).toBe('consistency');
     expect(
-      handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 3, days: 4 } }, c).learnId,
+      handle({ chip: 'focusBlock', args: { group: 'chest', weeks: 3, days: 4, alsoCore: false } }, c)
+        .learnId,
     ).toBe('focusBlocks');
     expect(handle({ chip: 'food' }, { ...c, m7Available: true, fuel: FUEL }).learnId).toBe(
       'protein',

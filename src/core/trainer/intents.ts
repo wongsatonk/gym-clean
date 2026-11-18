@@ -22,6 +22,9 @@
  *  6. stall;
  *  M12: 6a. progress ("how am I doing"); 6b. focusBlock ("build my chest"); 6c. focusEdit (a
  *     days-a-week / weeks count on its own, "only 4 days a week", or a focusEdit phrase);
+ *  M13c: 6b'. asking for abs ("add abs", "I want a six pack", "เพิ่มหน้าท้อง", or only "abs" /
+ *     "core" / "ท้อง") → focusBlock with group core (`m12.coreFocus`), never with a discomfort
+ *     word or a food phrase; the coach opens the focus flow, it never changes the plan itself;
  *  7. lighter, 8. food;
  *  8a. M12 week ("how's my week");
  *  9. discomfort with no area → avoidArea without an area (the coach asks which area);
@@ -166,6 +169,11 @@ const M12 = {
   focusBlock: compileList(P.m12.focusBlock),
   focusEdit: compileList(P.m12.focusEdit),
   month: compileList(P.m12.month),
+};
+const CORE_FOCUS = {
+  words: compileList(P.m12.coreFocus.words),
+  add: compileList(P.m12.coreFocus.add),
+  alone: new Set(P.m12.coreFocus.alone.map((w) => normalizeText(w))),
 };
 const DO_WORDS = compileList(P.m12.doToday.do);
 const SWITCH_WORDS = compileList(P.m12.doToday.switchTo);
@@ -496,6 +504,13 @@ function missingKit(text: string): boolean {
   );
 }
 
+/** M13c: a request for abs ("add abs", "six pack", or only "abs" / "ท้อง"), no discomfort, no food. */
+function asksForCore(text: string, safety: Safety): boolean {
+  if (safety !== 'none' || has(INTENTS.food, text)) return false;
+  if (CORE_FOCUS.alone.has(text)) return true;
+  return has(CORE_FOCUS.words, text) && has(CORE_FOCUS.add, text);
+}
+
 // ---- main ----
 
 export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
@@ -511,6 +526,7 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   const dayName = doDay?.name;
   const minutes = minutesOf(t);
   let intent: Intent;
+  let forCore = false;
   if (has(INTENTS.deload, t)) intent = 'deload';
   else if (doDay?.viaSwitch) intent = 'doToday';
   else if (has(INTENTS.swap, t)) intent = 'swap';
@@ -532,6 +548,7 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
   else if (has(INTENTS.stall, t)) intent = 'stall';
   else if (has(M12.progress, t)) intent = 'progress';
   else if (has(M12.focusBlock, t)) intent = 'focusBlock';
+  else if ((forCore = asksForCore(t, safety))) intent = 'focusBlock';
   else if (Object.keys(counts).length > 0 || has(M12.focusEdit, t)) intent = 'focusEdit';
   else if (has(INTENTS.lighter, t)) intent = 'lighter';
   else if (has(INTENTS.food, t)) intent = 'food';
@@ -556,7 +573,8 @@ export function matchIntent(text: string, ctx: MatchContext = {}): IntentMatch {
     const exerciseId = exerciseOf(t, ctx);
     if (exerciseId !== undefined) slots.exerciseId = exerciseId;
   }
-  if (intent === 'focusBlock' && area) slots.group = area.area;
+  if (intent === 'focusBlock' && forCore) slots.group = 'core';
+  else if (intent === 'focusBlock' && area) slots.group = area.area;
   if (intent === 'focusBlock' || intent === 'focusEdit') Object.assign(slots, counts);
   if (intent === 'shortOnTime' && minutes !== undefined) slots.minutes = minutes;
   if (date) slots.date = date;

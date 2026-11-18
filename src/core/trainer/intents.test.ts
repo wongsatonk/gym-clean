@@ -332,6 +332,55 @@ describe('M12 intents: week, progress, focus block, focus edits', () => {
   });
 });
 
+describe('M13c: asking for abs opens the focus flow with core', () => {
+  const m = (text: string) => matchIntent(text, ctx);
+  const CORE = { intent: 'focusBlock', slots: { group: 'core' }, safety: 'none' };
+
+  it('English: add abs, abs, core, six pack, train my abs', () => {
+    for (const t of [
+      'add abs',
+      'Add abs to my plan',
+      'can you add some core work',
+      'abs',
+      'Abs?',
+      'core',
+      'six pack',
+      'I want a six pack',
+      'I want a six-pack',
+      'more abs please',
+      'train my abs',
+      'focus on abs',
+      'build my core',
+    ])
+      expect(m(t), t).toMatchObject(CORE);
+  });
+
+  it('Thai: หน้าท้อง / ท้อง / ซิกแพค', () => {
+    for (const t of ['หน้าท้อง', 'ท้อง', 'เพิ่มหน้าท้อง', 'อยากเล่นหน้าท้อง', 'อยากมีซิกแพค', 'เพิ่มท่าหน้าท้อง'])
+      expect(m(t), t).toMatchObject(CORE);
+  });
+
+  it('counts still come along', () => {
+    expect(m('add abs for 3 weeks')).toEqual({
+      intent: 'focusBlock',
+      slots: { group: 'core', weeks: 3 },
+      safety: 'none',
+    });
+  });
+
+  it('never for discomfort, avoiding, food or a stomach that is not about training', () => {
+    expect(m('my abs hurt')).toMatchObject({ intent: 'avoidArea', safety: 'discomfort' });
+    expect(m('ปวดท้อง')).toMatchObject({ safety: 'discomfort' });
+    expect(m('ปวดท้อง').intent).not.toBe('focusBlock');
+    expect(m('skip abs').intent).toBe('avoidArea');
+    expect(m('go easy on my core').intent).toBe('avoidArea');
+    expect(m('what should I eat for abs').intent).toBe('food');
+    // Bare "ท้อง" only on its own: in a sentence it can mean other things (e.g. ตั้งท้อง).
+    for (const t of ['ฉันท้อง', 'ตั้งท้อง', 'ท้องว่าง', 'my stomach is full', 'I want a flat stomach'])
+      expect(m(t).intent, t).not.toBe('focusBlock');
+  });
+});
+
 describe('M12 1b short on time', () => {
   const short = (text: string) => matchIntent(text, evalCtx);
 

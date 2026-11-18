@@ -400,7 +400,7 @@ describe('exerciseSearchItems', () => {
   });
 });
 
-describe('search: the real catalog (no abs needed)', () => {
+describe('search: the real catalog', () => {
   const catalog = exercisesJson as Exercise[];
   const program = programJson as Program;
   const ctx: ExerciseSearchCtx = { ...CTX, planDays: program.days };
@@ -428,4 +428,14 @@ describe('search: the real catalog (no abs needed)', () => {
     );
     expect(ids(search(index, 'ขา', { limit: 100 }))).toEqual(expect.arrayContaining(quads));
   });
+
+  // M13c: the twin of the made-up "abs" test, on the vendored abs (task 2).
+  for (const q of ['abs', 'ท้อง']) {
+    it(`"${q}" lists every abdominals-primary exercise first (≥ 8 of them)`, () => {
+      const abs = catalog.filter((e) => e.primaryMuscles[0] === 'abdominals').map((e) => e.id);
+      expect(abs.length).toBeGreaterThanOrEqual(8);
+      const hits = ids(search(index, q, { limit: 200 }));
+      expect(new Set(hits.slice(0, abs.length))).toEqual(new Set(abs));
+    });
+  }
 });

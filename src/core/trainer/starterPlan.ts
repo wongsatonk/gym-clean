@@ -27,6 +27,9 @@
  *   is trimmed (`fitToMinutes`, no pairing): accessory sets, then the last accessories, the main
  *   lifts last.
  * - Out-of-range answers, or a gym that can do nothing, give an empty plan (the action refuses).
+ * - M13c abs: only with `intake.wantsCore` ("Add abs to your plan?" Yes), the `wantsCore` slot
+ *   joins the split's listed days right after their main lifts (data: `wantsCore`). No other
+ *   path adds abs: no other slot lists the abdominals.
  */
 import templatesJson from '../../data/templates/starterTemplates.json';
 import type {
@@ -67,6 +70,8 @@ export type StarterTemplates = {
   prescription: Record<GoalKind, Record<SlotKind, { reps: number[]; restSec: number }>>;
   sets: Record<Intake['experience'], Record<SlotKind | 'max' | 'maxExercises', number>>;
   fill: { bandMin: number };
+  /** M13c: the abs slot and the days of each split it joins when the intake said Yes. */
+  wantsCore?: { slot: string; days: Record<string, string[]> };
   easyOn: { setsDrop: number; minSets: number; bodyweightRepsFactor: number };
   bodyweightEquipment: string;
 };
@@ -188,9 +193,17 @@ export function buildStarterPlan(
     rows: PlannedExercise[];
     caps: Map<PlannedExercise, number>;
     main: string[];
+    /** M13c: the abs row asked for; trimmed like a main lift, not dropped as an accessory. */
+    kept: string[];
     inDay: Set<string>;
   };
-  const addTo = (b: Built, slot: string, kind: SlotKind, onlyIfFits: boolean): boolean => {
+  const addTo = (
+    b: Built,
+    slot: string,
+    kind: SlotKind,
+    onlyIfFits: boolean,
+    keep = false,
+  ): boolean => {
     const e = pick(slot, b.inDay);
     if (!e) return false;
     const row = rowFor(e, kind);
@@ -200,18 +213,26 @@ export function buildStarterPlan(
     b.rows.push(row);
     b.caps.set(row, capOf(e));
     if (kind === 'main') b.main.push(e.id);
+    if (keep) b.kept.push(e.id);
     return true;
   };
 
   // 1. Every day's template slots first, so the picks don't depend on the session length.
   const built: Built[] = [];
+  const core = intake.wantsCore === true ? templates.wantsCore : undefined;
+  const coreDays = new Set(core?.days[split.split] ?? []);
   for (const key of split.rotation) {
     const def = templates.days[key];
     if (!def) continue;
-    const b: Built = { def, rows: [], caps: new Map(), main: [], inDay: new Set() };
-    for (const s of def.slots) {
+    const b: Built = { def, rows: [], caps: new Map(), main: [], kept: [], inDay: new Set() };
+    let slots: { slot: string; main?: boolean; keep?: boolean }[] = def.slots;
+    if (core && coreDays.has(key)) {
+      const at = slots.reduce((n, s, i) => (s.main ? i + 1 : n), 0);
+      slots = [...slots.slice(0, at), { slot: core.slot, keep: true }, ...slots.slice(at)];
+    }
+    for (const s of slots) {
       if (b.rows.length >= sets.maxExercises) break;
-      addTo(b, s.slot, s.main ? 'main' : 'accessory', false);
+      addTo(b, s.slot, s.main ? 'main' : 'accessory', false, s.keep === true);
     }
     if (b.rows.length > 0) built.push(b);
   }
@@ -250,7 +271,7 @@ export function buildStarterPlan(
     const first = rows[0]?.exerciseId ?? '';
     const fit = fitToMinutes(rows, {
       minutes: intake.sessionMin,
-      main: b.main.length > 0 ? b.main : [first],
+      main: [...(b.main.length > 0 ? b.main : [first]), ...b.kept],
       minSets: templates.easyOn.minSets,
     });
     days.push({ id: b.def.id, name: b.def.name, exercises: fit.rows });

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISES, trainerCatalog } from '../testkit/trainerCatalog';
 import programJson from '../../data/program.json';
-import { addDate, seedPlan, weekdayOf, type PlanSession } from './plan';
+import { addDate, effectiveDay, seedPlan, weekdayOf, type PlanSession } from './plan';
+import { proposeShortOnTime } from './actions/shortOnTime';
 import { FOCUS_RULES } from './focusRules';
 import {
   buildFocusBlock,
@@ -11,7 +12,7 @@ import {
   reviseFocusBlock,
   weekdaysFor,
 } from './focusBlock';
-import type { TrainerCatalog } from './swapCandidates';
+import { swapCandidates, type TrainerCatalog } from './swapCandidates';
 import type { BodyArea, FocusBlock, FocusBlockParams, Program, TrainerState } from '../types';
 
 // Made-up data only: the repo's default program, no personal numbers.
@@ -402,5 +403,231 @@ describe('reviseFocusBlock', () => {
     expect(reviseFocusBlock(block(), { daysPerWeek: 3 }, state(), CATALOG)).toEqual(
       reviseFocusBlock(block(), { daysPerWeek: 3 }, state(), CATALOG),
     );
+  });
+});
+
+// ---------- M13c: abs only through a chosen focus (Decision "M13c answers", q3) ----------
+
+const isAbs = (id: string) =>
+  EXERCISES.find((e) => e.id === id)?.primaryMuscles.includes('abdominals') ?? false;
+const absRowsOf = (days: FocusBlock['days']) =>
+  trainingDays(days).flatMap((d) => d.exercises.filter((p) => isAbs(p.exerciseId)));
+const withoutAbs = (b: FocusBlock): FocusBlock['days'] =>
+  b.days.map((d) => ({
+    date: d.date,
+    day: d.day && { ...d.day, exercises: d.day.exercises.filter((p) => !isAbs(p.exerciseId)) },
+  }));
+const totalOf = (exercises: readonly { sets: number }[]) => sum(exercises.map((p) => p.sets));
+const NON_CORE: BodyArea[] = ['chest', 'back', 'arms', 'legs', 'shoulders'];
+const R = FOCUS_RULES.alsoCore;
+
+describe('core as the focus group (M13c)', () => {
+  it('a core block reaches the empty-base target on ≥ 2 days a week, abs from the gym only', () => {
+    for (const n of [3, 4, 5, 6]) {
+      const b = buildFocusBlock(state(), CATALOG, params({ group: 'core', weekdays: weekdaysFor(n) }));
+      expect(b.baseSetsPerWeek).toBe(0);
+      expect(b.targetSetsPerWeek).toBe(FOCUS_RULES.emptyBaseSets);
+      weeksOf(b)
+        .slice(0, -1)
+        .forEach((week, w) => {
+          expect(focusOfWeek(b, week), `${n}d week ${w + 1}`).toBeGreaterThanOrEqual(
+            FOCUS_RULES.emptyBaseSets,
+          );
+          const days = trainingDays(week).filter((d) => focusSetsOf(d.exercises, 'core', CATALOG) > 0);
+          expect(days.length).toBeGreaterThanOrEqual(2);
+        });
+      for (const p of absRowsOf(b.days)) expect(CATALOG.canDo(p.exerciseId), p.exerciseId).toBe(true);
+    }
+  });
+
+  it('picks from the preferred abs list first (Cable Crunch where the gym can)', () => {
+    const b = buildFocusBlock(state(), CATALOG, params({ group: 'core' }));
+    const ids = absRowsOf(weeksOf(b)[0] ?? []).map((p) => p.exerciseId);
+    // The lightest day gets the first pick, which need not be the first date.
+    expect(new Set(ids)).toEqual(new Set(FOCUS_RULES.prefer.core.slice(0, ids.length)));
+  });
+
+  it('a core block with alsoCore is just a core block', () => {
+    const plain = buildFocusBlock(state(), CATALOG, params({ group: 'core' }));
+    const also = buildFocusBlock(state(), CATALOG, params({ group: 'core', alsoCore: true }));
+    expect(also).toEqual(plain);
+    expect(also.alsoCore).toBeUndefined();
+  });
+});
+
+describe('alsoCore: "Also add abs?" Yes (M13c)', () => {
+  for (const group of NON_CORE) {
+    for (const n of [3, 5, 6]) {
+      it(`${group}, ${n} days: the main group is byte-identical, only abs rows are added`, () => {
+        const p = params({ group, weekdays: weekdaysFor(n) });
+        const plain = buildFocusBlock(state(), CATALOG, p);
+        const also = buildFocusBlock(state(), CATALOG, { ...p, alsoCore: true });
+        expect(absRowsOf(plain.days)).toEqual([]);
+        expect(plain.alsoCore).toBeUndefined();
+        expect(also.alsoCore).toBe(true);
+        expect(withoutAbs(also)).toEqual(plain.days);
+        expect([also.group, also.targetSetsPerWeek, also.baseSetsPerWeek]).toEqual([
+          plain.group,
+          plain.targetSetsPerWeek,
+          plain.baseSetsPerWeek,
+        ]);
+        expect(also.id).not.toBe(plain.id);
+      });
+    }
+  }
+
+  it('abs rows: 3 × 10–15, 60 s rest, manual, weight 0 for body-only, ≥ 2 days up to the empty base', () => {
+    for (const n of [3, 4, 5, 6]) {
+      const b = buildFocusBlock(
+        state(),
+        CATALOG,
+        params({ group: 'chest', weekdays: weekdaysFor(n), alsoCore: true }),
+      );
+      weeksOf(b).forEach((week, w) => {
+        const last = w === b.weeks - 1;
+        const rows = absRowsOf(week);
+        const days = trainingDays(week).filter((d) => d.exercises.some((p) => isAbs(p.exerciseId)));
+        expect(days.length, `${n}d w${w + 1}`).toBeGreaterThanOrEqual(R.minDays);
+        // One abs row per day, a different exercise each.
+        for (const d of days) expect(d.exercises.filter((p) => isAbs(p.exerciseId))).toHaveLength(1);
+        expect(new Set(rows.map((p) => p.exerciseId)).size).toBe(rows.length);
+        if (!last) expect(sum(rows.map((p) => p.sets))).toBe(FOCUS_RULES.emptyBaseSets);
+        for (const p of rows) {
+          const ex = EXERCISES.find((e) => e.id === p.exerciseId);
+          expect(p.targetReps).toEqual(R.targetReps);
+          expect(p.restSec).toBe(R.restSec);
+          expect(p.tracking).toBe('manual');
+          expect(p.sets).toBe(last ? R.sets - 1 : R.sets);
+          if (last) expect(p.adjusted).toBe('lighter');
+          else expect(p.adjusted).toBeUndefined();
+          if (ex?.equipment === 'body only') expect(p.startWeightKg).toBe(0);
+          else expect(p.startWeightKg).toBeUndefined();
+          expect(CATALOG.canDo(p.exerciseId)).toBe(true);
+        }
+      });
+    }
+  });
+
+  it('abs go on the lightest days of the week', () => {
+    const p = params({ group: 'back', weekdays: weekdaysFor(5) });
+    const plain = buildFocusBlock(state(), CATALOG, p);
+    const also = buildFocusBlock(state(), CATALOG, { ...p, alsoCore: true });
+    weeksOf(also)
+      .slice(0, -1)
+      .forEach((week, w) => {
+        const plainWeek = weeksOf(plain)[w] ?? [];
+        const totals = plainWeek.map((d) => (d.day ? totalOf(d.day.exercises) : null));
+        const withAbs = week.flatMap((d, i) =>
+          d.day?.exercises.some((x) => isAbs(x.exerciseId)) ? [totals[i] ?? 0] : [],
+        );
+        const others = week.flatMap((d, i) =>
+          d.day && !d.day.exercises.some((x) => isAbs(x.exerciseId)) ? [totals[i] ?? 0] : [],
+        );
+        expect(Math.max(...withAbs)).toBeLessThanOrEqual(Math.min(...others));
+      });
+  });
+
+  it('kit from the gym: Cable Crunch first where it can; a gym without cables gets body-only picks', () => {
+    const b = buildFocusBlock(state(), CATALOG, params({ alsoCore: true }));
+    expect(absRowsOf(weeksOf(b)[0] ?? []).map((p) => p.exerciseId)).toContain('Cable_Crunch');
+    for (const kit of [['dumbbells', 'adjustable-bench'], []]) {
+      const gym = trainerCatalog(kit);
+      const nb = buildFocusBlock(state(), gym, params({ alsoCore: true }));
+      const rows = absRowsOf(nb.days);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const p of rows) {
+        expect(gym.canDo(p.exerciseId), p.exerciseId).toBe(true);
+        expect(EXERCISES.find((e) => e.id === p.exerciseId)?.equipment, p.exerciseId).toBe(
+          'body only',
+        );
+      }
+    }
+  });
+
+  it('go-easy core → no abs rows (and no alsoCore mark)', () => {
+    const s = { ...state(), easyOn: ['core' as const] };
+    const plain = buildFocusBlock(s, CATALOG, params());
+    const also = buildFocusBlock(s, CATALOG, params({ alsoCore: true }));
+    expect(absRowsOf(also.days)).toEqual([]);
+    expect(also).toEqual(plain);
+  });
+
+  it('a gym that can do no abs adds none', () => {
+    const gym: TrainerCatalog = { ...CATALOG, canDo: (id) => !isAbs(id) && CATALOG.canDo(id) };
+    const b = buildFocusBlock(state(), gym, params({ alsoCore: true }));
+    expect(absRowsOf(b.days)).toEqual([]);
+    expect(b.alsoCore).toBeUndefined();
+    expect(withoutAbs(b)).toEqual(buildFocusBlock(state(), gym, params()).days);
+  });
+
+  it('revisions keep the abs: weeks and days rebuild with them, a swap keeps the mark', () => {
+    const b = buildFocusBlock(state(), CATALOG, params({ alsoCore: true }));
+    for (const edit of [{ weeks: 3 }, { daysPerWeek: 4 }] as const) {
+      const r = reviseFocusBlock(b, edit, state(), CATALOG);
+      if (!r.ok) throw new Error(r.reply);
+      expect(r.block.alsoCore).toBe(true);
+      expect(absRowsOf(r.block.days).length).toBeGreaterThan(0);
+    }
+    const r = reviseFocusBlock(
+      b,
+      { swap: { weekday: 4, exerciseId: 'Dumbbell_Flyes' } },
+      state(),
+      CATALOG,
+    );
+    if (!r.ok) throw new Error(r.reply);
+    expect(r.block.alsoCore).toBe(true);
+  });
+
+  it('is deterministic', () => {
+    const p = params({ group: 'legs', alsoCore: true });
+    expect(buildFocusBlock(state(), CATALOG, p)).toEqual(buildFocusBlock(state(), CATALOG, p));
+  });
+});
+
+describe('no path adds abs without your pick (M13c)', () => {
+  it('the default program, its seed and a re-seed have no abs', () => {
+    for (const d of program.days)
+      for (const p of d.exercises) expect(isAbs(p.exerciseId), p.exerciseId).toBe(false);
+    for (const d of state().plan.days)
+      for (const p of d.exercises) expect(isAbs(p.exerciseId), p.exerciseId).toBe(false);
+  });
+
+  it('a block for any other group without alsoCore has no abs, on any day count', () => {
+    for (const group of NON_CORE)
+      for (const n of [3, 4, 5, 6])
+        expect(
+          absRowsOf(buildFocusBlock(state(), CATALOG, params({ group, weekdays: weekdaysFor(n) })).days),
+          `${group} ${n}d`,
+        ).toEqual([]);
+  });
+
+  it('swaps never offer an abs exercise for a plan exercise', () => {
+    for (const d of program.days)
+      for (const p of d.exercises) {
+        const ex = EXERCISES.find((e) => e.id === p.exerciseId);
+        if (!ex) throw new Error(p.exerciseId);
+        const cands = swapCandidates(ex, CATALOG, { exclude: [], limit: 100 });
+        expect(cands.filter((c) => isAbs(c.exercise.id)).map((c) => c.exercise.id), p.exerciseId).toEqual([]);
+      }
+  });
+
+  it('short on time never adds abs', () => {
+    const s = state();
+    for (const [i, d] of program.days.entries()) {
+      // The day before `d` finished on Sunday 2026-11-15, so `d` runs on Monday.
+      const prev = program.days[(i + program.days.length - 1) % program.days.length]?.id ?? '';
+      const t = new Date(2026, 10, 15, 18).getTime();
+      const sessions: PlanSession[] = [{ dayId: prev, startedAt: t, endedAt: t + 3_600_000 }];
+      for (const minutes of [20, 30, 45]) {
+        const r = proposeShortOnTime(
+          { state: s, sessions, today: MON, unit: 'kg', lastWeightKg: {} },
+          minutes,
+          CATALOG,
+        );
+        if (!r.ok) continue;
+        const rows = effectiveDay(r.proposal.next, sessions, MON).day?.exercises ?? [];
+        expect(rows.filter((p) => isAbs(p.exerciseId)), `${d.id} ${minutes}`).toEqual([]);
+      }
+    }
   });
 });

@@ -486,6 +486,8 @@ export type FocusBlock = {
   /** Focus group's weekly sets: target in the block vs his base plan (for the scores). */
   targetSetsPerWeek: number;
   baseSetsPerWeek: number;
+  /** M13c: abs rows were added ("Also add abs?" Yes); they end with the block. */
+  alsoCore?: true;
 };
 
 export type ChatCardStatus = 'pending' | 'applied' | 'dismissed' | 'undone' | 'expired';
