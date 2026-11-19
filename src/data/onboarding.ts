@@ -67,10 +67,6 @@ export const WELCOME_PAGES: Record<WelcomePageId, WelcomePage> = {
     title: 'Train with a guide',
     body: 'Each set shows what to lift and the muscles to feel. Rest timers and voice cues keep you moving.',
   },
-  coach: {
-    title: 'A coach that adapts',
-    body: 'Short on time or low on energy? Ask the coach, and nothing changes until you tap Apply.',
-  },
 };
 
 export const PERMISSION_PAGES: Record<OnboardingPermission, PermissionPage> = {

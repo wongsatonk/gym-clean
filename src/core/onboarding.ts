@@ -2,11 +2,13 @@
  * M13 first launch (SPEC M13 goal 1, Decision "M13 Published look"). Pure: which pages a fresh
  * install walks through, whether an install gets the flow at all, and the stored outcome.
  *
- * - Steps: the welcome pages (the first is the lockup + tagline), then the slice 1b intake (only
- *   on a fresh install that hasn't answered it; a re-run from Settings on an install with history
- *   leaves it out, the intake has its own Settings row), then one permission page per permission
- *   the platform has: camera, Apple Health, microphone, notifications. The PWA ('web') shows the
- *   camera page only (no Health, mic or local reminders there).
+ * - Steps (M13d order): the welcome pages (the first is the lockup + tagline), the Units page,
+ *   Apple Health (iPhone app with Health, so what Health knows is there when the forms open), the
+ *   slice 1b intake (only on a fresh install that hasn't answered it; a re-run from Settings on an
+ *   install with history leaves it out, the intake has its own Settings row), then camera,
+ *   microphone, notifications. The PWA ('web') shows Units and the camera page only (no Health,
+ *   mic or local reminders there). Set up Fuel joins the flow only when the intake's Fuel row is
+ *   applied: `insertAfterIntake` puts it right after the intake.
  * - Who gets it: the slice 1b "fresh" test (no sessions) and no 'onboarding' row. Any row, even a
  *   damaged one, counts as seen, so an install is never put through it twice; an install that
  *   already skipped or answered the 1.13 intake ('intakeSkipped' / 'intake' row) is not fresh
@@ -20,15 +22,30 @@ export type OnboardingPlatform = TodoFacts['platform'];
 export type OnboardingPermission = Extract<OnboardingStep, { kind: 'permission' }>['permission'];
 
 /** Welcome page ids in order; 'hello' is the lockup page (mark, name, tagline). */
-export const WELCOME_PAGE_IDS = ['hello', 'train', 'coach'] as const;
+export const WELCOME_PAGE_IDS = ['hello', 'train'] as const;
 export type WelcomePageId = (typeof WELCOME_PAGE_IDS)[number];
 
+/** The permission catch-up's order (unchanged since M13). */
 export const PERMISSION_ORDER: readonly OnboardingPermission[] = [
   'camera',
   'health',
   'mic',
   'notifications',
 ];
+
+/**
+ * The first run's order (M13d): Health comes first, before the intake (the others after it), so
+ * Set up Fuel can pre-fill from Health.
+ */
+export const FIRST_RUN_PERMISSION_ORDER: readonly OnboardingPermission[] = [
+  'health',
+  'camera',
+  'mic',
+  'notifications',
+];
+
+/** Permissions shown before the intake on the first run. */
+const BEFORE_INTAKE: ReadonlySet<OnboardingPermission> = new Set(['health']);
 
 export type OnboardingInput = {
   platform: OnboardingPlatform;
@@ -46,17 +63,40 @@ export type OnboardingInput = {
 
 export function onboardingSteps(input: OnboardingInput): OnboardingStep[] {
   const { platform, fresh, intakeDone, has } = input;
-  const steps: OnboardingStep[] = WELCOME_PAGE_IDS.map((id) => ({ kind: 'welcome', id }));
-  if (fresh && !intakeDone) steps.push({ kind: 'intake' });
   const available: Record<OnboardingPermission, boolean> = {
     camera: has.camera !== false,
     health: platform === 'native' && has.health,
     mic: platform === 'native' && has.mic,
     notifications: platform === 'native' && has.notifications,
   };
-  for (const permission of PERMISSION_ORDER)
-    if (available[permission]) steps.push({ kind: 'permission', permission });
-  return steps;
+  const pages = (before: boolean): OnboardingStep[] =>
+    FIRST_RUN_PERMISSION_ORDER.filter((p) => available[p] && BEFORE_INTAKE.has(p) === before).map(
+      (permission) => ({ kind: 'permission', permission }),
+    );
+  return [
+    ...WELCOME_PAGE_IDS.map((id): OnboardingStep => ({ kind: 'welcome', id })),
+    { kind: 'units' },
+    ...pages(true),
+    ...(fresh && !intakeDone ? [{ kind: 'intake' } as const] : []),
+    ...pages(false),
+  ];
+}
+
+/**
+ * M13d: the flow with `step` (Set up Fuel) right after the intake, when `index` is the intake's
+ * position (the app calls it on the intake's Done with the Fuel row applied, then moves on one
+ * page). No-op (a copy of `steps`) when `steps[index]` isn't the intake, when there is no intake
+ * step, or when a step of that kind is already in the flow (Back to the intake, then Done again).
+ */
+export function insertAfterIntake(
+  steps: readonly OnboardingStep[],
+  index: number,
+  step: Extract<OnboardingStep, { kind: 'fuelSetup' }>,
+): OnboardingStep[] {
+  const out = [...steps];
+  if (steps[index]?.kind !== 'intake' || steps.some((s) => s.kind === step.kind)) return out;
+  out.splice(index + 1, 0, { ...step });
+  return out;
 }
 
 export type OnboardingFacts = {

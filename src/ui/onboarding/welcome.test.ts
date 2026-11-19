@@ -140,7 +140,7 @@ describe('onboardingScreen: welcome pages', () => {
   it('the last page says "Go to Today" and calls onDone', () => {
     const steps: OnboardingStep[] = [
       { kind: 'welcome', id: 'hello' },
-      { kind: 'welcome', id: 'coach' },
+      { kind: 'welcome', id: 'train' },
     ];
     const { el, calls } = render({ steps, index: 1 });
     const done = one(el, 'primary');
@@ -218,8 +218,8 @@ describe('onboardingScreen: permission pages', () => {
       .map((p) => p.getAttribute('data-step'))
       .filter((s) => s?.startsWith('permission:'));
     expect(perms).toEqual([
-      'permission:camera',
       'permission:health',
+      'permission:camera',
       'permission:mic',
       'permission:notifications',
     ]);

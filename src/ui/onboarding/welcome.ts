@@ -63,7 +63,6 @@ export type OnboardingScreen = {
 /** Decorative icon on the welcome pages after the lockup. */
 const WELCOME_ICON: Record<Exclude<WelcomePageId, 'hello'>, IconName> = {
   train: 'dumbbell',
-  coach: 'chat',
 };
 
 const TITLE_ID = 'ob-title';
