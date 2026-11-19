@@ -7,7 +7,7 @@ import { FIRST_SIDE, ONE_SIDED_COPY, oneSidedLimb, otherSide } from '../core/exe
 import { sideTurn, type SessionState } from '../core/session';
 import type { OneSidedLimb, WorkSide } from '../core/types';
 import { h } from './dom';
-import { icon } from './icons';
+import { midPill } from './midsetButtons';
 import { voice } from './voice';
 import './oneArm.css';
 
@@ -73,17 +73,18 @@ export function sideLabel(limb: OneSidedLimb, side: WorkSide, extraClass = ''): 
   );
 }
 
-/** The full-width primary "Next arm" button (the CTA slot on the first side). */
+/**
+ * The full-width main "Next arm" button (the CTA slot on the first side): M13d task 40g, the
+ * round-button pill in Set done's place and size.
+ */
 export function nextSideButton(limb: OneSidedLimb, onClick: () => void): HTMLElement {
-  return h(
-    'button',
-    {
-      type: 'button',
-      class: 'primary-btn cta-btn next-side-btn',
-      'data-next-side': true,
-      onclick: onClick,
-    },
-    icon('flip', 'lg'),
-    ONE_SIDED_COPY[limb].nextButton,
-  );
+  return midPill({
+    icon: 'flip',
+    label: ONE_SIDED_COPY[limb].nextButton,
+    variant: 'main',
+    wide: true,
+    class: 'next-side-btn',
+    hooks: { 'data-next-side': true },
+    onClick: () => onClick(),
+  });
 }

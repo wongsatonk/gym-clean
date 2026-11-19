@@ -20,6 +20,10 @@
 // holds Next arm (`[data-next-side]`, speaks the switch line, then onNextSide); Set done is not
 // offered there. On the second side a line gives the first side's reps (`[data-side-done]`) and
 // Set done ignores taps for SWITCH_GUARD_MS after the switch (a double tap on Next arm).
+// M13d task 40g (styling only): Set done is the round-button pill (midsetButtons.ts), How to a
+// secondary pill, Skip warm-ups a word-only pill, and − / + draw a 72px circle inside today's
+// 80px column.
+// Same places, words and names; hit boxes at least their 1.16.2 size; no press motion.
 import type { PlannedExercise } from '../../core/types';
 import { exerciseById } from '../../data/catalog';
 import { badgesFor } from '../badges';
@@ -27,6 +31,7 @@ import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { workoutTopBar } from '../topBar';
+import { midPill } from '../midsetButtons';
 import {
   nextSideButton,
   sideLabel,
@@ -119,11 +124,15 @@ function stepper(
       'button',
       {
         type: 'button',
-        class: 'step-btn',
+        class: 'step-btn mid-step',
         'aria-label': `${name} ${dir < 0 ? 'minus' : 'plus'}`,
         onclick: () => onAdjust(field, dir),
       },
-      icon(dir < 0 ? 'minus' : 'plus', 'lg', { stroke: 3 }),
+      h(
+        'span',
+        { class: 'mid-step-circle', 'aria-hidden': 'true' },
+        icon(dir < 0 ? 'minus' : 'plus', 'lg', { stroke: 3 }),
+      ),
     );
   return h(
     'div',
@@ -183,10 +192,17 @@ function warmupStrip(p: ExerciseProps, w: WarmupStep, onSkip?: () => void): HTML
         `${p.weightText} ${p.unit} × ${p.reps}`,
       ),
     ),
+    // Kept a word-only button (pill-shaped, midset.css): a circle + word beside it doesn't fit
+    // beside the warm-up label at 390px without moving it and the steppers below.
     onSkip
       ? h(
           'button',
-          { type: 'button', class: 'warmup-skip', 'data-skip-warmups': true, onclick: onSkip },
+          {
+            type: 'button',
+            class: 'warmup-skip mid-text-pill',
+            'data-skip-warmups': true,
+            onclick: onSkip,
+          },
           'Skip warm-ups',
         )
       : null,
@@ -196,17 +212,12 @@ function warmupStrip(p: ExerciseProps, w: WarmupStep, onSkip?: () => void): HTML
 export function exerciseScreen(p: ExerciseProps, a: ExerciseActions): HTMLElement {
   const primary = exerciseById(p.exerciseId)?.primaryMuscles ?? [];
   const legend = primary.map(muscleLabel).join(' · ');
-  const howTo: HTMLElement = h(
-    'button',
-    {
-      type: 'button',
-      class: 'howto-btn',
-      'data-howto-open': true,
-      onclick: () => a.onHowTo(howTo),
-    },
-    icon('help', 'md'),
-    'How to',
-  );
+  const howTo = midPill({
+    icon: 'help',
+    label: 'How to',
+    hooks: { 'data-howto-open': true },
+    onClick: (btn) => a.onHowTo(btn),
+  });
   return h(
     'main',
     { class: `screen exercise ${moodClass('pro')}`, 'data-screen': 'exercise' },
@@ -330,18 +341,15 @@ function ctaButton(side: OneSidedView | undefined, a: ExerciseActions): HTMLElem
     });
   }
   const switchedAt = side?.turn === 'second' ? side.switchedAt : undefined;
-  return h(
-    'button',
-    {
-      type: 'button',
-      class: 'primary-btn cta-btn',
-      'data-set-done': true,
-      onclick: () => {
-        if (switchedAt !== undefined && Date.now() - switchedAt < SWITCH_GUARD_MS) return;
-        a.onSetDone();
-      },
+  return midPill({
+    icon: 'check',
+    label: 'Set done',
+    variant: 'main',
+    wide: true,
+    hooks: { 'data-set-done': true },
+    onClick: () => {
+      if (switchedAt !== undefined && Date.now() - switchedAt < SWITCH_GUARD_MS) return;
+      a.onSetDone();
     },
-    icon('check', 'lg'),
-    'Set done',
-  );
+  });
 }

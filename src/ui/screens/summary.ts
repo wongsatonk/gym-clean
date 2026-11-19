@@ -27,6 +27,7 @@
 // M12 slice 1b task 33: the post-workout meal idea (`[data-meal-idea]`, fuel/proteinNudge.ts)
 // under the protein line, when `mealIdea` and `onLogMealIdea` are both set. The idea is the M10
 // coach food suggestion (core suggestFood), passed in; Log hands it back to main.
+// M13d task 40g (styling only): Done is the main round-button pill in the bar's place.
 import { formatDuration } from '../../core/format';
 import { sessionVolume, type NewBest } from '../../core/stats';
 import type { FoodSuggestion, SetLog } from '../../core/types';
@@ -36,6 +37,7 @@ import { postWorkoutIdea, type MealIdea } from '../fuel/proteinNudge';
 import { createStallCards, type StallCardData, type StallCardOption } from '../coachSummary';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { midPill } from '../midsetButtons';
 import { sidedSetBlock } from '../sidesText';
 import { moodClass } from '../tokens';
 import { dateLabel } from './today';
@@ -354,12 +356,13 @@ export function summaryScreen(p: SummaryProps, a: SummaryActions): HTMLElement {
     h(
       'div',
       { class: 'sticky-bottom' },
-      h(
-        'button',
-        { type: 'button', class: 'primary-btn cta-btn', onclick: a.onDone },
-        icon('check', 'lg'),
-        'Done',
-      ),
+      midPill({
+        icon: 'check',
+        label: 'Done',
+        variant: 'main',
+        wide: true,
+        onClick: () => a.onDone(),
+      }),
     ),
   );
 }

@@ -5,9 +5,14 @@
 //
 // The clock carries data-cam-rest-clock, NOT data-rest-clock: app.ts's tick queries the latter
 // for the Rest screen, and this panel is fed through `update()` instead.
+//
+// M13d task 40g (styling only): Start set is the main round-button pill and Close a secondary
+// round button with its word under it, in the same two columns, each at least its 1.16.2 box.
 
 import { formatRest } from '../core/format';
 import { h } from './dom';
+import { iconButton } from './iconButton';
+import { midPill } from './midsetButtons';
 import './handsfree.css';
 
 export type CameraRestPanelOptions = {
@@ -46,39 +51,6 @@ export function camRestClock(
   return { text: formatRest(ms), overtime: overtime ?? ms < 0 };
 }
 
-// ---------- icons (original, decorative) ----------
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-function icon(paths: string[], fill: boolean, cls: string): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  for (const [k, v] of Object.entries({
-    viewBox: '0 0 24 24',
-    width: '28',
-    height: '28',
-    'aria-hidden': 'true',
-    focusable: 'false',
-    class: cls,
-  }))
-    svg.setAttribute(k, v);
-  for (const d of paths) {
-    const p = document.createElementNS(SVG_NS, 'path');
-    p.setAttribute('d', d);
-    p.setAttribute('fill', fill ? 'currentColor' : 'none');
-    p.setAttribute('stroke', 'currentColor');
-    p.setAttribute('stroke-width', fill ? '1.5' : '2.5');
-    p.setAttribute('stroke-linecap', 'round');
-    p.setAttribute('stroke-linejoin', 'round');
-    svg.append(p);
-  }
-  return svg;
-}
-
-/** Rounded play triangle. */
-const playIcon = () => icon(['M8 5.5v13l10.5-6.5z'], true, 'cam-rest-icon');
-/** Two crossing strokes. */
-const closeIcon = () => icon(['M6 6l12 12', 'M18 6 6 18'], false, 'cam-rest-icon');
-
 // ---------- component ----------
 
 export function createCameraRestPanel(opts: CameraRestPanelOptions): CameraRestPanelHandle {
@@ -91,28 +63,21 @@ export function createCameraRestPanel(opts: CameraRestPanelOptions): CameraRestP
   const tipSlot = h('div', { class: 'cam-rest-slot', 'data-cam-rest': 'coach', hidden: true });
   const fixSlot = h('div', { class: 'cam-rest-slot', 'data-cam-rest': 'fix', hidden: true });
 
-  const startBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'cam-rest-start',
-      'data-cam-rest': 'start',
-      onclick: () => opts.onStartSet(),
-    },
-    playIcon(),
-    h('span', {}, 'Start set'),
-  );
-  const closeBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'cam-rest-close',
-      'data-cam-rest': 'close',
-      onclick: () => opts.onClose(),
-    },
-    closeIcon(),
-    h('span', {}, 'Close'),
-  );
+  const startBtn = midPill({
+    icon: 'play',
+    label: 'Start set',
+    variant: 'main',
+    class: 'cam-rest-start-pill',
+    hooks: { 'data-cam-rest': 'start' },
+    onClick: () => opts.onStartSet(),
+  });
+  const closeBtn = iconButton({
+    icon: 'close',
+    label: 'Close',
+    class: 'cam-rest-close-btn',
+    hooks: { 'data-cam-rest': 'close' },
+    onClick: () => opts.onClose(),
+  });
 
   const card = h(
     'div',

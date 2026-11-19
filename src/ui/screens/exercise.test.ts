@@ -147,8 +147,11 @@ describe('exerciseScreen', () => {
 
   it('Set done is the only CTA; no Skip or End on this screen', () => {
     const { el, calls } = render();
-    const ctas = el.byClass('primary-btn');
+    // M13d task 40g: the one main round button (a pill as wide as the old bar).
+    const ctas = el.find((e) => e.getAttribute('data-variant') === 'main');
     expect(ctas).toHaveLength(1);
+    expect(ctas[0]?.hasAttribute('data-icon-btn')).toBe(true);
+    expect(ctas[0]?.hasAttribute('data-wide-hit')).toBe(true);
     expect(ctas[0]?.textContent).toBe('Set done');
     ctas[0]?.click();
     expect(calls.done).toBe(1);
@@ -235,12 +238,14 @@ describe('pauseSheet', () => {
     expect(el.getAttribute('aria-label')).toBe('Paused');
     expect(el.getAttribute('aria-modal')).toBe('true');
     const resume = buttonByText(el, 'Resume');
-    expect(resume.classes).toContain('primary-btn');
+    expect(resume.getAttribute('data-variant')).toBe('main');
+    expect(resume.hasAttribute('data-wide-hit')).toBe(true);
     resume.click();
     buttonByText(el, 'Skip exercise').click();
     expect(calls).toEqual({ resume: 1, skip: 1, end: 0 });
     // Only Resume is the action colour.
-    expect(el.byClass('primary-btn')).toHaveLength(1);
+    expect(el.find((e) => e.getAttribute('data-variant') === 'main')).toHaveLength(1);
+    expect(buttonByText(el, 'End workout').getAttribute('data-variant')).toBe('danger');
     expect(el.oneByClass('pause-context').textContent).toBe('One-Arm Dumbbell Row · set 2 of 4');
   });
 
@@ -302,8 +307,8 @@ describe('pauseSheet', () => {
       ]);
       const coach = buttonByText(el, 'Coach');
       expect(coach.getAttribute('data-pause')).toBe('coach');
-      expect(coach.classes).toContain('pause-btn');
-      expect(coach.classes).not.toContain('primary-btn');
+      expect(coach.getAttribute('data-variant')).toBe('secondary');
+      expect(coach.classes).toContain('mid-row');
       expect(coach.byTag('svg')[0]?.getAttribute('data-icon')).toBe('chat');
       coach.click();
       expect(calls).toEqual({ resume: 0, skip: 0, end: 0, coach: 1 });

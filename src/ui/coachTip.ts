@@ -4,9 +4,12 @@
 // taps). It never dispatches anything itself: app.ts sends APPLY_NEXT_WEIGHT and speaks `say`.
 // Rest re-renders on every dispatch, so app.ts keeps one instance per logged set and calls
 // `update` instead of rebuilding.
+// M13d task 40g (styling only): Apply is a full-width secondary round-button pill (orange ring
+// and icon; Start set stays the one filled action), its box at least the 1.16.2 bar's.
 
 import { formatWeight, type Unit } from '../core/units';
 import { h } from './dom';
+import { midPill, setPillWord } from './midsetButtons';
 import './coach.css';
 
 /**
@@ -122,11 +125,13 @@ export function createCoachTip(opts: CoachTipOptions): CoachTipHandle {
 
   const text = h('p', { class: 'coach-text', 'data-coach': 'text' });
   const why = h('p', { class: 'coach-why', 'data-coach': 'why' });
-  const applyBtn = h('button', {
-    type: 'button',
-    class: 'coach-apply',
-    'data-coach': 'apply',
-    onclick: () => onApplyTap(),
+  const applyBtn = midPill({
+    icon: 'check',
+    label: '',
+    wide: true,
+    class: 'coach-apply coach-apply-pill',
+    hooks: { 'data-coach': 'apply' },
+    onClick: () => onApplyTap(),
   });
   const appliedEl = h('p', {
     class: 'coach-applied',
@@ -163,7 +168,7 @@ export function createCoachTip(opts: CoachTipOptions): CoachTipHandle {
     const next = applySlot(advice, { hasHandler: !!opts.onApply, canApply, applied });
     const w = advice.apply?.weightKg;
     if (w !== undefined) {
-      applyBtn.textContent = applyText(w, unit);
+      setPillWord(applyBtn, applyText(w, unit));
       applyBtn.setAttribute('aria-label', `Apply ${weightLabel(w, unit)} to the next set`);
       appliedEl.textContent = appliedText(w, unit);
     }

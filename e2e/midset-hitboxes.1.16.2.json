@@ -1,0 +1,921 @@
+{
+ "exercise": [
+  {
+   "key": "Push A, 1 of 6, Exercise list",
+   "x": 16,
+   "y": 12,
+   "w": 262,
+   "h": 60
+  },
+  {
+   "key": "Pause",
+   "x": 286,
+   "y": 12,
+   "w": 88,
+   "h": 60
+  },
+  {
+   "key": "How to",
+   "x": 31,
+   "y": 334.7,
+   "w": 132.1,
+   "h": 56
+  },
+  {
+   "key": "Show target muscles in 3D",
+   "x": 205,
+   "y": 188.7,
+   "w": 156,
+   "h": 206
+  },
+  {
+   "key": "Reps minus",
+   "x": 16,
+   "y": 536,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "Reps plus",
+   "x": 294,
+   "y": 536,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "kg minus",
+   "x": 16,
+   "y": 649.3,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "kg plus",
+   "x": 294,
+   "y": 649.3,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "Notes and machine setting",
+   "x": 16,
+   "y": 729.3,
+   "w": 358,
+   "h": 56
+  },
+  {
+   "key": "Set done",
+   "x": 16,
+   "y": 768,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "pause": [
+  {
+   "key": "Resume",
+   "x": 16,
+   "y": 520,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "Coach",
+   "x": 16,
+   "y": 604,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "Skip exercise",
+   "x": 16,
+   "y": 688,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "End workout",
+   "x": 16,
+   "y": 772,
+   "w": 358,
+   "h": 72
+  }
+ ],
+ "pause-armed": [
+  {
+   "key": "Resume",
+   "x": 16,
+   "y": 504,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "Coach",
+   "x": 16,
+   "y": 588,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "Skip exercise",
+   "x": 16,
+   "y": 672,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "Tap again to end",
+   "x": 16,
+   "y": 756,
+   "w": 358,
+   "h": 72
+  }
+ ],
+ "rest": [
+  {
+   "key": "Push A, 1 of 6, Exercise list",
+   "x": 16,
+   "y": 12,
+   "w": 262,
+   "h": 60
+  },
+  {
+   "key": "Pause",
+   "x": 286,
+   "y": 12,
+   "w": 88,
+   "h": 60
+  },
+  {
+   "key": "+30 s, add 30 seconds of rest",
+   "x": 95,
+   "y": 414,
+   "w": 200,
+   "h": 60
+  },
+  {
+   "key": "Fix",
+   "x": 270,
+   "y": 503,
+   "w": 88,
+   "h": 56
+  },
+  {
+   "key": "Why? About set effort",
+   "x": 266.9,
+   "y": 588,
+   "w": 107.1,
+   "h": 56
+  },
+  {
+   "key": "Easy, 3 or more reps left",
+   "x": 16,
+   "y": 650,
+   "w": 114,
+   "h": 76
+  },
+  {
+   "key": "Good, 2 reps left",
+   "x": 138,
+   "y": 650,
+   "w": 114,
+   "h": 76
+  },
+  {
+   "key": "Hard, 0 to 1 reps left",
+   "x": 260,
+   "y": 650,
+   "w": 114,
+   "h": 76
+  },
+  {
+   "key": "Show target muscles in 3D",
+   "x": 30,
+   "y": 756,
+   "w": 92,
+   "h": 150
+  },
+  {
+   "key": "Notes and machine setting",
+   "x": 16,
+   "y": 1002.3,
+   "w": 358,
+   "h": 56
+  },
+  {
+   "key": "Start set",
+   "x": 16,
+   "y": 768,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "rest-tip": [
+  {
+   "key": "Push A, 1 of 6, Exercise list",
+   "x": 16,
+   "y": 12,
+   "w": 262,
+   "h": 60
+  },
+  {
+   "key": "Pause",
+   "x": 286,
+   "y": 12,
+   "w": 88,
+   "h": 60
+  },
+  {
+   "key": "+30 s, add 30 seconds of rest",
+   "x": 95,
+   "y": 342,
+   "w": 200,
+   "h": 60
+  },
+  {
+   "key": "Fix",
+   "x": 270,
+   "y": 431,
+   "w": 88,
+   "h": 56
+  },
+  {
+   "key": "Apply 17.5 kg to the next set",
+   "x": 32,
+   "y": 659.5,
+   "w": 326,
+   "h": 60
+  },
+  {
+   "key": "Why? About set effort",
+   "x": 266.9,
+   "y": 747.5,
+   "w": 107.1,
+   "h": 56
+  },
+  {
+   "key": "Easy, 3 or more reps left",
+   "x": 16,
+   "y": 809.5,
+   "w": 114,
+   "h": 76
+  },
+  {
+   "key": "Good, 2 reps left",
+   "x": 138,
+   "y": 809.5,
+   "w": 114,
+   "h": 76
+  },
+  {
+   "key": "Hard, 0 to 1 reps left",
+   "x": 260,
+   "y": 809.5,
+   "w": 114,
+   "h": 76
+  },
+  {
+   "key": "Show target muscles in 3D",
+   "x": 30,
+   "y": 915.5,
+   "w": 92,
+   "h": 150
+  },
+  {
+   "key": "Notes and machine setting",
+   "x": 16,
+   "y": 1161.8,
+   "w": 358,
+   "h": 56
+  },
+  {
+   "key": "Start set",
+   "x": 16,
+   "y": 768,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "summary": [
+  {
+   "key": "Fix",
+   "x": 271,
+   "y": 624.5,
+   "w": 88,
+   "h": 56
+  },
+  {
+   "key": "Done",
+   "x": 16,
+   "y": 768,
+   "w": 358,
+   "h": 72
+  }
+ ],
+ "exercise-warmup": [
+  {
+   "key": "Push A, 1 of 6, Exercise list",
+   "x": 16,
+   "y": 12,
+   "w": 262,
+   "h": 60
+  },
+  {
+   "key": "Pause",
+   "x": 286,
+   "y": 12,
+   "w": 88,
+   "h": 60
+  },
+  {
+   "key": "How to",
+   "x": 31,
+   "y": 334.7,
+   "w": 132.1,
+   "h": 56
+  },
+  {
+   "key": "Show target muscles in 3D",
+   "x": 205,
+   "y": 188.7,
+   "w": 156,
+   "h": 206
+  },
+  {
+   "key": "Skip warm-ups",
+   "x": 198.5,
+   "y": 418.7,
+   "w": 168.5,
+   "h": 56
+  },
+  {
+   "key": "Reps minus",
+   "x": 16,
+   "y": 612,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "Reps plus",
+   "x": 294,
+   "y": 612,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "kg minus",
+   "x": 16,
+   "y": 725.3,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "kg plus",
+   "x": 294,
+   "y": 725.3,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "Notes and machine setting",
+   "x": 16,
+   "y": 805.3,
+   "w": 358,
+   "h": 56
+  },
+  {
+   "key": "Set done",
+   "x": 16,
+   "y": 768,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "exercise-one-arm-first": [
+  {
+   "key": "Pull A, 1 of 5, Exercise list",
+   "x": 16,
+   "y": 12,
+   "w": 166,
+   "h": 60
+  },
+  {
+   "key": "Camera",
+   "x": 190,
+   "y": 12,
+   "w": 88,
+   "h": 60
+  },
+  {
+   "key": "Pause",
+   "x": 286,
+   "y": 12,
+   "w": 88,
+   "h": 60
+  },
+  {
+   "key": "How to",
+   "x": 31,
+   "y": 367.7,
+   "w": 132.1,
+   "h": 56
+  },
+  {
+   "key": "Show target muscles in 3D",
+   "x": 205,
+   "y": 221.7,
+   "w": 156,
+   "h": 206
+  },
+  {
+   "key": "Reps minus",
+   "x": 16,
+   "y": 576.9,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "Reps plus",
+   "x": 294,
+   "y": 576.9,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "kg minus",
+   "x": 16,
+   "y": 690.2,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "kg plus",
+   "x": 294,
+   "y": 690.2,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "Notes and machine setting",
+   "x": 16,
+   "y": 770.2,
+   "w": 358,
+   "h": 56
+  },
+  {
+   "key": "Next arm",
+   "x": 16,
+   "y": 768,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "exercise-one-arm-second": [
+  {
+   "key": "Pull A, 1 of 5, Exercise list",
+   "x": 16,
+   "y": 12,
+   "w": 166,
+   "h": 60
+  },
+  {
+   "key": "Camera",
+   "x": 190,
+   "y": 12,
+   "w": 88,
+   "h": 60
+  },
+  {
+   "key": "Pause",
+   "x": 286,
+   "y": 12,
+   "w": 88,
+   "h": 60
+  },
+  {
+   "key": "How to",
+   "x": 31,
+   "y": 367.7,
+   "w": 132.1,
+   "h": 56
+  },
+  {
+   "key": "Show target muscles in 3D",
+   "x": 205,
+   "y": 221.7,
+   "w": 156,
+   "h": 206
+  },
+  {
+   "key": "Reps minus",
+   "x": 16,
+   "y": 613.9,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "Reps plus",
+   "x": 294,
+   "y": 613.9,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "kg minus",
+   "x": 16,
+   "y": 727.2,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "kg plus",
+   "x": 294,
+   "y": 727.2,
+   "w": 80,
+   "h": 68
+  },
+  {
+   "key": "Notes and machine setting",
+   "x": 16,
+   "y": 807.2,
+   "w": 358,
+   "h": 56
+  },
+  {
+   "key": "Set done",
+   "x": 16,
+   "y": 768,
+   "w": 358,
+   "h": 72
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "camera": [
+  {
+   "key": "3D skeleton",
+   "x": 191.8,
+   "y": 8,
+   "w": 57,
+   "h": 56
+  },
+  {
+   "key": "Close",
+   "x": 260.9,
+   "y": 8,
+   "w": 117.1,
+   "h": 56
+  },
+  {
+   "key": "Got it",
+   "x": 285.5,
+   "y": 472.8,
+   "w": 81.5,
+   "h": 56
+  },
+  {
+   "key": "Switch camera",
+   "x": 322,
+   "y": 635,
+   "w": 60,
+   "h": 60
+  },
+  {
+   "key": "Set done",
+   "x": 12,
+   "y": 756,
+   "w": 366,
+   "h": 80
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72.2,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "camera-one-arm-first": [
+  {
+   "key": "3D skeleton",
+   "x": 191.8,
+   "y": 8,
+   "w": 57,
+   "h": 56
+  },
+  {
+   "key": "Close",
+   "x": 260.9,
+   "y": 8,
+   "w": 117.1,
+   "h": 56
+  },
+  {
+   "key": "Got it",
+   "x": 285.5,
+   "y": 472.8,
+   "w": 81.5,
+   "h": 56
+  },
+  {
+   "key": "Switch camera",
+   "x": 322,
+   "y": 635,
+   "w": 60,
+   "h": 60
+  },
+  {
+   "key": "Next arm",
+   "x": 12,
+   "y": 756,
+   "w": 366,
+   "h": 80
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72.2,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "panel-rest": [
+  {
+   "key": "3D skeleton",
+   "x": 191.8,
+   "y": 8,
+   "w": 57,
+   "h": 56
+  },
+  {
+   "key": "Close",
+   "x": 260.9,
+   "y": 8,
+   "w": 117.1,
+   "h": 56
+  },
+  {
+   "key": "Switch camera",
+   "x": 322,
+   "y": 688,
+   "w": 60,
+   "h": 60
+  },
+  {
+   "key": "Apply 17.5 kg to the next set",
+   "x": 36,
+   "y": 491,
+   "w": 323,
+   "h": 60
+  },
+  {
+   "key": "Fix",
+   "x": 271,
+   "y": 589,
+   "w": 88,
+   "h": 56
+  },
+  {
+   "key": "Start set",
+   "x": 16,
+   "y": 668,
+   "w": 232,
+   "h": 72
+  },
+  {
+   "key": "Close #2",
+   "x": 258,
+   "y": 668,
+   "w": 116,
+   "h": 72
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72.2,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "panel-rest-fix-open": [
+  {
+   "key": "3D skeleton",
+   "x": 191.8,
+   "y": 8,
+   "w": 57,
+   "h": 56
+  },
+  {
+   "key": "Close",
+   "x": 260.9,
+   "y": 8,
+   "w": 117.1,
+   "h": 56
+  },
+  {
+   "key": "Switch camera",
+   "x": 322,
+   "y": 688,
+   "w": 60,
+   "h": 60
+  },
+  {
+   "key": "Apply 17.5 kg to the next set",
+   "x": 36,
+   "y": 379.8,
+   "w": 323,
+   "h": 60
+  },
+  {
+   "key": "Close #2",
+   "x": 271,
+   "y": 477.8,
+   "w": 88,
+   "h": 56
+  },
+  {
+   "key": "Reps minus",
+   "x": 31,
+   "y": 570.8,
+   "w": 72,
+   "h": 72
+  },
+  {
+   "key": "Reps plus",
+   "x": 287,
+   "y": 570.8,
+   "w": 72,
+   "h": 72
+  },
+  {
+   "key": "Partials minus",
+   "x": 31,
+   "y": 679.8,
+   "w": 72,
+   "h": 72
+  },
+  {
+   "key": "Partials plus",
+   "x": 287,
+   "y": 679.8,
+   "w": 72,
+   "h": 72
+  },
+  {
+   "key": "Cancel",
+   "x": 31,
+   "y": 763.8,
+   "w": 106,
+   "h": 60
+  },
+  {
+   "key": "Save",
+   "x": 147,
+   "y": 763.8,
+   "w": 212,
+   "h": 60
+  },
+  {
+   "key": "Start set",
+   "x": 16,
+   "y": 846.8,
+   "w": 232,
+   "h": 72
+  },
+  {
+   "key": "Close #3",
+   "x": 258,
+   "y": 846.8,
+   "w": 116,
+   "h": 72
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72.2,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "panel-hold": [
+  {
+   "key": "3D skeleton",
+   "x": 191.8,
+   "y": 8,
+   "w": 57,
+   "h": 56
+  },
+  {
+   "key": "Close",
+   "x": 260.9,
+   "y": 8,
+   "w": 117.1,
+   "h": 56
+  },
+  {
+   "key": "Switch camera",
+   "x": 322,
+   "y": 688,
+   "w": 60,
+   "h": 60
+  },
+  {
+   "key": "Continue set",
+   "x": 16,
+   "y": 568,
+   "w": 358,
+   "h": 80
+  },
+  {
+   "key": "Start next set",
+   "x": 16,
+   "y": 660,
+   "w": 358,
+   "h": 80
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72.2,
+   "w": 0,
+   "h": 0
+  }
+ ],
+ "panel-stop": [
+  {
+   "key": "3D skeleton",
+   "x": 191.8,
+   "y": 8,
+   "w": 57,
+   "h": 56
+  },
+  {
+   "key": "Close",
+   "x": 260.9,
+   "y": 8,
+   "w": 117.1,
+   "h": 56
+  },
+  {
+   "key": "Switch camera",
+   "x": 322,
+   "y": 688,
+   "w": 60,
+   "h": 60
+  },
+  {
+   "key": "Undo5Saving in 5 seconds",
+   "x": 16,
+   "y": 652,
+   "w": 358,
+   "h": 88
+  },
+  {
+   "key": "(top bar bottom)",
+   "x": 0,
+   "y": 72.2,
+   "w": 0,
+   "h": 0
+  }
+ ]
+}

@@ -1,0 +1,221 @@
+/* M13d task 40g: the round-button look on the workout screens, styling only (midsetButtons.ts).
+   Same places, same words, hit boxes at least their 1.16.2 size (e2e/midset-hitboxes.spec.ts).
+   The agreed look: docs/screenshots/m13d-buttons-preview-exercise.png. */
+
+/* ---------- The pill: circle + word beside it on a soft track ---------- */
+
+.icon-btn.mid-pill {
+  justify-content: flex-start;
+  gap: 16px;
+  padding: 4px 18px 4px 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.icon-btn.mid-pill:not([data-wide-hit]) {
+  align-self: flex-start;
+}
+
+.icon-btn.mid-pill .icon-btn-label {
+  min-width: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+/* The one main action of the screen (Set done, Next arm, Start set, Resume, Done, Continue set):
+   the 72px orange circle and the CTA's condensed display word. */
+.icon-btn.mid-pill[data-variant='main'] {
+  min-height: var(--tap-hero);
+  /* 72px circle + border inside the 80px bar, not 82 (the camera's bottom bar stays 1.16.2's
+     height, so the stage and its "Step into frame" strip line keep their place). */
+  padding-block: calc((var(--tap-hero) - var(--tap-cta)) / 2 - var(--line-w));
+}
+
+.icon-btn.mid-pill[data-variant='main'] .icon-btn-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  line-height: 1.1;
+}
+
+/* A row that stood 72px tall (Pause sheet rows) keeps that height. */
+.icon-btn.mid-pill.mid-row {
+  min-height: var(--tap-cta);
+}
+
+/* End workout: danger ring and word; armed ("Tap again to end"), the track fills with danger. */
+.icon-btn.mid-pill[data-variant='danger'] {
+  border-color: var(--danger);
+}
+
+.icon-btn.mid-pill[data-variant='danger'][data-armed] {
+  --ib-word: var(--on-danger);
+  --ib-ink: var(--on-danger);
+  --ib-ring: var(--on-danger);
+  --ib-fill: transparent;
+  background: var(--danger);
+}
+
+/* ---------- Exercise steppers: a 72px circle inside today's 80px column, no word ---------- */
+
+.ex-stepper .step-btn.mid-step {
+  min-height: var(--tap-cta);
+  padding: 0;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-btn);
+}
+
+.mid-step-circle {
+  display: grid;
+  place-items: center;
+  width: var(--tap-cta);
+  height: var(--tap-cta);
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 2px solid var(--line);
+  color: var(--text);
+}
+
+.ex-stepper .step-btn.mid-step:active .mid-step-circle {
+  filter: brightness(1.15);
+}
+
+.ex-stepper .step-btn.mid-step:focus-visible {
+  outline: none;
+}
+
+.ex-stepper .step-btn.mid-step:focus-visible .mid-step-circle {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* ---------- Placement on each screen ---------- */
+
+/* Exercise: How to under the set badge; Skip warm-ups beside the warm-up label. */
+.stage-col .icon-btn.mid-pill .ic {
+  color: var(--info);
+}
+
+/* Skip warm-ups: the word-only button, in the pill shape of the round buttons. */
+.warmup-strip .mid-text-pill {
+  border-radius: 999px;
+  padding: 0 18px;
+}
+
+/* Rest: +30 s centred, at least as wide as before (200px). */
+.icon-btn.mid-pill.rest-extend-pill {
+  align-self: center;
+  min-width: 200px;
+}
+
+.icon-btn.mid-pill.rest-extend-pill .ic {
+  color: var(--info);
+}
+
+/* Camera: rest mode hides Set done (Start set and Close live in the rest panel). */
+.camera-sheet.rest-mode .cam-bottom .icon-btn.cam-set-done {
+  display: none;
+}
+
+/* Camera rest panel: Start set (2 columns) + Close (1 column) side by side, both ≥ 72px. */
+.cam-rest-actions .icon-btn {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--tap-cta);
+}
+
+.cam-rest-actions .icon-btn.mid-pill {
+  gap: 10px;
+  padding-right: 10px;
+}
+
+.cam-rest-actions .icon-btn.mid-pill .icon-btn-label {
+  font-size: var(--fs-head);
+}
+
+.cam-rest-close-btn.icon-btn {
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-card);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.cam-rest-close-btn.icon-btn .icon-btn-label {
+  font-size: var(--fs-body);
+  line-height: 1.1;
+}
+
+/* Hold panel: two full rows, 80px as before, words at the old sizes. */
+.hold-actions .icon-btn.mid-pill {
+  width: 100%;
+  min-height: var(--tap-hero);
+}
+
+.hold-actions .icon-btn.mid-pill .icon-btn-label {
+  font-size: var(--fs-head);
+  line-height: 1.1;
+}
+
+.hold-actions .icon-btn.mid-pill[data-hold-action='next'] .icon-btn-label,
+.hold-actions .icon-btn.mid-pill[data-hold-action='save'] .icon-btn-label {
+  font-size: var(--fs-lead);
+}
+
+.hold-actions .icon-btn.mid-pill:disabled {
+  opacity: 0.6;
+}
+
+/* Short phones (375×667): 72px, as before, so both stay on screen. */
+@media (max-height: 720px) {
+  .hold-actions .icon-btn.mid-pill {
+    min-height: var(--tap-cta);
+  }
+}
+
+/* Coach tip Apply: a full-width secondary pill (Start set stays the only filled orange). */
+.icon-btn.mid-pill.coach-apply-pill {
+  min-height: var(--tap-bar);
+  --ib-ring: var(--cta);
+  --ib-ink: var(--cta);
+}
+
+/* The word keeps its 1.16.2 size and face (display, --fs-lead). */
+.icon-btn.mid-pill.coach-apply-pill .icon-btn-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-lead);
+}
+
+/* ---------- No press motion on the workout screens: a colour change only ----------
+   (Exercise and the camera sheet are already motion-off in iconButton.css; Rest, Summary and the
+   Pause sheet are the other mid-set screens, Decision "M13d answers".) */
+:is([data-screen='rest'], [data-screen='summary'], .pause-sheet) .icon-btn .icon-btn-circle {
+  transition: none;
+}
+
+:is([data-screen='rest'], [data-screen='summary'], .pause-sheet)
+  .icon-btn:active:not(:disabled)
+  .icon-btn-circle {
+  transform: none;
+}
+
+:is([data-screen='rest'], [data-screen='summary'], .pause-sheet) .icon-btn .icon-btn-circle::after {
+  display: none;
+}
+
+/* The bar itself never scales either (styles.css's global 0.97 press). */
+:is(
+    [data-screen='exercise'],
+    [data-screen='rest'],
+    [data-screen='summary'],
+    .camera-sheet,
+    .pause-sheet
+  )
+  .icon-btn.mid-pill {
+  transition: none;
+}

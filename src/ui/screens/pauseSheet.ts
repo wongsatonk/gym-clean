@@ -10,10 +10,13 @@
 // the disarm timer is cleared: a MutationObserver runs only during that armed window, so the
 // caller needs no dispose call.
 //
+// M13d task 40g (styling only): Resume is the main round-button pill, Coach / Skip / End are
+// full-width secondary (End: danger) pills in the same rows, 72px tall as before; no press motion.
 // e2e hooks: dialog named "Paused", buttons "Resume", "Coach" (`data-pause="coach"`), "Skip exercise", "End workout" →
 // "Tap again to end" (`data-armed` while armed).
 import { h } from '../dom';
 import { icon } from '../icons';
+import { midPill, setPillWord } from '../midsetButtons';
 import { moodClass } from '../tokens';
 
 export const END_CONFIRM_MS = 3000;
@@ -39,13 +42,15 @@ const END_LABEL = 'End workout';
 const END_ARMED_LABEL = 'Tap again to end';
 
 function endButton(onEnd: () => void, confirmMs: number): HTMLElement {
-  const label = h('span', {}, END_LABEL);
-  const btn = h(
-    'button',
-    { type: 'button', class: 'pause-btn pause-end', 'data-pause': 'end' },
-    icon('flag', 'md'),
-    label,
-  );
+  const btn = midPill({
+    icon: 'flag',
+    label: END_LABEL,
+    variant: 'danger',
+    wide: true,
+    class: 'mid-row pause-end',
+    hooks: { 'data-pause': 'end' },
+    onClick: () => {},
+  });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let watch: MutationObserver | undefined;
   const stopArmedWindow = () => {
@@ -61,11 +66,11 @@ function endButton(onEnd: () => void, confirmMs: number): HTMLElement {
       return;
     }
     btn.setAttribute('data-armed', 'true');
-    label.textContent = END_ARMED_LABEL;
+    setPillWord(btn, END_ARMED_LABEL);
     timer = setTimeout(() => {
       stopArmedWindow();
       btn.removeAttribute('data-armed');
-      label.textContent = END_LABEL;
+      setPillWord(btn, END_LABEL);
     }, confirmMs);
     // Sheet removed (Resume, re-render) while armed → drop the pending timer with it.
     watch = new MutationObserver(() => {
@@ -77,38 +82,35 @@ function endButton(onEnd: () => void, confirmMs: number): HTMLElement {
 }
 
 export function pauseSheet(p: PauseSheetProps, a: PauseSheetActions): HTMLElement {
-  const resume = h(
-    'button',
-    {
-      type: 'button',
-      class: 'primary-btn cta-btn',
-      'data-pause': 'resume',
-      onclick: a.onResume,
-    },
-    icon('play', 'lg'),
-    'Resume',
-  );
+  const resume = midPill({
+    icon: 'play',
+    label: 'Resume',
+    variant: 'main',
+    wide: true,
+    hooks: { 'data-pause': 'resume' },
+    onClick: () => a.onResume(),
+  });
   const skip =
     p.canSkip === false
       ? null
-      : h(
-          'button',
-          { type: 'button', class: 'pause-btn', 'data-pause': 'skip', onclick: a.onSkip },
-          icon('skip', 'md'),
-          h('span', {}, 'Skip exercise'),
-        );
-  const coach = a.onCoach
-    ? h(
-        'button',
-        {
-          type: 'button',
-          class: 'pause-btn pause-coach',
-          'data-pause': 'coach',
-          onclick: a.onCoach,
-        },
-        icon('chat', 'md'),
-        h('span', {}, 'Coach'),
-      )
+      : midPill({
+          icon: 'skip',
+          label: 'Skip exercise',
+          wide: true,
+          class: 'mid-row',
+          hooks: { 'data-pause': 'skip' },
+          onClick: () => a.onSkip(),
+        });
+  const onCoach = a.onCoach;
+  const coach = onCoach
+    ? midPill({
+        icon: 'chat',
+        label: 'Coach',
+        wide: true,
+        class: 'mid-row pause-coach',
+        hooks: { 'data-pause': 'coach' },
+        onClick: () => onCoach(),
+      })
     : null;
   const end = endButton(a.onEnd, p.confirmMs ?? END_CONFIRM_MS);
   const cycle = [resume, coach, skip, end].filter((b): b is HTMLElement => b !== null);

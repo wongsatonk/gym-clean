@@ -85,7 +85,9 @@ describe('exercise screen, one-sided set: first side', () => {
     expect(reps?.find((e) => e.hasAttribute('data-side-label'))).toHaveLength(1);
     const next = attr(el, 'data-next-side')[0];
     expect(next?.textContent).toBe('Next arm');
-    expect(next?.classes).toEqual(expect.arrayContaining(['primary-btn', 'cta-btn']));
+    // M13d task 40g: the main round-button pill, the whole row its tap area.
+    expect(next?.getAttribute('data-variant')).toBe('main');
+    expect(next?.hasAttribute('data-wide-hit')).toBe(true);
     // In the sticky CTA dock, where Set done is on a two-sided exercise.
     const dock = el.oneByClass('sticky-bottom');
     expect(dock.find((e) => e.hasAttribute('data-next-side'))).toHaveLength(1);

@@ -338,7 +338,7 @@ describe('summaryScreen stall card (M10)', () => {
     expect(rowBtns.every((b) => b.getAttribute('type') === 'button')).toBe(true);
     expect(rowBtns.every((b) => b.byTag('svg').length === 1)).toBe(true);
     // Secondary buttons: Done stays the only action-colour fill.
-    expect(el.byClass('primary-btn')).toHaveLength(1);
+    expect(el.find((e) => e.getAttribute('data-variant') === 'main')).toHaveLength(1);
     expect(pu?.byTag('button').map((b) => b.textContent)).toEqual(['Add a set']);
     rowBtns[0]?.click();
     rowBtns[1]?.click();
