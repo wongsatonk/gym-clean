@@ -12,11 +12,23 @@ import { openPause, endWorkout } from './workout.helpers';
 // is still there under the same name, at least as wide and as tall, and starts within 24px of
 // where it was. MIDSET_HITBOX_OUT=<dir> writes this run's table (how the 1.16.2 one was made).
 // Fixed clock, mocked speech and wake lock.
+//
+// Text-sized controls ("Close", "Skip warm-ups") come out a few px narrower under Linux fonts, so
+// each platform compares with a table recorded on that platform from the same 3c67c9e code:
+// `midset-hitboxes.1.16.2.json` on macOS (local runs), `midset-hitboxes.1.16.2.linux.json` on
+// Linux (CI, recorded in its mcr.microsoft.com/playwright:v1.65.0-noble image). Same screens and
+// keys in both; no tolerance added. To re-record the Linux one, check out 3c67c9e, copy this spec
+// in, and run it with MIDSET_HITBOX_OUT=<dir> inside that image; merge the five tables into one.
 
 type Box = { key: string; x: number; y: number; w: number; h: number };
 type Table = Record<string, Box[]>;
 
-const BASE_FILE = resolve(process.cwd(), 'e2e/midset-hitboxes.1.16.2.json');
+const BASE_FILE = resolve(
+  process.cwd(),
+  process.platform === 'linux'
+    ? 'e2e/midset-hitboxes.1.16.2.linux.json'
+    : 'e2e/midset-hitboxes.1.16.2.json',
+);
 const BASE: Table | null = (() => {
   try {
     return JSON.parse(readFileSync(BASE_FILE, 'utf8')) as Table;
