@@ -12,6 +12,8 @@
 //           text and a polite live line say it in words.
 //   bottom: welcome / mic / allowed pages → [Back][Next] (Go to Today on the last page);
 //           ask pages → the action full width, then [Back][Not now].
+//           M13d task 40b: all round buttons with their words (iconButton.ts): Back / Not now
+//           circles, the way forward an orange circle in a full-width pill (flowButtons.css).
 // Keys are a shortcut only: Escape = Skip, ArrowLeft = Back, ArrowRight = Next where Next exists.
 // Swipes (M13d) are the same shortcut by touch: left = Next, right = Back (gestures/pageSwipe.ts).
 // Motion: a page change is motion.ts enterScreen in the direction of travel, a no-op under
@@ -28,15 +30,16 @@ import {
   UNITS_PAGE,
   WELCOME_PAGES,
 } from '../../data/onboarding';
-import { forwardContent } from '../backButton';
 import { brandLockup } from '../brand';
 import { h } from '../dom';
 import { installPageSwipe } from '../gestures/pageSwipe';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
 import { enterScreen, type Stop } from '../motion';
 import { permissionPage } from './permissionPage';
 import { unitsPage } from './unitsPage';
 import './onboarding.css';
+import './flowButtons.css';
 
 export type OnboardingProps = {
   /** onboardingSteps(...) for this install. */
@@ -172,37 +175,39 @@ export function onboardingScreen(
     content,
   );
 
-  const skipBtn = h(
-    'button',
-    { type: 'button', class: 'ob-skip', 'data-ob': 'skip', onclick: () => actions.onSkipAll() },
-    ONBOARDING_BUTTONS.skip,
-  );
-  const backBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'ob-back',
-      'data-ob': 'back',
-      'data-swipe-back': true, // M13d task 24: the edge swipe's Back (disabled on page 1 = none)
-      disabled: index === 0,
-      onclick: () => actions.onBack(),
-    },
-    ONBOARDING_BUTTONS.back,
-  );
+  // M13d task 40b (Goal 7): round buttons with their words. Skip is quiet (word beside the
+  // circle), Back / Not now are secondary circles with the word under them, and the way forward
+  // is the page's one main action: the orange circle in a full-width pill (all of it the tap area).
+  const skipBtn = iconButton({
+    icon: 'skip',
+    label: ONBOARDING_BUTTONS.skip,
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'ob-skip',
+    hooks: { 'data-ob': 'skip' },
+    onClick: () => actions.onSkipAll(),
+  });
+  const backBtn = iconButton({
+    icon: 'back',
+    label: ONBOARDING_BUTTONS.back,
+    class: 'ob-back',
+    // M13d task 24: the edge swipe's Back (disabled on page 1 = none)
+    hooks: { 'data-ob': 'back', 'data-swipe-back': true },
+    disabled: index === 0,
+    onClick: () => actions.onBack(),
+  });
   const forward = isLast ? () => actions.onDone() : () => actions.onNext();
   const nextBtn =
     allow ??
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'ob-primary cta-btn',
-        'data-ob': 'primary',
-        'data-last': isLast ? 'true' : 'false',
-        onclick: forward,
-      },
-      ...(isLast ? [ONBOARDING_BUTTONS.done] : forwardContent(ONBOARDING_BUTTONS.next)),
-    );
+    iconButton({
+      icon: isLast ? 'check' : 'arrow-right',
+      label: isLast ? ONBOARDING_BUTTONS.done : ONBOARDING_BUTTONS.next,
+      variant: 'main',
+      wideHit: true,
+      class: 'ob-primary flow-pill',
+      hooks: { 'data-ob': 'primary', 'data-last': isLast ? 'true' : 'false' },
+      onClick: forward,
+    });
 
   const nav = notNow
     ? h(

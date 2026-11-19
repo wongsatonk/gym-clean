@@ -230,7 +230,7 @@ for (const screen of ['today', 'fuel', 'calendar', 'settings'] as const) {
       });
       expect(style.size).toBeGreaterThanOrEqual(20);
       // One line: the label is never cut or wrapped.
-      const label = btn.locator('.search-btn-label');
+      const label = btn.locator('.icon-btn-label');
       expect(await label.evaluate((l) => l.scrollWidth <= l.clientWidth + 0.5)).toBe(true);
       expect(((await label.boundingBox())?.height ?? 99) < 40).toBe(true);
       expect(await width(page)).toBe(vp.width);

@@ -1,13 +1,15 @@
 // M7 F2 (replaces M10 F2): the coach's food result card. Up to 3 suggestions from core
 // `suggestFood(...)`, each a row with the name, the portion, kcal / protein and a Log button
-// (≥ 56px). Props in, callbacks out; the app logs the entry, shows the Undo toast and re-renders
+// (≥ 56px; M13d task 40f: a round icon button, its name still "Log <food>"). Props in, callbacks out; the app logs the entry, shows the Undo toast and re-renders
 // with `logged` set for that row.
 //
 // e2e hooks: `[data-food-card]`, `[data-food-row=<index>]`, `[data-food-log=<index>]`.
 import type { FoodAmount, FoodSuggestion } from '../../core/types';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import './foodCard.css';
+import './coachButtons.css';
 
 /** "1 serving", "1.5 servings", "200 g". Pure. */
 export function portionText(amount: FoodAmount): string {
@@ -39,18 +41,15 @@ export function buildFoodCard(
           icon('check', 'sm'),
           h('span', {}, 'Logged'),
         )
-      : h(
-          'button',
-          {
-            type: 'button',
-            class: 'fc-log',
-            'data-food-log': index,
-            'aria-label': `Log ${s.label}`,
-            onclick: () => a.onLog(index),
-          },
-          icon('plus', 'sm'),
-          h('span', {}, 'Log'),
-        );
+      : // M13d task 40f: a secondary round button, "Log" under the circle; the name says which.
+        iconButton({
+          icon: 'plus',
+          label: 'Log',
+          ariaLabel: `Log ${s.label}`,
+          class: 'fc-log-btn',
+          hooks: { 'data-food-log': String(index) },
+          onClick: () => a.onLog(index),
+        });
     if (!done) controls.push(btn);
     return h(
       'li',

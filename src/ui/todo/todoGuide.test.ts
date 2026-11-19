@@ -98,6 +98,10 @@ describe('todoGuideScreen: header and navigation', () => {
     expect(r.calls).toMatchObject({ back: 1, next: 1, close: 0 });
     r = render({ stepIndex: 4 });
     expect(one(r.el, 'data-guide-next').textContent).toBe('Done');
+    // M13d task 40d: Next / Done is the main round button on a pill; Back a secondary circle.
+    expect(one(r.el, 'data-guide-next').getAttribute('data-variant')).toBe('main');
+    expect(one(r.el, 'data-guide-next').hasAttribute('data-wide-hit')).toBe(true);
+    expect(one(r.el, 'data-guide-back').getAttribute('data-variant')).toBe('secondary');
     one(r.el, 'data-guide-next').click();
     expect(r.calls).toMatchObject({ next: 0, close: 1 });
   });
@@ -278,6 +282,7 @@ describe('todoGuideScreen: Skip this topic', () => {
     skip.click();
     expect(skip.hasAttribute('data-armed')).toBe(true);
     expect(skip.textContent).toBe('Tap again to skip');
+    expect(skip.hasAttribute('data-icon-btn')).toBe(true);
     expect(calls.skip).toBe(0);
     vi.advanceTimersByTime(1001);
     expect(skip.hasAttribute('data-armed')).toBe(false);

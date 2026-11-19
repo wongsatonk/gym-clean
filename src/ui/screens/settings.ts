@@ -47,6 +47,14 @@
 // M13d task 21: **Display** (section key `display`, right under Your goal, shown when
 // `onTextSize` is set): Text size Standard / Large / Larger (../textSizePicker.ts, group
 // "Text size", `data-text-size-option`), one short note.
+//
+// M13d task 40d (Goal 7): every action row (Set your goal, Camera test, My gym, Health, Coach,
+// Self-check, Reminders, Plan changes, To-dos, What's new, Open progress photos, Coach eval,
+// About, Show the welcome again) is a round icon button with its word beside it
+// (`settingsRowButton`, class `set-row`); the whole row stays the tap area. Words, hooks and
+// accessible names are unchanged; Camera test also gets `data-camera-test-open`. Go-easy Remove
+// is a quiet round button (same aria-label). Switches, the kg / lb and cm / ft·in choices, Text
+// size, Accent and Background stay as they are.
 import type {
   Accent,
   BackgroundStyle,
@@ -62,6 +70,7 @@ import { ONBOARDING_BUTTONS, UNITS_PAGE } from '../../data/onboarding';
 import { accentPicker } from '../accentPicker';
 import { backgroundPicker } from '../backgroundPicker';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
 import { moreDisclosure } from '../moreDisclosure';
 import { AREA_LABEL, BODY_AREAS, intakeSummary } from '../intake/intake';
@@ -71,6 +80,7 @@ import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
 import { textSizePicker } from '../textSizePicker';
 import './settingsUnits.css';
+import '../settingsButtons.css';
 
 export type SettingsProps = {
   accent: Accent;
@@ -274,6 +284,29 @@ export function switchRow(
 }
 
 /**
+ * M13d task 40d: a Settings action (opens a sub-screen or runs something) as a round icon button
+ * with its word beside it; the whole row stays the tap area (it replaced a full-width bar).
+ * `hook` is the e2e / app data attribute (e.g. `data-my-gym-open`); the word is the accessible
+ * name, as before.
+ */
+export function settingsRowButton(
+  iconName: IconName,
+  label: string,
+  hook: string | null,
+  onTap: () => void,
+): HTMLButtonElement {
+  return iconButton({
+    icon: iconName,
+    label,
+    labelAt: 'beside',
+    wideHit: true,
+    class: 'set-ib-pill set-row',
+    hooks: hook ? { [hook]: true } : {},
+    onClick: () => onTap(),
+  });
+}
+
+/**
  * M12 slice 1c: "To-dos" + "What's new" rows (each only when its callback is set). M13: owner
  * mode off → no To-dos row; What's new alone is its own "What's new" section.
  */
@@ -289,28 +322,22 @@ function todosSection(
 ): HTMLElement | null {
   const onTodos = owner ? actions.onTodos : undefined;
   if (!onTodos && !actions.onWhatsNew) return null;
-  const row = (hook: string, label: string, onTap: (() => void) | undefined) =>
-    onTap
-      ? h(
-          'button',
-          { type: 'button', class: 'set-action', [hook]: true, onclick: () => onTap() },
-          label,
-        )
-      : null;
+  const row = (iconName: IconName, hook: string, label: string, onTap: (() => void) | undefined) =>
+    onTap ? settingsRowButton(iconName, label, hook, onTap) : null;
   if (!owner)
     return section(
       'whats-new',
       'list',
       "What's new",
-      row('data-whats-new-open', "What's new", actions.onWhatsNew),
+      row('spark', 'data-whats-new-open', "What's new", actions.onWhatsNew),
       notesMore('whats-new', "What's new", 'What changed in this version.'),
     );
   return section(
     'todos',
     'list',
     'To-dos',
-    row('data-todos-open', 'To-dos', onTodos),
-    row('data-whats-new-open', "What's new", actions.onWhatsNew),
+    row('list', 'data-todos-open', 'To-dos', onTodos),
+    row('spark', 'data-whats-new-open', "What's new", actions.onWhatsNew),
     notesMore('todos', 'To-dos', 'Things to try and answer, and what changed in this version.'),
   );
 }
@@ -342,15 +369,8 @@ function goalSection(
     intake?.goalText
       ? h('p', { class: 'set-note', 'data-goal-words': true }, intake.goalText)
       : null,
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'set-action',
-        'data-intake-open': true,
-        onclick: () => actions.onIntake?.(),
-      },
-      intake ? GOAL_RERUN_LABEL : GOAL_SET_LABEL,
+    settingsRowButton('flag', intake ? GOAL_RERUN_LABEL : GOAL_SET_LABEL, 'data-intake-open', () =>
+      actions.onIntake?.(),
     ),
     h('h3', { class: 'set-easy-head', id: 'set-easy-h' }, EASY_ON_HEAD),
     areas.length
@@ -363,18 +383,16 @@ function goalSection(
               { class: 'set-easy-row', 'data-easy-on': a },
               h('span', { class: 'set-easy-name' }, AREA_LABEL[a]),
               onRemove
-                ? h(
-                    'button',
-                    {
-                      type: 'button',
-                      class: 'set-easy-remove',
-                      'data-easy-remove': a,
-                      'aria-label': `Remove ${AREA_LABEL[a]} from the go-easy list`,
-                      onclick: () => onRemove(a),
-                    },
-                    icon('close', 'sm'),
-                    h('span', {}, 'Remove'),
-                  )
+                ? iconButton({
+                    icon: 'close',
+                    label: 'Remove',
+                    variant: 'quiet',
+                    labelAt: 'beside',
+                    ariaLabel: `Remove ${AREA_LABEL[a]} from the go-easy list`,
+                    class: 'set-easy-remove',
+                    hooks: { 'data-easy-remove': a },
+                    onClick: () => onRemove(a),
+                  })
                 : null,
             ),
           ),
@@ -404,15 +422,8 @@ function progressPhotosSection(
     'Progress photos',
     switchRow('progress-photos', 'Progress photos', on, onToggle),
     on && actions.onProgressPhotosOpen
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'set-action',
-            'data-progress-photos-open': true,
-            onclick: () => actions.onProgressPhotosOpen?.(),
-          },
-          'Open progress photos',
+      ? settingsRowButton('camera', 'Open progress photos', 'data-progress-photos-open', () =>
+          actions.onProgressPhotosOpen?.(),
         )
       : null,
     h(
@@ -426,20 +437,12 @@ function progressPhotosSection(
 
 /** The row that opens the About screen (M13). */
 function aboutRow(onAbout: () => void): HTMLElement {
-  return h(
-    'button',
-    { type: 'button', class: 'set-action', 'data-about-open': true, onclick: () => onAbout() },
-    `About ${APP_NAME}`,
-  );
+  return settingsRowButton('info', `About ${APP_NAME}`, 'data-about-open', onAbout);
 }
 
 /** The row that shows the first-launch welcome again (M13). */
 function rerunWelcomeRow(onRerun: () => void): HTMLElement {
-  return h(
-    'button',
-    { type: 'button', class: 'set-action', 'data-welcome-rerun': true, onclick: () => onRerun() },
-    ONBOARDING_BUTTONS.rerun,
-  );
+  return settingsRowButton('refresh', ONBOARDING_BUTTONS.rerun, 'data-welcome-rerun', onRerun);
 }
 
 /**
@@ -572,10 +575,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
       'camera',
       'Camera',
       switchRow('hands-free', 'Hands-free sets', props.handsFree, actions.onHandsFree),
-      h(
-        'button',
-        { type: 'button', class: 'set-action', onclick: () => actions.onCameraTest() },
-        'Camera test',
+      settingsRowButton('camera', 'Camera test', 'data-camera-test-open', () =>
+        actions.onCameraTest(),
       ),
     ),
     section(
@@ -620,16 +621,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'gym',
           'dumbbell',
           'Gym',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-my-gym-open': true,
-              onclick: () => actions.onMyGym?.(),
-            },
-            'My gym',
-          ),
+          settingsRowButton('dumbbell', 'My gym', 'data-my-gym-open', () => actions.onMyGym?.()),
           notesMore('gym', 'Gym', 'The kit your gym has. Swaps use only that.'),
         )
       : null,
@@ -638,16 +630,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'health',
           'trend',
           'Health',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-health-open': true,
-              onclick: () => actions.onHealth?.(),
-            },
-            'Health',
-          ),
+          settingsRowButton('trend', 'Health', 'data-health-open', () => actions.onHealth?.()),
           notesMore('health', 'Health', 'What the coach reads from Apple Health.'),
         )
       : null,
@@ -656,15 +639,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'coach',
           'chat',
           'Coach',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-coach-settings-open': true,
-              onclick: () => actions.onCoachSettings?.(),
-            },
-            'Coach',
+          settingsRowButton('chat', 'Coach', 'data-coach-settings-open', () =>
+            actions.onCoachSettings?.(),
           ),
           notesMore('coach', 'Coach', 'Who answers, and when replies are spoken.'),
         )
@@ -674,15 +650,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'selfcheck',
           'check',
           'Self-check',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-selfcheck-open': true,
-              onclick: () => actions.onSelfCheck?.(),
-            },
-            'Self-check',
+          settingsRowButton('check', 'Self-check', 'data-selfcheck-open', () =>
+            actions.onSelfCheck?.(),
           ),
           notesMore('selfcheck', 'Self-check', 'Is the app ready for the gym?'),
         )
@@ -692,15 +661,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'reminders',
           'clock',
           'Reminders',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-reminders-open': true,
-              onclick: () => actions.onReminders?.(),
-            },
-            'Reminders',
+          settingsRowButton('clock', 'Reminders', 'data-reminders-open', () =>
+            actions.onReminders?.(),
           ),
           notesMore('reminders', 'Reminders', 'Off until you turn them on.'),
         )
@@ -710,15 +672,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'plan',
           'calendar',
           'Plan',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-plan-changes-open': true,
-              onclick: () => actions.onPlanChanges?.(),
-            },
-            'Plan changes',
+          settingsRowButton('calendar', 'Plan changes', 'data-plan-changes-open', () =>
+            actions.onPlanChanges?.(),
           ),
         )
       : null,
@@ -732,15 +687,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'Developer log',
           props.devLog,
           actions.onBrainEval
-            ? h(
-                'button',
-                {
-                  type: 'button',
-                  class: 'set-action',
-                  'data-brain-eval-open': true,
-                  onclick: () => actions.onBrainEval?.(),
-                },
-                'Coach eval',
+            ? settingsRowButton('bars', 'Coach eval', 'data-brain-eval-open', () =>
+                actions.onBrainEval?.(),
               )
             : null,
         )

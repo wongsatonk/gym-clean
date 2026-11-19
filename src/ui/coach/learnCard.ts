@@ -36,10 +36,12 @@ import type { LearnCard } from '../../core/types';
 import { h } from '../dom';
 import { workoutOnScreen } from '../gestures/edgeBack';
 import { installSheetSwipe } from '../gestures/sheetSwipe';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { moreDisclosure } from '../moreDisclosure';
 import { enterScreen, type Stop } from '../motion';
 import { moodClass } from '../tokens';
+import '../chromeButtons.css';
 import './learnCard.css';
 
 export const GOT_IT = 'Got it';
@@ -130,17 +132,16 @@ function buildSheet(card: LearnCard, a: LearnSheetActions, opts: LearnSheetOptio
   const titleId = `learn-title-${++sheets}`;
   const bodyId = `learn-body-${sheets}`;
   const shortId = `learn-short-${sheets}`;
-  const close = h(
-    'button',
-    {
-      type: 'button',
-      class: 'learn-close',
-      'data-learn-close': true,
-      onclick: () => a.onClose(),
-    },
-    icon('check', 'md'),
-    h('span', {}, GOT_IT),
-  );
+  // M13d task 40a: Got it = the main round button on a full-width pill (the whole row taps).
+  const close = iconButton({
+    icon: 'check',
+    label: GOT_IT,
+    variant: 'main',
+    wideHit: true,
+    class: 'learn-close chrome-pill',
+    hooks: { 'data-learn-close': true },
+    onClick: () => a.onClose(),
+  });
   const paras = bodyParagraphs(card.body);
   const body = h(
     'div',

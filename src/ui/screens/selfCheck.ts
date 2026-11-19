@@ -12,9 +12,11 @@
 import { APP_NAME } from '../../core/brand';
 import { backButton } from '../backButton';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
 import { moodClass } from '../tokens';
 import './selfCheck.css';
+import '../settingsButtons.css';
 
 export type CheckState = 'waiting' | 'running' | 'ok' | 'info' | 'warn' | 'fail';
 export type CheckOutcome = {
@@ -182,18 +184,32 @@ export function selfCheckView(p: SelfCheckProps, a: SelfCheckActions): SelfCheck
     role: 'status',
     'data-selfcheck-copied': true,
   });
-  const again = h(
-    'button',
-    { type: 'button', class: 'selfcheck-again', 'data-selfcheck-again': true },
-    icon('flip', 'md'),
-    h('span', {}, RUN_AGAIN),
-  );
-  const copyBtn = h(
-    'button',
-    { type: 'button', class: 'selfcheck-copy', 'data-selfcheck-copy': true },
-    icon('list', 'md'),
-    h('span', {}, COPY_LABEL),
-  );
+  // M13d task 40d (Goal 7): Run again is the page's main round button, Copy results a secondary
+  // one; both pills (the whole row the tap area, as the bars they replace).
+  const again = iconButton({
+    icon: 'refresh',
+    label: RUN_AGAIN,
+    variant: 'main',
+    wideHit: true,
+    class: 'set-ib-pill',
+    hooks: { 'data-selfcheck-again': true },
+    onClick: () => void run(),
+  });
+  const copyBtn = iconButton({
+    icon: 'list',
+    label: COPY_LABEL,
+    labelAt: 'beside',
+    wideHit: true,
+    class: 'set-ib-pill',
+    hooks: { 'data-selfcheck-copy': true },
+    onClick: () => {
+      if (running) return;
+      void (p.copy ?? defaultCopy)(copyText(rows, p.version)).then(
+        () => (copied.textContent = COPIED),
+        () => (copied.textContent = COPY_FAILED),
+      );
+    },
+  });
 
   const paint = () => {
     summary.textContent = summaryText(rows);
@@ -232,15 +248,6 @@ export function selfCheckView(p: SelfCheckProps, a: SelfCheckActions): SelfCheck
     running = false;
     paint();
   };
-
-  again.addEventListener('click', () => void run());
-  copyBtn.addEventListener('click', () => {
-    if (running) return;
-    void (p.copy ?? defaultCopy)(copyText(rows, p.version)).then(
-      () => (copied.textContent = COPIED),
-      () => (copied.textContent = COPY_FAILED),
-    );
-  });
 
   paint();
   const el = h(

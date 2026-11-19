@@ -380,7 +380,9 @@ describe('M13d task 3b: Not now and the first touch', () => {
     const btn = oneAttr(r.el, 'data-setup-not-now');
     expect(btn.tag).toBe('button');
     expect(btn.textContent).toBe('Not now');
-    expect(btn.classes).toContain('ghost-btn');
+    // M13d task 40b: a quiet round button with its word beside the circle.
+    expect(btn.classes).toContain('icon-btn');
+    expect(btn.getAttribute('data-variant')).toBe('quiet');
     btn.click();
     expect(n).toBe(1);
     expect(r.saved).toEqual([]);
@@ -540,5 +542,34 @@ describe("M13d task 13c: a unit switch next to Height and Today's weight", () =>
   it('every switch button has a visible word', () => {
     const r = render();
     for (const b of byAttr(r.el, 'data-unit')) expect(b.textContent.trim()).toBeTruthy();
+  });
+});
+
+describe('M13d task 40b: round buttons', () => {
+  it('Save targets is the main pill; Back is round with its word beside it', () => {
+    const r = render({}, true);
+    expect(r.save.getAttribute('data-variant')).toBe('main');
+    expect(r.save.classes).toContain('flow-pill');
+    expect(r.save.textContent).toBe('Save targets');
+    const back = r.el.oneByClass('fuel-back');
+    expect(back.getAttribute('data-icon-btn')).not.toBeNull();
+    expect(back.getAttribute('data-label-at')).toBe('beside');
+    expect(back.textContent).toBe('Back');
+  });
+
+  it('− / + are round with the words Less / More; their names stay "Less <field>"', () => {
+    const r = render();
+    const down = r.step('weight', 'down');
+    const up = r.step('weight', 'up');
+    expect(down.hasAttribute('data-icon-btn')).toBe(true);
+    expect([down.textContent, up.textContent]).toEqual(['Less', 'More']);
+    expect(down.getAttribute('aria-label')).toBe("Less Today's weight");
+    expect(up.getAttribute('aria-label')).toBe("More Today's weight");
+    expect(down.classes).toContain('nf-step');
+    const before = valueOf(r.input('weight'));
+    up.click();
+    expect(valueOf(r.input('weight'))).not.toBe(before);
+    // The plain number field (birth year) uses the same pair.
+    expect(r.step('birth-year', 'up').getAttribute('aria-label')).toBe('More Birth year');
   });
 });

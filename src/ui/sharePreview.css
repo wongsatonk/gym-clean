@@ -54,6 +54,4 @@
   font-size: var(--fs-cue);
 }
 
-.share-go {
-  width: 100%;
-}
+/* Share: the round main button in its wide pill (screens/mainPill.css). */

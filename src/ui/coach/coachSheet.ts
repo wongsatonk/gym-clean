@@ -15,11 +15,13 @@
 // labelled "Ask the coach" with button "Send", button "Close".
 import type { BodyArea, FoodSuggestion, Proposal } from '../../core/types';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
 import { installSheetSwipe } from '../gestures/sheetSwipe';
 import { moodClass } from '../tokens';
 import { buildFoodCard } from './foodCard';
 import { buildProposalCard, buildRedFlagCard } from './proposalCard';
+import '../chromeButtons.css';
 import './coach.css';
 
 export type CoachChipId = 'notToday' | 'easyOn' | 'lighter' | 'swap' | 'adjustPlan' | 'food';
@@ -130,12 +132,15 @@ function bubble(item: { kind: 'coach' | 'user'; text: string }): HTMLElement {
 export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElement {
   const cycle: HTMLElement[] = [];
 
-  const close = h(
-    'button',
-    { type: 'button', class: 'cs-btn cs-close', onclick: a.onClose },
-    icon('close', 'md'),
-    h('span', {}, 'Close'),
-  );
+  // M13d task 40a: Close = a quiet round button with the word beside it (the title row).
+  const close = iconButton({
+    icon: 'close',
+    label: 'Close',
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'cs-close chrome-close',
+    onClick: () => a.onClose(),
+  });
   cycle.push(close);
 
   const red = hasRedFlag(p.items);
@@ -237,11 +242,14 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
         send();
       }
     });
-    const sendBtn = h(
-      'button',
-      { type: 'button', class: 'cs-btn cs-send', onclick: send },
-      h('span', {}, 'Send'),
-    );
+    // M13d task 40a: Send = a round button beside the text box (word beside the circle).
+    const sendBtn = iconButton({
+      icon: 'arrow-right',
+      label: 'Send',
+      labelAt: 'beside',
+      class: 'cs-send',
+      onClick: () => send(),
+    });
     typing = h(
       'div',
       { class: 'cs-typing' },

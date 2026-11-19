@@ -1,5 +1,5 @@
 /* M13 task 22: the shared empty state (emptyState.ts): a round icon badge, one line, one action.
-   Text ≥ 20px; the action button gets 56px (outline) or 72px (CTA) from the button rules. */
+   Text ≥ 20px; the action is a round icon button: 56px circle, or 72px for the main one. */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -32,19 +32,5 @@
   overflow-wrap: anywhere;
 }
 
-.empty-state-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.ghost-btn.empty-state-btn {
-  font-size: var(--fs-cue);
-  font-weight: 700;
-}
-
-.empty-state-btn .ic {
-  flex: none;
-}
+/* M13d task 40a: the action is a round icon button (iconButton.css) whose whole row is the tap
+   area; the main one sits on the shared pill track (chromeButtons.css, `.chrome-pill`). */

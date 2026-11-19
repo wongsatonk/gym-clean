@@ -160,25 +160,47 @@ describe('iconButton render', () => {
   });
 });
 
+describe('labelContent (M13d task 40a)', () => {
+  it('fills the word span with richer content (two lines); ariaLabel names the button', () => {
+    const day = document.createElement('b');
+    day.textContent = 'Pull A';
+    const pos = document.createElement('small');
+    pos.textContent = '3 of 5';
+    const el = asFake(
+      iconButton({
+        icon: 'list',
+        label: 'Pull A',
+        labelAt: 'beside',
+        ariaLabel: 'Pull A, 3 of 5, Exercise list',
+        labelContent: [day, pos],
+        onClick: () => {},
+      }),
+    );
+    const word = el.oneByClass('icon-btn-label');
+    expect(word.children.map((c) => c.textContent)).toEqual(['Pull A', '3 of 5']);
+    expect(el.getAttribute('aria-label')).toBe('Pull A, 3 of 5, Exercise list');
+  });
+});
+
 describe('press feel hook (setPressFeel)', () => {
+  // M13d Wave A follow-up (c): the haptic fires on the click (pointerup without a cancel), not on
+  // pointerdown, so a scroll that starts on a button never buzzes.
   it('is a no-op by default: pressing a main button without a hook throws nothing', () => {
     const el = asFake(
       iconButton({ icon: 'play', label: 'Start', variant: 'main', onClick: () => {} }),
     );
-    expect(() => pressDown(el)).not.toThrow();
+    expect(() => el.click()).not.toThrow();
   });
 
-  it('fires once per pointerdown on a main button, never on click or on the others', () => {
+  it('fires once per click on a main button, never on pointerdown alone or on the others', () => {
     const feel = vi.fn();
     setPressFeel(feel);
     const main = asFake(
       iconButton({ icon: 'play', label: 'Start', variant: 'main', onClick: () => {} }),
     );
-    pressDown(main);
-    expect(feel).toHaveBeenCalledTimes(1);
     main.click();
     expect(feel).toHaveBeenCalledTimes(1);
-    pressDown(main);
+    main.click();
     expect(feel).toHaveBeenCalledTimes(2);
     for (const v of ['secondary', 'quiet', 'danger'] as const) {
       const other = asFake(
@@ -190,26 +212,48 @@ describe('press feel hook (setPressFeel)', () => {
     expect(feel).toHaveBeenCalledTimes(2);
   });
 
+  it('a pointerdown that becomes a scroll (pointercancel, no click) never buzzes', () => {
+    const feel = vi.fn();
+    setPressFeel(feel);
+    const main = asFake(
+      iconButton({ icon: 'play', label: 'Start', variant: 'main', onClick: () => {} }),
+    );
+    pressDown(main);
+    main.dispatch('pointercancel', { isPrimary: true });
+    expect(feel).not.toHaveBeenCalled();
+  });
+
+  it('the feel comes before the action (an action that re-renders still gets its tap)', () => {
+    const order: string[] = [];
+    setPressFeel(() => order.push('feel'));
+    const main = asFake(
+      iconButton({
+        icon: 'check',
+        label: 'Save',
+        variant: 'main',
+        onClick: () => order.push('click'),
+      }),
+    );
+    main.click();
+    expect(order).toEqual(['feel', 'click']);
+  });
+
   it('uses the hook set at press time (main wires it after screens are built)', () => {
     const main = asFake(
       iconButton({ icon: 'check', label: 'Save', variant: 'main', onClick: () => {} }),
     );
     const late = vi.fn();
     setPressFeel(late);
-    pressDown(main);
+    main.click();
     expect(late).toHaveBeenCalledTimes(1);
     setPressFeel(null);
-    pressDown(main);
+    main.click();
     expect(late).toHaveBeenCalledTimes(1);
   });
 
-  it('skips a second finger and a disabled button', () => {
+  it('skips a disabled button', () => {
     const feel = vi.fn();
     setPressFeel(feel);
-    const main = asFake(
-      iconButton({ icon: 'play', label: 'Start', variant: 'main', onClick: () => {} }),
-    );
-    pressDown(main, { isPrimary: false });
     const off = asFake(
       iconButton({
         icon: 'play',
@@ -219,11 +263,11 @@ describe('press feel hook (setPressFeel)', () => {
         onClick: () => {},
       }),
     );
-    pressDown(off);
+    off.click();
     expect(feel).not.toHaveBeenCalled();
   });
 
-  it('a throwing or rejecting hook never breaks the press or the click', async () => {
+  it('a throwing or rejecting hook never breaks the click', async () => {
     let taps = 0;
     setPressFeel(() => {
       throw new Error('no haptics');
@@ -231,14 +275,14 @@ describe('press feel hook (setPressFeel)', () => {
     const main = asFake(
       iconButton({ icon: 'play', label: 'Start', variant: 'main', onClick: () => taps++ }),
     );
-    expect(() => pressDown(main)).not.toThrow();
+    expect(() => main.click()).not.toThrow();
+    expect(taps).toBe(1);
     const rejected = vi.fn(() => Promise.reject(new Error('plugin missing')));
     setPressFeel(rejected);
-    expect(() => pressDown(main)).not.toThrow();
+    expect(() => main.click()).not.toThrow();
     await Promise.resolve();
     expect(rejected).toHaveBeenCalledTimes(1);
-    main.click();
-    expect(taps).toBe(1);
+    expect(taps).toBe(2);
   });
 });
 

@@ -1,16 +1,16 @@
-/* M13 task 20: shared back / done marks (backButton.ts). Tap height comes from `button`
-   (--tap-min, 56px); this only lays out the icon and the word. */
+/* M13 task 20: shared back / done marks (backButton.ts).
+   M13d task 40a: Back is a round icon button (iconButton.css: 56px circle, word beside, the
+   whole button is the tap area). Here only: the word stays on one line, and the button keeps
+   its own width in a top bar instead of stretching. */
 .back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: var(--tap-min);
-  min-height: var(--tap-min);
-  padding: 0 18px 0 12px;
+  flex: none;
+  justify-content: flex-start;
+}
+
+.back-btn .icon-btn-label {
   white-space: nowrap;
 }
 
-.back-btn .ic,
 .done-mark .ic {
   flex: none;
 }

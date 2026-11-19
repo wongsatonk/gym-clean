@@ -42,11 +42,6 @@
 
 .wn-skip {
   margin-left: auto;
-  min-width: 96px;
-  padding: 0 20px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
 }
 
 .wn-body {
@@ -108,16 +103,11 @@
   line-height: var(--lh-text);
 }
 
+/* M13d task 40d: Try it / Open to-dos are round icon buttons on pills (../settingsButtons.css),
+   only as wide as their word. */
 .wn-try,
 .wn-open-todos {
   align-self: flex-start;
-  min-height: var(--tap-bar);
-  min-width: 160px;
-  padding: 0 24px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
-  border-color: var(--cta);
 }
 
 .wn-topics {
@@ -173,34 +163,5 @@
   background: var(--text);
 }
 
-.wn-nav {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  gap: 12px;
-}
-
-.wn-back,
-.wn-next {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: var(--tap-cta);
-  font-size: var(--fs-lead);
-  font-weight: 700;
-}
-
-.wn-back {
-  background: var(--surface-2);
-}
-
-.wn-back:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.wn-next {
-  background: var(--cta);
-  color: var(--on-cta);
-  border: none;
-}
+/* M13d task 40d: Back (circle, word below) + Next / Done (the main circle on a pill), laid out by
+   .set-ib-bottom (../settingsButtons.css); the buttons are iconButton (≥ 56px, main 72px). */

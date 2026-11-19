@@ -1,0 +1,57 @@
+/* M13d task 40a (SPEC M13d Goal 7): shared bits for the chrome and sheet buttons that became
+   round icon buttons (iconButton.css has the circle, sizes, press and focus ring).
+   Loaded by: emptyState, cameraInfoSheet, learnCard, todo/reportSheet, fuel/common (sheetShell),
+   coach/coachSheet, coach/undoToast. Tokens only; no motion here (the press is iconButton.css). */
+
+/* The wide main action: the 72px circle and its word on a soft pill track, as wide as the bar it
+   replaced (the whole pill is the tap area). Same look as the agreed preview (.pv-pill), but the
+   word keeps the body font (iconButton.css: --fs-lead, bold): Barlow Condensed is only for
+   numbers, timers, Start and tab labels (Decision "M13d answers" q4, tokens.test.ts). */
+.chrome-pill.icon-btn[data-variant='main'] {
+  justify-content: flex-start;
+  padding: 6px 18px 6px 6px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+/* A wide secondary row (Close on the Camera sheet, "I copied it"): circle + word, left-aligned
+   like the pill, on the same track. */
+.chrome-pill.icon-btn[data-variant='secondary'] {
+  justify-content: flex-start;
+  padding: 2px 18px 2px 4px;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+/* A quiet Close / Cancel in a sheet's title row: keeps its width, word on one line. */
+.chrome-close.icon-btn {
+  flex: none;
+}
+
+.chrome-close .icon-btn-label {
+  white-space: nowrap;
+}
+
+/* Coach sheet: Send beside the text box (one row, the box keeps the rest). */
+.coach-sheet .cs-typing-row {
+  align-items: center;
+}
+
+.coach-sheet .cs-send.icon-btn {
+  flex: none;
+}
+
+/* Undo toast: the round Undo keeps its own width next to the confirmation; circle + word beside
+   it, no extra padding, so the row is the 56px circle (the toast's 1.16.2 height). */
+.undo-action.icon-btn {
+  flex: none;
+  gap: 8px;
+  padding: 0 8px 0 0;
+}
+
+/* The word beside the circle at the spoken-line size, so the confirmation keeps its room. */
+.undo-toast .undo-action.icon-btn .icon-btn-label {
+  font-size: var(--fs-cue);
+}

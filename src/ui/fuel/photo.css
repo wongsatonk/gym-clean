@@ -8,27 +8,22 @@
   position: relative;
 }
 
-/* M13c task 15: Take photo + Choose from library side by side (Progress photos' pattern). The
-   words may wrap to two lines on a narrow phone, so the pair is taller than one line but both
-   stay the same height and ≥ 56px. */
+/* M13c task 15: Take photo + Choose from library side by side (Progress photos' pattern).
+   M13d task 40e: each is a round button with its word under it; "Choose from library" may wrap
+   to two lines, the grid keeps both the same height (≥ 56px). */
 .log-photo .photo-pick {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-.photo-pick .photo-open {
+.photo-pick .photo-open.icon-btn {
   min-width: 0;
-  min-height: var(--tap-min);
-  padding: 8px 10px;
-  font-size: var(--fs-body);
-  line-height: 1.15;
-  text-align: center;
-  overflow-wrap: anywhere;
+  justify-content: flex-start;
 }
 
-.photo-pick .photo-open .ic {
-  flex: none;
+.photo-pick .photo-open .icon-btn-label {
+  overflow-wrap: anywhere;
 }
 
 .photo-input {

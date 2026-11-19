@@ -12,8 +12,10 @@
 // transform/opacity on the motion tokens; under Reduce Motion, and on the motion-off screens
 // (Exercise, camera), a colour change only.
 //
-// Haptics: `setPressFeel(fn)` installs a hook fired on pointerdown of `main` buttons only. main
-// wires the native light tap into it at boot (task 39); src/ui never imports native code.
+// Haptics: `setPressFeel(fn)` installs a hook fired on the click of `main` buttons only (a
+// pointerup that wasn't cancelled, or Enter / Space), never on pointerdown: a scroll that starts
+// on a button must not buzz (M13d Wave A follow-up (c)). main wires the native light tap into it
+// at boot (task 39); src/ui never imports native code.
 import { h } from './dom';
 import { icon, type IconName, type IconSize } from './icons';
 import './iconButton.css';
@@ -103,6 +105,11 @@ export type IconButtonProps = {
   wideHit?: boolean;
   /** Only where the visible word is shortened ("Back" for "Back to To-dos"). */
   ariaLabel?: string;
+  /**
+   * Richer content for the word span in place of `label` (e.g. the workout top bar's day name
+   * over "3 of 5"). Give `ariaLabel` with it so the name stays exact.
+   */
+  labelContent?: (Node | string)[];
   /** Extra data attributes (test and app hooks), e.g. `{ 'data-save': true }`. */
   hooks?: Record<string, string | boolean>;
   /** Extra class names for placement by the screen. */
@@ -128,22 +135,20 @@ export function iconButton(props: IconButtonProps): HTMLButtonElement {
       'data-wide-hit': props.wideHit === true,
       'aria-label': props.ariaLabel,
       disabled: props.disabled === true,
-      onclick: () => props.onClick(btn),
-      onpointerdown:
-        variant === 'main'
-          ? (ev: Event) => {
-              if ((ev as PointerEvent).isPrimary === false) return;
-              if (btn.disabled === true || btn.hasAttribute('disabled')) return;
-              feelPress();
-            }
-          : undefined,
+      onclick: () => {
+        // The feel first: the action may re-render and drop this button.
+        if (variant === 'main' && btn.disabled !== true && !btn.hasAttribute('disabled')) {
+          feelPress();
+        }
+        props.onClick(btn);
+      },
     },
     h(
       'span',
       { class: 'icon-btn-circle', 'aria-hidden': 'true' },
       icon(props.icon, layout.iconSize),
     ),
-    h('span', { class: 'icon-btn-label' }, props.label),
+    h('span', { class: 'icon-btn-label' }, ...(props.labelContent ?? [props.label])),
   );
   return btn;
 }

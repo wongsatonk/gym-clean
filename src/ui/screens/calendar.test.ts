@@ -178,6 +178,23 @@ describe('calendarScreen', () => {
     );
   });
 
+  it('M13d task 40c: Earlier / Later and Share month are round iconButtons with their words', () => {
+    const root = render(props(), acts());
+    const hook = (n: string) => must(root.find((e) => e.hasAttribute(n))[0]);
+    const prev = hook('data-cal-prev');
+    const next = hook('data-cal-next');
+    const share = hook('data-share-month');
+    for (const b of [prev, next, share]) expect(b.hasAttribute('data-icon-btn')).toBe(true);
+    expect([prev.textContent, next.textContent, share.textContent]).toEqual([
+      'Earlier',
+      'Later',
+      'Share month',
+    ]);
+    // The accessible name still says which month it goes to.
+    expect(next.getAttribute('aria-label')).toBe('Next month, December 2026');
+    expect(share.getAttribute('data-variant')).toBe('secondary');
+  });
+
   it('shows week and month scores, focus sets vs target, extras and the streak', () => {
     const root = render();
     const score = (k: string) => must(root.find((e) => e.getAttribute('data-score') === k)[0]);

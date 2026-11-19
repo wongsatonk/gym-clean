@@ -10,13 +10,14 @@
 // e2e hooks: dialog `[data-photo-sheet]`, `[data-photo-state=looking|confident|unsure|noMatch|error]`,
 // `[data-photo-option=<label>]` (aria-pressed), `[data-photo-pct]`, `[data-photo-variant=<dishId>]`,
 // `[data-portion=<Small|Regular|Large>]`, `[data-slot-chip=<slot>]`, `[data-preview]`,
-// `[data-photo-search]`, `[data-photo-log]`.
+// `[data-photo-search]`, `[data-photo-log]`. M13d task 40e: Log (and Search for it / Log by hand
+// when they are the way on) is the main round pill, "None of these: search" a second pill.
 import { THAI_PORTIONS } from '../../core/nutrition/portions';
 import type { MacroSet, MealSlot, NutritionMode } from '../../core/types';
 import { h } from '../dom';
-import { icon } from '../icons';
 import { appendAll, clear, estimateTag, macroLine, sheetShell } from './common';
 import { slotChips } from './entrySheet';
+import { fuelMain, saveRow, secondPill } from './fuelButtons';
 import { scaleItem, type LogItem } from './logSheet';
 import './photo.css';
 
@@ -134,18 +135,16 @@ export function photoSheet(p: PhotoSheetProps, a: PhotoSheetActions): PhotoSheet
     return { opt: -1, variant: 0 };
   }
 
-  const searchBtn = (text: string, primary = false) =>
-    h(
-      'button',
-      {
-        type: 'button',
-        class: primary ? 'primary-btn cta-btn' : 'fuel-secondary',
-        'data-photo-search': true,
-        onclick: () => a.onSearch(),
-      },
-      icon('list', primary ? 'lg' : 'md'),
-      primary ? text : h('span', {}, text),
-    );
+  // M13d task 40e: the main pill when searching is the way on, else a second pill.
+  const searchBtn = (text: string, primary = false, iconName: 'search' | 'pencil' = 'search') => {
+    const p = {
+      icon: iconName,
+      label: text,
+      hooks: { 'data-photo-search': true },
+      onClick: () => a.onSearch(),
+    };
+    return primary ? saveRow(fuelMain(p)) : secondPill(p);
+  };
 
   const thumb = (): HTMLElement | null =>
     p.photo ? h('div', { class: 'photo-thumb', 'aria-hidden': 'true' }, p.photo) : null;
@@ -283,31 +282,27 @@ export function photoSheet(p: PhotoSheetProps, a: PhotoSheetActions): PhotoSheet
         ),
       );
     }
-    const log = h(
-      'button',
-      {
-        type: 'button',
-        class: 'primary-btn cta-btn photo-log',
-        'data-photo-log': true,
-        disabled: !item,
-        onclick: () => {
-          const it = current();
-          const s = shown[optAt];
-          if (!it || !s || !portion) return;
-          a.onLog({
-            dishId: dishId(it),
-            item: it,
-            portion,
-            slot,
-            macros: preview(it, portion.factor),
-            confidence: s.opt.score,
-            label: s.opt.label,
-          });
-        },
+    const log = fuelMain({
+      icon: 'check',
+      label: 'Log',
+      class: 'photo-log',
+      hooks: { 'data-photo-log': true },
+      disabled: !item,
+      onClick: () => {
+        const it = current();
+        const s = shown[optAt];
+        if (!it || !s || !portion) return;
+        a.onLog({
+          dishId: dishId(it),
+          item: it,
+          portion,
+          slot,
+          macros: preview(it, portion.factor),
+          confidence: s.opt.score,
+          label: s.opt.label,
+        });
       },
-      icon('check', 'lg'),
-      'Log',
-    );
+    });
     appendAll(
       wrap,
       h('p', { class: 'fuel-label' }, 'Meal'),
@@ -317,7 +312,7 @@ export function photoSheet(p: PhotoSheetProps, a: PhotoSheetActions): PhotoSheet
       item
         ? null
         : h('p', { class: 'fuel-hint', 'data-photo-pick-hint': true }, 'Pick a dish first.'),
-      log,
+      saveRow(log),
       searchBtn('None of these: search'),
     );
     return wrap;
@@ -356,7 +351,7 @@ export function photoSheet(p: PhotoSheetProps, a: PhotoSheetActions): PhotoSheet
           'section',
           { class: 'photo-result', 'data-photo-state': 'error' },
           h('p', { class: 'fuel-note photo-msg' }, 'Couldn’t read the photo. Log it by hand.'),
-          searchBtn('Log by hand', true),
+          searchBtn('Log by hand', true, 'pencil'),
         ),
       );
       return;

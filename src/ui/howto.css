@@ -184,14 +184,13 @@
   overflow-wrap: anywhere;
 }
 
+/* M13d task 40a: Close is a quiet round icon button (iconButton.css); here only its place. */
 .howto-close {
   flex: none;
-  min-width: 96px;
-  min-height: var(--tap-min);
-  padding: 0 18px;
-  font-weight: 700;
-  background: var(--surface-2);
-  border-color: var(--line);
+}
+
+.howto-close .icon-btn-label {
+  white-space: nowrap;
 }
 
 .howto-stage {

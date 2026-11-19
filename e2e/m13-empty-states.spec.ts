@@ -38,7 +38,11 @@ const shot = async (page: Page, name: string) => {
   await page.screenshot({ path: `docs/screenshots/${name}.png` });
 };
 const spoken = (page: Page) => page.evaluate(() => window.__spoken);
-const filledButtons = (page: Page, scope: string) => page.locator(`${scope} .primary-btn:visible`);
+// M13d: a filled action is the old filled bar or the main round icon button (Goal 7).
+const filledButtons = (page: Page, scope: string) =>
+  page.locator(
+    `${scope} .primary-btn:visible, ${scope} [data-icon-btn][data-variant="main"]:visible`,
+  );
 
 test('fresh install: empty Fuel day and empty Coach thread are icon + one line + one action', async ({
   page,
@@ -158,7 +162,7 @@ test('Fuel day with targets set (harness): Log food is the filled action inside 
   await expect(day).toBeVisible();
   await expect(filledButtons(page, 'main[data-screen="fuel"]')).toHaveCount(1);
   const log = day.getByRole('button', { name: 'Log food' });
-  await expect(log).toHaveClass(/primary-btn/);
+  await expect(log).toHaveAttribute('data-variant', 'main');
   expect((await log.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(72);
   await noHorizontalOverflow(page);
   await shot(page, 'm13-fuel-empty-targets');

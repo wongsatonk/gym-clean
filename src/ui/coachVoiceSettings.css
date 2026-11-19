@@ -171,10 +171,4 @@
   text-align: left;
 }
 
-.cv-test {
-  width: 100%;
-  min-height: var(--tap-bar);
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
-}
+/* M13d task 40d: Test voice is a round icon button (iconButton.css, ../settingsButtons.css). */

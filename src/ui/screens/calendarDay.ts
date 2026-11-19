@@ -2,10 +2,15 @@
 // each exercise done / partly / missed (sets and reps done vs planned, from logged sessions),
 // the actions Start (today) / Move / Do it today, and "History" per exercise (the existing
 // exercise history, one tap deeper). Props in, callbacks out; no weights, only sets and reps.
+// M13d task 40c: Start / Do it today are the round main button in a wide pill (./mainPill.ts),
+// Move and History round iconButtons, Back the shared round backButton (hooks kept).
 import './calendar.css';
 import type { DayCompletion, FocusGroup } from '../../core/types';
+import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
+import { iconButton } from '../iconButton';
+import { mainPill } from './mainPill';
 import { countUp } from '../motion';
 import { sidedSetBlock, type SetSides } from '../sidesText';
 import { moodClass } from '../tokens';
@@ -143,25 +148,21 @@ function exerciseRow(
       ),
       repsCell(ex),
     ),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'cal-ex-hist',
-        'data-cal-history': ex.exerciseId,
-        'aria-label': `History: ${nm}`,
-        onclick: () => actions.onHistory(ex.exerciseId),
-      },
-      icon('trend', 'md'),
-      h('span', { 'aria-hidden': 'true' }, 'History'),
-    ),
+    iconButton({
+      icon: 'trend',
+      label: 'History',
+      ariaLabel: `History: ${nm}`,
+      class: 'cal-ex-hist',
+      hooks: { 'data-cal-history': ex.exerciseId },
+      onClick: () => actions.onHistory(ex.exerciseId),
+    }),
   );
 }
 
-const ACTION_BTN: Record<DayAction, { label: string; cls: string; icon: IconName }> = {
-  start: { label: 'Start', cls: 'primary-btn cta-btn cal-act', icon: 'play' },
-  doToday: { label: 'Do it today', cls: 'primary-btn cta-btn cal-act', icon: 'play' },
-  move: { label: 'Move', cls: 'ghost-btn wide-btn cal-act cal-act-2', icon: 'calendar' },
+const ACTION_BTN: Record<DayAction, { label: string; main: boolean; icon: IconName }> = {
+  start: { label: 'Start', main: true, icon: 'play' },
+  doToday: { label: 'Do it today', main: true, icon: 'play' },
+  move: { label: 'Move', main: false, icon: 'calendar' },
 };
 
 export function calendarDayScreen(
@@ -198,12 +199,18 @@ export function calendarDayScreen(
         : a === 'move'
           ? () => actions.onMove(day.date)
           : () => actions.onDoToday(day.date);
-    return h(
-      'button',
-      { type: 'button', class: b.cls, 'data-day-action': a, onclick: on },
-      icon(b.icon, 'md'),
-      h('span', {}, b.label),
-    );
+    const hooks = { 'data-day-action': a };
+    return b.main
+      ? mainPill({ icon: b.icon, label: b.label, class: 'start-pill', hooks, onClick: () => on() })
+      : iconButton({
+          icon: b.icon,
+          label: b.label,
+          labelAt: 'beside',
+          wideHit: true,
+          class: 'cal-row-act',
+          hooks,
+          onClick: () => on(),
+        });
   });
 
   return h(
@@ -214,18 +221,8 @@ export function calendarDayScreen(
       'data-date': day.date,
       'data-status': day.status,
     },
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'cal-back',
-        'data-cal-back': true,
-        'data-swipe-back': true, // M13d task 24: the edge swipe's Back
-        onclick: actions.onBack,
-      },
-      icon('back', 'md'),
-      h('span', {}, 'Calendar'),
-    ),
+    // The shared Back (task 40a's round chevron + word); `data-swipe-back` comes with it.
+    backButton(() => actions.onBack(), 'Calendar', { 'data-cal-back': true }),
     h('h1', { class: 'page-title' }, dayLong(day.date)),
     h(
       'div',

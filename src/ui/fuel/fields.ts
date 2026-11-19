@@ -4,7 +4,9 @@
 //
 // - numberField: label, [−] value [+]. The value is a text box with a decimal keypad, so a
 //   number far from the start can be typed instead of tapped. The value is ≥ 64px (main number),
-//   the − / + buttons are ≥ 72px. Typed values are clamped and snapped to the step on change.
+//   the − / + buttons are ≥ 56px. Typed values are clamped and snapped to the step on change.
+//   M13d task 40b (Goal 7): − / + are round buttons (iconButton.ts) with the word "Less" / "More"
+//   under the circle; their accessible names stay "Less <label>" / "More <label>".
 // - choiceGroup: a row (or list) of buttons where one is chosen: white fill + check, aria-pressed.
 import {
   editField,
@@ -14,6 +16,7 @@ import {
   type UnitOf,
 } from '../../core/unitField';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import {
   setUnitSwitch as setUnitSwitchValue,
@@ -59,6 +62,27 @@ export type NumberFieldOpts = {
 
 export type NumberField = { el: HTMLElement; get: () => number; controls: HTMLElement[] };
 
+/**
+ * The − / + pair: round buttons with "Less" / "More" under the circle (M13d task 40b). The
+ * names stay "Less <label>" / "More <label>"; `data-step` = down / up. `onStep` is optional
+ * because numberField adds its own listeners.
+ */
+function stepButtons(
+  label: string,
+  onStep?: (dir: -1 | 1) => void,
+): [HTMLButtonElement, HTMLButtonElement] {
+  const make = (dir: -1 | 1) =>
+    iconButton({
+      icon: dir < 0 ? 'minus' : 'plus',
+      label: dir < 0 ? 'Less' : 'More',
+      ariaLabel: `${dir < 0 ? 'Less' : 'More'} ${label}`,
+      class: 'nf-step',
+      hooks: { 'data-step': dir < 0 ? 'down' : 'up' },
+      onClick: () => onStep?.(dir),
+    });
+  return [make(-1), make(1)];
+}
+
 export function numberField(o: NumberFieldOpts): NumberField {
   const decimals = decimalsOf(o.step);
   let value = clampStep(o.value, o.min, o.max, o.step);
@@ -74,16 +98,7 @@ export function numberField(o: NumberFieldOpts): NumberField {
   });
   input.value = show(value);
 
-  const minus = h(
-    'button',
-    { type: 'button', class: 'nf-step', 'data-step': 'down', 'aria-label': `Less ${o.label}` },
-    icon('minus', 'lg'),
-  );
-  const plus = h(
-    'button',
-    { type: 'button', class: 'nf-step', 'data-step': 'up', 'aria-label': `More ${o.label}` },
-    icon('plus', 'lg'),
-  );
+  const [minus, plus] = stepButtons(o.label);
 
   const set = (next: number) => {
     value = clampStep(next, o.min, o.max, o.step);
@@ -167,18 +182,7 @@ function stepRow(o: {
     autocomplete: 'off',
     'aria-describedby': `${o.inputId}-unit`,
   });
-  const minus = h(
-    'button',
-    { type: 'button', class: 'nf-step', 'data-step': 'down', 'aria-label': `Less ${o.label}` },
-    icon('minus', 'lg'),
-  );
-  const plus = h(
-    'button',
-    { type: 'button', class: 'nf-step', 'data-step': 'up', 'aria-label': `More ${o.label}` },
-    icon('plus', 'lg'),
-  );
-  minus.addEventListener('click', () => o.onStep(-1));
-  plus.addEventListener('click', () => o.onStep(1));
+  const [minus, plus] = stepButtons(o.label, o.onStep);
   input.addEventListener('change', () => o.onTyped(String(input.value ?? '')));
   const row = h(
     'div',

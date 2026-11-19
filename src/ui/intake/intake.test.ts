@@ -601,3 +601,41 @@ describe('intake: abs question data', () => {
     expect(LEARN_CARDS.some((c) => c.id === INTAKE_OPTIONS.wantsCore.learnId)).toBe(true);
   });
 });
+
+describe('intake: M13d task 40b round buttons', () => {
+  const variant = (b: FakeEl) => b.getAttribute('data-variant');
+
+  it('Next is the main pill (off until answered), Back round, Skip for now quiet', () => {
+    const { el } = render();
+    expect(next(el).hasAttribute('data-icon-btn')).toBe(true);
+    expect(variant(next(el))).toBe('main');
+    expect(next(el).classes).toContain('flow-pill');
+    expect(next(el).hasAttribute('disabled')).toBe(true);
+    opt(el, 'fat').click();
+    expect(next(el).hasAttribute('disabled')).toBe(false);
+    next(el).click();
+    const back = one(el, 'data-intake-back');
+    expect(variant(back)).toBe('secondary');
+    expect(back.textContent).toBe('Back');
+    expect(back.hasAttribute('data-swipe-back')).toBe(true);
+    const skip = one(el, 'data-intake-skip');
+    expect(variant(skip)).toBe('quiet');
+    expect(skip.textContent).toBe('Skip for now');
+  });
+
+  it('the summary: Done is the main pill; Apply is round with its row as the tap area', () => {
+    const { el } = render();
+    answerAll(el);
+    const done = one(el, 'data-intake-done');
+    expect(variant(done)).toBe('main');
+    expect(done.textContent).toBe('Done');
+    const apply = one(el, 'data-apply', 'plan');
+    expect(apply.hasAttribute('data-icon-btn')).toBe(true);
+    expect(apply.hasAttribute('data-wide-hit')).toBe(true);
+    expect(apply.getAttribute('aria-label')).toBe(`Apply: ${PLAN_TITLE_STARTER}`);
+    apply.click();
+    expect(apply.getAttribute('aria-label')).toBe(`Applied: ${PLAN_TITLE_STARTER}`);
+    expect(apply.classes).toEqual(expect.arrayContaining(['icon-btn', 'intake-apply', 'done']));
+    expect(apply.byClass('icon-btn-circle')[0]?.byTag('svg')).toHaveLength(1);
+  });
+});

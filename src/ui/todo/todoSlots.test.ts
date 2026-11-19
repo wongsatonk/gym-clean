@@ -110,7 +110,8 @@ describe('Settings To-dos rows', () => {
     const replay = el.find((e) => e.hasAttribute('data-whats-new-open'))[0];
     expect(open?.textContent).toBe('To-dos');
     expect(replay?.textContent).toBe("What's new");
-    expect(open?.classes).toContain('set-action');
+    expect(open?.classes).toContain('set-row');
+    expect(replay?.hasAttribute('data-icon-btn')).toBe(true);
     open?.click();
     replay?.click();
     expect(calls).toEqual({ todos: 1, whatsNew: 1 });

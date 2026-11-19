@@ -419,9 +419,23 @@ describe('Progress photos: helpers and copy', () => {
       new RegExp(`${sel.replace(/[.[\]]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
     expect(rule('.photos-add')).toContain('min-height: var(--tap-cta)');
     expect(rule('.photos-pose')).toContain('min-height: var(--tap-min)');
-    expect(css).toMatch(
-      /\.photo-delete,\s*\.photos-delete-all\s*\{[^}]*min-height: var\(--tap-min\)/,
-    );
+    // M13d task 40c: the delete buttons are round iconButtons (≥ 56px by iconButton.css).
     expect(css).not.toMatch(/font-size:\s*var\(--fs-label\)/);
+  });
+});
+
+describe('Progress photos: round buttons (M13d task 40c)', () => {
+  it('Turn on, Clear, Delete and Delete all are iconButtons with their words; Turn on is the main pill', () => {
+    const off = render({ enabled: false, photos: [OCT] });
+    const enable = off.at('data-photos-enable');
+    expect(enable?.getAttribute('data-icon-btn')).not.toBeNull();
+    expect(enable?.getAttribute('data-variant')).toBe('main');
+    expect(enable?.textContent).toBe(PHOTOS_COPY.enable);
+    expect(off.at('data-photos-delete-all')?.getAttribute('data-variant')).toBe('danger');
+    const on = render();
+    const del = on.at('data-photo-delete', 'p-oct');
+    expect(del?.getAttribute('data-variant')).toBe('danger');
+    expect(del?.getAttribute('data-label-at')).toBe('below');
+    expect(on.at('data-photos-delete-all')?.getAttribute('data-label-at')).toBe('beside');
   });
 });

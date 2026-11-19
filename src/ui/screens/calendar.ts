@@ -18,6 +18,7 @@ import { weekdayOf } from '../../core/trainer/plan';
 import type { DayCompletion, DayStatus, FocusGroup, PeriodScore } from '../../core/types';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import { countUp } from '../motion';
 import { pageHead, type OnSearch } from '../searchButton';
 import { moodClass } from '../tokens';
@@ -385,11 +386,14 @@ function stateCard(props: CalendarProps, actions: CalendarActions): HTMLElement 
       h('p', { class: 'cal-state-title' }, "Couldn't load your calendar"),
       h('p', { class: 'cal-state-body' }, 'Your sets are still saved.'),
       actions.onRetry
-        ? h(
-            'button',
-            { type: 'button', class: 'ghost-btn wide-btn', onclick: actions.onRetry },
-            'Try again',
-          )
+        ? iconButton({
+            icon: 'refresh',
+            label: 'Try again',
+            labelAt: 'beside',
+            wideHit: true,
+            class: 'cal-row-act',
+            onClick: () => actions.onRetry?.(),
+          })
         : null,
     );
   }
@@ -408,29 +412,30 @@ export function calendarScreen(props: CalendarProps, actions: CalendarActions): 
   const nav = h(
     'div',
     { class: 'cal-nav' },
+    // M13d task 40c: round buttons with a short word (Earlier / Later); the accessible name
+    // still names the month it goes to.
+    iconButton({
+      icon: 'back',
+      label: 'Earlier',
+      ariaLabel: `Previous month, ${monthTitle(shiftMonth(props.month, -1))}`,
+      class: 'cal-nav-act',
+      hooks: { 'data-cal-prev': true },
+      onClick: () => actions.onPrevMonth(),
+    }),
+    // The span shrinks the month to fit one line between Earlier / Later (calendar.css).
     h(
-      'button',
-      {
-        type: 'button',
-        class: 'cal-nav-btn',
-        'data-cal-prev': true,
-        'aria-label': `Previous month, ${monthTitle(shiftMonth(props.month, -1))}`,
-        onclick: actions.onPrevMonth,
-      },
-      icon('back', 'md'),
+      'h2',
+      { class: 'cal-month', 'aria-live': 'polite' },
+      h('span', { class: 'cal-month-text' }, title),
     ),
-    h('h2', { class: 'cal-month', 'aria-live': 'polite' }, title),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'cal-nav-btn cal-nav-next',
-        'data-cal-next': true,
-        'aria-label': `Next month, ${monthTitle(shiftMonth(props.month, 1))}`,
-        onclick: actions.onNextMonth,
-      },
-      icon('back', 'md'),
-    ),
+    iconButton({
+      icon: 'arrow-right',
+      label: 'Later',
+      ariaLabel: `Next month, ${monthTitle(shiftMonth(props.month, 1))}`,
+      class: 'cal-nav-act',
+      hooks: { 'data-cal-next': true },
+      onClick: () => actions.onNextMonth(),
+    }),
   );
   const animate = props.animate === true;
   const body: (HTMLElement | null)[] = state
@@ -456,17 +461,15 @@ export function calendarScreen(props: CalendarProps, actions: CalendarActions): 
           icon('flame', 'md'),
           h('span', {}, `Streak: ${plural(props.streakWeeks, 'week')}`),
         ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'ghost-btn wide-btn cal-share',
-            'data-share-month': true,
-            onclick: actions.onShare,
-          },
-          icon('medal', 'md'),
-          h('span', {}, 'Share month'),
-        ),
+        iconButton({
+          icon: 'share',
+          label: 'Share month',
+          labelAt: 'beside',
+          wideHit: true,
+          class: 'cal-row-act',
+          hooks: { 'data-share-month': true },
+          onClick: () => actions.onShare(),
+        }),
         h('p', { class: 'cal-privacy muted' }, 'The image is made on this phone. No body data.'),
       ];
   return h(

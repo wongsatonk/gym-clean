@@ -124,6 +124,9 @@ describe('native, not connected', () => {
     const { el, calls } = render({ connected: false });
     const connect = one(el, 'data-health-connect');
     expect(connect.textContent).toBe('Connect to Apple Health');
+    // M13d task 40d: the page's main round button, the whole row the tap area.
+    expect(connect.getAttribute('data-variant')).toBe('main');
+    expect(connect.hasAttribute('data-wide-hit')).toBe(true);
     connect.click();
     expect(calls.connect).toBe(1);
     expect(attr(el, 'data-health-read-now')).toHaveLength(0);
@@ -144,7 +147,9 @@ describe('native, connected', () => {
     const { el, calls } = render({ settings: { ...SETTINGS, lastReadAt: at } });
     expect(one(el, 'data-health-last-read').textContent).toBe('Last read: today 07:05');
     expect(attr(el, 'data-health-connect')).toHaveLength(0);
-    one(el, 'data-health-read-now').click();
+    const readNow = one(el, 'data-health-read-now');
+    expect(readNow.hasAttribute('data-icon-btn')).toBe(true);
+    readNow.click();
     expect(calls.readNow).toBe(1);
     const busy = render({ reading: true }).el;
     expect(one(busy, 'data-health-read-now').hasAttribute('disabled')).toBe(true);
@@ -192,6 +197,8 @@ describe('native, connected', () => {
     sw.click();
     const del = one(el, 'data-health-delete', 'restingHr');
     expect(del.textContent).toBe('Turn off and delete');
+    expect(del.getAttribute('data-variant')).toBe('danger');
+    expect(one(el, 'data-health-keep', 'restingHr').getAttribute('data-variant')).toBe('quiet');
     del.click();
     expect(calls.del).toEqual(['restingHr']);
     expect(calls.enable).toEqual([]);
@@ -273,8 +280,6 @@ describe('Health settings CSS', () => {
 
   it('rows and buttons ≥ 56px, text at body size, tokens only', () => {
     expect(rule('\\.health-switch')).toContain('min-height: var(--tap-bar)');
-    expect(rule('\\.health-btn')).toContain('min-height: var(--tap-min)');
-    expect(rule('\\.health-btn')).toContain('font-size: var(--fs-body)');
     expect(rule('\\.health-explainer')).toContain('font-size: var(--fs-body)');
     expect(rule('\\.health-confirm-note')).toContain('font-size: var(--fs-body)');
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);

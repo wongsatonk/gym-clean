@@ -28,6 +28,9 @@
 // (`[data-fuel-today]`, `onToday`). Rows still open the entry sheet (Edit / Delete).
 // M13d task 26 (optional): with `onDeleteEntry`, a swipe left on a row shows a round Delete
 // (fuel/mealSwipe.ts) that deletes straight away (the same Undo toast); a tap still opens the sheet.
+// M13d task 40e (Goal 7): Set up targets / Log food are the main round pill (fuel/fuelButtons.ts),
+// Log food before targets and Back to today a second pill, Weigh-in a round button with the last
+// weigh-in under its word. Rows, chips and the tab bar stay as they were.
 import type {
   FoodEntry,
   MacroSet,
@@ -42,7 +45,9 @@ import { nudgeBanner } from '../fuel/links';
 import { mealSwipe } from '../fuel/mealSwipe';
 import { measurementsEntryRow, type MeasurementsEntry } from '../fuel/measurements';
 import { proteinNudge, type ProteinNudgeProps } from '../fuel/proteinNudge';
+import { fuelMain, secondPill } from '../fuel/fuelButtons';
 import { fuelRings } from '../fuel/rings';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { searchButton, type OnSearch } from '../searchButton';
 import { tabBar, type TabId } from '../tabBar';
@@ -115,7 +120,6 @@ export function groupBySlot(
 }
 
 function header(props: FuelProps, actions: FuelActions): HTMLElement {
-  const w = props.lastWeighInKg;
   return h(
     'header',
     { class: actions.onSearch ? 'fuel-head has-search' : 'fuel-head' },
@@ -130,25 +134,7 @@ function header(props: FuelProps, actions: FuelActions): HTMLElement {
       ),
     ),
     actions.onSearch ? searchButton(actions.onSearch) : null,
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'fuel-weigh-btn',
-        'data-weigh-in': true,
-        onclick: () => actions.onWeighIn(),
-      },
-      icon('trend', 'md'),
-      h(
-        'span',
-        { class: 'fuel-weigh-txt' },
-        h('span', {}, 'Weigh-in'),
-        w != null
-          ? h('span', { class: 'fuel-weigh-last' }, `${formatWeight(w, props.unit)} ${props.unit}`)
-          : null,
-        w != null && props.lastWeighInSource === 'health' ? fromHealthTag() : null,
-      ),
-    ),
+    weighInButton(props, actions.onWeighIn),
   );
 }
 
@@ -162,34 +148,54 @@ function setupCard(onSetup: () => void): HTMLElement {
       { class: 'muted' },
       'Daily calories and protein come from your height, age, activity and today’s weight.',
     ),
-    // M13 task 22: until targets exist this is the screen's one filled button.
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'primary-btn cta-btn fuel-setup-btn',
-        'data-setup': true,
-        onclick: () => onSetup(),
-      },
-      icon('sliders', 'lg'),
-      h('span', {}, 'Set up targets'),
-    ),
+    // M13 task 22: until targets exist this is the screen's one main (orange) action.
+    fuelMain({
+      icon: 'sliders',
+      label: 'Set up targets',
+      class: 'fuel-setup-btn',
+      hooks: { 'data-setup': true },
+      onClick: () => onSetup(),
+    }),
   );
 }
 
-/** Log food: the filled CTA once targets exist, the outline second action before. */
+/** Log food: the main pill once targets exist, a second pill before (Set up targets leads). */
 function logButton(primary: boolean, onLog: () => void): HTMLElement {
-  return h(
-    'button',
-    {
-      type: 'button',
-      class: primary ? 'primary-btn cta-btn fuel-log-btn' : 'fuel-secondary fuel-log-btn',
-      'data-log-open': true,
-      onclick: () => onLog(),
-    },
-    icon('plus', primary ? 'lg' : 'md'),
-    h('span', {}, 'Log food'),
-  );
+  const p = {
+    icon: 'plus' as const,
+    label: 'Log food',
+    class: 'fuel-log-btn',
+    hooks: { 'data-log-open': true },
+    onClick: () => onLog(),
+  };
+  return primary ? fuelMain(p) : secondPill(p);
+}
+
+/**
+ * M13d task 40e: Weigh-in is a round button (scale + word beside); the last weigh-in (and "from
+ * Health") sits under the word, inside the button, so its name stays "Weigh-in 70 kg".
+ */
+function weighInButton(props: FuelProps, onWeighIn: () => void): HTMLElement {
+  const w = props.lastWeighInKg;
+  const btn = iconButton({
+    icon: 'scale',
+    label: 'Weigh-in',
+    labelAt: 'beside',
+    class: w != null ? 'fuel-weigh-btn has-last' : 'fuel-weigh-btn',
+    hooks: { 'data-weigh-in': true },
+    onClick: () => onWeighIn(),
+  });
+  if (w != null) {
+    btn.append(
+      h(
+        'span',
+        { class: 'fuel-weigh-last' },
+        h('span', {}, `${formatWeight(w, props.unit)} ${props.unit}`),
+        props.lastWeighInSource === 'health' ? fromHealthTag() : null,
+      ),
+    );
+  }
+  return btn;
 }
 
 function entryRow(e: FoodEntry, mode: NutritionMode, actions: FuelActions): HTMLElement {
@@ -224,19 +230,15 @@ function entryRow(e: FoodEntry, mode: NutritionMode, actions: FuelActions): HTML
     : row;
 }
 
-/** M13c 12b: "Back to today" on a past day (outline: the day's rows stay the content). */
+/** M13c 12b: "Back to today" on a past day (a second pill: the day's rows stay the content). */
 function todayButton(onToday: () => void): HTMLElement {
-  return h(
-    'button',
-    {
-      type: 'button',
-      class: 'fuel-secondary fuel-today-btn',
-      'data-fuel-today': true,
-      onclick: () => onToday(),
-    },
-    icon('back', 'md'),
-    h('span', {}, 'Back to today'),
-  );
+  return secondPill({
+    icon: 'back',
+    label: 'Back to today',
+    class: 'fuel-today-btn',
+    hooks: { 'data-fuel-today': true },
+    onClick: () => onToday(),
+  });
 }
 
 function entriesSection(props: FuelProps, actions: FuelActions): HTMLElement {

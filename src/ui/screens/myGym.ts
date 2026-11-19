@@ -16,11 +16,17 @@
 // `[data-gym-item="<id>"]` with aria-checked, `[data-gym-share]`, `[data-gym-shared]`,
 // `[data-gym-import]` (the file input), `[data-gym-import-preview]`, `[data-gym-import-apply]`,
 // `[data-gym-import-cancel]`, `[data-gym-import-error]`.
+//
+// M13d task 40d (Goal 7): Share / Import are round icon buttons with the word beside them (the
+// whole row the tap area); the preview's Cancel / Close is a quiet circle and Apply the main
+// action as a pill. The kit rows (checkboxes) stay as they are.
 import { backButton } from '../backButton';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import './myGym.css';
+import '../settingsButtons.css';
 
 export type MyGymItem = { id: string; label: string; group: string };
 
@@ -130,29 +136,24 @@ function shareSection(props: MyGymProps, actions: MyGymActions): HTMLElement | n
           : null,
         h(
           'div',
-          { class: 'gym-import-actions' },
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'gym-share-btn',
-              'data-gym-import-cancel': true,
-              onclick: () => actions.onImportCancel?.(),
-            },
-            preview.adds.length ? 'Cancel' : 'Close',
-          ),
+          { class: preview.adds.length ? 'set-ib-bottom' : 'set-ib-actions' },
+          iconButton({
+            icon: 'close',
+            label: preview.adds.length ? 'Cancel' : 'Close',
+            variant: 'quiet',
+            hooks: { 'data-gym-import-cancel': true },
+            onClick: () => actions.onImportCancel?.(),
+          }),
           preview.adds.length
-            ? h(
-                'button',
-                {
-                  type: 'button',
-                  class: 'gym-share-btn primary',
-                  'data-gym-import-apply': true,
-                  onclick: () => actions.onImportApply?.(),
-                },
-                icon('check', 'sm'),
-                h('span', {}, 'Apply'),
-              )
+            ? iconButton({
+                icon: 'check',
+                label: 'Apply',
+                variant: 'main',
+                wideHit: true,
+                class: 'set-ib-pill',
+                hooks: { 'data-gym-import-apply': true },
+                onClick: () => actions.onImportApply?.(),
+              })
             : null,
         ),
       )
@@ -167,16 +168,15 @@ function shareSection(props: MyGymProps, actions: MyGymActions): HTMLElement | n
     },
     h('h2', { class: 'set-head', id: 'gym-share-h' }, 'Share'),
     onShare
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'gym-share-btn',
-            'data-gym-share': true,
-            onclick: () => onShare(),
-          },
-          GYM_SHARE_LABEL,
-        )
+      ? iconButton({
+          icon: 'share',
+          label: GYM_SHARE_LABEL,
+          labelAt: 'beside',
+          wideHit: true,
+          class: 'set-ib-pill',
+          hooks: { 'data-gym-share': true },
+          onClick: () => onShare(),
+        })
       : null,
     props.shareNote
       ? h(
@@ -188,16 +188,15 @@ function shareSection(props: MyGymProps, actions: MyGymActions): HTMLElement | n
       : null,
     onShare ? h('p', { class: 'muted set-note' }, GYM_SHARE_NOTE) : null,
     input && !preview
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'gym-share-btn',
-            'data-gym-import-open': true,
-            onclick: () => input.click(),
-          },
-          GYM_IMPORT_LABEL,
-        )
+      ? iconButton({
+          icon: 'plus',
+          label: GYM_IMPORT_LABEL,
+          labelAt: 'beside',
+          wideHit: true,
+          class: 'set-ib-pill',
+          hooks: { 'data-gym-import-open': true },
+          onClick: () => input.click(),
+        })
       : null,
     input,
     props.importError

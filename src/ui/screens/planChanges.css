@@ -1,0 +1,20 @@
+/* M13d task 40c: Plan changes' round buttons (planChanges.ts). Undo sits at the end of its row
+   (word under the circle); Reset is a danger iconButton on a full-width row, its circle filled
+   red while armed ("Tap again to reset"), as the bar was. */
+.plan-undo-act.icon-btn {
+  flex: none;
+  min-width: 88px;
+}
+
+.plan-reset-act.icon-btn {
+  justify-content: flex-start;
+}
+
+.plan-reset-act.icon-btn .icon-btn-label {
+  font-size: var(--fs-cue);
+}
+
+.plan-reset-act.icon-btn[data-armed] {
+  --ib-fill: var(--danger);
+  --ib-ink: var(--on-danger);
+}

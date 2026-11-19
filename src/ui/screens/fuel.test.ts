@@ -147,24 +147,47 @@ describe('fuelScreen', () => {
     expectCleanCopy(el);
   });
 
+  // M13d 40e: the filled (orange) action is the main round button (`data-variant="main"`).
+  const filledOf = (el: FakeEl) => el.find((e) => e.getAttribute('data-variant') === 'main');
+
   it('M13: until targets exist, "Set up targets" is the one filled button; Log food is outline', () => {
-    const { el } = render({ targets: null, entries: [], totals: { kcal: 0, proteinG: 0 } });
-    const filled = el.byClass('primary-btn');
-    expect(filled).toHaveLength(1);
-    expect(filled[0]?.hasAttribute('data-setup')).toBe(true);
-    expect(filled[0]?.textContent).toBe('Set up targets');
-    const log = byAttr(el, 'data-log-open');
-    expect(log.classes).not.toContain('primary-btn');
-    expect(log.textContent).toBe('Log food');
+    for (const entries of [[], ENTRIES]) {
+      const { el } = render({ targets: null, entries, totals: { kcal: 0, proteinG: 0 } });
+      const filled = filledOf(el);
+      expect(filled).toHaveLength(1);
+      expect(filled[0]?.hasAttribute('data-setup')).toBe(true);
+      expect(filled[0]?.textContent).toBe('Set up targets');
+      const log = byAttr(el, 'data-log-open');
+      expect(log.getAttribute('data-variant')).toBe('secondary');
+      expect(log.textContent).toBe('Log food');
+    }
   });
 
   it('M13: with targets, Log food is the one filled button', () => {
     for (const entries of [[], ENTRIES]) {
       const { el } = render({ entries });
-      const filled = el.byClass('primary-btn');
+      const filled = filledOf(el);
       expect(filled).toHaveLength(1);
       expect(filled[0]?.hasAttribute('data-log-open')).toBe(true);
     }
+  });
+
+  it('M13d 40e: the Fuel buttons are round icon buttons with their word (names kept)', () => {
+    const { el } = render({ entries: ENTRIES, lastWeighInKg: 70 });
+    const log = byAttr(el, 'data-log-open');
+    expect(log.hasAttribute('data-icon-btn')).toBe(true);
+    expect(log.getAttribute('data-wide-hit')).toBe('');
+    expect(log.oneByClass('icon-btn-label').textContent).toBe('Log food');
+    expect(log.oneByClass('icon-btn-circle').getAttribute('aria-hidden')).toBe('true');
+    const weigh = byAttr(el, 'data-weigh-in');
+    expect(weigh.hasAttribute('data-icon-btn')).toBe(true);
+    expect(weigh.oneByClass('icon-btn-label').textContent).toBe('Weigh-in');
+    // The last weigh-in sits inside the button: its name is still "Weigh-in 70 kg".
+    expect(weigh.textContent).toBe('Weigh-in70 kg');
+    expect(weigh.classes).toContain('has-last');
+    expect(byAttr(render({ lastWeighInKg: null }).el, 'data-weigh-in').classes).not.toContain(
+      'has-last',
+    );
   });
 
   it('M13: an empty day is the empty state (plate icon, one line, Log food as its one action)', () => {
@@ -361,11 +384,8 @@ describe('Fuel: Search in the header (M13c)', () => {
     const head = el.byClass('fuel-head')[0];
     if (!head) throw new Error('no header');
     expect(head.classes).toContain('has-search');
-    expect(head.children.map((c) => c.classes[0])).toEqual([
-      'fuel-head-txt',
-      'search-btn',
-      'fuel-weigh-btn',
-    ]);
+    const tags = ['fuel-head-txt', 'search-btn', 'fuel-weigh-btn'];
+    expect(head.children.map((c) => tags.find((t) => c.classes.includes(t)))).toEqual(tags);
     const btn = byAttr(head, 'data-search-open', '');
     expect(btn.textContent).toBe('Search');
     btn.click();

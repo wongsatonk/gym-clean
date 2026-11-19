@@ -31,7 +31,10 @@ describe('emptyState (M13 task 22)', () => {
     expect(buttons).toHaveLength(1);
     expect(buttons[0]?.getAttribute('type')).toBe('button');
     expect(buttons[0]?.textContent).toBe('Log food');
-    expect(buttons[0]?.classes).toEqual(expect.arrayContaining(['empty-state-btn', 'ghost-btn']));
+    // M13d task 40a: a round icon button, secondary (circle + the word under it).
+    expect(buttons[0]?.classes).toEqual(expect.arrayContaining(['empty-state-btn', 'icon-btn']));
+    expect(buttons[0]?.hasAttribute('data-icon-btn')).toBe(true);
+    expect(buttons[0]?.getAttribute('data-variant')).toBe('secondary');
     expect(buttons[0]?.classes).not.toContain('primary-btn');
     buttons[0]?.click();
     expect(calls).toEqual(['log']);
@@ -58,8 +61,35 @@ describe('emptyState (M13 task 22)', () => {
     expect(el.getAttribute('data-history-empty')).toBe('none');
     expect(el.oneByClass('chat-empty-line').classes).toContain('empty-state-line');
     const btn = el.byTag('button')[0];
-    expect(btn?.classes).toEqual(expect.arrayContaining(['primary-btn', 'cta-btn']));
+    // M13d task 40a: the main round button (72px orange circle, word beside), the whole row
+    // its tap area; no icon given → the forward arrow.
+    expect(btn?.getAttribute('data-variant')).toBe('main');
+    expect(btn?.hasAttribute('data-wide-hit')).toBe(true);
+    expect(btn?.classes).toContain('empty-state-btn');
+    expect(btn?.textContent).toBe('Set up targets');
+    expect(btn?.byTag('svg').map((s) => s.getAttribute('data-icon'))).toEqual(['arrow-right']);
     expect(btn?.hasAttribute('data-setup')).toBe(true);
+  });
+
+  it('a secondary action without an icon gets the forward arrow; its own icon otherwise', () => {
+    const plain = render({
+      kind: 'y',
+      icon: 'dumbbell',
+      line: 'Line.',
+      action: { label: 'Show all exercises', onClick: () => undefined },
+    });
+    const b = plain.byTag('button')[0];
+    expect(b?.byTag('svg').map((s) => s.getAttribute('data-icon'))).toEqual(['arrow-right']);
+    expect(b?.getAttribute('data-label-at')).toBe('below');
+    const home = render({
+      kind: 'z',
+      icon: 'dumbbell',
+      line: 'Line.',
+      action: { label: 'Go to Today', icon: 'home', onClick: () => undefined },
+    });
+    expect(
+      home.byTag('button')[0]?.byTag('svg').map((s) => s.getAttribute('data-icon')),
+    ).toEqual(['home']);
   });
 
   it('an element action (a group of starters) is used as is; no action is allowed', () => {

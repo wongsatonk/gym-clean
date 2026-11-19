@@ -100,18 +100,10 @@
   font-weight: 700;
 }
 
+/* M13d task 40a: Got it is the main round icon button on the shared pill track
+   (iconButton.css + chromeButtons.css), the whole row its tap area. */
 .learn-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  min-height: var(--tap-cta);
   margin-top: 4px;
-  font-size: var(--fs-cue);
-  font-weight: 700;
-  background: var(--surface-2);
-  color: var(--text);
 }
 
 /* ---------- "Why?" (chat bubble, protein nudge; the rest screen has its own .effort-why) ---------- */

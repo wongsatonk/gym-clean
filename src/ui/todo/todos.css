@@ -363,59 +363,19 @@
   resize: vertical;
 }
 
-.todo-try {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  min-height: var(--tap-bar);
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
-}
-
+/* M13d task 40d: Try it, Back, Next / Done and Skip this topic are round icon buttons
+   (iconButton.css, ../settingsButtons.css). The step bar sits at the bottom. */
 .todo-nav {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 10px;
   margin-top: auto;
   padding-top: 12px;
 }
 
-.todo-nav-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: var(--tap-cta);
-  font-size: var(--fs-lead);
-  font-weight: 700;
-  background: var(--surface-2);
-}
-
-.todo-nav-next {
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
-}
-
-.todo-skip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: transparent;
-  color: var(--text-2);
-}
-
-.todo-skip[data-armed] {
-  background: var(--danger);
-  color: var(--on-danger);
-  border-color: var(--danger);
+/* Skip this topic, armed: the circle fills with the danger colour, the word says "Tap again". */
+.todo-skip.icon-btn[data-armed] {
+  --ib-fill: var(--danger);
+  --ib-ink: var(--on-danger);
+  --ib-ring: var(--danger);
+  --ib-word: var(--danger);
 }
 
 /* ---------- Report sheet ---------- */

@@ -22,6 +22,7 @@ import { createDemoPlayer, type DemoPlayer } from './demo3d/player';
 import { h } from './dom';
 import { installSheetSwipe } from './gestures/sheetSwipe';
 import { workoutOnScreen } from './gestures/edgeBack';
+import { iconButton } from './iconButton';
 import { icon } from './icons';
 import { moreDisclosure } from './moreDisclosure';
 import './howto.css';
@@ -78,11 +79,16 @@ export function createHowToSheet(opts: HowToSheetOptions): HowToSheetHandle {
   let player: DemoPlayer | null = null;
   let disposed = false;
 
-  const closeBtn = h(
-    'button',
-    { class: 'howto-close', 'data-howto': 'close', onclick: () => opts.onClose() },
-    'Close',
-  );
+  // M13d task 40a: a quiet round Close with the word beside it (the sheet's title row).
+  const closeBtn = iconButton({
+    icon: 'close',
+    label: 'Close',
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'howto-close',
+    hooks: { 'data-howto': 'close' },
+    onClick: () => opts.onClose(),
+  });
   const stage = h('div', { class: 'howto-stage', 'data-howto': 'stage' });
   const phase = h('p', { class: 'howto-phase', 'aria-live': 'off', 'data-howto': 'phase' });
   const note = h('p', { class: 'howto-note', 'data-howto': 'note', hidden: true });

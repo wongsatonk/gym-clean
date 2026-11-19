@@ -1,0 +1,186 @@
+<!doctype html>
+<!-- Dev-only visual check for M13d task 40f (round icon buttons in the Coach) with made-up data.
+     Not part of the build or the app. Open on the dev server:
+     /src/ui/coach/coachButtons.harness.html?view=
+       thread | proposal | checkin | checkin-open | offer | redflag | install | listening -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Coach buttons harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      // The app loads coach.css first (the Pause sheet); keep that order here.
+      import './coach.css';
+      import { chat, coachTabScreen } from './chat.ts';
+      import { tabBar } from '../tabBar.ts';
+
+      const q = new URLSearchParams(location.search);
+      const view = q.get('view') ?? 'thread';
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      const T0 = new Date(2026, 10, 19, 18, 0).getTime();
+      let id = 1;
+      const m = (role, text, extra = {}) => ({
+        id: id++,
+        createdAt: T0 + id * 1000,
+        role,
+        text,
+        source: role === 'user' ? 'chip' : 'rules',
+        phase: 'today',
+        ...extra,
+      });
+      const QS = [
+        { id: 'energy', label: 'Energy this week', low: 'Low', high: 'High' },
+        { id: 'sleep', label: 'Sleep this week', low: 'Low', high: 'High' },
+        { id: 'soreness', label: 'Soreness this week', low: 'Low', high: 'High' },
+      ];
+      const FOOD = [
+        {
+          label: 'Greek yogurt + oats',
+          ref: { foodId: 'f1' },
+          amount: { servings: 1 },
+          macros: { kcal: 320, proteinG: 28, carbG: 40, fatG: 6 },
+          why: 'Fits your 40 g protein left',
+        },
+        {
+          label: 'Chicken rice',
+          ref: { foodId: 'f2' },
+          amount: { servings: 1 },
+          macros: { kcal: 600, proteinG: 25, carbG: 80, fatG: 18 },
+          why: '',
+        },
+      ];
+      const actions = {
+        onText: (t) => log('text', t),
+        onChip: (c) => log('chip', c.id),
+        onArea: (a) => log('area', a),
+        onFollowUp: (i) => log('follow', i),
+        onApply: (i) => log('apply', i),
+        onDismiss: (i) => log('dismiss', i),
+        onUndo: (i) => log('undo', i),
+        onAskAgain: (i) => log('ask', i),
+        onLogFood: (i, n) => log('food', i, n),
+        onClearChat: () => log('clear'),
+        onEndWorkout: () => log('end'),
+        onClose: () => log('close'),
+        micDown: () => log('micDown'),
+        micUp: () => log('micUp'),
+        micCancel: () => log('micCancel'),
+        micInstall: () => log('micInstall'),
+        onCheckInDone: (i, a) => log('checkin', i, JSON.stringify(a)),
+        onCheckInSkip: (i) => log('skip', i),
+        onClaudeWanted: () => log('wanted'),
+        onClaudeDismiss: () => log('offerDismiss'),
+      };
+      const tab = (p) =>
+        app.replaceChildren(
+          coachTabScreen(
+            { allowTyping: true, checkInQuestions: QS, ...p },
+            actions,
+            tabBar('coach', () => {}),
+          ),
+        );
+      const proposal = (status) => ({
+        kind: 'proposal',
+        title: 'Short on time: 30 min',
+        lines: [
+          { before: 'Bench Press 4 sets', after: '3 sets' },
+          { before: 'Cable Fly', after: '' },
+        ],
+        why: 'Keeps the big lifts and drops one accessory.',
+        status,
+        baseVersion: 1,
+      });
+
+      if (view === 'thread') {
+        tab({
+          messages: [
+            m('user', 'What should I eat?'),
+            m('coach', 'Two ideas that fit what is left today.', {
+              card: { kind: 'food', suggestions: FOOD, logged: [] },
+            }),
+            m('user', 'Short on time'),
+            m('coach', 'Here is a 30 minute version of Push A.', { card: proposal('applied') }),
+          ],
+          undoable: [4],
+          mic: { state: 'idle' },
+        });
+      } else if (view === 'proposal') {
+        tab({
+          messages: [
+            m('user', 'Short on time'),
+            m('coach', 'Here is a 30 minute version of Push A.', { card: proposal('pending') }),
+          ],
+          mic: { state: 'idle' },
+        });
+      } else if (view === 'checkin' || view === 'checkin-open') {
+        tab({
+          messages: [
+            m('coach', 'New week. Three quick taps on how last week felt?', {
+              card: { kind: 'checkIn', weekStart: '2026-11-15', status: 'pending' },
+            }),
+          ],
+          checkIns: {},
+          mic: { state: 'idle' },
+        });
+        if (view === 'checkin-open') {
+          document.querySelector('[data-checkin-answer]')?.click();
+          document.querySelector('[data-checkin-pick="energy:4"]')?.click();
+          window.scrollTo(0, 0);
+        }
+      } else if (view === 'offer') {
+        tab({
+          messages: [
+            m('user', 'Plan me a deload for my shoulder'),
+            m('coach', "That's more than the phone's coach can plan right now."),
+          ],
+          claudeOffer: { messageId: 2 },
+          mic: { state: 'idle' },
+        });
+      } else if (view === 'redflag') {
+        app.replaceChildren(
+          h_sheet(
+            chat(
+              {
+                variant: 'sheet',
+                messages: [
+                  m('user', 'My chest hurts'),
+                  m('coach', 'Stop this workout now. If it is serious, get help.', {
+                    card: { kind: 'redFlag' },
+                    phase: 'workout',
+                  }),
+                ],
+                inWorkout: true,
+              },
+              actions,
+            ),
+          ),
+        );
+      } else if (view === 'install') {
+        tab({
+          messages: [m('coach', 'Ask me anything about today.')],
+          mic: { state: 'unavailable', reason: 'modelNotInstalled' },
+        });
+      } else if (view === 'listening') {
+        tab({
+          messages: [m('coach', 'Ask me anything about today.')],
+          mic: { state: 'listening', partial: 'Can I move push to', level: 0.6 },
+        });
+      }
+
+      function h_sheet(el) {
+        const wrap = document.createElement('main');
+        wrap.className = 'screen';
+        wrap.append(el);
+        return wrap;
+      }
+    </script>
+  </body>

@@ -12,6 +12,8 @@ import {
   measurementsScreen,
   measureStatus,
   saveLabel,
+  saveName,
+  SAVE_WORD,
   siteHistory,
   siteLabel,
   siteLine,
@@ -117,6 +119,14 @@ describe('measurement helpers', () => {
     expect(saveLabel(1)).toBe('Save 1 measurement');
     expect(saveLabel(3)).toBe('Save 3 measurements');
   });
+
+  it('M13d 40e: the visible word is short; the name starts with it and says what it saves', () => {
+    expect(SAVE_WORD).toBe('Save');
+    expect(saveName(0)).toBe('Save. Tap a spot to measure');
+    expect(saveName(1)).toBe('Save 1 measurement');
+    expect(saveName(3)).toBe('Save 3 measurements');
+    for (const n of [0, 1, 3]) expect(saveName(n).startsWith(SAVE_WORD)).toBe(true);
+  });
 });
 
 describe('measurementsScreen', () => {
@@ -147,6 +157,11 @@ describe('measurementsScreen', () => {
     const { el, calls } = render();
     const save = oneAttr(el, 'data-measure-save');
     expect(save.hasAttribute('disabled')).toBe(true);
+    // M13d 40e: the round main button; the word is "Save", the name what it saves.
+    expect(save.hasAttribute('data-icon-btn')).toBe(true);
+    expect(save.getAttribute('data-variant')).toBe('main');
+    expect(oneAttr(save, 'data-measure-save-label').textContent).toBe('Save');
+    expect(save.getAttribute('aria-label')).toBe('Save. Tap a spot to measure');
     save.click();
     expect(calls.save).toEqual([]);
     expect(byAttr(el, 'data-field')).toHaveLength(0);
@@ -155,7 +170,8 @@ describe('measurementsScreen', () => {
     arm.click();
     expect(arm.getAttribute('aria-expanded')).toBe('true');
     expect(save.hasAttribute('disabled')).toBe(false);
-    expect(save.textContent).toBe('Save 1 measurement');
+    expect(save.textContent).toBe('Save');
+    expect(save.getAttribute('aria-label')).toBe('Save 1 measurement');
     const field = oneAttr(el, 'data-field', 'site-leftArm');
     expect(valueOf(field.oneByClass('nf-value'))).toBe('34.5');
     expect(oneAttr(el, 'data-site-edit', 'leftArm').hasAttribute('hidden')).toBe(false);
@@ -175,7 +191,7 @@ describe('measurementsScreen', () => {
     oneAttr(el, 'data-site-toggle', 'chest').click();
     expect(oneAttr(el, 'data-site-toggle', 'chest').getAttribute('aria-expanded')).toBe('false');
     const save = oneAttr(el, 'data-measure-save');
-    expect(save.textContent).toBe('Save 2 measurements');
+    expect(save.getAttribute('aria-label')).toBe('Save 2 measurements');
     save.click();
     expect(calls.save).toEqual([
       [

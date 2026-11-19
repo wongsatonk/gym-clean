@@ -24,6 +24,7 @@ import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { dayMuscles, estimateMinutes, muscleLabel } from '../../core/dayInfo';
 import { adjustedBanner, coachButton } from './today';
+import { mainPill } from './mainPill';
 import { gymPrompt, type MissingKit } from './gymPrompt';
 
 /** How a row differs from the default day (M10). `removed` rows aren't part of the day that runs. */
@@ -207,17 +208,14 @@ export function previewScreen(props: PreviewProps, actions: PreviewActions): HTM
       'div',
       { class: 'sticky-bottom' },
       props.hint ?? null,
-      h(
-        'button',
-        {
-          class: 'primary-btn hero-cta',
-          type: 'button',
-          disabled: props.loading,
-          onclick: () => actions.onStart(day),
-        },
-        props.loading ? null : icon('play', 'lg'),
-        props.loading ? 'Loading…' : 'Start workout',
-      ),
+      // M13d task 40c: the round main Start in its wide pill (./mainPill.ts).
+      mainPill({
+        icon: 'play',
+        label: props.loading ? 'Loading…' : 'Start workout',
+        class: 'start-pill',
+        disabled: props.loading === true,
+        onClick: () => actions.onStart(day),
+      }),
     ),
   );
 }

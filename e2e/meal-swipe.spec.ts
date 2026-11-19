@@ -74,8 +74,11 @@ const MEALS = [
   },
 ];
 
-/** The middle of a row (where a thumb lands). */
+/** The middle of a row (where a thumb lands), scrolled clear of the fixed tab bar first. */
 async function centre(page: Page, id: string): Promise<{ x: number; y: number }> {
+  // M13d task 40e: the round buttons made Fuel's header and actions taller, so the second row can
+  // start under the tab bar; bring it to the middle of the screen as a thumb would.
+  await row(page, id).evaluate((el) => el.scrollIntoView({ block: 'center' }));
   const box = await row(page, id).boundingBox();
   if (!box) throw new Error(`no row ${id}`);
   return { x: box.x + box.width * 0.75, y: box.y + box.height / 2 };
@@ -201,7 +204,9 @@ test.describe('Fuel: swipe a meal row to Delete', () => {
     expect(errors).toEqual([]);
   });
 
-  test('Reduce Motion: no follow while dragging; the swipe still shows Delete', async ({ page }) => {
+  test('Reduce Motion: no follow while dragging; the swipe still shows Delete', async ({
+    page,
+  }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const { errors } = await openFuelWithMeals(page);
     const f = await finger(page);

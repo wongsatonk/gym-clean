@@ -332,7 +332,7 @@ import { previewScreen as renderPreview } from './screens/preview';
 import { historyScreen as renderHistory } from './screens/history';
 import { restScreen as renderRest } from './screens/rest';
 import { exerciseHistory } from '../core/history';
-import { settingsScreen as renderSettings } from './screens/settings';
+import { settingsScreen as renderSettings, settingsRowButton } from './screens/settings';
 import { summaryScreen as renderSummary } from './screens/summary';
 import { createTodayMotion, todayScreen as renderToday, type TodayLast } from './screens/today';
 import { icon } from './icons';
@@ -5166,40 +5166,32 @@ export function mountApp(root: HTMLElement): void {
     const show = (text: string) => {
       statusLine.textContent = text;
     };
-    const btn = h(
-      'button',
-      {
-        class: 'ghost-btn wide-btn',
-        'data-voice-test': true,
-        onclick: () => {
-          voice.unlock(); // inside the tap
-          const st = voice.status();
-          if (!st.supported) {
-            show('This browser has no speech. Try Safari or Chrome.');
-            return;
-          }
-          const u = voice.speak('Voice test. One, two, three.', { kind: 'cue' });
-          if (!u) return;
-          show('Speaking…');
-          u.addEventListener('start', () => show('Speaking… can you hear it?'));
-          u.addEventListener('end', () =>
-            show('Done. If you heard nothing, Silent mode is on or the volume is down.'),
+    const btn = settingsRowButton('speaker', 'Speaker check', 'data-voice-test', () => {
+      voice.unlock(); // inside the tap
+      const st = voice.status();
+      if (!st.supported) {
+        show('This browser has no speech. Try Safari or Chrome.');
+        return;
+      }
+      const u = voice.speak('Voice test. One, two, three.', { kind: 'cue' });
+      if (!u) return;
+      show('Speaking…');
+      u.addEventListener('start', () => show('Speaking… can you hear it?'));
+      u.addEventListener('end', () =>
+        show('Done. If you heard nothing, Silent mode is on or the volume is down.'),
+      );
+      u.addEventListener('error', (e) =>
+        show(`Speech error: ${(e as SpeechSynthesisErrorEvent).error ?? 'unknown'}.`),
+      );
+      // iOS gives no event when speech is blocked: report what we know after a moment.
+      window.setTimeout(() => {
+        const now = voice.status();
+        if (statusLine.textContent === 'Speaking…')
+          show(
+            `Nothing started (voices: ${now.voices}, English: ${now.english}, paused: ${now.paused ? 'yes' : 'no'}). Turn off Silent mode, turn the volume up, then tap again.`,
           );
-          u.addEventListener('error', (e) =>
-            show(`Speech error: ${(e as SpeechSynthesisErrorEvent).error ?? 'unknown'}.`),
-          );
-          // iOS gives no event when speech is blocked: report what we know after a moment.
-          window.setTimeout(() => {
-            const now = voice.status();
-            if (statusLine.textContent === 'Speaking…')
-              show(
-                `Nothing started (voices: ${now.voices}, English: ${now.english}, paused: ${now.paused ? 'yes' : 'no'}). Turn off Silent mode, turn the volume up, then tap again.`,
-              );
-          }, 2500);
-        },
-      },
-      'Speaker check',
-    );
+      }, 2500);
+    });
     return h(
       'div',
       { class: 'voice-test' },

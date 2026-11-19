@@ -520,8 +520,8 @@ describe('typography (M13d task 17)', () => {
   const DISPLAY_OK: Record<string, string> = {
     [ruleId(
       '../styles.css',
-      `.summary-title, .exercise-name, .stepper-value, .rest-clock, .stat-value, .hero-cta, ${WORKOUT} :is(.primary-btn, .page-title), .rep-num, .rep-target, .auto-stop-num, .auto-stop-secs, .cam-rest-clock, .hold-clock`,
-    )]: 'numbers, timers, Start (hero-cta) and the workout screens',
+      `.summary-title, .exercise-name, .stepper-value, .rest-clock, .stat-value, ${WORKOUT} :is(.primary-btn, .page-title), .rep-num, .rep-target, .auto-stop-num, .auto-stop-secs, .cam-rest-clock, .hold-clock`,
+    )]: 'numbers, timers and the workout screens (Start: mainPill.css .start-pill)',
     [ruleId('../styles.css', '.brand')]: 'the Gym Clean wordmark',
     [ruleId('./brand.css', '.brand-name')]: 'the Gym Clean wordmark',
     [ruleId('../styles.css', '.hero-title')]: "Today's workout-day name above Start (84px)",
@@ -542,7 +542,10 @@ describe('typography (M13d task 17)', () => {
     [ruleId('./devlog.css', '.lsc-value')]: 'Rest (last-set fix): number',
     [ruleId('./devlog.css', '.lsc-save')]: 'Rest (last-set fix)',
     [ruleId('./handsfree.css', '.auto-stop-done')]: 'Exercise (hands-free)',
-    [ruleId('./handsfree.css', '.cam-rest-start')]: 'camera',
+    [ruleId('./midset.css', ".icon-btn.mid-pill[data-variant='main'] .icon-btn-label")]:
+      "the workout screens' main action word (Set done, Start set, Resume, Done; task 40g)",
+    [ruleId('./midset.css', '.icon-btn.mid-pill.coach-apply-pill .icon-btn-label')]:
+      'Rest (coach tip Apply, as before; task 40g)',
     [ruleId('./handsfree.css', '.hold-title')]: 'Exercise (hold)',
     [ruleId('./howto.css', '.howto-phase')]: 'the tempo readout ("Lift 1 s · Lower 2 s")',
     [ruleId('./exerciseDetail.css', '.detail-best-num')]: 'number',
@@ -557,6 +560,8 @@ describe('typography (M13d task 17)', () => {
     [ruleId('./fuel/fuelForms.css', '.nt-value')]: 'number',
     [ruleId('./charts/e1rmChart.css', '.e1-best')]: 'number',
     [ruleId('./screens/today.css', '.today .notices-count')]: 'number',
+    [ruleId('./screens/mainPill.css', '.start-pill.icon-btn .icon-btn-label')]:
+      'Start (the round main button, task 40c)',
     [ruleId('./screens/feelToday.css', '.feel-num')]: 'number',
     [ruleId('./screens/coachSettings.css', '.eval-progress')]: 'number',
     [ruleId('./screens/coachSettings.css', '.eval-stat-num')]: 'number',
@@ -586,7 +591,8 @@ describe('typography (M13d task 17)', () => {
     [ruleId('./coach.css', '.coach-next')]: 'Summary',
     [ruleId('./coach.css', '.coach-progress')]: 'Summary',
     [ruleId('./coach.css', '.stall-line')]: 'Summary',
-    [ruleId('./coach/coach.css', '.undo-text')]: 'one-line toast, also the mid-set auto-stop banner',
+    [ruleId('./coach/coach.css', '.undo-text')]:
+      'one-line toast, also the mid-set auto-stop banner',
     [ruleId('./howto.css', '.ex-badge')]: 'a tappable badge (control)',
     [ruleId('./coach/chat.css', '.fb-row')]: 'a button row (control)',
   };
@@ -625,7 +631,9 @@ describe('typography (M13d task 17)', () => {
       .filter((r) => !TOKEN_SELECTORS.has(r.selector))
       .flatMap((r) =>
         decls(r.body)
-          .filter(([k, v]) => k === 'font-family' && !/^(var\(--font-(display|body)\)|inherit)$/.test(v))
+          .filter(
+            ([k, v]) => k === 'font-family' && !/^(var\(--font-(display|body)\)|inherit)$/.test(v),
+          )
           .map(([, v]) => `${ruleId(r.file, r.selector)}: ${v}`),
       );
     expect(bad).toEqual([]);

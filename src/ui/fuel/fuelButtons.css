@@ -1,0 +1,89 @@
+/* M13d task 40e (SPEC M13d Goal 7): placement of the round icon buttons (iconButton.ts) on the
+   Fuel screens and sheets (fuelButtons.ts). The circle, its word, the press look, focus ring and
+   Reduce Motion are iconButton.css / styles.css; the main pill's track is screens/mainPill.css.
+
+   .fuel-pill      a wide second action that became circle + word: the whole row stays the tap
+                   area, on a soft pill track (as the main pill).
+   .fuel-pill-long a long word on a pill ("Add it to My foods"): list-name size, so it stays one
+                   line at 390.
+   .fuel-back      the top Back: round chevron + "Back", no box around it.
+   .fuel-acts      circles with their word under them, side by side.
+   .fuel-save-row  a sheet's bottom: Delete (danger circle) + the main pill. */
+
+.fuel-pill.icon-btn[data-icon-btn] {
+  justify-content: flex-start;
+  min-height: var(--tap-min);
+  padding: 4px 18px 4px 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.fuel-pill.icon-btn[data-icon-btn] .icon-btn-label {
+  min-width: 0;
+  font-size: var(--fs-cue);
+  line-height: var(--lh-head);
+  overflow-wrap: anywhere;
+}
+
+.main-pill.fuel-pill-long.icon-btn[data-icon-btn] .icon-btn-label {
+  font-size: var(--fs-cue);
+}
+
+.fuel-pill.icon-btn[data-icon-btn][data-variant='danger'] {
+  border-color: var(--danger);
+}
+
+.fuel-pill.icon-btn[data-icon-btn]:disabled {
+  background: transparent;
+}
+
+/* The top Back (fuelForms.css / fuel.css gave the old text button a grey box). */
+.fuel-back.icon-btn[data-icon-btn] {
+  flex: none;
+  min-width: var(--tap-min);
+  padding: 4px 8px 4px 0;
+  background: transparent;
+}
+
+.fuel-back.icon-btn[data-icon-btn] .icon-btn-label {
+  font-size: var(--fs-cue);
+}
+
+.fuel-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 16px;
+}
+
+.fuel-acts > .icon-btn {
+  min-width: var(--tap-cta);
+}
+
+.fuel-save-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fuel-save-row > .icon-btn[data-wide-hit] {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+.fuel-save-row > .icon-btn:not([data-wide-hit]) {
+  flex: none;
+  min-width: 88px;
+}
+
+/* A toast over a sheet: its bottom row sticks just above the toast (fuel.css keeps the room),
+   so Log / Save are never under it and need no scroll (the old .cta-btn rule). */
+body:has(> .undo-toast) .fuel-sheet .fuel-save-row {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--bg);
+  box-shadow: 0 0 0 8px var(--bg);
+}

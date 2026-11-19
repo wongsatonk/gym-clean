@@ -1,0 +1,10 @@
+/* M13d task 40c: the Goal card's buttons (goalCard.ts). Round iconButtons with the word beside
+   the circle on a full-width row; the card's other styles stay in intake/intake.css. */
+.goal-card-act.icon-btn {
+  justify-content: flex-start;
+  min-height: var(--tap-min);
+}
+
+.goal-card-act.icon-btn .icon-btn-label {
+  font-size: var(--fs-cue);
+}

@@ -162,6 +162,13 @@ describe("What's New tour", () => {
     const next = one(el, 'next');
     expect(back.hasAttribute('disabled')).toBe(true);
     expect(next.textContent).toBe('Next');
+    // M13d task 40d: Next is the main round button on a pill; its circle shows an arrow, then a
+    // check on the last page (the word changes with it, so not the icon alone).
+    expect(next.getAttribute('data-variant')).toBe('main');
+    expect(next.hasAttribute('data-wide-hit')).toBe(true);
+    expect(back.getAttribute('data-variant')).toBe('secondary');
+    const circleIcon = () => next.children[0]?.children[0]?.getAttribute('data-icon');
+    expect(circleIcon()).toBe('arrow-right');
     next.click();
     expect(tour.index()).toBe(1);
     expect(back.hasAttribute('disabled')).toBe(false);
@@ -173,6 +180,7 @@ describe("What's New tour", () => {
     expect(tour.index()).toBe(3);
     expect(next.textContent).toBe('Done');
     expect(next.getAttribute('data-last')).toBe('true');
+    expect(circleIcon()).toBe('check');
     expect(calls.done).toBe(0);
     next.click();
     expect(calls.done).toBe(1);

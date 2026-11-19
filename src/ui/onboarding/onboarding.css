@@ -33,14 +33,9 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* M13d task 40b: Skip is a quiet round button (iconButton.ts) with its word beside it. */
 .ob-skip {
   margin-left: auto;
-  min-width: 96px;
-  min-height: var(--tap-min);
-  padding: 0 20px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
 }
 
 .ob-body {
@@ -143,46 +138,24 @@
   gap: 12px;
 }
 
+/* M13d task 40b (Goal 7): [Back circle][main pill]; on an ask page the pill gets its own row and
+   Back / Not now sit under it, one at each end. Both rows keep ≥ 12px between targets. */
 .ob-nav-row {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   gap: 12px;
 }
 
 .ob-nav-ask .ob-nav-row {
-  grid-template-columns: 1fr 1fr;
-}
-
-.ob-back,
-.ob-not-now,
-.ob-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: var(--tap-cta);
-  padding: 0 16px;
-  font-size: var(--fs-lead);
-  font-weight: 700;
-  line-height: 1.15;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .ob-back,
 .ob-not-now {
-  background: var(--surface-2);
-}
-
-.ob-back:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-.ob-primary {
-  background: var(--cta);
-  color: var(--on-cta);
-  border: none;
+  min-width: var(--tap-cta);
 }
 
 /* M13d task 12: the Units page (unitsPage.ts). Each choice is a word ("Weight") over the shared

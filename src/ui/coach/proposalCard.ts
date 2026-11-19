@@ -1,6 +1,8 @@
 // M10 Proposal card (SPEC M10 "Coach chat"): what a trainer action would change, before → after,
 // a why line, and two buttons. Nothing changes until Apply (the CTA, the only action-colour fill);
 // Not now is a neutral surface-2 button. Props in, callbacks out; the app owns the Proposal.
+// M13d task 40f: both are round icon buttons (iconButton.ts): Apply the main circle + word in a
+// wide pill, Not now a secondary circle with its word under it; names unchanged.
 //
 // Also the red-flag card: the fixed red-flag line (from core) with the only two buttons the SPEC
 // allows (End workout / Not today). Danger is used here because it is a stop, with a flag icon
@@ -23,8 +25,10 @@
 import type { ChatCardStatus, PlannedExercise, Proposal } from '../../core/types';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
+import { iconButton } from '../iconButton';
 import { checkMorph } from '../motion';
 import './coach.css';
+import './coachButtons.css';
 
 export type ProposalCardProps = Pick<Proposal, 'title' | 'lines' | 'why'> & {
   /** M12 1b: accessories paired back to back, drawn as pair lines after `lines`. */
@@ -120,19 +124,37 @@ function row(line: { before: string; after: string }): HTMLElement {
   );
 }
 
+/**
+ * M13d task 40f: Apply (the main circle + word in a wide pill, the card's one main action) and
+ * Not now (a secondary circle, word below), one row. `proposal-apply` stays: the coach sheet
+ * focuses the newest Apply by it (app.ts).
+ */
+export function proposalActions(a: ProposalCardActions): {
+  el: HTMLElement;
+  controls: HTMLElement[];
+} {
+  const apply = iconButton({
+    icon: 'check',
+    label: 'Apply',
+    variant: 'main',
+    wideHit: true,
+    class: 'cb-bar proposal-apply',
+    onClick: () => a.onApply(),
+  });
+  const dismiss = iconButton({
+    icon: 'close',
+    label: 'Not now',
+    class: 'proposal-dismiss-btn',
+    onClick: () => a.onDismiss(),
+  });
+  return {
+    el: h('div', { class: 'proposal-actions cb-actions' }, apply, dismiss),
+    controls: [apply, dismiss],
+  };
+}
+
 export function buildProposalCard(p: ProposalCardProps, a: ProposalCardActions): Built {
-  const apply = h(
-    'button',
-    { type: 'button', class: 'primary-btn cta-btn proposal-apply', onclick: a.onApply },
-    icon('check', 'lg'),
-    'Apply',
-  );
-  const dismiss = h(
-    'button',
-    { type: 'button', class: 'cs-btn proposal-dismiss', onclick: a.onDismiss },
-    icon('close', 'md'),
-    h('span', {}, 'Not now'),
-  );
+  const actions = proposalActions(a);
   const el = h(
     'section',
     { class: 'proposal-card', 'data-proposal': true, 'aria-label': p.title },
@@ -144,9 +166,9 @@ export function buildProposalCard(p: ProposalCardProps, a: ProposalCardActions):
       ...(p.pairs ?? []).map((pair) => pairRow({ before: '', after: pairText(pair) })),
     ),
     h('p', { class: 'proposal-why' }, p.why),
-    h('div', { class: 'proposal-actions' }, apply, dismiss),
+    actions.el,
   );
-  return { el, controls: [apply, dismiss] };
+  return { el, controls: actions.controls };
 }
 
 export function proposalCard(p: ProposalCardProps, a: ProposalCardActions): HTMLElement {
@@ -161,24 +183,33 @@ export type RedFlagActions = {
 
 export function buildRedFlagCard(text: string, a: RedFlagActions): Built {
   const controls: HTMLElement[] = [];
+  // M13d task 40f: the two stops stay full-width bars (≥ 72px, as before): circle + word with
+  // the whole row as the tap area. End workout is the danger circle (flag icon + words).
   if (a.onEndWorkout) {
+    const onEnd = a.onEndWorkout;
     controls.push(
-      h(
-        'button',
-        { type: 'button', class: 'cs-btn redflag-end', onclick: a.onEndWorkout },
-        icon('flag', 'md'),
-        h('span', {}, 'End workout'),
-      ),
+      iconButton({
+        icon: 'flag',
+        label: 'End workout',
+        variant: 'danger',
+        labelAt: 'beside',
+        wideHit: true,
+        class: 'cb-bar cb-tall redflag-end-btn',
+        onClick: () => onEnd(),
+      }),
     );
   }
   if (a.onNotToday) {
+    const onNot = a.onNotToday;
     controls.push(
-      h(
-        'button',
-        { type: 'button', class: 'cs-btn', onclick: a.onNotToday },
-        icon('calendar', 'md'),
-        h('span', {}, 'Not today'),
-      ),
+      iconButton({
+        icon: 'calendar',
+        label: 'Not today',
+        labelAt: 'beside',
+        wideHit: true,
+        class: 'cb-bar cb-tall',
+        onClick: () => onNot(),
+      }),
     );
   }
   const el = h(
@@ -239,24 +270,29 @@ export function buildCardOutcome(
   );
   if (morph) checkMorph(line, icon('check', 'md', { class: 'card-outcome-icon' }));
   const controls: HTMLElement[] = [];
+  // M13d task 40f: a secondary circle with its word beside it, under the status line.
   if (status === 'applied' && a.onUndo) {
+    const onUndo = a.onUndo;
     controls.push(
-      h(
-        'button',
-        { type: 'button', class: 'cs-btn card-undo', 'data-card-undo': true, onclick: a.onUndo },
-        icon('back', 'md'),
-        h('span', {}, 'Undo'),
-      ),
+      iconButton({
+        icon: 'undo',
+        label: 'Undo',
+        labelAt: 'beside',
+        hooks: { 'data-card-undo': true },
+        onClick: () => onUndo(),
+      }),
     );
   }
   if (status === 'expired' && a.onAskAgain) {
+    const onAsk = a.onAskAgain;
     controls.push(
-      h(
-        'button',
-        { type: 'button', class: 'cs-btn card-ask', 'data-card-ask': true, onclick: a.onAskAgain },
-        icon('chat', 'md'),
-        h('span', {}, 'Ask again'),
-      ),
+      iconButton({
+        icon: 'chat',
+        label: 'Ask again',
+        labelAt: 'beside',
+        hooks: { 'data-card-ask': true },
+        onClick: () => onAsk(),
+      }),
     );
   }
   const el = h(

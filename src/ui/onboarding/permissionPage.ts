@@ -11,7 +11,9 @@ import type { OnboardingPermission } from '../../core/onboarding';
 import { PERMISSION_PAGES } from '../../data/onboarding';
 import { doneMark } from '../backButton';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
+import './flowButtons.css';
 
 /** Decorative icon per page (from the project's own set). */
 export const PERMISSION_ICON: Record<OnboardingPermission, IconName> = {
@@ -66,26 +68,23 @@ export function permissionPage(
 
   if (action.kind === 'none' || granted) return { body, allow: null, notNow: null };
 
-  const allow = h(
-    'button',
-    {
-      type: 'button',
-      class: 'ob-primary cta-btn',
-      'data-ob': 'primary',
-      'data-action-kind': action.kind,
-      onclick: () => actions.onAllow(permission),
-    },
-    action.label,
-  );
-  const notNow = h(
-    'button',
-    {
-      type: 'button',
-      class: 'ob-not-now',
-      'data-ob': 'not-now',
-      onclick: () => actions.onNotNow(permission),
-    },
-    copy.notNow,
-  );
+  // M13d task 40b (Goal 7): the ask is the page's main action (orange circle in a full-width
+  // pill, the page's own icon); "Not now" a secondary circle with its word under it.
+  const allow = iconButton({
+    icon: PERMISSION_ICON[permission],
+    label: action.label,
+    variant: 'main',
+    wideHit: true,
+    class: 'ob-primary flow-pill',
+    hooks: { 'data-ob': 'primary', 'data-action-kind': action.kind },
+    onClick: () => actions.onAllow(permission),
+  });
+  const notNow = iconButton({
+    icon: 'skip',
+    label: copy.notNow,
+    class: 'ob-not-now',
+    hooks: { 'data-ob': 'not-now' },
+    onClick: () => actions.onNotNow(permission),
+  });
   return { body, allow, notNow };
 }

@@ -191,6 +191,33 @@ describe('micButton: states', () => {
   });
 });
 
+describe('micButton: the round look (M13d task 40f, look only)', () => {
+  it('the hold button wears the round button markup: circle (glyph + ring) and the word under it', () => {
+    const { el } = mount({ state: 'idle' });
+    const b = hold(need(el));
+    expect(b.hasAttribute('data-icon-btn')).toBe(true);
+    expect(b.getAttribute('data-variant')).toBe('secondary');
+    expect(b.getAttribute('data-label-at')).toBe('below');
+    expect(b.classes).toEqual(expect.arrayContaining(['icon-btn', 'mic-btn']));
+    const circle = b.oneByClass('icon-btn-circle');
+    expect(circle.getAttribute('aria-hidden')).toBe('true');
+    expect(circle.find((e) => e.hasAttribute('data-mic-ring'))).toHaveLength(1);
+    expect(circle.byTag('svg')[0]?.getAttribute('data-icon')).toBe('mic');
+    expect(b.oneByClass('icon-btn-label').textContent).toBe(MIC_LABEL);
+    // Still the hold button: named "Hold to talk", no click behaviour of its own.
+    expect(b.getAttribute('aria-label')).toBe(MIC_A11Y_NAME);
+  });
+
+  it('the Download bar is a round button with the whole row as its tap area', () => {
+    const { el } = mount({ state: 'unavailable', reason: 'modelNotInstalled' });
+    const btn = need(el).find((e) => e.hasAttribute('data-mic-install'))[0] as FakeEl;
+    expect(btn.hasAttribute('data-icon-btn')).toBe(true);
+    expect(btn.hasAttribute('data-wide-hit')).toBe(true);
+    expect(btn.getAttribute('data-label-at')).toBe('beside');
+    expect(btn.oneByClass('icon-btn-label').textContent).toBe(MIC_INSTALL_LABEL);
+  });
+});
+
 describe('micButton: hold to talk', () => {
   it('pointer down → micDown; release over the button → micUp; listeners removed', () => {
     const { el, log } = mount({ state: 'idle' });

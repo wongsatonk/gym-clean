@@ -334,3 +334,41 @@ describe('onboardingScreen: M13d task 25 page swipes', () => {
     expect(calls.next).toBe(0);
   });
 });
+
+describe('onboardingScreen: M13d task 40b round buttons', () => {
+  const at = (p: OnboardingPermission) =>
+    NATIVE.findIndex((s) => s.kind === 'permission' && s.permission === p);
+  const look = (b: FakeEl) => [b.hasAttribute('data-icon-btn'), b.getAttribute('data-variant')];
+
+  it('Next is the main circle in a pill; Back and Skip are round, words kept', () => {
+    const { el } = render({ index: 1 });
+    const next = one(el, 'primary');
+    expect(look(next)).toEqual([true, 'main']);
+    expect(next.classes).toContain('flow-pill');
+    expect(next.hasAttribute('data-wide-hit')).toBe(true);
+    expect(next.textContent).toBe(ONBOARDING_BUTTONS.next);
+    expect(look(one(el, 'back'))).toEqual([true, 'secondary']);
+    expect(one(el, 'back').hasAttribute('data-swipe-back')).toBe(true);
+    expect(look(one(el, 'skip'))).toEqual([true, 'quiet']);
+    // The icon is decorative: the word is the only name.
+    for (const b of [next, one(el, 'back'), one(el, 'skip')]) {
+      expect(b.getAttribute('aria-label')).toBeNull();
+      expect(b.byClass('icon-btn-circle')[0]?.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('page 1: Back is shown disabled; the last page says Go to Today', () => {
+    expect(one(render({ index: 0 }).el, 'back').hasAttribute('disabled')).toBe(true);
+    const last = one(render({ steps: WEB, index: WEB.length - 1 }).el, 'primary');
+    expect(last.hasAttribute('data-icon-btn')).toBe(true);
+  });
+
+  it('an ask page: the action is the main pill, Not now a round secondary button', () => {
+    const { el } = render({ index: at('camera') });
+    const allow = one(el, 'primary');
+    expect(look(allow)).toEqual([true, 'main']);
+    expect(allow.getAttribute('data-action-kind')).toBe('ask');
+    expect(look(one(el, 'not-now'))).toEqual([true, 'secondary']);
+    expect(one(el, 'not-now').textContent).toBe('Not now');
+  });
+});

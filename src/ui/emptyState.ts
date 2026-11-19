@@ -2,13 +2,19 @@
 // original icon in a round badge, one line, one action. Props in, callbacks out; no copy of its
 // own (each screen passes its line, all passing `checkCopy`).
 //
-// The action is either one button (`primary` makes it the screen's filled CTA, e.g. Fuel's
-// "Set up targets" until targets exist; otherwise the quiet outline look) or an element the screen
-// builds itself (the Coach thread's starter chips, one group of suggestions). Omitted: no action.
+// The action is either one button or an element the screen builds itself (the Coach thread's
+// starter chips, one group of suggestions). Omitted: no action.
+// M13d task 40a (SPEC M13d Goal 7): the button is the shared round icon button. `primary` makes
+// it the screen's one main action (72px orange circle, the word beside it, on the shared pill
+// track, chromeButtons.css);
+// otherwise a secondary 56px circle with the word under it. Either way the whole row stays its
+// tap area (as wide as the bar it replaced). No icon given: the forward arrow.
 //
 // e2e hooks: `[data-empty-state=<kind>]`, `.empty-state-line`, `.empty-state-btn`.
 import { h } from './dom';
+import { iconButton } from './iconButton';
 import { icon, type IconName } from './icons';
+import './chromeButtons.css';
 import './emptyState.css';
 
 type Hooks = Record<string, string | boolean>;
@@ -16,9 +22,9 @@ type Hooks = Record<string, string | boolean>;
 export type EmptyStateAction = {
   label: string;
   onClick: () => void;
-  /** The screen's one filled CTA (72px orange). Default: the outline secondary look. */
+  /** The screen's one main action (72px orange circle). Default: a secondary circle. */
   primary?: boolean;
-  /** An icon before the words (decorative). */
+  /** The circle's icon (decorative). Default: the forward arrow. */
   icon?: IconName;
   /** Extra attributes on the button (e2e hooks such as `data-setup`). */
   hooks?: Hooks;
@@ -43,18 +49,15 @@ export type EmptyStateProps = {
 };
 
 function actionButton(a: EmptyStateAction): HTMLElement {
-  const look = a.primary ? 'primary-btn cta-btn' : 'ghost-btn wide-btn';
-  return h(
-    'button',
-    {
-      type: 'button',
-      ...a.hooks,
-      class: `${look} empty-state-btn`,
-      onclick: () => a.onClick(),
-    },
-    a.icon ? icon(a.icon, a.primary ? 'lg' : 'md') : null,
-    h('span', {}, a.label),
-  );
+  return iconButton({
+    icon: a.icon ?? 'arrow-right',
+    label: a.label,
+    variant: a.primary ? 'main' : 'secondary',
+    wideHit: true,
+    class: a.primary ? 'empty-state-btn chrome-pill' : 'empty-state-btn',
+    ...(a.hooks ? { hooks: a.hooks } : {}),
+    onClick: () => a.onClick(),
+  });
 }
 
 export function emptyState(p: EmptyStateProps): HTMLElement {

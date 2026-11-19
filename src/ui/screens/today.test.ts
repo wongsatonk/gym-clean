@@ -140,7 +140,7 @@ describe('todayScreen', () => {
     hint.setAttribute('data-silent-hint', '');
     const { el, calls } = render({ hint: hint as unknown as HTMLElement });
     const hero = el.oneByClass('hero');
-    const start = hero.oneByClass('hero-cta');
+    const start = hero.oneByClass('start-pill');
     expect(start.textContent).toBe('Start workout');
     const i = hero.children.indexOf(start);
     expect(hero.children[i - 1]).toBe(hint);
@@ -150,7 +150,7 @@ describe('todayScreen', () => {
 
   it('disables Start while the up-next day is unknown (history loading)', () => {
     const { el, calls } = render({ upNextDayId: null });
-    const start = el.oneByClass('hero-cta');
+    const start = el.oneByClass('start-pill');
     expect(start.hasAttribute('disabled')).toBe(true);
     expect(start.textContent).toBe('Loading…');
     // The placeholder heading has a spoken name, not just "…".
@@ -312,12 +312,12 @@ describe('previewScreen', () => {
     const loading = renderPreview(true, hint);
     const bottom = loading.el.oneByClass('sticky-bottom');
     expect(bottom.children[0]).toBe(hint);
-    const start = bottom.oneByClass('primary-btn');
+    const start = bottom.oneByClass('start-pill');
     expect(start.textContent).toBe('Loading…');
     expect(start.hasAttribute('disabled')).toBe(true);
 
     const ready = renderPreview(false);
-    const go = ready.el.oneByClass('sticky-bottom').oneByClass('primary-btn');
+    const go = ready.el.oneByClass('sticky-bottom').oneByClass('start-pill');
     expect(go.textContent).toBe('Start workout');
     go.click();
     expect(ready.calls.start).toEqual([PULL_A.id]);
@@ -461,7 +461,7 @@ describe('todayScreen with M10 trainer props', () => {
   it('M13: no Coach button in the app bar, even with every M10 action (the Coach tab is the way in)', () => {
     const { el } = renderM10();
     expect(el.find((e) => e.hasAttribute('data-coach-open'))).toHaveLength(0);
-    expect(el.byClass('coach-btn')).toHaveLength(0);
+    expect(el.byClass('coach-open')).toHaveLength(0);
     const bar = el.oneByClass('appbar');
     expect(bar.children.map((c) => c.classes[0])).toEqual(['brand', 'date']);
     expect(bar.oneByClass('date').textContent).toBe('Fri 13 Nov');
@@ -488,7 +488,7 @@ describe('todayScreen with M10 trainer props', () => {
     expect(hero.getAttribute('data-hero')).toBe('rest');
     expect(hero.byTag('h1')[0]?.textContent).toBe('Rest day');
     expect(hero.oneByClass('rest-next').textContent).toBe('Next up: Pull A');
-    const cta = hero.oneByClass('hero-cta');
+    const cta = hero.oneByClass('start-pill');
     expect(cta.textContent).toBe('Train anyway');
     expect(cta.hasAttribute('disabled')).toBe(false);
     expect(cta.getAttribute('data-start')).toBe(PULL_A.id);
@@ -499,7 +499,7 @@ describe('todayScreen with M10 trainer props', () => {
 
   it('Train anyway falls back to onStart when no onTrainAnyway is given', () => {
     const { el, calls } = renderM10({ calendar: CAL }, false);
-    el.oneByClass('hero-cta').click();
+    el.oneByClass('start-pill').click();
     expect(calls.start).toEqual([PULL_A.id]);
   });
 
@@ -509,7 +509,7 @@ describe('todayScreen with M10 trainer props', () => {
     );
     const hero = renderM10({ calendar: cal }).el.oneByClass('hero');
     expect(hero.getAttribute('data-hero')).toBe(PULL_A.id);
-    expect(hero.oneByClass('hero-cta').textContent).toBe('Start workout');
+    expect(hero.oneByClass('start-pill').textContent).toBe('Start workout');
   });
 
   it('the week strip follows the calendar: dated cards, rest cards, moved days marked', () => {
@@ -595,7 +595,7 @@ describe('previewScreen with M10 trainer props', () => {
         { onBack: () => undefined, onStart: () => undefined },
       ),
     );
-    expect(el.byClass('coach-btn')).toHaveLength(0);
+    expect(el.byClass('coach-open')).toHaveLength(0);
     expect(el.byClass('adjusted-banner')).toHaveLength(0);
     expect(el.byClass('adj-badge')).toHaveLength(0);
     expect(el.byClass('removed-list')).toHaveLength(0);
@@ -638,11 +638,11 @@ describe('previewScreen with M10 trainer props', () => {
       ),
     );
     const top = el.oneByClass('top-bar');
-    top.oneByClass('coach-btn').click();
+    top.oneByClass('coach-open').click();
     expect(calls.coach).toBe(1);
     const banner = el.oneByClass('adjusted-banner');
     expect(banner.oneByClass('adjusted-text').textContent).toBe('Adjusted today: Easy on arms');
-    banner.oneByClass('adjusted-undo').click();
+    banner.find((e) => e.hasAttribute('data-undo-adjust'))[0]?.click();
     expect(calls.undo).toBe(1);
 
     // .ex-row still counts the exercises that run; changed rows carry the badge + note.
@@ -730,8 +730,10 @@ describe('Today: missed-day card (M12)', () => {
     const move = byAttr(el, 'data-missed-move')[0];
     const skip = byAttr(el, 'data-missed-skip')[0];
     expect([move?.textContent, skip?.textContent]).toEqual(['Move it', 'Skip it']);
-    expect(move?.classes).toContain('missed-btn');
-    expect(skip?.classes).toContain('missed-btn');
+    // M13d task 40c: round iconButtons; Move it is the ringed suggestion.
+    expect(move?.hasAttribute('data-icon-btn')).toBe(true);
+    expect(skip?.hasAttribute('data-icon-btn')).toBe(true);
+    expect(move?.classes).toContain('card-cta');
     move?.click();
     skip?.click();
     expect(calls.move).toEqual([MISSED]);
@@ -776,7 +778,7 @@ describe('Today: missed-day card (M12)', () => {
     const start = byAttr(el, 'data-missed-start')[0];
     const skip = byAttr(el, 'data-missed-skip')[0];
     expect([start?.textContent, skip?.textContent]).toEqual(['Start it', 'Skip it']);
-    expect(start?.classes).toContain('missed-cta');
+    expect(start?.classes).toContain('card-cta');
     start?.click();
     skip?.click();
     expect(calls).toEqual({ start: [MISSED], skip: [MISSED] });
@@ -1161,20 +1163,23 @@ describe('Today: hero first + "things to sort" (M13)', () => {
   const hit = (e: FakeEl, sets: string[][]) =>
     sets.some((cls) => cls.every((c) => e.classes.includes(c)));
 
-  it('exactly one filled primary button: Start (every notice open, the feel row open)', () => {
+  it('exactly one filled button: Start, the round main button (every notice open, the feel row open)', () => {
     // The scan sees the fills it guards against (else this test would pass vacuously).
-    for (const c of ['primary-btn', 'readiness-cta', 'missed-cta', 'gym-prompt-cta', 'feel-save'])
-      expect(FILLED).toContainEqual([c]);
-    expect(FILLED).toContainEqual(['goal-card-btn', 'primary']);
+    expect(FILLED).toContainEqual(['primary-btn']);
     for (const over of [{}, { noticesOpen: true }]) {
       const el = renderAll(over);
-      const filled = el.byTag('button').filter((b) => hit(b, FILLED) && !hit(b, OUTLINED));
-      expect(filled).toHaveLength(1);
-      expect(filled[0]?.classes).toContain('hero-cta');
-      expect(filled[0]?.textContent).toBe('Start workout');
-      // The notice CTAs that would be filled elsewhere are outlined on Today.
-      const outlined = el.byTag('button').filter((b) => hit(b, FILLED) && hit(b, OUTLINED));
-      expect(outlined.length).toBeGreaterThanOrEqual(4);
+      const buttons = el.byTag('button');
+      // M13d task 40c: the only orange-filled circle is Start's (iconButton `main`).
+      const main = buttons.filter((b) => b.getAttribute('data-variant') === 'main');
+      expect(main).toHaveLength(1);
+      expect(main[0]?.classes).toContain('start-pill');
+      expect(main[0]?.textContent).toBe('Start workout');
+      // No old filled bar is left unless today.css outlines it (the missing-kit prompt).
+      expect(buttons.filter((b) => hit(b, FILLED) && !hit(b, OUTLINED))).toEqual([]);
+      // The cards' suggested actions are ringed round buttons, not filled ones.
+      const ringed = buttons.filter((b) => b.classes.includes('card-cta'));
+      expect(ringed.length).toBeGreaterThanOrEqual(4);
+      expect(ringed.every((b) => b.getAttribute('data-variant') === 'secondary')).toBe(true);
     }
   });
 });

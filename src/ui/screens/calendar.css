@@ -11,25 +11,31 @@
   gap: 8px;
 }
 
-.cal-nav-btn {
-  width: var(--tap-min);
-  min-width: var(--tap-min);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+/* M13d task 40c: Earlier / Later are round iconButtons (word under the circle), no side padding
+   so the month keeps the room (still ≥ 56px wide). */
+.cal-nav-act.icon-btn {
+  flex: none;
+  padding-inline: 0;
 }
 
-.cal-nav-next .ic {
-  transform: scaleX(-1);
-}
-
+/* The month stays on one line at 390 ("September 2026" with Larger text): the title is its own
+   inline-size container and its words shrink to fit it, from --fs-head down to the --fs-body
+   floor (≈ 8.4 em is the widest month + year in the body face). */
 .cal-month {
+  flex: 1 1 0;
+  min-width: 0;
+  container-type: inline-size;
   margin: 0;
   font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
+  line-height: var(--lh-head);
   text-align: center;
+  white-space: nowrap;
+}
+
+.cal-month-text {
+  font-size: clamp(var(--fs-body), calc(100cqi / 8.4), var(--fs-head));
 }
 
 /* Edge to edge: 7 columns use the full phone width so each day is as wide as it can be
@@ -251,14 +257,10 @@
   font-weight: 700;
 }
 
-.cal-share,
-.cal-act {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-size: var(--fs-lead);
-  font-weight: 700;
+/* M13d task 40c: Share month, Try again and a day's Move are round iconButtons, the word beside
+   the circle on a full-width row (the whole row is the tap area, as the bars were). */
+.cal-row-act.icon-btn {
+  justify-content: flex-start;
 }
 
 .cal-privacy {
@@ -290,15 +292,9 @@
 
 /* ---------- day detail ---------- */
 
-.cal-back {
+/* Back: the shared backButton (src/ui/backButton.ts), placed at the start of the page. */
+.calendar-day > .back-btn {
   align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 18px 0 10px;
-  background: transparent;
-  font-size: var(--fs-cue);
-  font-weight: 700;
 }
 
 .cal-day-head {
@@ -358,16 +354,6 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.calendar-day .primary-btn.cal-act {
-  margin-top: 0;
-  min-height: var(--tap-cta);
-  font-size: var(--fs-head);
-}
-
-.cal-act-2 {
-  min-height: var(--tap-min);
 }
 
 .cal-section-head {
@@ -451,15 +437,7 @@
   font-size: var(--fs-body);
 }
 
-.cal-ex-hist {
+.cal-ex-hist.icon-btn {
   flex: none;
   min-width: var(--tap-min);
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0;
-  padding: 4px 8px;
-  font-size: var(--fs-label);
-  font-weight: 700;
 }

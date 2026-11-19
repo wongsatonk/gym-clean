@@ -16,6 +16,11 @@ describe('searchButton', () => {
     expect(el.getAttribute('type')).toBe('button');
     expect(el.hasAttribute('data-search-open')).toBe(true);
     expect(el.classes).toContain('search-btn');
+    // M13d task 40a: the round icon button, word beside the circle (secondary look).
+    expect(el.classes).toContain('icon-btn');
+    expect(el.hasAttribute('data-icon-btn')).toBe(true);
+    expect(el.getAttribute('data-variant')).toBe('secondary');
+    expect(el.getAttribute('data-label-at')).toBe('beside');
     expect(el.textContent).toBe('Search');
     expect(el.getAttribute('aria-label')).toBeNull();
     const ic = icons(el);
@@ -32,14 +37,16 @@ describe('searchButton', () => {
     expect(got).toEqual([btn, btn]);
   });
 
-  it('css: ≥ 56px tall and wide, 20px bold text, neutral surface (tokens only, never --cta)', () => {
+  it('css: sits right in its row, word on one line, tokens only, never --cta', () => {
+    // Size, colours and the press come from iconButton.css (56px circle, 20px+ word).
     const css = readFileSync(join(__dirname, 'searchButton.css'), 'utf8');
     const block = /\.search-btn\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(block).toMatch(/min-height:\s*var\(--tap-min\)/);
-    expect(block).toMatch(/min-width:\s*var\(--tap-min\)/);
-    expect(block).toMatch(/font-size:\s*var\(--fs-body\)/);
-    expect(block).toMatch(/background:\s*var\(--surface-2\)/);
-    expect(block).toMatch(/white-space:\s*nowrap/);
+    expect(block).toMatch(/flex:\s*none/);
+    expect(block).toMatch(/margin-left:\s*auto/);
+    // No box of its own around the circle (the old surface-2 bar).
+    expect(block).not.toMatch(/background|border|padding/);
+    const word = /\.search-btn \.icon-btn-label\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(word).toMatch(/white-space:\s*nowrap/);
     expect(css).not.toMatch(/--cta/);
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
   });

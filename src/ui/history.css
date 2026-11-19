@@ -203,15 +203,8 @@
 }
 
 /* Detail view */
-.hist-back {
+.history > .back-btn {
   align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 18px 0 10px;
-  background: transparent;
-  font-size: var(--fs-cue);
-  font-weight: 700;
 }
 
 .hist-title {
@@ -322,8 +315,8 @@
   font-size: var(--fs-body);
 }
 
-.hist-empty-btn {
+/* M13d task 40c: Go to Today is a round iconButton, the word beside it on a full-width row. */
+.hist-empty-btn.icon-btn {
   margin-top: 4px;
-  font-size: var(--fs-cue);
-  font-weight: 700;
+  justify-content: flex-start;
 }

@@ -99,20 +99,5 @@
 }
 
 .fuel-nudge-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.fuel-nudge-btn {
-  flex: 1 1 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: var(--tap-min);
-  padding: 0 16px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
+  justify-content: flex-end;
 }

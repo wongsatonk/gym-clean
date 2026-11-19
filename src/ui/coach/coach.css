@@ -262,10 +262,6 @@
   margin-top: 0;
 }
 
-.proposal-dismiss {
-  width: 100%;
-}
-
 /* ---------- Red-flag card ---------- */
 
 .redflag-card {
@@ -299,15 +295,7 @@
   gap: 10px;
 }
 
-.redflag-actions .cs-btn {
-  width: 100%;
-  min-height: var(--tap-cta);
-}
-
-.redflag-end {
-  color: var(--danger);
-  border-color: var(--danger);
-}
+/* M13d task 40f: End workout / Not today are round-button bars (coachButtons.css, ≥ 72px). */
 
 /* ---------- Undo toast ---------- */
 
@@ -355,11 +343,6 @@
 .undo-icon {
   flex: 0 0 auto;
   color: var(--success);
-}
-
-.undo-btn {
-  flex: 0 0 auto;
-  background: var(--surface);
 }
 
 .undo-track {
@@ -493,24 +476,10 @@
   flex: none;
 }
 
+/* M13d task 40f: the two answers are same-size round buttons side by side (coachButtons.css).
+   .co-wanted stays neutral like "Not now": a consent choice gets equal weight, no orange nudge (main, M13c 6d). */
 .co-actions {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.co-btn {
-  width: 100%;
-  min-height: var(--tap-min);
-  padding: 10px 18px;
-  border-radius: var(--r-btn);
-  font-size: var(--fs-cue);
-  line-height: 1.2;
-  text-align: center;
-}
-
-/* .co-wanted stays neutral like "Not now": a consent choice gets equal weight, no orange nudge (main, M13c 6d). */
-
-.co-btn:disabled {
-  opacity: 0.6;
 }

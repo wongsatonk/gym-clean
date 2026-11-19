@@ -40,6 +40,13 @@
   width: 100%;
 }
 
+/* The hidden attribute wins over the display above (Next arm / Set done swap, Fuel's Delete,
+   Coach's Send). Keep this after every display rule here; a screen that must keep a hidden
+   button's space (Coach's Send while the mic is held) overrides it with a longer selector. */
+.icon-btn[hidden] {
+  display: none;
+}
+
 /* ---------- Variants ---------- */
 
 .icon-btn[data-variant='main'] {
@@ -112,7 +119,9 @@
   border-radius: 50%;
   border: 6px solid color-mix(in srgb, var(--ib-glow) 30%, transparent);
   opacity: 0;
-  transform: scale(0.85);
+  /* Idle, the ring sits inside the circle (0.75 × (circle + 18px) < circle), so a button only as
+     wide as its circle (the Fuel − / +) has no hidden overflow. */
+  transform: scale(0.75);
   transition:
     opacity var(--dur-fast) var(--ease-standard),
     transform var(--dur-fast) var(--ease-spring);

@@ -457,7 +457,8 @@ describe('settingsScreen M10e Gym and M9 Backup sections', () => {
     ]);
     const btn = one(el, (e) => e.hasAttribute('data-my-gym-open'), 'my gym');
     expect(btn.textContent).toBe('My gym');
-    expect(btn.classes).toContain('set-action');
+    expect(btn.classes).toContain('set-row');
+    expect(btn.hasAttribute('data-icon-btn')).toBe(true);
     btn.click();
     expect(opened).toBe(1);
     const sec = byAttr(el, 'data-section', 'backup');
@@ -832,7 +833,8 @@ describe('settingsScreen M13 owner mode', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.hasAttribute('data-about-open')).toBe(true);
     expect(rows[0]?.textContent).toBe('About Gym Clean');
-    expect(rows[0]?.classes).toContain('set-action');
+    expect(rows[0]?.classes).toContain('set-row');
+    expect(rows[0]?.hasAttribute('data-icon-btn')).toBe(true);
     // No build hash, version or credit on Settings itself.
     expect(el.textContent).not.toContain('build');
     expect(el.textContent).not.toContain(CREDIT);
@@ -867,7 +869,8 @@ describe('settingsScreen M13 owner mode', () => {
       const rows = about.byTag('button');
       expect(rows.map((b) => b.textContent)).toEqual(['About Gym Clean', 'Show the welcome again']);
       expect(rows[1]?.hasAttribute('data-welcome-rerun')).toBe(true);
-      expect(rows[1]?.classes).toContain('set-action');
+      expect(rows[1]?.classes).toContain('set-row');
+      expect(rows[1]?.hasAttribute('data-icon-btn')).toBe(true);
       rows[1]?.click();
       expect(log).toEqual(['welcome']);
     }
@@ -880,7 +883,8 @@ describe('settingsScreen M13 owner mode', () => {
       const sec = byAttr(el, 'data-section', 'selfcheck');
       const btn = one(sec, (e) => e.hasAttribute('data-selfcheck-open'), 'self-check row');
       expect(btn.textContent).toBe('Self-check');
-      expect(btn.classes).toContain('set-action');
+      expect(btn.classes).toContain('set-row');
+      expect(btn.hasAttribute('data-icon-btn')).toBe(true);
       btn.click();
       expect(log).toEqual(['check']);
     }

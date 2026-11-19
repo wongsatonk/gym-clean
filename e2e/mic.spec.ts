@@ -124,6 +124,28 @@ test('hold → live words → release sends; the reply is spoken (Mic only); per
   expect(s.prompts).toBe(0);
   await expectTapTargets(page, '[data-screen="coach"]');
   await noHorizontalOverflow(page);
+  // M13d task 40f (look only): the round button's circle + word, never smaller than the 1.16.2
+  // hold button (102 × 56 at 390 wide); Send is a round button too.
+  {
+    const look = await tab.locator('[data-mic-hold]').evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const c = el.querySelector('.icon-btn-circle');
+      const cr = c?.getBoundingClientRect();
+      return {
+        round: el.hasAttribute('data-icon-btn'),
+        w: r.width,
+        h: r.height,
+        circle: cr ? [cr.width, cr.height, getComputedStyle(c as Element).borderRadius] : null,
+      };
+    });
+    expect(look.round).toBe(true);
+    expect(look.w).toBeGreaterThanOrEqual(102);
+    expect(look.h).toBeGreaterThanOrEqual(56);
+    expect(look.circle?.[0]).toBeGreaterThanOrEqual(56);
+    expect(look.circle?.[1]).toBeGreaterThanOrEqual(56);
+    expect(look.circle?.[2]).toBe('50%');
+    await expect(tab.getByRole('button', { name: 'Send' })).toHaveAttribute('data-icon-btn', '');
+  }
 
   const prewarmsBefore = (await brainState(page)).prewarms;
   const replies = await coachItems(tab).count();

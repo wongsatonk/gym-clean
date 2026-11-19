@@ -1,0 +1,57 @@
+/* M13d task 40b (SPEC M13d Goal 7): the round buttons on the first run, the intake and Set up
+   Fuel (welcome.ts, permissionPage.ts, intake.ts, fuel/setup.ts). The circle, word, press and
+   focus looks are iconButton.css; this file only places them.
+
+   The page's one main action is a full-width pill: a soft track holding the 72px orange circle
+   and its word beside it. The whole pill is the tap area (as wide as the bar it replaced). Long
+   words ("Turn on session reminder") wrap to a second line, never clipped; Text size Larger
+   leaves this size alone (--fs-head is not scaled). Reduce Motion: the shared rule in
+   styles.css. */
+
+.icon-btn.flow-pill {
+  justify-content: flex-start;
+  min-width: 0;
+  padding: 6px 18px 6px 6px;
+  border: var(--line-w) solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+}
+
+.icon-btn.flow-pill .icon-btn-label {
+  min-width: 0;
+  font-size: var(--fs-head);
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
+
+/* Set up Fuel (fuel/setup.ts): Back is a round button with its word beside it (the title moves
+   under it when both don't fit on one line), "Not now" a quiet one under the form. fuelForms.css gives `.fuel-back` / `.fuel-not-now` a bar look for the
+   other Fuel forms; here the round look wins. */
+.fuel-setup .fuel-back.icon-btn {
+  gap: 14px;
+  min-height: var(--tap-min);
+  padding: 4px;
+  background: transparent;
+}
+
+.fuel-setup .fuel-not-now.icon-btn {
+  align-self: center;
+  min-height: var(--tap-min);
+  padding: 4px;
+}
+
+.fuel-setup > .fuel-head {
+  flex-wrap: wrap;
+}
+
+/* The sticky Save bar is taller with the pill and the "Pick your sex…" line above it: solid
+   behind both, so the form never shows through the words. */
+.fuel-setup .sticky-bottom.fuel-actions {
+  background: linear-gradient(transparent, var(--bg) 12px);
+}
+
+/* The same over the glow (styles.css "Sticky bottoms fade into the glow" uses a see-through veil;
+   words must not sit on other words, so solid here). */
+html:not([data-background='plain']) main.screen.fuel-form.fuel-setup .sticky-bottom.fuel-actions {
+  background: linear-gradient(transparent, var(--bg) 12px);
+}

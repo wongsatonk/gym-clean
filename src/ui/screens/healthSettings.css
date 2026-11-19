@@ -61,46 +61,14 @@
   line-height: var(--lh-text);
 }
 
-.health-confirm-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.health-btn {
-  flex: none;
-  min-width: 0;
-  min-height: var(--tap-min);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 16px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface);
-  border: var(--line-w) solid var(--line);
-  border-radius: var(--r-btn);
-}
-
-.health-btn:disabled {
-  opacity: 0.6;
-}
-
-.health-delete {
-  color: var(--danger);
-  border-color: var(--danger);
-}
+/* M13d task 40d: the buttons here are round icon buttons (iconButton.css, placed by
+   ../settingsButtons.css). */
 
 .health-connect-box,
 .health-read {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.health-connect {
-  margin-top: 0;
 }
 
 .health-last-read {

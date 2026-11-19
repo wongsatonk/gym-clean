@@ -9,10 +9,16 @@
 // e2e hooks: `[data-backup-export]`, `[data-backup-restore]`, the hidden file input
 // `input[data-backup-file]`, `[data-backup-confirm]` (the question), `[data-backup-replace]`
 // (`data-armed` while armed), `[data-backup-cancel]`, `[data-backup-status]`.
+//
+// M13d task 40d (Goal 7): Back up, Restore, Replace (danger) and Cancel are round icon buttons
+// with the word beside them, each on a pill row as wide as the bar it replaced. Armed Replace
+// fills its circle with the danger colour and says "Tap again to replace" (not colour alone).
 import { APP_NAME } from '../../core/brand';
 import type { BackupErrorCode } from '../../data/backup';
 import { h } from '../dom';
-import { icon } from '../icons';
+import { iconButton } from '../iconButton';
+import { setIconButtonLabel } from '../iconButtonLabel';
+import '../settingsButtons.css';
 
 export const REPLACE_CONFIRM_MS = 3000;
 export const REPLACE_QUESTION = 'Replace all data on this phone?';
@@ -67,30 +73,33 @@ const REPLACE_LABEL = 'Replace';
 const REPLACE_ARMED_LABEL = 'Tap again to replace';
 
 function replaceButton(onConfirm: () => void, confirmMs: number): HTMLElement {
-  const label = h('span', {}, REPLACE_LABEL);
-  const btn = h(
-    'button',
-    { type: 'button', class: 'plan-reset backup-replace', 'data-backup-replace': true },
-    icon('flag', 'md'),
-    label,
-  );
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const btn = iconButton({
+    icon: 'undo',
+    label: REPLACE_LABEL,
+    variant: 'danger',
+    labelAt: 'beside',
+    wideHit: true,
+    class: 'set-ib-pill backup-replace',
+    hooks: { 'data-backup-replace': true },
+    onClick: () => {
+      if (btn.getAttribute('data-armed') !== null) {
+        disarm();
+        onConfirm();
+        return;
+      }
+      btn.setAttribute('data-armed', 'true');
+      setLabel(REPLACE_ARMED_LABEL);
+      timer = setTimeout(disarm, confirmMs);
+    },
+  });
+  const setLabel = (text: string) => setIconButtonLabel(btn, text);
   const disarm = () => {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
     btn.removeAttribute('data-armed');
-    label.textContent = REPLACE_LABEL;
+    setLabel(REPLACE_LABEL);
   };
-  btn.addEventListener('click', () => {
-    if (btn.getAttribute('data-armed') !== null) {
-      disarm();
-      onConfirm();
-      return;
-    }
-    btn.setAttribute('data-armed', 'true');
-    label.textContent = REPLACE_ARMED_LABEL;
-    timer = setTimeout(disarm, confirmMs);
-  });
   return btn;
 }
 
@@ -134,16 +143,15 @@ export function backupPanel(props: BackupPanelProps, actions: BackupPanelActions
           ),
           h('p', { class: 'set-note muted' }, `${r.fileName}: ${r.summary}.`),
           replaceButton(actions.onConfirmRestore, props.confirmMs ?? REPLACE_CONFIRM_MS),
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-backup-cancel': true,
-              onclick: () => actions.onCancelRestore(),
-            },
-            'Cancel',
-          ),
+          iconButton({
+            icon: 'close',
+            label: 'Cancel',
+            labelAt: 'beside',
+            wideHit: true,
+            class: 'set-ib-pill',
+            hooks: { 'data-backup-cancel': true },
+            onClick: () => actions.onCancelRestore(),
+          }),
         )
       : null;
   return h(
@@ -151,29 +159,27 @@ export function backupPanel(props: BackupPanelProps, actions: BackupPanelActions
     { class: 'backup-panel', 'data-backup': true },
     h('p', { class: 'set-note muted' }, BACKUP_NOTE),
     h('p', { class: 'set-note muted', 'data-backup-photos-note': true }, BACKUP_PHOTOS_NOTE),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'set-action',
-        'data-backup-export': true,
-        disabled: busy,
-        onclick: () => actions.onExport(),
-      },
-      'Back up',
-    ),
+    iconButton({
+      icon: 'share',
+      label: 'Back up',
+      labelAt: 'beside',
+      wideHit: true,
+      class: 'set-ib-pill',
+      disabled: busy,
+      hooks: { 'data-backup-export': true },
+      onClick: () => actions.onExport(),
+    }),
     confirm ??
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'set-action',
-          'data-backup-restore': true,
-          disabled: busy,
-          onclick: () => input.click(),
-        },
-        busy ? 'Restoring…' : 'Restore from a file',
-      ),
+      iconButton({
+        icon: 'refresh',
+        label: busy ? 'Restoring…' : 'Restore from a file',
+        labelAt: 'beside',
+        wideHit: true,
+        class: 'set-ib-pill',
+        disabled: busy,
+        hooks: { 'data-backup-restore': true },
+        onClick: () => input.click(),
+      }),
     input,
     status,
   );

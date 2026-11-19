@@ -16,7 +16,7 @@ import { blockEnd } from '../../core/trainer/focusBlock';
 import type { ChatCardStatus, FocusBlock, FocusGroup, ProgramDay } from '../../core/types';
 import { h } from '../dom';
 import { icon } from '../icons';
-import { buildCardOutcome, type Built, type OutcomeActions } from './proposalCard';
+import { buildCardOutcome, proposalActions, type Built, type OutcomeActions } from './proposalCard';
 import './chat.css';
 
 export type FocusBlockCardProps = {
@@ -263,20 +263,10 @@ export function buildFocusBlockCard(p: FocusBlockCardProps, a: FocusBlockCardAct
   let actions: HTMLElement;
   let controls: HTMLElement[];
   if (p.status === 'pending') {
-    const apply = h(
-      'button',
-      { type: 'button', class: 'primary-btn cta-btn proposal-apply', onclick: a.onApply },
-      icon('check', 'lg'),
-      'Apply',
-    );
-    const dismiss = h(
-      'button',
-      { type: 'button', class: 'cs-btn proposal-dismiss', onclick: a.onDismiss },
-      icon('close', 'md'),
-      h('span', {}, 'Not now'),
-    );
-    actions = h('div', { class: 'proposal-actions' }, apply, dismiss);
-    controls = [apply, dismiss];
+    // M13d task 40f: the same Apply / Not now row as the proposal card (round buttons).
+    const built = proposalActions(a);
+    actions = built.el;
+    controls = built.controls;
   } else {
     const out = buildCardOutcome(p.status, a, { justApplied: p.justApplied === true });
     actions = out.el;

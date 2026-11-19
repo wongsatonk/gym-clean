@@ -50,32 +50,42 @@
 }
 
 .fuel-head.has-search > .fuel-weigh-btn {
-  grid-area: weigh;
-  justify-self: end;
-}
-
-.fuel-weigh-btn {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  min-height: var(--tap-min);
-  background: var(--surface-2);
-  font-weight: 700;
 }
 
-.fuel-weigh-txt {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.15;
+/* M13d task 40e: Weigh-in is a round button (scale + word beside); the last weigh-in sits under
+   the word, inside the button (fuel.ts weighInButton). */
+.fuel-weigh-btn.icon-btn[data-icon-btn] {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 12px;
+  justify-content: end;
+  align-items: center;
+}
+
+.fuel-weigh-btn.has-last .icon-btn-circle {
+  grid-row: 1 / span 2;
+}
+
+.fuel-weigh-btn .icon-btn-label {
+  font-size: var(--fs-cue);
+}
+
+.fuel-weigh-btn.has-last .icon-btn-label {
+  align-self: end;
 }
 
 .fuel-weigh-last {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: start;
+  text-align: start;
   font-size: var(--fs-label);
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
+  line-height: var(--lh-head);
 }
 
 .fuel-rings {
@@ -197,10 +207,6 @@
   font-size: var(--fs-head);
   font-weight: 700;
   line-height: var(--lh-head);
-}
-
-.primary-btn.fuel-log-btn {
-  margin-top: 4px;
 }
 
 .fuel-h2 {
@@ -449,20 +455,19 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
 
 .fuel-stepper {
   display: grid;
-  grid-template-columns: 72px 1fr 72px;
+  grid-template-columns: minmax(72px, auto) 1fr minmax(72px, auto);
   align-items: center;
   gap: 8px;
 }
 
-.fuel-step-btn {
-  min-height: var(--tap-cta);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-2);
+/* M13d: − / + are round buttons (iconButton.ts) with "Less" / "More" under the circle, as the
+   number fields (fuelForms.css .nf-step); the whole 72px-wide cell is the tap area. */
+.fuel-step-btn.icon-btn {
+  min-width: 72px;
+  padding: 4px 0;
 }
 
-.fuel-step-btn:disabled {
+.fuel-step-btn.icon-btn:disabled {
   opacity: 0.45;
 }
 
@@ -549,12 +554,6 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 6px 8px;
-}
-
-.fuel-secondary.rx-remove {
-  width: auto;
-  min-width: 96px;
-  font-size: var(--fs-body);
 }
 
 /* The ingredient's label spans the row; Remove sits beside the grams input, the error below. */

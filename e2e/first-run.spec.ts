@@ -20,6 +20,11 @@
 //   the same plan version when the summary opens, so the second Apply is refused as stale
 //   (core/trainer/changes.ts applyProposal) and shows "That didn't apply. Try again." for good.
 //
+// M13d task 40b: the round buttons (SPEC M13d Goal 7) on every page of the flow: each
+// `[data-icon-btn]` shows its word, is ≥ 56px, the main circle 72px in a pill as wide as the old
+// bar; keyboard focus rings the circle. BUTTONS_AFTER_SHOT=1 also writes
+// docs/screenshots/m13d-buttons-after-{first-run,intake,fuel-setup}.png (390×844, dark).
+//
 // Tagged @m13d-repro: red on 1.16.1/1.16.2 at the "Done → Set up Fuel inside the flow" step (the
 // easy-on test first at its second Apply), green once main lands task 4 (and the stale-offer fix) (`npx playwright test e2e/first-run.spec.ts --project=mobile`).
 // Nothing is spoken (read with the phone in hand); no request leaves the dev server.
@@ -554,6 +559,145 @@ test(
     await cameraToToday(page);
     expect(await getSetting(page, 'nutrition')).toBeUndefined();
     await expectNotAgain(page);
+
+    expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+    expect(offsite).toEqual([]);
+    expect(errors).toEqual([]);
+  },
+);
+
+/** Every round button under `root`: a visible word, ≥ 56px both ways, a round circle (72px for
+ *  the main one, which spans the row). Returns the words seen. */
+async function roundButtons(page: Page, root: string): Promise<string[]> {
+  await page.evaluate(() => document.fonts.ready);
+  const rows = await page.locator(`${root} [data-icon-btn]`).evaluateAll((els) =>
+    els
+      .filter((e) => e.getClientRects().length > 0)
+      .map((e) => {
+        const b = e.getBoundingClientRect();
+        const circle = e.querySelector('.icon-btn-circle');
+        const c = circle?.getBoundingClientRect();
+        const word = e.querySelector('.icon-btn-label');
+        const w = word?.getBoundingClientRect();
+        return {
+          word: word?.textContent ?? '',
+          wordShown:
+            !!word &&
+            !!w &&
+            w.width > 0 &&
+            w.height > 0 &&
+            getComputedStyle(word).visibility === 'visible',
+          wordPx: word ? parseFloat(getComputedStyle(word).fontSize) : 0,
+          clipped: !!word && word.scrollWidth > word.clientWidth + 1,
+          w: b.width,
+          h: b.height,
+          right: b.right,
+          circle: c ? [Math.round(c.width), Math.round(c.height)] : [0, 0],
+          round: circle ? getComputedStyle(circle).borderRadius === '50%' : false,
+          main: e.getAttribute('data-variant') === 'main',
+        };
+      }),
+  );
+  expect(rows.length, root).toBeGreaterThan(0);
+  for (const r of rows) {
+    expect(r.wordShown, `${r.word} shows its word`).toBe(true);
+    expect(r.wordPx, `${r.word} word size`).toBeGreaterThanOrEqual(20);
+    expect(r.clipped, `${r.word} word clipped`).toBe(false);
+    expect(r.h, `${r.word} height`).toBeGreaterThanOrEqual(56);
+    expect(r.w, `${r.word} width`).toBeGreaterThanOrEqual(56);
+    expect(r.right, `${r.word} inside the screen`).toBeLessThanOrEqual(390);
+    expect(r.round, `${r.word} round`).toBe(true);
+    expect(r.circle, r.word).toEqual(r.main ? [72, 72] : [56, 56]);
+    // The main action is a pill across the row (as wide as the bar it replaced).
+    if (r.main) expect(r.w, `${r.word} pill width`).toBeGreaterThanOrEqual(240);
+  }
+  return rows.map((r) => r.word);
+}
+
+const shoot = async (page: Page, name: string) => {
+  if (!process.env.BUTTONS_AFTER_SHOT) return;
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: `docs/screenshots/m13d-buttons-after-${name}.png` });
+};
+
+test(
+  'M13d 40b: round buttons with words on the welcome, intake and Set up Fuel pages',
+  { tag: '@m13d-flow' },
+  async ({ page }) => {
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await open(page);
+
+    // Page 1: Back is there but off, Skip is quiet, Next is the main pill.
+    expect(await roundButtons(page, '[data-screen="welcome"]')).toEqual(['Skip', 'Back', 'Next']);
+    await expect(welcome(page).locator('[data-ob="back"]')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Skip', exact: true })).toBeVisible();
+    await noHorizontalOverflow(page);
+    await expectTapTargets(page, '[data-screen="welcome"]');
+    await shoot(page, 'first-run');
+
+    // Keyboard focus rings the circle (the whole row is the tap area, the circle shows focus).
+    let ring = 'none';
+    for (let i = 0; i < 6 && ring !== 'solid'; i++) {
+      await page.keyboard.press('Tab');
+      ring = await page.evaluate(() => {
+        const c = document.activeElement
+          ?.closest('[data-icon-btn]')
+          ?.querySelector('.icon-btn-circle');
+        return c ? getComputedStyle(c).outlineStyle : 'none';
+      });
+    }
+    expect(ring).toBe('solid');
+
+    // The other welcome pages (Units included) keep the same look.
+    for (let i = 0; i < 8 && !(await intake(page).isVisible()); i++) {
+      await primary(page).tap();
+      if (await intake(page).isVisible()) break;
+      const words = await roundButtons(page, '[data-screen="welcome"]');
+      expect(words).toEqual(expect.arrayContaining(['Skip', 'Back']));
+      await noHorizontalOverflow(page);
+    }
+    await expect(intake(page)).toBeVisible();
+
+    // An intake question: Next stays off until answered, Back round, Skip for now quiet.
+    await step(page, 'goal');
+    const next = intake(page).locator('[data-intake-next]');
+    await expect(next).toBeDisabled();
+    await intake(page).locator('[data-option="fat"]').tap();
+    await expect(next).toBeEnabled();
+    await next.tap();
+    await step(page, 'days');
+    expect(await roundButtons(page, 'main[data-screen="intake"]')).toEqual(
+      expect.arrayContaining(['Back', 'Next', 'Skip for now']),
+    );
+    await expectTapTargets(page, 'main[data-screen="intake"]');
+    await noHorizontalOverflow(page);
+    await intake(page).locator('[data-option="3"]').tap();
+    await shoot(page, 'intake');
+    await intake(page).locator('[data-intake-back]').tap();
+    await step(page, 'goal');
+
+    // The summary: Apply rows and Done; then Set up Fuel inside the flow.
+    await answerAll(page);
+    await apply(page, 'plan');
+    await apply(page, 'fuel');
+    expect(await roundButtons(page, 'main[data-screen="intake"]')).toEqual(
+      expect.arrayContaining(['Applied', 'Done']),
+    );
+    await intake(page).locator('[data-intake-done]').tap();
+    await expectFuelStepInFlow(page);
+    await expect(fuelSetup(page).getByRole('button', { name: 'Less Height' })).toBeVisible();
+    await expect(fuelSetup(page).getByRole('button', { name: 'More Height' })).toBeVisible();
+    await expect(fuelSetup(page).getByRole('button', { name: 'Save targets' })).toBeDisabled();
+    expect(await roundButtons(page, 'main[data-screen="fuel-setup"]')).toEqual(
+      expect.arrayContaining(['Back', 'Less', 'More', 'Not now', 'Save targets']),
+    );
+    await expectTapTargets(page, 'main[data-screen="fuel-setup"]');
+    await noHorizontalOverflow(page);
+    await shoot(page, 'fuel-setup');
+    await saveFuel(page);
+    await cameraToToday(page);
 
     expect(await page.evaluate(() => window.__spoken)).toEqual([]);
     expect(offsite).toEqual([]);

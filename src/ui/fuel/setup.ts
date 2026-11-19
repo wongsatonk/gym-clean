@@ -33,11 +33,13 @@ import {
 import { unitField } from '../../core/unitField';
 import type { Unit } from '../../core/units';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { HEIGHT_UNIT_SWITCH, WEIGHT_UNIT_SWITCH } from '../unitSwitch';
 import { choiceGroup, numberField, switchedUnitField, type Choice } from './fields';
 import './fuelForms.css';
+import '../onboarding/flowButtons.css';
 
 export type Sex = NutritionSettings['sex'];
 export type Activity = NutritionSettings['activity'];
@@ -142,12 +144,26 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
     a.onTouch?.();
   };
 
-  const save = h(
-    'button',
-    { type: 'button', class: 'primary-btn cta-btn', 'data-setup-save': true },
-    icon('check', 'lg'),
-    'Save targets',
-  );
+  // M13d task 40b (Goal 7): Save is the page's one main action, the orange circle in a
+  // full-width pill (flowButtons.css); greyed until sex and activity are picked.
+  const save = iconButton({
+    icon: 'check',
+    label: 'Save targets',
+    variant: 'main',
+    wideHit: true,
+    class: 'flow-pill fuel-setup-save',
+    hooks: { 'data-setup-save': true },
+    onClick: () => {
+      if (!v.sex || !v.activity) return;
+      a.onSave({
+        heightCm: height.get().metric,
+        birthYear: v.birthYear,
+        sex: v.sex,
+        activity: v.activity,
+        weightKg: weight.get().metric,
+      });
+    },
+  });
   const missing = h('p', { class: 'fuel-note', 'data-setup-missing': true, role: 'status' });
   const refresh = () => {
     const need = [v.sex ? null : 'sex', v.activity ? null : 'activity level'].filter(Boolean);
@@ -197,17 +213,6 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
     decorate: (f) => healthNote('weight', f.el, f.inputs),
   });
 
-  save.addEventListener('click', () => {
-    if (!v.sex || !v.activity) return;
-    a.onSave({
-      heightCm: height.get().metric,
-      birthYear: v.birthYear,
-      sex: v.sex,
-      activity: v.activity,
-      weightKg: weight.get().metric,
-    });
-  });
-
   const birthYear = numberField({
     id: 'birth-year',
     label: 'Birth year',
@@ -241,17 +246,15 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
       'header',
       { class: 'fuel-head' },
       a.onCancel
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'fuel-back',
-              'data-swipe-back': true, // M13d task 24: the edge swipe's Back (also in the flow)
-              onclick: () => a.onCancel?.(),
-            },
-            icon('back', 'md'),
-            h('span', {}, 'Back'),
-          )
+        ? iconButton({
+            icon: 'back',
+            label: 'Back',
+            labelAt: 'beside',
+            class: 'fuel-back',
+            // M13d task 24: the edge swipe's Back (also in the flow)
+            hooks: { 'data-swipe-back': true },
+            onClick: () => a.onCancel?.(),
+          })
         : null,
       h('h1', { class: 'page-title' }, 'Set up Fuel'),
     ),
@@ -280,16 +283,15 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
     ),
     // Quiet: at the end of the form, not in the sticky bar (Save stays the one main action).
     a.onNotNow
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'ghost-btn fuel-not-now',
-            'data-setup-not-now': true,
-            onclick: () => a.onNotNow?.(),
-          },
-          'Not now',
-        )
+      ? iconButton({
+          icon: 'skip',
+          label: 'Not now',
+          variant: 'quiet',
+          labelAt: 'beside',
+          class: 'fuel-not-now',
+          hooks: { 'data-setup-not-now': true },
+          onClick: () => a.onNotNow?.(),
+        })
       : null,
     h('div', { class: 'sticky-bottom fuel-actions' }, missing, save),
   );

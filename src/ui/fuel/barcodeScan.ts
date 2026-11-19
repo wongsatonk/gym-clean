@@ -8,12 +8,13 @@
 //
 // e2e hooks: dialog `[data-scan-sheet]`, `[data-scan-video]`, `[data-scan-camera=starting|on|
 // none|nodecoder|stopped]`, `#scan-digits`, `[data-scan-lookup]`, `[data-scan-result=<kind>]`,
-// `[data-scan-add]`, `[data-scan-again]`.
+// `[data-scan-add]`, `[data-scan-again]`. M13d task 40e: Look up / Add it to My foods are the main
+// round pill, Scan again a second pill (fuelButtons.ts).
 import { isValidBarcode, normalizeBarcode } from '../../core/nutrition/barcode';
 import { h } from '../dom';
-import { icon } from '../icons';
 import { loadBarcodeDecoder, type BarcodeDecoder } from './barcodeDecoder';
 import { appendAll, clear, field, inputValue, sheetShell } from './common';
+import { fuelMain, saveRow, secondPill } from './fuelButtons';
 import './barcodeScan.css';
 
 /** What the lookup said (set by the app after `onCode`). */
@@ -219,13 +220,13 @@ export function barcodeScanSheet(a: ScanSheetActions, env: ScanEnv = browserScan
   const frame = h('div', { class: 'scan-frame', 'aria-hidden': 'true' });
   const view = h('div', { class: 'scan-view' }, video, frame);
   const camLine = h('p', { class: 'scan-cam', role: 'status', 'data-scan-camera': camera });
-  const again = h(
-    'button',
-    { type: 'button', class: 'fuel-secondary', 'data-scan-again': true, hidden: true },
-    icon('camera', 'md'),
-    h('span', {}, 'Scan again'),
-  );
-  again.addEventListener('click', () => void start());
+  const again = secondPill({
+    icon: 'camera',
+    label: 'Scan again',
+    hooks: { 'data-scan-again': true },
+    onClick: () => void start(),
+  });
+  again.setAttribute('hidden', '');
 
   const digits = field({
     id: 'scan-digits',
@@ -234,12 +235,12 @@ export function barcodeScanSheet(a: ScanSheetActions, env: ScanEnv = browserScan
   });
   digits.input.setAttribute('inputmode', 'numeric');
   digits.input.setAttribute('enterkeyhint', 'search');
-  const lookupBtn = h(
-    'button',
-    { type: 'button', class: 'primary-btn cta-btn', 'data-scan-lookup': true },
-    icon('check', 'lg'),
-    'Look up',
-  );
+  const lookupBtn = fuelMain({
+    icon: 'search',
+    label: 'Look up',
+    hooks: { 'data-scan-lookup': true },
+    onClick: () => submitTyped(),
+  });
   const submitTyped = () => {
     const code = normalizeBarcode(inputValue(digits.input));
     if (!isValidBarcode(code)) {
@@ -251,7 +252,6 @@ export function barcodeScanSheet(a: ScanSheetActions, env: ScanEnv = browserScan
     stop('stopped');
     a.onCode(code);
   };
-  lookupBtn.addEventListener('click', submitTyped);
   digits.input.addEventListener('keydown', (ev) => {
     if ((ev as KeyboardEvent).key === 'Enter') submitTyped();
   });
@@ -274,7 +274,7 @@ export function barcodeScanSheet(a: ScanSheetActions, env: ScanEnv = browserScan
     ),
     result,
     digits.wrap,
-    lookupBtn,
+    saveRow(lookupBtn),
   );
 
   function paintCamera(next: CameraState): void {
@@ -373,17 +373,12 @@ export function barcodeScanSheet(a: ScanSheetActions, env: ScanEnv = browserScan
     if (s.kind === 'missing') {
       const code = s.code;
       result.append(
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'primary-btn cta-btn',
-            'data-scan-add': code,
-            onclick: () => a.onAddFood(code),
-          },
-          icon('plus', 'lg'),
-          'Add it to My foods',
-        ),
+        fuelMain({
+          icon: 'plus',
+          label: 'Add it to My foods',
+          hooks: { 'data-scan-add': code },
+          onClick: () => a.onAddFood(code),
+        }),
       );
     }
   }

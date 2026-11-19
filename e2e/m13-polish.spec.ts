@@ -168,8 +168,11 @@ const filledButtons = (page: Page) =>
     document.body.append(probe);
     const cta = getComputedStyle(probe).color;
     probe.remove();
+    // M13d task 40c: a round button is filled when its circle is (iconButton `main`).
+    const fill = (b: Element) =>
+      getComputedStyle(b.querySelector('.icon-btn-circle') ?? b).backgroundColor;
     return [...document.querySelectorAll('button')]
-      .filter((b) => b.offsetParent !== null && getComputedStyle(b).backgroundColor === cta)
+      .filter((b) => b.offsetParent !== null && fill(b) === cta)
       .map((b) => b.textContent?.trim() ?? '');
   });
 

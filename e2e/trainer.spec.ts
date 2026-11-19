@@ -716,7 +716,10 @@ test('Not today → Train anyway takes the postpone back: the week is as before,
   const toast = page.locator('[data-undo-toast]');
   await expect(toast).toContainText('Today is a training day');
   // On the preview it sits above the sticky Start, which stays fully visible and tappable.
-  await expectToastClear(page, ['.sticky-bottom', '.sticky-bottom .primary-btn']);
+  await expectToastClear(page, [
+    '.sticky-bottom',
+    '.sticky-bottom [data-icon-btn][data-variant="main"]',
+  ]);
   await expect(page.getByRole('button', { name: 'Start workout' })).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: testInfo.outputPath('undo-toast-preview-390.png') });
   await page.getByRole('button', { name: 'Back', exact: true }).click();

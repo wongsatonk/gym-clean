@@ -11,7 +11,7 @@
 //   once and no audio is sent. Tap → `micInstall` (main: GymSpeech.installModel()).
 // - 'downloading': the download main started is running: one status line, typing still works.
 //   (`modelDownloading` is iOS fetching on its own: it keeps its unavailable line.)
-// - 'idle': "Talk" next to Send. Press and hold (pointer) or hold Space (keyboard) → `micDown`.
+// - 'idle': "Talk" next to Send (M13d task 40f: a round icon button, look only). Press and hold (pointer) or hold Space (keyboard) → `micDown`.
 // - 'listening': the button is filled (aria-pressed) and keeps its width (the text box next to it
 //   shows the live words), a level ring grows with loudness (transform + opacity; static under
 //   reduced motion), the hint "Listening… Let go to send. Slide off to cancel."
@@ -27,6 +27,8 @@
 // `[data-mic-install]` (the download button), `[data-mic-install-note]`, `[data-mic-downloading]`.
 import { APP_NAME } from '../../core/brand';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
+import '../iconButton.css';
 import { reducedMotion } from '../motion';
 
 export type MicState = 'hidden' | 'unavailable' | 'downloading' | 'idle' | 'listening';
@@ -209,11 +211,16 @@ export function micButton(p: MicProps, a: MicActions): MicView {
   }
   if (p.state === 'unavailable' && a.micInstall && MIC_INSTALL_REASONS.includes(p.reason ?? '')) {
     const onInstall = a.micInstall;
-    const install = h(
-      'button',
-      { type: 'button', class: 'cs-btn mic-install', 'data-mic-install': true, onclick: onInstall },
-      MIC_INSTALL_LABEL,
-    );
+    // M13d task 40f: a full-width bar that became circle + word (the whole row is the tap area).
+    const install = iconButton({
+      icon: 'plus',
+      label: MIC_INSTALL_LABEL,
+      labelAt: 'beside',
+      wideHit: true,
+      class: 'cb-bar mic-install',
+      hooks: { 'data-mic-install': true },
+      onClick: () => onInstall(),
+    });
     const wrap = h(
       'div',
       { class: 'mic-install-box', 'data-mic-unavailable': p.reason ?? 'unknown' },
@@ -234,13 +241,19 @@ export function micButton(p: MicProps, a: MicActions): MicView {
     return { el: line, button: null, hint: null, update: () => {} };
   }
 
+  // M13d task 40f, look only: the round icon button's markup (iconButton.ts: circle + word under
+  // it, the same classes and data hooks) around the unchanged hold-to-talk handlers. The level
+  // ring sits round the circle. The box is at least as big as the 1.16.2 button (chat.css).
   const ring = h('span', { class: 'mic-ring', 'data-mic-ring': true, 'aria-hidden': 'true' });
-  const label = h('span', { class: 'mic-label' }, MIC_LABEL);
+  const label = h('span', { class: 'icon-btn-label mic-label' }, MIC_LABEL);
   const btn = h(
     'button',
     {
       type: 'button',
-      class: 'cs-btn mic-btn',
+      class: 'icon-btn mic-btn',
+      'data-icon-btn': true,
+      'data-variant': 'secondary',
+      'data-label-at': 'below',
       'data-mic-hold': true,
       'aria-label': MIC_A11Y_NAME,
       oncontextmenu: (ev: Event) => ev.preventDefault(),
@@ -258,8 +271,7 @@ export function micButton(p: MicProps, a: MicActions): MicView {
         if (k.key === ' ' && !k.repeat) startHold(a, 'key');
       },
     },
-    ring,
-    micGlyph(),
+    h('span', { class: 'icon-btn-circle mic-circle', 'aria-hidden': 'true' }, ring, micGlyph()),
     label,
   );
   const hint = h('p', { class: 'mic-hint', 'data-mic-hint': true, role: 'status' });

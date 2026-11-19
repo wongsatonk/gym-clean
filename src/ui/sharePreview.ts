@@ -10,6 +10,7 @@
 // `[data-share-busy]`.
 import type { ShareLead } from '../core/types';
 import { backButton } from './backButton';
+import { mainPill } from './screens/mainPill';
 import { h } from './dom';
 import { icon } from './icons';
 import type { ShareSize } from './shareMonth';
@@ -143,17 +144,15 @@ export function sharePreview(p: SharePreviewProps, a: SharePreviewActions): HTML
       ),
     ),
     leads,
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'primary-btn cta-btn share-go',
-        'data-share-go': true,
-        disabled: p.busy === true || !p.image,
-        onclick: () => a.onShare(),
-      },
-      h('span', {}, 'Share'),
-    ),
+    // M13d task 40c: the page's main action, the round main button in a wide pill.
+    mainPill({
+      icon: 'share',
+      label: 'Share',
+      class: 'share-go',
+      hooks: { 'data-share-go': true },
+      disabled: p.busy === true || !p.image,
+      onClick: () => a.onShare(),
+    }),
     h('p', { class: 'muted set-note' }, SHARE_NOTE),
   );
 }

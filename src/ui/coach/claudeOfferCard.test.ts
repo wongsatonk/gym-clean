@@ -94,6 +94,22 @@ describe('buildClaudeOfferCard', () => {
     expect(calls).toEqual(['wanted']);
   });
 
+  it('M13d task 40f: both are secondary round buttons of the same kind (equal weight, no orange)', () => {
+    const { controls } = card();
+    for (const b of controls) {
+      expect(b.hasAttribute('data-icon-btn')).toBe(true);
+      expect(b.getAttribute('data-variant')).toBe('secondary');
+      expect(b.getAttribute('data-label-at')).toBe('below');
+      expect(b.classes).toContain('co-choice');
+      expect(b.getAttribute('aria-label')).toBeNull();
+      expect(b.oneByClass('icon-btn-circle').getAttribute('aria-hidden')).toBe('true');
+    }
+    expect(controls.map((b) => b.oneByClass('icon-btn-label').textContent)).toEqual([
+      CLAUDE_OFFER.wanted,
+      CLAUDE_OFFER.dismiss,
+    ]);
+  });
+
   it('Not now calls onDismiss', () => {
     const { el, calls } = card();
     one(el, 'data-claude-offer-dismiss').click();
@@ -293,12 +309,13 @@ describe('claudeOfferCard.ts reaches no request code (M13c: no Claude request)',
     expect(g.files.some((f) => NETWORK.test(code(readFileSync(join(SRC, f), 'utf8'))))).toBe(true);
   });
 
-  it('only the DOM helpers, icons, its CSS and pure core code; no fetch, native, brain or voice', () => {
+  it('only the DOM helpers, icons, the round button, its CSS and pure core code; no fetch, native, brain or voice', () => {
     const g = reach('ui/coach/claudeOfferCard.ts');
     expect(g.packages).toEqual([]);
     for (const f of g.files) {
+      // M13d task 40f: + the shared round button (iconButton.ts / .css) and coachButtons.css.
       expect(f, f).toMatch(
-        /^(core\/.*|data\/.*\.json|ui\/dom\.ts|ui\/icons\.ts|ui\/coach\/claudeOfferCard\.ts|ui\/coach\/coach\.css)$/,
+        /^(core\/.*|data\/.*\.json|ui\/dom\.ts|ui\/icons\.ts|ui\/iconButton\.(ts|css)|ui\/coach\/claudeOfferCard\.ts|ui\/coach\/(coach|coachButtons)\.css)$/,
       );
       if (f.endsWith('.ts'))
         expect(NETWORK.test(code(readFileSync(join(SRC, f), 'utf8'))), f).toBe(false);

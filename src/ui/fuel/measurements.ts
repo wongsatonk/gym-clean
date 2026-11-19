@@ -8,6 +8,8 @@
 //   28 days old), one row per site with its last value and the change since the time before.
 //   Tapping a row opens its [−] value [+] field and adds it to this save; tapping it again leaves
 //   it out. One Save button stores every opened site for today (saving again replaces today's).
+//   M13d task 40e: Save is the main round button with the short word "Save" (one line at 390);
+//   its name says what it saves ("Save 1 measurement", or "Save. Tap a spot to measure").
 // - `measurementsEntryRow`: the row on the Fuel tab that opens the screen.
 //
 // Values are stored in cm; `units.length` (M13d: settings 'lengthUnit') picks cm or inches.
@@ -35,6 +37,7 @@ import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { TAPE_UNIT_SWITCH, unitSwitch } from '../unitSwitch';
 import { unitNumberField } from './fields';
+import { fuelBack, fuelMain, labelOf } from './fuelButtons';
 import { dayNumber, shortDate } from './weighIn';
 import './measurements.css';
 
@@ -153,6 +156,14 @@ export function saveLabel(n: number): string {
   return n === 1 ? 'Save 1 measurement' : `Save ${n} measurements`;
 }
 
+/** M13d task 40e: the Save button's visible word (one line at 390, at every text size). */
+export const SAVE_WORD = 'Save';
+
+/** The Save button's accessible name: starts with the visible word, then what it saves. */
+export function saveName(n: number): string {
+  return n === 0 ? `${SAVE_WORD}. ${saveLabel(0)}` : saveLabel(n);
+}
+
 // ---------- the Fuel entry row ----------
 
 export type MeasurementsEntry = { lastDate: string | null; due: boolean };
@@ -211,32 +222,31 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
   const open = new Map<string, { get: () => UnitField<'tape'> }>();
   /** Per site: re-shows its line and (when opened) its field in the unit now chosen. */
   const reshow: (() => void)[] = [];
-  const saveText = h('span', { 'data-measure-save-label': true }, saveLabel(0));
-  const save = h(
-    'button',
-    {
-      type: 'button',
-      class: 'primary-btn cta-btn ms-save',
-      'data-measure-save': true,
-      disabled: true,
-      onclick: () => {
-        if (open.size === 0) return;
-        a.onSave(
-          p.sites
-            .filter((s) => open.has(s))
-            .map((site) => ({
-              date: p.today,
-              site,
-              cm: open.get(site)?.get().metric ?? 0,
-            })),
-        );
-      },
+  // M13d task 40e: the main round button with the short word "Save" (the long "Save 1
+  // measurement" wrapped onto two lines in the system font); the count stays in its name.
+  const save = fuelMain({
+    icon: 'check',
+    label: SAVE_WORD,
+    ariaLabel: saveName(0),
+    class: 'ms-save',
+    hooks: { 'data-measure-save': true },
+    disabled: true,
+    onClick: () => {
+      if (open.size === 0) return;
+      a.onSave(
+        p.sites
+          .filter((s) => open.has(s))
+          .map((site) => ({
+            date: p.today,
+            site,
+            cm: open.get(site)?.get().metric ?? 0,
+          })),
+      );
     },
-    icon('check', 'lg'),
-    saveText,
-  );
+  });
+  labelOf(save)?.setAttribute('data-measure-save-label', '');
   const sync = () => {
-    saveText.textContent = saveLabel(open.size);
+    save.setAttribute('aria-label', saveName(open.size));
     if (open.size === 0) save.setAttribute('disabled', '');
     else save.removeAttribute('disabled');
   };
@@ -323,17 +333,7 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
     h(
       'header',
       { class: 'fuel-head' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'fuel-back',
-          'data-swipe-back': true, // M13d task 24: the edge swipe's Back
-          onclick: () => a.onBack(),
-        },
-        icon('back', 'md'),
-        h('span', {}, 'Back'),
-      ),
+      fuelBack(() => a.onBack(), { swipe: true }), // M13d task 24: the edge swipe's Back
       h('h1', { class: 'page-title' }, 'Measurements'),
     ),
     h(

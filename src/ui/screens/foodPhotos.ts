@@ -26,6 +26,8 @@
 import type { FoodModelRecord, FoodPhoto, FoodVisionSettings } from '../../core/types';
 import { exportFoodPhotos } from '../../core/nutrition/photoExport';
 import { h } from '../dom';
+import { actionRow, secondPill } from '../fuel/fuelButtons';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { switchRow } from './settings';
 import './foodPhotos.css';
@@ -44,8 +46,7 @@ export const NO_MODEL_NOTE =
 
 /** What app.ts's validator says about a picked model file. */
 export type ModelCheck =
-  | { ok: true; labels: string[] }
-  | { ok: false; reason: 'mismatch' | 'unreadable' };
+  { ok: true; labels: string[] } | { ok: false; reason: 'mismatch' | 'unreadable' };
 
 export type ImportError = 'type' | 'tooBig' | 'mismatch' | 'unreadable' | 'save';
 
@@ -279,7 +280,10 @@ export function createFoodPhotosSettings(
           ? { kind: 'ready', file }
           : res === 'cancelled'
             ? { kind: 'idle' }
-            : { kind: 'done', text: count === 1 ? 'Exported 1 photo.' : `Exported ${count} photos.` };
+            : {
+                kind: 'done',
+                text: count === 1 ? 'Exported 1 photo.' : `Exported ${count} photos.`,
+              };
     } catch {
       exp = { kind: 'error' };
     }
@@ -304,17 +308,17 @@ export function createFoodPhotosSettings(
                 ? `Model added: ${imp.name}.`
                 : importErrorText(imp.error),
           );
-    const importBtn = h(
-      'button',
-      {
-        type: 'button',
-        class: 'set-action',
-        'data-food-model-import': true,
-        disabled: imp.kind === 'busy',
-        onclick: () => input.click(),
-      },
-      model ? 'Replace model (.tflite)' : 'Import model (.tflite)',
-    );
+    // M13d task 40e: second pills; the visible word drops "(.tflite)" (one line at 390), the
+    // name keeps it.
+    const importWord = model ? 'Replace model' : 'Import model';
+    const importBtn = secondPill({
+      icon: model ? 'refresh' : 'plus',
+      label: importWord,
+      ariaLabel: `${importWord} (.tflite)`,
+      hooks: { 'data-food-model-import': true },
+      disabled: imp.kind === 'busy',
+      onClick: () => input.click(),
+    });
     return h(
       'div',
       { class: 'food-model', 'data-food-model': true, 'data-state': model ? 'ready' : 'none' },
@@ -337,20 +341,17 @@ export function createFoodPhotosSettings(
           ),
       importBtn,
       model
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-food-model-remove': true,
-              disabled: imp.kind === 'busy',
-              onclick: () => {
-                imp = { kind: 'idle' };
-                actions.onRemoveModel();
-              },
+        ? secondPill({
+            icon: 'trash',
+            label: 'Remove model',
+            variant: 'danger',
+            hooks: { 'data-food-model-remove': true },
+            disabled: imp.kind === 'busy',
+            onClick: () => {
+              imp = { kind: 'idle' };
+              actions.onRemoveModel();
             },
-            'Remove model',
-          )
+          })
         : null,
       input,
       status,
@@ -384,31 +385,27 @@ export function createFoodPhotosSettings(
             h('span', {}, SAVE_EXPLAINER),
           ),
           h('p', { class: 'set-note muted' }, SAVE_EXPLAINER_MORE),
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action food-save-on',
-              'data-food-save-on': true,
-              onclick: () => {
+          actionRow(
+            null,
+            iconButton({
+              icon: 'check',
+              label: 'Turn on',
+              class: 'food-save-on',
+              hooks: { 'data-food-save-on': true },
+              onClick: () => {
                 explainer = false;
                 actions.onSavePhotos(true);
               },
-            },
-            'Turn on',
-          ),
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-food-save-cancel': true,
-              onclick: () => {
+            }),
+            iconButton({
+              icon: 'close',
+              label: 'Not now',
+              hooks: { 'data-food-save-cancel': true },
+              onClick: () => {
                 explainer = false;
                 render();
               },
-            },
-            'Not now',
+            }),
           ),
         )
       : null;
@@ -435,59 +432,48 @@ export function createFoodPhotosSettings(
     const busy = exp.kind === 'busy';
     const exportBtn =
       exp.kind === 'ready'
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-food-photos-share': true,
-              onclick: () => {
-                const file = exp.kind === 'ready' ? exp.file : null;
-                if (file) void finishExport(file, photoCount);
-              },
+        ? secondPill({
+            icon: 'share',
+            label: 'Share the zip',
+            hooks: { 'data-food-photos-share': true },
+            onClick: () => {
+              const file = exp.kind === 'ready' ? exp.file : null;
+              if (file) void finishExport(file, photoCount);
             },
-            icon('check', 'md'),
-            h('span', {}, 'Share the zip'),
-          )
-        : h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-food-photos-export': true,
-              disabled: busy,
-              onclick: () => void runExport(),
-            },
-            busy ? 'Making the zip…' : 'Export photos (.zip)',
-          );
+          })
+        : secondPill({
+            icon: 'share',
+            label: busy ? 'Making the zip…' : 'Export photos',
+            ...(busy ? {} : { ariaLabel: 'Export photos (.zip)' }),
+            hooks: { 'data-food-photos-export': true },
+            disabled: busy,
+            onClick: () => void runExport(),
+          });
     const delLabel = armed ? 'Tap again to delete' : 'Delete saved photos';
-    const del = h(
-      'button',
-      {
-        type: 'button',
-        class: 'plan-reset food-delete',
-        'data-food-photos-delete': true,
-        'data-armed': armed,
-        disabled: busy,
-        onclick: () => {
-          if (armed) {
-            disarm();
-            exp = { kind: 'idle' };
-            actions.onDeletePhotos();
-            render();
-            return;
-          }
-          armed = true;
-          armTimer = setTimeout(() => {
-            disarm();
-            render();
-          }, confirmMs);
+    // Two taps: the second (armed) look fills the circle red; the word says what happens.
+    const del = secondPill({
+      icon: 'trash',
+      label: delLabel,
+      variant: 'danger',
+      class: 'food-delete',
+      hooks: { 'data-food-photos-delete': true, 'data-armed': armed },
+      disabled: busy,
+      onClick: () => {
+        if (armed) {
+          disarm();
+          exp = { kind: 'idle' };
+          actions.onDeletePhotos();
           render();
-        },
+          return;
+        }
+        armed = true;
+        armTimer = setTimeout(() => {
+          disarm();
+          render();
+        }, confirmMs);
+        render();
       },
-      icon('close', 'md'),
-      h('span', {}, delLabel),
-    );
+    });
     const status =
       exp.kind === 'done' || exp.kind === 'error' || exp.kind === 'ready'
         ? h(

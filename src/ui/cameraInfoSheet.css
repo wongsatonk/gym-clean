@@ -175,17 +175,8 @@
   border-top: var(--line-w) solid var(--line);
 }
 
-.camsheet .camsheet-practice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  min-height: var(--tap-cta);
-  margin-top: 0;
-  font-size: var(--fs-lead);
-}
-
+/* M13d task 40a: Practice and Close are round icon buttons on the shared pill track
+   (iconButton.css + chromeButtons.css), each the full row. */
 .camsheet-practice-note {
   margin: 0;
   text-align: center;
@@ -193,15 +184,3 @@
   color: var(--text-2);
 }
 
-.camsheet-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  min-height: var(--tap-bar);
-  font-size: var(--fs-cue);
-  font-weight: 700;
-  background: var(--surface-2);
-  color: var(--text);
-}

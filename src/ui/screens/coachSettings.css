@@ -62,17 +62,6 @@
   margin-top: 2px;
 }
 
-.settings .brain-recheck {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.settings .brain-recheck:disabled {
-  opacity: 0.6;
-}
-
 /* Speak replies: three choices, so a smaller word than the kg / lb pair. */
 .settings .segmented.seg-3 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -171,13 +160,6 @@
 }
 
 /* ---------- Coach eval (developer) ---------- */
-
-.eval-run {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
 
 .eval-progress {
   margin: 0;

@@ -67,6 +67,20 @@ describe('buildFoodCard', () => {
     for (const t of el.find((e) => e.tag === '#text')) expect(checkCopy(t.text).ok).toBe(true);
   });
 
+  it('M13d task 40f: Log is a secondary round button, word under, named for its food', () => {
+    const { el: raw } = buildFoodCard(FOOD, { onLog: () => undefined });
+    for (const b of attr(asFake(raw), 'data-food-log')) {
+      expect(b.hasAttribute('data-icon-btn')).toBe(true);
+      expect(b.getAttribute('data-variant')).toBe('secondary');
+      expect(b.getAttribute('data-label-at')).toBe('below');
+      expect(b.oneByClass('icon-btn-label').textContent).toBe('Log');
+      expect(b.oneByClass('icon-btn-circle').byTag('svg')[0]?.getAttribute('data-icon')).toBe(
+        'plus',
+      );
+      expect(b.getAttribute('aria-label')).toMatch(/^Log /);
+    }
+  });
+
   it('a logged row shows "Logged" instead of its button', () => {
     const { el: raw, controls } = buildFoodCard(FOOD, { onLog: () => undefined }, [0]);
     const el = asFake(raw);

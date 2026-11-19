@@ -19,7 +19,9 @@ import type { FeelOffer } from '../../core/health/readiness';
 import type { BodyArea, DayFeel } from '../../core/types';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import { enterScreen } from '../motion';
+import './mainPill.css';
 import './feelToday.css';
 
 export type Energy = NonNullable<DayFeel['energy']>;
@@ -221,18 +223,14 @@ export function feelToday(props: FeelTodayProps, actions: FeelTodayActions): HTM
           h('span', { class: 'feel-done-title' }, `${FEEL_COPY.doneTitle}: `),
           h('span', { 'data-feel-summary': true }, feelSummary(feel)),
         ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'feel-change',
-            'data-feel-change': true,
-            'aria-expanded': 'false',
-            'aria-label': `${FEEL_COPY.change}: ${FEEL_COPY.ask}`,
-            onclick: () => showOpen(true),
-          },
-          FEEL_COPY.change,
-        ),
+        iconButton({
+          icon: 'pencil',
+          label: FEEL_COPY.change,
+          class: 'feel-change',
+          ariaLabel: `${FEEL_COPY.change}: ${FEEL_COPY.ask}`,
+          hooks: { 'data-feel-change': true, 'aria-expanded': 'false' },
+          onClick: () => showOpen(true),
+        }),
       ),
       ...(offers ? [offers] : []),
     );
@@ -312,34 +310,28 @@ export function feelToday(props: FeelTodayProps, actions: FeelTodayActions): HTM
       h(
         'div',
         { class: 'feel-actions' },
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'feel-btn feel-save',
-            'data-feel-save': true,
-            onclick: () => {
-              const feel: DayFeel = { date: props.date };
-              if (draft.energy !== undefined) feel.energy = draft.energy;
-              const sore = FEEL_AREAS.filter((a) => draft.sore.has(a));
-              if (sore.length) feel.sore = sore;
-              props = { ...props, feel };
-              actions.onSaveFeel(feel);
-              showCollapsed();
-            },
+        iconButton({
+          icon: 'check',
+          label: FEEL_COPY.save,
+          class: 'feel-btn feel-save card-cta',
+          hooks: { 'data-feel-save': true },
+          onClick: () => {
+            const feel: DayFeel = { date: props.date };
+            if (draft.energy !== undefined) feel.energy = draft.energy;
+            const sore = FEEL_AREAS.filter((a) => draft.sore.has(a));
+            if (sore.length) feel.sore = sore;
+            props = { ...props, feel };
+            actions.onSaveFeel(feel);
+            showCollapsed();
           },
-          FEEL_COPY.save,
-        ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'feel-btn',
-            'data-feel-cancel': true,
-            onclick: () => showCollapsed(),
-          },
-          FEEL_COPY.cancel,
-        ),
+        }),
+        iconButton({
+          icon: 'close',
+          label: FEEL_COPY.cancel,
+          class: 'feel-btn',
+          hooks: { 'data-feel-cancel': true },
+          onClick: () => showCollapsed(),
+        }),
       ),
     );
     root.replaceChildren(panel);

@@ -56,6 +56,8 @@ import {
 import type { BodyArea, BrainSource, ChatMessage, CheckIn, FocusBlock } from '../../core/types';
 import { h } from '../dom';
 import { emptyState } from '../emptyState';
+import { iconButton } from '../iconButton';
+import { setIconButtonLabel } from '../iconButtonLabel';
 import { icon, type IconName } from '../icons';
 import { moodClass } from '../tokens';
 import { buildClaudeOfferCard } from './claudeOfferCard';
@@ -67,6 +69,7 @@ import { micButton, type MicProps, type MicView } from './micButton';
 import { buildRedFlagCard, buildThreadProposalCard, type Built } from './proposalCard';
 import './coach.css';
 import './chat.css';
+import './coachButtons.css';
 
 export type ChatChip = { id: CoachChipId; label: string; args?: CoachArgs };
 
@@ -641,43 +644,45 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
 
   // Header: title + Close (sheet) or Clear chat (tab).
   const headEnd: HTMLElement[] = [];
+  // M13d task 40f: round icon buttons with their word beside the circle (the header stays one
+  // row). Clear chat's second tap turns it into the danger colour with "Tap again to clear".
   if (sheet && a.onClose) {
+    const onClose = a.onClose;
     headEnd.push(
-      h(
-        'button',
-        { type: 'button', class: 'cs-btn cs-close', onclick: a.onClose },
-        icon('close', 'md'),
-        h('span', {}, 'Close'),
-      ),
+      iconButton({
+        icon: 'close',
+        label: 'Close',
+        labelAt: 'beside',
+        class: 'cs-close',
+        onClick: () => onClose(),
+      }),
     );
   }
   if (!sheet && a.onClearChat && p.messages.length > 0) {
     const onClear = a.onClearChat;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const label = h('span', {}, CLEAR_LABEL);
-    const clear = h(
-      'button',
-      {
-        type: 'button',
-        class: 'cs-btn chat-clear',
-        'data-chat-clear': true,
-        onclick: () => {
-          if (clear.getAttribute('data-armed') === 'true') {
-            if (timer !== undefined) clearTimeout(timer);
-            onClear();
-            return;
-          }
-          clear.setAttribute('data-armed', 'true');
-          label.textContent = CLEAR_CONFIRM;
-          timer = setTimeout(() => {
-            clear.setAttribute('data-armed', 'false');
-            label.textContent = CLEAR_LABEL;
-          }, CLEAR_ARM_MS);
-        },
+    const clear = iconButton({
+      icon: 'trash',
+      label: CLEAR_LABEL,
+      labelAt: 'beside',
+      class: 'chat-clear',
+      hooks: { 'data-chat-clear': true },
+      onClick: () => {
+        if (clear.getAttribute('data-armed') === 'true') {
+          if (timer !== undefined) clearTimeout(timer);
+          onClear();
+          return;
+        }
+        arm(true);
+        timer = setTimeout(() => arm(false), CLEAR_ARM_MS);
       },
-      icon('close', 'sm'),
-      label,
-    );
+    });
+    const arm = (on: boolean) => {
+      clear.setAttribute('data-armed', on ? 'true' : 'false');
+      // The confirming tap is the danger colour (with words), never colour alone.
+      clear.setAttribute('data-variant', on ? 'danger' : 'secondary');
+      setIconButtonLabel(clear, on ? CLEAR_CONFIRM : CLEAR_LABEL);
+    };
     clear.setAttribute('data-armed', 'false');
     headEnd.push(clear);
   }
@@ -929,11 +934,13 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
         send();
       }
     });
-    const sendEl = h(
-      'button',
-      { type: 'button', class: 'cs-btn cs-send', onclick: send },
-      h('span', {}, 'Send'),
-    );
+    // M13d task 40f: Send is a secondary round button, its word under the circle.
+    const sendEl = iconButton({
+      icon: 'arrow-right',
+      label: 'Send',
+      class: 'cs-send',
+      onClick: () => send(),
+    });
     sendBtn = sendEl;
     const mic = p.mic ?? { state: 'hidden' };
     const canHold = !!(a.micDown && a.micUp && a.micCancel);

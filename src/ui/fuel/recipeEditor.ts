@@ -9,6 +9,7 @@
 // `#recipe-search`, results `[data-log-item=<key>]`, `[data-per-serving]`, `[data-recipe-save]`.
 import type { MacroSet, NutritionMode } from '../../core/types';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import {
   appendAll,
@@ -21,6 +22,7 @@ import {
   sheetShell,
   stepper,
 } from './common';
+import { fuelMain, saveRow } from './fuelButtons';
 import type { LogItem, SearchState } from './logSheet';
 
 export type RecipeIngredient = { foodId: string; name: string; grams: number };
@@ -127,22 +129,18 @@ export function recipeEditor(p: RecipeEditorProps, a: RecipeEditorActions): Reci
           'li',
           { class: 'rx-ing', 'data-ingredient': ing.foodId },
           g.wrap,
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'fuel-secondary rx-remove',
-              'data-ingredient-remove': ing.foodId,
-              'aria-label': `Remove ${ing.name}`,
-              onclick: () => {
-                draft.ingredients.splice(i, 1);
-                paintList();
-                paintPreview();
-              },
+          iconButton({
+            icon: 'close',
+            label: 'Remove',
+            ariaLabel: `Remove ${ing.name}`,
+            class: 'rx-remove',
+            hooks: { 'data-ingredient-remove': ing.foodId },
+            onClick: () => {
+              draft.ingredients.splice(i, 1);
+              paintList();
+              paintPreview();
             },
-            icon('close', 'md'),
-            h('span', { 'aria-hidden': 'true' }, 'Remove'),
-          ),
+          }),
         ),
       );
     });
@@ -244,13 +242,13 @@ export function recipeEditor(p: RecipeEditorProps, a: RecipeEditorActions): Reci
     onInput: (v) => a.onSearch(v),
   });
 
-  const save = h(
-    'button',
-    { type: 'button', class: 'primary-btn cta-btn', 'data-recipe-save': true },
-    icon('check', 'lg'),
-    'Save recipe',
-  );
-  save.addEventListener('click', () => {
+  const save = fuelMain({
+    icon: 'check',
+    label: 'Save recipe',
+    hooks: { 'data-recipe-save': true },
+    onClick: () => saveRecipe(),
+  });
+  function saveRecipe(): void {
     const nm = inputValue(name.input);
     name.error.textContent = nm === '' ? 'Give the recipe a name.' : '';
     listError.textContent = draft.ingredients.length === 0 ? 'Add at least one ingredient.' : '';
@@ -263,7 +261,7 @@ export function recipeEditor(p: RecipeEditorProps, a: RecipeEditorActions): Reci
       return;
     }
     a.onSave({ ...draft, name: nm, ingredients: draft.ingredients.map((i) => ({ ...i })) });
-  });
+  }
 
   paintList();
   paintPreview();
@@ -285,20 +283,20 @@ export function recipeEditor(p: RecipeEditorProps, a: RecipeEditorActions): Reci
       preview,
     ),
     h('p', { class: 'fuel-hint' }, 'Changing a recipe doesn’t change food you already logged.'),
-    save,
-    a.onDelete
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'fuel-secondary',
-            'data-recipe-delete': true,
-            onclick: () => a.onDelete?.(),
-          },
-          icon('close', 'md'),
-          h('span', {}, 'Delete recipe'),
-        )
-      : null,
+    // M13d task 40e: Delete (danger circle, name "Delete recipe") beside the Save pill.
+    saveRow(
+      save,
+      a.onDelete
+        ? iconButton({
+            icon: 'trash',
+            label: 'Delete',
+            ariaLabel: 'Delete recipe',
+            variant: 'danger',
+            hooks: { 'data-recipe-delete': true },
+            onClick: () => a.onDelete?.(),
+          })
+        : null,
+    ),
   );
 
   return Object.assign(shell.el, {

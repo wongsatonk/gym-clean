@@ -2,6 +2,8 @@
 // On/off switch, size + session count, Export last / Export all (iOS share sheet when the
 // browser can share files, else a download), and Clear with a two-tap confirm.
 // Privacy: the log is pose numbers only and leaves the phone only through these buttons.
+// M13d task 40d (Goal 7): the three actions are round icon buttons with the word beside them on
+// pill rows (Clear a danger circle, filled once armed); the switch stays a switch.
 
 import type { GymDb } from '../data/db';
 import {
@@ -13,7 +15,10 @@ import {
   type DevLogFile,
 } from '../data/devlog';
 import { h } from './dom';
+import { iconButton } from './iconButton';
+import { setIconButtonLabel } from './iconButtonLabel';
 import './devlog.css';
+import './settingsButtons.css';
 
 export const DEVLOG_CLEAR_CONFIRM_MS = 3000;
 export const DEVLOG_PRIVACY_NOTE =
@@ -145,20 +150,37 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
     switchState,
   );
   const summary = h('p', { class: 'devlog-summary', 'data-devlog': 'summary' }, '…');
-  const exportLast = h(
-    'button',
-    { class: 'devlog-btn', 'data-devlog': 'export-last', onclick: () => void onExport('last') },
-    'Export last session',
-  );
-  const exportAll = h(
-    'button',
-    { class: 'devlog-btn', 'data-devlog': 'export-all', onclick: () => void onExport('all') },
-    'Export all',
-  );
-  const clearBtn = h(
-    'button',
-    { class: 'devlog-btn danger', 'data-devlog': 'clear', onclick: () => void onClear() },
+  const action = (
+    iconName: 'share' | 'trash',
+    label: string,
+    hook: string,
+    onClick: () => void,
+    danger = false,
+  ) =>
+    iconButton({
+      icon: iconName,
+      label,
+      variant: danger ? 'danger' : 'secondary',
+      labelAt: 'beside',
+      wideHit: true,
+      class: 'set-ib-pill devlog-btn',
+      hooks: { 'data-devlog': hook },
+      onClick,
+    });
+  const exportLast = action('share', 'Export last session', 'export-last', () => {
+    void onExport('last');
+  });
+  const exportAll = action('share', 'Export all', 'export-all', () => {
+    void onExport('all');
+  });
+  const clearBtn = action(
+    'trash',
     'Clear',
+    'clear',
+    () => {
+      void onClear();
+    },
+    true,
   );
   const status = h('p', {
     class: 'devlog-status',
@@ -188,8 +210,8 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
   }
 
   function resetExportLabels(): void {
-    exportLast.textContent = 'Export last session';
-    exportAll.textContent = 'Export all';
+    setIconButtonLabel(exportLast, 'Export last session');
+    setIconButtonLabel(exportAll, 'Export all');
     delete exportLast.dataset.ready;
     delete exportAll.dataset.ready;
   }
@@ -198,7 +220,7 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
     window.clearTimeout(clearTimer);
     clearTimer = undefined;
     delete clearBtn.dataset.armed;
-    clearBtn.textContent = 'Clear';
+    setIconButtonLabel(clearBtn, 'Clear');
   }
 
   async function refresh(): Promise<void> {
@@ -245,7 +267,7 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
     if (result === 'needs-tap') {
       pending = { file, scope };
       const btn = scope === 'last' ? exportLast : exportAll;
-      btn.textContent = 'Tap to share';
+      setIconButtonLabel(btn, 'Tap to share');
       btn.dataset.ready = 'true';
       setStatus('File ready. Tap again to share it.');
       return;
@@ -270,7 +292,7 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
     resetExportLabels();
     busy = true;
     const btn = scope === 'last' ? exportLast : exportAll;
-    btn.textContent = 'Preparing…';
+    setIconButtonLabel(btn, 'Preparing…');
     for (const b of [exportLast, exportAll, clearBtn]) b.disabled = true;
     setStatus('Preparing the file…');
     try {
@@ -294,7 +316,7 @@ export function createDevLogPanel(opts: DevLogPanelOptions): DevLogPanelHandle {
     if (busy) return;
     if (!clearBtn.dataset.armed) {
       clearBtn.dataset.armed = 'true';
-      clearBtn.textContent = 'Tap again to clear';
+      setIconButtonLabel(clearBtn, 'Tap again to clear');
       clearTimer = window.setTimeout(disarmClear, DEVLOG_CLEAR_CONFIRM_MS);
       return;
     }

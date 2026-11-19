@@ -8,11 +8,15 @@
 // e2e hooks: `[data-goal-card]` = goals / prompt, `[data-goal=<id>]`, `[data-goal-pct]`,
 // `[data-goal-status]` = onTrack / behind / done, `[data-goal-due]`, `[data-goal-open]`,
 // `[data-goal-set]`.
+// M13d task 40c: Set your goal / Change are round iconButtons, the word beside the circle on a
+// full-width row (Set your goal ringed orange as the card's suggested action; only Start is filled).
 import type { Goal } from '../../core/types';
-import { forwardContent } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import '../intake/intake.css';
+import './mainPill.css';
+import './goalCard.css';
 
 export type GoalStatus = 'onTrack' | 'behind' | 'done';
 
@@ -137,16 +141,15 @@ export function goalCard(props: GoalCardProps, actions: GoalCardActions): HTMLEl
         h('span', {}, GOAL_PROMPT_TITLE),
       ),
       h('p', { class: 'goal-prompt-body' }, GOAL_PROMPT_BODY),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'goal-card-btn primary',
-          'data-goal-set': true,
-          onclick: () => actions.onSetGoal(),
-        },
-        ...forwardContent(GOAL_PROMPT_TITLE),
-      ),
+      iconButton({
+        icon: 'arrow-right',
+        label: GOAL_PROMPT_TITLE,
+        labelAt: 'beside',
+        wideHit: true,
+        class: 'goal-card-act card-cta',
+        hooks: { 'data-goal-set': true },
+        onClick: () => actions.onSetGoal(),
+      }),
     );
   return h(
     'section',
@@ -158,17 +161,15 @@ export function goalCard(props: GoalCardProps, actions: GoalCardActions): HTMLEl
       h('span', {}, goals.length === 1 ? 'Your goal' : 'Your goals'),
     ),
     h('ul', { class: 'goal-list' }, ...goals.map((g) => goalRow(g, props.today))),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'goal-card-btn',
-        'data-goal-open': true,
-        'aria-label': goals.length === 1 ? 'Change your goal' : 'Change your goals',
-        onclick: () => actions.onOpen(),
-      },
-      icon('pencil', 'sm'),
-      h('span', {}, 'Change'),
-    ),
+    iconButton({
+      icon: 'pencil',
+      label: 'Change',
+      labelAt: 'beside',
+      wideHit: true,
+      ariaLabel: goals.length === 1 ? 'Change your goal' : 'Change your goals',
+      class: 'goal-card-act',
+      hooks: { 'data-goal-open': true },
+      onClick: () => actions.onOpen(),
+    }),
   );
 }

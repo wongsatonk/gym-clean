@@ -34,16 +34,21 @@
 // `[data-unit-for="weigh-in"]`). A tap re-shows the stepper from the kg value it holds (no drift,
 // nothing saved), re-draws what shows a weight (weekly card, today's note, both trends) in the new
 // unit, and calls `onUnits` with the whole new preference (the app makes it app-wide).
+//
+// M13d task 40e: Back, Save and the card actions are round buttons (fuelButtons.ts); Accept,
+// Not now / Got it, Switch and Keep are circles with the word under them.
 import { checkHasChange, type TrendPoint } from '../../core/nutrition/adjust';
 import type { HistoryDay } from '../../core/nutrition/day';
 import type { UnitPrefs, WeeklyCheck } from '../../core/types';
 import { unitField } from '../../core/unitField';
 import { formatWeight, toUnit, type Unit } from '../../core/units';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { dateLabel } from '../screens/today';
 import { moodClass } from '../tokens';
 import { estimateTag, fromHealthTag } from './common';
+import { actionRow, fuelBack, fuelMain } from './fuelButtons';
 import { WEIGHT_UNIT_SWITCH } from '../unitSwitch';
 import { switchedUnitField } from './fields';
 import { targetText } from './nutritionSettings';
@@ -377,29 +382,22 @@ function activityBlock(p: WeighInView, a: WeighInActions): HTMLElement | null {
     'div',
     { class: 'wi-activity', 'data-activity-suggest': s.suggested },
     h('p', { class: 'wi-activity-text' }, line),
-    h(
-      'div',
-      { class: 'wi-card-actions' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'wi-dismiss wi-activity-btn',
-          'data-activity-switch': true,
-          onclick: () => onSwitchActivity(s.suggested),
-        },
-        h('span', {}, 'Switch'),
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'wi-dismiss wi-activity-btn',
-          'data-activity-keep': true,
-          onclick: () => onKeepActivity(),
-        },
-        h('span', {}, 'Keep'),
-      ),
+    actionRow(
+      'wi-card-actions',
+      iconButton({
+        icon: 'refresh',
+        label: 'Switch',
+        class: 'wi-activity-btn',
+        hooks: { 'data-activity-switch': true },
+        onClick: () => onSwitchActivity(s.suggested),
+      }),
+      iconButton({
+        icon: 'check',
+        label: 'Keep',
+        class: 'wi-activity-btn',
+        hooks: { 'data-activity-keep': true },
+        onClick: () => onKeepActivity(),
+      }),
     ),
   );
 }
@@ -461,32 +459,25 @@ function weeklyCard(p: WeighInView, a: WeighInActions): HTMLElement | null {
     copy.change
       ? h('p', { class: 'wi-card-change' }, h('span', {}, copy.change), ' ', estimateTag())
       : null,
-    h(
-      'div',
-      { class: 'wi-card-actions' },
+    actionRow(
+      'wi-card-actions',
       copy.accept
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'wi-accept',
-              'data-weekly-accept': true,
-              onclick: () => a.onAccept(),
-            },
-            icon('check', 'md'),
-            h('span', {}, copy.accept),
-          )
+        ? iconButton({
+            icon: 'check',
+            label: copy.accept,
+            class: 'wi-accept',
+            hooks: { 'data-weekly-accept': true },
+            onClick: () => a.onAccept(),
+          })
         : null,
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'wi-dismiss',
-          'data-weekly-dismiss': true,
-          onclick: () => a.onDismiss(),
-        },
-        h('span', {}, copy.dismiss),
-      ),
+      iconButton({
+        // "Got it" closes an info card; "Not now" leaves the target as it is.
+        icon: copy.accept ? 'close' : 'check',
+        label: copy.dismiss,
+        class: 'wi-dismiss',
+        hooks: { 'data-weekly-dismiss': true },
+        onClick: () => a.onDismiss(),
+      }),
     ),
     activityBlock(p, a),
   );
@@ -687,17 +678,7 @@ export function weighInScreen(p: WeighInProps, a: WeighInActions): HTMLElement {
     h(
       'header',
       { class: 'fuel-head' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'fuel-back',
-          'data-swipe-back': true, // M13d task 24: the edge swipe's Back
-          onclick: () => a.onBack(),
-        },
-        icon('back', 'md'),
-        h('span', {}, 'Back'),
-      ),
+      fuelBack(() => a.onBack(), { swipe: true }), // M13d task 24: the edge swipe's Back
       h('h1', { class: 'page-title' }, 'Weigh-in'),
     ),
     cardSlot,
@@ -706,17 +687,13 @@ export function weighInScreen(p: WeighInProps, a: WeighInActions): HTMLElement {
       { class: 'wi-entry', 'aria-label': 'Weigh in' },
       field.el,
       todayNote,
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'primary-btn cta-btn wi-save',
-          'data-weigh-save': true,
-          onclick: () => a.onSave(field.get().metric),
-        },
-        icon('check', 'lg'),
-        p.todayKg !== null ? 'Update weigh-in' : 'Save weigh-in',
-      ),
+      fuelMain({
+        icon: 'check',
+        label: p.todayKg !== null ? 'Update weigh-in' : 'Save weigh-in',
+        class: 'wi-save',
+        hooks: { 'data-weigh-save': true },
+        onClick: () => a.onSave(field.get().metric),
+      }),
     ),
     h('h2', { class: 'fuel-sub' }, 'Trend'),
     trendSlot,

@@ -44,17 +44,15 @@
   gap: 8px;
 }
 
-.pn-dismiss {
-  flex: 1 1 140px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: var(--tap-min);
-  padding: 0 16px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
+.pn-actions > .pn-dismiss {
+  margin-inline-start: auto;
+}
+
+/* Summary's Log (M13d task 40e): a round button; styling only, so its hit box stays at least
+   the old 96 × 56. */
+.meal-idea-log.icon-btn {
+  flex: none;
+  min-width: 96px;
 }
 
 /* Summary: the idea card sits on the Energy page like the protein line, as one row. */

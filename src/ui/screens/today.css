@@ -82,15 +82,33 @@
   display: none;
 }
 
-/* Only Start is filled: the notice cards' primary buttons are outlines on Today. */
-.today .readiness-cta,
-.today .missed-cta,
-.today .gym-prompt-cta,
-.today .goal-card-btn.primary,
-.today .feel-save {
+/* Only Start is filled: the notice cards' primary buttons are outlines on Today. M13d task 40c:
+   the cards' own buttons are round iconButtons now (never filled; `.card-cta` rings the
+   suggested one in orange, mainPill.css); the missing-kit prompt (gymPrompt.ts) keeps this. */
+.today .gym-prompt-cta {
   background: transparent;
   color: var(--cta);
   border: 2px solid var(--cta);
+}
+
+/* M13d task 40c: the cards' round buttons, words under the circles, side by side. Each button is
+   at least 56px tall whatever the load (follow-up (u): the old bar measured 55.99997px). */
+.today .missed-actions,
+.program-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.missed-act.icon-btn,
+.adjusted-act.icon-btn {
+  flex: none;
+  min-width: 88px;
+  min-height: 56px;
+}
+
+.top-bar .coach-open.icon-btn {
+  margin-left: auto;
 }
 
 /* The last row of the week strip ends clear of the tab bar. */

@@ -1,21 +1,15 @@
 /* M13c task 14: the Search button (searchButton.ts) and the title row that holds it.
-   Tokens only. Neutral like the Coach button: orange stays Start's. */
+   Tokens only. Neutral like the Coach button: orange stays Start's. M13d task 40a: the button
+   is a round icon button (iconButton.css: circle, word beside, sizes, press); here only its
+   place in the row. */
 
 .search-btn {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: var(--tap-min);
-  min-width: var(--tap-min);
-  padding: 0 14px;
   margin-left: auto;
-  font-size: var(--fs-body);
-  font-weight: 700;
+}
+
+.search-btn .icon-btn-label {
   white-space: nowrap;
-  color: var(--text);
-  background: var(--surface-2);
-  border: var(--line-w) solid var(--line);
 }
 
 /* Title left, Search right; wraps (Search under the title) rather than scroll sideways. */

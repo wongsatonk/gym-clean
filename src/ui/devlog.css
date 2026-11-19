@@ -17,42 +17,19 @@
 }
 
 .devlog-actions {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.devlog-actions [data-devlog='export-last'] {
-  grid-column: 1 / -1;
-}
-
-.devlog-btn {
-  min-height: var(--tap-min);
-  padding: 0 14px;
-  font-weight: 700;
-  background: var(--surface-2);
-}
-
-.devlog-btn[data-ready] {
-  background: var(--cta);
-  color: var(--on-cta);
+/* M13d task 40d: the actions are round icon buttons on pill rows (iconButton.css,
+   ./settingsButtons.css). A prepared export ("Tap to share") takes the main colours; an armed
+   Clear fills its danger circle (settingsButtons.css). */
+.devlog-btn.icon-btn[data-ready] {
+  --ib-fill: var(--cta);
+  --ib-ink: var(--on-cta);
+  --ib-ring: var(--cta);
   border-color: var(--cta);
-}
-
-.devlog-btn.danger {
-  color: var(--danger);
-  background: transparent;
-}
-
-.devlog-btn.danger[data-armed] {
-  background: var(--danger);
-  color: var(--on-danger);
-  border-color: var(--danger);
-}
-
-.devlog-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
 }
 
 .devlog-status:empty,

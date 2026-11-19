@@ -224,7 +224,7 @@ test('Audio test: chosen session type is set before each play; camera stops on o
     '.audio-test-note',
     '.audio-test-status',
     '.audio-seg-btn',
-    '.audio-test-btn',
+    '.audio-test-btn .icon-btn-label',
   ]) {
     const sizes = await page
       .locator(sel)
