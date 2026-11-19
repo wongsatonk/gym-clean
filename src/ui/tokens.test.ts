@@ -520,7 +520,7 @@ describe('typography (M13d task 17)', () => {
   const DISPLAY_OK: Record<string, string> = {
     [ruleId(
       '../styles.css',
-      `.summary-title, .exercise-name, .stepper-value, .rest-clock, .stat-value, ${WORKOUT} :is(.primary-btn, .page-title), .rep-num, .rep-target, .auto-stop-num, .auto-stop-secs, .cam-rest-clock, .hold-clock`,
+      `.summary-title, .exercise-name, .stepper-value, .rest-clock, .stat-value, ${WORKOUT} .page-title, .rep-num, .rep-target, .auto-stop-num, .auto-stop-secs, .cam-rest-clock, .hold-clock`,
     )]: 'numbers, timers and the workout screens (Start: mainPill.css .start-pill)',
     [ruleId('../styles.css', '.brand')]: 'the Gym Clean wordmark',
     [ruleId('./brand.css', '.brand-name')]: 'the Gym Clean wordmark',

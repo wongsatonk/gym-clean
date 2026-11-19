@@ -21,7 +21,7 @@ import { hasDemo } from './demo3d/ids';
 import { createDemoPlayer, type DemoPlayer } from './demo3d/player';
 import { h } from './dom';
 import { installSheetSwipe } from './gestures/sheetSwipe';
-import { workoutOnScreen } from './gestures/edgeBack';
+import { motionOffInWorkout, workoutOnScreen } from './gestures/edgeBack';
 import { iconButton } from './iconButton';
 import { icon } from './icons';
 import { moreDisclosure } from './moreDisclosure';
@@ -197,6 +197,9 @@ export function createHowToSheet(opts: HowToSheetOptions): HowToSheetHandle {
         ).el
       : null,
   );
+
+  // Opened mid-workout (Exercise, Rest): nothing new moves, so no press scale / glow.
+  motionOffInWorkout(el);
 
   // Swipe down = Close (one code path); the 3D stage keeps its own drag.
   const unswipe = installSheetSwipe(el, {

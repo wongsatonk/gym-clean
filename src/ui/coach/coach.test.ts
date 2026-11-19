@@ -14,6 +14,7 @@ import {
   type CoachSheetProps,
 } from './coachSheet';
 import { proposalCard, redFlagCard, rowLabel } from './proposalCard';
+import { NO_SWIPE_BACK } from '../gestures/edgeBack';
 import { UNDO_MS, undoBarStyle, undoToast } from './undoToast';
 
 useFakeDom();
@@ -324,6 +325,15 @@ describe('undoToast', () => {
     expect(fake.oneByClass('undo-text').textContent).toBe('Done. Curls swapped for hammer curls.');
     expect(fake.oneByClass('undo-bar').getAttribute('style')).toBe('--undo-ms:10000ms');
     expect(fake.oneByClass('undo-track').getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('over a workout it is motion-off (no press scale / glow on Undo); elsewhere not', () => {
+    const doc = globalThis.document as unknown as { querySelector?: (s: string) => unknown };
+    expect(mountToast().fake.getAttribute('data-motion')).toBeNull();
+    doc.querySelector = (sel: string) => (sel === NO_SWIPE_BACK ? {} : null);
+    expect(mountToast().fake.getAttribute('data-motion')).toBe('off');
+    doc.querySelector = () => null;
+    expect(mountToast().fake.getAttribute('data-motion')).toBeNull();
   });
 
   it('expires once after the window', () => {

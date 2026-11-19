@@ -96,17 +96,63 @@ type Sweep = {
 };
 
 /**
- * Measures every visible `[data-icon-btn]` under `root` (one evaluate) and checks the Goal 7
- * rules on each. Keyboard modality first (one Tab), so `focus()` shows the focus-visible ring
- * exactly as a keyboard user would see it. Returns the words found.
+ * Waits until `root` has settled. Screens that load data (Calendar, Today) render twice and
+ * replace their root when the data arrives; measuring in between reads a root that is about to
+ * be detached (0 buttons). Settled: a round button visible, no loading placeholder
+ * (`aria-busy`) under the root, and the same root element with the same number (> 0) of
+ * visible round buttons on two reads 50 ms (several frames) apart.
+ */
+async function settle(page: Page, root: string): Promise<void> {
+  await expect(page.locator(`${root} [data-icon-btn]`).first()).toBeVisible();
+  await expect(page.locator(`${root} [aria-busy="true"]`)).toHaveCount(0);
+  let last: string | null = null;
+  await expect
+    .poll(
+      async () => {
+        const snap = await page.evaluate((sel) => {
+          const w = window as unknown as {
+            __sweepIds?: WeakMap<Element, number>;
+            __sweepN?: number;
+          };
+          const el = document.querySelector(sel);
+          if (!el) return null;
+          w.__sweepIds ??= new WeakMap();
+          let id = w.__sweepIds.get(el);
+          if (id === undefined) {
+            id = w.__sweepN = (w.__sweepN ?? 0) + 1;
+            w.__sweepIds.set(el, id);
+          }
+          const n = [...el.querySelectorAll('[data-icon-btn]')].filter((b) =>
+            b.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true }),
+          ).length;
+          return n > 0 ? `${id}:${n}` : null;
+        }, root);
+        const same = snap !== null && snap === last;
+        last = snap;
+        return same;
+      },
+      { message: `${root} settles`, intervals: [50], timeout: 15_000 },
+    )
+    .toBe(true);
+}
+
+/**
+ * Measures every visible `[data-icon-btn]` under `root` (one evaluate, on the root as it is at
+ * that moment, after `settle`) and checks the Goal 7 rules on each. Keyboard modality first (one
+ * Tab), so `focus()` shows the focus-visible ring exactly as a keyboard user would see it.
+ * Returns the words found.
  */
 async function sweep(page: Page, root: string): Promise<string[]> {
-  await expect(page.locator(`${root} [data-icon-btn]`).first()).toBeVisible();
+  await settle(page, root);
   await page.keyboard.press('Tab');
-  const rows: Sweep[] = await page
-    .locator(root)
-    .first()
-    .evaluate((scope) => {
+  let rows: Sweep[] | null = null;
+  // The root is looked up inside the page, so the measure never runs on a detached element; if
+  // it re-rendered away between settle and measure, settle again (bounded).
+  for (let i = 0; i < 3 && rows === null; i++) {
+    if (i > 0) await settle(page, root);
+    rows = await page.evaluate((sel): Sweep[] | null => {
+      const scope = document.querySelector(sel);
+      if (!scope) return null;
       const norm = (s: string) =>
         s
           .toLowerCase()
@@ -181,8 +227,10 @@ async function sweep(page: Page, root: string): Promise<string[]> {
         };
       });
       (document.activeElement as HTMLElement | null)?.blur?.();
-      return out;
-    });
+      return out.length > 0 ? out : null;
+    }, root);
+  }
+  if (rows === null) throw new Error(`${root}: no round buttons after settling 3 times`);
   expect(rows.length, `${root}: round buttons`).toBeGreaterThan(0);
   for (const r of rows) {
     const id = `${root} "${r.word || r.name}"`;
@@ -226,11 +274,15 @@ async function pressTransform(page: Page, btn: Locator): Promise<{ circle: strin
   const t = await btn.evaluate((b) => ({
     circle: getComputedStyle(b.querySelector('.icon-btn-circle') as Element).transform,
     btn: getComputedStyle(b).transform,
+    // The element read is the one held down (not a fresh copy from a re-render, which would
+    // read "still" without being pressed).
+    active: b.matches(':active'),
   }));
   // Leave before releasing: no click.
   await page.mouse.move(1, 1);
   await page.mouse.up();
-  return t;
+  expect(t.active, 'the pressed button is the one measured').toBe(true);
+  return { circle: t.circle, btn: t.btn };
 }
 
 const still = (t: string) => t === 'none' || t === 'matrix(1, 0, 0, 1, 0, 0)';
@@ -433,6 +485,94 @@ test('a workout: Exercise, Pause, Rest, Summary; a press moves nothing mid-set',
   expect(errors).toEqual([]);
 });
 
+/**
+ * Presses `btn` (a round button in a sheet or toast mounted on document.body, outside the
+ * session tree) and expects no motion: the sheet's root carries `data-motion="off"`.
+ */
+async function stillInSheet(page: Page, sheet: Locator, btn: Locator, what: string) {
+  await expect(sheet, `${what} is motion-off`).toHaveAttribute('data-motion', 'off');
+  await expect(btn).toHaveAttribute('data-icon-btn', /.*/);
+  const t = await pressTransform(page, btn);
+  expect(still(t.circle) && still(t.btn), `${what} press ${JSON.stringify(t)}`).toBe(true);
+}
+
+test('sheets on the body mid-workout (How-to, effort Why?, Pause → Coach): a press moves nothing', async ({
+  page,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  await openApp(page, NOW);
+
+  // Proof the check can see motion: the same How-to sheet off a workout (Library → detail)
+  // is not motion-off and its Close scales on a press.
+  await settle(page, 'main[data-screen="today"]');
+  await page.locator('main[data-screen="today"] [data-search-open]').click();
+  const library = page.locator('main[data-screen="library"]');
+  await expect(library).toBeVisible();
+  await library.locator('[data-library-search]').fill('bench');
+  await library.locator('[data-ex-open]').first().click();
+  const detail = page.locator('main[data-screen="exercise-detail"]');
+  await expect(detail).toBeVisible();
+  await detail.locator('[data-detail-howto]').click();
+  const howTo = page.locator('[data-howto="sheet"]');
+  await expect(howTo).toBeVisible();
+  await expect(howTo).not.toHaveAttribute('data-motion', /.*/);
+  const off = await pressTransform(page, howTo.locator('[data-howto="close"]'));
+  expect(off.circle).toMatch(/^matrix\(0\.92, 0, 0, 0\.92, 0, 0\)$/);
+  await howTo.locator('[data-howto="close"]').click();
+  await expect(howTo).toHaveCount(0);
+  await detail.locator('[data-swipe-back]').click();
+  await expect(library).toBeVisible();
+  await library.locator('[data-library-back]').click();
+  await settle(page, 'main[data-screen="today"]');
+
+  await page
+    .getByRole('button', { name: /Push A/ })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Start workout' }).click();
+  const ex = page.locator('main[data-screen="exercise"]');
+  await expect(ex).toBeVisible();
+
+  // How-to from Exercise.
+  await ex.locator('[data-howto-open]').click();
+  await expect(howTo).toBeVisible();
+  await stillInSheet(page, howTo, howTo.locator('[data-howto="close"]'), 'How-to (Exercise)');
+  await howTo.locator('[data-howto="close"]').click();
+  await expect(howTo).toHaveCount(0);
+
+  // Pause → Coach: the compact chat sheet.
+  await openPause(page);
+  await page.locator('[data-pause="coach"]').click();
+  const chat = page.getByRole('dialog', { name: 'Coach' });
+  await expect(chat).toBeVisible();
+  const chatClose = chat.getByRole('button', { name: 'Close' });
+  await stillInSheet(page, chat, chatClose, 'Pause → Coach');
+  await chatClose.click();
+  await expect(chat).toHaveCount(0);
+  await page
+    .getByRole('dialog', { name: 'Paused' })
+    .getByRole('button', { name: 'Resume' })
+    .click();
+  await expect(page.getByRole('dialog', { name: 'Paused' })).toHaveCount(0);
+
+  // Rest: the effort row's Why? opens the learn card.
+  await page.clock.runFor(30_000);
+  await ex.getByRole('button', { name: 'Set done' }).click();
+  const effort = page.locator('[data-effort]');
+  await expect(effort).toBeVisible();
+  await effort.locator('[data-effort-why]').click();
+  const card = page.locator('[data-learn-sheet="effort"]');
+  await expect(card).toBeVisible();
+  await stillInSheet(page, card, card.locator('[data-learn-close]'), 'effort Why? (Rest)');
+  await card.locator('[data-learn-close]').click();
+  await expect(card).toHaveCount(0);
+  await expect(page.locator('[data-screen="rest"]')).toBeVisible();
+
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 /** The 1.16.2 hit boxes (px, at 390×844) of the workout sheets' buttons: never smaller. */
 const SHEET_BOXES_1162 = {
   close: { w: 96, h: 56 },
@@ -526,6 +666,7 @@ test('workout sheets (body, exercise list, notes): names and 1.16.2 hit boxes ke
 test.describe('press motion', () => {
   test('Today: a press scales the circle (≤ 200 ms) and never the whole row', async ({ page }) => {
     await openApp(page, NOW);
+    await settle(page, 'main[data-screen="today"]');
     const start = page.locator('main[data-screen="today"] [data-icon-btn][data-variant="main"]');
     await expect(start.first()).toBeVisible();
     const t = await pressTransform(page, start.first());
@@ -538,6 +679,7 @@ test.describe('press motion', () => {
     test.use({ reducedMotion: 'reduce' });
     test('Today and a sheet: a press moves nothing, colour only', async ({ page }) => {
       await openApp(page, NOW);
+      await settle(page, 'main[data-screen="today"]');
       const today = page.locator('main[data-screen="today"]');
       const main = today.locator('[data-icon-btn][data-variant="main"]').first();
       await expect(main).toBeVisible();
@@ -549,6 +691,7 @@ test.describe('press motion', () => {
       await page.locator('main[data-screen="fuel"] [data-log-open]').first().click();
       const close = page.locator('[data-log-sheet] [data-close]');
       await expect(close).toBeVisible();
+      await settle(page, '[data-log-sheet]');
       const t = await pressTransform(page, close);
       expect(still(t.circle) && still(t.btn), JSON.stringify(t)).toBe(true);
     });

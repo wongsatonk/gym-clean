@@ -40,6 +40,20 @@ export function workoutOnScreen(
   );
 }
 
+/**
+ * Marks a sheet or toast that mounts outside the screen tree (on document.body) `data-motion="off"`
+ * when a workout is on screen as it opens, so nothing new moves mid-set: its round buttons keep
+ * the colour change without the press scale and glow (iconButton.css), and the motion.ts helpers
+ * leave it still (MOTION_OFF). Off a workout it is left alone. Returns `el`.
+ */
+export function motionOffInWorkout<T extends Pick<Element, 'setAttribute'>>(
+  el: T,
+  doc: Pick<Document, 'querySelector'> | null | undefined = globalThis.document,
+): T {
+  if (workoutOnScreen(doc)) el.setAttribute('data-motion', 'off');
+  return el;
+}
+
 const MODAL = '[aria-modal="true"]';
 /** On the screen while it follows the finger (its leading edge; edgeBack.css). */
 export const MOVING_CLASS = 'edge-back-moving';

@@ -142,18 +142,6 @@
   gap: 4px 8px;
 }
 
-.fuel-sheet .primary-btn.cta-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-/* Log stays in reach while the guesses and variants scroll (1 tap after the photo). */
-.fuel-sheet .primary-btn.photo-log:not(:disabled) {
-  position: sticky;
-  bottom: max(12px, env(safe-area-inset-bottom));
-  z-index: 1;
-}
-
 /* M7b task 15: the Photo row at the top of the log sheet (or the Settings hint, M7b-q4). */
 .log-photo[hidden],
 .log-photo-hint[hidden] {

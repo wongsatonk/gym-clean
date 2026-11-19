@@ -67,7 +67,7 @@ async function mount(page: Page, accent = 'orange'): Promise<void> {
     const speaker = document.createElement('div');
     speaker.className = 'voice-test';
     speaker.innerHTML =
-      '<button class="ghost-btn wide-btn" data-voice-test>Speaker check</button>' +
+      '<button class="ghost-btn" data-voice-test>Speaker check</button>' +
       '<p class="muted">No sound? Turn Silent mode off and the volume up.</p>';
     tokens.applyAccent(state.accent);
     const render = () => {

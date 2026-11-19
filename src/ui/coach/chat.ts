@@ -55,6 +55,7 @@ import {
 } from '../../core/trainer/coach';
 import type { BodyArea, BrainSource, ChatMessage, CheckIn, FocusBlock } from '../../core/types';
 import { h } from '../dom';
+import { motionOffInWorkout } from '../gestures/edgeBack';
 import { emptyState } from '../emptyState';
 import { iconButton } from '../iconButton';
 import { setIconButtonLabel } from '../iconButtonLabel';
@@ -1027,6 +1028,8 @@ export function chat(p: ChatProps, a: ChatActions): HTMLElement {
     },
     h('div', { class: 'cs-panel chat' }, ...body),
   );
+  // The Pause sheet's chat is up mid-workout: no press scale / glow on its round buttons.
+  motionOffInWorkout(root);
   // Focus trap and Escape, as the Pause sheet: Escape closes; Tab / Shift+Tab cycle the
   // sheet's visible controls in order.
   root.addEventListener('keydown', (ev) => {

@@ -15,6 +15,7 @@
 // labelled "Ask the coach" with button "Send", button "Close".
 import type { BodyArea, FoodSuggestion, Proposal } from '../../core/types';
 import { h } from '../dom';
+import { motionOffInWorkout } from '../gestures/edgeBack';
 import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
 import { installSheetSwipe } from '../gestures/sheetSwipe';
@@ -305,6 +306,8 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
     },
     panel,
   );
+  // Opened from the Pause sheet mid-workout: no press scale / glow.
+  motionOffInWorkout(sheet);
   // M13d task 25: swipe down = Close (the panel follows; a scrolled message list scrolls first).
   installSheetSwipe(sheet, { close: () => close.click(), mover: panel });
 

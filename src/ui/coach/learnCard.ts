@@ -34,7 +34,7 @@
 // `data-learn-open=<id>` (or the caller's own hook).
 import type { LearnCard } from '../../core/types';
 import { h } from '../dom';
-import { workoutOnScreen } from '../gestures/edgeBack';
+import { motionOffInWorkout, workoutOnScreen } from '../gestures/edgeBack';
 import { installSheetSwipe } from '../gestures/sheetSwipe';
 import { iconButton } from '../iconButton';
 import { icon } from '../icons';
@@ -192,6 +192,8 @@ function buildSheet(card: LearnCard, a: LearnSheetActions, opts: LearnSheetOptio
     veil,
     panel,
   );
+  // Opened mid-workout (the effort "why" from Rest): no press scale / glow, no slide-in.
+  motionOffInWorkout(root);
   // Escape closes; Tab / Shift+Tab cycle through the sheet's controls (More, Got it).
   root.addEventListener('keydown', (ev) => {
     const kev = ev as KeyboardEvent;

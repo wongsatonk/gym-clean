@@ -345,14 +345,6 @@ body:has(> .undo-toast) .fuel-sheet {
   scroll-padding-bottom: calc(var(--toast-space, 248px) + 96px);
 }
 
-/* Sticky edges are measured inside the sheet's padding, which already holds the toast's room. */
-body:has(> .undo-toast) .fuel-sheet .cta-btn {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  box-shadow: 0 0 0 8px var(--bg);
-}
-
 .fuel-sheet > * {
   width: 100%;
   max-width: 560px;
@@ -574,8 +566,4 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
 .rx-ing .rx-remove {
   grid-column: 2;
   grid-row: 2;
-}
-
-.fuel-sheet .primary-btn.cta-btn {
-  margin-top: 4px;
 }

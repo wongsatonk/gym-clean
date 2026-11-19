@@ -363,14 +363,14 @@ html:not([data-background='plain'])
 }
 
 /* Display width (Barlow Condensed) for big numbers, timers, Start and the workout screens'
-   titles and CTA. Everything else, sentence headings included, is --font-body. */
+   titles. Everything else, sentence headings included, is --font-body. */
 .summary-title,
 .exercise-name,
 .stepper-value,
 .rest-clock,
 .stat-value,
 :is([data-screen='exercise'], [data-screen='rest'], [data-screen='summary'], .camera-sheet, .pause-sheet)
-  :is(.primary-btn, .page-title),
+  .page-title,
 .rep-num,
 .rep-target,
 .auto-stop-num,
@@ -1460,18 +1460,6 @@ h4 {
   gap: 6px;
 }
 
-/* THE action button (mix): full width, 72px, orange, icon + words. */
-.primary-btn.cta-btn {
-  width: 100%;
-  min-height: var(--tap-cta);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  font-size: var(--fs-title);
-  font-weight: 700;
-}
-
 /* === M12 1b task 24: warm-up strip on the Exercise screen (exercise.ts) — start ===
    Plain text and one neutral button on one row; no transition or animation (the screen is
    motion-off). The label wraps to "Warm-up 1 of 2" / "20 kg × 8" beside Skip on a phone; the
@@ -1917,14 +1905,6 @@ h4 {
 /* The rows (Resume, Coach, Skip exercise, End workout) are round-button pills: midset.css
    (.mid-pill .mid-row; End workout's danger ring and armed fill there too). */
 
-.cta-btn {
-  transition: transform var(--dur-fast) var(--ease-standard);
-}
-
-.cta-btn:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
 /* ---------- Session ---------- */
 
 .top-bar {
@@ -1977,16 +1957,6 @@ h4 {
   font-variant-numeric: tabular-nums;
 }
 
-.primary-btn {
-  min-height: 88px;
-  font-size: var(--fs-head);
-  font-weight: 700;
-  background: var(--cta);
-  color: var(--on-cta);
-  border: none;
-  margin-top: auto;
-}
-
 .stack {
   position: relative;
 }
@@ -2010,10 +1980,6 @@ h4 {
   font-size: var(--fs-num-sm);
   font-weight: 700;
   text-align: center;
-}
-
-.overlay .primary-btn {
-  margin-top: 0;
 }
 
 /* ---------- Summary ---------- */
@@ -2480,14 +2446,6 @@ h4 {
   background: linear-gradient(transparent, var(--bg) 24%);
 }
 
-.sticky-bottom .primary-btn {
-  width: 100%;
-}
-
-.primary-btn:disabled {
-  opacity: 0.6;
-}
-
 .sheet {
   justify-content: flex-start;
   gap: 10px;
@@ -2496,10 +2454,6 @@ h4 {
   max-width: 560px;
   margin: 0 auto;
   background: var(--bg);
-}
-
-.sheet .primary-btn {
-  margin-top: 8px;
 }
 
 input[type='text'],
@@ -2622,10 +2576,6 @@ textarea:focus-visible {
 }
 
 /* ---------- M3: camera + 3D skeleton ---------- */
-
-.wide-btn {
-  width: 100%;
-}
 
 /* M4c camera-first layout: slim top band, the video fills the rest, slim bottom band. */
 .camera-sheet {
@@ -3422,17 +3372,6 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
-/* Neutral actions (Camera test, Speaker check): surface-2, never the action colour. */
-.settings .set-action {
-  width: 100%;
-  min-height: var(--tap-bar);
-  padding: 0 18px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
-  border-color: var(--line);
-}
-
 .settings .voice-test {
   display: flex;
   flex-direction: column;
@@ -3679,14 +3618,6 @@ html[data-text-size='larger'] .bg-picker .segmented {
 .sheet textarea {
   border-radius: var(--r-btn);
   background: var(--surface);
-}
-
-.sheet > .primary-btn {
-  min-height: var(--tap-cta);
-  margin-top: 12px;
-  font-size: var(--fs-title);
-  font-weight: 700;
-  border-radius: var(--r-btn);
 }
 
 .body-sheet .muscle-slot.full {

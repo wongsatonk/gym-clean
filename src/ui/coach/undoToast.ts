@@ -6,6 +6,7 @@
 //
 // e2e hooks: `data-undo-toast`, button "Undo".
 import { h } from '../dom';
+import { motionOffInWorkout } from '../gestures/edgeBack';
 import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import '../chromeButtons.css';
@@ -73,6 +74,8 @@ export function undoToast(p: UndoToastProps, a: UndoToastActions): UndoToast {
       h('div', { class: 'undo-bar', style: undoBarStyle(ms) }),
     ),
   );
+  // Shown over a workout (an Apply from the Pause sheet): Undo presses without scale / glow.
+  motionOffInWorkout(el);
   timer = setTimeout(() => {
     timer = undefined;
     if (el.isConnected) a.onExpire?.();

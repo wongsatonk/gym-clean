@@ -82,15 +82,6 @@
   display: none;
 }
 
-/* Only Start is filled: the notice cards' primary buttons are outlines on Today. M13d task 40c:
-   the cards' own buttons are round iconButtons now (never filled; `.card-cta` rings the
-   suggested one in orange, mainPill.css); the missing-kit prompt (gymPrompt.ts) keeps this. */
-.today .gym-prompt-cta {
-  background: transparent;
-  color: var(--cta);
-  border: 2px solid var(--cta);
-}
-
 /* M13d task 40c: the cards' round buttons, words under the circles, side by side. Each button is
    at least 56px tall whatever the load (follow-up (u): the old bar measured 55.99997px). */
 .today .missed-actions,

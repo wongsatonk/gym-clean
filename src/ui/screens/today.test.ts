@@ -1165,7 +1165,7 @@ describe('Today: hero first + "things to sort" (M13)', () => {
 
   it('exactly one filled button: Start, the round main button (every notice open, the feel row open)', () => {
     // The scan sees the fills it guards against (else this test would pass vacuously).
-    expect(FILLED).toContainEqual(['primary-btn']);
+    expect(FILLED).toContainEqual(['goal-card-btn', 'primary']);
     for (const over of [{}, { noticesOpen: true }]) {
       const el = renderAll(over);
       const buttons = el.byTag('button');
@@ -1174,7 +1174,7 @@ describe('Today: hero first + "things to sort" (M13)', () => {
       expect(main).toHaveLength(1);
       expect(main[0]?.classes).toContain('start-pill');
       expect(main[0]?.textContent).toBe('Start workout');
-      // No old filled bar is left unless today.css outlines it (the missing-kit prompt).
+      // No old filled bar is left (unless today.css outlines it).
       expect(buttons.filter((b) => hit(b, FILLED) && !hit(b, OUTLINED))).toEqual([]);
       // The cards' suggested actions are ringed round buttons, not filled ones.
       const ringed = buttons.filter((b) => b.classes.includes('card-cta'));

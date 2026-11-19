@@ -3,7 +3,13 @@
 // here: which control is pressed, when nothing happens, the follow, Reduce Motion and feel().
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MOVING_CLASS, installEdgeBack, swipeBackTarget } from './edgeBack';
+import {
+  MOVING_CLASS,
+  NO_SWIPE_BACK,
+  installEdgeBack,
+  motionOffInWorkout,
+  swipeBackTarget,
+} from './edgeBack';
 
 type Listener = (e: unknown) => void;
 
@@ -451,5 +457,30 @@ describe('installEdgeBack', () => {
     expect(screen.style.transform).toBe('');
     touch(app, 'touchend', 200, 400, 900);
     expect(sheetBack.clicks).toBe(1);
+  });
+});
+
+describe('motionOffInWorkout', () => {
+  const doc = (match: boolean) => ({
+    querySelector: (sel: string) => (match && sel === NO_SWIPE_BACK ? ({} as Element) : null),
+  });
+  const sheet = () => {
+    const attrs: Record<string, string> = {};
+    return { attrs, setAttribute: (k: string, v: string) => void (attrs[k] = v) };
+  };
+
+  it('marks a sheet opened while a workout is on screen motion-off', () => {
+    const s = sheet();
+    expect(motionOffInWorkout(s, doc(true))).toBe(s);
+    expect(s.attrs['data-motion']).toBe('off');
+  });
+
+  it('leaves a sheet opened off a workout (or with no document) alone', () => {
+    const a = sheet();
+    motionOffInWorkout(a, doc(false));
+    expect(a.attrs).toEqual({});
+    const b = sheet();
+    motionOffInWorkout(b, null);
+    expect(b.attrs).toEqual({});
   });
 });

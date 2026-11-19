@@ -215,13 +215,6 @@
   flex: none;
 }
 
-.settings .eval-summary + .set-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
 .eval-rows {
   list-style: none;
   margin: 0;
