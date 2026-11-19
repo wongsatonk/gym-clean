@@ -33,12 +33,14 @@ import {
   setBarcodeLookup,
   setMode,
 } from '../../data/nutrition/store';
+import { saveMeasurement } from '../../data/trainerKit/store';
 import type { TabId } from '../tabBar';
 import { FakeEl, asFake, useFakeDom } from '../screens/testDom';
 import {
   createFuel,
   type FuelController,
   type FuelHealthHost,
+  type FuelHost,
   type FuelPhotoHost,
 } from './fuelController';
 
@@ -98,10 +100,12 @@ type Toast = { text: string; onUndo: () => void };
 let db: GymDb;
 let n = 0;
 beforeEach(async () => {
+  vi.stubGlobal('scrollTo', () => undefined); // M13d: every Set up Fuel open scrolls to the top
   db = new GymDb(`fuel-ctrl-${n++}`);
   await db.open();
 });
 afterEach(async () => {
+  await flush(); // M13d: a Set up Fuel open finishes its load / Health read before the db closes
   vi.unstubAllGlobals();
   db.close();
   await db.delete();
@@ -111,7 +115,12 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0));
 };
 
-function makeApp(now = EVENING, photo?: FuelPhotoHost, health?: FuelHealthHost) {
+function makeApp(
+  now = EVENING,
+  photo?: FuelPhotoHost,
+  health?: FuelHealthHost,
+  more: Pick<FuelHost, 'healthProfile' | 'lengthUnit' | 'trainerKit'> = {},
+) {
   const root = new FakeEl('main');
   (root as unknown as { querySelector: (s: string) => FakeEl | null }).querySelector = (s) =>
     select(root, s);
@@ -151,6 +160,7 @@ function makeApp(now = EVENING, photo?: FuelPhotoHost, health?: FuelHealthHost) 
     },
     photo,
     health,
+    ...more,
   });
   const openFuel = async () => {
     await ctrl.open();
@@ -264,7 +274,8 @@ describe('setupForGoal (M12 1b; M13d task 3: onLeave / inFlow)', () => {
     expect(app.calls.showFuel).toBe(1);
     expect(app.onScreen('data-screen').getAttribute('data-screen')).toBe('fuel-setup');
     expect(app.root.find((e) => e.hasAttribute('data-onboarding-step'))).toHaveLength(0);
-    expect(scrolls).toEqual([]);
+    // M13d (t): opened at the top too (the intake summary's scroll doesn't carry over).
+    expect(scrolls).toEqual([[0, 0]]);
     pickBoth(app);
     app.onScreen('data-setup-save').click();
     await flush();
@@ -355,13 +366,41 @@ describe('setupForGoal (M12 1b; M13d task 3: onLeave / inFlow)', () => {
     expect(asFake(app.ctrl.screen()).getAttribute('data-onboarding-step')).toBe('fuelSetup');
   });
 
-  it('onLeave without inFlow: not marked as a flow step, scroll left alone', () => {
+  it('onLeave without inFlow: not marked as a flow step, no Not now; opened at the top', () => {
     const app = makeApp();
     app.ctrl.setupForGoal('fat', { onLeave: () => undefined });
     expect(app.onScreen('data-screen', 'fuel-setup').hasAttribute('data-onboarding-step')).toBe(
       false,
     );
-    expect(scrolls).toEqual([]);
+    expect(app.root.find((e) => e.hasAttribute('data-setup-not-now'))).toHaveLength(0);
+    expect(scrolls).toEqual([[0, 0]]);
+  });
+
+  it('M13d 3b: in the flow, Not now leaves with "skip" once and saves nothing', async () => {
+    await setUp();
+    const before = await getNutritionSettings(db);
+    const app = makeApp();
+    const how: string[] = [];
+    app.ctrl.setupForGoal('fat', { onLeave: (h) => how.push(h), inFlow: true });
+    const after = { ...app.calls };
+    const notNow = app.onScreen('data-setup-not-now');
+    expect(notNow.textContent).toBe('Not now');
+    notNow.click();
+    notNow.click();
+    app.onScreen('data-setup-save').click(); // too late: already left
+    await flush();
+    expect(how).toEqual(['skip']);
+    expect(app.calls).toEqual(after);
+    expect(await getNutritionSettings(db)).toEqual(before);
+    expect(await db.weighIns.count()).toBe(1);
+    expect(asFake(app.ctrl.screen()).getAttribute('data-screen')).toBe('fuel');
+  });
+
+  it('without opts or from Settings: no Not now', async () => {
+    await setUp();
+    const app = makeApp();
+    app.ctrl.setupForGoal('fat');
+    expect(app.root.find((e) => e.hasAttribute('data-setup-not-now'))).toHaveLength(0);
   });
 
   it('after leaving the flow step, Settings → Re-run setup is the normal screen again', async () => {
@@ -1038,4 +1077,151 @@ describe('M13c 12b: openDay (search → a Fuel day)', () => {
       expect(active()).toBe(app.onScreen('data-entry-edit', 'x'));
     });
   }
+});
+
+describe('M13d task 8: Set up Fuel pre-fill (Health profile + latest weigh-in)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('scrollTo', () => undefined);
+  });
+  const PROFILE = { heightCm: 168, birthYear: 1992, sex: 'female' as const };
+  const tags = (app: ReturnType<typeof makeApp>) =>
+    app.root
+      .find((e) => e.hasAttribute('data-from-health'))
+      .map((e) => e.getAttribute('data-from-health'));
+  const value = (app: ReturnType<typeof makeApp>, field: string) =>
+    (app.onScreen('data-field', field).oneByClass('nf-value') as unknown as { value: string })
+      .value;
+
+  it('first setup: Health height / birth year / sex and a Health weigh-in, each tagged', async () => {
+    await saveWeighIn(db, { date: localDate(EVENING - DAY), kg: 63.4, source: 'health' });
+    let reads = 0;
+    const app = makeApp(EVENING, undefined, undefined, {
+      healthProfile: async () => {
+        reads++;
+        return PROFILE;
+      },
+    });
+    app.ctrl.setupForGoal('fat', { onLeave: () => undefined, inFlow: true });
+    await flush();
+    expect(reads).toBe(1); // one read per open
+    expect(tags(app)).toEqual(['height', 'birthYear', 'sex', 'weight']);
+    expect(value(app, 'height')).toBe('168');
+    expect(value(app, 'birth-year')).toBe('1992');
+    expect(value(app, 'weight')).toBe('63.4');
+    // A re-render (a sync finishing) keeps the pre-fill without reading again.
+    app.ctrl.screen();
+    expect(reads).toBe(1);
+    // Still confirmed with Save: activity is yours to pick.
+    app.onScreen('data-choice', 'light').click();
+    app.onScreen('data-setup-save').click();
+    await flush();
+    expect(await getNutritionSettings(db)).toMatchObject({
+      heightCm: 168,
+      birthYear: 1992,
+      sex: 'female',
+      activity: 'light',
+    });
+  });
+
+  it('without Health: no tags; a first setup still starts from the latest (own) weigh-in', async () => {
+    await saveWeighIn(db, { date: localDate(EVENING - DAY), kg: 66.2 });
+    const app = makeApp();
+    app.ctrl.setupForGoal('fat');
+    await flush();
+    expect(tags(app)).toEqual([]);
+    expect(value(app, 'weight')).toBe('66.2');
+    expect(value(app, 'height')).toBe('170');
+  });
+
+  it('a Health reply of null or an error: the form works as before', async () => {
+    for (const healthProfile of [async () => null, async () => Promise.reject(new Error('x'))]) {
+      // (makeApp's logError throws: a failed read must stay quiet, never crash the open.)
+      const app = makeApp(EVENING, undefined, undefined, { healthProfile });
+      app.ctrl.setupForGoal('fat');
+      await flush();
+      expect(tags(app)).toEqual([]);
+      expect(app.onScreen('data-screen', 'fuel-setup')).toBeTruthy();
+    }
+  });
+
+  it('a re-run: saved values win over Health (no tag on them)', async () => {
+    await setUp(); // saved: 175 cm, 1994, male; weigh-in 70 (manual)
+    const app = makeApp(EVENING, undefined, undefined, { healthProfile: async () => PROFILE });
+    await app.ctrl.open();
+    app.showSettings();
+    app.onScreen('data-setup-rerun').click();
+    await flush();
+    expect(tags(app)).toEqual([]);
+    expect(value(app, 'height')).toBe('175');
+    expect(value(app, 'weight')).toBe('70.0');
+  });
+
+  it('once you start filling it in, data arriving late does not re-fill the form', async () => {
+    let answer: (p: typeof PROFILE) => void = () => undefined;
+    const app = makeApp(EVENING, undefined, undefined, {
+      healthProfile: () => new Promise((r) => (answer = r)),
+    });
+    app.ctrl.setupForGoal('fat');
+    const renders = app.calls.render;
+    app
+      .onScreen('data-field', 'height')
+      .find((e) => e.getAttribute('data-step') === 'up')[0]
+      ?.click();
+    answer(PROFILE);
+    await flush();
+    expect(app.calls.render).toBe(renders);
+    expect(value(app, 'height')).toBe('171');
+  });
+
+  it('left before Health answered: nothing re-renders', async () => {
+    let answer: (p: typeof PROFILE) => void = () => undefined;
+    const app = makeApp(EVENING, undefined, undefined, {
+      healthProfile: () => new Promise((r) => (answer = r)),
+    });
+    app.ctrl.setupForGoal('fat', { onLeave: () => undefined });
+    app.root.oneByClass('fuel-back').click();
+    const renders = app.calls.render;
+    answer(PROFILE);
+    await flush();
+    expect(app.calls.render).toBe(renders);
+  });
+});
+
+describe('M13d task 13: length unit', () => {
+  beforeEach(() => {
+    vi.stubGlobal('scrollTo', () => undefined);
+  });
+
+  it('host.lengthUnit "in": Set up Fuel asks ft + in and Measurements shows inches', async () => {
+    await setUp();
+    await saveMeasurement(db, { date: localDate(EVENING - 3 * DAY), site: 'waist', cm: 81.28 });
+    const app = makeApp(EVENING, undefined, undefined, {
+      lengthUnit: () => 'in',
+      trainerKit: () =>
+        ({ measurementSites: ['waist'] }) as unknown as ReturnType<
+          NonNullable<FuelHost['trainerKit']>
+        >,
+    });
+    app.ctrl.setupForGoal('fat');
+    await flush();
+    const height = app.onScreen('data-field', 'height');
+    expect(
+      height.find((e) => e.hasAttribute('data-part')).map((e) => e.getAttribute('data-part')),
+    ).toEqual(['ft', 'in']);
+    await app.ctrl.openMeasurements();
+    const el = asFake(app.ctrl.screen());
+    expect(el.getAttribute('data-screen')).toBe('measurements');
+    const last = el.find((e) => e.getAttribute('data-site-last') === 'waist')[0];
+    expect(last?.textContent).toContain('32 in');
+  });
+
+  it('no lengthUnit from the host: follows the weight unit (kg → cm)', async () => {
+    await setUp();
+    const app = makeApp();
+    app.ctrl.setupForGoal('fat');
+    await flush();
+    expect(
+      app.onScreen('data-field', 'height').find((e) => e.hasAttribute('data-part')),
+    ).toHaveLength(0);
+  });
 });

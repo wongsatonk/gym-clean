@@ -38,7 +38,7 @@
 .fuel-note {
   font-size: var(--fs-body);
   color: var(--text-2);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .fuel-note:empty {
@@ -64,6 +64,28 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* M13d task 3b: the first run's quiet "Not now" at the end of the form (no fill, full-width row). */
+.fuel-not-now {
+  min-height: var(--tap-min);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* M13d task 8: "From Apple Health" under a pre-filled field (body size, never the only cue). */
+.fuel-from-health {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.fuel-from-health .ic {
+  flex: none;
 }
 
 /* ---------- Number field: label, [−] value [+] ---------- */
@@ -333,7 +355,7 @@
   align-items: flex-start;
   gap: 10px;
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .nt-confirm-txt .ic {

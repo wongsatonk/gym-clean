@@ -224,6 +224,14 @@ describe('weighInScreen stepper', () => {
     expect(calls.save).toEqual([71]);
   });
 
+  it('M13d task 24: the header Back is the edge swipe’s one Back', () => {
+    for (const over of [{}, { check: check('up') }]) {
+      const marked = render(over).el.find((e) => e.hasAttribute('data-swipe-back'));
+      expect(marked).toHaveLength(1);
+      expect(marked[0]?.classes).toContain('fuel-back');
+    }
+  });
+
   it('Back calls onBack', () => {
     const { el, calls } = render();
     el.find((e) => e.tag === 'button' && e.textContent === 'Back')[0]?.click();

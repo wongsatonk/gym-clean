@@ -87,8 +87,11 @@ import type {
   TrainerKitSettings,
   WeeklyCheck,
   WeighIn,
+  HealthProfile,
+  LengthUnit,
 } from '../../core/types';
-import type { Unit } from '../../core/units';
+import { lengthUnitFor, type Unit } from '../../core/units';
+import { prefillSetup } from '../../core/nutrition/setupPrefill';
 import { sessionsSince, type GymDb } from '../../data/db';
 import { CLASS_MAP } from '../../food-vision/classMap';
 import { decide as decidePhoto, type ScoredLabel } from '../../food-vision/decide';
@@ -179,6 +182,16 @@ export type FuelHost = {
   openLearn?: ((id: string, opener: HTMLElement) => void) | undefined;
   /** M13c: the app's Search button on the Fuel header. Omitted → no button. */
   onSearch?: OnSearch | undefined;
+  /**
+   * M13d: the length unit (settings 'lengthUnit', `getLengthUnit`) for Set up Fuel's height and
+   * Measurements. Omitted → follows the weight unit (cm with kg, inches with lb).
+   */
+  lengthUnit?: (() => LengthUnit) | undefined;
+  /**
+   * M13d task 8: Apple Health's height / birth year / sex (`healthHost.profile()`), read once per
+   * Set up Fuel open to pre-fill only; never stored here. Omitted / null → no pre-fill.
+   */
+  healthProfile?: (() => Promise<HealthProfile | null>) | undefined;
 };
 
 /** M11-q8: what the weigh-in screen needs from the Health wiring (app.ts). */
@@ -209,8 +222,11 @@ export type FuelPhotoHost = {
 /** A photo still in memory while its dish is being picked (search after a photo). */
 type PendingPhoto = { photo: CapturedPhoto; takenAt: number };
 
-/** M13d: how Set up Fuel was left when the caller took over leaving (`setupForGoal` opts). */
-export type SetupLeave = 'saved' | 'back';
+/**
+ * M13d: how Set up Fuel was left when the caller took over leaving (`setupForGoal` opts).
+ * 'skip' (task 3b): the first run's quiet "Not now": nothing saved, the step is dropped.
+ */
+export type SetupLeave = 'saved' | 'back' | 'skip';
 
 /**
  * M13d task 3: `setupForGoal` options. `onLeave`: Save (after its writes) and Back call it
@@ -225,10 +241,25 @@ export type SetupForGoalOpts = {
 /** A setup open handed to the caller: `left` is set by the first Save / Back (a second is ignored). */
 type SetupHook = { onLeave: (how: SetupLeave) => void; inFlow: boolean; left: boolean };
 
+/**
+ * M13d task 8: one Set up Fuel open. `profile`: what Apple Health gave for this open (kept only
+ * while the screen is open). `touched`: you started filling the form in, so data arriving late
+ * (Fuel's first load, the Health read) no longer re-fills it.
+ */
+type SetupOpen = { profile: HealthProfile | null; touched: boolean };
+
+/** How long Set up Fuel waits for the Health read before giving up on the pre-fill. */
+const PROFILE_WAIT_MS = 3000;
+
 type Sub =
   | { kind: 'main' }
   | { kind: 'weighIn' }
-  | { kind: 'setup'; back: 'fuel' | 'settings'; hook?: SetupHook | undefined }
+  | {
+      kind: 'setup';
+      back: 'fuel' | 'settings';
+      hook?: SetupHook | undefined;
+      open: SetupOpen;
+    }
   | { kind: 'measurements' };
 
 /** M12 1b: settings key of the protein-nudge meals already dismissed (once per meal). */
@@ -1405,7 +1436,7 @@ export function createFuel(host: FuelHost) {
   function measurementsView(): HTMLElement {
     const sites = host.trainerKit?.().measurementSites ?? [];
     return measurementsScreen(
-      { sites, unit: host.unit(), today: today(), measurements },
+      { sites, lengthUnit: lengthUnit(), today: today(), measurements },
       {
         onBack: () => {
           sub = { kind: 'main' };
@@ -1506,9 +1537,50 @@ export function createFuel(host: FuelHost) {
     afterChange();
   }
 
+  /** M13d: the length unit for height and tape (no row → follows the weight unit). */
+  function lengthUnit(): LengthUnit {
+    return host.lengthUnit?.() ?? lengthUnitFor(host.unit());
+  }
+
+  /**
+   * Shows Set up Fuel at once, then (M13d task 8) makes sure Fuel's data is loaded and reads the
+   * Health profile once for this open; the form is re-filled with them unless you already
+   * started on it.
+   */
   function openSetup(back: 'fuel' | 'settings', hook?: SetupHook): void {
-    sub = hook ? { kind: 'setup', back, hook } : { kind: 'setup', back };
+    const open: SetupOpen = { profile: null, touched: false };
+    sub = hook ? { kind: 'setup', back, hook, open } : { kind: 'setup', back, open };
     host.showFuel();
+    window.scrollTo(0, 0);
+    void fillSetup(open);
+  }
+
+  async function fillSetup(open: SetupOpen): Promise<void> {
+    const wasLoaded = loaded;
+    const [, profile] = await Promise.all([ensureLoaded(), readProfile()]);
+    if (sub.kind !== 'setup' || sub.open !== open) return; // left, or opened again
+    open.profile = profile;
+    if (open.touched || (wasLoaded && !profile)) return;
+    host.render();
+  }
+
+  /** The Health profile, or null (no reader, nothing there, an error, or no answer in time). */
+  async function readProfile(): Promise<HealthProfile | null> {
+    const read = host.healthProfile;
+    if (!read) return null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        read(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), PROFILE_WAIT_MS);
+        }),
+      ]);
+    } catch {
+      return null; // the Health host logs its own errors; here it only means "no pre-fill"
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** M13d: leave a setup the caller took over (Save after its writes, or Back). */
@@ -1523,24 +1595,42 @@ export function createFuel(host: FuelHost) {
     else host.render();
   }
 
-  function setupView(back: 'fuel' | 'settings', hook?: SetupHook): HTMLElement {
+  function setupView(back: 'fuel' | 'settings', open: SetupOpen, hook?: SetupHook): HTMLElement {
     const s = settings;
-    const kg = latestKg();
+    const latest = latestWeighIn();
+    const year = new Date(host.now()).getFullYear();
+    // Saved values win, then Apple Health, then the latest weigh-in (even on a first setup).
+    const prefill = prefillSetup({
+      profile: open.profile,
+      latestKg: latest?.kg ?? null,
+      latestSource: latest?.source,
+      saved: s
+        ? { heightCm: s.heightCm, birthYear: s.birthYear, sex: s.sex, activity: s.activity }
+        : undefined,
+      year,
+    });
     const el = fuelSetupScreen(
       {
-        year: new Date(host.now()).getFullYear(),
+        year,
         unit: host.unit(),
-        initial: s
-          ? {
-              heightCm: s.heightCm,
-              birthYear: s.birthYear,
-              sex: s.sex,
-              activity: s.activity,
-              ...(kg !== null ? { weightKg: kg } : {}),
-            }
-          : undefined,
+        lengthUnit: lengthUnit(),
+        initial: prefill.initial,
+        fromHealth: prefill.fromHealth,
       },
       {
+        onTouch: () => {
+          open.touched = true;
+        },
+        ...(hook?.inFlow
+          ? {
+              onNotNow: () => {
+                if (hook.left) return;
+                hook.left = true;
+                pendingGoal = null;
+                leaveToCaller(hook, 'skip');
+              },
+            }
+          : {}),
         onSave: (v) => {
           if (!hook) {
             void saveSetup(v, back).catch(host.logError);
@@ -1706,7 +1796,7 @@ export function createFuel(host: FuelHost) {
         case 'weighIn':
           return weighInView();
         case 'setup':
-          return setupView(sub.back, sub.hook);
+          return setupView(sub.back, sub.open, sub.hook);
         case 'measurements':
           return measurementsView();
       }
@@ -1748,14 +1838,13 @@ export function createFuel(host: FuelHost) {
      */
     setupForGoal(goalKind: GoalKind, opts?: SetupForGoalOpts): void {
       pendingGoal = goalKind;
+      // Every open starts at the top (openSetup): the intake summary's scroll would otherwise
+      // carry over (it opened at Sex / Activity).
       if (!opts) {
         openSetup('fuel');
         return;
       }
-      const inFlow = opts.inFlow === true;
-      openSetup('fuel', { onLeave: opts.onLeave, inFlow, left: false });
-      // The intake summary's scroll would otherwise carry over (it opened at Sex / Activity).
-      if (inFlow) window.scrollTo(0, 0);
+      openSetup('fuel', { onLeave: opts.onLeave, inFlow: opts.inFlow === true, left: false });
     },
     settingsBlock,
     /** Summary's protein line, or null without targets. */

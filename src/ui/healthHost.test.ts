@@ -77,6 +77,9 @@ function fakeApi() {
 function host(
   api: HealthApi | null,
   clock = { now: NOW, trainingDay: true as boolean | undefined },
+  logError: (err: unknown) => void = (err) => {
+    throw err;
+  },
 ) {
   const renders = { n: 0 };
   const h = createHealthHost({
@@ -87,9 +90,7 @@ function host(
     inWorkout: () => false,
     sessions: () => [],
     onWeighIns: () => undefined,
-    logError: (err) => {
-      throw err;
-    },
+    logError,
     loadHealth: async () => api,
   });
   return { h, renders };
@@ -395,5 +396,117 @@ describe('Health data never reaches the coach (M11-q7)', () => {
     const body = app.slice(start, end);
     expect(body).toContain('return {');
     expect(body).not.toMatch(HEALTH);
+  });
+});
+
+describe('M13d task 8: profile() for Set up Fuel', () => {
+  const PROFILE = { heightCm: 168, birthYear: 1992, sex: 'female' as const };
+
+  function profileApi(reply: typeof PROFILE | null = PROFILE) {
+    const base = fakeApi();
+    const calls = { profile: 0, options: [] as unknown[] };
+    const api: HealthApi = {
+      ...base.api,
+      requestRead: async (types, options) => {
+        calls.options.push(options);
+        return base.api.requestRead(types);
+      },
+      readProfile: async () => {
+        calls.profile++;
+        return reply;
+      },
+    };
+    return { api, calls };
+  }
+
+  it('PWA (no plugin): null, nothing read', async () => {
+    const { h } = host(null);
+    await h.sync();
+    expect(await h.profile()).toBeNull();
+  });
+
+  it('not connected (every type off): null, Health is not asked', async () => {
+    const { api, calls } = profileApi();
+    const { h } = host(api);
+    await h.sync();
+    expect(await h.profile()).toBeNull();
+    expect(calls.profile).toBe(0);
+  });
+
+  it('connected: one read per call, handed back as is and never stored', async () => {
+    const { api, calls } = profileApi();
+    const { h } = host(api);
+    await connect(h);
+    expect(await h.profile()).toEqual(PROFILE);
+    expect(calls.profile).toBe(1);
+    expect(await h.profile()).toEqual(PROFILE);
+    expect(calls.profile).toBe(2); // read again for the next open, not cached
+    // Nothing of it went into the database.
+    const rows = JSON.stringify(await db.settings.toArray());
+    expect(rows).not.toContain('1992');
+    expect(rows).not.toContain('168');
+  });
+
+  it('Connect also asks iOS for the profile (read only)', async () => {
+    const { api, calls } = profileApi();
+    const { h } = host(api);
+    await connect(h);
+    expect(calls.options[0]).toEqual({ profile: true });
+  });
+
+  it('connected before 1.16.3: asks iOS for the profile types first, then reads', async () => {
+    const order: string[] = [];
+    const base = fakeApi();
+    const api: HealthApi = {
+      ...base.api,
+      requestRead: async (types, options) => {
+        order.push(`request:${types.length}:${options?.profile === true}`);
+        return base.api.requestRead(types);
+      },
+      readProfile: async () => {
+        order.push('read');
+        return PROFILE;
+      },
+    };
+    const { h } = host(api);
+    await connect(h);
+    order.length = 0; // Connect's own ask is not what this checks
+    expect(await h.profile()).toEqual(PROFILE);
+    expect(order).toEqual(['request:0:true', 'read']);
+  });
+
+  it('the profile ask is not made on the PWA or while not connected', async () => {
+    const { h: web } = host(null);
+    await web.sync();
+    expect(await web.profile()).toBeNull();
+    const { api, calls } = profileApi();
+    const { h } = host(api);
+    await h.sync();
+    expect(await h.profile()).toBeNull();
+    expect(calls.options).toEqual([]);
+  });
+
+  it('the profile ask failing: null, nothing read', async () => {
+    const { api, calls } = profileApi();
+    const logged: unknown[] = [];
+    const { h } = host(api, undefined, (err) => logged.push(err));
+    await connect(h);
+    api.requestRead = async () => {
+      throw new Error('denied');
+    };
+    expect(await h.profile()).toBeNull();
+    expect(calls.profile).toBe(0);
+    expect(logged).toHaveLength(1);
+  });
+
+  it('a plugin without readProfile or with nothing in Health: null', async () => {
+    const { api } = profileApi(null);
+    const { h } = host(api);
+    await connect(h);
+    expect(await h.profile()).toBeNull();
+    const old = fakeApi();
+    const { h: h2 } = host(old.api);
+    await h2.sync(); // same database: already connected
+    expect(await h2.profile()).toBeNull();
   });
 });

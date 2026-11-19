@@ -6,6 +6,7 @@
 //   number far from the start can be typed instead of tapped. The value is ≥ 64px (main number),
 //   the − / + buttons are ≥ 72px. Typed values are clamped and snapped to the step on change.
 // - choiceGroup: a row (or list) of buttons where one is chosen: white fill + check, aria-pressed.
+import { editField, type FieldKind, type UnitField } from '../../core/unitField';
 import { h } from '../dom';
 import { icon } from '../icons';
 import './fuelForms.css';
@@ -112,6 +113,208 @@ export function numberField(o: NumberFieldOpts): NumberField {
     ),
   );
   return { el, get: () => value, controls: [minus, input, plus] };
+}
+
+// ---------- M13d: fields backed by a core unit field (no drift) ----------
+//
+// The field keeps the metric value it will save (core `unitField`); what is shown is re-derived
+// from it (`display` / `parts`), and every edit goes through core `editField` (snapped, clamped,
+// stored at the data layer's precision). An untouched field saves its metric value as given.
+
+export type UnitNumberFieldOpts<K extends FieldKind> = {
+  id: string;
+  label: string;
+  field: UnitField<K>;
+  /** Called with the new field after every − / + tap or typed change that moved it. */
+  onChange: (field: UnitField<K>) => void;
+};
+
+export type UnitNumberField<K extends FieldKind> = {
+  el: HTMLElement;
+  get: () => UnitField<K>;
+  /** Every input (one, or two for height in ft·in), for aria-describedby hooks. */
+  inputs: HTMLElement[];
+};
+
+/** One − / + row: the buttons and the value box. Labels / handlers come from the caller. */
+function stepRow(o: {
+  inputId: string;
+  label: string;
+  unitText: string;
+  numeric: boolean;
+  part?: string;
+  onStep: (dir: -1 | 1) => void;
+  onTyped: (raw: string) => void;
+}) {
+  const input = h('input', {
+    type: 'text',
+    id: o.inputId,
+    class: 'nf-value',
+    inputmode: o.numeric ? 'numeric' : 'decimal',
+    autocomplete: 'off',
+    'aria-describedby': `${o.inputId}-unit`,
+  });
+  const minus = h(
+    'button',
+    { type: 'button', class: 'nf-step', 'data-step': 'down', 'aria-label': `Less ${o.label}` },
+    icon('minus', 'lg'),
+  );
+  const plus = h(
+    'button',
+    { type: 'button', class: 'nf-step', 'data-step': 'up', 'aria-label': `More ${o.label}` },
+    icon('plus', 'lg'),
+  );
+  minus.addEventListener('click', () => o.onStep(-1));
+  plus.addEventListener('click', () => o.onStep(1));
+  input.addEventListener('change', () => o.onTyped(String(input.value ?? '')));
+  const row = h(
+    'div',
+    { class: 'nf-row', 'data-part': o.part },
+    minus,
+    h(
+      'span',
+      { class: 'nf-mid' },
+      input,
+      h('span', { class: 'nf-unit', id: `${o.inputId}-unit` }, o.unitText),
+    ),
+    plus,
+  );
+  const ends = (atMin: boolean, atMax: boolean) => {
+    if (atMin) minus.setAttribute('disabled', '');
+    else minus.removeAttribute('disabled');
+    if (atMax) plus.setAttribute('disabled', '');
+    else plus.removeAttribute('disabled');
+  };
+  return { row, input, ends };
+}
+
+const EPS = 1e-9;
+
+/**
+ * label, [−] value [+] for a body weight, a height in cm or a tape length: shows
+ * `field.display`, steps by `field.step`, edits through core `editField`.
+ */
+export function unitNumberField<K extends FieldKind>(
+  o: UnitNumberFieldOpts<K>,
+): UnitNumberField<K> {
+  if (o.field.kind === 'height' && o.field.unit === 'in') {
+    return heightFtInField(
+      o as unknown as UnitNumberFieldOpts<'height'>,
+    ) as unknown as UnitNumberField<K>;
+  }
+  let field = o.field;
+  const inputId = `nf-${o.id}`;
+  const apply = (next: UnitField<K>) => {
+    const moved = next.metric !== field.metric;
+    field = next;
+    show();
+    if (moved) o.onChange(field);
+  };
+  const r = stepRow({
+    inputId,
+    label: o.label,
+    unitText: field.unit,
+    numeric: field.decimals === 0,
+    onStep: (dir) => apply(editField(field, field.value + dir * field.step)),
+    onTyped: (raw) => apply(editField(field, raw)),
+  });
+  const show = () => {
+    r.input.value = field.display;
+    r.ends(field.value <= field.min + EPS, field.value >= field.max - EPS);
+  };
+  show();
+  const el = h(
+    'div',
+    { class: 'nf', 'data-field': o.id },
+    h('label', { class: 'nf-label', for: inputId }, o.label),
+    r.row,
+  );
+  return { el, get: () => field, inputs: [r.input] };
+}
+
+/** A typed height that names its own feet / inches (`5'7"`, `5 ft 7`, `5 7`, `67 in`). */
+const WHOLE_HEIGHT = /['"′″’”]|ft|feet|foot|in|\s/i;
+
+/**
+ * Height in ft·in: two − / + rows (feet, inches) over one height field. Inches carry at 12
+ * (11 in + 1 → next foot); a whole height typed in either box (`5'7"`) sets both.
+ */
+export function heightFtInField(o: UnitNumberFieldOpts<'height'>): UnitNumberField<'height'> {
+  let field = o.field;
+  const parts = () => field.parts ?? { ft: Math.floor(field.value / 12), inch: field.value % 12 };
+  const apply = (next: UnitField<'height'>) => {
+    const moved = next.metric !== field.metric;
+    field = next;
+    show();
+    if (moved) o.onChange(field);
+  };
+  const typed = (raw: string, part: 'ft' | 'inch') => {
+    const t = raw.trim();
+    if (WHOLE_HEIGHT.test(t)) return apply(editField(field, t));
+    const n = Number(t.replace(',', '.'));
+    if (t === '' || !Number.isFinite(n)) return apply(field); // junk: show the value again
+    const p = parts();
+    apply(
+      editField(
+        field,
+        part === 'ft' ? { ft: Math.round(n), inch: p.inch } : { ft: p.ft, inch: Math.round(n) },
+      ),
+    );
+  };
+  const step = (part: 'ft' | 'inch', dir: -1 | 1) => {
+    const p = parts();
+    apply(
+      editField(
+        field,
+        part === 'ft' ? { ft: p.ft + dir, inch: p.inch } : { ft: p.ft, inch: p.inch + dir },
+      ),
+    );
+  };
+  const ft = stepRow({
+    inputId: `nf-${o.id}-ft`,
+    label: `${o.label}, feet`,
+    unitText: 'ft',
+    numeric: true,
+    part: 'ft',
+    onStep: (dir) => step('ft', dir),
+    onTyped: (raw) => typed(raw, 'ft'),
+  });
+  const inch = stepRow({
+    inputId: `nf-${o.id}-in`,
+    label: `${o.label}, inches`,
+    unitText: 'in',
+    numeric: true,
+    part: 'in',
+    onStep: (dir) => step('inch', dir),
+    onTyped: (raw) => typed(raw, 'inch'),
+  });
+  ft.input.setAttribute('aria-label', `${o.label}, feet`);
+  inch.input.setAttribute('aria-label', `${o.label}, inches`);
+  const show = () => {
+    const p = parts();
+    ft.input.value = String(p.ft);
+    inch.input.value = String(p.inch);
+    const atMin = field.value <= field.min + EPS;
+    const atMax = field.value >= field.max - EPS;
+    ft.ends(atMin, atMax);
+    inch.ends(atMin, atMax);
+  };
+  show();
+  const labelId = `nf-${o.id}-label`;
+  const el = h(
+    'div',
+    {
+      class: 'nf nf-ftin',
+      'data-field': o.id,
+      'data-unit': 'ftin',
+      role: 'group',
+      'aria-labelledby': labelId,
+    },
+    h('span', { class: 'nf-label', id: labelId }, o.label),
+    ft.row,
+    inch.row,
+  );
+  return { el, get: () => field, inputs: [ft.input, inch.input] };
 }
 
 export type Choice<T extends string> = { value: T; label: string; note?: string | undefined };

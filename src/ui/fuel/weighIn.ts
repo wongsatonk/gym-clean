@@ -647,7 +647,12 @@ export function weighInScreen(p: WeighInProps, a: WeighInActions): HTMLElement {
       { class: 'fuel-head' },
       h(
         'button',
-        { type: 'button', class: 'fuel-back', onclick: () => a.onBack() },
+        {
+          type: 'button',
+          class: 'fuel-back',
+          'data-swipe-back': true, // M13d task 24: the edge swipe's Back
+          onclick: () => a.onBack(),
+        },
         icon('back', 'md'),
         h('span', {}, 'Back'),
       ),

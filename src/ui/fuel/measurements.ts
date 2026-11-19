@@ -10,33 +10,38 @@
 //   it out. One Save button stores every opened site for today (saving again replaces today's).
 // - `measurementsEntryRow`: the row on the Fuel tab that opens the screen.
 //
-// Values are stored in cm; he sees cm with kg and inches with lb. Copy is plain numbers: no
-// score, no good/bad colour, no health wording.
+// Values are stored in cm; the `lengthUnit` prop (M13d: settings 'lengthUnit') picks cm or
+// inches. Unit maths and labels come from core (`src/core/progress/measurements.ts`); each opened
+// site is a core tape unit field (no drift; range 5–300 cm). Copy is plain numbers: no score, no
+// good/bad colour, no health wording.
 //
 // e2e hooks: `main[data-screen="measurements"]`, `[data-measure-status=first|ok|due]`,
 // `[data-site=<id>]` rows, `[data-site-toggle=<id>]` (aria-expanded), `[data-site-last=<id>]`,
 // `[data-field="site-<id>"] .nf-value`, `[data-measure-save]`; on Fuel
 // `[data-measurements-open]` (data-due).
+import {
+  MEASURE_AGAIN_DAYS,
+  formatLength,
+  siteLabel,
+  toLength,
+  type LengthUnit,
+} from '../../core/progress/measurements';
 import type { Measurement } from '../../core/types';
-import type { Unit } from '../../core/units';
+import { unitField, type UnitField } from '../../core/unitField';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
-import { numberField, type NumberField } from './fields';
+import { unitNumberField } from './fields';
 import { dayNumber, shortDate } from './weighIn';
 import './measurements.css';
 
-export type LengthUnit = 'cm' | 'in';
-
-export const CM_PER_IN = 2.54;
-/** "Measure again" shows once the latest measurement is this many days old (core data wins). */
-export const MEASURE_AGAIN_DAYS = 28;
+export { MEASURE_AGAIN_DAYS, siteLabel };
 
 export type MeasurementsProps = {
   /** Site ids from settings 'trainerKit'.measurementSites, in his order. */
   sites: readonly string[];
-  /** His weight unit: kg shows cm, lb shows inches. */
-  unit: Unit;
+  /** M13d: cm or inches (settings 'lengthUnit'; the app's fallback follows the weight unit). */
+  lengthUnit: LengthUnit;
   /** Local date YYYY-MM-DD. */
   today: string;
   /** Every saved measurement, any order. */
@@ -54,41 +59,6 @@ export type MeasurementsActions = {
 };
 
 // ---------- pure helpers ----------
-
-export const lengthUnit = (unit: Unit): LengthUnit => (unit === 'kg' ? 'cm' : 'in');
-
-export const toLength = (cm: number, lu: LengthUnit): number => (lu === 'cm' ? cm : cm / CM_PER_IN);
-
-/** Display value → cm, rounded to 1 decimal (what is stored). */
-export const fromLength = (value: number, lu: LengthUnit): number =>
-  Math.round((lu === 'cm' ? value : value * CM_PER_IN) * 10) / 10;
-
-/** "34.5 cm" / "13.5 in". */
-export function formatLength(cm: number, lu: LengthUnit): string {
-  return `${toLength(cm, lu).toLocaleString('en-US', { maximumFractionDigits: 1 })} ${lu}`;
-}
-
-const SITE_LABEL: Record<string, string> = {
-  leftArm: 'Left arm',
-  rightArm: 'Right arm',
-  chest: 'Chest',
-  waist: 'Waist',
-  hips: 'Hips',
-  leftThigh: 'Left thigh',
-  rightThigh: 'Right thigh',
-};
-
-/** 'leftArm' → "Left arm"; an unknown id reads as its words ('leftCalf' → "Left calf"). */
-export function siteLabel(site: string): string {
-  const known = SITE_LABEL[site];
-  if (known) return known;
-  const words = site
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .trim()
-    .toLowerCase();
-  return words ? words.charAt(0).toUpperCase() + words.slice(1) : site;
-}
 
 /** Where the field starts when a site has no value yet (cm). Only a starting point to tap from. */
 const SITE_START: readonly [RegExp, number][] = [
@@ -223,18 +193,16 @@ export function measurementsEntryRow(e: MeasurementsEntry, onOpen: () => void): 
 // ---------- the screen ----------
 
 export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions): HTMLElement {
-  const lu = lengthUnit(p.unit);
+  const lu = p.lengthUnit;
   const label = p.siteLabel ?? siteLabel;
   const afterDays = p.againAfterDays ?? MEASURE_AGAIN_DAYS;
   const status = measureStatus(p.measurements, p.today, afterDays);
   const copy = statusCopy(status, afterDays);
-  // One decimal in either unit, so the ≥ 64px value always fits its box at 390px.
-  const step = lu === 'cm' ? 0.5 : 0.1;
-  const min = lu === 'cm' ? 10 : 4;
-  const max = lu === 'cm' ? 250 : 100;
+  // Core tape field: one decimal in either unit (0.5 cm / 0.1 in steps), so the ≥ 64px value
+  // always fits its box at 390px.
 
   /** Opened sites → their field (these are what Save stores). */
-  const open = new Map<string, NumberField>();
+  const open = new Map<string, { get: () => UnitField<'tape'> }>();
   const saveText = h('span', { 'data-measure-save-label': true }, saveLabel(0));
   const save = h(
     'button',
@@ -251,7 +219,7 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
             .map((site) => ({
               date: p.today,
               site,
-              cm: fromLength(open.get(site)?.get() ?? 0, lu),
+              cm: open.get(site)?.get().metric ?? 0,
             })),
         );
       },
@@ -298,14 +266,10 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
         toggle.setAttribute('aria-expanded', 'false');
         state.replaceChildren(icon('plus', 'sm'), h('span', {}, 'Add'));
       } else {
-        const field = numberField({
+        const field = unitNumberField({
           id: `site-${site}`,
           label: `${name} now`,
-          unit: lu,
-          value: toLength(history[0]?.cm ?? startCm(site), lu),
-          step,
-          min,
-          max,
+          field: unitField({ kind: 'tape', metric: history[0]?.cm ?? startCm(site), unit: lu }),
           onChange: () => undefined,
         });
         open.set(site, field);
@@ -327,7 +291,12 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
       { class: 'fuel-head' },
       h(
         'button',
-        { type: 'button', class: 'fuel-back', onclick: () => a.onBack() },
+        {
+          type: 'button',
+          class: 'fuel-back',
+          'data-swipe-back': true, // M13d task 24: the edge swipe's Back
+          onclick: () => a.onBack(),
+        },
         icon('back', 'md'),
         h('span', {}, 'Back'),
       ),
@@ -352,7 +321,11 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
     p.sites.length
       ? h('ul', { class: 'ms-sites', 'aria-label': 'Spots to measure' }, ...p.sites.map(row))
       : h('p', { class: 'fuel-note', 'data-measure-sites': 'none' }, 'No spots are set up yet.'),
-    h('p', { class: 'fuel-note' }, `Saved for today in ${lu}. Saving again replaces today's.`),
+    h(
+      'p',
+      { class: 'fuel-note' },
+      `Saved for today in ${lu === 'in' ? 'inches' : 'cm'}. Saving again replaces today's.`,
+    ),
     h('div', { class: 'sticky-bottom ms-bottom' }, save),
   );
 }
