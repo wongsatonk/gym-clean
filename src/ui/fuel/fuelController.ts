@@ -1400,6 +1400,11 @@ export function createFuel(host: FuelHost) {
         onDismissProteinNudge: (key) => dismissProteinNudge(key),
         onProteinWhy: host.openLearn ? (opener) => host.openLearn?.('protein', opener) : undefined,
         onEditEntry: (e) => openEntry(e),
+        // M13d task 26: the row's swipe-left Delete, the same delete + Undo as the sheet's.
+        onDeleteEntry: (e) => {
+          const home = viewDate === null ? LOG_OPEN : FUEL_TODAY;
+          void removeEntry(e, true, home).catch(host.logError);
+        },
         onWeighIn: () => {
           sub = { kind: 'weighIn' };
           host.render();

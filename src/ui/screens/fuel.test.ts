@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FoodEntry, NutritionTargets } from '../../core/types';
 import { all, byAttr, expectCleanCopy } from '../fuel/fuelTestKit';
 import type { TabId } from '../tabBar';
@@ -416,5 +416,216 @@ describe('M13c 12b: a past day (search → Meals · Wed 11 Nov)', () => {
     expect(all(el, 'data-fuel-day')).toHaveLength(0);
     expect(all(el, 'data-log-open')).toHaveLength(1);
     expect(all(el, 'data-fuel-today')).toHaveLength(0);
+  });
+});
+
+describe('M13d task 26: swipe left on a meal row shows Delete', () => {
+  type Doc = { addEventListener?: unknown; removeEventListener?: unknown };
+  let downs: ((e: unknown) => void)[] = [];
+  let reduce = false;
+  const g = globalThis as { matchMedia?: unknown };
+  beforeEach(() => {
+    downs = [];
+    reduce = false;
+    const doc = (globalThis as unknown as { document: Doc }).document;
+    doc.addEventListener = (type: string, cb: (e: unknown) => void) => {
+      if (type === 'pointerdown') downs.push(cb);
+    };
+    doc.removeEventListener = (type: string, cb: (e: unknown) => void) => {
+      if (type === 'pointerdown') downs = downs.filter((d) => d !== cb);
+    };
+    g.matchMedia = () => ({ matches: reduce });
+  });
+  afterEach(() => {
+    delete g.matchMedia;
+    vi.useRealTimers();
+  });
+
+  function swipeRender() {
+    const deleted: string[] = [];
+    const edited: string[] = [];
+    const el = asFake(
+      fuelScreen(props(), {
+        onLog: () => undefined,
+        onEditEntry: (e) => edited.push(e.id),
+        onDeleteEntry: (e) => deleted.push(e.id),
+        onWeighIn: () => undefined,
+        onSetup: () => undefined,
+        onTab: () => undefined,
+      }),
+    );
+    return { el, deleted, edited };
+  }
+
+  /** A one-finger drag on the row: start, `steps` moves to `dx`/`dy`, then (optionally) lift. */
+  function drag(row: FakeEl, dx: number, dy = 0, opts: { lift?: boolean; holdMs?: number } = {}) {
+    const x0 = 300;
+    const y0 = 400;
+    const target = { closest: () => null };
+    let t = 1000;
+    let prevented = 0;
+    const touch = (x: number, y: number) => [{ clientX: x, clientY: y }];
+    row.dispatch('touchstart', { touches: touch(x0, y0), timeStamp: t, target });
+    for (let i = 1; i <= 8; i++) {
+      t += 16;
+      const x = x0 + (dx * i) / 8;
+      const y = y0 + (dy * i) / 8;
+      row.dispatch('touchmove', {
+        touches: touch(x, y),
+        timeStamp: t,
+        target,
+        cancelable: true,
+        preventDefault: () => prevented++,
+      });
+    }
+    if (opts.lift !== false) {
+      t += opts.holdMs ?? 160;
+      row.dispatch('touchend', {
+        touches: [],
+        changedTouches: touch(x0 + dx, y0 + dy),
+        timeStamp: t,
+        target,
+      });
+    }
+    return { prevented };
+  }
+
+  const main = (row: FakeEl) => byAttr(row, 'data-entry-edit');
+  const del = (row: FakeEl) => byAttr(row, 'data-entry-delete');
+  const panel = (row: FakeEl) => byAttr(row, 'data-entry-swipe');
+  /** A tap on the row's own button (the row's click listeners run first, as in capture). */
+  function tapRow(row: FakeEl) {
+    let stopped = false;
+    row.dispatch('click', {
+      target: { closest: () => null },
+      preventDefault: () => undefined,
+      stopPropagation: () => (stopped = true),
+    });
+    if (!stopped) main(row).click();
+  }
+
+  it('without onDeleteEntry the rows are not swipeable (old callers unchanged)', () => {
+    const { el } = render();
+    expect(all(el, 'data-swipe-row')).toHaveLength(0);
+  });
+
+  it('an untouched row is still one button; a tap opens the sheet', () => {
+    const { el, edited } = swipeRender();
+    const row = byAttr(el, 'data-entry', 'e1');
+    expect(row.hasAttribute('data-swipe-row')).toBe(true);
+    expect(row.byTag('button')).toHaveLength(1);
+    expect(row.textContent).not.toContain('Delete');
+    tapRow(row);
+    expect(edited).toEqual(['e1']);
+  });
+
+  it('left past 72px: the row follows, then opens on a round danger Delete (trash + word)', () => {
+    const { el, deleted, edited } = swipeRender();
+    const row = byAttr(el, 'data-entry', 'e3');
+    const { prevented } = drag(row, -90, 0, { lift: false });
+    expect(prevented).toBeGreaterThan(0); // the swipe is ours: no page scroll
+    expect(main(row).style.transform).toBe('translate3d(-90px, 0, 0)');
+    expect(panel(row).hasAttribute('hidden')).toBe(false);
+    row.dispatch('touchend', {
+      touches: [],
+      changedTouches: [{ clientX: 210, clientY: 400 }],
+      timeStamp: 1300,
+      target: { closest: () => null },
+    });
+    expect(row.hasAttribute('data-swipe-open')).toBe(true);
+    expect(main(row).style.transform).toBe('translate3d(-104px, 0, 0)');
+    const btn = del(row);
+    expect(btn.getAttribute('data-entry-delete')).toBe('e3');
+    expect(btn.getAttribute('data-variant')).toBe('danger');
+    expect(btn.getAttribute('aria-label')).toBe('Delete Banana');
+    expect(btn.oneByClass('icon-btn-label').textContent).toBe('Delete');
+    expect(btn.find((e) => e.getAttribute('data-icon') === 'trash')).toHaveLength(1);
+    btn.click();
+    expect(deleted).toEqual(['e3']);
+    expect(edited).toEqual([]);
+  });
+
+  it('past the Delete width the row drags with resistance', () => {
+    const { el } = swipeRender();
+    const row = byAttr(el, 'data-entry', 'e1');
+    drag(row, -164, 0, { lift: false });
+    expect(main(row).style.transform).toBe('translate3d(-124px, 0, 0)');
+  });
+
+  it('a short drag springs back and deletes nothing', () => {
+    vi.useFakeTimers();
+    const { el, deleted } = swipeRender();
+    const row = byAttr(el, 'data-entry', 'e1');
+    drag(row, -50);
+    expect(row.hasAttribute('data-swipe-open')).toBe(false);
+    expect(main(row).style.transform).toBe('');
+    vi.advanceTimersByTime(500);
+    expect(panel(row).hasAttribute('hidden')).toBe(true);
+    expect(deleted).toEqual([]);
+  });
+
+  it('a vertical drag is the page scroll: nothing moves, nothing prevented', () => {
+    const { el } = swipeRender();
+    const row = byAttr(el, 'data-entry', 'e1');
+    const { prevented } = drag(row, -6, -200);
+    expect(prevented).toBe(0);
+    expect(all(row, 'data-entry-swipe')).toHaveLength(0);
+    expect(row.hasAttribute('data-swipe-open')).toBe(false);
+  });
+
+  it('a right swipe is not this gesture', () => {
+    const { el } = swipeRender();
+    const row = byAttr(el, 'data-entry', 'e1');
+    drag(row, 120);
+    expect(all(row, 'data-entry-swipe')).toHaveLength(0);
+  });
+
+  it('a tap on the open row only closes it (no sheet); a press elsewhere closes it too', () => {
+    vi.useFakeTimers();
+    const { el, edited } = swipeRender();
+    const row = byAttr(el, 'data-entry', 'e2');
+    drag(row, -100);
+    vi.advanceTimersByTime(500); // past the swipe's own click
+    expect(row.hasAttribute('data-swipe-open')).toBe(true);
+    tapRow(row);
+    expect(row.hasAttribute('data-swipe-open')).toBe(false);
+    expect(edited).toEqual([]);
+    vi.advanceTimersByTime(500);
+    tapRow(row); // closed again: a tap opens the sheet
+    expect(edited).toEqual(['e2']);
+
+    drag(row, -100);
+    expect(downs).toHaveLength(1);
+    downs[0]?.({ target: null });
+    expect(row.hasAttribute('data-swipe-open')).toBe(false);
+    expect(downs).toHaveLength(0);
+  });
+
+  it('one row open at a time', () => {
+    const { el } = swipeRender();
+    const a = byAttr(el, 'data-entry', 'e1');
+    const b = byAttr(el, 'data-entry', 'e3');
+    drag(a, -100);
+    drag(b, -100);
+    expect(a.hasAttribute('data-swipe-open')).toBe(false);
+    expect(b.hasAttribute('data-swipe-open')).toBe(true);
+  });
+
+  it('Reduce Motion: no follow while dragging; it still opens on release', () => {
+    reduce = true;
+    const { el, deleted } = swipeRender();
+    const row = byAttr(el, 'data-entry', 'e1');
+    drag(row, -90, 0, { lift: false });
+    expect(main(row).style.transform ?? '').toBe('');
+    row.dispatch('touchend', {
+      touches: [],
+      changedTouches: [{ clientX: 210, clientY: 400 }],
+      timeStamp: 1300,
+      target: { closest: () => null },
+    });
+    expect(row.hasAttribute('data-swipe-open')).toBe(true);
+    expect(main(row).style.transition).toBe('none');
+    del(row).click();
+    expect(deleted).toEqual(['e1']);
   });
 });

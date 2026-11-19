@@ -26,6 +26,8 @@
 // date, the rings and the rows are that day's, the food heading / empty line name it, nudges and
 // the measurements row hide, and Log food (which logs now) gives way to "Back to today"
 // (`[data-fuel-today]`, `onToday`). Rows still open the entry sheet (Edit / Delete).
+// M13d task 26 (optional): with `onDeleteEntry`, a swipe left on a row shows a round Delete
+// (fuel/mealSwipe.ts) that deletes straight away (the same Undo toast); a tap still opens the sheet.
 import type {
   FoodEntry,
   MacroSet,
@@ -37,6 +39,7 @@ import { formatWeight, type Unit } from '../../core/units';
 import { h } from '../dom';
 import { SLOT_LABEL, amountText, estimateTag, fmtNum, fromHealthTag } from '../fuel/common';
 import { nudgeBanner } from '../fuel/links';
+import { mealSwipe } from '../fuel/mealSwipe';
 import { measurementsEntryRow, type MeasurementsEntry } from '../fuel/measurements';
 import { proteinNudge, type ProteinNudgeProps } from '../fuel/proteinNudge';
 import { fuelRings } from '../fuel/rings';
@@ -79,6 +82,11 @@ export type FuelActions = {
   onLog: () => void;
   /** The row was tapped: opens the entry sheet (Edit amount / slot, Delete with the Undo toast). */
   onEditEntry: (entry: FoodEntry) => void;
+  /**
+   * M13d task 26: the row's swipe-left Delete (deletes at once, with the Undo toast). Omitted → no
+   * swipe; the sheet's Delete is always there.
+   */
+  onDeleteEntry?: ((entry: FoodEntry) => void) | undefined;
   onWeighIn: () => void;
   onSetup: () => void;
   onDismissNudge?: (() => void) | undefined;
@@ -190,29 +198,30 @@ function entryRow(e: FoodEntry, mode: NutritionMode, actions: FuelActions): HTML
     if (e.carbsG !== undefined) macros.push(`${fmtNum(e.carbsG)} g carbs`);
     if (e.fatG !== undefined) macros.push(`${fmtNum(e.fatG)} g fat`);
   }
-  return h(
-    'li',
-    { class: 'fuel-entry', 'data-entry': e.id },
+  const main = h(
+    'button',
+    {
+      type: 'button',
+      class: 'fuel-entry-main',
+      'data-entry-edit': e.id,
+      onclick: () => actions.onEditEntry(e),
+    },
+    h('span', { class: 'fuel-entry-name' }, e.label),
     h(
-      'button',
-      {
-        type: 'button',
-        class: 'fuel-entry-main',
-        'data-entry-edit': e.id,
-        onclick: () => actions.onEditEntry(e),
-      },
-      h('span', { class: 'fuel-entry-name' }, e.label),
-      h(
-        'span',
-        { class: 'fuel-entry-meta' },
-        h('span', {}, amountText(e.amount)),
-        e.estimate ? estimateTag() : null,
-      ),
-      h('span', { class: 'fuel-entry-macros' }, macros.join(' · ')),
-      h('span', { class: 'fuel-entry-go', 'aria-hidden': 'true' }, icon('pencil', 'sm')),
-      h('span', { class: 'sr-only' }, ', edit or delete'),
+      'span',
+      { class: 'fuel-entry-meta' },
+      h('span', {}, amountText(e.amount)),
+      e.estimate ? estimateTag() : null,
     ),
+    h('span', { class: 'fuel-entry-macros' }, macros.join(' · ')),
+    h('span', { class: 'fuel-entry-go', 'aria-hidden': 'true' }, icon('pencil', 'sm')),
+    h('span', { class: 'sr-only' }, ', edit or delete'),
   );
+  const row = h('li', { class: 'fuel-entry', 'data-entry': e.id }, main);
+  const { onDeleteEntry } = actions;
+  return onDeleteEntry
+    ? mealSwipe(row, main, { id: e.id, label: e.label, onDelete: () => onDeleteEntry(e) })
+    : row;
 }
 
 /** M13c 12b: "Back to today" on a past day (outline: the day's rows stay the content). */
