@@ -42,6 +42,7 @@ import type {
   OnboardingStep,
   LengthUnit,
   UnitPrefs,
+  TextSize,
   OwnerMode,
   ShareLead,
 } from '../core/types';
@@ -267,6 +268,8 @@ import {
   setUnit,
   setUnitPrefs,
   setLengthUnit,
+  getTextSize,
+  setTextSize,
   startSessionRow,
   type ExerciseNoteRow,
   type SetRow,
@@ -402,6 +405,7 @@ import { noteSignal } from '../data/todos/store';
 import { createTodoHost, nativeShell } from './todo/todoHost';
 import { setPressFeel } from './iconButton';
 import { installEdgeBack } from './gestures/edgeBack';
+import { applyTextSize } from './textSizePicker';
 import type { WhatsNewTour } from './todo/whatsNewTour';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
@@ -491,6 +495,8 @@ export function mountApp(root: HTMLElement): void {
   let view: View = { screen: 'today', upNextDayId: null, stats: null };
   // M13c state: background style, the Claude card's message and shown date, the open Library.
   let background: BackgroundStyle = 'glow';
+  /** M13d: Settings → Display → Text size (index.html applies the mirrored copy before first paint). */
+  let textSize: TextSize = 'standard';
   let claudeOffer: ClaudeOffer = {};
   let claudeOfferMsgId: number | null = null;
   let lib: {
@@ -631,6 +637,15 @@ export function mountApp(root: HTMLElement): void {
     now: () => now(),
     unit: () => unit,
     lengthUnit: () => lengthUnit,
+    // M13d: a unit switch next to a field changes the app-wide units (the open page already shows
+    // them; no render, so unsaved edits stay).
+    onUnits: (next) => {
+      unit = next.weight;
+      lengthUnit = next.length;
+      // In the first run the Units page shows (and saves on Next) the same choice.
+      if (onboarding) onboarding.units = next;
+      void setUnitPrefs(db, next).catch(logDbError);
+    },
     // M13d: Set up Fuel pre-fills height / birth year / sex from Apple Health (iPhone app, connected).
     healthProfile: () => health.profile(),
     render: () => render(),
@@ -5205,6 +5220,7 @@ export function mountApp(root: HTMLElement): void {
       {
         accent,
         background,
+        textSize,
         spokenCount,
         coachTips,
         handsFree,
@@ -5252,6 +5268,12 @@ export function mountApp(root: HTMLElement): void {
       },
       {
         onSearch: (opener) => openLibrary(opener),
+        onTextSize: (s) => {
+          textSize = s;
+          applyTextSize(s);
+          void setTextSize(db, s).catch(logDbError);
+          render();
+        },
         onBackground: (style) => {
           background = style;
           applyBackground(style);
@@ -5442,6 +5464,8 @@ export function mountApp(root: HTMLElement): void {
       background = backgroundStyle((await db.settings.get('background'))?.value);
       applyBackground(background);
       mirrorBackground(background);
+      textSize = await getTextSize(db);
+      applyTextSize(textSize);
       coachVoice = await getCoachVoice(db);
       voice.configure(coachVoice);
     } catch (err) {
@@ -6457,6 +6481,13 @@ export function mountApp(root: HTMLElement): void {
       background = backgroundStyle(row?.value);
       applyBackground(background);
       mirrorBackground(background);
+      if (view.screen === 'settings') render();
+    })
+    .catch(logDbError);
+  void getTextSize(db)
+    .then((s) => {
+      textSize = s;
+      applyTextSize(s);
       if (view.screen === 'settings') render();
     })
     .catch(logDbError);
