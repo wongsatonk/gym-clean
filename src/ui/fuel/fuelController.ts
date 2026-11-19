@@ -87,8 +87,12 @@ import type {
   TrainerKitSettings,
   WeeklyCheck,
   WeighIn,
+  HealthProfile,
+  LengthUnit,
+  UnitPrefs,
 } from '../../core/types';
-import type { Unit } from '../../core/units';
+import { lengthUnitFor, type Unit } from '../../core/units';
+import { prefillSetup } from '../../core/nutrition/setupPrefill';
 import { sessionsSince, type GymDb } from '../../data/db';
 import { CLASS_MAP } from '../../food-vision/classMap';
 import { decide as decidePhoto, type ScoredLabel } from '../../food-vision/decide';
@@ -179,6 +183,23 @@ export type FuelHost = {
   openLearn?: ((id: string, opener: HTMLElement) => void) | undefined;
   /** M13c: the app's Search button on the Fuel header. Omitted → no button. */
   onSearch?: OnSearch | undefined;
+  /**
+   * M13d: the length unit (settings 'lengthUnit', `getLengthUnit`) for Set up Fuel's height and
+   * Measurements. Omitted → follows the weight unit (cm with kg, inches with lb).
+   */
+  lengthUnit?: (() => LengthUnit) | undefined;
+  /**
+   * M13d task 13c: a unit switch on Set up Fuel, the weigh-in or Measurements was tapped (the
+   * whole new preference, once per tap). The page already re-shows its fields from their metric
+   * values; the app saves the preference (`setUnitPrefs`) and makes it app-wide. Omitted → the
+   * switch changes only the open page.
+   */
+  onUnits?: ((next: UnitPrefs) => void) | undefined;
+  /**
+   * M13d task 8: Apple Health's height / birth year / sex (`healthHost.profile()`), read once per
+   * Set up Fuel open to pre-fill only; never stored here. Omitted / null → no pre-fill.
+   */
+  healthProfile?: (() => Promise<HealthProfile | null>) | undefined;
 };
 
 /** M11-q8: what the weigh-in screen needs from the Health wiring (app.ts). */
@@ -209,10 +230,44 @@ export type FuelPhotoHost = {
 /** A photo still in memory while its dish is being picked (search after a photo). */
 type PendingPhoto = { photo: CapturedPhoto; takenAt: number };
 
+/**
+ * M13d: how Set up Fuel was left when the caller took over leaving (`setupForGoal` opts).
+ * 'skip' (task 3b): the first run's quiet "Not now": nothing saved, the step is dropped.
+ */
+export type SetupLeave = 'saved' | 'back' | 'skip';
+
+/**
+ * M13d task 3: `setupForGoal` options. `onLeave`: Save (after its writes) and Back call it
+ * instead of going to the Fuel tab / Settings, once per open. `inFlow`: Set up Fuel is a step of
+ * the first-launch flow (marked `data-onboarding-step="fuelSetup"`, no tab bar, opens at the top).
+ */
+export type SetupForGoalOpts = {
+  onLeave: (how: SetupLeave) => void;
+  inFlow?: true | undefined;
+};
+
+/** A setup open handed to the caller: `left` is set by the first Save / Back (a second is ignored). */
+type SetupHook = { onLeave: (how: SetupLeave) => void; inFlow: boolean; left: boolean };
+
+/**
+ * M13d task 8: one Set up Fuel open. `profile`: what Apple Health gave for this open (kept only
+ * while the screen is open). `touched`: you started filling the form in, so data arriving late
+ * (Fuel's first load, the Health read) no longer re-fills it.
+ */
+type SetupOpen = { profile: HealthProfile | null; touched: boolean };
+
+/** How long Set up Fuel waits for the Health read before giving up on the pre-fill. */
+const PROFILE_WAIT_MS = 3000;
+
 type Sub =
   | { kind: 'main' }
   | { kind: 'weighIn' }
-  | { kind: 'setup'; back: 'fuel' | 'settings' }
+  | {
+      kind: 'setup';
+      back: 'fuel' | 'settings';
+      hook?: SetupHook | undefined;
+      open: SetupOpen;
+    }
   | { kind: 'measurements' };
 
 /** M12 1b: settings key of the protein-nudge meals already dismissed (once per meal). */
@@ -1353,6 +1408,11 @@ export function createFuel(host: FuelHost) {
         onDismissProteinNudge: (key) => dismissProteinNudge(key),
         onProteinWhy: host.openLearn ? (opener) => host.openLearn?.('protein', opener) : undefined,
         onEditEntry: (e) => openEntry(e),
+        // M13d task 26: the row's swipe-left Delete, the same delete + Undo as the sheet's.
+        onDeleteEntry: (e) => {
+          const home = viewDate === null ? LOG_OPEN : FUEL_TODAY;
+          void removeEntry(e, true, home).catch(host.logError);
+        },
         onWeighIn: () => {
           sub = { kind: 'weighIn' };
           host.render();
@@ -1389,13 +1449,14 @@ export function createFuel(host: FuelHost) {
   function measurementsView(): HTMLElement {
     const sites = host.trainerKit?.().measurementSites ?? [];
     return measurementsScreen(
-      { sites, unit: host.unit(), today: today(), measurements },
+      { sites, units: units(), today: today(), measurements },
       {
         onBack: () => {
           sub = { kind: 'main' };
           host.render();
         },
         onSave: (rows) => void saveMeasurements(rows),
+        onUnits,
       },
     );
   }
@@ -1432,7 +1493,7 @@ export function createFuel(host: FuelHost) {
     const r = targetsResult();
     return weighInScreen(
       {
-        unit: host.unit(),
+        units: units(),
         todayKg: weighIns.find((w) => w.date === d)?.kg ?? null,
         todaySource: weighIns.find((w) => w.date === d)?.source,
         activity: activityNow(),
@@ -1461,6 +1522,7 @@ export function createFuel(host: FuelHost) {
         },
         onAccept: () => decide('accepted'),
         onDismiss: () => decide('dismissed'),
+        onUnits,
         onSwitchActivity: (level) => answerActivity('switch', level),
         onKeepActivity: () => {
           const s = activityNow();
@@ -1490,9 +1552,66 @@ export function createFuel(host: FuelHost) {
     afterChange();
   }
 
-  function openSetup(back: 'fuel' | 'settings'): void {
-    sub = { kind: 'setup', back };
+  /** M13d: the length unit for height and tape (no row → follows the weight unit). */
+  function lengthUnit(): LengthUnit {
+    return host.lengthUnit?.() ?? lengthUnitFor(host.unit());
+  }
+
+  /** M13d: both units, for the pages with a unit switch. */
+  function units(): UnitPrefs {
+    return { weight: host.unit(), length: lengthUnit() };
+  }
+
+  /** M13d task 13c: a page's unit switch; the app makes the preference app-wide. */
+  function onUnits(next: UnitPrefs): void {
+    host.onUnits?.(next);
+  }
+
+  /**
+   * Shows Set up Fuel at once, then (M13d task 8) makes sure Fuel's data is loaded and reads the
+   * Health profile once for this open; the form is re-filled with them unless you already
+   * started on it.
+   */
+  function openSetup(back: 'fuel' | 'settings', hook?: SetupHook): void {
+    const open: SetupOpen = { profile: null, touched: false };
+    sub = hook ? { kind: 'setup', back, hook, open } : { kind: 'setup', back, open };
     host.showFuel();
+    window.scrollTo(0, 0);
+    void fillSetup(open);
+  }
+
+  async function fillSetup(open: SetupOpen): Promise<void> {
+    const wasLoaded = loaded;
+    const [, profile] = await Promise.all([ensureLoaded(), readProfile()]);
+    if (sub.kind !== 'setup' || sub.open !== open) return; // left, or opened again
+    open.profile = profile;
+    if (open.touched || (wasLoaded && !profile)) return;
+    host.render();
+  }
+
+  /** The Health profile, or null (no reader, nothing there, an error, or no answer in time). */
+  async function readProfile(): Promise<HealthProfile | null> {
+    const read = host.healthProfile;
+    if (!read) return null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        read(),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), PROFILE_WAIT_MS);
+        }),
+      ]);
+    } catch {
+      return null; // the Health host logs its own errors; here it only means "no pre-fill"
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** M13d: leave a setup the caller took over (Save after its writes, or Back). */
+  function leaveToCaller(hook: SetupHook, how: SetupLeave): void {
+    if (sub.kind === 'setup' && sub.hook === hook) sub = { kind: 'main' };
+    hook.onLeave(how);
   }
 
   function leaveSetup(back: 'fuel' | 'settings'): void {
@@ -1501,31 +1620,75 @@ export function createFuel(host: FuelHost) {
     else host.render();
   }
 
-  function setupView(back: 'fuel' | 'settings'): HTMLElement {
+  function setupView(back: 'fuel' | 'settings', open: SetupOpen, hook?: SetupHook): HTMLElement {
     const s = settings;
-    const kg = latestKg();
-    return fuelSetupScreen(
+    const latest = latestWeighIn();
+    const year = new Date(host.now()).getFullYear();
+    // Saved values win, then Apple Health, then the latest weigh-in (even on a first setup).
+    const prefill = prefillSetup({
+      profile: open.profile,
+      latestKg: latest?.kg ?? null,
+      latestSource: latest?.source,
+      saved: s
+        ? { heightCm: s.heightCm, birthYear: s.birthYear, sex: s.sex, activity: s.activity }
+        : undefined,
+      year,
+    });
+    const el = fuelSetupScreen(
       {
-        year: new Date(host.now()).getFullYear(),
-        unit: host.unit(),
-        initial: s
-          ? {
-              heightCm: s.heightCm,
-              birthYear: s.birthYear,
-              sex: s.sex,
-              activity: s.activity,
-              ...(kg !== null ? { weightKg: kg } : {}),
-            }
-          : undefined,
+        year,
+        units: units(),
+        initial: prefill.initial,
+        fromHealth: prefill.fromHealth,
       },
       {
-        onSave: (v) => void saveSetup(v, back).catch(host.logError),
-        onCancel: () => leaveSetup(back),
+        onTouch: () => {
+          open.touched = true;
+        },
+        onUnits,
+        ...(hook?.inFlow
+          ? {
+              onNotNow: () => {
+                if (hook.left) return;
+                hook.left = true;
+                pendingGoal = null;
+                leaveToCaller(hook, 'skip');
+              },
+            }
+          : {}),
+        onSave: (v) => {
+          if (!hook) {
+            void saveSetup(v, back).catch(host.logError);
+            return;
+          }
+          if (hook.left) return;
+          hook.left = true;
+          void saveSetup(v, back, hook).catch((err: unknown) => {
+            hook.left = false; // not saved: Save (or Back) can be tapped again
+            host.logError(err);
+          });
+        },
+        onCancel: () => {
+          if (!hook) {
+            leaveSetup(back);
+            return;
+          }
+          if (hook.left) return;
+          hook.left = true;
+          pendingGoal = null;
+          leaveToCaller(hook, 'back');
+        },
       },
     );
+    if (hook?.inFlow) el.setAttribute('data-onboarding-step', 'fuelSetup');
+    return el;
   }
 
-  async function saveSetup(v: SetupValues, back: 'fuel' | 'settings'): Promise<void> {
+  async function saveSetup(
+    v: SetupValues,
+    back: 'fuel' | 'settings',
+    hook?: SetupHook,
+  ): Promise<void> {
     // Build on what is stored, not the in-memory copy: mode and the barcode switch may have been
     // set (before setup, or while it was open), and the in-memory copy may be older.
     const [stored, storedMode, storedBarcode] = await Promise.all([
@@ -1562,7 +1725,8 @@ export function createFuel(host: FuelHost) {
       a.date < b.date ? -1 : 1,
     );
     evaluateNudge();
-    leaveSetup(back);
+    if (hook) leaveToCaller(hook, 'saved');
+    else leaveSetup(back);
   }
 
   // ---------- Settings → Nutrition ----------
@@ -1657,7 +1821,7 @@ export function createFuel(host: FuelHost) {
         case 'weighIn':
           return weighInView();
         case 'setup':
-          return setupView(sub.back);
+          return setupView(sub.back, sub.open, sub.hook);
         case 'measurements':
           return measurementsView();
       }
@@ -1691,10 +1855,21 @@ export function createFuel(host: FuelHost) {
       });
       return true;
     },
-    /** M12 1b: "Set up Fuel for this goal": setup, saved with the goal's targets. */
-    setupForGoal(goalKind: GoalKind): void {
+    /**
+     * M12 1b: "Set up Fuel for this goal": setup, saved with the goal's targets. Without `opts`
+     * Save / Back go to the Fuel tab. M13d task 3: with `opts.onLeave` they call it instead
+     * ('saved' after the writes, 'back' with nothing saved), and with `opts.inFlow` the screen is
+     * the first-launch flow's `fuelSetup` step and opens at the top.
+     */
+    setupForGoal(goalKind: GoalKind, opts?: SetupForGoalOpts): void {
       pendingGoal = goalKind;
-      openSetup('fuel');
+      // Every open starts at the top (openSetup): the intake summary's scroll would otherwise
+      // carry over (it opened at Sex / Activity).
+      if (!opts) {
+        openSetup('fuel');
+        return;
+      }
+      openSetup('fuel', { onLeave: opts.onLeave, inFlow: opts.inFlow === true, left: false });
     },
     settingsBlock,
     /** Summary's protein line, or null without targets. */

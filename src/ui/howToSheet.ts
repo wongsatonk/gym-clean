@@ -2,6 +2,16 @@
 // 2D muscle map when there is no demo or no WebGL), the phase text big under it, the tempo, 2-3
 // how-to lines, the focus line and the M2 form cue. The 3D player renders only while the sheet is
 // open: dispose() frees it, and closing while three.js loads aborts the load.
+//
+// M13d task 19 ("some screens have too much text"): the steps come first under the demo, then the
+// tempo and the form cue (a cue is never hidden: SPEC M13d); the focus line (which muscles to
+// feel) sits behind the shared "More" disclosure (`[data-more="howto"]`). The sheet opens only on
+// a tap of How-to, never by itself, and nothing in it is spoken. Opened while a workout is on
+// screen (the Exercise / Rest screen) More starts open, so nothing new has to be tapped mid-set.
+//
+// M13d task 25: swipe down closes it (the Close button's own path), but never from the 3D stage
+// (it drags the model) and never while a workout is on screen (sheetSwipe.ts). dispose() removes
+// the swipe.
 
 import type { PlannedExercise } from '../core/types';
 import { cueFor, exerciseById, exerciseName, howToFor } from '../data/catalog';
@@ -10,7 +20,11 @@ import { bodyMapSvg, pickView } from './bodyMap';
 import { hasDemo } from './demo3d/ids';
 import { createDemoPlayer, type DemoPlayer } from './demo3d/player';
 import { h } from './dom';
+import { installSheetSwipe } from './gestures/sheetSwipe';
+import { motionOffInWorkout, workoutOnScreen } from './gestures/edgeBack';
+import { iconButton } from './iconButton';
 import { icon } from './icons';
+import { moreDisclosure } from './moreDisclosure';
 import './howto.css';
 
 export type HowToSheetOptions = {
@@ -65,11 +79,16 @@ export function createHowToSheet(opts: HowToSheetOptions): HowToSheetHandle {
   let player: DemoPlayer | null = null;
   let disposed = false;
 
-  const closeBtn = h(
-    'button',
-    { class: 'howto-close', 'data-howto': 'close', onclick: () => opts.onClose() },
-    'Close',
-  );
+  // M13d task 40a: a quiet round Close with the word beside it (the sheet's title row).
+  const closeBtn = iconButton({
+    icon: 'close',
+    label: 'Close',
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'howto-close',
+    hooks: { 'data-howto': 'close' },
+    onClick: () => opts.onClose(),
+  });
   const stage = h('div', { class: 'howto-stage', 'data-howto': 'stage' });
   const phase = h('p', { class: 'howto-phase', 'aria-live': 'off', 'data-howto': 'phase' });
   const note = h('p', { class: 'howto-note', 'data-howto': 'note', hidden: true });
@@ -146,7 +165,6 @@ export function createHowToSheet(opts: HowToSheetOptions): HowToSheetHandle {
     stage,
     phase,
     note,
-    c.tempo ? h('p', { class: 'howto-tempo', 'data-howto': 'tempo' }, c.tempo) : null,
     c.lines.length
       ? h(
           'ol',
@@ -154,15 +172,7 @@ export function createHowToSheet(opts: HowToSheetOptions): HowToSheetHandle {
           ...c.lines.map((l) => h('li', {}, l)),
         )
       : null,
-    // The focus line names the muscles: a cyan dot (the muscle colour) beside plain text.
-    c.focus
-      ? h(
-          'p',
-          { class: 'howto-focus', 'data-howto': 'focus' },
-          h('i', { class: 'swatch-dot', 'aria-hidden': 'true' }),
-          h('span', {}, c.focus),
-        )
-      : null,
+    c.tempo ? h('p', { class: 'howto-tempo', 'data-howto': 'tempo' }, c.tempo) : null,
     // The form cue is the line the coach speaks mid-set: the shared lavender cue panel.
     c.cue
       ? h(
@@ -172,7 +182,30 @@ export function createHowToSheet(opts: HowToSheetOptions): HowToSheetHandle {
           h('p', { class: 'cue-text' }, c.cue),
         )
       : null,
+    // The focus line names the muscles: a cyan dot (the muscle colour) beside plain text.
+    c.focus
+      ? moreDisclosure(
+          [
+            h(
+              'p',
+              { class: 'howto-focus', 'data-howto': 'focus' },
+              h('i', { class: 'swatch-dot', 'aria-hidden': 'true' }),
+              h('span', {}, c.focus),
+            ),
+          ],
+          { about: 'the muscles to feel', hook: 'howto', open: workoutOnScreen() },
+        ).el
+      : null,
   );
+
+  // Opened mid-workout (Exercise, Rest): nothing new moves, so no press scale / glow.
+  motionOffInWorkout(el);
+
+  // Swipe down = Close (one code path); the 3D stage keeps its own drag.
+  const unswipe = installSheetSwipe(el, {
+    close: () => closeBtn.click(),
+    ignore: '[data-howto="stage"]',
+  });
 
   // Put focus in the sheet once it is attached (Close is the safe first target).
   queueMicrotask(() => {
@@ -184,6 +217,7 @@ export function createHowToSheet(opts: HowToSheetOptions): HowToSheetHandle {
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      unswipe();
       abort.abort();
       player?.dispose();
       player = null;

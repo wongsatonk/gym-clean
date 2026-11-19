@@ -68,7 +68,7 @@ button.about-version {
   margin: 0;
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
 }
 
 .about-card-head .ic {
@@ -83,7 +83,7 @@ button.about-version {
   flex-direction: column;
   gap: 8px;
   font-size: var(--fs-body);
-  line-height: 1.4;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -103,7 +103,7 @@ button.about-version {
 .about-exception-text {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.4;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -184,7 +184,7 @@ button.about-version {
   border-radius: var(--r-card);
   font-family: var(--font-body);
   font-size: var(--fs-body);
-  line-height: 1.45;
+  line-height: var(--lh-text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   color: var(--text);

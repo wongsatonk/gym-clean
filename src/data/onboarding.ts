@@ -1,8 +1,10 @@
 /**
  * M13 first launch (SPEC M13 goal 1): the page copy as data, and the settings row 'onboarding'.
  *
- * Copy rules (tested): at most 2 short sentences a page, written to "you", no goal assumed, every
- * string passes `checkCopy`, the name comes from APP_NAME. The permission pages keep the slice 2
+ * Copy rules (tested): written to "you", no goal assumed, every string passes `checkCopy`, the name
+ * comes from APP_NAME. M13d task 18 ("some screens have too much text"): a welcome page is a title +
+ * one sentence of ≤ 15 words; a permission "why" is one sentence of ≤ 20 words that keeps its
+ * privacy promise; the Units page has one line. The permission pages keep the slice 2
  * rules: the notifications button switches the session reminder on (that switch asks for
  * permission); Health goes through the M11 connect flow; the camera asks on its button. The mic
  * page's Allow (permission catch-up decision, M13) asks for the microphone and then downloads the
@@ -20,7 +22,7 @@ import {
   type OnboardingPermission,
   type WelcomePageId,
 } from '../core/onboarding';
-import type { Onboarding } from '../core/types';
+import type { LengthUnit, Onboarding } from '../core/types';
 import type { GymDb } from './db';
 import { getIntake } from './trainerKit/store';
 
@@ -61,43 +63,59 @@ export const WELCOME_PAGES: Record<WelcomePageId, WelcomePage> = {
   hello: {
     title: APP_NAME,
     tagline: APP_TAGLINE,
-    body: 'Guided workouts, a coach and a food log in one app. Everything stays on this phone.',
+    body: 'Everything stays on this phone.',
   },
   train: {
     title: 'Train with a guide',
-    body: 'Each set shows what to lift and the muscles to feel. Rest timers and voice cues keep you moving.',
-  },
-  coach: {
-    title: 'A coach that adapts',
-    body: 'Short on time or low on energy? Ask the coach, and nothing changes until you tap Apply.',
+    body: 'Each set shows what to lift and the muscles to feel, with voice cues.',
   },
 };
 
 export const PERMISSION_PAGES: Record<OnboardingPermission, PermissionPage> = {
   camera: {
     title: 'Camera',
-    why: 'Prop up your phone and it counts your reps for you. No video is saved or sent.',
+    why: 'Prop up your phone and it counts your reps; no video is saved or sent.',
     action: { kind: 'ask', label: 'Allow camera' },
     notNow: 'Not now',
   },
   health: {
     title: 'Apple Health',
-    why: 'Sleep and workouts from Health help the coach suggest lighter days. It is read-only and stays on this phone.',
+    why: 'Reads sleep and workouts for lighter days, and height, weight, birthday and sex for Fuel; read-only, stays on this phone.',
     action: { kind: 'connect', label: 'Connect Apple Health' },
     notNow: 'Not now',
   },
   mic: {
     title: 'Microphone',
-    why: 'Hold the mic to talk to the coach; audio is never stored or sent. Allow also sets up speech on this phone, about a minute on Wi-Fi.',
+    // M13d follow-up (q) + review: who you talk to, and the audio itself ("your voice"); 20 words,
+    // the page cap ("Hold to talk to the coach" would make it 21).
+    why: 'Hold to ask the coach; speech runs on this phone after Wi-Fi setup; your voice is never stored or sent.',
     action: { kind: 'ask', label: 'Allow microphone' },
     notNow: 'Not now',
   },
   notifications: {
     title: 'Reminders',
-    why: 'A nudge at your training time, made on this phone. Reminders start off until you turn one on.',
+    why: 'A nudge at your training time, made on this phone; reminders stay off until you turn one on.',
     action: { kind: 'reminder', label: 'Turn on session reminder' },
     notNow: 'Not now',
   },
+};
+
+/**
+ * M13d Units page (SPEC M13d goal 3): one line, then two choices. The option words are the units
+ * themselves; `in` reads "ft·in" because height shows as feet + inches (tape as inches).
+ */
+export type UnitsPage = {
+  title: string;
+  body: string;
+  weight: { label: string; options: Record<'kg' | 'lb', string> };
+  length: { label: string; options: Record<LengthUnit, string> };
+};
+
+export const UNITS_PAGE: UnitsPage = {
+  title: 'Units',
+  body: 'Pick your units; a switch next to each field changes them later.',
+  weight: { label: 'Weight', options: { kg: 'kg', lb: 'lb' } },
+  length: { label: 'Height and body', options: { cm: 'cm', in: 'ft·in' } },
 };
 
 export const ONBOARDING_BUTTONS = {

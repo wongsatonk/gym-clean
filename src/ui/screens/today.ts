@@ -32,6 +32,10 @@
 // M13c (optional): Search in the app bar (`[data-search-open]`, ../searchButton.ts) when
 // `onSearch` is set; the date moves under the brand so the bar stays one 56px row.
 // Only Start is a filled orange button here; today.css turns the cards' own CTAs into outlines.
+// M13d task 40c (SPEC M13d Goal 7): Start / Train anyway are the round main button in a wide pill
+// (./mainPill.ts, still the first thing under the app bar); the cards' actions (Coach, Undo, Use it
+// / Keep mine, Move it / Start it / Skip it) are round iconButtons with their words kept. The
+// day cards, the notices row and the chips stay as they were.
 import type { WeekDot } from '../../core/stats';
 import type { MissedDay } from '../../core/progress/completion';
 import type { DayFeel, DayOverride, ProgramDay, ReadinessCard } from '../../core/types';
@@ -43,6 +47,7 @@ import { exerciseById } from '../../data/catalog';
 import { bodyMapSvg, pickView } from '../bodyMap';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import { countUp, enterScreen, staggerIn } from '../motion';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
@@ -55,6 +60,7 @@ import { feelToday } from './feelToday';
 import { todoCard, type TodoCardProps } from '../todo/todoCard';
 import { goalCard, type GoalCardProps } from './goalCard';
 import { weekLoadLine, type WeekLoad } from './weekLoad';
+import { mainPill } from './mainPill';
 import './today.css';
 
 /** The last finished session, as the Last time tile shows it. */
@@ -289,14 +295,16 @@ function appBar(props: TodayProps, actions: TodayActions): HTMLElement {
   );
 }
 
-/** The Coach button (Today and the preview top bars): icon + word, ≥ 56px. */
+/** The Coach button (Today and the preview top bars): round icon + word beside, ≥ 56px. */
 export function coachButton(onCoach: () => void): HTMLElement {
-  return h(
-    'button',
-    { type: 'button', class: 'coach-btn', 'data-coach-open': true, onclick: () => onCoach() },
-    icon('chat', 'md'),
-    h('span', {}, 'Coach'),
-  );
+  return iconButton({
+    icon: 'chat',
+    label: 'Coach',
+    labelAt: 'beside',
+    class: 'coach-open',
+    hooks: { 'data-coach-open': true },
+    onClick: () => onCoach(),
+  });
 }
 
 /**
@@ -314,16 +322,13 @@ export function adjustedBanner(summary: string, onUndo: (() => void) | undefined
       h('span', {}, h('strong', {}, 'Adjusted today: '), summary),
     ),
     onUndo
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'adjusted-undo',
-            'data-undo-adjust': true,
-            onclick: () => onUndo(),
-          },
-          'Undo',
-        )
+      ? iconButton({
+          icon: 'undo',
+          label: 'Undo',
+          class: 'adjusted-act',
+          hooks: { 'data-undo-adjust': true },
+          onClick: () => onUndo(),
+        })
       : null,
   );
 }
@@ -342,16 +347,18 @@ function newProgramPrompt(actions: TodayActions): HTMLElement {
     h(
       'div',
       { class: 'program-prompt-actions' },
-      h(
-        'button',
-        { type: 'button', class: 'adjusted-undo', onclick: () => actions.onUseNewProgram?.() },
-        'Use it',
-      ),
-      h(
-        'button',
-        { type: 'button', class: 'adjusted-undo', onclick: () => actions.onKeepPlan?.() },
-        'Keep mine',
-      ),
+      iconButton({
+        icon: 'refresh',
+        label: 'Use it',
+        class: 'adjusted-act card-cta',
+        onClick: () => actions.onUseNewProgram?.(),
+      }),
+      iconButton({
+        icon: 'check',
+        label: 'Keep mine',
+        class: 'adjusted-act',
+        onClick: () => actions.onKeepPlan?.(),
+      }),
     ),
   );
 }
@@ -391,18 +398,13 @@ function restHero(day: ProgramDay, props: TodayProps, actions: TodayActions): HT
       h('p', { class: 'hero-meta rest-next' }, `Next up: ${day.name}`),
     ),
     props.hint ?? null,
-    h(
-      'button',
-      {
-        class: 'primary-btn hero-cta',
-        type: 'button',
-        'data-start': day.id,
-        'data-train-anyway': true,
-        onclick: () => train(day),
-      },
-      icon('play', 'lg'),
-      'Train anyway',
-    ),
+    mainPill({
+      icon: 'play',
+      label: 'Train anyway',
+      class: 'start-pill hero-start',
+      hooks: { 'data-start': day.id, 'data-train-anyway': true },
+      onClick: () => train(day),
+    }),
   );
 }
 
@@ -421,7 +423,13 @@ function hero(props: TodayProps, actions: TodayActions): HTMLElement {
         h('span', { class: 'sr-only' }, 'Loading'),
       ),
       props.hint ?? null,
-      h('button', { class: 'primary-btn hero-cta', type: 'button', disabled: true }, 'Loading…'),
+      mainPill({
+        icon: 'play',
+        label: 'Loading…',
+        class: 'start-pill hero-start',
+        disabled: true,
+        onClick: () => {},
+      }),
     );
   }
   if (todayEntry(props)?.rest) return restHero(day, props, actions);
@@ -449,17 +457,13 @@ function hero(props: TodayProps, actions: TodayActions): HTMLElement {
       ),
     ),
     props.hint ?? null,
-    h(
-      'button',
-      {
-        class: 'primary-btn hero-cta',
-        type: 'button',
-        'data-start': day.id,
-        onclick: () => actions.onStart(day),
-      },
-      icon('play', 'lg'),
-      'Start workout',
-    ),
+    mainPill({
+      icon: 'play',
+      label: 'Start workout',
+      class: 'start-pill hero-start',
+      hooks: { 'data-start': day.id },
+      onClick: () => actions.onStart(day),
+    }),
   );
 }
 
@@ -689,26 +693,20 @@ export function missedDayCard(
     h(
       'div',
       { class: 'missed-actions' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'missed-btn missed-cta',
-          [action === 'start' ? 'data-missed-start' : 'data-missed-move']: true,
-          onclick: () => onFirst(missed),
-        },
-        action === 'start' ? 'Start it' : 'Move it',
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'missed-btn',
-          'data-missed-skip': true,
-          onclick: () => onSkipMissed(missed),
-        },
-        'Skip it',
-      ),
+      iconButton({
+        icon: action === 'start' ? 'play' : 'calendar',
+        label: action === 'start' ? 'Start it' : 'Move it',
+        class: 'missed-act card-cta',
+        hooks: { [action === 'start' ? 'data-missed-start' : 'data-missed-move']: true },
+        onClick: () => onFirst(missed),
+      }),
+      iconButton({
+        icon: 'skip',
+        label: 'Skip it',
+        class: 'missed-act',
+        hooks: { 'data-missed-skip': true },
+        onClick: () => onSkipMissed(missed),
+      }),
     ),
   );
 }

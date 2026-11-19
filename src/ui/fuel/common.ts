@@ -2,8 +2,10 @@
 // stepper, the sheet shell with its focus trap). Pure render helpers: no DB, no speech.
 import type { FoodAmount, MacroSet, MealSlot, NutritionMode } from '../../core/types';
 import { h } from '../dom';
-import { icon } from '../icons';
+import { installSheetSwipe } from '../gestures/sheetSwipe';
+import { iconButton } from '../iconButton';
 import { moodClass } from '../tokens';
+import '../chromeButtons.css';
 import './fuel.css';
 
 export const SLOT_LABEL: Record<MealSlot, string> = {
@@ -87,33 +89,28 @@ export type StepperOpts = {
 };
 
 /**
- * A [−] value [+] stepper: 64px number (`.stepper-value`), 64px buttons with a visible word
- * for screen readers via aria-label (the buttons carry only the ± glyph, as the workout steppers).
+ * A [−] value [+] stepper: 64px number (`.stepper-value`) between round − / + buttons with
+ * "Less" / "More" under the circle (M13d, as fields.ts's number field). Names stay
+ * "Less <label>" / "More <label>"; `data-step` = down / up.
  */
 export function stepper(o: StepperOpts): HTMLElement & { set: (v: number) => void } {
   let value = o.value;
   const num = h('span', { class: 'stepper-value fuel-step-num' }, fmtAmount(value));
   const unit = h('span', { class: 'fuel-step-unit' }, o.unit(value));
-  const minus = h(
-    'button',
-    {
-      type: 'button',
+  const roundStep = (dir: -1 | 1) =>
+    iconButton({
+      icon: dir < 0 ? 'minus' : 'plus',
+      label: dir < 0 ? 'Less' : 'More',
+      ariaLabel: `${dir < 0 ? 'Less' : 'More'} ${o.label.toLowerCase()}`,
       class: 'fuel-step-btn',
-      'aria-label': `Less ${o.label.toLowerCase()}`,
-      'data-step': 'down',
-    },
-    icon('minus', 'lg', { stroke: 3 }),
-  );
-  const plus = h(
-    'button',
-    {
-      type: 'button',
-      class: 'fuel-step-btn',
-      'aria-label': `More ${o.label.toLowerCase()}`,
-      'data-step': 'up',
-    },
-    icon('plus', 'lg', { stroke: 3 }),
-  );
+      hooks: { 'data-step': dir < 0 ? 'down' : 'up' },
+      onClick: () => {
+        set(value + dir * o.step);
+        o.onChange(value);
+      },
+    });
+  const minus = roundStep(-1);
+  const plus = roundStep(1);
   const paint = () => {
     num.textContent = fmtAmount(value);
     unit.textContent = o.unit(value);
@@ -127,14 +124,6 @@ export function stepper(o: StepperOpts): HTMLElement & { set: (v: number) => voi
     value = Math.min(max, Math.max(o.min, Math.round(v * 100) / 100));
     paint();
   };
-  minus.addEventListener('click', () => {
-    set(value - o.step);
-    o.onChange(value);
-  });
-  plus.addEventListener('click', () => {
-    set(value + o.step);
-    o.onChange(value);
-  });
   const el = h(
     'div',
     { class: 'fuel-stepper', role: 'group', 'aria-label': o.label, 'data-stepper': o.key },
@@ -203,9 +192,10 @@ export type SheetShell = {
 };
 
 /**
- * A full-screen sheet (Pro mood): a title row with a neutral Close/Back button, a scrolling body.
+ * A full-screen sheet (Pro mood): a title row with a quiet round Close / Cancel, a scrolling body.
  * Escape calls `onEscape`; Tab / Shift+Tab stay inside the sheet (focus trap, as in the Pause
- * sheet). The app makes the page behind inert.
+ * sheet). The app makes the page behind inert. Swipe down (at the top) = the Close button (M13d),
+ * until the sheet has unsaved changes (any input / change event inside it).
  */
 export function sheetShell(o: {
   title: string;
@@ -216,12 +206,16 @@ export function sheetShell(o: {
 }): SheetShell {
   const title = h('h1', { class: 'page-title fuel-sheet-title', id: `${o.key}-title` }, o.title);
   const body = h('div', { class: 'fuel-sheet-body' });
-  const close = h(
-    'button',
-    { type: 'button', class: 'fuel-close', 'data-close': true, onclick: () => o.onClose() },
-    icon('close', 'md'),
-    h('span', {}, o.closeLabel),
-  );
+  // M13d task 40a: Close / Cancel is a quiet round icon button with the word beside it.
+  const close = iconButton({
+    icon: 'close',
+    label: o.closeLabel,
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'fuel-sheet-close chrome-close',
+    hooks: { 'data-close': true },
+    onClick: () => o.onClose(),
+  });
   const el = h(
     'div',
     {
@@ -235,6 +229,17 @@ export function sheetShell(o: {
     h('div', { class: 'fuel-sheet-top' }, title, close),
     body,
   );
+  // M13d task 25: swipe down = this Close / Cancel (the whole sheet follows; scrolled: scrolls).
+  // Once anything is typed or changed in the sheet it is "dirty" and the swipe is removed for
+  // good (like iOS isModalInPresentation): a stray swipe never drops an edit. Close still works.
+  const unswipe = installSheetSwipe(el, { close: () => close.click() });
+  const dirty = () => {
+    unswipe();
+    el.removeEventListener('input', dirty);
+    el.removeEventListener('change', dirty);
+  };
+  el.addEventListener('input', dirty);
+  el.addEventListener('change', dirty);
   el.addEventListener('keydown', (ev) => {
     const e = ev as KeyboardEvent;
     if (e.key === 'Escape') {

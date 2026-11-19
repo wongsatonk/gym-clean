@@ -22,8 +22,10 @@ import { CARD_TITLE } from '../../core/health/copy';
 import type { FeelOffer } from '../../core/health/readiness';
 import type { BodyArea, ReadinessCard } from '../../core/types';
 import { h } from '../dom';
-import { icon } from '../icons';
+import { icon, type IconName } from '../icons';
+import { iconButton } from '../iconButton';
 import { easyOnOffers } from './feelToday';
+import './mainPill.css';
 import './readinessCard.css';
 
 export type ReadinessActions = {
@@ -61,6 +63,28 @@ export function readinessFixedCopy(): string[] {
   return [c.lighter.title, c.lighter.cta, c.deload.title, c.deload.cta, c.notToday, c.keep];
 }
 
+/**
+ * M13d task 40c: one of the card's choices, a round iconButton with its word beside it on a
+ * full-width row (the choices stack, as the bars did; "Go easy on …" rows sit between them).
+ */
+function cardAct(
+  ic: IconName,
+  label: string,
+  cls: string,
+  hooks: Record<string, boolean>,
+  onClick: () => void,
+): HTMLButtonElement {
+  return iconButton({
+    icon: ic,
+    label,
+    labelAt: 'beside',
+    wideHit: true,
+    class: ['readiness-act', cls].filter(Boolean).join(' '),
+    hooks,
+    onClick: () => onClick(),
+  });
+}
+
 /** The card, or null with no card / no reasons, or when a needed callback isn't wired. */
 export function readinessCard(
   card: ReadinessCard | null | undefined,
@@ -95,39 +119,26 @@ export function readinessCard(
     h(
       'div',
       { class: 'readiness-actions' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'readiness-btn readiness-cta',
-          [deload ? 'data-readiness-deload' : 'data-readiness-lighter']: true,
-          onclick: () => onMain(),
-        },
+      cardAct(
+        'minus',
         copy.cta,
+        'readiness-cta card-cta',
+        {
+          [deload ? 'data-readiness-deload' : 'data-readiness-lighter']: true,
+        },
+        onMain,
       ),
       cardShowsEasyOn(card, offers, actions.onEasyOn)
         ? easyOnOffers(offers, actions.onEasyOn, 'readiness-btn readiness-easy')
         : null,
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'readiness-btn',
-          'data-readiness-postpone': true,
-          onclick: () => onNotToday(),
-        },
+      cardAct(
+        'calendar',
         READINESS_COPY.notToday,
+        '',
+        { 'data-readiness-postpone': true },
+        onNotToday,
       ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'readiness-btn',
-          'data-readiness-keep': true,
-          onclick: () => onTrainAsPlanned(),
-        },
-        READINESS_COPY.keep,
-      ),
+      cardAct('check', READINESS_COPY.keep, '', { 'data-readiness-keep': true }, onTrainAsPlanned),
     ),
   );
 }

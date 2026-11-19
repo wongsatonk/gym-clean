@@ -34,6 +34,12 @@ export class FakeEl {
   addEventListener(type: string, cb: (ev?: unknown) => void) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), cb]);
   }
+  removeEventListener(type: string, cb: (ev?: unknown) => void) {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter((l) => l !== cb),
+    );
+  }
   click() {
     for (const cb of this.listeners.get('click') ?? []) cb();
   }

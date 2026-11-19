@@ -33,20 +33,54 @@
 // M13c task 14: Search next to the title (`[data-search-open]`, ../searchButton.ts) when
 // `onSearch` is set, and every section is a jump target: `id="settings-<key>"` (settingsSectionId)
 // + tabindex=-1. The search items for these sections are in ./settingsIndex.ts.
-import type { Accent, BackgroundStyle, BodyArea, Intake } from '../../core/types';
-import type { Unit } from '../../core/units';
+//
+// M13d task 12: "Weight unit" became **Units** (section key still `unit`): Weight (kg / lb, the
+// same `data-unit` buttons in the group "Weight unit") and, when `onLengthUnit` is set, Height and
+// body (cm / ft·in, `data-length-unit`, group "Height and body unit"). Stored values never change.
+//
+// M13d task 19 ("some screens have too much text"): a section's one-line note (one sentence,
+// ≤ 10 words) stays shown; multi-sentence or long notes sit behind one shared "More" disclosure
+// per section (`[data-more="set-<key>"]`, ../moreDisclosure.ts).
+// Shown as before: the privacy line (Progress photos), state lines (goal summary / own words,
+// "Nothing on the list", "Not set yet") and About's name / version / credit.
+//
+// M13d task 21: **Display** (section key `display`, right under Your goal, shown when
+// `onTextSize` is set): Text size Standard / Large / Larger (../textSizePicker.ts, group
+// "Text size", `data-text-size-option`), one short note.
+//
+// M13d task 40d (Goal 7): every action row (Set your goal, Camera test, My gym, Health, Coach,
+// Self-check, Reminders, Plan changes, To-dos, What's new, Open progress photos, Coach eval,
+// About, Show the welcome again) is a round icon button with its word beside it
+// (`settingsRowButton`, class `set-row`); the whole row stays the tap area. Words, hooks and
+// accessible names are unchanged; Camera test also gets `data-camera-test-open`. Go-easy Remove
+// is a quiet round button (same aria-label). Switches, the kg / lb and cm / ft·in choices, Text
+// size, Accent and Background stay as they are.
+import type {
+  Accent,
+  BackgroundStyle,
+  BodyArea,
+  Intake,
+  LengthUnit,
+  TextSize,
+} from '../../core/types';
+import { lengthUnitFor, type Unit } from '../../core/units';
 import { APP_NAME } from '../../core/brand';
 import { CREDIT, versionLabel } from '../../core/version';
-import { ONBOARDING_BUTTONS } from '../../data/onboarding';
+import { ONBOARDING_BUTTONS, UNITS_PAGE } from '../../data/onboarding';
 import { accentPicker } from '../accentPicker';
 import { backgroundPicker } from '../backgroundPicker';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
+import { moreDisclosure } from '../moreDisclosure';
 import { AREA_LABEL, BODY_AREAS, intakeSummary } from '../intake/intake';
 import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import { pageHead, type OnSearch } from '../searchButton';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
+import { textSizePicker } from '../textSizePicker';
+import './settingsUnits.css';
+import '../settingsButtons.css';
 
 export type SettingsProps = {
   accent: Accent;
@@ -56,6 +90,13 @@ export type SettingsProps = {
   coachTips: boolean;
   handsFree: boolean;
   unit: Unit;
+  /**
+   * M13d: the 'lengthUnit' row (height in ft·in, tape in inches when 'in'). Missing → follows the
+   * weight unit (the no-row behaviour of 1.16).
+   */
+  lengthUnit?: LengthUnit | undefined;
+  /** M13d task 21: settings 'textSize' (Display → Text size). Missing → Standard. */
+  textSize?: TextSize | undefined;
   /** `createCoachVoiceSettings(...).el`. */
   coachVoice: HTMLElement;
   /** The speaker check (`voiceTest()` in app.ts, the `.voice-test` block). */
@@ -98,6 +139,16 @@ export type SettingsActions = {
   onHandsFree: (on: boolean) => void;
   /** A different unit was picked. */
   onUnit: (unit: Unit) => void;
+  /**
+   * M13d: a different height-and-body unit was picked (save 'lengthUnit'). Omitted → Units shows
+   * only the Weight choice.
+   */
+  onLengthUnit?: ((unit: LengthUnit) => void) | undefined;
+  /**
+   * M13d task 21: a different text size was picked: save it (setTextSize) and apply it
+   * (applyTextSize, ../textSizePicker). Omitted → no Display section.
+   */
+  onTextSize?: ((size: TextSize) => void) | undefined;
   onCameraTest: () => void;
   onTab: (tab: TabId) => void;
   /** M10: opens Settings → Plan changes. Omitted → no Plan section. */
@@ -160,6 +211,47 @@ export function unitNote(unit: Unit): string {
     : 'Weights step by 5 lb. Saved weights are converted, nothing is lost if you switch back.';
 }
 
+/** M13d: the help line under the cm / ft·in choice. */
+export function lengthNote(unit: LengthUnit): string {
+  return unit === 'in' ? 'Height in feet and inches, tape in inches.' : 'Height and tape in cm.';
+}
+
+/** M13d: the group names of the two Units choices (as on the first-run Units page). */
+export const WEIGHT_UNIT_GROUP = 'Weight unit';
+export const LENGTH_UNIT_GROUP = 'Height and body unit';
+
+/** A one-line note stays shown; longer ones fold behind More (M13d review). */
+export const SHORT_NOTE_WORDS = 10;
+
+/** True for a one-sentence note of at most SHORT_NOTE_WORDS words ("2.5 kg." is one). Pure. */
+export function isShortNote(note: string): boolean {
+  const t = note.trim();
+  const sentences = t.split(/[.!?](?:\s+|$)/).filter((x) => x.trim() !== '');
+  return sentences.length <= 1 && t.split(/\s+/).filter(Boolean).length <= SHORT_NOTE_WORDS;
+}
+
+/**
+ * A section's explanatory note(s) (M13d task 19 + review): one-line notes stay shown
+ * (`.set-note[data-set-note=<key>]`); multi-sentence or long ones sit behind one "More"
+ * (`[data-more="set-<key>"]`). Both kinds: a `display: contents` wrapper, so the section's gap holds.
+ */
+function notesMore(key: string, about: string, ...notes: (string | null)[]): HTMLElement | null {
+  const all = notes.filter((n): n is string => Boolean(n));
+  const note = (n: string, attrs: Record<string, string | boolean> = {}) =>
+    h('p', { class: 'muted set-note', ...attrs }, n);
+  const shown = all.filter(isShortNote).map((n) => note(n, { 'data-set-note': key }));
+  const folded = all.filter((n) => !isShortNote(n));
+  const more = folded.length
+    ? moreDisclosure(
+        folded.map((n) => note(n)),
+        { about, hook: `set-${key}` },
+      ).el
+    : null;
+  const parts = [...shown, more].filter((p): p is HTMLElement => p !== null);
+  if (parts.length <= 1) return parts[0] ?? null;
+  return h('div', { class: 'set-notes' }, ...parts);
+}
+
 /** A section heading: icon + words (the icon is decorative). */
 function sectionTitle(name: IconName, text: string, id: string): HTMLElement {
   return h('h2', { class: 'set-head', id }, icon(name, 'md'), h('span', {}, text));
@@ -192,6 +284,29 @@ export function switchRow(
 }
 
 /**
+ * M13d task 40d: a Settings action (opens a sub-screen or runs something) as a round icon button
+ * with its word beside it; the whole row stays the tap area (it replaced a full-width bar).
+ * `hook` is the e2e / app data attribute (e.g. `data-my-gym-open`); the word is the accessible
+ * name, as before.
+ */
+export function settingsRowButton(
+  iconName: IconName,
+  label: string,
+  hook: string | null,
+  onTap: () => void,
+): HTMLButtonElement {
+  return iconButton({
+    icon: iconName,
+    label,
+    labelAt: 'beside',
+    wideHit: true,
+    class: 'set-ib-pill set-row',
+    hooks: hook ? { [hook]: true } : {},
+    onClick: () => onTap(),
+  });
+}
+
+/**
  * M12 slice 1c: "To-dos" + "What's new" rows (each only when its callback is set). M13: owner
  * mode off → no To-dos row; What's new alone is its own "What's new" section.
  */
@@ -207,33 +322,23 @@ function todosSection(
 ): HTMLElement | null {
   const onTodos = owner ? actions.onTodos : undefined;
   if (!onTodos && !actions.onWhatsNew) return null;
-  const row = (hook: string, label: string, onTap: (() => void) | undefined) =>
-    onTap
-      ? h(
-          'button',
-          { type: 'button', class: 'set-action', [hook]: true, onclick: () => onTap() },
-          label,
-        )
-      : null;
+  const row = (iconName: IconName, hook: string, label: string, onTap: (() => void) | undefined) =>
+    onTap ? settingsRowButton(iconName, label, hook, onTap) : null;
   if (!owner)
     return section(
       'whats-new',
       'list',
       "What's new",
-      row('data-whats-new-open', "What's new", actions.onWhatsNew),
-      h('p', { class: 'muted set-note' }, 'What changed in this version.'),
+      row('spark', 'data-whats-new-open', "What's new", actions.onWhatsNew),
+      notesMore('whats-new', "What's new", 'What changed in this version.'),
     );
   return section(
     'todos',
     'list',
     'To-dos',
-    row('data-todos-open', 'To-dos', onTodos),
-    row('data-whats-new-open', "What's new", actions.onWhatsNew),
-    h(
-      'p',
-      { class: 'muted set-note' },
-      'Things to try and answer, and what changed in this version.',
-    ),
+    row('list', 'data-todos-open', 'To-dos', onTodos),
+    row('spark', 'data-whats-new-open', "What's new", actions.onWhatsNew),
+    notesMore('todos', 'To-dos', 'Things to try and answer, and what changed in this version.'),
   );
 }
 
@@ -264,15 +369,8 @@ function goalSection(
     intake?.goalText
       ? h('p', { class: 'set-note', 'data-goal-words': true }, intake.goalText)
       : null,
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'set-action',
-        'data-intake-open': true,
-        onclick: () => actions.onIntake?.(),
-      },
-      intake ? GOAL_RERUN_LABEL : GOAL_SET_LABEL,
+    settingsRowButton('flag', intake ? GOAL_RERUN_LABEL : GOAL_SET_LABEL, 'data-intake-open', () =>
+      actions.onIntake?.(),
     ),
     h('h3', { class: 'set-easy-head', id: 'set-easy-h' }, EASY_ON_HEAD),
     areas.length
@@ -285,24 +383,22 @@ function goalSection(
               { class: 'set-easy-row', 'data-easy-on': a },
               h('span', { class: 'set-easy-name' }, AREA_LABEL[a]),
               onRemove
-                ? h(
-                    'button',
-                    {
-                      type: 'button',
-                      class: 'set-easy-remove',
-                      'data-easy-remove': a,
-                      'aria-label': `Remove ${AREA_LABEL[a]} from the go-easy list`,
-                      onclick: () => onRemove(a),
-                    },
-                    icon('close', 'sm'),
-                    h('span', {}, 'Remove'),
-                  )
+                ? iconButton({
+                    icon: 'close',
+                    label: 'Remove',
+                    variant: 'quiet',
+                    labelAt: 'beside',
+                    ariaLabel: `Remove ${AREA_LABEL[a]} from the go-easy list`,
+                    class: 'set-easy-remove',
+                    hooks: { 'data-easy-remove': a },
+                    onClick: () => onRemove(a),
+                  })
                 : null,
             ),
           ),
         )
       : h('p', { class: 'muted set-note', 'data-easy-empty': true }, EASY_ON_EMPTY),
-    areas.length ? h('p', { class: 'muted set-note' }, EASY_ON_NOTE) : null,
+    areas.length ? notesMore('goal', EASY_ON_HEAD, EASY_ON_NOTE) : null,
   );
 }
 
@@ -326,15 +422,8 @@ function progressPhotosSection(
     'Progress photos',
     switchRow('progress-photos', 'Progress photos', on, onToggle),
     on && actions.onProgressPhotosOpen
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'set-action',
-            'data-progress-photos-open': true,
-            onclick: () => actions.onProgressPhotosOpen?.(),
-          },
-          'Open progress photos',
+      ? settingsRowButton('camera', 'Open progress photos', 'data-progress-photos-open', () =>
+          actions.onProgressPhotosOpen?.(),
         )
       : null,
     h(
@@ -348,20 +437,12 @@ function progressPhotosSection(
 
 /** The row that opens the About screen (M13). */
 function aboutRow(onAbout: () => void): HTMLElement {
-  return h(
-    'button',
-    { type: 'button', class: 'set-action', 'data-about-open': true, onclick: () => onAbout() },
-    `About ${APP_NAME}`,
-  );
+  return settingsRowButton('info', `About ${APP_NAME}`, 'data-about-open', onAbout);
 }
 
 /** The row that shows the first-launch welcome again (M13). */
 function rerunWelcomeRow(onRerun: () => void): HTMLElement {
-  return h(
-    'button',
-    { type: 'button', class: 'set-action', 'data-welcome-rerun': true, onclick: () => onRerun() },
-    ONBOARDING_BUTTONS.rerun,
-  );
+  return settingsRowButton('refresh', ONBOARDING_BUTTONS.rerun, 'data-welcome-rerun', onRerun);
 }
 
 /**
@@ -399,6 +480,27 @@ function aboutSection(
 
 export function settingsScreen(props: SettingsProps, actions: SettingsActions): HTMLElement {
   const owner = props.owner ?? true;
+  const lengthUnit = props.lengthUnit ?? lengthUnitFor(props.unit);
+  const lengthBtn = (u: LengthUnit) => {
+    const on = lengthUnit === u;
+    return h(
+      'button',
+      {
+        type: 'button',
+        class: on ? 'seg-btn active' : 'seg-btn',
+        'aria-pressed': on ? 'true' : 'false',
+        'data-length-unit': u,
+        onclick: () => {
+          if (!on) actions.onLengthUnit?.(u);
+        },
+      },
+      on ? icon('check', 'sm') : null,
+      h('span', {}, UNITS_PAGE.length.options[u]),
+    );
+  };
+  // The visible words above each choice are hidden from screen readers: the group name says it.
+  const unitsLabel = (text: string) =>
+    h('p', { class: 'set-units-label', 'aria-hidden': 'true' }, text);
   const unitBtn = (u: Unit) => {
     const on = props.unit === u;
     return h(
@@ -441,6 +543,14 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
     { class: `screen settings has-tabbar ${moodClass('pro')}`, 'data-screen': 'settings' },
     pageHead('Settings', actions.onSearch),
     goalSection(props, actions, section),
+    actions.onTextSize
+      ? section(
+          'display',
+          'text',
+          'Display',
+          textSizePicker(props.textSize ?? 'standard', actions.onTextSize),
+        )
+      : null,
     section(
       'accent',
       'palette',
@@ -465,23 +575,44 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
       'camera',
       'Camera',
       switchRow('hands-free', 'Hands-free sets', props.handsFree, actions.onHandsFree),
-      h(
-        'button',
-        { type: 'button', class: 'set-action', onclick: () => actions.onCameraTest() },
-        'Camera test',
+      settingsRowButton('camera', 'Camera test', 'data-camera-test-open', () =>
+        actions.onCameraTest(),
       ),
     ),
     section(
       'unit',
       'ruler',
-      'Weight unit',
+      'Units',
       h(
         'div',
-        { class: 'segmented', role: 'group', 'aria-label': 'Weight unit' },
-        unitBtn('kg'),
-        unitBtn('lb'),
+        { class: 'set-units', 'data-units-choice': 'weight' },
+        unitsLabel(UNITS_PAGE.weight.label),
+        h(
+          'div',
+          { class: 'segmented', role: 'group', 'aria-label': WEIGHT_UNIT_GROUP },
+          unitBtn('kg'),
+          unitBtn('lb'),
+        ),
       ),
-      h('p', { class: 'muted set-note' }, unitNote(props.unit)),
+      actions.onLengthUnit
+        ? h(
+            'div',
+            { class: 'set-units', 'data-units-choice': 'length' },
+            unitsLabel(UNITS_PAGE.length.label),
+            h(
+              'div',
+              { class: 'segmented', role: 'group', 'aria-label': LENGTH_UNIT_GROUP },
+              lengthBtn('cm'),
+              lengthBtn('in'),
+            ),
+          )
+        : null,
+      notesMore(
+        'unit',
+        'Units',
+        unitNote(props.unit),
+        actions.onLengthUnit ? lengthNote(lengthUnit) : null,
+      ),
     ),
     props.nutrition ? section('nutrition', 'flame', 'Nutrition', props.nutrition) : null,
     props.foodPhotos ? section('food-photos', 'bowl', 'Food photos', props.foodPhotos) : null,
@@ -490,17 +621,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'gym',
           'dumbbell',
           'Gym',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-my-gym-open': true,
-              onclick: () => actions.onMyGym?.(),
-            },
-            'My gym',
-          ),
-          h('p', { class: 'muted set-note' }, 'The kit your gym has. Swaps use only that.'),
+          settingsRowButton('dumbbell', 'My gym', 'data-my-gym-open', () => actions.onMyGym?.()),
+          notesMore('gym', 'Gym', 'The kit your gym has. Swaps use only that.'),
         )
       : null,
     actions.onHealth
@@ -508,17 +630,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'health',
           'trend',
           'Health',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-health-open': true,
-              onclick: () => actions.onHealth?.(),
-            },
-            'Health',
-          ),
-          h('p', { class: 'muted set-note' }, 'What the coach reads from Apple Health.'),
+          settingsRowButton('trend', 'Health', 'data-health-open', () => actions.onHealth?.()),
+          notesMore('health', 'Health', 'What the coach reads from Apple Health.'),
         )
       : null,
     actions.onCoachSettings
@@ -526,17 +639,10 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'coach',
           'chat',
           'Coach',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-coach-settings-open': true,
-              onclick: () => actions.onCoachSettings?.(),
-            },
-            'Coach',
+          settingsRowButton('chat', 'Coach', 'data-coach-settings-open', () =>
+            actions.onCoachSettings?.(),
           ),
-          h('p', { class: 'muted set-note' }, 'Who answers, and when replies are spoken.'),
+          notesMore('coach', 'Coach', 'Who answers, and when replies are spoken.'),
         )
       : null,
     actions.onSelfCheck
@@ -544,17 +650,10 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'selfcheck',
           'check',
           'Self-check',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-selfcheck-open': true,
-              onclick: () => actions.onSelfCheck?.(),
-            },
-            'Self-check',
+          settingsRowButton('check', 'Self-check', 'data-selfcheck-open', () =>
+            actions.onSelfCheck?.(),
           ),
-          h('p', { class: 'muted set-note' }, 'Is the app ready for the gym?'),
+          notesMore('selfcheck', 'Self-check', 'Is the app ready for the gym?'),
         )
       : null,
     actions.onReminders
@@ -562,17 +661,10 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'reminders',
           'clock',
           'Reminders',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-reminders-open': true,
-              onclick: () => actions.onReminders?.(),
-            },
-            'Reminders',
+          settingsRowButton('clock', 'Reminders', 'data-reminders-open', () =>
+            actions.onReminders?.(),
           ),
-          h('p', { class: 'muted set-note' }, 'Off until you turn them on.'),
+          notesMore('reminders', 'Reminders', 'Off until you turn them on.'),
         )
       : null,
     actions.onPlanChanges
@@ -580,15 +672,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'plan',
           'calendar',
           'Plan',
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'set-action',
-              'data-plan-changes-open': true,
-              onclick: () => actions.onPlanChanges?.(),
-            },
-            'Plan changes',
+          settingsRowButton('calendar', 'Plan changes', 'data-plan-changes-open', () =>
+            actions.onPlanChanges?.(),
           ),
         )
       : null,
@@ -602,15 +687,8 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           'Developer log',
           props.devLog,
           actions.onBrainEval
-            ? h(
-                'button',
-                {
-                  type: 'button',
-                  class: 'set-action',
-                  'data-brain-eval-open': true,
-                  onclick: () => actions.onBrainEval?.(),
-                },
-                'Coach eval',
+            ? settingsRowButton('bars', 'Coach eval', 'data-brain-eval-open', () =>
+                actions.onBrainEval?.(),
               )
             : null,
         )

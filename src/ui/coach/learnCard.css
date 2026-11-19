@@ -55,10 +55,10 @@
 
 .learn-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -68,11 +68,19 @@
   gap: 10px;
 }
 
+/* M13d task 19: the one-sentence lead shown first (body + why sit behind More). */
+.learn-short {
+  margin: 0;
+  font-size: var(--fs-cue);
+  line-height: var(--lh-text);
+  overflow-wrap: anywhere;
+}
+
 .learn-body p,
 .learn-whyblock p {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.45;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -92,18 +100,10 @@
   font-weight: 700;
 }
 
+/* M13d task 40a: Got it is the main round icon button on the shared pill track
+   (iconButton.css + chromeButtons.css), the whole row its tap area. */
 .learn-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  min-height: var(--tap-cta);
   margin-top: 4px;
-  font-size: var(--fs-cue);
-  font-weight: 700;
-  background: var(--surface-2);
-  color: var(--text);
 }
 
 /* ---------- "Why?" (chat bubble, protein nudge; the rest screen has its own .effort-why) ---------- */

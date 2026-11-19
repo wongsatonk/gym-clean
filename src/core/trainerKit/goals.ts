@@ -15,7 +15,7 @@ import { bestSetE1rm, e1rm, e1rmSeriesByLift, type E1rmFormula, type E1rmPoint, 
 import { formatLength, lengthUnitFor, siteLabel } from '../progress/measurements';
 import { addDate, localDate } from '../trainer/plan';
 import { formatWeight, fromUnit, stepFor, toUnit, type Unit } from '../units';
-import type { Goal, Intake, Measurement, SetLog, WeighIn } from '../types';
+import type { Goal, Intake, LengthUnit, Measurement, SetLog, WeighIn } from '../types';
 import {
   EXPERIENCE_GAIN,
   GOAL_BASELINE_DAYS,
@@ -39,6 +39,8 @@ export type GoalHistory = {
   /** Exercise id → name for the goal text (the catalog's names). */
   exerciseNames: Readonly<Record<string, string>>;
   unit: Unit;
+  /** M13d settings 'lengthUnit' (`getLengthUnit`) for measurement goal text; omitted → follows `unit`. */
+  lengthUnit?: LengthUnit | undefined;
   /** settings 'trainerKit' `measurementSites`. */
   sites: readonly string[];
   /** settings 'trainerKit' `e1rmFormula`. */
@@ -152,7 +154,7 @@ export function suggestGoals(intake: Intake, history: GoalHistory): GoalSuggesti
       }
       goals.push({
         id: `${h.now}-measurement-${base.site}`,
-        text: `${siteLabel(base.site)} ${formatLength(t.deltaCm, lengthUnitFor(h.unit), { signed: true })} by ${due}`,
+        text: `${siteLabel(base.site)} ${formatLength(t.deltaCm, h.lengthUnit ?? lengthUnitFor(h.unit), { signed: true })} by ${due}`,
         target: { kind: 'measurement', ref: base.site, value: round1(base.cm + t.deltaCm) },
         due,
         createdAt: h.now,

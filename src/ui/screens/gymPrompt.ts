@@ -7,9 +7,14 @@
 // Keep it remembers the exercise. The day's rows stay as they are until Apply.
 //
 // e2e hooks: `[data-gym-prompt="<exerciseId>"]`, `[data-gym-swap]`, `[data-gym-keep]`.
+//
+// M13d task 40d (Goal 7): both are round icon buttons with the word below (See a swap a
+// secondary circle, Keep it a quiet one): the page's one main action stays Start.
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import './gymPrompt.css';
+import '../settingsButtons.css';
 
 /** The exercise the gym lacks kit for (`name` = `exerciseName(id)`). */
 export type MissingKit = { exerciseId: string; name: string };
@@ -45,27 +50,20 @@ export function gymPrompt(
     ),
     h(
       'div',
-      { class: 'gym-prompt-actions' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'gym-prompt-btn gym-prompt-cta',
-          'data-gym-swap': true,
-          onclick: () => onSeeGymSwap(id),
-        },
-        'See a swap',
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'gym-prompt-btn',
-          'data-gym-keep': true,
-          onclick: () => onKeepExercise(id),
-        },
-        'Keep it',
-      ),
+      { class: 'gym-prompt-actions set-ib-actions' },
+      iconButton({
+        icon: 'flip',
+        label: 'See a swap',
+        hooks: { 'data-gym-swap': true },
+        onClick: () => onSeeGymSwap(id),
+      }),
+      iconButton({
+        icon: 'check',
+        label: 'Keep it',
+        variant: 'quiet',
+        hooks: { 'data-gym-keep': true },
+        onClick: () => onKeepExercise(id),
+      }),
     ),
   );
 }

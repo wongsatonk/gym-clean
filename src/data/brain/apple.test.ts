@@ -127,13 +127,13 @@ describe('the request (instructions, context, one message, read results)', () =>
   it('sends the instructions, the context, only the new message, and the read results', async () => {
     const b = bridge();
     const turns = [turn(0, 'made-up question about rows'), turn(1, 'made-up answer about rows')];
-    await appleBrain(b).ask('What am I training today?', ctx(turns));
+    await appleBrain(b).ask('Any thoughts on staying motivated?', ctx(turns));
     const req = b.reqs[0] as GymBrainRequest;
     expect(req.instructions).toBe(brainInstructions({ phase: 'today', voice: 'calm' }));
     const input: BrainInput = { coach, turns, howTo: howToFor, cue: cueFor };
     expect(req.context).toBe(serializeContext(input, { brain: 'apple' }).text);
     expect(req.context).toContain('User: made-up question about rows');
-    expect(req.messages).toEqual([{ role: 'user', text: 'What am I training today?' }]);
+    expect(req.messages).toEqual([{ role: 'user', text: 'Any thoughts on staying motivated?' }]);
     expect(req.toolResults).toEqual(readToolResults(input));
   });
 
@@ -159,7 +159,7 @@ describe('the request (instructions, context, one message, read results)', () =>
   it('uses the workout phase and the drill voice from the extras', async () => {
     const b = bridge();
     await appleBrain(b, { extras: () => ({ voice: 'drill' }) }).ask(
-      'what is next?',
+      'any words for the last sets?',
       ctx([], { phase: 'workout' }),
     );
     expect(b.reqs[0]?.instructions).toBe(brainInstructions({ phase: 'workout', voice: 'drill' }));
@@ -220,7 +220,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
   it('a plain answer: sanitized text, source apple, no proposal, spoken line from it', async () => {
     const r = await appleBrain(
       says('Rows today. Keep your elbows close and pause at the top.'),
-    ).ask('what is on today?', ctx());
+    ).ask('any thoughts on pacing?', ctx());
     expect(r.source).toBe('apple');
     expect(r.reply).toBe('Rows today. Keep your elbows close and pause at the top.');
     expect(r.proposal).toBeUndefined();
@@ -413,7 +413,7 @@ describe('the reply (sanitize always, tool calls → proposals)', () => {
 
   it('read-only tool calls are ignored (the results were passed in)', async () => {
     const r = await appleBrain(says('You did 2 of 6.', [{ name: 'weekSummary', args: {} }])).ask(
-      "how's my week",
+      'How am I doing?',
       ctx(),
     );
     expect(r.proposal).toBeUndefined();
@@ -625,11 +625,79 @@ describe('rules route (brain/route.ts)', () => {
 
   it('open chat goes to the model with trace.route model', async () => {
     const b = bridge();
-    const out = await askApple(b, 'What am I training today?', ctx());
+    const out = await askApple(b, 'Any thoughts on staying motivated?', ctx());
     expect(b.reqs).toHaveLength(1);
     expect(out.trace.route).toBe('model');
     expect(out.trace).not.toHaveProperty('why');
     expect(out.reply.source).toBe('apple');
+  });
+});
+
+// 1.16.2 "Coach facts": own-number questions are answered in code from saved data.
+describe('facts route (brain/facts.ts)', () => {
+  const extras = (): AppleExtras => ({
+    ...(base.goalKind && { goalKind: base.goalKind }),
+    ...(base.goalText && { goalText: base.goalText }),
+    ...(base.goals && { goals: base.goals }),
+  });
+
+  it('answers from saved data: no model call, source rules, latency 0, no tool call', async () => {
+    const b = says('You have 1,000 kcal left.', [{ name: 'suggestFood', args: {} }]);
+    const out = await askApple(b, 'How many calories do I have left today?', ctx());
+    expect(b.reqs).toHaveLength(0);
+    expect(out.reply.reply).toBe('You have 950 kcal left today (1450 of 2400 kcal).');
+    expect(out.reply.source).toBe('rules');
+    expect(out.reply.proposal).toBeUndefined();
+    expect(out.reply.foods).toBeUndefined();
+    expect(out).not.toHaveProperty('call');
+    expect(out.trace).toEqual({
+      latencyMs: 0,
+      action: 'none',
+      calls: [],
+      replaced: false,
+      hits: [],
+      usedHealth: false,
+      redFlag: false,
+      route: 'rules',
+      why: 'facts',
+    });
+  });
+
+  it('reads goals and cues the way the model request does (extras, howTo, cue)', async () => {
+    const b = bridge();
+    const goal = await askApple(b, 'How close am I to my bench goal?', ctx(), { extras });
+    expect(goal.reply.reply).toBe('Dumbbell bench 30 kg for 5: 33% of the way, on track.');
+    const tip = await askApple(b, 'Any tip for the one-arm dumbbell row?', ctx(), {
+      cue: () => 'Made-up cue, elbow in.',
+    });
+    expect(tip.reply.reply).toBe('One-Arm Dumbbell Row: Made-up cue, elbow in.');
+    expect(b.reqs).toHaveLength(0);
+  });
+
+  it('no data → the model answers, as before (trace route model)', async () => {
+    const b = bridge();
+    const out = await askApple(b, 'How close am I to my bench goal?', ctx());
+    expect(b.reqs).toHaveLength(1);
+    expect(out.trace.route).toBe('model');
+    expect(out.reply.source).toBe('apple');
+  });
+
+  it('the trace holds ids only, never the answer text', async () => {
+    const out = await askApple(bridge(), 'What did I goblet squat last time?', ctx());
+    expect(out.reply.reply).toContain('24 kg for 12 reps');
+    expect(JSON.stringify(out.trace)).not.toMatch(/Goblet|24 kg/);
+  });
+
+  it('mid-workout "what is next?" is the next exercise: the model answers it', async () => {
+    const b = bridge();
+    const out = await askApple(b, 'what is next?', ctx([], { phase: 'workout' }));
+    expect(b.reqs).toHaveLength(1);
+    expect(out.trace.route).toBe('model');
+  });
+
+  it('speaks the first sentence, short (sayFor)', async () => {
+    const out = await askApple(bridge(), "What's my next workout?", ctx());
+    expect(out.reply.say).toBe('Your next workout is Push A, today.');
   });
 });
 
@@ -644,9 +712,9 @@ describe('context window (1.15.2 lever 3)', () => {
     );
     const b = bridge();
     const brain = appleBrain(b, { windowTokens: () => win });
-    await brain.ask('What am I training today?', ctx(turns));
+    await brain.ask('Any thoughts on staying motivated?', ctx(turns));
     win = 8192;
-    await brain.ask('What am I training today?', ctx(turns));
+    await brain.ask('Any thoughts on staying motivated?', ctx(turns));
     const input: BrainInput = { coach, turns, howTo: howToFor, cue: cueFor };
     expect(b.reqs[0]?.context).toBe(serializeContext(input, { brain: 'apple' }).text);
     expect(b.reqs[1]?.context).toBe(

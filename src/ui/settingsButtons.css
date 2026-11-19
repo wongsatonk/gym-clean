@@ -1,0 +1,64 @@
+/* M13d task 40d (SPEC M13d Goal 7): placement of the round icon buttons (iconButton.ts) on
+   Settings, its sub-screens, the To-dos and What's New. The look of the circle and its word is
+   iconButton.css; this file only lays them out. Import it after '../iconButton' (or
+   '../../iconButton'), so these rules sit over the button's own reset.
+
+   .set-ib-pill   a wide button that became circle + word: the whole row stays the tap area
+                  (as wide as the bar it replaces, never lower), a soft pill track around it.
+   .set-ib-actions a row of circles with their word below (secondary choices side by side).
+   .set-ib-bottom  bottom bar: Back (circle, word below) + the main action as a pill. */
+
+.set-ib-pill.icon-btn {
+  justify-content: flex-start;
+  min-height: var(--tap-bar);
+  padding: 6px 18px 6px 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+/* Secondary rows (Settings → My gym, Health, …): the word at list-name size, left aligned. */
+.set-ib-pill.icon-btn:not([data-variant='main']) .icon-btn-label {
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  text-align: start;
+}
+
+/* The page's one main action as a pill: the word as iconButton sets it for `main` (lead size,
+   bold, body face: the display face is kept for numbers, timers, Start and the tab labels,
+   M13d task 17). */
+
+.set-ib-pill.icon-btn[data-variant='danger'] {
+  border-color: var(--danger);
+}
+
+.set-ib-pill.icon-btn:disabled {
+  background: transparent;
+}
+
+.set-ib-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.set-ib-actions > .icon-btn {
+  flex: 1 1 0;
+  min-width: var(--tap-min);
+}
+
+.set-ib-bottom {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+/* Two-tap confirms (Replace, Clear, Skip this topic): once armed the danger circle fills, and
+   the word says "Tap again to …", so the state is never colour alone. */
+.icon-btn[data-variant='danger'][data-armed] {
+  --ib-fill: var(--danger);
+  --ib-ink: var(--on-danger);
+}

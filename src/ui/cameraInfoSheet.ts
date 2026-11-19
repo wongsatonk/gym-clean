@@ -16,10 +16,13 @@
 import { ONE_SIDED_COPY, type CameraInfo } from '../core/exercises';
 import type { OneSidedLimb } from '../core/types';
 import { h } from './dom';
+import { installSheetSwipe } from './gestures/sheetSwipe';
+import { iconButton } from './iconButton';
 import { icon } from './icons';
 import { enterScreen, type Stop } from './motion';
 import { placementPictogram } from './placementPictogram';
 import { moodClass } from './tokens';
+import './chromeButtons.css';
 import './cameraInfoSheet.css';
 
 export const CAMERA_COUNTS_HEADING = 'What the camera counts';
@@ -87,26 +90,32 @@ function fact(label: string, value: string, hook: string): HTMLElement {
 
 function buildSheet(info: CameraInfo, a: CameraInfoActions, on: Handlers): Built {
   const titleId = `camsheet-title-${++sheets}`;
-  const practice = on.practice
-    ? h(
-        'button',
-        {
-          type: 'button',
-          class: 'primary-btn camsheet-practice',
+  // M13d task 40a: Practice = the main round button, Close = a secondary one; both keep the
+  // whole row as their tap area (Practice ≥ 72px, Close ≥ 60px, as before).
+  const onPractice = on.practice;
+  const practice = onPractice
+    ? iconButton({
+        icon: 'camera',
+        label: PRACTICE_LABEL,
+        variant: 'main',
+        wideHit: true,
+        class: 'camsheet-practice chrome-pill',
+        hooks: {
           'data-camera-practice': true,
           'aria-describedby': `camsheet-practice-note-${sheets}`,
-          onclick: on.practice,
         },
-        icon('camera', 'lg'),
-        h('span', {}, PRACTICE_LABEL),
-      )
+        onClick: () => onPractice(),
+      })
     : null;
-  const close = h(
-    'button',
-    { type: 'button', class: 'camsheet-close', 'data-camera-close': true, onclick: on.close },
-    icon('close', 'md'),
-    h('span', {}, CLOSE_LABEL),
-  );
+  const close = iconButton({
+    icon: 'close',
+    label: CLOSE_LABEL,
+    labelAt: 'beside',
+    wideHit: true,
+    class: 'camsheet-close chrome-pill',
+    hooks: { 'data-camera-close': true },
+    onClick: () => on.close(),
+  });
   // The body scrolls; Practice and Close stay in view at the bottom of the panel.
   const body = h(
     'div',
@@ -197,6 +206,8 @@ function buildSheet(info: CameraInfo, a: CameraInfoActions, on: Handlers): Built
     veil,
     panel,
   );
+  // M13d task 25: swipe down = Close (the panel follows; a scrolled body scrolls first).
+  installSheetSwipe(root, { close: () => close.click(), mover: panel });
   const controls = [practice, close].filter((c): c is HTMLButtonElement => c !== null);
   // Escape closes; Tab / Shift+Tab cycle between the sheet's buttons.
   root.addEventListener('keydown', (ev) => {

@@ -3,6 +3,7 @@ import {
   DIRECT_AVAILABLE_TIMEOUT_MS,
   createHealth,
   loadHealth,
+  mapHealthProfile,
   type HealthBridge,
   type HealthReadResult,
 } from './health';
@@ -418,5 +419,121 @@ describe('loadHealth', () => {
     const cap = { isNativePlatform: () => true, PluginHeaders: [{ name: 'GymHealth' }] };
     const h = await loadHealth({ cap, importCore });
     expect(await h.isAvailable()).toBe(false);
+  });
+});
+
+// ---- M13d task 6/7: profile (height, birth year, sex) to pre-fill Set up Fuel ----
+
+describe('mapHealthProfile', () => {
+  const YEAR = 2026;
+
+  it('keeps height (cm), birth year and female / male', () => {
+    expect(mapHealthProfile({ heightCm: 170.2, birthYear: 1990, sex: 'female' }, YEAR)).toEqual({
+      heightCm: 170.2,
+      birthYear: 1990,
+      sex: 'female',
+    });
+    expect(mapHealthProfile({ sex: 'male' }, YEAR)).toEqual({ sex: 'male' });
+  });
+
+  it('nothing usable → null (no Health data, nothing allowed, junk reply)', () => {
+    expect(mapHealthProfile({}, YEAR)).toBeNull();
+    expect(mapHealthProfile(null, YEAR)).toBeNull();
+    expect(mapHealthProfile('x', YEAR)).toBeNull();
+    expect(mapHealthProfile([170], YEAR)).toBeNull();
+  });
+
+  it('drops NaN, wrong types and out-of-range values, keeps the rest', () => {
+    expect(
+      mapHealthProfile({ heightCm: Number.NaN, birthYear: 1990.5, sex: 'other' }, YEAR),
+    ).toBeNull();
+    expect(
+      mapHealthProfile({ heightCm: '170', birthYear: '1990', sex: 'notSet' }, YEAR),
+    ).toBeNull();
+    expect(mapHealthProfile({ heightCm: 12, birthYear: 1850 }, YEAR)).toBeNull();
+    expect(mapHealthProfile({ heightCm: 400, birthYear: YEAR + 1 }, YEAR)).toBeNull();
+    expect(mapHealthProfile({ heightCm: 165, birthYear: 1850, sex: 'Female' }, YEAR)).toEqual({
+      heightCm: 165,
+    });
+  });
+
+  it('never passes on anything but the three fields (no month or day of birth)', () => {
+    const p = mapHealthProfile(
+      { heightCm: 180, birthYear: 1985, sex: 'male', birthMonth: 4, birthDay: 2, name: 'x' },
+      YEAR,
+    );
+    expect(p).toEqual({ heightCm: 180, birthYear: 1985, sex: 'male' });
+  });
+});
+
+describe('createHealth: readProfile', () => {
+  it('web (no plugin) → null', async () => {
+    expect(await createHealth(null).readProfile()).toBeNull();
+  });
+
+  it('maps the plugin reply', async () => {
+    const b = fakeBridge({
+      readProfile: vi.fn(async () => ({ heightCm: 170, birthYear: 1990, sex: 'female' })),
+    });
+    expect(await createHealth(b).readProfile()).toEqual({
+      heightCm: 170,
+      birthYear: 1990,
+      sex: 'female',
+    });
+    expect(b.readProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('unavailable device → null, plugin not called', async () => {
+    const readProfile = vi.fn(async () => ({ heightCm: 170 }));
+    const b = fakeBridge({ isAvailable: vi.fn(async () => ({ available: false })), readProfile });
+    expect(await createHealth(b).readProfile()).toBeNull();
+    expect(readProfile).not.toHaveBeenCalled();
+  });
+
+  it('nothing allowed (empty reply), locked phone or any error → null, no throw', async () => {
+    const empty = fakeBridge({ readProfile: vi.fn(async () => ({})) });
+    expect(await createHealth(empty).readProfile()).toBeNull();
+    const locked = fakeBridge({
+      readProfile: vi.fn(async () =>
+        Promise.reject(Object.assign(new Error('l'), { code: 'LOCKED' })),
+      ),
+    });
+    expect(await createHealth(locked).readProfile()).toBeNull();
+  });
+
+  it('an older app without readProfile (bridge lacks the method) → null', async () => {
+    expect(await createHealth(fakeBridge()).readProfile()).toBeNull();
+  });
+});
+
+describe('createHealth: requestRead with the profile types', () => {
+  it('passes profile: true only when asked', async () => {
+    const b = fakeBridge();
+    const h = createHealth(b);
+    await h.requestRead(['bodyMass', 'sleep'], { profile: true });
+    expect(b.requestRead).toHaveBeenLastCalledWith({ types: ['bodyMass', 'sleep'], profile: true });
+    await h.requestRead(['bodyMass']);
+    expect(b.requestRead).toHaveBeenLastCalledWith({ types: ['bodyMass'] });
+  });
+
+  it('profile alone (no other types) still asks', async () => {
+    const b = fakeBridge();
+    expect(await createHealth(b).requestRead([], { profile: true })).toBe(true);
+    expect(b.requestRead).toHaveBeenCalledWith({ types: [], profile: true });
+  });
+});
+
+describe('loadHealth: readProfile on the direct native path', () => {
+  it('calls GymHealth.readProfile through nativePromise when the header is late', async () => {
+    const plugin = fakeBridge({ readProfile: vi.fn(async () => ({ birthYear: 1992 })) });
+    const methods = plugin as unknown as Record<string, (o?: unknown) => Promise<unknown>>;
+    const nativePromise = vi.fn(async (_p: string, m: string, o?: unknown): Promise<unknown> => {
+      const fn = methods[m];
+      if (!fn) throw new Error('no method');
+      return fn(o);
+    });
+    const h = await loadHealth({ cap: { isNativePlatform: () => true, nativePromise } });
+    expect(await h.readProfile()).toEqual({ birthYear: 1992 });
+    expect(nativePromise).toHaveBeenCalledWith('GymHealth', 'readProfile', {});
   });
 });

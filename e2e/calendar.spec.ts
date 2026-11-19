@@ -210,6 +210,39 @@ test('month rings by status → a day per exercise → exercise history (‹ Cal
   // Month nav: back to October and forward again.
   await page.locator('[data-cal-prev]').click();
   await expect(month(page)).toHaveAttribute('data-month', '2026-10');
+  // M13d: the month stays on one line between Earlier / Later at 390, the longest name too
+  // (September), at every text size; the round buttons stay ≥ 56px.
+  await page.locator('[data-cal-prev]').click();
+  await expect(month(page)).toHaveAttribute('data-month', '2026-09');
+  for (const size of ['standard', 'large', 'larger']) {
+    await page.evaluate((s) => {
+      if (s === 'standard') delete document.documentElement.dataset.textSize;
+      else document.documentElement.dataset.textSize = s;
+    }, size);
+    const fit = await page.locator('.cal-month').evaluate((el) => {
+      const t = el.querySelector('.cal-month-text') ?? el;
+      const lh = parseFloat(getComputedStyle(t).lineHeight);
+      return {
+        text: el.textContent,
+        lines: Math.round(t.getBoundingClientRect().height / lh),
+        fits: el.scrollWidth <= el.clientWidth,
+        font: parseFloat(getComputedStyle(t).fontSize),
+      };
+    });
+    expect(fit.text).toBe('September 2026');
+    expect(fit.lines, `one line (${size})`).toBe(1);
+    expect(fit.fits, `not clipped (${size})`).toBe(true);
+    expect(fit.font, `≥ body size (${size})`).toBeGreaterThanOrEqual(20);
+    for (const sel of ['[data-cal-prev]', '[data-cal-next]']) {
+      const b = await page.locator(sel).boundingBox();
+      expect(Math.min(b?.width ?? 0, b?.height ?? 0), `${sel} (${size})`).toBeGreaterThanOrEqual(
+        56,
+      );
+    }
+    await noHorizontalOverflow(page);
+  }
+  await page.evaluate(() => delete document.documentElement.dataset.textSize);
+  await page.locator('[data-cal-next]').click();
   await page.locator('[data-cal-next]').click();
   await expect(month(page)).toHaveAttribute('data-month', '2026-11');
 

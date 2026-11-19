@@ -13,7 +13,7 @@
   margin: 0;
   font-size: var(--fs-head);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-text);
   color: var(--text);
 }
 
@@ -96,7 +96,7 @@
 .selfcheck-fix {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -119,34 +119,8 @@
   gap: 12px;
 }
 
-.selfcheck-again,
-.selfcheck-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: 64px;
-  width: 100%;
-  padding: 0 18px;
-  font-size: var(--fs-lead);
-  font-weight: 700;
-}
-
-.selfcheck-again {
-  background: var(--cta);
-  color: var(--on-cta);
-  border: none;
-}
-
-.selfcheck-copy {
-  background: var(--surface-2);
-}
-
-.selfcheck-again:disabled,
-.selfcheck-copy:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
+/* M13d task 40d: Run again / Copy results are round icon buttons on pill rows (iconButton.css,
+   ../settingsButtons.css). */
 
 .selfcheck-copied {
   margin: 0;

@@ -14,9 +14,11 @@
 import type { BrainUnavailableReason, CoachSettings } from '../../core/types';
 import { backButton } from '../backButton';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import './coachSettings.css';
+import '../settingsButtons.css';
 
 export type SpeakReplies = NonNullable<CoachSettings['speakReplies']>;
 
@@ -113,18 +115,17 @@ function statusCard(p: CoachSettingsProps, a: CoachSettingsActions): HTMLElement
   const checking = p.checking === true;
   const recheck =
     a.onRecheck && (unknown || copy.how)
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'set-action brain-recheck',
-            'data-brain-recheck': true,
-            disabled: checking || undefined,
-            onclick: () => a.onRecheck?.(),
-          },
-          icon('flip', 'sm'),
-          h('span', {}, checking ? 'Checking…' : 'Check again'),
-        )
+      ? // M13d task 40d: a round icon button, word beside, the whole row the tap area.
+        iconButton({
+          icon: 'refresh',
+          label: checking ? 'Checking…' : 'Check again',
+          labelAt: 'beside',
+          wideHit: true,
+          class: 'set-ib-pill brain-recheck',
+          disabled: checking,
+          hooks: { 'data-brain-recheck': true },
+          onClick: () => a.onRecheck?.(),
+        })
       : null;
   return h(
     'section',

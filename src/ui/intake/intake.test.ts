@@ -16,6 +16,7 @@ import {
   PLAN_TITLE_STARTER,
   areaList,
   intakeScreen,
+  leadLine,
   intakeSummary,
   questionCountText,
   type IntakeActions,
@@ -279,6 +280,8 @@ describe('intake: questions', () => {
     why.click();
     expect(opened.map(([id]) => id)).toEqual(['coreTraining']);
     expect(opened[0]?.[1]).toBe(why);
+    // M13d follow-up (q): the card opens without its focus-block `why` here.
+    expect(why.hasAttribute('data-learn-hide-why')).toBe(true);
     // Only on the abs question.
     const { el: el3 } = render(
       { initial: FULL, startStep: 'easyOn' },
@@ -355,6 +358,17 @@ describe('intake: questions', () => {
     expect(calls.close).toBe(2);
   });
 
+  it('M13d task 24: the edge swipe takes the question Back, never the close', () => {
+    const swipe = (el: FakeEl) => el.find((e) => e.hasAttribute('data-swipe-back'));
+    const { el, calls } = render({ initial: FULL }, { onClose: () => calls.close++ });
+    expect(swipe(el)).toHaveLength(1);
+    expect(swipe(el)[0]?.hasAttribute('data-intake-back')).toBe(true);
+    expect(one(el, 'data-intake-close').hasAttribute('data-swipe-back')).toBe(false);
+    next(el).click(); // question 2: still the one question Back
+    expect(swipe(el)).toHaveLength(1);
+    expect(swipe(el)[0]?.hasAttribute('data-intake-back')).toBe(true);
+  });
+
   it('ignores stored answers that are out of range', () => {
     const { el } = render({
       initial: { days: 9, sessionMin: 50 as Intake['sessionMin'], goalKind: 'fat' },
@@ -387,11 +401,22 @@ describe('intake: what will change', () => {
       'fuel',
     ]);
     expect(one(el, 'data-change', 'plan').byTag('h2')[0]?.textContent).toBe(PLAN_TITLE_STARTER);
-    expect(
-      one(el, 'data-change', 'plan')
-        .byTag('li')
-        .map((l) => l.textContent),
-    ).toEqual(CHANGES[0]?.lines);
+    // M13d task 19: the first line shows; the rest sits behind More (closed).
+    const plan = one(el, 'data-change', 'plan');
+    expect(one(plan, 'data-change-lead', 'plan').textContent).toBe(CHANGES[0]?.lines?.[0]);
+    expect(plan.byTag('li').map((l) => l.textContent)).toEqual(CHANGES[0]?.lines?.slice(1));
+    const more = one(plan, 'data-more', 'change-plan');
+    const moreBtn = one(more, 'data-more-btn');
+    expect(moreBtn.tag).toBe('button');
+    expect(moreBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(one(more, 'data-more-panel').hasAttribute('hidden')).toBe(true);
+    moreBtn.click();
+    expect(moreBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(one(more, 'data-more-panel').hasAttribute('hidden')).toBe(false);
+    // A one-line row has no More.
+    const easy = one(el, 'data-change', 'easyOn');
+    expect(one(easy, 'data-change-lead', 'easyOn').textContent).toBe('Shoulders');
+    expect(by(easy, 'data-more')).toHaveLength(0);
     // Fuel: before → after in words.
     const fuel = one(el, 'data-change', 'fuel');
     expect(one(fuel, 'data-diff', 'before').textContent).toBe('Now2,100 kcal · 110 g protein');
@@ -548,11 +573,69 @@ describe('intake: copy', () => {
   });
 });
 
+describe('intake: M13d task 19 copy cuts', () => {
+  const words = (t: string) => t.split(/\s+/).filter(Boolean).length;
+
+  it('every why line is one short sentence (≤ 10 words) or none', () => {
+    for (const step of ['goal', 'days', 'length', 'experience', 'easyOn', 'wantsCore'] as const) {
+      const why = INTAKE_COPY[step].why;
+      expect(words(why), why).toBeLessThanOrEqual(10);
+      expect(why.replace(/\.$/, ''), why).not.toMatch(/[.;!?]/);
+    }
+  });
+
+  it('leadLine cuts the row title from the start of its first line, nothing else', () => {
+    expect(leadLine('Starter plan', 'Starter plan: 3 days a week')).toBe('3 days a week');
+    expect(leadLine('Starter plan', 'starter plan · Full body')).toBe('Full body');
+    expect(leadLine('Starter plan', 'Starter plans for later')).toBe('Starter plans for later');
+    expect(leadLine('Starter plan', 'Starter plan')).toBe('Starter plan');
+    expect(leadLine('Fuel targets', 'Set up Fuel for this goal')).toBe('Set up Fuel for this goal');
+  });
+});
+
 describe('intake: abs question data', () => {
   it('uses the core question, labels and learn card', () => {
     expect(INTAKE_COPY.wantsCore.title).toBe(INTAKE_OPTIONS.wantsCore.question);
     expect(INTAKE_COPY.wantsCore.why).toBe(INTAKE_OPTIONS.wantsCore.hint);
     expect(CORE_LABEL).toEqual({ no: 'No', yes: 'Yes, add abs' });
     expect(LEARN_CARDS.some((c) => c.id === INTAKE_OPTIONS.wantsCore.learnId)).toBe(true);
+  });
+});
+
+describe('intake: M13d task 40b round buttons', () => {
+  const variant = (b: FakeEl) => b.getAttribute('data-variant');
+
+  it('Next is the main pill (off until answered), Back round, Skip for now quiet', () => {
+    const { el } = render();
+    expect(next(el).hasAttribute('data-icon-btn')).toBe(true);
+    expect(variant(next(el))).toBe('main');
+    expect(next(el).classes).toContain('flow-pill');
+    expect(next(el).hasAttribute('disabled')).toBe(true);
+    opt(el, 'fat').click();
+    expect(next(el).hasAttribute('disabled')).toBe(false);
+    next(el).click();
+    const back = one(el, 'data-intake-back');
+    expect(variant(back)).toBe('secondary');
+    expect(back.textContent).toBe('Back');
+    expect(back.hasAttribute('data-swipe-back')).toBe(true);
+    const skip = one(el, 'data-intake-skip');
+    expect(variant(skip)).toBe('quiet');
+    expect(skip.textContent).toBe('Skip for now');
+  });
+
+  it('the summary: Done is the main pill; Apply is round with its row as the tap area', () => {
+    const { el } = render();
+    answerAll(el);
+    const done = one(el, 'data-intake-done');
+    expect(variant(done)).toBe('main');
+    expect(done.textContent).toBe('Done');
+    const apply = one(el, 'data-apply', 'plan');
+    expect(apply.hasAttribute('data-icon-btn')).toBe(true);
+    expect(apply.hasAttribute('data-wide-hit')).toBe(true);
+    expect(apply.getAttribute('aria-label')).toBe(`Apply: ${PLAN_TITLE_STARTER}`);
+    apply.click();
+    expect(apply.getAttribute('aria-label')).toBe(`Applied: ${PLAN_TITLE_STARTER}`);
+    expect(apply.classes).toEqual(expect.arrayContaining(['icon-btn', 'intake-apply', 'done']));
+    expect(apply.byClass('icon-btn-circle')[0]?.byTag('svg')).toHaveLength(1);
   });
 });

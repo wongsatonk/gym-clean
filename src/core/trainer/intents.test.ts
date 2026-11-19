@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   asksOwnNumbers,
+  exercisesNamed,
   matchIntent,
   namesExercise,
   normalizeText,
+  phraseMatcher,
   type IntentMatch,
   type MatchContext,
 } from './intents';
@@ -794,3 +796,26 @@ function sortKeys(o: object): Record<string, unknown> {
       .sort(([a], [b]) => a.localeCompare(b)),
   );
 }
+
+// 1.16.2 facts answerer (brain/facts.ts) reuses the exercise resolution and the phrase matching.
+describe('exercisesNamed', () => {
+  it('the exercise the rules pick, else every best-scoring candidate, else none', () => {
+    expect(exercisesNamed('Has my seated cable row gone up?', ctx)).toEqual(['Seated_Cable_Rows']);
+    expect(exercisesNamed('what did I lift on goblet squats last time', ctx)).toEqual([
+      'Goblet_Squat',
+    ]);
+    const rows = exercisesNamed('is my row going up', ctx);
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows).toEqual(expect.arrayContaining(['One-Arm_Dumbbell_Row', 'Seated_Cable_Rows']));
+    expect(exercisesNamed('how many calories left', ctx)).toEqual([]);
+  });
+});
+
+describe('phraseMatcher', () => {
+  it('whole words on normalized text, a trailing s and * endings', () => {
+    const m = phraseMatcher(['rest day', 'improv*']);
+    expect(m("What's my REST DAYS?")).toBe(true);
+    expect(m('improving lately')).toBe(true);
+    expect(m('restday')).toBe(false);
+  });
+});

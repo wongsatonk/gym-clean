@@ -97,7 +97,9 @@ test('free text → Apple answers with the "On-device AI" badge; shown, not spok
   await goCoach(page);
 
   // Open chat (the rules read it as help), so it reaches the model. Since 1.15.2 a message the
-  // rules read as a change ("What should I focus on…" → focus block) never does.
+  // rules read as a change ("What should I focus on…" → focus block) never does, and since
+  // 1.16.2 nor does a question about his own numbers ("What am I training today?" → facts).
+  // An opinion question like this one is a guard that the facts route stays narrow.
   const reply = await ask(page, 'Any thoughts on how today should go?');
   await expect(reply.locator('.cs-msg-coach')).toContainText(DEFAULT_BRAIN_TEXT);
   await expect(reply.locator('[data-chat-source="apple"]')).toHaveText('Answered by On-device AI');
@@ -219,6 +221,34 @@ test("a rule-matched change → the rules' proposal card, quick-replies badge, m
   expect(errors).toEqual([]);
 });
 
+// 1.16.2 (src/core/trainer/brain/facts.ts): a question about his own numbers is answered by the
+// rules from saved data, even with Apple's model ready; the model is not asked.
+test("an own-numbers question → the rules' facts answer, quick-replies badge, model not asked", async ({
+  page,
+}) => {
+  const offsite = await guardNetwork(page);
+  const { errors } = record(page);
+  await openNative(page);
+  await expect(page.locator('[data-hero="push-a"]')).toBeVisible();
+  await goCoach(page);
+
+  const reply = await ask(page, 'What am I training today?');
+  await expect(reply.locator('[data-chat-source="rules"]')).toHaveText('Answered by Quick replies');
+  await expect(reply.locator('[data-chat-source="apple"]')).toHaveCount(0);
+  await expect(reply.locator('[data-chat-note]')).toHaveCount(0);
+  // Today (Fri 13 Nov) is Push A on the fresh plan.
+  await expect(reply.locator('.cs-msg-coach')).toContainText('Push A');
+  await expect(reply.locator('.cs-msg-coach')).not.toContainText(DEFAULT_BRAIN_TEXT);
+  await expect(coachTab(page).locator('[data-proposal]')).toHaveCount(0);
+  await noHorizontalOverflow(page);
+
+  expect((await brainState(page)).requests).toEqual([]);
+  // Typed, so it stays silent.
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+  expect(offsite).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
 test('a read-only tool answers from its result, with no card', async ({ page }) => {
   const offsite = await guardNetwork(page);
   const { errors } = record(page);
@@ -226,7 +256,9 @@ test('a read-only tool answers from its result, with no card', async ({ page }) 
   await goCoach(page);
 
   await queueBrain(page, { echo: 'weekSummary', toolCalls: [{ name: 'weekSummary', args: {} }] });
-  const reply = await ask(page, 'How is my week going?');
+  // Open chat that reaches the model (since 1.16.2 "How is my week going?" is a facts question
+  // the rules answer); the fake's queued tool call still reads the week.
+  const reply = await ask(page, 'Any thoughts on my training lately?');
   const req = (await brainState(page)).requests.at(-1);
   const week = req?.toolResults.weekSummary ?? '';
   expect(week.length).toBeGreaterThan(0);
@@ -310,6 +342,7 @@ test('a failed reply → quick replies + a one-line note, every time', async ({ 
   await goCoach(page);
 
   await queueBrain(page, { error: 'timeout' }, { error: 'timeout' }, { error: 'guardrail' });
+  // Advice requests reach the model (a guard that the 1.16.2 facts route stays narrow).
   for (const [text, note] of [
     ['Plan my week please', copy.timeout],
     ['Plan my week again', copy.timeout],
@@ -344,6 +377,8 @@ test('appleCardReasons false → the "Lighter today?" reasons never reach the mo
   await revealNotice(page, page.locator('[data-readiness="lighter"]'));
 
   await goCoach(page);
+  // The readiness question the Lighter-today reasons exist for; it reaches the model (a guard
+  // that the 1.16.2 facts route stays narrow).
   await ask(page, 'Should I train hard today?');
   let ctx = (await brainState(page)).requests.at(-1)?.context ?? '';
   // Default (setting unset): the reason sentences, never numbers.
@@ -353,7 +388,7 @@ test('appleCardReasons false → the "Lighter today?" reasons never reach the mo
   // The M12-q1 decision step's setting, merged into settings 'coach' (read on every ask).
   const row = ((await getSetting(page, 'coach')) as Record<string, unknown> | undefined) ?? {};
   await putSetting(page, 'coach', { ...row, appleCardReasons: false });
-  await ask(page, 'And what about tomorrow?');
+  await ask(page, 'Any tips to sleep better?');
   ctx = (await brainState(page)).requests.at(-1)?.context ?? '';
   expect(ctx).not.toContain('Lighter today? card');
   expect(ctx).not.toContain('energy is low');

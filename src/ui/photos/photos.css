@@ -26,16 +26,7 @@
   font-size: var(--fs-body);
 }
 
-.photos-enable {
-  width: 100%;
-  min-height: var(--tap-cta);
-  padding: 0 18px;
-  font-size: var(--fs-lead);
-  font-weight: 700;
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
-}
+/* M13d task 40c: Turn on is the round main button in its wide pill (screens/mainPill.css). */
 
 .photos-add-row {
   display: grid;
@@ -186,11 +177,9 @@
   line-height: 1.2;
 }
 
-.photos-clear {
-  width: 100%;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
+/* M13d task 40c: Clear is a round iconButton (word under the circle). */
+.photos-clear.icon-btn {
+  align-self: flex-start;
 }
 
 /* ---------- list ---------- */
@@ -263,30 +252,19 @@
   font-weight: 600;
 }
 
-.photo-delete,
-.photos-delete-all {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  min-height: var(--tap-min);
-  padding: 4px 8px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  line-height: 1.1;
-  background: var(--surface-2);
+/* M13d task 40c: Delete (per photo, word under the circle) and Delete all (word beside, a
+   full-width row) are round danger iconButtons; armed, the circle fills red. */
+.photo-delete.icon-btn {
+  align-self: center;
 }
 
-.photos-delete-all {
+.photos-delete-all.icon-btn {
   margin-top: 8px;
-  background: transparent;
-  color: var(--text-2);
+  justify-content: flex-start;
 }
 
-.photo-delete[data-armed],
-.photos-delete-all[data-armed] {
-  background: var(--danger);
-  color: var(--on-danger);
-  border-color: var(--danger);
+.photo-delete.icon-btn[data-armed],
+.photos-delete-all.icon-btn[data-armed] {
+  --ib-fill: var(--danger);
+  --ib-ink: var(--on-danger);
 }

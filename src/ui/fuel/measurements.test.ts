@@ -1,26 +1,24 @@
 /// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type { Measurement } from '../../core/types';
+import type { LengthUnit, Measurement, UnitPrefs } from '../../core/types';
 import { asFake, useFakeDom } from '../screens/testDom';
 import { byAttr, copyHits, oneAttr, texts, typeInto, valueOf } from './fuelTestUtil';
 import {
   changeText,
   entryLine,
-  formatLength,
-  fromLength,
-  lengthUnit,
   measurementsEntry,
   measurementsEntryRow,
   measurementsScreen,
   measureStatus,
   saveLabel,
+  saveName,
+  SAVE_WORD,
   siteHistory,
   siteLabel,
   siteLine,
   startCm,
   statusCopy,
-  toLength,
   type MeasurementsProps,
 } from './measurements';
 
@@ -36,26 +34,41 @@ const SAVED: Measurement[] = [
   { date: '2026-08-14', site: 'waist', cm: 82 },
 ];
 
-function render(over: Partial<MeasurementsProps> = {}) {
-  const calls = { back: 0, save: [] as Measurement[][] };
+/** Test shorthand: `lengthUnit` builds `units` (weight in kg). */
+function render(
+  over: Partial<Omit<MeasurementsProps, 'units'>> & { lengthUnit?: LengthUnit } = {},
+) {
+  const calls = { back: 0, save: [] as Measurement[][], units: [] as UnitPrefs[] };
+  const { lengthUnit = 'cm', ...rest } = over;
   const el = asFake(
     measurementsScreen(
-      { sites: SITES, unit: 'kg', today: TODAY, measurements: SAVED, ...over },
-      { onBack: () => calls.back++, onSave: (rows) => calls.save.push(rows) },
+      {
+        sites: SITES,
+        units: { weight: 'kg', length: lengthUnit },
+        today: TODAY,
+        measurements: SAVED,
+        ...rest,
+      },
+      {
+        onBack: () => calls.back++,
+        onSave: (rows) => calls.save.push(rows),
+        onUnits: (u) => calls.units.push(u),
+      },
     ),
   );
   return { el, calls };
 }
 
 describe('measurement helpers', () => {
-  it('cm with kg, inches with lb', () => {
-    expect(lengthUnit('kg')).toBe('cm');
-    expect(lengthUnit('lb')).toBe('in');
-    expect(toLength(25.4, 'in')).toBeCloseTo(10);
-    expect(fromLength(10, 'in')).toBe(25.4);
-    expect(fromLength(34.5, 'cm')).toBe(34.5);
-    expect(formatLength(34.5, 'cm')).toBe('34.5 cm');
-    expect(formatLength(34.29, 'in')).toBe('13.5 in');
+  it("M13d: the unit maths is core's (no local cm / in copy left here)", () => {
+    const src = readFileSync(new URL('./measurements.ts', import.meta.url), 'utf8');
+    expect(src).not.toMatch(/CM_PER_IN|2\.54/);
+    expect(src).not.toMatch(
+      /export (const|function) (toLength|fromLength|formatLength|lengthUnit)\b/,
+    );
+    expect(siteLine(siteHistory(SAVED, 'waist'), 'in', TODAY)).toBe(
+      '32.3 in · 12 Oct · same as 14 Aug',
+    );
   });
 
   it('labels the default sites and reads an unknown id as words', () => {
@@ -106,6 +119,14 @@ describe('measurement helpers', () => {
     expect(saveLabel(1)).toBe('Save 1 measurement');
     expect(saveLabel(3)).toBe('Save 3 measurements');
   });
+
+  it('M13d 40e: the visible word is short; the name starts with it and says what it saves', () => {
+    expect(SAVE_WORD).toBe('Save');
+    expect(saveName(0)).toBe('Save. Tap a spot to measure');
+    expect(saveName(1)).toBe('Save 1 measurement');
+    expect(saveName(3)).toBe('Save 3 measurements');
+    for (const n of [0, 1, 3]) expect(saveName(n).startsWith(SAVE_WORD)).toBe(true);
+  });
 });
 
 describe('measurementsScreen', () => {
@@ -136,6 +157,11 @@ describe('measurementsScreen', () => {
     const { el, calls } = render();
     const save = oneAttr(el, 'data-measure-save');
     expect(save.hasAttribute('disabled')).toBe(true);
+    // M13d 40e: the round main button; the word is "Save", the name what it saves.
+    expect(save.hasAttribute('data-icon-btn')).toBe(true);
+    expect(save.getAttribute('data-variant')).toBe('main');
+    expect(oneAttr(save, 'data-measure-save-label').textContent).toBe('Save');
+    expect(save.getAttribute('aria-label')).toBe('Save. Tap a spot to measure');
     save.click();
     expect(calls.save).toEqual([]);
     expect(byAttr(el, 'data-field')).toHaveLength(0);
@@ -144,7 +170,8 @@ describe('measurementsScreen', () => {
     arm.click();
     expect(arm.getAttribute('aria-expanded')).toBe('true');
     expect(save.hasAttribute('disabled')).toBe(false);
-    expect(save.textContent).toBe('Save 1 measurement');
+    expect(save.textContent).toBe('Save');
+    expect(save.getAttribute('aria-label')).toBe('Save 1 measurement');
     const field = oneAttr(el, 'data-field', 'site-leftArm');
     expect(valueOf(field.oneByClass('nf-value'))).toBe('34.5');
     expect(oneAttr(el, 'data-site-edit', 'leftArm').hasAttribute('hidden')).toBe(false);
@@ -164,7 +191,7 @@ describe('measurementsScreen', () => {
     oneAttr(el, 'data-site-toggle', 'chest').click();
     expect(oneAttr(el, 'data-site-toggle', 'chest').getAttribute('aria-expanded')).toBe('false');
     const save = oneAttr(el, 'data-measure-save');
-    expect(save.textContent).toBe('Save 2 measurements');
+    expect(save.getAttribute('aria-label')).toBe('Save 2 measurements');
     save.click();
     expect(calls.save).toEqual([
       [
@@ -174,8 +201,8 @@ describe('measurementsScreen', () => {
     ]);
   });
 
-  it('lb: shows and steps in inches, stores cm', () => {
-    const { el, calls } = render({ unit: 'lb' });
+  it('lengthUnit "in": shows and steps in inches, stores cm', () => {
+    const { el, calls } = render({ lengthUnit: 'in' });
     expect(oneAttr(el, 'data-site-last', 'waist').textContent).toContain('32.3 in');
     oneAttr(el, 'data-site-toggle', 'chest').click();
     const input = oneAttr(el, 'data-field', 'site-chest').oneByClass('nf-value');
@@ -183,6 +210,42 @@ describe('measurementsScreen', () => {
     expect(valueOf(input)).toBe('40.0');
     oneAttr(el, 'data-measure-save').click();
     expect(calls.save).toEqual([[{ date: TODAY, site: 'chest', cm: 101.6 }]]);
+    expect(texts(el)).toContain("Saved for today in inches. Saving again replaces today's.");
+  });
+
+  it('M13d: an opened site left alone saves exactly what it was, in either unit', () => {
+    for (const lengthUnit of ['cm', 'in'] as const) {
+      const { el, calls } = render({ lengthUnit });
+      oneAttr(el, 'data-site-toggle', 'leftArm').click();
+      expect(valueOf(oneAttr(el, 'data-field', 'site-leftArm').oneByClass('nf-value'))).toBe(
+        lengthUnit === 'cm' ? '34.5' : '13.6',
+      );
+      oneAttr(el, 'data-measure-save').click();
+      expect(calls.save).toEqual([[{ date: TODAY, site: 'leftArm', cm: 34.5 }]]);
+    }
+  });
+
+  it('M13d: typed values are clamped to the tape range (5–300 cm), steps disable at the ends', () => {
+    const { el, calls } = render();
+    oneAttr(el, 'data-site-toggle', 'chest').click();
+    const field = oneAttr(el, 'data-field', 'site-chest');
+    const input = field.oneByClass('nf-value');
+    typeInto(input, '400');
+    expect(valueOf(input)).toBe('300.0');
+    expect(oneAttr(field, 'data-step', 'up').hasAttribute('disabled')).toBe(true);
+    typeInto(input, '3');
+    expect(valueOf(input)).toBe('5.0');
+    expect(oneAttr(field, 'data-step', 'down').hasAttribute('disabled')).toBe(true);
+    typeInto(input, 'abc');
+    expect(valueOf(input)).toBe('5.0');
+    oneAttr(el, 'data-measure-save').click();
+    expect(calls.save).toEqual([[{ date: TODAY, site: 'chest', cm: 5 }]]);
+  });
+
+  it('M13d task 24: the header Back is the edge swipe’s one Back', () => {
+    const marked = render().el.find((e) => e.hasAttribute('data-swipe-back'));
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.classes).toContain('fuel-back');
   });
 
   it('Back calls back; no sites → a plain note', () => {
@@ -193,8 +256,93 @@ describe('measurementsScreen', () => {
   });
 
   it('copy is plain: no banned or diagnosis words', () => {
-    for (const over of [{}, { measurements: [] }, { today: '2026-10-20' }, { unit: 'lb' as const }])
+    for (const over of [
+      {},
+      { measurements: [] },
+      { today: '2026-10-20' },
+      { lengthUnit: 'in' as const },
+    ])
       expect(copyHits(render(over).el)).toEqual([]);
+  });
+});
+
+describe('M13d task 13c: cm | in switch by the entry', () => {
+  const tap = (el: ReturnType<typeof render>['el'], unit: string) =>
+    oneAttr(oneAttr(el, 'data-unit-for', 'tape'), 'data-unit', unit).click();
+  const value = (el: ReturnType<typeof render>['el'], site: string) =>
+    valueOf(oneAttr(el, 'data-field', `site-${site}`).oneByClass('nf-value'));
+
+  it('one named switch heading the list, showing the unit passed in; none without spots', () => {
+    const { el } = render({ lengthUnit: 'in' });
+    const g = oneAttr(el, 'data-unit-for', 'tape');
+    expect(g.getAttribute('role')).toBe('group');
+    expect(g.getAttribute('aria-label')).toBe('Measurement unit');
+    expect(oneAttr(g, 'data-unit', 'in').getAttribute('aria-pressed')).toBe('true');
+    expect(byAttr(el, 'data-unit-switch')).toHaveLength(1);
+    // The switch sits in the list's heading row, before the list.
+    const row = el.oneByClass('ms-unit-row');
+    expect(row.children[0]?.textContent).toBe('Spots to measure');
+    expect(row.children[1]).toBe(g);
+    const order = el.find((e) => e.hasAttribute('data-unit-for') || e.classes.includes('ms-sites'));
+    expect(order[0]?.hasAttribute('data-unit-for')).toBe(true);
+    expect(byAttr(render({ sites: [] }).el, 'data-unit-switch')).toHaveLength(0);
+  });
+
+  it('80 cm → 31.5 in → 80 cm with no drift; nothing saved; onUnits once per tap', () => {
+    const { el, calls } = render({ measurements: [{ date: '2026-10-12', site: 'waist', cm: 80 }] });
+    oneAttr(el, 'data-site-toggle', 'waist').click();
+    expect(value(el, 'waist')).toBe('80.0');
+    tap(el, 'in');
+    expect(value(el, 'waist')).toBe('31.5');
+    expect(oneAttr(el, 'data-field', 'site-waist').oneByClass('nf-unit').textContent).toBe('in');
+    tap(el, 'cm');
+    expect(value(el, 'waist')).toBe('80.0');
+    for (let i = 0; i < 20; i++) {
+      tap(el, 'in');
+      tap(el, 'cm');
+    }
+    tap(el, 'cm'); // already shown: nothing
+    expect(value(el, 'waist')).toBe('80.0');
+    expect(calls.save).toEqual([]);
+    expect(calls.units).toHaveLength(42);
+    expect(calls.units[0]).toEqual({ weight: 'kg', length: 'in' });
+    expect(calls.units.at(-1)).toEqual({ weight: 'kg', length: 'cm' });
+    tap(el, 'in');
+    oneAttr(el, 'data-measure-save').click();
+    expect(calls.save).toEqual([[{ date: TODAY, site: 'waist', cm: 80 }]]);
+  });
+
+  it('re-words the last-value lines and the note; closed sites open in the new unit', () => {
+    const { el } = render();
+    tap(el, 'in');
+    expect(oneAttr(el, 'data-site-last', 'waist').textContent).toBe(
+      siteLine(siteHistory(SAVED, 'waist'), 'in', TODAY),
+    );
+    expect(oneAttr(el, 'data-measure-note').textContent).toBe(
+      "Saved for today in inches. Saving again replaces today's.",
+    );
+    oneAttr(el, 'data-site-toggle', 'leftArm').click();
+    expect(oneAttr(el, 'data-field', 'site-leftArm').oneByClass('nf-unit').textContent).toBe('in');
+    expect(value(el, 'leftArm')).toBe('13.6');
+  });
+
+  it('an edit survives switching and is what gets saved', () => {
+    const { el, calls } = render();
+    oneAttr(el, 'data-site-toggle', 'chest').click();
+    tap(el, 'in');
+    typeInto(oneAttr(el, 'data-field', 'site-chest').oneByClass('nf-value'), '40');
+    tap(el, 'cm');
+    expect(value(el, 'chest')).toBe('101.6');
+    tap(el, 'in');
+    expect(value(el, 'chest')).toBe('40.0');
+    oneAttr(el, 'data-measure-save').click();
+    expect(calls.save).toEqual([[{ date: TODAY, site: 'chest', cm: 101.6 }]]);
+  });
+
+  it('copy stays plain after a switch', () => {
+    const { el } = render();
+    tap(el, 'in');
+    expect(copyHits(el)).toEqual([]);
   });
 });
 

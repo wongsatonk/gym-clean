@@ -12,10 +12,12 @@
 // `[data-stepper=portion]`, `[data-slot-chip=<slot>]`, `[data-log-confirm]`, `[data-quick-*]`,
 // `[data-scan-open]` (Search and My foods, only while barcode lookup is on), `[data-item-note]`,
 // `[data-log-photo]` (M7b: the Photo button row, or `[data-photo-hint]` without a food model).
+// M13d task 40e: Log / Enter label numbers are the main round pill, Back / Scan a barcode / New
+// recipe / New food / Edit second actions (fuelButtons.ts); section buttons, chips and the item
+// rows stay.
 import { scaleFood } from '../../core/nutrition/portions';
 import type { Food, FoodAmount, MacroSet, MealSlot, NutritionMode } from '../../core/types';
 import { h } from '../dom';
-import { icon } from '../icons';
 import {
   appendAll,
   clear,
@@ -29,6 +31,7 @@ import {
   stepper,
 } from './common';
 import { GRAM_STEP, SERVING_STEP, slotChips } from './entrySheet';
+import { fuelBack, fuelMain, saveRow, secondPill } from './fuelButtons';
 import { photoButtons } from './photoCapture';
 
 /** M7b-q4: shown in place of the Photo button until a food model is imported. */
@@ -308,17 +311,12 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
 
   const scanButton = (): HTMLElement | null =>
     p.scan && a.onScan
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'fuel-secondary',
-            'data-scan-open': true,
-            onclick: () => a.onScan?.(section),
-          },
-          icon('camera', 'md'),
-          h('span', {}, 'Scan a barcode'),
-        )
+      ? secondPill({
+          icon: 'camera',
+          label: 'Scan a barcode',
+          hooks: { 'data-scan-open': true },
+          onClick: () => a.onScan?.(section),
+        })
       : null;
 
   function sectionPanel(): HTMLElement {
@@ -331,17 +329,12 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
         break;
       case 'recipes':
         wrap.append(
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'fuel-secondary',
-              'data-new-recipe': true,
-              onclick: () => a.onNewRecipe(),
-            },
-            icon('plus', 'md'),
-            h('span', {}, 'New recipe'),
-          ),
+          secondPill({
+            icon: 'plus',
+            label: 'New recipe',
+            hooks: { 'data-new-recipe': true },
+            onClick: () => a.onNewRecipe(),
+          }),
           itemList(p.recipes, p.mode, pick, 'No recipes yet.'),
         );
         break;
@@ -369,17 +362,12 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
       case 'myFoods':
         appendAll(
           wrap,
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'fuel-secondary',
-              'data-new-food': true,
-              onclick: () => a.onNewFood(),
-            },
-            icon('plus', 'md'),
-            h('span', {}, 'New food'),
-          ),
+          secondPill({
+            icon: 'plus',
+            label: 'New food',
+            hooks: { 'data-new-food': true },
+            onClick: () => a.onNewFood(),
+          }),
           scanButton(),
           itemList(p.myFoods, p.mode, pick, 'No foods of your own yet.'),
         );
@@ -449,13 +437,13 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
       fav.setAttribute('class', saveFavorite ? 'switch-btn on' : 'switch-btn');
       favState.textContent = saveFavorite ? 'On' : 'Off';
     });
-    const submit = h(
-      'button',
-      { type: 'button', class: 'primary-btn cta-btn', 'data-quick-log': true },
-      icon('check', 'lg'),
-      'Log',
-    );
-    submit.addEventListener('click', () => {
+    const submit = fuelMain({
+      icon: 'check',
+      label: 'Log',
+      hooks: { 'data-quick-log': true },
+      onClick: () => logQuick(),
+    });
+    function logQuick(): void {
       const k = parseNum(inputValue(kcal.input));
       const pr = parseNum(inputValue(protein.input));
       kcal.error.textContent = k === null ? 'Enter the calories. A guess is fine.' : '';
@@ -475,7 +463,7 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
         slot,
         saveFavorite,
       });
-    });
+    }
     return h(
       'div',
       { class: 'log-quick', 'data-quick-form': true },
@@ -492,7 +480,7 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
         slot = s;
       }),
       fav,
-      submit,
+      saveRow(submit),
     );
   }
 
@@ -552,17 +540,7 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
     const wrap = h(
       'section',
       { class: 'log-detail', 'data-log-detail': item.key, 'aria-labelledby': 'log-detail-name' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'fuel-back',
-          'data-log-back': true,
-          onclick: () => back(),
-        },
-        icon('back', 'md'),
-        h('span', {}, 'Back'),
-      ),
+      fuelBack(() => back(), { hooks: { 'data-log-back': true } }),
       h('h2', { class: 'log-detail-name', id: 'log-detail-name', tabindex: '-1' }, item.label),
       item.nameTh ? h('p', { class: 'log-item-th', lang: 'th' }, item.nameTh) : null,
       item.estimate ? h('p', { class: 'log-detail-tag' }, estimateTag()) : null,
@@ -575,16 +553,13 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
           { class: 'fuel-note', 'data-needs-label': true },
           'Enter the numbers from your product’s label first. They stay on this phone.',
         ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'primary-btn cta-btn',
-            'data-edit-item': true,
-            onclick: () => a.onEditItem(item),
-          },
-          icon('pencil', 'lg'),
-          'Enter label numbers',
+        saveRow(
+          fuelMain({
+            icon: 'pencil',
+            label: 'Enter label numbers',
+            hooks: { 'data-edit-item': true },
+            onClick: () => a.onEditItem(item),
+          }),
         ),
       );
       return wrap;
@@ -627,13 +602,12 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
       slotChips(slot, (s) => {
         slot = s;
       }),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'primary-btn cta-btn',
-          'data-log-confirm': true,
-          onclick: () =>
+      saveRow(
+        fuelMain({
+          icon: 'check',
+          label: 'Log',
+          hooks: { 'data-log-confirm': true },
+          onClick: () =>
             a.onLog({
               item,
               amount: toAmount(),
@@ -641,22 +615,15 @@ export function logSheet(p: LogSheetProps, a: LogSheetActions): LogSheet {
               slot,
               macros: preview(item, toAmount(), portion?.factor ?? 1),
             }),
-        },
-        icon('check', 'lg'),
-        'Log',
+        }),
       ),
       item.editable
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'fuel-secondary',
-              'data-edit-item': true,
-              onclick: () => a.onEditItem(item),
-            },
-            icon('pencil', 'md'),
-            h('span', {}, item.ref.recipeId ? 'Edit recipe' : 'Edit food'),
-          )
+        ? secondPill({
+            icon: 'pencil',
+            label: item.ref.recipeId ? 'Edit recipe' : 'Edit food',
+            hooks: { 'data-edit-item': true },
+            onClick: () => a.onEditItem(item),
+          })
         : null,
     );
     return wrap;

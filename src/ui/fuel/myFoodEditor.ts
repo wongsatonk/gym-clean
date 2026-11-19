@@ -9,8 +9,9 @@
 // `#food-carbs`, `#food-fat`, `[data-food-save]`, `[data-food-barcode]` (a scanned code, shown).
 import type { MacroSet, NutritionMode } from '../../core/types';
 import { h } from '../dom';
-import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import { appendAll, field, inputValue, parseNum, sheetShell } from './common';
+import { fuelMain, saveRow } from './fuelButtons';
 
 export type MyFoodDraft = MacroSet & {
   id?: string | undefined;
@@ -137,13 +138,13 @@ export function myFoodEditor(p: MyFoodEditorProps, a: MyFoodEditorActions): HTML
   });
   paintBasis();
 
-  const save = h(
-    'button',
-    { type: 'button', class: 'primary-btn cta-btn', 'data-food-save': true },
-    icon('check', 'lg'),
-    'Save food',
-  );
-  save.addEventListener('click', () => {
+  const save = fuelMain({
+    icon: 'check',
+    label: 'Save food',
+    hooks: { 'data-food-save': true },
+    onClick: () => saveFood(),
+  });
+  function saveFood(): void {
     const nm = inputValue(name.input);
     const k = parseNum(inputValue(kcal.input));
     const pr = parseNum(inputValue(protein.input));
@@ -182,7 +183,7 @@ export function myFoodEditor(p: MyFoodEditorProps, a: MyFoodEditorActions): HTML
     if (c !== null) out.carbsG = c;
     if (f !== null) out.fatG = f;
     a.onSave(out);
-  });
+  }
 
   appendAll(
     shell.body,
@@ -215,20 +216,20 @@ export function myFoodEditor(p: MyFoodEditorProps, a: MyFoodEditorActions): HTML
     protein.wrap,
     carbs?.wrap ?? null,
     fat?.wrap ?? null,
-    save,
-    a.onDelete
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'fuel-secondary',
-            'data-food-delete': true,
-            onclick: () => a.onDelete?.(),
-          },
-          icon('close', 'md'),
-          h('span', {}, 'Delete food'),
-        )
-      : null,
+    // M13d task 40e: Delete (danger circle, name "Delete food") beside the Save pill.
+    saveRow(
+      save,
+      a.onDelete
+        ? iconButton({
+            icon: 'trash',
+            label: 'Delete',
+            ariaLabel: 'Delete food',
+            variant: 'danger',
+            hooks: { 'data-food-delete': true },
+            onClick: () => a.onDelete?.(),
+          })
+        : null,
+    ),
   );
   return shell.el;
 }

@@ -1,13 +1,15 @@
 // M7 Fuel: edit one logged entry (task 11 "each entry can be edited"). Amount stepper (0.5
-// servings, or 10 g for gram entries), meal-slot chips, a live preview, Save and Delete.
+// servings, or 10 g for gram entries), meal-slot chips, a live preview, Save and Delete (M13d
+// task 40e: the round Delete circle beside the Save pill; Delete's name stays "Delete entry").
 // The preview numbers come from the caller (core portion scaling), so the UI holds no math.
 //
 // e2e hooks: dialog `[data-entry-sheet]`, `[data-stepper=amount]`, `[data-slot-chip=<slot>]`,
 // `[data-entry-save]`, `[data-entry-remove]`.
 import type { FoodAmount, FoodEntry, MacroSet, MealSlot, NutritionMode } from '../../core/types';
 import { h } from '../dom';
-import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import { SLOT_LABEL, SLOT_ORDER, macroLine, sheetShell, stepper } from './common';
+import { fuelMain, saveRow } from './fuelButtons';
 
 export type EntrySheetProps = {
   entry: FoodEntry;
@@ -88,27 +90,22 @@ export function entrySheet(p: EntrySheetProps, a: EntrySheetActions): HTMLElemen
     slotChips(slot, (s) => {
       slot = s;
     }),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'primary-btn cta-btn',
-        'data-entry-save': true,
-        onclick: () => a.onSave({ amount: toAmount(amount), slot }),
-      },
-      icon('check', 'lg'),
-      'Save',
-    ),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'fuel-secondary',
-        'data-entry-remove': true,
-        onclick: () => a.onDelete(),
-      },
-      icon('close', 'md'),
-      h('span', {}, 'Delete entry'),
+    // M13d task 40e: Delete (danger circle, the word shortened, name "Delete entry") + Save.
+    saveRow(
+      fuelMain({
+        icon: 'check',
+        label: 'Save',
+        hooks: { 'data-entry-save': true },
+        onClick: () => a.onSave({ amount: toAmount(amount), slot }),
+      }),
+      iconButton({
+        icon: 'trash',
+        label: 'Delete',
+        ariaLabel: 'Delete entry',
+        variant: 'danger',
+        hooks: { 'data-entry-remove': true },
+        onClick: () => a.onDelete(),
+      }),
     ),
   );
   return shell.el;

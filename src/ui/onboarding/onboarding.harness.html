@@ -2,6 +2,7 @@
 <!-- Dev-only visual check for M13 tasks 10 + 12 (brand lockup, welcome + permission pages). Not
      part of the build or the app. Open on the dev server:
      /src/ui/onboarding/onboarding.harness.html?platform=native|web&step=0..6[&granted=camera]
+     [&units=lb,in] (M13d: what the Units page shows as chosen; default kg,cm)
      Buttons walk the flow; window.harnessLog records the callbacks. -->
 <html lang="en">
   <head>
@@ -14,9 +15,6 @@
     <div id="app"></div>
     <script type="module">
       import '@fontsource/barlow-condensed/latin-700.css';
-      import '@fontsource/barlow/latin-400.css';
-      import '@fontsource/barlow/latin-600.css';
-      import '@fontsource/barlow/latin-700.css';
       import { onboardingSteps } from '../../core/onboarding.ts';
       import { onboardingScreen } from './welcome.ts';
 
@@ -30,6 +28,8 @@
         has: { health: native, mic: native, notifications: native },
       });
       let index = Number(q.get('step') ?? 0);
+      const [w, l] = (q.get('units') ?? 'kg,cm').split(',');
+      let units = { weight: w === 'lb' ? 'lb' : 'kg', length: l === 'in' ? 'in' : 'cm' };
       const granted = {};
       for (const p of (q.get('granted') ?? '').split(',').filter(Boolean)) granted[p] = true;
       const app = document.getElementById('app');
@@ -39,13 +39,14 @@
       function show(dir) {
         screen?.dispose();
         screen = onboardingScreen(
-          { steps, index, granted, dir },
+          { steps, index, granted, dir, units },
           {
             onNext: () => (log('next'), index++, show('next')),
             onBack: () => (log('back'), index--, show('prev')),
             onSkipAll: () => log('skip'),
             onDone: () => log('done'),
             onAllow: (p) => (log('allow', p), (granted[p] = true), show()),
+            onUnits: (u) => (log('units', u.weight, u.length), (units = u)),
             onNotNow: (p) => {
               log('notNow', p);
               if (index < steps.length - 1) (index++, show('next'));

@@ -1,0 +1,44 @@
+/* M13d task 40c: the wide main action (mainPill.ts). A soft pill track with the 72px main circle
+   and its word beside it; the whole pill is the tap area (as wide as the filled bar it replaced).
+   Press look, focus ring and Reduce Motion come from iconButton.css / styles.css. */
+
+.main-pill.icon-btn {
+  justify-content: flex-start;
+  min-height: var(--tap-hero);
+  padding: 4px 18px 4px 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.main-pill.icon-btn .icon-btn-label {
+  min-width: 0;
+  line-height: var(--lh-head);
+  overflow-wrap: anywhere;
+}
+
+/* Start (Today, the day preview, a calendar day): the condensed display face, as the filled
+   Start bar had (M13d task 17 keeps Barlow for Start). */
+.start-pill.icon-btn .icon-btn-label {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+}
+
+/* On the ember hero: a darker see-through track, above the decorative rings. */
+.hero .main-pill.icon-btn {
+  position: relative;
+  z-index: 1;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+  border-color: transparent;
+}
+
+.main-pill.icon-btn:disabled {
+  opacity: 0.6;
+}
+
+/* A card's suggested action (Move it, Lighter today, Set your goal, …): a secondary round button
+   with an orange ring and icon. Only Start is filled; the word stays in --text (4.5:1). */
+.card-cta.icon-btn:not(:disabled) {
+  --ib-ring: var(--cta);
+  --ib-ink: var(--cta);
+}

@@ -13,9 +13,11 @@
 import type { TodoTopic } from '../../core/types';
 import { backButton } from '../backButton';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import './todos.css';
+import '../settingsButtons.css';
 
 /** Same shape as core `topicStatus(topic, answers, facts)`. */
 export type TodoTopicStatus = {
@@ -161,17 +163,16 @@ export function todoListScreen(props: TodoListProps, actions: TodoListActions): 
         { class: 'muted set-note' },
         'One text with your answers since your last copy. You see it before it is copied.',
       ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'todo-copy-btn',
-          'data-copy-report': true,
-          onclick: () => actions.onCopyReport(),
-        },
-        icon('list', 'md'),
-        h('span', {}, 'Copy report'),
-      ),
+      // M13d task 40d: the page's main round button on a pill (the whole row the tap area).
+      iconButton({
+        icon: 'list',
+        label: 'Copy report',
+        variant: 'main',
+        wideHit: true,
+        class: 'set-ib-pill',
+        hooks: { 'data-copy-report': true },
+        onClick: () => actions.onCopyReport(),
+      }),
     ),
   );
 }

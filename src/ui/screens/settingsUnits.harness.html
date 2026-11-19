@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- Dev-only visual check for M13d task 12 (Settings → Units: Weight kg / lb, Height and body
+     cm / ft·in) with made-up values. Not part of the build or the app. Open on the dev server:
+     /src/ui/screens/settingsUnits.harness.html[?unit=lb&length=in]
+     The page opens scrolled to Units. window.harnessLog: 'unit kg' / 'length in' per tap (the
+     harness re-renders like app.ts does after a save). e2e/units.spec.ts screenshots it. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Settings Units harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import { settingsScreen, settingsSectionId } from './settings.ts';
+
+      const q = new URLSearchParams(location.search);
+      let unit = q.get('unit') === 'lb' ? 'lb' : 'kg';
+      let lengthUnit =
+        q.get('length') === 'in' ? 'in' : q.get('length') === 'cm' ? 'cm' : undefined;
+      const app = document.getElementById('app');
+      const log = (...a) => (window.harnessLog = [...(window.harnessLog ?? []), a.join(' ')]);
+      const slot = (attr) => {
+        const el = document.createElement('div');
+        el.setAttribute(attr, '');
+        return el;
+      };
+
+      function show() {
+        const el = settingsScreen(
+          {
+            accent: 'orange',
+            spokenCount: true,
+            coachTips: true,
+            handsFree: false,
+            unit,
+            lengthUnit,
+            coachVoice: slot('data-coach-voice'),
+            speakerCheck: slot('data-voice-test'),
+            audioTest: slot('data-audio-test'),
+            devLog: slot('data-devlog'),
+            owner: false,
+          },
+          {
+            onAccent: () => {},
+            onSpokenCount: () => {},
+            onCoachTips: () => {},
+            onHandsFree: () => {},
+            onUnit: (u) => (log('unit', u), (unit = u), show()),
+            onLengthUnit: (u) => (log('length', u), (lengthUnit = u), show()),
+            onCameraTest: () => {},
+            onTab: () => {},
+          },
+        );
+        app.replaceChildren(el);
+      }
+      show();
+      document.getElementById(settingsSectionId('unit'))?.scrollIntoView({ block: 'start' });
+      window.harnessReady = true;
+    </script>
+  </body>
+</html>

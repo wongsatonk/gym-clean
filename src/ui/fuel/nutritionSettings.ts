@@ -16,14 +16,18 @@
 // e2e hooks: `[data-nutrition]`, `[data-mode=quick|full]` (aria-pressed), `[data-target=kcal|
 // proteinG|carbsG|fatG]` with `.nt-value`, `[data-target-edit]`, `[data-field=surplus|protein]`,
 // `[data-setup-rerun]`, `[data-setting=barcode-lookup]` (role=switch), `[data-barcode-confirm]`.
+// M13d task 40e: Change / Save / Use estimate / Cancel / Turn on / Not now are round buttons with
+// the word under them, Set up targets / Re-run setup a second pill; the mode switch stays.
 import { visibleMacros, type MacroKey } from '../../core/nutrition/targets';
 import { fuelRuleFor } from '../../core/nutrition/goalTargets';
 import type { NutritionMode, NutritionSettings, NutritionTargets } from '../../core/types';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { switchRow } from '../screens/settings';
 import { estimateTag } from './common';
 import { numberField } from './fields';
+import { actionRow, secondPill } from './fuelButtons';
 import './fuelForms.css';
 
 export type { MacroKey };
@@ -157,17 +161,12 @@ function targetRow(
           h('span', { class: 'nt-value' }, targetText(target.value)),
           h('span', { class: 'nt-unit' }, meta.unit),
         ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'nt-btn',
-            'data-target-edit': key,
-            onclick: edit,
-          },
-          icon('pencil', 'sm'),
-          h('span', {}, 'Change'),
-        ),
+        iconButton({
+          icon: 'pencil',
+          label: 'Change',
+          hooks: { 'data-target-edit': key },
+          onClick: () => edit(),
+        }),
       ),
     );
   };
@@ -184,37 +183,29 @@ function targetRow(
     });
     row.replaceChildren(
       field.el,
-      h(
-        'div',
-        { class: 'nt-edit-actions' },
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'nt-btn nt-save',
-            'data-target-save': key,
-            onclick: () => onOverride(key, field.get()),
-          },
-          icon('check', 'sm'),
-          h('span', {}, 'Save'),
-        ),
+      actionRow(
+        'nt-edit-actions',
+        iconButton({
+          icon: 'check',
+          label: 'Save',
+          class: 'nt-save',
+          hooks: { 'data-target-save': key },
+          onClick: () => onOverride(key, field.get()),
+        }),
         overridden
-          ? h(
-              'button',
-              {
-                type: 'button',
-                class: 'nt-btn',
-                'data-target-reset': key,
-                onclick: () => onOverride(key, null),
-              },
-              h('span', {}, 'Use estimate'),
-            )
+          ? iconButton({
+              icon: 'refresh',
+              label: 'Use estimate',
+              hooks: { 'data-target-reset': key },
+              onClick: () => onOverride(key, null),
+            })
           : null,
-        h(
-          'button',
-          { type: 'button', class: 'nt-btn', 'data-target-cancel': key, onclick: view },
-          h('span', {}, 'Cancel'),
-        ),
+        iconButton({
+          icon: 'close',
+          label: 'Cancel',
+          hooks: { 'data-target-cancel': key },
+          onClick: () => view(),
+        }),
       ),
     );
   };
@@ -234,24 +225,21 @@ function barcodeBlock(on: boolean, onSet: (on: boolean) => void): HTMLElement {
         'aria-label': 'Barcode lookup',
       },
       h('p', { class: 'nt-confirm-txt' }, icon('help', 'sm'), h('span', {}, BARCODE_EXPLAINER)),
-      h(
-        'div',
-        { class: 'nt-edit-actions' },
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'nt-btn nt-save',
-            'data-barcode-on': true,
-            onclick: () => onSet(true),
-          },
-          h('span', {}, 'Turn on'),
-        ),
-        h(
-          'button',
-          { type: 'button', class: 'nt-btn', 'data-barcode-cancel': true, onclick: show },
-          h('span', {}, 'Not now'),
-        ),
+      actionRow(
+        'nt-edit-actions',
+        iconButton({
+          icon: 'check',
+          label: 'Turn on',
+          class: 'nt-save',
+          hooks: { 'data-barcode-on': true },
+          onClick: () => onSet(true),
+        }),
+        iconButton({
+          icon: 'close',
+          label: 'Not now',
+          hooks: { 'data-barcode-cancel': true },
+          onClick: () => show(),
+        }),
       ),
     );
   function show() {
@@ -282,16 +270,13 @@ export function nutritionSettings(
       'div',
       { class: 'nt', 'data-nutrition': 'empty' },
       h('p', { class: 'set-note' }, 'Set up Fuel to get daily calorie and protein targets.'),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'set-action',
-          'data-setup-rerun': true,
-          onclick: () => a.onSetup(),
-        },
-        'Set up targets',
-      ),
+      secondPill({
+        icon: 'sliders',
+        label: 'Set up targets',
+        class: 'nt-rerun',
+        hooks: { 'data-setup-rerun': true },
+        onClick: () => a.onSetup(),
+      }),
       barcodeBlock(p.barcodeLookup ?? false, a.onBarcodeLookup),
     );
   }
@@ -332,11 +317,13 @@ export function nutritionSettings(
       ...PROTEIN_RANGE,
       onChange: a.onProteinPerKg,
     }).el,
-    h(
-      'button',
-      { type: 'button', class: 'set-action', 'data-setup-rerun': true, onclick: () => a.onSetup() },
-      'Re-run setup',
-    ),
+    secondPill({
+      icon: 'refresh',
+      label: 'Re-run setup',
+      class: 'nt-rerun',
+      hooks: { 'data-setup-rerun': true },
+      onClick: () => a.onSetup(),
+    }),
     barcodeBlock(s.barcodeLookup, a.onBarcodeLookup),
   );
 }

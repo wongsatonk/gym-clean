@@ -151,6 +151,13 @@ describe('calendarDayScreen', () => {
     expect(actionIds(root)).toEqual(['start', 'move']);
     root.find((e) => e.getAttribute('data-day-action') === 'start')[0]?.click();
     expect(a.onStart).toHaveBeenCalledOnce();
+    // M13d task 40c: Start is the round main button in its pill, Move a round secondary one.
+    const act = (id: string) => must(root.find((e) => e.getAttribute('data-day-action') === id)[0]);
+    expect(act('start').getAttribute('data-variant')).toBe('main');
+    expect(act('start').classes).toContain('start-pill');
+    expect(act('start').textContent).toBe('Start');
+    expect(act('move').getAttribute('data-variant')).toBe('secondary');
+    expect(act('move').textContent).toBe('Move');
   });
 
   it('an extra session on a rest day lists what was done, with no plan denominator', () => {
@@ -179,6 +186,10 @@ describe('calendarDayScreen', () => {
     expect(a.onHistory).toHaveBeenCalledWith('row');
     root.find((e) => e.hasAttribute('data-cal-back'))[0]?.click();
     expect(a.onBack).toHaveBeenCalledOnce();
+    // M13d task 24: that Back is the edge swipe's one Back.
+    const marked = root.find((e) => e.hasAttribute('data-swipe-back'));
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.hasAttribute('data-cal-back')).toBe(true);
     for (const b of root.byTag('button')) {
       expect(b.getAttribute('type')).toBe('button');
       expect(

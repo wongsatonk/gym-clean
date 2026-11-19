@@ -1,7 +1,9 @@
 import { h } from './dom';
+import { iconButton } from './iconButton';
 import { icon } from './icons';
 import type { EnglishVoice, Rudeness, VoiceConfig } from './voiceNames';
 import './coachVoiceSettings.css';
+import './settingsButtons.css';
 
 /**
  * Settings → "Coach voice" (drill-sergeant design 2026-11-13): Calm / Drill sergeant, and for
@@ -145,16 +147,16 @@ export function createCoachVoiceSettings(
       );
     }
     parts.push(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'cv-test',
-          'data-coach-voice-test': true,
-          onclick: () => opts.onTest({ ...value }),
-        },
-        'Test voice',
-      ),
+      // M13d task 40d: a round icon button, word beside, the whole row the tap area.
+      iconButton({
+        icon: 'speaker',
+        label: 'Test voice',
+        labelAt: 'beside',
+        wideHit: true,
+        class: 'set-ib-pill cv-test',
+        hooks: { 'data-coach-voice-test': true },
+        onClick: () => opts.onTest({ ...value }),
+      }),
     );
     body.replaceChildren(...parts.filter((p): p is HTMLElement => p !== null));
   }

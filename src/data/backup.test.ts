@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { TrainerState } from '../core/types';
-import { GymDb } from './db';
+import { GymDb, getLengthUnit, getTextSize, getUnitPrefs, setTextSize, setUnit, setUnitPrefs } from './db';
 import {
   BACKUP_FORMAT,
   BACKUP_TABLES,
@@ -1145,5 +1145,31 @@ describe('M13b one-sided sets in backups', () => {
       expect((err as BackupError).code).toBe('corrupt');
       expect((err as BackupError).message).toContain('sides');
     }
+  });
+});
+
+describe('M13d unit and text-size rows in backups', () => {
+  it('carries the length unit and text size and restores them (not phone-only)', async () => {
+    await setUnitPrefs(a, { weight: 'kg', length: 'in' });
+    await setTextSize(a, 'larger');
+    const file = await exportAll(a, { appVersion: '1.16.3', now: T0 });
+    const keys = (file.tables.settings ?? []).map((r) => (r as { key: string }).key);
+    expect(keys).toEqual(expect.arrayContaining(['unit', 'lengthUnit', 'textSize']));
+    await importAll(b, viaFile(file));
+    expect(await getUnitPrefs(b)).toEqual({ weight: 'kg', length: 'in' });
+    expect(await getTextSize(b)).toBe('larger');
+  });
+
+  it('a 1.16.1 backup without the rows restores with the fallbacks (length follows the weight unit)', async () => {
+    await setUnit(a, 'lb');
+    const file = await exportAll(a, { appVersion: '1.16.1', now: T0 });
+    expect((file.tables.settings ?? []).map((r) => (r as { key: string }).key)).not.toContain('lengthUnit');
+    // This phone had picked other units and a size; the restore replaces settings with the file's.
+    await setUnitPrefs(b, { weight: 'kg', length: 'cm' });
+    await setTextSize(b, 'large');
+    await importAll(b, viaFile(file));
+    expect(await getLengthUnit(b)).toBe('in');
+    expect(await getUnitPrefs(b)).toEqual({ weight: 'lb', length: 'in' });
+    expect(await getTextSize(b)).toBe('standard');
   });
 });

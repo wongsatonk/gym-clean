@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppRoute, WhatsNewPage } from '../../core/types';
 import { versionLabel } from '../../core/version';
 import { FakeEl, asFake, useFakeDom } from '../screens/testDom';
-import { pageCount, SWIPE_MIN_PX, whatsNewTour, type TourTopic } from './whatsNewTour';
+import { fakeSwipe } from '../gestures/testTouch';
+import { pageCount, whatsNewTour, type TourTopic } from './whatsNewTour';
 
 useFakeDom();
 
@@ -161,6 +162,13 @@ describe("What's New tour", () => {
     const next = one(el, 'next');
     expect(back.hasAttribute('disabled')).toBe(true);
     expect(next.textContent).toBe('Next');
+    // M13d task 40d: Next is the main round button on a pill; its circle shows an arrow, then a
+    // check on the last page (the word changes with it, so not the icon alone).
+    expect(next.getAttribute('data-variant')).toBe('main');
+    expect(next.hasAttribute('data-wide-hit')).toBe(true);
+    expect(back.getAttribute('data-variant')).toBe('secondary');
+    const circleIcon = () => next.children[0]?.children[0]?.getAttribute('data-icon');
+    expect(circleIcon()).toBe('arrow-right');
     next.click();
     expect(tour.index()).toBe(1);
     expect(back.hasAttribute('disabled')).toBe(false);
@@ -172,6 +180,7 @@ describe("What's New tour", () => {
     expect(tour.index()).toBe(3);
     expect(next.textContent).toBe('Done');
     expect(next.getAttribute('data-last')).toBe('true');
+    expect(circleIcon()).toBe('check');
     expect(calls.done).toBe(0);
     next.click();
     expect(calls.done).toBe(1);
@@ -238,20 +247,41 @@ describe("What's New tour", () => {
     expect(document.activeElement).toBe(one(el, 'next'));
   });
 
-  it('swipe left / right on the page is a shortcut; short or vertical moves do nothing', () => {
+  it('M13d task 25: swipe left = Next, right = Back (touch, core pageSwipe); short or vertical moves do nothing', () => {
+    const { el, tour, calls } = render();
+    const body = one(el, 'body');
+    expect(body.hasAttribute('data-page-swipe')).toBe(true);
+    const swipe = (dx: number, dy = 0) =>
+      fakeSwipe(body, { from: { x: 200, y: 300 }, to: { x: 200 + dx, y: 300 + dy } });
+    swipe(-150); // past 25% of 390
+    expect(tour.index()).toBe(1);
+    swipe(150);
+    expect(tour.index()).toBe(0);
+    swipe(150); // Back on page 1: nothing
+    expect(tour.index()).toBe(0);
+    swipe(-40); // short and slow: springs back
+    expect(tour.index()).toBe(0);
+    swipe(-80, 200); // mostly vertical: the page scrolls
+    expect(tour.index()).toBe(0);
+    // Last page: a swipe left doesn't press Done (that stays a tap).
+    tour.next();
+    tour.next();
+    tour.next();
+    expect(tour.index()).toBe(tour.total() - 1);
+    swipe(-150);
+    expect(tour.index()).toBe(tour.total() - 1);
+    expect(calls.done).toBe(0);
+  });
+
+  it('M13d task 25: the page follows the finger (transform only); a short drag springs back', () => {
     const { el, tour } = render();
     const body = one(el, 'body');
-    const swipe = (dx: number, dy = 0) => {
-      body.dispatch('pointerdown', { clientX: 200, clientY: 300 });
-      body.dispatch('pointerup', { clientX: 200 + dx, clientY: 300 + dy });
-    };
-    swipe(-(SWIPE_MIN_PX + 10));
-    expect(tour.index()).toBe(1);
-    swipe(SWIPE_MIN_PX + 10);
-    expect(tour.index()).toBe(0);
-    swipe(-(SWIPE_MIN_PX - 10));
-    expect(tour.index()).toBe(0);
-    swipe(-80, 200);
+    const page = one(el, 'page');
+    const s = fakeSwipe(body, { from: { x: 300, y: 300 }, to: { x: 240, y: 300 }, release: false });
+    expect(s.prevented).toBeGreaterThan(0);
+    expect(page.style.transform).toBe('translate3d(-60px, 0, 0)');
+    s.lift();
+    expect(page.style.transform).toBe('');
     expect(tour.index()).toBe(0);
   });
 

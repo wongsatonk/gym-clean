@@ -1,0 +1,62 @@
+/* M13d task 40f (SPEC M13d Goal 7): placement of the Coach's round icon buttons (iconButton.ts /
+   iconButton.css own the circle, the word, the press and the focus ring). Tokens only. */
+
+/* A wide bar that became circle + word (`wideHit`): a soft pill track, the whole pill is the tap
+   area (as wide as the bar it replaces). Same look as the agreed preview's Save / Next, with the
+   word in the body font (M13d task 17: the display font is for numbers, timers and Start). */
+.icon-btn.cb-bar {
+  justify-content: flex-start;
+  padding: 4px 18px 4px 4px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: var(--line-w) solid var(--line);
+}
+
+.icon-btn.cb-bar[data-variant='main'] {
+  padding: 6px 18px 6px 6px;
+}
+
+.icon-btn.cb-bar[data-variant='danger'] {
+  border-color: var(--danger);
+}
+
+/* The red-flag stops keep their 1.16.2 height (≥ 72px). */
+.icon-btn.cb-tall {
+  min-height: var(--tap-cta);
+}
+
+/* Apply (the main pill) and Not now (a circle, word under) in one row. */
+.cb-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.cb-actions > .icon-btn.cb-bar {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.cb-actions > .icon-btn:not(.cb-bar) {
+  flex: 0 0 auto;
+}
+
+/* The Claude offer: two round buttons of the same size, side by side (equal weight). */
+.co-actions.co-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 10px;
+}
+
+.co-choices > .icon-btn {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+/* Food ideas: the Log circle at the end of its row. */
+.fc-row > .icon-btn.fc-log-btn {
+  flex: none;
+}

@@ -30,12 +30,15 @@
 // slot; when app.ts's 3D body lands in the slot and has drawn a frame, the card's `data-3d` turns
 // "shown" and rest.css fades the 3D in over the 2D (tokens: instant under reduced motion). If 3D
 // never arrives, fails, or moves to the 3D sheet, the 2D map stays (or comes back).
+// M13d task 40g (styling only): Start set is the main round-button pill, +30 s a secondary pill
+// in its place (≥ its 1.16.2 box); no press motion (midset.css).
 import { formatRest } from '../../core/format';
 import type { SetEffort } from '../../core/types';
 import { exerciseById } from '../../data/catalog';
 import { bodyMapSvg, pickView } from '../bodyMap';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { midPill } from '../midsetButtons';
 import { ringFill } from '../motion';
 import { moodClass } from '../tokens';
 import { workoutTopBar } from '../topBar';
@@ -399,18 +402,14 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
   }
   update(p.remainingMs, p.targetMs);
 
-  const extend = h(
-    'button',
-    {
-      type: 'button',
-      class: 'rest-extend',
-      'aria-label': '+30 s, add 30 seconds of rest',
-      'data-rest-extend': true,
-      onclick: a.onExtend,
-    },
-    icon('timer', 'md'),
-    '+30 s',
-  );
+  const extend = midPill({
+    icon: 'timer',
+    label: '+30 s',
+    ariaLabel: '+30 s, add 30 seconds of rest',
+    class: 'rest-extend-pill',
+    hooks: { 'data-rest-extend': true },
+    onClick: () => a.onExtend(),
+  });
 
   const figBox = h('div', { class: 'rest-card-fig' }, restFigure2d(p.exerciseId), p.figure);
   watch = watch3d(figBox);
@@ -504,12 +503,13 @@ export function restScreen(p: RestProps, a: RestActions): RestView {
     h(
       'div',
       { class: 'sticky-bottom' },
-      h(
-        'button',
-        { type: 'button', class: 'primary-btn cta-btn', onclick: a.onStartSet },
-        icon('play', 'lg'),
-        'Start set',
-      ),
+      midPill({
+        icon: 'play',
+        label: 'Start set',
+        variant: 'main',
+        wide: true,
+        onClick: () => a.onStartSet(),
+      }),
     ),
   );
   return { el, update, dispose: () => watch?.stop() };

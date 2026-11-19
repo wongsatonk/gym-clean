@@ -218,6 +218,16 @@ describe('focus-block card: render', () => {
     expect(one(again, 'data-fb-week', '0').getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('M13d task 40f: Apply / Not now are the round pair shared with the proposal card', () => {
+    const { controls } = mount();
+    const [apply, dismiss] = controls.slice(-2).map((c) => c as unknown as FakeEl);
+    expect(apply?.getAttribute('data-variant')).toBe('main');
+    expect(apply?.hasAttribute('data-wide-hit')).toBe(true);
+    expect(apply?.classes).toContain('proposal-apply');
+    expect(dismiss?.getAttribute('data-variant')).toBe('secondary');
+    expect(dismiss?.hasAttribute('data-icon-btn')).toBe(true);
+  });
+
   it('controls in tab order: every row button, then Apply, Not now', () => {
     const { controls } = mount();
     expect(

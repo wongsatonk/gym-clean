@@ -132,7 +132,11 @@ describe('Food photos: model', () => {
     const block = oneAttr(el, 'data-food-model');
     expect(block.getAttribute('data-state')).toBe('none');
     expect(block.textContent).toContain('No food model yet.');
-    expect(oneAttr(el, 'data-food-model-import').textContent).toBe('Import model (.tflite)');
+    // M13d 40e: a round button; the word drops "(.tflite)", the name keeps it.
+    const imp = oneAttr(el, 'data-food-model-import');
+    expect(imp.hasAttribute('data-icon-btn')).toBe(true);
+    expect(imp.textContent).toBe('Import model');
+    expect(imp.getAttribute('aria-label')).toBe('Import model (.tflite)');
     const input = oneAttr(el, 'data-food-model-file');
     expect(input.getAttribute('type')).toBe('file');
     expect(input.getAttribute('accept')).toBe('.tflite');
@@ -147,7 +151,10 @@ describe('Food photos: model', () => {
     expect(block.getAttribute('data-state')).toBe('ready');
     expect(block.textContent).toContain('thai-food-v1.tflite');
     expect(block.textContent).toContain('4.2 MB · 3 dishes');
-    expect(oneAttr(el, 'data-food-model-import').textContent).toBe('Replace model (.tflite)');
+    const imp = oneAttr(el, 'data-food-model-import');
+    expect(imp.textContent).toBe('Replace model');
+    expect(imp.getAttribute('aria-label')).toBe('Replace model (.tflite)');
+    expect(oneAttr(el, 'data-food-model-remove').getAttribute('data-variant')).toBe('danger');
     oneAttr(el, 'data-food-model-remove').click();
     expect(calls.removed).toBe(1);
   });
@@ -373,12 +380,15 @@ describe('Food photos: copy and size', () => {
     expect([...copyHits(a.el), ...copyHits(b.el)]).toEqual([]);
   });
 
-  it('text is body size or bigger and controls keep the 60px settings row (css)', () => {
+  it('text is body size or bigger and controls keep at least the 60px settings row (css)', () => {
     const css = readFileSync(new URL('./foodPhotos.css', import.meta.url), 'utf8');
     expect(css).not.toMatch(/font-size:\s*\d+px/);
     expect(css).not.toMatch(/#[0-9a-f]{3,6}\b/i);
-    expect(/\.settings \.food-photos \.set-action\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
-      'min-height: var(--tap-bar)',
-    );
+    // M13d 40e: the actions are round-button pills (fuelButtons.css): a 56px circle plus 4px
+    // padding above and below, so each row is at least 64px tall (≥ the 60px settings row).
+    const pills = readFileSync(new URL('../fuel/fuelButtons.css', import.meta.url), 'utf8');
+    const pill = /\.fuel-pill\.icon-btn\[data-icon-btn\]\s*\{([^}]*)\}/.exec(pills)?.[1] ?? '';
+    expect(pill).toContain('min-height: var(--tap-min)');
+    expect(pill).toContain('padding: 4px 18px 4px 4px');
   });
 });

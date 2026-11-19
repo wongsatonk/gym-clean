@@ -483,13 +483,19 @@ describe('chat: tab variant', () => {
       const { el, log } = mount({ messages: [msg('coach', 'hi')] });
       const clear = one(el, 'data-chat-clear');
       expect(clear.textContent.trim()).toBe(CLEAR_LABEL);
+      // M13d task 40f: a round button (word beside); armed it turns danger, with words.
+      expect(clear.hasAttribute('data-icon-btn')).toBe(true);
+      expect(clear.getAttribute('data-label-at')).toBe('beside');
+      expect(clear.getAttribute('data-variant')).toBe('secondary');
       clear.click();
       expect(clear.getAttribute('data-armed')).toBe('true');
       expect(clear.textContent.trim()).toBe(CLEAR_CONFIRM);
+      expect(clear.getAttribute('data-variant')).toBe('danger');
       expect(log).toEqual([]);
       vi.advanceTimersByTime(CLEAR_ARM_MS);
       expect(clear.getAttribute('data-armed')).toBe('false');
       expect(clear.textContent.trim()).toBe(CLEAR_LABEL);
+      expect(clear.getAttribute('data-variant')).toBe('secondary');
       clear.click();
       clear.click();
       expect(log).toEqual(['clear']);
@@ -541,6 +547,21 @@ describe('chat: sheet variant (Pause sheet)', () => {
     expect(texts(el)).toEqual(['Close', 'End workout', 'Not today']);
     btn(el, 'End workout').click();
     expect(log).toEqual(['end']);
+  });
+
+  it('M13d task 40f: Close and Send are round buttons; their words stay their names', () => {
+    const { el } = mount({ variant: 'sheet', messages: thread, allowTyping: true });
+    const close = btn(el, 'Close');
+    expect(close.hasAttribute('data-icon-btn')).toBe(true);
+    expect(close.getAttribute('data-label-at')).toBe('beside');
+    expect(close.getAttribute('aria-label')).toBeNull();
+    const send = btn(el, 'Send');
+    expect(send.hasAttribute('data-icon-btn')).toBe(true);
+    expect(send.getAttribute('data-variant')).toBe('secondary');
+    expect(send.getAttribute('data-label-at')).toBe('below');
+    expect(send.oneByClass('icon-btn-circle').byTag('svg')[0]?.getAttribute('data-icon')).toBe(
+      'arrow-right',
+    );
   });
 
   it('Escape closes; Tab cycles the controls', () => {

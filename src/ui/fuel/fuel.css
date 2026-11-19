@@ -50,32 +50,42 @@
 }
 
 .fuel-head.has-search > .fuel-weigh-btn {
-  grid-area: weigh;
-  justify-self: end;
-}
-
-.fuel-weigh-btn {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 16px;
-  min-height: var(--tap-min);
-  background: var(--surface-2);
-  font-weight: 700;
 }
 
-.fuel-weigh-txt {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.15;
+/* M13d task 40e: Weigh-in is a round button (scale + word beside); the last weigh-in sits under
+   the word, inside the button (fuel.ts weighInButton). */
+.fuel-weigh-btn.icon-btn[data-icon-btn] {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 12px;
+  justify-content: end;
+  align-items: center;
+}
+
+.fuel-weigh-btn.has-last .icon-btn-circle {
+  grid-row: 1 / span 2;
+}
+
+.fuel-weigh-btn .icon-btn-label {
+  font-size: var(--fs-cue);
+}
+
+.fuel-weigh-btn.has-last .icon-btn-label {
+  align-self: end;
 }
 
 .fuel-weigh-last {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  align-self: start;
+  text-align: start;
   font-size: var(--fs-label);
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
+  line-height: var(--lh-head);
 }
 
 .fuel-rings {
@@ -178,7 +188,7 @@
   color: var(--text-2);
   font-size: var(--fs-label);
   font-weight: 700;
-  line-height: 1.4;
+  line-height: var(--lh-head);
   white-space: nowrap;
 }
 
@@ -193,14 +203,10 @@
 
 .fuel-setup-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
-  line-height: 1.1;
-}
-
-.primary-btn.fuel-log-btn {
-  margin-top: 4px;
+  line-height: var(--lh-head);
 }
 
 .fuel-h2 {
@@ -339,14 +345,6 @@ body:has(> .undo-toast) .fuel-sheet {
   scroll-padding-bottom: calc(var(--toast-space, 248px) + 96px);
 }
 
-/* Sticky edges are measured inside the sheet's padding, which already holds the toast's room. */
-body:has(> .undo-toast) .fuel-sheet .cta-btn {
-  position: sticky;
-  bottom: 0;
-  z-index: 1;
-  box-shadow: 0 0 0 8px var(--bg);
-}
-
 .fuel-sheet > * {
   width: 100%;
   max-width: 560px;
@@ -364,7 +362,7 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
   flex: 1;
   min-width: 0;
   font-size: var(--fs-title);
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -422,10 +420,10 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
 
 .log-detail-name {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -449,20 +447,19 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
 
 .fuel-stepper {
   display: grid;
-  grid-template-columns: 72px 1fr 72px;
+  grid-template-columns: minmax(72px, auto) 1fr minmax(72px, auto);
   align-items: center;
   gap: 8px;
 }
 
-.fuel-step-btn {
-  min-height: var(--tap-cta);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-2);
+/* M13d: − / + are round buttons (iconButton.ts) with "Less" / "More" under the circle, as the
+   number fields (fuelForms.css .nf-step); the whole 72px-wide cell is the tap area. */
+.fuel-step-btn.icon-btn {
+  min-width: 72px;
+  padding: 4px 0;
 }
 
-.fuel-step-btn:disabled {
+.fuel-step-btn.icon-btn:disabled {
   opacity: 0.45;
 }
 
@@ -551,12 +548,6 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
   gap: 6px 8px;
 }
 
-.fuel-secondary.rx-remove {
-  width: auto;
-  min-width: 96px;
-  font-size: var(--fs-body);
-}
-
 /* The ingredient's label spans the row; Remove sits beside the grams input, the error below. */
 .rx-ing .fuel-field {
   display: contents;
@@ -575,8 +566,4 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
 .rx-ing .rx-remove {
   grid-column: 2;
   grid-row: 2;
-}
-
-.fuel-sheet .primary-btn.cta-btn {
-  margin-top: 4px;
 }

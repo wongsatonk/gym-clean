@@ -1,0 +1,8 @@
+/* M13d task 24: the screen being swiped back shows its leading edge (a line + soft shadow), as on
+   iOS. Painted once when the drag starts; the follow itself is transform only (edgeBack.ts). */
+.edge-back-moving {
+  box-shadow:
+    calc(-1 * var(--line-w)) 0 0 var(--line),
+    -16px 0 32px var(--scrim-soft);
+  will-change: transform;
+}

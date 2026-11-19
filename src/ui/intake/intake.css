@@ -57,10 +57,10 @@
 
 .intake-q {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -166,54 +166,27 @@
   font-size: var(--fs-body);
 }
 
+/* M13d task 40b (Goal 7): [Back circle][main pill] (flowButtons.css); Skip for now is a quiet
+   round button with its word beside it, centred under them. */
 .intake-nav {
   display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
   margin-top: auto;
   padding-top: 12px;
 }
 
 .intake-nav.single {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.intake-nav-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: var(--tap-cta);
-  padding: 0 10px;
-  font-size: var(--fs-lead);
-  font-weight: 700;
-  line-height: 1.1;
-  background: var(--surface-2);
-}
-
-.intake-nav-next {
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
-}
-
-.intake-nav-next[disabled] {
-  background: var(--surface-2);
-  color: var(--text-2);
-  border-color: var(--line);
-  cursor: default;
+.intake-nav-back {
+  min-width: var(--tap-cta);
 }
 
 .intake-skip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: transparent;
-  color: var(--text-2);
+  align-self: center;
 }
 
 /* The last screen: what the answers change. */
@@ -250,7 +223,15 @@
   margin: 0;
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
+  overflow-wrap: anywhere;
+}
+
+/* M13d task 19: the row's one visible line (the rest is behind More). */
+.intake-change-lead {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -290,29 +271,19 @@
   font-weight: 700;
 }
 
-.intake-apply {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
+/* M13d task 40b: Apply is a round button (plus) with its word beside it, the whole row its tap
+   area; applied, the circle turns to a green check on a clear fill. */
+.intake-apply.icon-btn {
+  justify-content: flex-start;
   min-height: var(--tap-bar);
-  font-size: var(--fs-cue);
-  font-weight: 700;
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
 }
 
-.intake-apply.done {
-  background: transparent;
-  color: var(--text);
-  border-color: var(--success);
+.intake-apply.done.icon-btn {
+  --ib-fill: transparent;
+  --ib-ink: var(--success);
+  --ib-ring: var(--success);
+  --ib-word: var(--text);
   cursor: default;
-}
-
-.intake-apply.done .ic {
-  color: var(--success);
 }
 
 .intake-change-error {
@@ -346,10 +317,10 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
 }
 
 .goal-card-title .ic {

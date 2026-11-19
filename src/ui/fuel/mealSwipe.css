@@ -1,0 +1,40 @@
+/* M13d task 26: swipe left on a logged meal row to show Delete (mealSwipe.ts).
+   The row's button slides aside (transform only) over a Delete area of 104px (REVEAL_PX) on the
+   page background; Delete is the round danger iconButton (trash + word). */
+.fuel-entry[data-swipe-row] {
+  position: relative;
+}
+
+.fuel-entry[data-swipe-row] > .fuel-entry-main {
+  /* Vertical scrolling stays the browser's; a sideways drag is the swipe. */
+  touch-action: pan-y;
+}
+
+/* While the Delete area shows, the row clips what slides past its left edge. */
+.fuel-entry[data-swiping] {
+  overflow: hidden;
+  border-radius: var(--r-card);
+}
+
+.fuel-entry[data-swiping] > .fuel-entry-main {
+  will-change: transform;
+}
+
+.fuel-entry-swipe {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fuel-entry-swipe[hidden] {
+  display: none;
+}
+
+.fuel-entry-swipe .icon-btn {
+  min-width: 88px;
+}

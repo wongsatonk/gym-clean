@@ -5,6 +5,7 @@ import { APP_NAME, APP_TAGLINE } from '../../core/brand';
 import { onboardingSteps, type OnboardingPermission } from '../../core/onboarding';
 import type { OnboardingStep } from '../../core/types';
 import { ONBOARDING_BUTTONS, WELCOME_PAGES } from '../../data/onboarding';
+import { fakeSwipe } from '../gestures/testTouch';
 import { asFake, FakeEl, useFakeDom } from '../screens/testDom';
 import { onboardingScreen, stepCount, type OnboardingProps } from './welcome';
 
@@ -137,10 +138,22 @@ describe('onboardingScreen: welcome pages', () => {
     expect(second.calls.back).toBe(1);
   });
 
+  it('M13d task 24: the first-run Back is the edge swipe’s one Back, on every page', () => {
+    const marked = (el: FakeEl) => el.find((e) => e.hasAttribute('data-swipe-back'));
+    for (let index = 0; index < NATIVE.length; index++) {
+      const { el } = render({ index });
+      const hits = marked(el);
+      expect(hits, `page ${index}`).toHaveLength(1);
+      expect(hits[0]?.getAttribute('data-ob')).toBe('back');
+    }
+    // Page 1: marked but disabled, so a swipe there does nothing (edgeBack skips disabled).
+    expect(marked(render().el)[0]?.hasAttribute('disabled')).toBe(true);
+  });
+
   it('the last page says "Go to Today" and calls onDone', () => {
     const steps: OnboardingStep[] = [
       { kind: 'welcome', id: 'hello' },
-      { kind: 'welcome', id: 'coach' },
+      { kind: 'welcome', id: 'train' },
     ];
     const { el, calls } = render({ steps, index: 1 });
     const done = one(el, 'primary');
@@ -218,8 +231,8 @@ describe('onboardingScreen: permission pages', () => {
       .map((p) => p.getAttribute('data-step'))
       .filter((s) => s?.startsWith('permission:'));
     expect(perms).toEqual([
-      'permission:camera',
       'permission:health',
+      'permission:camera',
       'permission:mic',
       'permission:notifications',
     ]);
@@ -241,5 +254,121 @@ describe('onboardingScreen: motion', () => {
     setReduced(true);
     render({ index: 1, dir: 'next' });
     expect(animate).not.toHaveBeenCalled();
+  });
+});
+
+describe('onboardingScreen: M13d task 25 page swipes', () => {
+  const at = (p: OnboardingPermission) =>
+    NATIVE.findIndex((s) => s.kind === 'permission' && s.permission === p);
+  const swipe = (el: FakeEl, dx: number, dy = 0) =>
+    fakeSwipe(el.oneByClass('ob-body'), {
+      from: { x: 200, y: 400 },
+      to: { x: 200 + dx, y: 400 + dy },
+    });
+
+  it('left = Next, right = Back, once each (the buttons stay)', () => {
+    const { el, calls } = render({ index: 1 });
+    expect(el.oneByClass('ob-body').hasAttribute('data-page-swipe')).toBe(true);
+    swipe(el, -150);
+    expect(calls.next).toBe(1);
+    swipe(el, 150);
+    expect(calls.back).toBe(1);
+    expect(one(el, 'primary')).toBeTruthy();
+    expect(one(el, 'back')).toBeTruthy();
+  });
+
+  it('page 1: no Back by swipe; short, slow or vertical moves do nothing', () => {
+    const { el, calls } = render({ index: 0 });
+    swipe(el, 150);
+    swipe(el, -40);
+    swipe(el, -60, 240);
+    expect(calls).toMatchObject({ next: 0, back: 0, done: 0, skip: 0 });
+  });
+
+  it('an ask page or the last page: a swipe left neither asks nor finishes', () => {
+    const ask = render({ index: at('camera') });
+    swipe(ask.el, -150);
+    expect(ask.calls.allow).toEqual([]);
+    expect(ask.calls.notNow).toEqual([]);
+    expect(ask.calls.next).toBe(0);
+    swipe(ask.el, 150);
+    expect(ask.calls.back).toBe(1);
+
+    const steps = NATIVE.slice(0, 2);
+    const last = render({ steps, index: 1 });
+    swipe(last.el, -150);
+    expect(last.calls.done + last.calls.next).toBe(0);
+  });
+
+  it('the page follows the finger; Reduce Motion keeps the swipe without the follow', () => {
+    const { el, calls } = render({ index: 1 });
+    const page = one(el, 'page');
+    const s = fakeSwipe(el.oneByClass('ob-body'), {
+      from: { x: 300, y: 400 },
+      to: { x: 220, y: 400 },
+      release: false,
+    });
+    expect(page.style.transform).toBe('translate3d(-80px, 0, 0)');
+    s.lift();
+    expect(page.style.transform).toBe('');
+
+    setReduced(true);
+    const r = render({ index: 1 });
+    const rPage = one(r.el, 'page');
+    const s2 = fakeSwipe(r.el.oneByClass('ob-body'), {
+      from: { x: 300, y: 400 },
+      to: { x: 100, y: 400 },
+      release: false,
+    });
+    expect(rPage.style.transform ?? '').toBe('');
+    s2.lift();
+    expect(r.calls.next).toBe(1);
+    expect(calls.next).toBe(0);
+  });
+
+  it('dispose removes the swipe', () => {
+    const { el, screen, calls } = render({ index: 1 });
+    screen.dispose();
+    expect(el.oneByClass('ob-body').hasAttribute('data-page-swipe')).toBe(false);
+    swipe(el, -150);
+    expect(calls.next).toBe(0);
+  });
+});
+
+describe('onboardingScreen: M13d task 40b round buttons', () => {
+  const at = (p: OnboardingPermission) =>
+    NATIVE.findIndex((s) => s.kind === 'permission' && s.permission === p);
+  const look = (b: FakeEl) => [b.hasAttribute('data-icon-btn'), b.getAttribute('data-variant')];
+
+  it('Next is the main circle in a pill; Back and Skip are round, words kept', () => {
+    const { el } = render({ index: 1 });
+    const next = one(el, 'primary');
+    expect(look(next)).toEqual([true, 'main']);
+    expect(next.classes).toContain('flow-pill');
+    expect(next.hasAttribute('data-wide-hit')).toBe(true);
+    expect(next.textContent).toBe(ONBOARDING_BUTTONS.next);
+    expect(look(one(el, 'back'))).toEqual([true, 'secondary']);
+    expect(one(el, 'back').hasAttribute('data-swipe-back')).toBe(true);
+    expect(look(one(el, 'skip'))).toEqual([true, 'quiet']);
+    // The icon is decorative: the word is the only name.
+    for (const b of [next, one(el, 'back'), one(el, 'skip')]) {
+      expect(b.getAttribute('aria-label')).toBeNull();
+      expect(b.byClass('icon-btn-circle')[0]?.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('page 1: Back is shown disabled; the last page says Go to Today', () => {
+    expect(one(render({ index: 0 }).el, 'back').hasAttribute('disabled')).toBe(true);
+    const last = one(render({ steps: WEB, index: WEB.length - 1 }).el, 'primary');
+    expect(last.hasAttribute('data-icon-btn')).toBe(true);
+  });
+
+  it('an ask page: the action is the main pill, Not now a round secondary button', () => {
+    const { el } = render({ index: at('camera') });
+    const allow = one(el, 'primary');
+    expect(look(allow)).toEqual([true, 'main']);
+    expect(allow.getAttribute('data-action-kind')).toBe('ask');
+    expect(look(one(el, 'not-now'))).toEqual([true, 'secondary']);
+    expect(one(el, 'not-now').textContent).toBe('Not now');
   });
 });

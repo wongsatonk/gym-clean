@@ -13,12 +13,15 @@
 // e2e hooks: `main[data-screen="plan-changes"]`, `li.plan-change[data-change]` (the change id,
 // or its index when unsaved) with `data-undone` when undone, Undo `[data-undo-change]`, Reset
 // `[data-reset-plan]` (`data-armed` while armed), empty state `[data-plan-changes="empty"]`.
+// M13d task 40c: Undo and Reset are round iconButtons (Reset: danger, word beside the circle on a
+// full-width row; armed, the circle fills red and the word changes, as before).
 import type { PlanChange } from '../../core/types';
 import { backButton } from '../backButton';
 import { h } from '../dom';
-import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import { moodClass } from '../tokens';
 import { dateLabel } from './today';
+import './planChanges.css';
 
 export const RESET_CONFIRM_MS = 3000;
 
@@ -55,13 +58,18 @@ export function newestFirst(changes: readonly PlanChange[]): PlanChange[] {
 }
 
 function resetButton(onReset: () => void, confirmMs: number): HTMLElement {
-  const label = h('span', {}, RESET_LABEL);
-  const btn = h(
-    'button',
-    { type: 'button', class: 'plan-reset', 'data-reset-plan': true },
-    icon('flag', 'md'),
-    label,
-  );
+  const btn = iconButton({
+    icon: 'flag',
+    label: RESET_LABEL,
+    variant: 'danger',
+    labelAt: 'beside',
+    wideHit: true,
+    class: 'plan-reset-act',
+    hooks: { 'data-reset-plan': true },
+    onClick: () => {},
+  });
+  // The word is the button's last child (iconButton: circle, then word).
+  const label = btn.children[btn.children.length - 1] as HTMLElement;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let watch: MutationObserver | undefined;
   const stopArmedWindow = () => {
@@ -120,17 +128,14 @@ function changeRow(
       ),
     ),
     undoable
-      ? h(
-          'button',
-          {
-            type: 'button',
-            class: 'plan-undo',
-            'data-undo-change': key,
-            'aria-label': `Undo: ${c.title}`,
-            onclick: () => actions.onUndo(c),
-          },
-          'Undo',
-        )
+      ? iconButton({
+          icon: 'undo',
+          label: 'Undo',
+          ariaLabel: `Undo: ${c.title}`,
+          class: 'plan-undo-act',
+          hooks: { 'data-undo-change': key },
+          onClick: () => actions.onUndo(c),
+        })
       : null,
   );
 }

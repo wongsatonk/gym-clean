@@ -10,15 +10,24 @@
 // topics this release added, with Open to-dos. A release with no new topics ends on its last
 // feature page (Done there).
 //
-// Input: buttons (≥ 56px) are the way through; swipe left/right is a shortcut only. Keyboard:
+// Input: buttons (≥ 56px) are the way through; swipe left/right is a shortcut only (M13d:
+// gestures/pageSwipe.ts, the core `pageSwipe` classifier, the page follows the finger). Keyboard:
 // ArrowRight / ArrowLeft = Next / Back, Escape = Skip, Tab is trapped in the dialog.
 // Motion: a page change is motion.ts enterScreen (fade + 8px slide in the direction of travel),
 // a no-op under prefers-reduced-motion. No other animation here.
+//
+// M13d task 40d (Goal 7): round icon buttons, as on the first-run pages: Skip a quiet circle with
+// its word beside it, Back a circle with the word below, Next / Done the main circle on a pill
+// (the whole row the tap area), Try it and Open to-dos circles with the word beside them.
 import type { AppRoute, WhatsNewPage } from '../../core/types';
 import { h } from '../dom';
+import { installPageSwipe } from '../gestures/pageSwipe';
+import { iconButton } from '../iconButton';
+import { setIconButtonIcon, setIconButtonLabel } from '../iconButtonLabel';
 import { icon, ICON_NAMES, type IconName } from '../icons';
 import { enterScreen, type Stop } from '../motion';
 import './whatsNewTour.css';
+import '../settingsButtons.css';
 
 /** What the last page needs from a to-do topic (a `TodoTopic` fits). */
 export type TourTopic = { id: string; title: string; checkpoint?: string | undefined };
@@ -61,9 +70,6 @@ export type WhatsNewTour = {
   dispose: () => void;
 };
 
-/** A horizontal move longer than this (and mostly sideways) is a swipe. */
-export const SWIPE_MIN_PX = 50;
-
 const TITLE_ID = 'wn-title';
 
 const present = (e: HTMLElement | null): e is HTMLElement => e !== null;
@@ -93,24 +99,32 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
   const counter = h('p', { class: 'wn-count', 'data-wn': 'count' });
   // Words for screen readers on every page change (the visible counter stays short).
   const live = h('p', { class: 'sr-only', 'aria-live': 'polite', 'data-wn': 'live' });
-  const skipBtn = h(
-    'button',
-    { type: 'button', class: 'wn-skip', 'data-wn': 'skip', onclick: () => actions.onSkip() },
-    'Skip',
-  );
+  const skipBtn = iconButton({
+    icon: 'skip',
+    label: 'Skip',
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'wn-skip',
+    hooks: { 'data-wn': 'skip' },
+    onClick: () => actions.onSkip(),
+  });
   const page = h('section', { class: 'wn-page', 'data-wn': 'page' });
   const dots = h('div', { class: 'wn-dots', 'aria-hidden': 'true', 'data-wn': 'dots' });
-  const backBtn = h(
-    'button',
-    { type: 'button', class: 'wn-back', 'data-wn': 'back', onclick: () => back() },
-    icon('back', 'sm'),
-    h('span', {}, 'Back'),
-  );
-  const nextBtn = h('button', {
-    type: 'button',
-    class: 'wn-next cta-btn',
-    'data-wn': 'next',
-    onclick: () => (isLast() ? actions.onDone() : next()),
+  const backBtn = iconButton({
+    icon: 'back',
+    label: 'Back',
+    class: 'wn-back',
+    hooks: { 'data-wn': 'back' },
+    onClick: () => back(),
+  });
+  const nextBtn = iconButton({
+    icon: 'arrow-right',
+    label: 'Next',
+    variant: 'main',
+    wideHit: true,
+    class: 'set-ib-pill wn-next',
+    hooks: { 'data-wn': 'next' },
+    onClick: () => (isLast() ? actions.onDone() : next()),
   });
 
   function featurePage(p: WhatsNewPage): HTMLElement[] {
@@ -123,20 +137,17 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
         h('p', { class: 'wn-what', 'data-wn': 'what' }, p.what),
         h('p', { class: 'wn-why', 'data-wn': 'why' }, p.why),
         p.tryIt
-          ? h(
-              'button',
-              {
-                type: 'button',
-                class: 'wn-try',
-                'data-wn': 'try',
-                'data-route': p.tryIt,
-                'aria-label': `Try it: ${p.title}`,
-                onclick: () => {
-                  if (p.tryIt) actions.onTryIt(p.tryIt);
-                },
+          ? iconButton({
+              icon: 'arrow-right',
+              label: 'Try it',
+              labelAt: 'beside',
+              ariaLabel: `Try it: ${p.title}`,
+              class: 'set-ib-pill wn-try',
+              hooks: { 'data-wn': 'try', 'data-route': p.tryIt },
+              onClick: () => {
+                if (p.tryIt) actions.onTryIt(p.tryIt);
               },
-              h('span', {}, 'Try it'),
-            )
+            })
           : null,
       ] as (HTMLElement | null)[]
     ).filter(present);
@@ -160,16 +171,14 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
             ),
           ),
         ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'wn-open-todos',
-            'data-wn': 'open-todos',
-            onclick: () => actions.onOpenTodos(),
-          },
-          'Open to-dos',
-        ),
+        iconButton({
+          icon: 'list',
+          label: 'Open to-dos',
+          labelAt: 'beside',
+          class: 'set-ib-pill wn-open-todos',
+          hooks: { 'data-wn': 'open-todos' },
+          onClick: () => actions.onOpenTodos(),
+        }),
       ] as (HTMLElement | null)[]
     ).filter(present);
   }
@@ -201,8 +210,8 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
     );
     if (index === 0) backBtn.setAttribute('disabled', '');
     else backBtn.removeAttribute('disabled');
-    nextBtn.replaceChildren(h('span', {}, isLast() ? 'Done' : 'Next'));
-    if (isLast()) nextBtn.append(icon('check', 'sm'));
+    setIconButtonLabel(nextBtn, isLast() ? 'Done' : 'Next');
+    setIconButtonIcon(nextBtn, isLast() ? 'check' : 'arrow-right');
     nextBtn.setAttribute('data-last', isLast() ? 'true' : 'false');
     if (dir) {
       stopAnim();
@@ -257,37 +266,16 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
     }
   }
 
-  // Swipe: a shortcut on the page area only, never the only way through.
-  let startX: number | null = null;
-  let startY = 0;
-  const onDown = (ev: PointerEvent) => {
-    startX = ev.clientX;
-    startY = ev.clientY;
-  };
-  const onUp = (ev: PointerEvent) => {
-    if (startX === null) return;
-    const dx = ev.clientX - startX;
-    const dy = ev.clientY - startY;
-    startX = null;
-    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return;
-    if (dx < 0) next();
-    else back();
-  };
-  const onCancel = () => {
-    startX = null;
-  };
-
-  const body = h(
-    'div',
-    {
-      class: 'wn-body',
-      'data-wn': 'body',
-      onpointerdown: onDown as (ev: Event) => void,
-      onpointerup: onUp as (ev: Event) => void,
-      onpointercancel: onCancel,
-    },
-    page,
-  );
+  // Swipe (M13d task 25): left = Next, right = Back on the page area; a shortcut only, never the
+  // only way through (Done stays a tap). The page follows the finger.
+  const body = h('div', { class: 'wn-body', 'data-wn': 'body' }, page);
+  const unswipe = installPageSwipe(body, {
+    mover: page,
+    onNext: () => next(),
+    onBack: () => back(),
+    canNext: () => !isLast(),
+    canBack: () => index > 0,
+  });
 
   const el = h(
     'div',
@@ -303,7 +291,7 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
     live,
     body,
     dots,
-    h('div', { class: 'wn-nav' }, backBtn, nextBtn),
+    h('div', { class: 'wn-nav set-ib-bottom' }, backBtn, nextBtn),
   );
 
   render();
@@ -322,6 +310,7 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
     dispose: () => {
       stopAnim();
       stopAnim = () => {};
+      unswipe();
     },
   };
 }

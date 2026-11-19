@@ -55,10 +55,10 @@ test.describe('motion allowed', () => {
     const ex = page.locator('[data-screen="exercise"]');
     await expect(ex).toBeVisible();
     expect(await animationsIn(page, '[data-screen="exercise"]')).toEqual([]);
-    // (Set done's own 0.97 press, .cta-btn, dates from M1 and isn't new; every other button
-    // is excluded from the M12 press transition.)
+    // Every button, Set done included (a round main button since M13d: on this motion-off screen
+    // its press is a colour change only, iconButton.css), has no press transition.
     const durations = await ex
-      .locator('button:not(.cta-btn)')
+      .locator('button')
       .evaluateAll((els) =>
         els.map((e) => [e.textContent?.trim() ?? '', getComputedStyle(e).transitionDuration]),
       );

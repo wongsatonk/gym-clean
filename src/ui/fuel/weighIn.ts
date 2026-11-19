@@ -29,22 +29,35 @@
 // with `[data-comp-now]`, `[data-comp-change]` and `[data-comp-chart]`). Shown only when
 // `bodyComp` has a value; plain numbers, no score and no judgement on them. These values stay
 // out of every coach context (the app never passes them anywhere but here).
+//
+// M13d task 13c (Decision "M13d answers" q3): a kg | lb switch by the stepper ("Weight unit",
+// `[data-unit-for="weigh-in"]`). A tap re-shows the stepper from the kg value it holds (no drift,
+// nothing saved), re-draws what shows a weight (weekly card, today's note, both trends) in the new
+// unit, and calls `onUnits` with the whole new preference (the app makes it app-wide).
+//
+// M13d task 40e: Back, Save and the card actions are round buttons (fuelButtons.ts); Accept,
+// Not now / Got it, Switch and Keep are circles with the word under them.
 import { checkHasChange, type TrendPoint } from '../../core/nutrition/adjust';
 import type { HistoryDay } from '../../core/nutrition/day';
-import type { WeeklyCheck } from '../../core/types';
-import { formatWeight, fromUnit, toUnit, type Unit } from '../../core/units';
+import type { UnitPrefs, WeeklyCheck } from '../../core/types';
+import { unitField } from '../../core/unitField';
+import { formatWeight, toUnit, type Unit } from '../../core/units';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { dateLabel } from '../screens/today';
 import { moodClass } from '../tokens';
 import { estimateTag, fromHealthTag } from './common';
-import { numberField } from './fields';
+import { actionRow, fuelBack, fuelMain } from './fuelButtons';
+import { WEIGHT_UNIT_SWITCH } from '../unitSwitch';
+import { switchedUnitField } from './fields';
 import { targetText } from './nutritionSettings';
-import { ACTIVITY_CHOICES, weightStep, type Activity } from './setup';
+import { ACTIVITY_CHOICES, type Activity } from './setup';
 import './weighIn.css';
 
 export type WeighInProps = {
-  unit: Unit;
+  /** M13d: the app's units; this screen shows weights in `units.weight`. */
+  units: UnitPrefs;
   /** Today's weigh-in (kg), if already saved. */
   todayKg: number | null;
   /** The latest weigh-in before today (kg): the stepper starts here. */
@@ -89,7 +102,12 @@ export type WeighInActions = {
   onSwitchActivity?: ((level: Activity) => void) | undefined;
   /** M11-q8: Keep the current level (don't ask again for this check). */
   onKeepActivity?: (() => void) | undefined;
+  /** M13d task 13c: the kg | lb switch was tapped; the whole new preference, once per tap. */
+  onUnits: (next: UnitPrefs) => void;
 };
+
+/** What the parts of the screen draw from: the props with the weight unit shown now. */
+type WeighInView = Omit<WeighInProps, 'units'> & { unit: Unit };
 
 // ---------- pure helpers ----------
 
@@ -354,7 +372,7 @@ export function activityLine(s: ActivitySuggestion): string | null {
 
 // ---------- parts ----------
 
-function activityBlock(p: WeighInProps, a: WeighInActions): HTMLElement | null {
+function activityBlock(p: WeighInView, a: WeighInActions): HTMLElement | null {
   const s = p.activity;
   const { onSwitchActivity, onKeepActivity } = a;
   if (!s || !onSwitchActivity || !onKeepActivity) return null;
@@ -364,35 +382,28 @@ function activityBlock(p: WeighInProps, a: WeighInActions): HTMLElement | null {
     'div',
     { class: 'wi-activity', 'data-activity-suggest': s.suggested },
     h('p', { class: 'wi-activity-text' }, line),
-    h(
-      'div',
-      { class: 'wi-card-actions' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'wi-dismiss wi-activity-btn',
-          'data-activity-switch': true,
-          onclick: () => onSwitchActivity(s.suggested),
-        },
-        h('span', {}, 'Switch'),
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'wi-dismiss wi-activity-btn',
-          'data-activity-keep': true,
-          onclick: () => onKeepActivity(),
-        },
-        h('span', {}, 'Keep'),
-      ),
+    actionRow(
+      'wi-card-actions',
+      iconButton({
+        icon: 'refresh',
+        label: 'Switch',
+        class: 'wi-activity-btn',
+        hooks: { 'data-activity-switch': true },
+        onClick: () => onSwitchActivity(s.suggested),
+      }),
+      iconButton({
+        icon: 'check',
+        label: 'Keep',
+        class: 'wi-activity-btn',
+        hooks: { 'data-activity-keep': true },
+        onClick: () => onKeepActivity(),
+      }),
     ),
   );
 }
 
 /** The activity line on its own card, for when no weekly check is pending. */
-function activityCard(p: WeighInProps, a: WeighInActions): HTMLElement | null {
+function activityCard(p: WeighInView, a: WeighInActions): HTMLElement | null {
   const block = activityBlock(p, a);
   if (!block) return null;
   return h(
@@ -422,7 +433,7 @@ function svg(tag: string, attrs: Record<string, string | number>, text?: string)
   return el;
 }
 
-function weeklyCard(p: WeighInProps, a: WeighInActions): HTMLElement | null {
+function weeklyCard(p: WeighInView, a: WeighInActions): HTMLElement | null {
   const c = p.check;
   if (!c || c.outcome !== 'pending') return activityCard(p, a);
   const copy = weeklyCardCopy(c, p.unit, p.kcalTarget);
@@ -448,38 +459,31 @@ function weeklyCard(p: WeighInProps, a: WeighInActions): HTMLElement | null {
     copy.change
       ? h('p', { class: 'wi-card-change' }, h('span', {}, copy.change), ' ', estimateTag())
       : null,
-    h(
-      'div',
-      { class: 'wi-card-actions' },
+    actionRow(
+      'wi-card-actions',
       copy.accept
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'wi-accept',
-              'data-weekly-accept': true,
-              onclick: () => a.onAccept(),
-            },
-            icon('check', 'md'),
-            h('span', {}, copy.accept),
-          )
+        ? iconButton({
+            icon: 'check',
+            label: copy.accept,
+            class: 'wi-accept',
+            hooks: { 'data-weekly-accept': true },
+            onClick: () => a.onAccept(),
+          })
         : null,
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'wi-dismiss',
-          'data-weekly-dismiss': true,
-          onclick: () => a.onDismiss(),
-        },
-        h('span', {}, copy.dismiss),
-      ),
+      iconButton({
+        // "Got it" closes an info card; "Not now" leaves the target as it is.
+        icon: copy.accept ? 'close' : 'check',
+        label: copy.dismiss,
+        class: 'wi-dismiss',
+        hooks: { 'data-weekly-dismiss': true },
+        onClick: () => a.onDismiss(),
+      }),
     ),
     activityBlock(p, a),
   );
 }
 
-function trendChart(p: WeighInProps): HTMLElement {
+function trendChart(p: WeighInView): HTMLElement {
   const g = chartGeometry(p.trend, p.unit);
   if (!g) {
     return h(
@@ -573,7 +577,7 @@ function compCard(kind: CompKind, series: readonly CompReading[], unit: Unit): H
 }
 
 /** Body fat % and lean mass trends (from Health), or nothing when there is no reading. */
-function bodyCompSection(p: WeighInProps): HTMLElement | null {
+function bodyCompSection(p: WeighInView): HTMLElement | null {
   const points = p.bodyComp ?? [];
   const cards = (['bodyFat', 'leanMass'] as const)
     .map((k) => compCard(k, compSeries(points, k, p.unit), p.unit))
@@ -588,7 +592,7 @@ function bodyCompSection(p: WeighInProps): HTMLElement | null {
   );
 }
 
-function historyList(p: WeighInProps): HTMLElement {
+function historyList(p: WeighInView): HTMLElement {
   if (!p.history.length) {
     return h('p', { class: 'wi-empty', 'data-fuel-history': 'empty' }, 'Nothing logged yet.');
   }
@@ -629,60 +633,72 @@ function historyList(p: WeighInProps): HTMLElement {
 
 export function weighInScreen(p: WeighInProps, a: WeighInActions): HTMLElement {
   const startKg = p.todayKg ?? p.lastKg ?? 70;
-  const field = numberField({
+  let units: UnitPrefs = { ...p.units };
+  const view = (): WeighInView => ({ ...p, unit: units.weight });
+
+  // The parts that show a weight in the chosen unit, re-drawn on a switch (display: contents).
+  const cardSlot = h('div', { class: 'unit-slot' });
+  const trendSlot = h('div', { class: 'unit-slot' });
+  const compSlot = h('div', { class: 'unit-slot' });
+  const todayNote = h('p', {
+    class: 'fuel-note',
+    'data-weigh-today': p.todayKg !== null ? 'saved' : 'none',
+  });
+  const draw = () => {
+    const v = view();
+    cardSlot.replaceChildren(...[weeklyCard(v, a)].filter((x): x is HTMLElement => x !== null));
+    trendSlot.replaceChildren(trendChart(v));
+    compSlot.replaceChildren(...[bodyCompSection(v)].filter((x): x is HTMLElement => x !== null));
+    todayNote.replaceChildren(
+      ...(p.todayKg !== null
+        ? [
+            `Saved today: ${formatWeight(p.todayKg, v.unit)} ${v.unit}. Saving again replaces it.`,
+            ...(p.todaySource === 'health' ? [' ', fromHealthTag()] : []),
+          ]
+        : ['Best in the morning, before breakfast.']),
+    );
+  };
+
+  const field = switchedUnitField({
     id: 'weigh-in',
     label: "Today's weight",
-    unit: p.unit,
-    value: toUnit(startKg, p.unit),
-    step: weightStep(p.unit),
-    min: toUnit(30, p.unit),
-    max: toUnit(250, p.unit),
+    field: unitField({ kind: 'bodyWeight', metric: startKg, unit: units.weight }),
+    spec: WEIGHT_UNIT_SWITCH,
     onChange: () => undefined,
+    onUnit: (weight) => {
+      units = { ...units, weight };
+      draw();
+      a.onUnits(units);
+    },
   });
+  draw();
   return h(
     'main',
     { class: `screen fuel-form weigh-in ${moodClass('pro')}`, 'data-screen': 'weigh-in' },
     h(
       'header',
       { class: 'fuel-head' },
-      h(
-        'button',
-        { type: 'button', class: 'fuel-back', onclick: () => a.onBack() },
-        icon('back', 'md'),
-        h('span', {}, 'Back'),
-      ),
+      fuelBack(() => a.onBack(), { swipe: true }), // M13d task 24: the edge swipe's Back
       h('h1', { class: 'page-title' }, 'Weigh-in'),
     ),
-    weeklyCard(p, a),
+    cardSlot,
     h(
       'section',
       { class: 'wi-entry', 'aria-label': 'Weigh in' },
       field.el,
-      h(
-        'p',
-        { class: 'fuel-note', 'data-weigh-today': p.todayKg !== null ? 'saved' : 'none' },
-        p.todayKg !== null
-          ? `Saved today: ${formatWeight(p.todayKg, p.unit)} ${p.unit}. Saving again replaces it.`
-          : 'Best in the morning, before breakfast.',
-        p.todayKg !== null && p.todaySource === 'health' ? ' ' : null,
-        p.todayKg !== null && p.todaySource === 'health' ? fromHealthTag() : null,
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'primary-btn cta-btn wi-save',
-          'data-weigh-save': true,
-          onclick: () => a.onSave(fromUnit(field.get(), p.unit)),
-        },
-        icon('check', 'lg'),
-        p.todayKg !== null ? 'Update weigh-in' : 'Save weigh-in',
-      ),
+      todayNote,
+      fuelMain({
+        icon: 'check',
+        label: p.todayKg !== null ? 'Update weigh-in' : 'Save weigh-in',
+        class: 'wi-save',
+        hooks: { 'data-weigh-save': true },
+        onClick: () => a.onSave(field.get().metric),
+      }),
     ),
     h('h2', { class: 'fuel-sub' }, 'Trend'),
-    trendChart(p),
-    bodyCompSection(p),
+    trendSlot,
+    compSlot,
     h('h2', { class: 'fuel-sub' }, 'Last 14 days'),
-    historyList(p),
+    historyList(view()),
   );
 }

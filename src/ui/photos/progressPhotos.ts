@@ -22,8 +22,10 @@ import type { ProgressPhoto } from '../../core/types';
 import { backButton } from '../backButton';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import { reducedMotion } from '../motion';
 import { dueDate } from '../screens/goalCard';
+import { mainPill } from '../screens/mainPill';
 import { moodClass } from '../tokens';
 import './photos.css';
 
@@ -179,16 +181,25 @@ function twoTap(o: {
   attrs: Record<string, string | boolean>;
   cls: string;
   aria?: string;
+  /** Word beside the circle on a full-width row (Delete all); default under it (one photo). */
+  wide?: boolean;
   onConfirm: () => void;
 }): { el: HTMLElement; stop: () => void } {
-  const label = h('span', {}, o.idle);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const btn = h(
-    'button',
-    { type: 'button', class: o.cls, 'aria-label': o.aria, ...o.attrs },
-    icon('close', 'sm'),
-    label,
-  );
+  // M13d task 40c: a round danger iconButton; armed, its circle fills red and the word changes.
+  const btn = iconButton({
+    icon: 'trash',
+    label: o.idle,
+    variant: 'danger',
+    labelAt: o.wide === true ? 'beside' : 'below',
+    wideHit: o.wide === true,
+    class: o.cls,
+    ...(o.aria !== undefined ? { ariaLabel: o.aria } : {}),
+    hooks: o.attrs,
+    onClick: () => {},
+  });
+  // The word is the button's last child (iconButton: circle, then word).
+  const label = btn.children[btn.children.length - 1] as HTMLElement;
   const disarm = () => {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
@@ -251,6 +262,7 @@ export function createProgressPhotos(
       ms,
       cls: 'photos-delete-all',
       attrs: { 'data-photos-delete-all': true },
+      wide: true,
       onConfirm: actions.onDeleteAll,
     });
     stops.push(t.stop);
@@ -277,16 +289,13 @@ export function createProgressPhotos(
         'off',
         h('p', { class: 'photos-note', 'data-photos-off': true }, PHOTOS_COPY.off),
         actions.onEnable
-          ? h(
-              'button',
-              {
-                type: 'button',
-                class: 'photos-enable',
-                'data-photos-enable': true,
-                onclick: () => actions.onEnable?.(),
-              },
-              PHOTOS_COPY.enable,
-            )
+          ? mainPill({
+              icon: 'camera',
+              label: PHOTOS_COPY.enable,
+              class: 'photos-enable',
+              hooks: { 'data-photos-enable': true },
+              onClick: () => actions.onEnable?.(),
+            })
           : null,
         kept
           ? h(
@@ -426,19 +435,16 @@ export function createProgressPhotos(
     compare.replaceChildren(
       h('h2', { class: 'photos-head' }, PHOTOS_COPY.compareTitle),
       h('div', { class: 'photos-pair' }, side(a), side(b)),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'photos-clear',
-          'data-compare-clear': true,
-          onclick: () => {
-            picked.length = 0;
-            paintCompare(false);
-          },
+      iconButton({
+        icon: 'close',
+        label: PHOTOS_COPY.clear,
+        class: 'photos-clear',
+        hooks: { 'data-compare-clear': true },
+        onClick: () => {
+          picked.length = 0;
+          paintCompare(false);
         },
-        PHOTOS_COPY.clear,
-      ),
+      }),
     );
     if (scroll)
       (compare as Partial<HTMLElement>).scrollIntoView?.({

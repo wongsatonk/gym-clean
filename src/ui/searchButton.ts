@@ -3,9 +3,10 @@
 // Never on Exercise, Rest, the camera or Coach: nothing new is reachable during a set, and Coach
 // has its own text box.
 //
-// Look: a neutral button (surface-2, never the orange that is Start's), magnifier + the word
-// "Search". The icon is decorative (aria-hidden); the visible word is the accessible name.
-// ≥ 56px tall from the global button rule, 20px text. Hook: `[data-search-open]`.
+// Look (M13d task 40a, SPEC M13d Goal 7): the shared round icon button, secondary (surface-2,
+// never the orange that is Start's): a 56px circle with the magnifier and the word "Search"
+// beside it. The icon is decorative (aria-hidden); the visible word is the accessible name.
+// Hook: `[data-search-open]` (and `.search-btn`).
 //
 // `pageHead(title, onSearch)` is the row the tab screens put at the top (Calendar, Settings):
 // the page title on the left, Search on the right; it wraps instead of scrolling sideways when
@@ -14,7 +15,7 @@
 // The callback gets the button, so app.ts can hand focus back to it when the Library closes.
 // app.ts must call the Library's `focus()` inside this same tap, or iOS won't show the keyboard.
 import { h } from './dom';
-import { icon } from './icons';
+import { iconButton } from './iconButton';
 import './searchButton.css';
 
 /** The button's word (and accessible name). */
@@ -23,19 +24,18 @@ export const SEARCH_LABEL = 'Search';
 /** Called with the button that was tapped (the opener). */
 export type OnSearch = (opener: HTMLElement) => void;
 
-/** Search: magnifier + "Search", ≥ 56px. */
+/** Search: a round magnifier + "Search" beside it, ≥ 56px. */
 export function searchButton(onSearch: OnSearch): HTMLElement {
-  const btn: HTMLElement = h(
-    'button',
-    {
-      type: 'button',
-      class: 'search-btn',
-      'data-search-open': true,
-      onclick: () => onSearch(btn),
-    },
-    icon('search', 'md'),
-    h('span', { class: 'search-btn-label' }, SEARCH_LABEL),
-  );
+  const btn = iconButton({
+    icon: 'search',
+    label: SEARCH_LABEL,
+    labelAt: 'beside',
+    class: 'search-btn',
+    hooks: { 'data-search-open': true },
+    onClick: (b) => onSearch(b),
+  });
+  // `search-btn` first: screens' render tests name a header's children by their first class.
+  btn.setAttribute('class', 'search-btn icon-btn');
   return btn;
 }
 

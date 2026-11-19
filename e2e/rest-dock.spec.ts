@@ -115,7 +115,7 @@ const place3d = (page: Page) =>
 /** Tags of what elementFromPoint hits at 5%…95% across the button, on its middle row. */
 const hitsAcross = (page: Page) =>
   page.evaluate(() => {
-    const btn = document.querySelector<HTMLElement>('.sticky-bottom .cta-btn');
+    const btn = document.querySelector<HTMLElement>('.sticky-bottom [data-icon-btn]');
     if (!btn) return ['no button'];
     const r = btn.getBoundingClientRect();
     const out: string[] = [];
@@ -136,7 +136,7 @@ test('Rest: the sticky Start set button is on top of the 3D card and tappable ac
   await expect(page.locator('.rest-card-fig')).toHaveAttribute('data-3d', 'shown');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 
-  const btn = page.locator('.sticky-bottom .cta-btn');
+  const btn = page.locator('.sticky-bottom [data-icon-btn]');
   await expect(btn).toBeVisible();
   expect((await btn.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(56);
 

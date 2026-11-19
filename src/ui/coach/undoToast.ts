@@ -6,7 +6,10 @@
 //
 // e2e hooks: `data-undo-toast`, button "Undo".
 import { h } from '../dom';
+import { motionOffInWorkout } from '../gestures/edgeBack';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
+import '../chromeButtons.css';
 import './coach.css';
 
 export const UNDO_MS = 10_000;
@@ -38,19 +41,19 @@ export function undoToast(p: UndoToastProps, a: UndoToastActions): UndoToast {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
   };
-  const undo = h(
-    'button',
-    {
-      type: 'button',
-      class: 'cs-btn undo-btn',
-      onclick: () => {
-        dispose();
-        a.onUndo();
-      },
+  // M13d task 40a: Undo = a round button with the undo arrow. The word sits beside the circle so
+  // the toast stays one 56px row tall (as in 1.16.2): with the word under it the toast grew ~36px
+  // and covered the Pause sheet's Coach row above Set done.
+  const undo = iconButton({
+    icon: 'undo',
+    label: 'Undo',
+    labelAt: 'beside',
+    class: 'undo-action',
+    onClick: () => {
+      dispose();
+      a.onUndo();
     },
-    icon('back', 'md'),
-    h('span', {}, 'Undo'),
-  );
+  });
   const el = h(
     'div',
     { class: 'undo-toast', role: 'status', 'aria-atomic': 'true', 'data-undo-toast': true },
@@ -71,6 +74,8 @@ export function undoToast(p: UndoToastProps, a: UndoToastActions): UndoToast {
       h('div', { class: 'undo-bar', style: undoBarStyle(ms) }),
     ),
   );
+  // Shown over a workout (an Apply from the Pause sheet): Undo presses without scale / glow.
+  motionOffInWorkout(el);
   timer = setTimeout(() => {
     timer = undefined;
     if (el.isConnected) a.onExpire?.();

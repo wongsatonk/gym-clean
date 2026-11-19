@@ -17,10 +17,12 @@
 import type { BrainUnavailableReason } from '../../core/types';
 import { backButton } from '../backButton';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { BRAIN_REASON_COPY } from './coachSettings';
 import './coachSettings.css';
+import '../settingsButtons.css';
 
 /** One eval item's result. No reply text, by design. */
 export type BrainEvalRow = {
@@ -217,18 +219,17 @@ export function brainEvalScreen(p: BrainEvalProps, a: BrainEvalActions): HTMLEle
     );
   } else {
     kids.push(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'primary-btn cta-btn eval-run',
-          'data-eval-run': true,
-          disabled: running || undefined,
-          onclick: () => a.onRun(),
-        },
-        icon('play', 'lg'),
-        h('span', {}, running ? 'Running…' : p.report ? 'Run again' : 'Run'),
-      ),
+      // M13d task 40d: the page's main round button, on a pill row (the whole row the tap area).
+      iconButton({
+        icon: 'play',
+        label: running ? 'Running…' : p.report ? 'Run again' : 'Run',
+        variant: 'main',
+        wideHit: true,
+        class: 'set-ib-pill eval-run',
+        disabled: running,
+        hooks: { 'data-eval-run': true },
+        onClick: () => a.onRun(),
+      }),
     );
   }
 
@@ -265,17 +266,15 @@ export function brainEvalScreen(p: BrainEvalProps, a: BrainEvalActions): HTMLEle
         stat('p50', 'Median time', secs(p50Ms), null),
         p.report.errors === undefined ? null : errorsStat(p.report.errors, s.total),
       ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'set-action',
-          'data-eval-export': true,
-          onclick: () => a.onExport(),
-        },
-        icon('list', 'sm'),
-        h('span', {}, 'Export report'),
-      ),
+      iconButton({
+        icon: 'share',
+        label: 'Export report',
+        labelAt: 'beside',
+        wideHit: true,
+        class: 'set-ib-pill',
+        hooks: { 'data-eval-export': true },
+        onClick: () => a.onExport(),
+      }),
       h(
         'ol',
         { class: 'eval-rows', 'aria-label': `${s.total} items` },

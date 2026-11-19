@@ -18,6 +18,7 @@ import type { FoodSuggestion } from '../../core/types';
 import { macroText, portionText } from '../coach/foodCard';
 import { whyButton } from '../coach/learnCard';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import './proteinNudge.css';
 
@@ -58,17 +59,13 @@ export function proteinNudge(p: ProteinNudgeProps, a: ProteinNudgeActions): HTML
             attrs: { 'data-protein-nudge-why': true },
           })
         : null,
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'pn-dismiss',
-          'data-protein-nudge-dismiss': true,
-          onclick: () => a.onDismiss(p.mealKey),
-        },
-        icon('check', 'sm'),
-        h('span', {}, NUDGE_DISMISS),
-      ),
+      iconButton({
+        icon: 'check',
+        label: NUDGE_DISMISS,
+        class: 'pn-dismiss',
+        hooks: { 'data-protein-nudge-dismiss': true },
+        onClick: () => a.onDismiss(p.mealKey),
+      }),
     ),
   );
 }
@@ -89,18 +86,16 @@ export function postWorkoutIdea(idea: MealIdea, onLog: (s: FoodSuggestion) => vo
         icon('check', 'sm'),
         h('span', {}, 'Logged'),
       )
-    : h(
-        'button',
-        {
-          type: 'button',
-          class: 'fc-log',
-          'data-meal-idea-log': true,
-          'aria-label': `Log ${s.label}`,
-          onclick: () => onLog(s),
-        },
-        icon('plus', 'sm'),
-        h('span', {}, 'Log'),
-      );
+    : // M13d task 40e (Summary: styling only): a round button, its hit box not under the old
+      // 96 × 56 (proteinNudge.css).
+      iconButton({
+        icon: 'plus',
+        label: 'Log',
+        ariaLabel: `Log ${s.label}`,
+        class: 'meal-idea-log',
+        hooks: { 'data-meal-idea-log': true },
+        onClick: () => onLog(s),
+      });
   return h(
     'section',
     { class: 'fc-card meal-idea', 'data-meal-idea': true, 'aria-labelledby': 'meal-idea-title' },

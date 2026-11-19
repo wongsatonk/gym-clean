@@ -7,11 +7,15 @@
 //   top:    "2 of 7" and Skip (always visible, every page)
 //   page:   welcome — page 1 is the brand lockup (mark, name, tagline) + one line; others are an
 //           icon, title and body. permission — permissionPage.ts (icon, title, why, note).
+//           units (M13d) — unitsPage.ts (kg | lb, cm | ft·in; taps go to onUnits).
 //   dots:   current page is a wide filled pill (shape + size, not colour alone); the "2 of 7"
 //           text and a polite live line say it in words.
 //   bottom: welcome / mic / allowed pages → [Back][Next] (Go to Today on the last page);
 //           ask pages → the action full width, then [Back][Not now].
+//           M13d task 40b: all round buttons with their words (iconButton.ts): Back / Not now
+//           circles, the way forward an orange circle in a full-width pill (flowButtons.css).
 // Keys are a shortcut only: Escape = Skip, ArrowLeft = Back, ArrowRight = Next where Next exists.
+// Swipes (M13d) are the same shortcut by touch: left = Next, right = Back (gestures/pageSwipe.ts).
 // Motion: a page change is motion.ts enterScreen in the direction of travel, a no-op under
 // prefers-reduced-motion (the global rule in styles.css zeroes the press feedback too).
 import {
@@ -19,15 +23,23 @@ import {
   type OnboardingPermission,
   type WelcomePageId,
 } from '../../core/onboarding';
-import type { OnboardingStep } from '../../core/types';
-import { ONBOARDING_BUTTONS, PERMISSION_PAGES, WELCOME_PAGES } from '../../data/onboarding';
-import { forwardContent } from '../backButton';
+import type { OnboardingStep, UnitPrefs } from '../../core/types';
+import {
+  ONBOARDING_BUTTONS,
+  PERMISSION_PAGES,
+  UNITS_PAGE,
+  WELCOME_PAGES,
+} from '../../data/onboarding';
 import { brandLockup } from '../brand';
 import { h } from '../dom';
+import { installPageSwipe } from '../gestures/pageSwipe';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
 import { enterScreen, type Stop } from '../motion';
 import { permissionPage } from './permissionPage';
+import { unitsPage } from './unitsPage';
 import './onboarding.css';
+import './flowButtons.css';
 
 export type OnboardingProps = {
   /** onboardingSteps(...) for this install. */
@@ -38,6 +50,11 @@ export type OnboardingProps = {
   granted?: Partial<Record<OnboardingPermission, boolean>> | undefined;
   /** Direction of travel: slides the page in. Omit on first show (no motion). */
   dir?: 'next' | 'prev' | undefined;
+  /**
+   * M13d: the units the Units page shows as chosen (the saved rows, or
+   * defaultUnits(deviceLocale()) on a fresh install). Missing → kg + cm.
+   */
+  units?: UnitPrefs | undefined;
 };
 
 export type OnboardingActions = {
@@ -52,6 +69,11 @@ export type OnboardingActions = {
   onAllow: (permission: OnboardingPermission) => void;
   /** "Not now" on a permission page; the caller moves on (or finishes on the last page). */
   onNotNow: (permission: OnboardingPermission) => void;
+  /**
+   * M13d: a tap on the Units page (both units as they are now). The caller keeps them and saves
+   * both rows when the page is left with Next; Next itself is the usual onNext.
+   */
+  onUnits?: ((units: UnitPrefs) => void) | undefined;
 };
 
 export type OnboardingScreen = {
@@ -63,10 +85,12 @@ export type OnboardingScreen = {
 /** Decorative icon on the welcome pages after the lockup. */
 const WELCOME_ICON: Record<Exclude<WelcomePageId, 'hello'>, IconName> = {
   train: 'dumbbell',
-  coach: 'chat',
 };
 
 const TITLE_ID = 'ob-title';
+
+/** The Units page's choice when the caller passes none. */
+const METRIC: UnitPrefs = { weight: 'kg', length: 'cm' };
 
 /** "2 of 7". */
 export function stepCount(index: number, total: number): string {
@@ -80,12 +104,13 @@ function stepKey(step: OnboardingStep | undefined): string {
   if (!step) return 'none';
   if (step.kind === 'welcome') return `welcome:${step.id}`;
   if (step.kind === 'permission') return `permission:${step.permission}`;
-  return 'intake';
+  return step.kind; // 'units' (below) | 'intake' | 'fuelSetup' (the caller shows those screens)
 }
 
 function stepTitle(step: OnboardingStep | undefined): string {
   if (step?.kind === 'welcome' && isWelcomeId(step.id)) return WELCOME_PAGES[step.id].title;
   if (step?.kind === 'permission') return PERMISSION_PAGES[step.permission].title;
+  if (step?.kind === 'units') return UNITS_PAGE.title;
   return '';
 }
 
@@ -134,6 +159,11 @@ export function onboardingScreen(
     notNow = parts.notNow;
   } else if (step?.kind === 'welcome' && isWelcomeId(step.id)) {
     content = welcomeBody(step.id);
+  } else if (step?.kind === 'units') {
+    content = unitsPage(
+      { units: props.units ?? METRIC, titleId: TITLE_ID },
+      { onChange: (u) => actions.onUnits?.(u) },
+    );
   } else {
     // The intake step is the slice 1b intake screen (the caller shows it); an empty page here.
     content = h('section', { class: 'ob-welcome' }, h('h2', { class: 'sr-only', id: TITLE_ID }));
@@ -145,36 +175,39 @@ export function onboardingScreen(
     content,
   );
 
-  const skipBtn = h(
-    'button',
-    { type: 'button', class: 'ob-skip', 'data-ob': 'skip', onclick: () => actions.onSkipAll() },
-    ONBOARDING_BUTTONS.skip,
-  );
-  const backBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'ob-back',
-      'data-ob': 'back',
-      disabled: index === 0,
-      onclick: () => actions.onBack(),
-    },
-    ONBOARDING_BUTTONS.back,
-  );
+  // M13d task 40b (Goal 7): round buttons with their words. Skip is quiet (word beside the
+  // circle), Back / Not now are secondary circles with the word under them, and the way forward
+  // is the page's one main action: the orange circle in a full-width pill (all of it the tap area).
+  const skipBtn = iconButton({
+    icon: 'skip',
+    label: ONBOARDING_BUTTONS.skip,
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'ob-skip',
+    hooks: { 'data-ob': 'skip' },
+    onClick: () => actions.onSkipAll(),
+  });
+  const backBtn = iconButton({
+    icon: 'back',
+    label: ONBOARDING_BUTTONS.back,
+    class: 'ob-back',
+    // M13d task 24: the edge swipe's Back (disabled on page 1 = none)
+    hooks: { 'data-ob': 'back', 'data-swipe-back': true },
+    disabled: index === 0,
+    onClick: () => actions.onBack(),
+  });
   const forward = isLast ? () => actions.onDone() : () => actions.onNext();
   const nextBtn =
     allow ??
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'ob-primary cta-btn',
-        'data-ob': 'primary',
-        'data-last': isLast ? 'true' : 'false',
-        onclick: forward,
-      },
-      ...(isLast ? [ONBOARDING_BUTTONS.done] : forwardContent(ONBOARDING_BUTTONS.next)),
-    );
+    iconButton({
+      icon: isLast ? 'check' : 'arrow-right',
+      label: isLast ? ONBOARDING_BUTTONS.done : ONBOARDING_BUTTONS.next,
+      variant: 'main',
+      wideHit: true,
+      class: 'ob-primary flow-pill',
+      hooks: { 'data-ob': 'primary', 'data-last': isLast ? 'true' : 'false' },
+      onClick: forward,
+    });
 
   const nav = notNow
     ? h(
@@ -206,6 +239,17 @@ export function onboardingScreen(
     }
   }
 
+  // M13d task 25: swipe left = Next, right = Back (a shortcut for the buttons, as the arrow keys:
+  // no Next on the last page or on an ask page, whose way forward is a choice).
+  const body = h('div', { class: 'ob-body' }, page);
+  const unswipe = installPageSwipe(body, {
+    mover: page,
+    onNext: () => actions.onNext(),
+    onBack: () => actions.onBack(),
+    canNext: () => !allow && !isLast,
+    canBack: () => index > 0,
+  });
+
   const el = h(
     'div',
     {
@@ -227,7 +271,7 @@ export function onboardingScreen(
       { class: 'sr-only', 'aria-live': 'polite', 'data-ob': 'live' },
       `Page ${stepCount(index, total)}: ${stepTitle(step)}`,
     ),
-    h('div', { class: 'ob-body' }, page),
+    body,
     dots,
     nav,
   );
@@ -245,6 +289,7 @@ export function onboardingScreen(
     dispose: () => {
       stop();
       stop = () => {};
+      unswipe();
     },
   };
 }

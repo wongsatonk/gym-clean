@@ -1,0 +1,93 @@
+<!doctype html>
+<!-- Dev-only visual check for M13d task 13c (the unit switch on each measure page), made-up
+     values, dark theme. Not part of the build or the app. Open on the dev server:
+     /src/ui/fuel/unitSwitchPages.harness.html
+     ?v=setup         Set up Fuel (re-run look, with Back): 170 cm, 70 kg; switches by Height and
+                      Today's weight.
+     ?v=weighin       the Fuel weigh-in: last weigh-in 70 kg; switch by the stepper.
+     ?v=measurements  Fuel → Measurements: waist last 80 cm; switch heading the list.
+     &units=lb,in     the units the page starts in (default kg,cm).
+     window.harnessEvents: what the page called back (['units', {weight, length}], ['save', …]).
+     e2e/units.spec.ts tests it (part 3) and writes docs/screenshots/m13d-*-switch.png. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Unit switch pages harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import { fuelSetupScreen } from './setup.ts';
+      import { weighInScreen } from './weighIn.ts';
+      import { measurementsScreen } from './measurements.ts';
+
+      window.harnessEvents = [];
+      const push = (e) => window.harnessEvents.push(e);
+      const q = new URLSearchParams(location.search);
+      const v = q.get('v') ?? 'setup';
+      const [weight = 'kg', length = 'cm'] = (q.get('units') ?? 'kg,cm').split(',');
+      const units = { weight, length };
+      const onUnits = (u) => push(['units', u]);
+
+      // Made-up days around 18 Nov 2026 (public repo).
+      const day = (n) => `2026-11-${String(n).padStart(2, '0')}`;
+      const TREND = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17].map((n, i) => ({
+        date: day(n),
+        kg: i % 3 === 2 ? null : 70.8 - i * 0.06,
+        avgKg: i < 2 ? null : 70.7 - i * 0.05,
+      }));
+
+      let page;
+      if (v === 'weighin') {
+        page = weighInScreen(
+          {
+            units,
+            todayKg: null,
+            lastKg: 70,
+            trend: TREND,
+            check: null,
+            kcalTarget: 2650,
+            history: [],
+          },
+          {
+            onBack: () => push(['back']),
+            onSave: (kg) => push(['save', kg]),
+            onAccept: () => push(['accept']),
+            onDismiss: () => push(['dismiss']),
+            onUnits,
+          },
+        );
+      } else if (v === 'measurements') {
+        page = measurementsScreen(
+          {
+            sites: ['waist', 'chest', 'leftArm'],
+            units,
+            today: day(18),
+            measurements: [
+              { date: day(2), site: 'waist', cm: 80 },
+              { date: day(2), site: 'chest', cm: 98 },
+            ],
+          },
+          {
+            onBack: () => push(['back']),
+            onSave: (rows) => push(['save', rows]),
+            onUnits,
+          },
+        );
+      } else {
+        page = fuelSetupScreen(
+          { year: 2026, units, initial: { heightCm: 170, birthYear: 1994, weightKg: 70 } },
+          {
+            onSave: (values) => push(['save', values]),
+            onCancel: () => push(['back']),
+            onUnits,
+          },
+        );
+      }
+      document.getElementById('app').replaceChildren(page);
+    </script>
+  </body>
+</html>

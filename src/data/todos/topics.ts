@@ -27,6 +27,12 @@
  * Claude card and food photos from the library). Ask steps only (no new detector); it folds in the
  * Moving glow vs Plain battery comparison and M13c-q5 (do abs stay after a block). Steps have no
  * platform field, so the two photo-library steps say "In the iPhone app," and offer "Not yet".
+ *
+ * Release 1.16.3 (M13d) adds "Easier first run" (Checkpoint K4: back up, reinstall or a spare
+ * install, the first run again, then a few days of normal use). Ask steps only: units first with
+ * the region default (kg + cm on a Thai-region phone), what Health filled, Set up Fuel inside the
+ * flow, reading, too much text, each swipe, the unit switch, the round buttons, and a Buddhist-era
+ * year (2569) on a Thai-region phone. The Health step says "In the iPhone app,".
  */
 import { RULES } from '../../core/exercises';
 import { TRAINER_KIT_DEFAULTS } from '../../core/trainerKit/defaults';
@@ -72,8 +78,152 @@ const R115 = '1.15.0';
 const R1151 = '1.15.1';
 /** M13c Library, abs and home polish (moving glow, search, badges, abs by choice). */
 const R116 = '1.16.0';
+/** M13d Easier first run (units, Health pre-fill, easier reading, swipes, round buttons). */
+const R1163 = '1.16.3';
 
 export const TODO_TOPICS: readonly TodoTopic[] = [
+  {
+    id: 'easier-first-run',
+    title: 'Easier first run',
+    checkpoint: 'Checkpoint K4',
+    since: R1163,
+    platform: 'any',
+    steps: [
+      {
+        id: 'fresh-install',
+        title: 'Did you run the first run again on a fresh install?',
+        why: 'Tap Back up in Settings first. Then delete and reinstall the app, or use a spare install.',
+        tryIt: 'settings',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'fresh', label: 'Yes, reinstalled' },
+          { id: 'spare', label: 'Yes, a spare install' },
+          { id: 'notYet', label: 'Not yet' },
+        ],
+      },
+      {
+        id: 'units-first',
+        title: 'Did Units come first, with kg and cm already picked?',
+        why: 'On a Thai-region phone it should pick kg and cm by itself.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'yes', label: 'Yes' },
+          { id: 'lb', label: 'It picked lb or ft·in' },
+          { id: 'notFirst', label: 'Units did not come first' },
+        ],
+      },
+      {
+        id: 'health-fill',
+        title: 'In the iPhone app, did Set up Fuel fill in what Apple Health knows?',
+        why: 'Height, birth year, sex and weight, each marked From Apple Health. An older install asks once for the new ones.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'all', label: 'All of it' },
+          { id: 'some', label: 'Some, see my note' },
+          { id: 'none', label: 'Nothing filled' },
+          { id: 'noHealth', label: 'No Apple Health data' },
+        ],
+      },
+      {
+        id: 'ends-today',
+        title: 'Did Set up Fuel come inside the first run, and did it end on Today?',
+        why: 'Not now on Set up Fuel should also carry on to Today.',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'yes', label: 'Yes' },
+          { id: 'no', label: 'No, see my note' },
+        ],
+      },
+      {
+        id: 'easier-read',
+        title: 'After a few days, is the text easier to read?',
+        why: 'Settings, then Display, then Text size makes it bigger.',
+        tryIt: 'settings',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'too-much-text',
+        title: 'Which screens still have too much text?',
+        kind: 'ask',
+        multi: true,
+        note: 'optional',
+        options: [
+          { id: 'firstRun', label: 'The first run' },
+          { id: 'fuel', label: 'Fuel' },
+          { id: 'settings', label: 'Settings' },
+          { id: 'coach', label: 'Coach' },
+          { id: 'learn', label: 'Learn cards or How-to' },
+          { id: 'other', label: 'Another, see my note' },
+          { id: 'none', label: 'None' },
+        ],
+      },
+      {
+        id: 'swipes-ios',
+        title: 'Do the swipes feel like other iPhone apps?',
+        why: 'Back from the left edge, sideways between pages, down to close a sheet, left on a meal.',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'swipe-off',
+        title: 'Which swipes felt off?',
+        kind: 'ask',
+        multi: true,
+        note: 'optional',
+        options: [
+          { id: 'back', label: 'Back from the left edge' },
+          { id: 'pages', label: 'Sideways between pages' },
+          { id: 'sheet', label: 'A sheet bounced back instead of closing' },
+          { id: 'meal', label: 'Swipe left on a meal' },
+          { id: 'none', label: 'None' },
+        ],
+      },
+      {
+        id: 'unit-switch',
+        title: 'Was the unit switch where you expected it?',
+        why: 'It sits next to the field in Set up Fuel, the weigh-in and Measurements.',
+        tryIt: 'fuel',
+        kind: 'ask',
+        note: 'optional',
+        options: [...YES_MOSTLY_NO, { id: 'untried', label: "Didn't try it" }],
+      },
+      {
+        id: 'buttons-look',
+        title: 'Do the round buttons look clean, with words you can read?',
+        tryIt: 'today',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'buttons-hit',
+        title: 'Are they easy to hit, also at the gym?',
+        why: 'Name any button you missed or hit by mistake in the note.',
+        kind: 'ask',
+        note: 'optional',
+        options: YES_MOSTLY_NO,
+      },
+      {
+        id: 'thai-year',
+        title: 'Does any date show a year like 2569?',
+        why: 'A Thai-region phone can show the Buddhist year. Check the Calendar and Share month.',
+        tryIt: 'calendar',
+        kind: 'ask',
+        note: 'optional',
+        options: [
+          { id: 'no', label: 'No' },
+          { id: 'yes', label: 'Yes, see my note' },
+        ],
+      },
+    ],
+  },
   {
     id: 'library-abs',
     title: 'Library, abs and background',

@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { checkCopy } from '../../core/trainer/replies';
 import { asFake, useFakeDom, type FakeEl } from '../screens/testDom';
 import {
+  buildCardOutcome,
   buildProposalCard,
+  buildRedFlagCard,
   buildThreadProposalCard,
   isPairLine,
   PAIR_REST_SEC,
@@ -162,6 +164,104 @@ describe('proposal card: short on time', () => {
 
   it('copy passes the coach copy check', () => {
     expect(checkCopy(render().el.textContent).hits).toEqual([]);
+  });
+});
+
+describe('round icon buttons (M13d task 40f)', () => {
+  const ib = (b: FakeEl | undefined) => ({
+    round: b?.hasAttribute('data-icon-btn'),
+    variant: b?.getAttribute('data-variant'),
+    labelAt: b?.getAttribute('data-label-at'),
+    wide: b?.hasAttribute('data-wide-hit'),
+    word: b?.oneByClass('icon-btn-label').textContent,
+    icon: b?.oneByClass('icon-btn-circle').byTag('svg')[0]?.getAttribute('data-icon'),
+    hidden: b?.oneByClass('icon-btn-circle').getAttribute('aria-hidden'),
+  });
+
+  it('Apply is the main circle + word in a wide pill; Not now a secondary circle, word under', () => {
+    const { built } = render();
+    const [apply, dismiss] = built.controls.map(asFake);
+    expect(ib(apply)).toEqual({
+      round: true,
+      variant: 'main',
+      labelAt: 'beside',
+      wide: true,
+      word: 'Apply',
+      icon: 'check',
+      hidden: 'true',
+    });
+    // The coach sheet focuses the newest Apply by this class (app.ts).
+    expect(apply?.classes).toContain('proposal-apply');
+    expect(ib(dismiss)).toEqual({
+      round: true,
+      variant: 'secondary',
+      labelAt: 'below',
+      wide: false,
+      word: 'Not now',
+      icon: 'close',
+      hidden: 'true',
+    });
+    // No accessible-name override: the word is the name.
+    expect(apply?.getAttribute('aria-label')).toBeNull();
+    expect(dismiss?.getAttribute('aria-label')).toBeNull();
+  });
+
+  it('red flag: End workout (danger) and Not today stay full-width bars, words beside', () => {
+    const calls: string[] = [];
+    const { controls } = buildRedFlagCard('Stop.', {
+      onEndWorkout: () => calls.push('end'),
+      onNotToday: () => calls.push('not'),
+    });
+    const [end, not] = controls.map(asFake);
+    expect(ib(end)).toMatchObject({
+      round: true,
+      variant: 'danger',
+      wide: true,
+      word: 'End workout',
+      icon: 'flag',
+    });
+    expect(ib(not)).toMatchObject({
+      round: true,
+      variant: 'secondary',
+      wide: true,
+      word: 'Not today',
+      icon: 'calendar',
+    });
+    expect(end?.classes).toContain('cb-tall');
+    expect(not?.classes).toContain('cb-tall');
+    end?.click();
+    not?.click();
+    expect(calls).toEqual(['end', 'not']);
+  });
+
+  it('Undo and Ask again: secondary circles with the word beside, hooks kept', () => {
+    const calls: string[] = [];
+    const undo = asFake(
+      buildCardOutcome('applied', { onUndo: () => calls.push('undo') }).controls[0] as HTMLElement,
+    );
+    const ask = asFake(
+      buildCardOutcome('expired', { onAskAgain: () => calls.push('ask') })
+        .controls[0] as HTMLElement,
+    );
+    expect(ib(undo)).toMatchObject({
+      round: true,
+      variant: 'secondary',
+      labelAt: 'beside',
+      word: 'Undo',
+      icon: 'undo',
+    });
+    expect(undo.hasAttribute('data-card-undo')).toBe(true);
+    expect(ib(ask)).toMatchObject({
+      round: true,
+      variant: 'secondary',
+      labelAt: 'beside',
+      word: 'Ask again',
+      icon: 'chat',
+    });
+    expect(ask.hasAttribute('data-card-ask')).toBe(true);
+    undo.click();
+    ask.click();
+    expect(calls).toEqual(['undo', 'ask']);
   });
 });
 

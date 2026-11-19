@@ -29,7 +29,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Counts your reps on this phone. Video never leaves it.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Reads sleep, heart rate, workouts and weight so the coach can suggest a lighter day. Stays on this phone.</string>
+	<string>Reads sleep, heart rate, workouts and weight to suggest lighter days, and your height, birthday and sex to set up Fuel. Stays on this phone.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Lets you talk to the coach. Audio stays on this phone.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from './fixtures';
+import { animationsSettled, at, expectTapTargets, openApp, record } from './app.helpers';
 
 /**
  * M12 task 14: Today's missed-day card and first-load motion, and the rest screen's set ring,
@@ -9,6 +10,11 @@ import { expect, test, type Page } from './fixtures';
  *
  * M12_SHOTS=1 also saves 390×844 screenshots to docs/screenshots/m12-today-*.png and
  * docs/screenshots/m12-rest-set-ring.png.
+ *
+ * M13d task 40c: Today's buttons are round (iconButton): Start the 72px main circle + word in a
+ * wide pill, the cards' actions 56px circles with their words. BUTTONS_AFTER_SHOT=1 saves
+ * docs/screenshots/m13d-buttons-after-today.png (the real app) and
+ * m13d-buttons-after-today-cards.png (this harness, both notices open).
  */
 
 declare global {
@@ -310,4 +316,89 @@ test('rest screen: the set ring fills to the set just logged, words unchanged', 
   ).toBe('50px');
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
   await shot(page, 'm12-rest-set-ring');
+});
+
+// ---------- M13d task 40c: the round buttons on Today ----------
+
+/** Box of the circle inside a round button, and of the whole button. */
+const roundBoxes = (page: Page, sel: string) =>
+  page.locator(sel).evaluate((b) => {
+    const c = b.querySelector('.icon-btn-circle') as HTMLElement;
+    const cb = c.getBoundingClientRect();
+    const bb = b.getBoundingClientRect();
+    return {
+      variant: b.getAttribute('data-variant'),
+      circle: { w: cb.width, h: cb.height, radius: getComputedStyle(c).borderRadius },
+      button: { w: bb.width, h: bb.height },
+      word: b.querySelector('.icon-btn-label')?.textContent ?? '',
+      fill: getComputedStyle(c).backgroundColor,
+    };
+  });
+
+test("M13d 40c: Start is the round main button in its pill, the cards' actions round with their words", async ({
+  page,
+}) => {
+  await mountToday(page, { readiness: true });
+  const start = page.getByRole('button', { name: 'Start workout' });
+  await expect(start).toBeInViewport({ ratio: 1 });
+  const s = await roundBoxes(page, '[data-start]');
+  expect(s.variant).toBe('main');
+  expect(s.word).toBe('Start workout');
+  expect(s.circle.w).toBeGreaterThanOrEqual(72);
+  expect(s.circle.h).toBeGreaterThanOrEqual(72);
+  expect(s.circle.radius).toBe('50%');
+  expect(s.button.w).toBeGreaterThan(300); // the whole row stays the tap area
+  expect(s.button.h).toBeGreaterThanOrEqual(72);
+
+  await page.locator('[data-notices-toggle]').click();
+  for (const sel of [
+    '[data-missed-move]',
+    '[data-missed-skip]',
+    '[data-readiness-lighter]',
+    '[data-readiness-postpone]',
+    '[data-readiness-keep]',
+  ]) {
+    const b = await roundBoxes(page, sel);
+    expect(b.variant, sel).toBe('secondary');
+    expect(b.word.length, sel).toBeGreaterThan(0);
+    expect(b.circle.w, sel).toBeGreaterThanOrEqual(56);
+    expect(b.circle.radius, sel).toBe('50%');
+    // Follow-up (u): never under 56px, whatever the load.
+    expect(b.button.h, sel).toBeGreaterThanOrEqual(56);
+    expect(b.button.w, sel).toBeGreaterThanOrEqual(56);
+  }
+  // Only Start's circle is filled orange.
+  const fills = await page
+    .locator('[data-icon-btn][data-variant="main"]')
+    .evaluateAll((els) => els.map((e) => e.textContent?.trim()));
+  expect(fills).toEqual(['Start workout']);
+  // The accessible names did not change.
+  await expect(page.getByRole('button', { name: 'Move it' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Skip it' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Lighter today', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await expectTapTargets(page, 'main.today');
+  if (process.env['BUTTONS_AFTER_SHOT']) {
+    await animationsSettled(page);
+    await page.screenshot({ path: 'docs/screenshots/m13d-buttons-after-today-cards.png' });
+  }
+  expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+});
+
+test("M13d 40c: the real app's Today at 390×844: round Start in the first viewport, no overflow", async ({
+  page,
+}) => {
+  const { errors } = record(page);
+  await openApp(page, at(13, 18));
+  const start = page.locator('main[data-screen="today"] [data-start]').first();
+  await expect(start).toBeInViewport({ ratio: 1 });
+  await expect(start).toHaveAttribute('data-variant', 'main');
+  await expect(start).toHaveAccessibleName('Start workout');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await expectTapTargets(page, 'main[data-screen="today"]');
+  if (process.env['BUTTONS_AFTER_SHOT']) {
+    await animationsSettled(page);
+    await page.screenshot({ path: 'docs/screenshots/m13d-buttons-after-today.png' });
+  }
+  expect(errors).toEqual([]);
 });

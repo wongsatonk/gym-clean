@@ -31,7 +31,6 @@
 }
 
 .rep-pin[hidden],
-.next-side-btn[hidden],
-.cam-bottom .cta-btn[hidden] {
+.next-side-btn[hidden] {
   display: none;
 }

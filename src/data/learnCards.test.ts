@@ -34,9 +34,29 @@ describe('learn cards', () => {
     }
   });
 
+  // M13d task 18 (SPEC M13d goal 4): the card opens on a short lead; body + why sit behind "More".
+  it('M13d: every card has a `short` lead, one sentence of ≤ 20 words, that passes the copy check', () => {
+    for (const c of LEARN_CARDS) {
+      const short = c.short ?? '';
+      expect(short.trim(), c.id).not.toBe('');
+      expect(short.split(/(?<=[.!?])\s+/).filter(Boolean), `${c.id}: ${short}`).toHaveLength(1);
+      expect(short.trim().split(/\s+/).length, `${c.id}: ${short}`).toBeLessThanOrEqual(20);
+      expect(checkCopy(short), `${c.id}: ${short}`).toEqual({ ok: true, hits: [] });
+      // A lead, not a copy of the body's first line.
+      expect(c.body.startsWith(short), c.id).toBe(false);
+    }
+  });
+
+  it('M13d: title + short lead stay within the first view (≤ 26 words)', () => {
+    for (const c of LEARN_CARDS) {
+      const n = `${c.title} ${c.short ?? ''}`.trim().split(/\s+/).length;
+      expect(n, c.id).toBeLessThanOrEqual(26);
+    }
+  });
+
   it('no medical claims or promises', () => {
     for (const c of LEARN_CARDS) {
-      const all = `${c.title} ${c.body} ${c.why ?? ''}`;
+      const all = `${c.title} ${c.short ?? ''} ${c.body} ${c.why ?? ''}`;
       expect(all, c.id).not.toMatch(/\b(cure|heal|prevent|guarantee|doctor says|clinically)\b/i);
     }
   });
@@ -67,7 +87,7 @@ describe('learn cards', () => {
   it('coreTraining explains the "Also add abs?" choice: the block, the main focus unchanged', () => {
     const c = learnCard('coreTraining');
     expect(c?.title).toBeTruthy();
-    const text = `${c?.title} ${c?.body} ${c?.why}`;
+    const text = `${c?.title} ${c?.short} ${c?.body} ${c?.why}`;
     expect(text).toMatch(/\babs\b/i);
     expect(c?.why).toMatch(/block/i);
     expect(c?.why).toMatch(/main focus/i);
@@ -78,7 +98,7 @@ describe('learn cards', () => {
 
   it('every card says "you", never he or she (M13 anyone-scan)', () => {
     for (const c of LEARN_CARDS)
-      expect(`${c.title} ${c.body} ${c.why ?? ''}`, c.id).not.toMatch(
+      expect(`${c.title} ${c.short ?? ''} ${c.body} ${c.why ?? ''}`, c.id).not.toMatch(
         /\b(he|she|his|her|him|hers)\b/i,
       );
   });

@@ -34,15 +34,11 @@
   gap: 8px;
 }
 
-.chat-clear {
-  font-size: var(--fs-body);
-  padding: 0 14px;
-}
-
-/* Second tap needed: a confirmation, so danger with words (M4e). */
-.chat-clear[data-armed='true'] {
-  color: var(--danger);
-  border-color: var(--danger);
+/* M13d task 40f: Clear chat is a round button, word beside. Armed (second tap needed, a
+   confirmation): chat.ts switches it to the danger variant with "Tap again to clear" (M4e: danger
+   with words); the longer word wraps instead of pushing the title. */
+.icon-btn.chat-clear .icon-btn-label {
+  max-width: 6.5em;
 }
 
 .chat-scroll {
@@ -119,7 +115,7 @@
   gap: 8px;
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   color: var(--text-2);
   overflow-wrap: anywhere;
 }
@@ -210,7 +206,7 @@
 .chat-empty-line {
   font-size: var(--fs-cue);
   color: var(--text-2);
-  line-height: 1.3;
+  line-height: var(--lh-text);
 }
 
 .chat-starters {
@@ -252,7 +248,7 @@
 
 .chat-recap-text {
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 /* ---------- Dock: follow-ups, quick chips, text box, privacy ---------- */
@@ -314,7 +310,7 @@
   gap: 10px;
   font-size: var(--fs-body);
   font-weight: 700;
-  line-height: 1.3;
+  line-height: var(--lh-text);
 }
 
 .card-outcome-icon {
@@ -336,12 +332,8 @@
 
 .card-outcome-actions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 10px;
-}
-
-.card-outcome-actions .cs-btn {
-  width: 100%;
 }
 
 /* ---------- Focus-block card (focusBlockCard.ts) ---------- */
@@ -447,7 +439,7 @@
   justify-content: space-between;
   gap: 4px 12px;
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
 }
 
 .fb-ex-name {
@@ -507,12 +499,11 @@
   display: inline-flex;
 }
 
-.mic-btn {
+.icon-btn.mic-btn {
   position: relative;
-  min-width: var(--tap-min);
-  min-height: var(--tap-min);
-  padding: 0 14px;
-  gap: 6px;
+  /* M13d task 40f (look only): the round button's circle + word, in a box never narrower than
+     the 1.16.2 button (56px tall, ≈ 102px wide: padding + glyph + "Talk"); now taller. */
+  min-width: calc(var(--tap-min) + 8px + 2.4em);
   font-size: var(--fs-body);
   touch-action: none;
   user-select: none;
@@ -520,25 +511,25 @@
   -webkit-touch-callout: none;
 }
 
-.mic-btn > .ic,
-.mic-label {
+.mic-circle > .ic {
   position: relative;
 }
 
-/* Listening: a filled button (white with dark text) plus the word "Listening": not colour alone. */
-.mic-btn[aria-pressed='true'] {
-  background: var(--selected);
-  color: var(--on-selected);
-  border-color: var(--selected);
+/* Listening: a filled circle (white with a dark glyph) plus aria-pressed and the hint line above
+   the row: not colour alone. */
+.icon-btn.mic-btn[aria-pressed='true'] {
+  --ib-fill: var(--selected);
+  --ib-ink: var(--on-selected);
+  --ib-ring: var(--selected);
 }
 
-/* Level ring: transform + opacity only; growth is off under reduced motion (micButton.ts sets a
-   fixed scale), and the global rule stops the transition. */
+/* Level ring round the circle: transform + opacity only; growth is off under reduced motion
+   (micButton.ts sets a fixed scale), and the global rule stops the transition. */
 .mic-ring {
   position: absolute;
-  inset: -4px;
+  inset: -7px;
   border: 3px solid var(--cta);
-  border-radius: var(--r-btn);
+  border-radius: 50%;
   z-index: 0;
   opacity: 0;
   pointer-events: none;
@@ -555,9 +546,7 @@
   gap: 8px;
 }
 
-.mic-install {
-  width: 100%;
-  min-height: var(--tap-min);
+.icon-btn.mic-install .icon-btn-label {
   font-size: var(--fs-body);
 }
 
@@ -565,7 +554,7 @@
 .mic-unavailable {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   color: var(--text-2);
 }
 
@@ -588,7 +577,7 @@
   flex-direction: column;
   justify-content: flex-end;
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   font-weight: 600;
   color: var(--text);
   overflow-wrap: anywhere;
@@ -604,10 +593,21 @@
 
 /* Listening: Send is disabled and out of sight, but keeps its space. With display: none the mic
    button would slide right into Send's place under the held finger, and letting go where it went
-   down would land off the button (= cancel, nothing sent). */
-.cs-send[hidden] {
+   down would land off the button (= cancel, nothing sent). Send is an icon button: this outranks
+   iconButton.css's `.icon-btn[hidden] { display: none }`. */
+.icon-btn.cs-send[hidden] {
   display: inline-flex;
   visibility: hidden;
+}
+
+/* M13d task 40f: Talk and Send are round buttons with their word under the circle; the text box
+   lines up with the circles (each button has 4px padding above its circle). */
+.chat .cs-typing-row {
+  align-items: flex-start;
+}
+
+.chat .cs-typing-row > .cs-input {
+  margin-top: 4px;
 }
 
 /* ---------- M12 slice 2: weekly check-in card (checkInCard.ts) ---------- */
@@ -638,7 +638,7 @@
   align-items: flex-start;
   gap: 8px;
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   color: var(--text-2);
 }
 
@@ -725,32 +725,34 @@
 }
 
 /* Collapsed (Checkpoint J): Answer + Skip side by side under the one-line title; opened: Answer
-   goes, Skip fills the row under Done. Wraps to two rows if the words ever don't fit. */
+   goes, Skip stays under Done. M13d task 40f: Answer is the main pill, Skip a round button with
+   its word under it. */
 .checkin-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
 }
 
 .checkin-card[data-card-status='pending'] .checkin-title {
   font-size: var(--fs-cue);
 }
 
-.checkin-card .checkin-answer {
-  flex: 2 1 0;
-  min-height: var(--tap-min);
-  margin-top: 0;
-  padding: 0 18px;
-  font-size: var(--fs-cue);
-  border-radius: var(--r-btn);
+.checkin-card .icon-btn.checkin-answer {
+  flex: 1 1 auto;
+  width: auto;
 }
 
 .checkin-card .checkin-answer[hidden] {
   display: none;
 }
 
-.checkin-skip {
-  flex: 1 1 0;
+.icon-btn.checkin-skip {
+  flex: 0 0 auto;
+}
+
+/* Opened: Skip sits at the end of the row, under Done. */
+.checkin-card[data-expanded='true'] .checkin-actions {
+  justify-content: flex-end;
 }
 
 .checkin-summary {
@@ -760,7 +762,7 @@
   gap: 8px;
   font-size: var(--fs-body);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: var(--lh-text);
 }
 
 .checkin-summary .ic {

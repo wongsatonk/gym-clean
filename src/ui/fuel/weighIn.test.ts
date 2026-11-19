@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TrendPoint } from '../../core/nutrition/adjust';
 import type { HistoryDay } from '../../core/nutrition/day';
-import type { WeeklyCheck } from '../../core/types';
+import type { UnitPrefs, WeeklyCheck } from '../../core/types';
 import type { Unit } from '../../core/units';
 import { asFake, useFakeDom } from '../screens/testDom';
 import { checkCopy } from '../../core/trainer/replies';
@@ -64,25 +64,28 @@ const check = (kind: WeeklyCheck['kind'], over: Partial<WeeklyCheck> = {}): Week
   ...over,
 });
 
-function render(over: Partial<WeighInProps> = {}) {
-  const calls = { back: 0, save: [] as number[], accept: 0, dismiss: 0 };
+/** Test shorthand: `unit` builds `units` (tape in cm). */
+function render(over: Partial<Omit<WeighInProps, 'units'>> & { unit?: Unit } = {}) {
+  const calls = { back: 0, save: [] as number[], accept: 0, dismiss: 0, units: [] as UnitPrefs[] };
+  const { unit = 'kg', ...rest } = over;
   const el = asFake(
     weighInScreen(
       {
-        unit: 'kg',
+        units: { weight: unit, length: 'cm' },
         todayKg: null,
         lastKg: 70.4,
         trend: TREND,
         check: null,
         kcalTarget: 2650,
         history: HISTORY,
-        ...over,
+        ...rest,
       },
       {
         onBack: () => calls.back++,
         onSave: (kg) => calls.save.push(kg),
         onAccept: () => calls.accept++,
         onDismiss: () => calls.dismiss++,
+        onUnits: (u) => calls.units.push(u),
       },
     ),
   );
@@ -222,6 +225,14 @@ describe('weighInScreen stepper', () => {
     typeInto(oneAttr(el, 'data-field', 'weigh-in').oneByClass('nf-value'), '71.0');
     oneAttr(el, 'data-weigh-save').click();
     expect(calls.save).toEqual([71]);
+  });
+
+  it('M13d task 24: the header Back is the edge swipe’s one Back', () => {
+    for (const over of [{}, { check: check('up') }]) {
+      const marked = render(over).el.find((e) => e.hasAttribute('data-swipe-back'));
+      expect(marked).toHaveLength(1);
+      expect(marked[0]?.classes).toContain('fuel-back');
+    }
   });
 
   it('Back calls onBack', () => {
@@ -367,7 +378,7 @@ describe('M11: from Health tag and activity line', () => {
     const el = asFake(
       weighInScreen(
         {
-          unit: 'kg',
+          units: { weight: 'kg', length: 'cm' },
           todayKg: null,
           lastKg: 70.4,
           trend: TREND,
@@ -384,6 +395,7 @@ describe('M11: from Health tag and activity line', () => {
           onDismiss: () => {},
           onSwitchActivity: (l) => calls.sw.push(l),
           onKeepActivity: () => calls.keep++,
+          onUnits: () => {},
         },
       ),
     );
@@ -526,5 +538,84 @@ describe('M12 1b: body composition trends (from Health)', () => {
     const { el } = render({ unit: 'lb', bodyComp: COMP });
     expect(oneAttr(el, 'data-comp-now', 'leanMass').textContent).toBe('127');
     expect(oneAttr(el, 'data-comp', 'leanMass').textContent).toContain('lb');
+  });
+});
+
+describe('M13d task 13c: kg | lb switch by the stepper', () => {
+  const field = (el: ReturnType<typeof render>['el']) => oneAttr(el, 'data-field', 'weigh-in');
+  const tap = (el: ReturnType<typeof render>['el'], unit: string) =>
+    oneAttr(oneAttr(el, 'data-unit-for', 'weigh-in'), 'data-unit', unit).click();
+  const shown = (el: ReturnType<typeof render>['el']) => valueOf(field(el).oneByClass('nf-value'));
+
+  it("a named switch in the stepper's label row; the only switch on the screen", () => {
+    const { el } = render({ unit: 'lb' });
+    const g = oneAttr(field(el), 'data-unit-for', 'weigh-in');
+    expect(g.getAttribute('role')).toBe('group');
+    expect(g.getAttribute('aria-label')).toBe('Weight unit');
+    expect(oneAttr(g, 'data-unit', 'lb').getAttribute('aria-pressed')).toBe('true');
+    expect(byAttr(el, 'data-unit-switch')).toHaveLength(1);
+  });
+
+  it('70.0 kg → 154.3 lb → 70.0 kg with no drift; nothing saved; onUnits once per tap', () => {
+    const { el, calls } = render({ lastKg: 70 });
+    expect(shown(el)).toBe('70.0');
+    tap(el, 'lb');
+    expect(shown(el)).toBe('154.3');
+    expect(field(el).oneByClass('nf-unit').textContent).toBe('lb');
+    tap(el, 'kg');
+    expect(shown(el)).toBe('70.0');
+    for (let i = 0; i < 20; i++) {
+      tap(el, 'lb');
+      tap(el, 'kg');
+    }
+    tap(el, 'kg'); // the unit already shown: nothing
+    expect(shown(el)).toBe('70.0');
+    expect(calls.save).toEqual([]);
+    expect(calls.units).toHaveLength(42);
+    expect(calls.units[0]).toEqual({ weight: 'lb', length: 'cm' });
+    expect(calls.units.at(-1)).toEqual({ weight: 'kg', length: 'cm' });
+    tap(el, 'lb');
+    oneAttr(el, 'data-weigh-save').click();
+    expect(calls.save).toEqual([70]);
+  });
+
+  it("re-draws what shows a weight in the new unit: today's note, weekly card, trend, lean mass", () => {
+    const { el } = render({
+      todayKg: 71.2,
+      check: check('up'),
+      bodyComp: [
+        { date: day(3), leanMassKg: 57.2 },
+        { date: day(14), leanMassKg: 57.6 },
+      ],
+    });
+    tap(el, 'lb');
+    expect(oneAttr(el, 'data-weigh-today', 'saved').textContent).toBe(
+      'Saved today: 157 lb. Saving again replaces it.',
+    );
+    expect(oneAttr(el, 'data-weekly-card').textContent).toContain('lb');
+    expect(oneAttr(el, 'data-weekly-card').textContent).not.toContain(' kg');
+    expect(oneAttr(el, 'data-comp-now', 'leanMass').textContent).toBe('127');
+    // Still one of each, in the same order.
+    expect(byAttr(el, 'data-weekly-card')).toHaveLength(1);
+    expect(byAttr(el, 'data-trend-chart')).toHaveLength(1);
+    expect(byAttr(el, 'data-body-comp')).toHaveLength(1);
+    const order = el.find(
+      (e) => e.hasAttribute('data-weekly-card') || e.getAttribute('data-field') === 'weigh-in',
+    );
+    expect(order[0]?.hasAttribute('data-weekly-card')).toBe(true);
+    // The weekly card still works after the re-draw.
+    oneAttr(el, 'data-weekly-dismiss').click();
+  });
+
+  it('a typed value survives switching: 154.4 lb → 70.0 kg → 154.4 lb, saved as that kg', () => {
+    const { el, calls } = render({ lastKg: 70 });
+    tap(el, 'lb');
+    typeInto(field(el).oneByClass('nf-value'), '154.4');
+    tap(el, 'kg');
+    expect(shown(el)).toBe('70.0');
+    tap(el, 'lb');
+    expect(shown(el)).toBe('154.4');
+    oneAttr(el, 'data-weigh-save').click();
+    expect(calls.save[0]).toBeCloseTo(154.4 * 0.45359237, 9);
   });
 });

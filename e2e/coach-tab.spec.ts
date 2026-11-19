@@ -110,6 +110,12 @@ test('Not today → Apply → Undo in the thread; the thread survives a reload; 
   await expect(coachTab(page).getByLabel('Ask the coach')).toHaveCount(0);
   await expectTapTargets(page, '[data-screen="coach"]');
   await noHorizontalOverflow(page);
+  // M13d task 40f: Apply is the main round button (a wide pill), Not now a secondary circle.
+  await expect(card.getByRole('button', { name: 'Apply' })).toHaveAttribute('data-variant', 'main');
+  await expect(card.getByRole('button', { name: 'Not now' })).toHaveAttribute(
+    'data-variant',
+    'secondary',
+  );
   await page.screenshot({ path: testInfo.outputPath('m12-coach-proposal.png') });
 
   await card.getByRole('button', { name: 'Apply' }).click();
@@ -351,6 +357,17 @@ test("Claude card: an off-topic question → the card with both lists → Tell m
   await expect(wanted).toHaveText("Tell me when it's ready");
   await expect(notNow).toHaveText('Not now');
   await expectTapTargets(page, '[data-claude-offer]');
+  // M13d task 40f: two secondary round buttons, side by side, the same size (equal weight).
+  {
+    await card.scrollIntoViewIfNeeded();
+    const [w, n] = [await wanted.boundingBox(), await notNow.boundingBox()];
+    if (!w || !n) throw new Error('no Claude card buttons');
+    expect(Math.abs(w.width - n.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(w.height - n.height)).toBeLessThanOrEqual(1);
+    expect(Math.abs(w.y - n.y)).toBeLessThanOrEqual(1);
+    await expect(wanted).toHaveAttribute('data-variant', 'secondary');
+    await expect(notNow).toHaveAttribute('data-variant', 'secondary');
+  }
   await noHorizontalOverflow(page);
   await card.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('m13c-e2e-claude-card.png') });

@@ -194,6 +194,9 @@ describe('My gym: Share my gym / Import a gym file (M12 slice 1b)', () => {
     // The Import button gives way to the preview.
     expect(at('data-gym-import-open')).toBeUndefined();
     expect(calls).toEqual({ share: 0, text: [], apply: 0, cancel: 0 });
+    // M13d task 40d: Apply is the main round button (a pill), Cancel a quiet circle.
+    expect(at('data-gym-import-apply')?.getAttribute('data-variant')).toBe('main');
+    expect(at('data-gym-import-cancel')?.getAttribute('data-variant')).toBe('quiet');
     at('data-gym-import-apply')?.click();
     at('data-gym-import-cancel')?.click();
     expect(calls.apply).toBe(1);
@@ -222,11 +225,11 @@ describe('My gym: Share my gym / Import a gym file (M12 slice 1b)', () => {
     );
   });
 
-  it('share buttons are ≥ 56px at body size (css) and the copy is plain', () => {
-    const css = readFileSync(new URL('./myGym.css', import.meta.url), 'utf8');
-    const rule = /\.gym-share-btn\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+  it('share buttons: the pill row keeps the bar height (css) and the copy is plain', () => {
+    // M13d task 40d: Share / Import are round icon buttons on a pill row (settingsButtons.css).
+    const css = readFileSync(new URL('../settingsButtons.css', import.meta.url), 'utf8');
+    const rule = /\.set-ib-pill\.icon-btn\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(rule).toContain('min-height: var(--tap-bar)');
-    expect(rule).toContain('font-size: var(--fs-body)');
     for (const s of [
       GYM_SHARE_LABEL,
       GYM_IMPORT_LABEL,

@@ -24,7 +24,7 @@ import {
 test.use({ owner: 'on' });
 
 /** Topics for the web app (platform 'any'); the 4 iPhone-only ones don't count here. */
-const WEB_TOTAL = 12; // 1.13.0 adds "Trainer kit at the gym"; 1.15.0 "Published look"; 1.15.1 "One-arm sets"; 1.16.0 "Library, abs and background"
+const WEB_TOTAL = 13; // 1.13.0 adds "Trainer kit at the gym"; 1.15.0 "Published look"; 1.15.1 "One-arm sets"; 1.16.0 "Library, abs and background"; 1.16.3 "Easier first run"
 const NOW = at(16, 18);
 
 const card = (page: Page) => page.locator('[data-todo-card]');
@@ -114,8 +114,8 @@ test('Today card → list → guide; asking the coach ticks the auto step; Try i
     `To-dos: 0 of ${WEB_TOTAL} done`,
   );
   await expect(card(page).locator('[data-todo-next]')).toHaveText(
-    'Next: Library, abs and background',
-  ); // 1.16.0's K3 topic leads the list
+    'Next: Easier first run',
+  ); // 1.16.3's K4 topic leads the list
   expect((await card(page).boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(56);
   // Below the Start card: it never pushes Start down.
   const start = await page.locator('[data-start]').first().boundingBox();
@@ -364,6 +364,7 @@ test('nothing during a workout; the card hides when every web topic is done or s
     'published-look', // 1.15.0
     'one-arm-sets', // 1.15.1
     'library-abs', // 1.16.0
+    'easier-first-run', // 1.16.3
   ];
   await putRows(
     page,

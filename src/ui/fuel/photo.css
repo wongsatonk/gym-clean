@@ -8,27 +8,22 @@
   position: relative;
 }
 
-/* M13c task 15: Take photo + Choose from library side by side (Progress photos' pattern). The
-   words may wrap to two lines on a narrow phone, so the pair is taller than one line but both
-   stay the same height and ≥ 56px. */
+/* M13c task 15: Take photo + Choose from library side by side (Progress photos' pattern).
+   M13d task 40e: each is a round button with its word under it; "Choose from library" may wrap
+   to two lines, the grid keeps both the same height (≥ 56px). */
 .log-photo .photo-pick {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-.photo-pick .photo-open {
+.photo-pick .photo-open.icon-btn {
   min-width: 0;
-  min-height: var(--tap-min);
-  padding: 8px 10px;
-  font-size: var(--fs-body);
-  line-height: 1.15;
-  text-align: center;
-  overflow-wrap: anywhere;
+  justify-content: flex-start;
 }
 
-.photo-pick .photo-open .ic {
-  flex: none;
+.photo-pick .photo-open .icon-btn-label {
+  overflow-wrap: anywhere;
 }
 
 .photo-input {
@@ -147,18 +142,6 @@
   gap: 4px 8px;
 }
 
-.fuel-sheet .primary-btn.cta-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-/* Log stays in reach while the guesses and variants scroll (1 tap after the photo). */
-.fuel-sheet .primary-btn.photo-log:not(:disabled) {
-  position: sticky;
-  bottom: max(12px, env(safe-area-inset-bottom));
-  z-index: 1;
-}
-
 /* M7b task 15: the Photo row at the top of the log sheet (or the Settings hint, M7b-q4). */
 .log-photo[hidden],
 .log-photo-hint[hidden] {
@@ -167,5 +150,5 @@
 
 .log-photo-hint {
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }

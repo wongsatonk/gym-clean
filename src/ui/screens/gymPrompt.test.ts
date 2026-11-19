@@ -95,7 +95,7 @@ describe('gymPrompt', () => {
     expect(gymPrompt(MISSING, { onKeepExercise: () => {} })).toBeNull();
   });
 
-  it('is a status card with See a swap (CTA) then Keep it, each passing the exercise id', () => {
+  it('is a status card with See a swap then Keep it, each passing the exercise id', () => {
     const calls = { swap: [] as string[], keep: [] as string[] };
     const el = asFake(gymPrompt(MISSING, wired(calls)));
     expect(el.getAttribute('data-gym-prompt')).toBe(LEG_PRESS);
@@ -105,17 +105,16 @@ describe('gymPrompt', () => {
     const buttons = el.byTag('button');
     expect(buttons.map((b) => b.textContent)).toEqual(['See a swap', 'Keep it']);
     expect(buttons.every((b) => b.getAttribute('type') === 'button')).toBe(true);
-    expect(buttons[0]?.classes).toContain('gym-prompt-cta');
+    // M13d task 40d: round icon buttons; Start stays the page's one main action.
+    expect(buttons.map((b) => b.getAttribute('data-variant'))).toEqual(['secondary', 'quiet']);
     buttons[0]?.click();
     buttons[1]?.click();
     expect(calls).toEqual({ swap: [LEG_PRESS], keep: [LEG_PRESS] });
   });
 
-  it('CSS: buttons are ≥ 56px tall with body-size text, tokens only', () => {
+  it('CSS: body-size text, tokens only (the buttons are iconButton: ≥ 56px there)', () => {
     const css = readFileSync(new URL('./gymPrompt.css', import.meta.url), 'utf8');
     const rule = (sel: string) => css.match(new RegExp(`\\n${sel} \\{([^}]*)\\}`))?.[1] ?? '';
-    expect(rule('\\.gym-prompt-btn')).toContain('min-height: var(--tap-min)');
-    expect(rule('\\.gym-prompt-btn')).toContain('font-size: var(--fs-body)');
     expect(rule('\\.gym-prompt-text')).toContain('font-size: var(--fs-body)');
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(css).not.toMatch(/font-size:\s*\d/);

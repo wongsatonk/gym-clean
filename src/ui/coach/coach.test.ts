@@ -14,6 +14,7 @@ import {
   type CoachSheetProps,
 } from './coachSheet';
 import { proposalCard, redFlagCard, rowLabel } from './proposalCard';
+import { NO_SWIPE_BACK } from '../gestures/edgeBack';
 import { UNDO_MS, undoBarStyle, undoToast } from './undoToast';
 
 useFakeDom();
@@ -197,7 +198,8 @@ describe('coachSheet', () => {
     byText(el, 'Apply').click();
     byText(el, 'Not now').click();
     expect(log).toEqual(['apply:2', 'dismiss:2']);
-    expect(el.byClass('primary-btn')).toHaveLength(1);
+    // M13d task 40f: Apply is the one main round button (the orange fill).
+    expect(el.find((e) => e.getAttribute('data-variant') === 'main')).toHaveLength(1);
     expect(el.byClass('cs-chip')).toHaveLength(0);
     expect(mount({ items, allowTyping: true, showAreas: true }).el.byTag('input')).toHaveLength(0);
   });
@@ -283,7 +285,13 @@ describe('proposalCard / redFlagCard', () => {
         .find((e) => e.getAttribute('data-icon') === 'arrow-right'),
     ).toHaveLength(1);
     expect(el.oneByClass('proposal-why').textContent).toBe(PROPOSAL.why);
-    expect(byText(el, 'Apply').classes).toEqual(expect.arrayContaining(['primary-btn', 'cta-btn']));
+    // M13d task 40f: Apply is the main round button (circle + word, the CTA fill); Not now a
+    // secondary one; both keep their names.
+    const apply = byText(el, 'Apply');
+    expect(apply.hasAttribute('data-icon-btn')).toBe(true);
+    expect(apply.getAttribute('data-variant')).toBe('main');
+    expect(apply.classes).toContain('proposal-apply');
+    expect(byText(el, 'Not now').getAttribute('data-variant')).toBe('secondary');
     byText(el, 'Not now').click();
     expect(calls).toEqual(['dismiss']);
   });
@@ -317,6 +325,15 @@ describe('undoToast', () => {
     expect(fake.oneByClass('undo-text').textContent).toBe('Done. Curls swapped for hammer curls.');
     expect(fake.oneByClass('undo-bar').getAttribute('style')).toBe('--undo-ms:10000ms');
     expect(fake.oneByClass('undo-track').getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('over a workout it is motion-off (no press scale / glow on Undo); elsewhere not', () => {
+    const doc = globalThis.document as unknown as { querySelector?: (s: string) => unknown };
+    expect(mountToast().fake.getAttribute('data-motion')).toBeNull();
+    doc.querySelector = (sel: string) => (sel === NO_SWIPE_BACK ? {} : null);
+    expect(mountToast().fake.getAttribute('data-motion')).toBe('off');
+    doc.querySelector = () => null;
+    expect(mountToast().fake.getAttribute('data-motion')).toBeNull();
   });
 
   it('expires once after the window', () => {

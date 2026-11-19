@@ -1,6 +1,9 @@
 import { h } from './dom';
+import { iconButton } from './iconButton';
+import { setIconButtonLabel } from './iconButtonLabel';
 import { voice } from './voice';
 import './audioTest.css';
+import './settingsButtons.css';
 
 /**
  * Settings → Voice → "Audio test (for music)". An on-phone experiment: with Spotify (or any app)
@@ -222,20 +225,30 @@ export function createAudioTest(): AudioTestHandle {
     hidden: true,
   });
   preview.muted = true;
-  const camBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'audio-test-btn',
-      'aria-pressed': 'false',
-      'data-audio-camera': true,
-      onclick: () => (stream || status.camera === 'starting' ? stopCamera() : void startCamera()),
-    },
-    'Camera on',
+  // M13d task 40d: round icon buttons with the word beside them, each on a pill row as wide as
+  // the bar it replaced (`audio-test-btn` kept for the e2e size checks).
+  const testBtn = (
+    iconName: 'speaker' | 'play' | 'camera',
+    label: string,
+    hook: string,
+    onClick: () => void,
+  ) =>
+    iconButton({
+      icon: iconName,
+      label,
+      labelAt: 'beside',
+      wideHit: true,
+      class: 'set-ib-pill audio-test-btn',
+      hooks: { [hook]: true },
+      onClick,
+    });
+  const camBtn = testBtn('camera', 'Camera on', 'data-audio-camera', () =>
+    stream || status.camera === 'starting' ? stopCamera() : void startCamera(),
   );
+  camBtn.setAttribute('aria-pressed', 'false');
 
   function setCamUi(on: boolean): void {
-    camBtn.textContent = on ? 'Camera off' : 'Camera on';
+    setIconButtonLabel(camBtn, on ? 'Camera off' : 'Camera on');
     camBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
     preview.hidden = !on;
   }
@@ -295,16 +308,8 @@ export function createAudioTest(): AudioTestHandle {
       ),
       typeChoice,
       session ? hintLine : null,
-      h(
-        'button',
-        { type: 'button', class: 'audio-test-btn', 'data-audio-speak': true, onclick: speak },
-        'Speak a phrase',
-      ),
-      h(
-        'button',
-        { type: 'button', class: 'audio-test-btn', 'data-audio-beep': true, onclick: beep },
-        'Play a beep',
-      ),
+      testBtn('speaker', 'Speak a phrase', 'data-audio-speak', speak),
+      testBtn('play', 'Play a beep', 'data-audio-beep', beep),
       h('div', { class: 'audio-test-cam' }, camBtn, preview),
       statusLine,
       h('p', { class: 'muted audio-test-privacy' }, 'Nothing is recorded or sent anywhere.'),

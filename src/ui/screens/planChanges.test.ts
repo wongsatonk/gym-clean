@@ -83,13 +83,13 @@ describe('planChangesScreen', () => {
     expect(rows[0]?.hasAttribute('data-undone')).toBe(true);
     expect(rows[0]?.classes).toContain('undone');
     expect(rows[0]?.oneByClass('plan-change-when').textContent).toBe('Thu 12 Nov · 07:00 · Undone');
-    expect(rows[0]?.byClass('plan-undo')).toHaveLength(0);
-    expect(rows[1]?.byClass('plan-undo')).toHaveLength(1);
+    expect(rows[0]?.find((e) => e.hasAttribute('data-undo-change'))).toHaveLength(0);
+    expect(rows[1]?.find((e) => e.hasAttribute('data-undo-change'))).toHaveLength(1);
   });
 
   it('no Undo when every change is undone', () => {
     const { el } = render([change(1, at(10, 9), 'Lighter today', at(10, 10))]);
-    expect(el.byClass('plan-undo')).toHaveLength(0);
+    expect(el.find((e) => e.hasAttribute('data-undo-change'))).toHaveLength(0);
   });
 
   it('Reset to default program needs two taps and disarms itself', () => {

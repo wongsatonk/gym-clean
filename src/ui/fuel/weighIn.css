@@ -1,16 +1,13 @@
 /* M7 task 15: the Weigh-in screen (src/ui/fuel/weighIn.ts). Tokens only, Pro mood.
-   The weight is ≥ 64px (number field), body ≥ 20px, taps ≥ 56px. Colour roles: Accept is the
-   one orange fill on the weekly card; the chart uses neutral marks (white average line, grey
-   daily dots) because orange, cyan, lavender and green each have another meaning. */
+   The weight is ≥ 64px (number field), body ≥ 20px, taps ≥ 56px. Colour roles: Save is the
+   one orange fill (M13d: the main round button), Accept has the orange ring on the weekly card;
+   the chart uses neutral marks (white average line, grey daily dots) because orange, cyan,
+   lavender and green each have another meaning. */
 
 .wi-entry {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.wi-entry .wi-save {
-  margin-top: 0;
 }
 
 /* ---------- Weekly check card ---------- */
@@ -37,16 +34,16 @@
 
 .wi-card-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
 }
 
 .wi-card-body,
 .wi-card-change {
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .wi-card-change {
@@ -57,33 +54,11 @@
   font-weight: 700;
 }
 
-.wi-card-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.wi-accept,
-.wi-dismiss {
-  flex: 1 1 140px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: var(--tap-cta);
-  padding: 0 16px;
-  font-size: var(--fs-lead);
-  font-weight: 700;
-}
-
-.wi-accept {
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
-}
-
-.wi-dismiss {
-  background: var(--surface-2);
+/* M13d task 40e: the card's actions are round buttons with the word under them
+   (fuelButtons.css .fuel-acts). Accept, the change to act on, has the orange ring and icon. */
+.wi-accept.icon-btn:not(:disabled) {
+  --ib-ring: var(--cta);
+  --ib-ink: var(--cta);
 }
 
 /* M11-q8: the activity-level line (asks, never applies by itself). Inside the weekly card it
@@ -103,12 +78,7 @@
   margin: 0;
   font-size: var(--fs-body);
   font-weight: 600;
-  line-height: 1.35;
-}
-
-.wi-activity-btn {
-  min-height: var(--tap-min);
-  font-size: var(--fs-body);
+  line-height: var(--lh-text);
 }
 
 /* ---------- Trend chart ---------- */

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import type { OnboardingStep } from './types';
 import {
+  FIRST_RUN_PERMISSION_ORDER,
   PERMISSION_ORDER,
   WELCOME_PAGE_IDS,
   closeOnboarding,
+  insertAfterIntake,
   onboardingSteps,
   parseOnboarding,
   permissionCatchUpSteps,
@@ -25,29 +28,78 @@ const input = (over: Partial<OnboardingInput> = {}): OnboardingInput => ({
   ...over,
 });
 
-const kinds = (steps: ReturnType<typeof onboardingSteps>) =>
+const kinds = (steps: readonly OnboardingStep[]) =>
   steps.map((s) =>
-    s.kind === 'welcome' ? `welcome:${s.id}` : s.kind === 'permission' ? s.permission : 'intake',
+    s.kind === 'welcome' ? `welcome:${s.id}` : s.kind === 'permission' ? s.permission : s.kind,
   );
 
 describe('onboardingSteps', () => {
-  it('iPhone app, fresh: welcome pages, intake, then every permission it has, in order', () => {
+  it('iPhone app, fresh (M13d): welcome, Units, Health, intake, then camera, mic, reminders', () => {
     expect(kinds(onboardingSteps(input()))).toEqual([
       'welcome:hello',
       'welcome:train',
-      'welcome:coach',
+      'units',
+      'health',
       'intake',
       'camera',
-      'health',
       'mic',
       'notifications',
     ]);
   });
 
-  it('starts with 2–3 welcome pages after the hello page (the lockup page)', () => {
-    expect(WELCOME_PAGE_IDS[0]).toBe('hello');
-    expect(WELCOME_PAGE_IDS.length - 1).toBeGreaterThanOrEqual(2);
-    expect(WELCOME_PAGE_IDS.length - 1).toBeLessThanOrEqual(3);
+  it('PWA, fresh (M13d): welcome, Units, intake, camera (no Health, mic or reminders)', () => {
+    expect(kinds(onboardingSteps(input({ platform: 'web', has: ALL })))).toEqual([
+      'welcome:hello',
+      'welcome:train',
+      'units',
+      'intake',
+      'camera',
+    ]);
+  });
+
+  it('two welcome pages (M13d): the hello lockup and train; the coach page is gone', () => {
+    expect(WELCOME_PAGE_IDS).toEqual(['hello', 'train']);
+  });
+
+  it('Units comes right after the welcome pages on every platform and run', () => {
+    for (const over of [
+      {},
+      { platform: 'web' as const },
+      { fresh: false },
+      { intakeDone: true },
+      { has: NONE },
+    ]) {
+      const k = kinds(onboardingSteps(input(over)));
+      expect(k.indexOf('units'), JSON.stringify(over)).toBe(WELCOME_PAGE_IDS.length);
+      expect(k.filter((x) => x === 'units')).toHaveLength(1);
+    }
+  });
+
+  it('Health comes before the intake, so Set up Fuel can pre-fill from it', () => {
+    const k = kinds(onboardingSteps(input()));
+    expect(k.indexOf('health')).toBeLessThan(k.indexOf('intake'));
+    expect(k.indexOf('health')).toBe(k.indexOf('units') + 1);
+  });
+
+  it('iPhone app without Health: Units then the intake', () => {
+    expect(kinds(onboardingSteps(input({ has: { ...ALL, health: false } })))).toEqual([
+      'welcome:hello',
+      'welcome:train',
+      'units',
+      'intake',
+      'camera',
+      'mic',
+      'notifications',
+    ]);
+  });
+
+  it('first-run permission order is Health, then camera, mic, reminders', () => {
+    expect(FIRST_RUN_PERMISSION_ORDER).toEqual(['health', 'camera', 'mic', 'notifications']);
+  });
+
+  it('the flow never holds a fuelSetup step on its own (it is inserted after the intake)', () => {
+    for (const platform of ['web', 'native'] as const)
+      expect(kinds(onboardingSteps(input({ platform })))).not.toContain('fuelSetup');
   });
 
   it('PWA: the camera page only, whatever `has` says', () => {
@@ -65,8 +117,8 @@ describe('onboardingSteps', () => {
     expect(perms(NONE)).toEqual(['camera']);
     expect(perms({ health: false, mic: true, notifications: false })).toEqual(['camera', 'mic']);
     expect(perms({ health: true, mic: false, notifications: true })).toEqual([
-      'camera',
       'health',
+      'camera',
       'notifications',
     ]);
   });
@@ -80,15 +132,94 @@ describe('onboardingSteps', () => {
     expect(kinds(onboardingSteps(input({ intakeDone: true })))).not.toContain('intake');
   });
 
-  it('a re-run from Settings on an install with history has no intake (it has its own row)', () => {
-    const steps = kinds(onboardingSteps(input({ fresh: false })));
-    expect(steps).not.toContain('intake');
-    expect(steps[0]).toBe('welcome:hello');
-    expect(steps).toContain('camera');
+  it('a re-run from Settings on an install with history has no intake but shows Units', () => {
+    expect(kinds(onboardingSteps(input({ fresh: false })))).toEqual([
+      'welcome:hello',
+      'welcome:train',
+      'units',
+      'health',
+      'camera',
+      'mic',
+      'notifications',
+    ]);
+    expect(kinds(onboardingSteps(input({ platform: 'web', fresh: false })))).toEqual([
+      'welcome:hello',
+      'welcome:train',
+      'units',
+      'camera',
+    ]);
   });
 
-  it('permission order is camera, Health, mic, notifications', () => {
+  it('catch-up permission order is unchanged: camera, Health, mic, notifications', () => {
     expect(PERMISSION_ORDER).toEqual(['camera', 'health', 'mic', 'notifications']);
+  });
+});
+
+describe('insertAfterIntake (M13d: Set up Fuel becomes a step of the first run)', () => {
+  const FUEL = { kind: 'fuelSetup' } as const;
+  const native = () => onboardingSteps(input());
+  const intakeAt = (steps: readonly OnboardingStep[]) =>
+    steps.findIndex((s) => s.kind === 'intake');
+
+  it('puts the step right after the intake; the rest keeps its order', () => {
+    const steps = native();
+    const i = intakeAt(steps);
+    const out = insertAfterIntake(steps, i, FUEL);
+    expect(kinds(out)).toEqual([
+      'welcome:hello',
+      'welcome:train',
+      'units',
+      'health',
+      'intake',
+      'fuelSetup',
+      'camera',
+      'mic',
+      'notifications',
+    ]);
+    expect(out[i + 1]).toEqual(FUEL);
+  });
+
+  it('PWA: intake, Set up Fuel, camera', () => {
+    const steps = onboardingSteps(input({ platform: 'web' }));
+    expect(kinds(insertAfterIntake(steps, intakeAt(steps), FUEL)).slice(-3)).toEqual([
+      'intake',
+      'fuelSetup',
+      'camera',
+    ]);
+  });
+
+  it('is pure: the input list is not changed', () => {
+    const steps = native();
+    const before = structuredClone(steps);
+    insertAfterIntake(steps, intakeAt(steps), FUEL);
+    expect(steps).toEqual(before);
+  });
+
+  it('never adds it twice (Back to the intake, then Done again)', () => {
+    const steps = native();
+    const i = intakeAt(steps);
+    const once = insertAfterIntake(steps, i, FUEL);
+    const twice = insertAfterIntake(once, i, FUEL);
+    expect(twice).toEqual(once);
+    expect(twice.filter((s) => s.kind === 'fuelSetup')).toHaveLength(1);
+  });
+
+  it('a no-op without an intake step (re-run from Settings, intake already answered)', () => {
+    const rerun = onboardingSteps(input({ fresh: false }));
+    for (let i = -1; i <= rerun.length; i++)
+      expect(insertAfterIntake(rerun, i, FUEL)).toEqual(rerun);
+  });
+
+  it('only right after the intake: an index that is not the intake changes nothing', () => {
+    const steps = native();
+    const i = intakeAt(steps);
+    for (const at of [0, 1, i - 1, i + 1, steps.length - 1, steps.length, -1, 2.5])
+      expect(insertAfterIntake(steps, at, FUEL), String(at)).toEqual(steps);
+  });
+
+  it('works when the intake is the last step', () => {
+    const steps: OnboardingStep[] = [{ kind: 'welcome', id: 'hello' }, { kind: 'intake' }];
+    expect(insertAfterIntake(steps, 1, FUEL)).toEqual([...steps, FUEL]);
   });
 });
 

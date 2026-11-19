@@ -19,16 +19,26 @@
 // `[data-goal-text]`, `[data-intake-back]`, `[data-intake-next]` (disabled until answered),
 // `[data-intake-skip]`, `[data-intake-close]`, `[data-change=<id>]`, `[data-apply=<id>]`
 // (`data-applied` once applied), `[data-change-error=<id>]`, `[data-intake-done]`,
-// `[data-learn-open="coreTraining"]` (the abs question's Why?).
+// `[data-learn-open="coreTraining"]` (the abs question's Why?, with `data-learn-hide-why`: the
+// card opens without its focus-block `why`), `[data-change-lead=<id>]`, `[data-more="change-<id>"]`.
+//
+// M13d task 19 ("some screens have too much text"): each question's why line is one short
+// sentence (the question budget is 20 words besides the options). On the last screen each row
+// shows its title, its first line (the title's own words cut from its start, e.g. "Starter plan:
+// 3 days a week" → "3 days a week") and Now / After; the other lines (the full plan, day by
+// day) sit behind the shared "More" disclosure.
 import { INTAKE_OPTIONS } from '../../core/trainerKit/intake';
 import type { BodyArea, GoalKind, Intake } from '../../core/types';
-import { backButton, forwardContent } from '../backButton';
-import { whyButton } from '../coach/learnCard';
+import { backButton } from '../backButton';
+import { HIDE_WHY_ATTR, whyButton } from '../coach/learnCard';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
+import { moreDisclosure } from '../moreDisclosure';
 import { checkMorph, enterScreen } from '../motion';
 import { moodClass } from '../tokens';
 import './intake.css';
+import '../onboarding/flowButtons.css';
 
 export type IntakeStepId =
   'goal' | 'days' | 'length' | 'experience' | 'easyOn' | 'wantsCore' | 'summary';
@@ -99,7 +109,7 @@ export const FUEL_TITLE = 'Fuel targets';
 export const INTAKE_COPY = {
   goal: {
     title: "What's your main goal?",
-    why: 'The coach builds the plan around it. You can change it later in Settings.',
+    why: 'Your plan is built around it.',
   },
   days: {
     title: 'How many days a week can you train?',
@@ -111,11 +121,11 @@ export const INTAKE_COPY = {
   },
   experience: {
     title: 'How much lifting have you done?',
-    why: 'This sets how many sets and how fast the plan moves.',
+    why: 'This sets how fast your plan moves.',
   },
   easyOn: {
     title: 'Any areas to go easy on?',
-    why: 'Pick any, or none. The coach keeps the load light there until you take it off the list.',
+    why: 'The coach keeps any you pick light.',
   },
   wantsCore: {
     title: INTAKE_OPTIONS.wantsCore.question,
@@ -191,6 +201,18 @@ export function questionCountText(index: number): string {
 /** "Build muscle · 3 days a week · 45 min". Used by the last screen and the Settings row. */
 export function intakeSummary(intake: Pick<Intake, 'goalKind' | 'days' | 'sessionMin'>): string {
   return `${GOAL_LABEL[intake.goalKind]} · ${intake.days} days a week · ${intake.sessionMin} min`;
+}
+
+/**
+ * A row's first line without the row title repeated at its start ("Starter plan: 3 days a week"
+ * under "Starter plan" → "3 days a week"). Anything else is kept as is. Pure.
+ */
+export function leadLine(title: string, line: string): string {
+  const t = title.trim().toLowerCase();
+  const l = line.trim();
+  if (!t || !l.toLowerCase().startsWith(t)) return l;
+  const rest = l.slice(t.length).replace(/^\s*[:·–-]\s*/, '');
+  return rest && rest !== l.slice(t.length) ? rest : l;
 }
 
 /** "Shoulders, Back", in the fixed body order. Empty list → "". */
@@ -494,7 +516,7 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
         onLearn
           ? whyButton((opener) => onLearn(learnId, opener), {
               label: 'Why? About abs training',
-              attrs: { 'data-learn-open': learnId },
+              attrs: { 'data-learn-open': learnId, [HIDE_WHY_ATTR]: true },
             })
           : null,
       ];
@@ -536,34 +558,42 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
       'data-change-error': c.id,
       role: 'alert',
     });
-    const label = h('span', {}, done ? 'Applied' : 'Apply');
-    const btn = h(
-      'button',
-      {
-        type: 'button',
-        class: done ? 'intake-apply done' : 'intake-apply',
-        'data-apply': c.id,
-        'data-applied': done ? 'true' : undefined,
-        disabled: done,
-        'aria-label': `${done ? 'Applied' : 'Apply'}: ${c.title}`,
-      },
-      done ? icon('check', 'sm') : null,
-      label,
+    // M13d task 40b (Goal 7): a round button with its word beside it, the whole row its tap
+    // area. Apply shows a plus; once applied the plus turns into a check (checkMorph) and the
+    // circle goes green.
+    const btn = iconButton({
+      icon: done ? 'check' : 'plus',
+      label: done ? 'Applied' : 'Apply',
+      labelAt: 'beside',
+      wideHit: true,
+      class: done ? 'intake-apply done' : 'intake-apply',
+      ariaLabel: `${done ? 'Applied' : 'Apply'}: ${c.title}`,
+      hooks: done ? { 'data-apply': c.id, 'data-applied': 'true' } : { 'data-apply': c.id },
+      disabled: done,
+      onClick: () => tap(),
+    });
+    const label = Array.from(btn.children).find(
+      (e) => e.getAttribute('class') === 'icon-btn-label',
     );
+    const circle = Array.from(btn.children).find(
+      (e) => e.getAttribute('class') === 'icon-btn-circle',
+    ) as HTMLElement | undefined;
     const markDone = () => {
       applied.add(c.id);
-      btn.setAttribute('class', 'intake-apply done');
+      btn.setAttribute('class', 'icon-btn intake-apply done');
       btn.setAttribute('data-applied', 'true');
       btn.setAttribute('disabled', '');
       btn.setAttribute('aria-label', `Applied: ${c.title}`);
-      label.textContent = 'Applied';
-      checkMorph(btn, icon('check', 'sm'));
+      if (label) label.textContent = 'Applied';
+      // The plus becomes a check (the old icon goes first, so one icon is left in any DOM).
+      circle?.replaceChildren();
+      checkMorph(circle ?? btn, icon('check', 'md'));
     };
     const fail = () => {
       btn.removeAttribute('disabled');
       error.replaceChildren(icon('help', 'sm'), h('span', {}, INTAKE_COPY.applyFailed));
     };
-    btn.addEventListener('click', () => {
+    const tap = () => {
       if (btn.hasAttribute('disabled')) return;
       btn.setAttribute('disabled', '');
       error.replaceChildren();
@@ -581,14 +611,19 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
         );
       else if (r === false) fail();
       else markDone();
-    });
+    };
     const headId = `intake-change-${c.id}`;
+    const [first, ...rest] = c.lines ?? [];
     return h(
       'section',
       { class: 'intake-change', 'data-change': c.id, 'aria-labelledby': headId },
       h('h2', { class: 'intake-change-title', id: headId }, c.title),
-      c.lines?.length
-        ? h('ul', { class: 'intake-change-lines' }, ...c.lines.map((l) => h('li', {}, l)))
+      first !== undefined
+        ? h(
+            'p',
+            { class: 'intake-change-lead', 'data-change-lead': c.id },
+            leadLine(c.title, first),
+          )
         : null,
       c.before !== undefined || c.after !== undefined
         ? h(
@@ -601,6 +636,12 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
               ? h('div', { 'data-diff': 'after' }, h('dt', {}, 'After'), h('dd', {}, c.after))
               : null,
           )
+        : null,
+      rest.length
+        ? moreDisclosure(
+            [h('ul', { class: 'intake-change-lines' }, ...rest.map((l) => h('li', {}, l)))],
+            { about: c.title, hook: `change-${c.id}` },
+          ).el
         : null,
       btn,
       error,
@@ -666,7 +707,11 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
       'header',
       { class: 'top-bar intake-top' },
       actions.onClose
-        ? backButton(() => actions.onClose?.(), 'Back', { 'data-intake-close': true })
+        ? backButton(() => actions.onClose?.(), 'Back', {
+            'data-intake-close': true,
+            // M13d task 24: the edge swipe takes the question Back below (previous question).
+            'data-swipe-back': false,
+          })
         : null,
       isSummary
         ? h('span', { class: 'intake-count', 'data-intake-count': true }, 'Your answers')
@@ -687,44 +732,45 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
     );
 
     const showBack = i > 0 || Boolean(actions.onClose);
+    // M13d task 40b (Goal 7): Back is a round secondary button with its word under it; Next /
+    // See what changes / Done is the page's one main action, the orange circle in a full-width
+    // pill (flowButtons.css), greyed until the question is answered; Skip for now is quiet.
     nextBtn = isSummary
       ? null
-      : h(
-          'button',
-          {
-            type: 'button',
-            class: 'intake-nav-btn intake-nav-next',
-            'data-intake-next': true,
-            onclick: next,
-          },
-          ...forwardContent(INTAKE_STEPS[i + 1] === 'summary' ? 'See what changes' : 'Next'),
-        );
+      : iconButton({
+          icon: 'arrow-right',
+          label: INTAKE_STEPS[i + 1] === 'summary' ? 'See what changes' : 'Next',
+          variant: 'main',
+          wideHit: true,
+          class: 'intake-nav-next flow-pill',
+          hooks: { 'data-intake-next': true },
+          onClick: next,
+        });
     syncNext();
     const nav = h(
       'nav',
       { class: showBack ? 'intake-nav' : 'intake-nav single', 'aria-label': 'Questions' },
       showBack
-        ? h(
-            'button',
-            { type: 'button', class: 'intake-nav-btn', 'data-intake-back': true, onclick: back },
-            icon('back', 'sm'),
-            h('span', {}, 'Back'),
-          )
+        ? iconButton({
+            icon: 'back',
+            label: 'Back',
+            class: 'intake-nav-back',
+            hooks: { 'data-intake-back': true, 'data-swipe-back': true },
+            onClick: back,
+          })
         : null,
       isSummary
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'intake-nav-btn intake-nav-next',
-              'data-intake-done': true,
-              onclick: () => {
-                if (intake) actions.onDone(intake);
-              },
+        ? iconButton({
+            icon: 'check',
+            label: 'Done',
+            variant: 'main',
+            wideHit: true,
+            class: 'intake-nav-next flow-pill',
+            hooks: { 'data-intake-done': true },
+            onClick: () => {
+              if (intake) actions.onDone(intake);
             },
-            h('span', {}, 'Done'),
-            icon('check', 'sm'),
-          )
+          })
         : nextBtn,
     );
 
@@ -735,17 +781,15 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
       ...(isSummary
         ? []
         : [
-            h(
-              'button',
-              {
-                type: 'button',
-                class: 'intake-skip',
-                'data-intake-skip': true,
-                onclick: () => actions.onSkip(),
-              },
-              icon('skip', 'sm'),
-              h('span', {}, 'Skip for now'),
-            ),
+            iconButton({
+              icon: 'skip',
+              label: 'Skip for now',
+              variant: 'quiet',
+              labelAt: 'beside',
+              class: 'intake-skip',
+              hooks: { 'data-intake-skip': true },
+              onClick: () => actions.onSkip(),
+            }),
           ]),
     );
   }

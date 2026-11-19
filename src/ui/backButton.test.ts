@@ -15,8 +15,14 @@ describe('backButton', () => {
     const el = asFake(backButton(() => n++));
     expect(el.tag).toBe('button');
     expect(el.getAttribute('type')).toBe('button');
-    expect(el.classes).toEqual(expect.arrayContaining(['ghost-btn', 'back-btn']));
+    expect(el.classes).toEqual(expect.arrayContaining(['icon-btn', 'back-btn']));
+    // M13d task 40a: the round icon button (circle + the word beside it), secondary look.
+    expect(el.hasAttribute('data-icon-btn')).toBe(true);
+    expect(el.getAttribute('data-variant')).toBe('secondary');
+    expect(el.getAttribute('data-label-at')).toBe('beside');
+    expect(el.oneByClass('icon-btn-label').textContent).toBe('Back');
     expect(el.hasAttribute('data-back')).toBe(true);
+    expect(el.hasAttribute('data-swipe-back')).toBe(true);
     expect(el.textContent).toBe('Back');
     expect(el.getAttribute('aria-label')).toBeNull();
     const ic = icons(el);
@@ -31,13 +37,26 @@ describe('backButton', () => {
     const el = asFake(backButton(() => {}, 'To-dos', { 'data-intake-close': true }));
     expect(el.textContent).toBe('To-dos');
     expect(el.hasAttribute('data-intake-close')).toBe(true);
+    expect(el.hasAttribute('data-swipe-back')).toBe(true);
   });
 
-  it('is at least 56px tall and wide (its own css, on top of the button rule)', () => {
+  it('M13d task 24: a screen can hand the edge swipe to another control', () => {
+    const el = asFake(backButton(() => {}, 'Back', { 'data-swipe-back': false }));
+    expect(el.hasAttribute('data-swipe-back')).toBe(false);
+    expect(el.hasAttribute('data-back')).toBe(true);
+  });
+
+  it('passes the button to nothing new: the back callback still takes no arguments', () => {
+    const calls: unknown[][] = [];
+    const el = asFake(backButton((...args: unknown[]) => calls.push(args)));
+    el.click();
+    expect(calls).toEqual([[]]);
+  });
+
+  it('keeps the word on one line (its own css; size comes from iconButton.css)', () => {
     const css = readFileSync(join(__dirname, 'backButton.css'), 'utf8');
-    const block = /\.back-btn\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(block).toMatch(/min-height:\s*var\(--tap-min\)/);
-    expect(block).toMatch(/min-width:\s*var\(--tap-min\)/);
+    const block = /\.back-btn \.icon-btn-label\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(block).toMatch(/white-space:\s*nowrap/);
   });
 });
 

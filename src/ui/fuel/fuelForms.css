@@ -38,7 +38,7 @@
 .fuel-note {
   font-size: var(--fs-body);
   color: var(--text-2);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .fuel-note:empty {
@@ -66,7 +66,35 @@
   gap: 8px;
 }
 
+/* M13d task 3b: the first run's quiet "Not now" at the end of the form (no fill, full-width row). */
+.fuel-not-now {
+  min-height: var(--tap-min);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* M13d task 8: "From Apple Health" under a pre-filled field (body size, never the only cue). */
+.fuel-from-health {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--fs-body);
+  color: var(--text-2);
+}
+
+.fuel-from-health .ic {
+  flex: none;
+}
+
 /* ---------- Number field: label, [−] value [+] ---------- */
+
+/* M13d task 13c: the slot a switched unit field is rebuilt in; its field lays out as if it were
+   the page's own child. */
+.unit-slot {
+  display: contents;
+}
 
 .nf {
   display: flex;
@@ -82,9 +110,11 @@
 
 .nf-row {
   display: grid;
-  grid-template-columns: var(--tap-cta) minmax(0, 1fr) var(--tap-cta);
+  /* The round − / + take their circle's width (56px, wider only if the word needs it), so a
+     4-digit value ("2830 kcal" in Settings → Nutrition → Change) shows whole between them. */
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   align-items: stretch;
-  gap: 8px;
+  gap: 6px;
 }
 
 .nf-step {
@@ -99,13 +129,23 @@
   opacity: 0.4;
 }
 
+/* M13d task 40b (Goal 7): − / + are round buttons (iconButton.ts) with "Less" / "More" under the
+   circle; the whole cell (≥ 56 × 56) is the tap area. */
+.nf-step.icon-btn {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+}
+
 .nf-mid {
   display: flex;
   align-items: baseline;
   justify-content: center;
   gap: 6px;
   min-width: 0;
-  padding: 0 10px;
+  padding: 0 6px;
   border: var(--line-w) solid var(--line);
   border-radius: var(--r-btn);
   background: var(--surface);
@@ -282,34 +322,10 @@
   font-weight: 700;
 }
 
-.nt-btn {
+/* M13d task 40e: Change, Save, Use estimate, Cancel, Turn on and Not now are round buttons with
+   the word under them (fuelButtons.css .fuel-acts); Re-run setup is a second pill. */
+.nt-bottom > .icon-btn {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: var(--tap-min);
-  padding: 0 16px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
-}
-
-/* Save / Turn on in a settings block: a confirmed choice, so the white "selected" fill. */
-.nt-btn.nt-save {
-  background: var(--selected);
-  color: var(--on-selected);
-  border-color: var(--selected);
-}
-
-.nt-edit-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.nt-edit-actions .nt-btn {
-  flex: 1 1 auto;
 }
 
 .nt-barcode {
@@ -333,7 +349,7 @@
   align-items: flex-start;
   gap: 10px;
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .nt-confirm-txt .ic {

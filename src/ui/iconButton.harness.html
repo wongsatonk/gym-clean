@@ -1,0 +1,117 @@
+<!doctype html>
+<!-- Dev-only visual check for M13d task 36 (round icon buttons), made-up labels, dark theme.
+     Not part of the build or the app. Open on the dev server: /src/ui/iconButton.harness.html
+     Every variant (main beside / main below / main wide row, secondary, quiet, danger, disabled),
+     a bottom-bar row, the Exercise (motion-off) context and every icon the buttons can use.
+     Task 38's design preview (whole made-up screens) is src/ui/buttonsPreview.harness.html;
+     e2e/icon-button.spec.ts tests this page.
+     window.harnessTaps: words of tapped buttons; window.harnessFeels: press-feel hook calls. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Icon button harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <style>
+      .ib-harness {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .ib-row {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-start;
+        gap: 4px;
+      }
+      .ib-card {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        background: var(--surface);
+        border-radius: var(--r-card);
+        padding: 8px 4px 10px;
+      }
+      .ib-cap {
+        margin: 0 8px;
+        font-size: var(--fs-body);
+        font-weight: 700;
+        color: var(--text-2);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { iconButton, setPressFeel } from './iconButton.ts';
+      import { h } from './dom.ts';
+
+      window.harnessTaps = [];
+      window.harnessFeels = 0;
+      setPressFeel(() => {
+        window.harnessFeels += 1;
+      });
+
+      const btn = (icon, label, opts = {}) =>
+        iconButton({ icon, label, ...opts, onClick: () => window.harnessTaps.push(label) });
+      const row = (...kids) => h('div', { class: 'ib-row' }, ...kids);
+      const cap = (t) => h('p', { class: 'ib-cap' }, t);
+
+      // Rows, top to bottom: main beside; main as a wide row; secondary (word below, the new
+      // icons, a shortened word with a longer name); quiet / danger / disabled; a sheet; the
+      // Exercise screen (motion-off: look only). Every new icon appears once.
+      const app = document.getElementById('app');
+      app.replaceChildren(
+        h(
+          'main',
+          { class: 'screen mood-pro ib-harness', 'data-harness': 'icon-buttons' },
+          h('h1', { class: 'page-title' }, 'Round buttons'),
+          row(btn('play', 'Start', { variant: 'main', hooks: { 'data-demo': 'main' } })),
+          btn('arrow-right', 'Next', {
+            variant: 'main',
+            wideHit: true,
+            hooks: { 'data-demo': 'wide' },
+          }),
+          row(
+            btn('back', 'Back', { ariaLabel: 'Back to To-dos', hooks: { 'data-demo': 'aria' } }),
+            btn('gear', 'Settings', { hooks: { 'data-demo': 'secondary' } }),
+            btn('scale', 'Weigh-in'),
+            btn('more', 'Options'),
+          ),
+          row(
+            btn('close', 'Not now', { variant: 'quiet', hooks: { 'data-demo': 'quiet' } }),
+            btn('info', 'Info', { variant: 'quiet' }),
+            btn('trash', 'Delete', { variant: 'danger', hooks: { 'data-demo': 'danger' } }),
+            btn('check', 'Save', { disabled: true, hooks: { 'data-demo': 'disabled' } }),
+          ),
+          h(
+            'div',
+            { class: 'ib-card' },
+            cap('A sheet'),
+            row(
+              btn('refresh', 'Retry'),
+              btn('undo', 'Undo'),
+              btn('share', 'Share'),
+              btn('check', 'Apply', { variant: 'main', labelAt: 'below' }),
+            ),
+          ),
+          h(
+            'section',
+            { 'data-screen': 'exercise', class: 'mood-track ib-card' },
+            cap('Exercise screen: look only'),
+            row(
+              btn('minus', 'Less', { hooks: { 'data-demo': 'motion-off' } }),
+              btn('check', 'Set done', { variant: 'main', labelAt: 'below' }),
+              btn('plus', 'More'),
+              btn('pause', 'Pause'),
+            ),
+          ),
+        ),
+      );
+    </script>
+  </body>
+</html>

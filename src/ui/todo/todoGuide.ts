@@ -22,13 +22,16 @@
 // `[data-guide-back]`, `[data-guide-next]`, `[data-skip-topic]` (`data-armed` while armed),
 // `[data-topic-skipped]`.
 import type { AppRoute, DetectorResult, TodoAnswer, TodoStep, TodoTopic } from '../../core/types';
-import { backButton, forwardContent } from '../backButton';
+import { backButton } from '../backButton';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
+import { setIconButtonLabel } from '../iconButtonLabel';
 import { icon } from '../icons';
 import { dateLabel } from '../screens/today';
 import { moodClass } from '../tokens';
 import type { TodoTopicStatus } from './todoList';
 import './todos.css';
+import '../settingsButtons.css';
 
 export const NOTE_MAX = 500;
 export const SKIP_CONFIRM_MS = 3000;
@@ -101,16 +104,16 @@ export function defaultDecisionPreview(step: AskStep, optionId: string): string 
 
 function tryItButton(route: AppRoute | undefined, actions: TodoGuideActions): HTMLElement | null {
   if (!route) return null;
-  return h(
-    'button',
-    {
-      type: 'button',
-      class: 'todo-try',
-      'data-try-it': route,
-      onclick: () => actions.onTryIt(route),
-    },
-    ...forwardContent('Try it'),
-  );
+  // M13d task 40d: a round icon button (forward arrow), word beside, the whole row the tap area.
+  return iconButton({
+    icon: 'arrow-right',
+    label: 'Try it',
+    labelAt: 'beside',
+    wideHit: true,
+    class: 'set-ib-pill todo-try',
+    hooks: { 'data-try-it': route },
+    onClick: () => actions.onTryIt(route),
+  });
 }
 
 function autoBody(
@@ -329,30 +332,34 @@ const flushers = new Map<string, () => void>();
 function skipButton(onSkip: () => void, confirmMs: number): HTMLElement {
   const IDLE = 'Skip this topic';
   const ARMED = 'Tap again to skip';
-  const label = h('span', {}, IDLE);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const btn = h(
-    'button',
-    { type: 'button', class: 'todo-skip', 'data-skip-topic': true },
-    icon('skip', 'sm'),
-    label,
-  );
-  btn.addEventListener('click', () => {
-    if (btn.getAttribute('data-armed') !== null) {
-      if (timer !== undefined) clearTimeout(timer);
-      timer = undefined;
-      btn.removeAttribute('data-armed');
-      label.textContent = IDLE;
-      onSkip();
-      return;
-    }
-    btn.setAttribute('data-armed', 'true');
-    label.textContent = ARMED;
-    timer = setTimeout(() => {
-      timer = undefined;
-      btn.removeAttribute('data-armed');
-      label.textContent = IDLE;
-    }, confirmMs);
+  // M13d task 40d: a quiet round button, word beside; armed it fills with the danger colour and
+  // says "Tap again to skip" (todos.css), so the state is never colour alone.
+  const btn = iconButton({
+    icon: 'skip',
+    label: IDLE,
+    variant: 'quiet',
+    labelAt: 'beside',
+    wideHit: true,
+    class: 'todo-skip',
+    hooks: { 'data-skip-topic': true },
+    onClick: () => {
+      if (btn.getAttribute('data-armed') !== null) {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = undefined;
+        btn.removeAttribute('data-armed');
+        setIconButtonLabel(btn, IDLE);
+        onSkip();
+        return;
+      }
+      btn.setAttribute('data-armed', 'true');
+      setIconButtonLabel(btn, ARMED);
+      timer = setTimeout(() => {
+        timer = undefined;
+        btn.removeAttribute('data-armed');
+        setIconButtonLabel(btn, IDLE);
+      }, confirmMs);
+    },
   });
   return btn;
 }
@@ -408,10 +415,15 @@ export function todoGuideScreen(props: TodoGuideProps, actions: TodoGuideActions
     h(
       'header',
       { class: 'top-bar' },
-      backButton(() => {
-        flush();
-        actions.onClose();
-      }, 'To-dos'),
+      backButton(
+        () => {
+          flush();
+          actions.onClose();
+        },
+        'To-dos',
+        // M13d task 24: the edge swipe takes the step Back (previous step; the list on step 1).
+        { 'data-swipe-back': false },
+      ),
     ),
     h(
       'div',
@@ -453,39 +465,34 @@ export function todoGuideScreen(props: TodoGuideProps, actions: TodoGuideActions
           ...body,
         )
       : null,
+    // M13d task 40d: Back is a round button (word below), Next / Done the page's main round
+    // button on a pill (the whole row the tap area), as on the first-run pages.
     h(
       'nav',
-      { class: 'todo-nav', 'aria-label': 'Steps' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'todo-nav-btn',
-          'data-guide-back': true,
-          onclick: () => {
-            flush();
-            if (index === 0) actions.onClose();
-            else actions.onBack();
-          },
+      { class: 'todo-nav set-ib-bottom', 'aria-label': 'Steps' },
+      iconButton({
+        icon: 'back',
+        label: 'Back',
+        hooks: { 'data-guide-back': true, 'data-swipe-back': true },
+        onClick: () => {
+          flush();
+          if (index === 0) actions.onClose();
+          else actions.onBack();
         },
-        icon('back', 'sm'),
-        h('span', {}, 'Back'),
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'todo-nav-btn todo-nav-next',
-          'data-guide-next': true,
-          onclick: () => {
-            flush();
-            if (last) actions.onClose();
-            else actions.onNext();
-          },
+      }),
+      iconButton({
+        icon: last ? 'check' : 'arrow-right',
+        label: last ? 'Done' : 'Next',
+        variant: 'main',
+        wideHit: true,
+        class: 'set-ib-pill',
+        hooks: { 'data-guide-next': true },
+        onClick: () => {
+          flush();
+          if (last) actions.onClose();
+          else actions.onNext();
         },
-        h('span', {}, last ? 'Done' : 'Next'),
-        icon(last ? 'check' : 'arrow-right', 'sm'),
-      ),
+      }),
     ),
     props.status.skipped
       ? null

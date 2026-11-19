@@ -23,8 +23,10 @@ import {
   type ClaudeSendItem,
 } from '../../core/trainer/claude/sends';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
 import './coach.css';
+import './coachButtons.css';
 
 export type ClaudeOfferCardActions = {
   /** "Tell me when it's ready": main saves `coach.claudeWanted = 'yes'` (+ the shown date). */
@@ -84,19 +86,23 @@ export function buildClaudeOfferCard(a: ClaudeOfferCardActions): {
     for (const b of buttons) b.setAttribute('disabled', '');
     cb();
   };
-  const wanted = h(
-    'button',
-    { type: 'button', class: 'cs-btn co-btn co-wanted', 'data-claude-offer-wanted': true },
-    CLAUDE_OFFER.wanted,
-  );
-  const dismiss = h(
-    'button',
-    { type: 'button', class: 'cs-btn co-btn co-dismiss', 'data-claude-offer-dismiss': true },
-    CLAUDE_OFFER.dismiss,
-  );
+  // M13d task 40f: two secondary round buttons of the same size side by side (equal weight for a
+  // consent choice: neither is the orange main action), each word under its circle.
+  const wanted = iconButton({
+    icon: 'clock',
+    label: CLAUDE_OFFER.wanted,
+    class: 'co-choice co-wanted',
+    hooks: { 'data-claude-offer-wanted': true },
+    onClick: answer(a.onWanted),
+  });
+  const dismiss = iconButton({
+    icon: 'close',
+    label: CLAUDE_OFFER.dismiss,
+    class: 'co-choice co-dismiss',
+    hooks: { 'data-claude-offer-dismiss': true },
+    onClick: answer(a.onDismiss),
+  });
   const buttons = [wanted, dismiss];
-  wanted.addEventListener('click', answer(a.onWanted));
-  dismiss.addEventListener('click', answer(a.onDismiss));
 
   const el = h(
     'section',
@@ -111,7 +117,7 @@ export function buildClaudeOfferCard(a: ClaudeOfferCardActions): {
     ...section(CLAUDE_OFFER.sendsHead, 'chat', CLAUDE_SENDS, 'sends'),
     ...section(CLAUDE_OFFER.neverHead, 'lock', CLAUDE_NEVER_SENDS, 'never'),
     h('p', { class: 'co-key' }, icon('help', 'sm'), h('span', {}, CLAUDE_OFFER.keyNote)),
-    h('div', { class: 'co-actions' }, wanted, dismiss),
+    h('div', { class: 'co-actions co-choices' }, wanted, dismiss),
   );
   return { el, controls: buttons };
 }

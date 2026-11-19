@@ -119,6 +119,21 @@ test.describe('fresh install', () => {
     await expectTapTargets(page, 'main[data-screen="intake"]');
     await noHorizontalOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('m13c-intake-abs.png') });
+    // M13d task 19: Why? opens the abs card on its short lead; the body is behind More, and the
+    // card's focus-block "why" is left out here (follow-up q).
+    await intake(page).locator('[data-learn-open="coreTraining"]').click();
+    const card = page.locator('[data-learn-sheet="coreTraining"]');
+    await expect(card.locator('[data-learn-short]')).toBeVisible();
+    await expect(card.locator('[data-learn-body]')).toBeHidden();
+    const cardMore = card.locator('[data-more-btn]');
+    await expect(cardMore).toHaveAttribute('aria-expanded', 'false');
+    await cardMore.click();
+    await expect(cardMore).toHaveAttribute('aria-expanded', 'true');
+    await expect(card.locator('[data-learn-body]')).toBeVisible();
+    await expect(card.locator('[data-learn-why]')).toHaveCount(0);
+    await expectTapTargets(page, '[data-learn-sheet="coreTraining"]');
+    await card.locator('[data-learn-close]').click();
+    await expect(card).toHaveCount(0);
     await intake(page).locator('[data-intake-next]').click();
     await step(page, 'summary');
     const plan = intake(page).locator('[data-change="plan"]');
@@ -126,6 +141,16 @@ test.describe('fresh install', () => {
     await expect(plan).toContainText('Starter plan');
     const planWithoutAbs = (await plan.textContent()) ?? '';
     await expect(intake(page)).toContainText('Nothing changes until you tap Apply.');
+    // M13d task 19: the row shows its title and one line; the day-by-day plan is behind More.
+    await expect(plan.locator('[data-change-lead="plan"]')).toHaveText('3 days a week');
+    const planPanel = plan.locator('[data-more-panel]');
+    await expect(planPanel).toBeHidden();
+    const planMore = plan.locator('[data-more="change-plan"] [data-more-btn]');
+    await expect(planMore).toHaveAccessibleName('More about Starter plan');
+    await planMore.click();
+    await expect(planMore).toHaveAttribute('aria-expanded', 'true');
+    await expect(planPanel).toBeVisible();
+    await expect(planPanel).toContainText('Full body');
     await expectTapTargets(page, 'main[data-screen="intake"]');
     await noHorizontalOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('m12b-intake-changes.png') });

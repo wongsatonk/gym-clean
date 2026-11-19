@@ -28,10 +28,12 @@ import '../history.css';
 import { formatDuration } from '../../core/format';
 import type { DaySession, ExerciseHistory, ExerciseSessionEntry } from '../../core/history';
 import { formatWeight, toUnit, type Unit } from '../../core/units';
+import { backButton } from '../backButton';
 import { e1rmChart, type E1rmPoint } from '../charts/e1rmChart';
 import { h } from '../dom';
 import { emptyState } from '../emptyState';
 import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import { sidedSetBlock } from '../sidesText';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
@@ -191,15 +193,14 @@ function stateCard(props: HistoryProps, actions: HistoryActions): HTMLElement | 
         { class: 'hist-empty-body' },
         'Your sets are still saved. Open History again to retry.',
       ),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'ghost-btn wide-btn hist-empty-btn',
-          onclick: () => actions.onTab('today'),
-        },
-        'Go to Today',
-      ),
+      iconButton({
+        icon: 'home',
+        label: 'Go to Today',
+        labelAt: 'beside',
+        wideHit: true,
+        class: 'hist-empty-btn',
+        onClick: () => actions.onTab('today'),
+      }),
     );
   }
   if (props.loading) {
@@ -447,12 +448,8 @@ function detailView(
   backLabel: string,
   e1rm: readonly E1rmPoint[] | undefined,
 ): (HTMLElement | null)[] {
-  const back = h(
-    'button',
-    { type: 'button', class: 'hist-back', 'data-history-back': true, onclick: actions.onBack },
-    icon('back', 'md'),
-    h('span', {}, backLabel),
-  );
+  // M13d task 40c: the shared round Back (backButton, `data-swipe-back` included).
+  const back = backButton(() => actions.onBack(), backLabel, { 'data-history-back': true });
   const title = h('h1', { class: 'page-title hist-title' }, name);
   if (d.sessions.length === 0) {
     return [

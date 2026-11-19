@@ -11,6 +11,9 @@ import {
   getCoachVoice,
   getExerciseNote,
   getHandsFree,
+  getLengthUnit,
+  getTextSize,
+  getUnitPrefs,
   getSpokenCount,
   getUnit,
   lastSessionSets,
@@ -24,6 +27,9 @@ import {
   setCoachTips,
   setCoachVoice,
   setHandsFree,
+  setLengthUnit,
+  setTextSize,
+  setUnitPrefs,
   setSpokenCount,
   setUnit,
   setsForExercises,
@@ -1308,5 +1314,92 @@ describe('GymDb v11 (M12 slice 2 weekly check-in)', () => {
     const row = { weekStart: '2026-11-16', energy: 4 as const, sleep: 3 as const, at: 7 };
     await db.checkIns.put(row);
     expect(await db.checkIns.get('2026-11-16')).toEqual(row);
+  });
+});
+
+describe('GymDb length unit and unit prefs (M13d task 11)', () => {
+  it("with no 'lengthUnit' row follows the weight unit (kg → cm, lb → in), the 1.16 behaviour", async () => {
+    expect(await getLengthUnit(db)).toBe('cm');
+    expect(await getUnitPrefs(db)).toEqual({ weight: 'kg', length: 'cm' });
+    await setUnit(db, 'lb');
+    expect(await getLengthUnit(db)).toBe('in');
+    expect(await getUnitPrefs(db)).toEqual({ weight: 'lb', length: 'in' });
+    expect(await db.settings.get('lengthUnit')).toBeUndefined();
+  });
+
+  it('a stored length unit wins over the weight unit and survives a reopen', async () => {
+    await setUnit(db, 'lb');
+    await setLengthUnit(db, 'cm');
+    expect(await getLengthUnit(db)).toBe('cm');
+    await setUnit(db, 'kg');
+    await setLengthUnit(db, 'in');
+    const name = db.name;
+    db.close();
+    db = new GymDb(name);
+    await db.open();
+    expect(await getUnitPrefs(db)).toEqual({ weight: 'kg', length: 'in' });
+    expect(await db.settings.get('lengthUnit')).toEqual({ key: 'lengthUnit', value: 'in' });
+  });
+
+  it('an unknown stored length unit reads as the fallback', async () => {
+    await db.settings.put({ key: 'lengthUnit', value: 'ft' });
+    expect(await getLengthUnit(db)).toBe('cm');
+    await setUnit(db, 'lb');
+    await db.settings.put({ key: 'lengthUnit', value: 3 });
+    expect(await getLengthUnit(db)).toBe('in');
+  });
+
+  it('setUnitPrefs writes both rows together and getUnitPrefs reads them back', async () => {
+    for (const prefs of [
+      { weight: 'lb', length: 'in' },
+      { weight: 'kg', length: 'in' },
+      { weight: 'lb', length: 'cm' },
+      { weight: 'kg', length: 'cm' },
+    ] as const) {
+      await setUnitPrefs(db, prefs);
+      expect(await getUnitPrefs(db)).toEqual(prefs);
+      expect(await getUnit(db)).toBe(prefs.weight);
+      expect(await getLengthUnit(db)).toBe(prefs.length);
+    }
+  });
+
+  it('setUnitPrefs is one transaction: a bad value writes neither row', async () => {
+    await setUnitPrefs(db, { weight: 'kg', length: 'cm' });
+    await expect(setUnitPrefs(db, { weight: 'lb', length: 'yd' as never })).rejects.toThrow(RangeError);
+    await expect(setUnitPrefs(db, { weight: 'st' as never, length: 'in' })).rejects.toThrow(RangeError);
+    await expect(setLengthUnit(db, 'mm' as never)).rejects.toThrow(RangeError);
+    expect(await getUnitPrefs(db)).toEqual({ weight: 'kg', length: 'cm' });
+  });
+
+  it('never touches stored kg / cm values (sets keep their kg)', async () => {
+    await saveSet(db, log({ weightKg: 22.5 }));
+    await setUnitPrefs(db, { weight: 'lb', length: 'in' });
+    expect((await setsForSession(db, 's1')).map((r) => r.weightKg)).toEqual([22.5]);
+  });
+});
+
+describe('GymDb text size (M13d task 20)', () => {
+  it("defaults to 'standard' with no row", async () => {
+    expect(await getTextSize(db)).toBe('standard');
+  });
+
+  it('remembers each size and reads it back after reopening', async () => {
+    for (const s of ['large', 'larger', 'standard'] as const) {
+      await setTextSize(db, s);
+      expect(await getTextSize(db)).toBe(s);
+    }
+    await setTextSize(db, 'larger');
+    const name = db.name;
+    db.close();
+    db = new GymDb(name);
+    await db.open();
+    expect(await getTextSize(db)).toBe('larger');
+    expect(await db.settings.get('textSize')).toEqual({ key: 'textSize', value: 'larger' });
+  });
+
+  it("reads an unknown stored value as 'standard' and refuses to write one", async () => {
+    await db.settings.put({ key: 'textSize', value: 'huge' });
+    expect(await getTextSize(db)).toBe('standard');
+    await expect(setTextSize(db, 'huge' as never)).rejects.toThrow(RangeError);
   });
 });

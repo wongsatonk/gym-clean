@@ -53,7 +53,7 @@
   min-width: 0;
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -61,14 +61,12 @@
   color: var(--text-2);
 }
 
+/* M13d task 40c: Change, Save and Not now are round iconButtons (word under the circle). */
 .feel-change {
   flex: none;
   min-height: var(--tap-min);
   min-width: var(--tap-min);
-  padding: 0 14px;
   font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
 }
 
 .feel-panel {
@@ -86,16 +84,16 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
 }
 
 .feel-hint {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
   color: var(--text-2);
 }
 
@@ -191,25 +189,16 @@
 }
 
 .feel-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
   margin-top: 4px;
 }
 
 .feel-btn {
   min-height: var(--tap-min);
-  padding: 0 14px;
+  min-width: 88px;
   font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
-  border: var(--line-w) solid var(--line);
-}
-
-.feel-save {
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
 }
 
 /* "Go easy on shoulders today?": on the feel row and on the readiness card. */

@@ -10,8 +10,7 @@
   background: var(--black);
 }
 
-.scan-view[hidden],
-.fuel-sheet .fuel-secondary[hidden] {
+.scan-view[hidden] {
   display: none;
 }
 

@@ -502,3 +502,206 @@ describe('moving glow background', () => {
     expect(hexOf('--bg').toLowerCase()).toBe('#0d0f12');
   });
 });
+
+// M13d task 17 (SPEC M13d goal 4, his wife: "font is hard to read"): words use the phone's own
+// font; Barlow Condensed only for numbers, timers, Start, the tab labels and the workout screens
+// (Exercise, Rest, camera, Pause, Summary: "unchanged except the body font"). Paragraphs 1.5,
+// headings 1.2, a 32em measure; no uppercase + tracked labels off the workout screens.
+describe('typography (M13d task 17)', () => {
+  const all = Object.entries(CSS_FILES).flatMap(([file, css]) =>
+    rules(css).map((r) => ({ file, ...r })),
+  );
+  const ruleId = (file: string, selector: string) => `${file} ${selector}`;
+  /** The workout-screen roots (Exercise, Rest, Summary, the camera, Pause). */
+  const WORKOUT =
+    ":is([data-screen='exercise'], [data-screen='rest'], [data-screen='summary'], .camera-sheet, .pause-sheet)";
+
+  /** Every rule that may use --font-display, with why. Anything else is a word: --font-body. */
+  const DISPLAY_OK: Record<string, string> = {
+    [ruleId(
+      '../styles.css',
+      `.summary-title, .exercise-name, .stepper-value, .rest-clock, .stat-value, ${WORKOUT} .page-title, .rep-num, .rep-target, .auto-stop-num, .auto-stop-secs, .cam-rest-clock, .hold-clock`,
+    )]: 'numbers, timers and the workout screens (Start: mainPill.css .start-pill)',
+    [ruleId('../styles.css', '.brand')]: 'the Gym Clean wordmark',
+    [ruleId('./brand.css', '.brand-name')]: 'the Gym Clean wordmark',
+    [ruleId('../styles.css', '.hero-title')]: "Today's workout-day name above Start (84px)",
+    [ruleId('../styles.css', '.last-name')]: 'workout-day name in a number tile',
+    [ruleId('../styles.css', '.day-strip .day-name')]: 'workout-day names on the day cards',
+    [ruleId('../styles.css', '.tile-num')]: 'number',
+    [ruleId('../styles.css', '.tab-label')]: 'tab labels',
+    [ruleId('../styles.css', '.set-badge')]: 'Exercise',
+    [ruleId('../styles.css', '.rest-next-name')]: 'Rest',
+    [ruleId('../styles.css', '.pause-panel .overlay-title')]: 'Pause',
+    [ruleId('../styles.css', '.sum-volume-unit')]: 'Summary',
+    [ruleId('../styles.css', '.sum-bests-title')]: 'Summary',
+    [ruleId('../styles.css', '.sum-best-now')]: 'Summary',
+    [ruleId('../styles.css', '.summary .section-title')]: 'Summary',
+    [ruleId('../styles.css', '.summary .coach-summary-title, .summary .focus-summary-title')]:
+      'Summary',
+    [ruleId('./coach.css', '.coach-apply')]: 'Rest (coach tip)',
+    [ruleId('./devlog.css', '.lsc-value')]: 'Rest (last-set fix): number',
+    [ruleId('./devlog.css', '.lsc-save')]: 'Rest (last-set fix)',
+    [ruleId('./handsfree.css', '.auto-stop-done')]: 'Exercise (hands-free)',
+    [ruleId('./midset.css', ".icon-btn.mid-pill[data-variant='main'] .icon-btn-label")]:
+      "the workout screens' main action word (Set done, Start set, Resume, Done; task 40g)",
+    [ruleId('./midset.css', '.icon-btn.mid-pill.coach-apply-pill .icon-btn-label')]:
+      'Rest (coach tip Apply, as before; task 40g)',
+    [ruleId('./handsfree.css', '.hold-title')]: 'Exercise (hold)',
+    [ruleId('./howto.css', '.howto-phase')]: 'the tempo readout ("Lift 1 s · Lower 2 s")',
+    [ruleId('./exerciseDetail.css', '.detail-best-num')]: 'number',
+    [ruleId('./history.css', '.hist-stat-value, .hist-best-num')]: 'number',
+    [ruleId('./history.css', '.hist-focus-num')]: 'number',
+    [ruleId('./history.css', '.hist-ex-top')]: 'number (reps × weight)',
+    [ruleId('./history.css', '.hist-end-num')]: 'number',
+    [ruleId('./fuel/fuel.css', '.fuel-left-num')]: 'number',
+    [ruleId('./fuel/weighIn.css', '.bc-num')]: 'number',
+    [ruleId('./fuel/fuelLinks.css', '.fp-value')]: 'number',
+    [ruleId('./fuel/fuelForms.css', '.nf-mid input.nf-value')]: 'number',
+    [ruleId('./fuel/fuelForms.css', '.nt-value')]: 'number',
+    [ruleId('./charts/e1rmChart.css', '.e1-best')]: 'number',
+    [ruleId('./screens/today.css', '.today .notices-count')]: 'number',
+    [ruleId('./screens/mainPill.css', '.start-pill.icon-btn .icon-btn-label')]:
+      'Start (the round main button, task 40c)',
+    [ruleId('./screens/feelToday.css', '.feel-num')]: 'number',
+    [ruleId('./screens/coachSettings.css', '.eval-progress')]: 'number',
+    [ruleId('./screens/coachSettings.css', '.eval-stat-num')]: 'number',
+    [ruleId('./screens/calendar.css', '.cal-score-num')]: 'number',
+    [ruleId('./screens/calendar.css', '.cal-day-big-num')]: 'number',
+    [ruleId('./intake/intake.css', '.intake-opts.row .intake-opt')]: 'numbers (days a week)',
+  };
+
+  /** Line-heights between headings (≤ 1.2) and running text (≥ 1.5) allowed only here. */
+  const MID_LINE_HEIGHT_OK: Record<string, string> = {
+    [ruleId('../styles.css', 'html, body')]: 'controls and labels; p and headings set their own',
+    [ruleId(
+      '../styles.css',
+      ":where([data-screen='exercise'], [data-screen='rest'], [data-screen='summary'], .camera-sheet, .pause-sheet) p",
+    )]: 'workout screens keep their spacing',
+    [ruleId('../styles.css', '.cue-text')]: 'Exercise (how-to sheet / detail override it to 1.5)',
+    [ruleId('../styles.css', '.warmup-label')]: 'Exercise',
+    [ruleId('../styles.css', '.cam-learning')]: 'camera',
+    [ruleId('../styles.css', '.cam-note')]: 'camera',
+    [ruleId('./devlog.css', '.lsc-learning')]: 'Rest',
+    [ruleId('./focusSummary.css', '.focus-item-name')]: 'Summary',
+    [ruleId('./focusSummary.css', '.focus-cue, .focus-clean')]: 'Summary',
+    [ruleId('./focusSummary.css', '.focus-explainer')]: 'Summary',
+    [ruleId('./coach.css', '.coach-text')]: 'Rest (coach tip)',
+    [ruleId('./coach.css', '.coach-why')]: 'Rest / Summary',
+    [ruleId('./coach.css', '.coach-item-name')]: 'Summary',
+    [ruleId('./coach.css', '.coach-next')]: 'Summary',
+    [ruleId('./coach.css', '.coach-progress')]: 'Summary',
+    [ruleId('./coach.css', '.stall-line')]: 'Summary',
+    [ruleId('./coach/coach.css', '.undo-text')]:
+      'one-line toast, also the mid-set auto-stop banner',
+    [ruleId('./howto.css', '.ex-badge')]: 'a tappable badge (control)',
+    [ruleId('./coach/chat.css', '.fb-row')]: 'a button row (control)',
+  };
+
+  /** Uppercase or positive letter-spacing allowed only on the workout screens. */
+  const CAPS_OK: Record<string, string> = {
+    [ruleId('../styles.css', `${WORKOUT} .caps`)]: 'Track caps labels (REST, LAST SET)',
+    [ruleId('../styles.css', '.rest-lbl')]: 'Rest',
+    [ruleId('../styles.css', '.rest.mood-track .lsc-prefix')]: 'Rest',
+    [ruleId('../styles.css', '.rep-label')]: 'camera',
+    [ruleId('../styles.css', '.tab-label')]: '0.01em on the condensed tab labels',
+    [ruleId('./brand.css', '.brand-name')]: '0.01em on the wordmark',
+    [ruleId('./coach.css', '.coach-label')]: 'Rest (coach tip)',
+    [ruleId('./handsfree.css', '.cam-rest-label')]: 'camera',
+    [ruleId('./handsfree.css', '.hold-label')]: 'Exercise (hold)',
+  };
+
+  const decl = (body: string, prop: string) => decls(body).find(([k]) => k === prop)?.[1];
+
+  it('--font-body is the system font stack, no web font; --font-display is Barlow Condensed', () => {
+    const body = ROOT['--font-body'] ?? '';
+    expect(body.split(',')[0]?.trim()).toBe('-apple-system');
+    expect(body).toMatch(/system-ui/);
+    expect(body).not.toMatch(/barlow/i);
+    expect(ROOT['--font-display']?.split(',')[0]?.trim()).toBe("'Barlow Condensed'");
+  });
+
+  it('only Barlow Condensed is bundled (no Barlow body import)', () => {
+    const main = readRaw('../main.ts');
+    expect(main).toMatch(/@fontsource\/barlow-condensed\//);
+    expect(main).not.toMatch(/@fontsource\/barlow\//);
+  });
+
+  it('every font-family is a font token (or inherit)', () => {
+    const bad = all
+      .filter((r) => !TOKEN_SELECTORS.has(r.selector))
+      .flatMap((r) =>
+        decls(r.body)
+          .filter(
+            ([k, v]) => k === 'font-family' && !/^(var\(--font-(display|body)\)|inherit)$/.test(v),
+          )
+          .map(([, v]) => `${ruleId(r.file, r.selector)}: ${v}`),
+      );
+    expect(bad).toEqual([]);
+  });
+
+  it('--font-display only on numbers, timers, Start, tab labels and the workout screens', () => {
+    const used = all
+      .filter((r) => decl(r.body, 'font-family') === 'var(--font-display)')
+      .map((r) => ruleId(r.file, r.selector));
+    expect(used.filter((id) => !(id in DISPLAY_OK))).toEqual([]);
+    // No stale entries.
+    expect(Object.keys(DISPLAY_OK).filter((id) => !used.includes(id))).toEqual([]);
+  });
+
+  it('sentence headings use the body font, bold, at 1.2', () => {
+    const heads: [string, string][] = [
+      ['./intake/intake.css', '.intake-q'],
+      ['./onboarding/onboarding.css', '.ob-title'],
+      ['./todo/whatsNewTour.css', '.wn-title'],
+      ['./coach/learnCard.css', '.learn-title'],
+      ['./coach/coach.css', '.cs-title'],
+      ['./howto.css', '.howto-title'],
+      ['./cameraInfoSheet.css', '.camsheet-title'],
+    ];
+    for (const [file, sel] of heads) {
+      const r = all.filter((x) => x.file === file && x.selector === sel);
+      const body = r.map((x) => x.body).join(';');
+      expect(decl(body, 'font-family'), sel).toBe('var(--font-body)');
+      expect(decl(body, 'font-weight'), sel).toBe('700');
+      expect(decl(body, 'line-height'), sel).toBe('var(--lh-head)');
+    }
+    // Page titles (Settings, Fuel, …) are words too: off the workout screens they are body font.
+    const pageTitle = all.filter((r) => r.file === '../styles.css' && r.selector === '.page-title');
+    expect(pageTitle.map((r) => decl(r.body, 'font-family')).filter(Boolean)).toEqual([]);
+    expect(decl(pageTitle.map((r) => r.body).join(';'), 'line-height')).toBe('var(--lh-head)');
+  });
+
+  it('paragraphs 1.5 with a 32em measure, headings 1.2', () => {
+    expect(ROOT['--lh-text']).toBe('1.5');
+    expect(ROOT['--lh-head']).toBe('1.2');
+    const p = rules(stylesCss).find((r) => r.selector === 'p');
+    expect(decl(p?.body ?? '', 'line-height')).toBe('var(--lh-text)');
+    expect(decl(p?.body ?? '', 'max-width')).toBe('32em');
+    const hs = rules(stylesCss).find((r) => r.selector === 'h1, h2, h3, h4');
+    expect(decl(hs?.body ?? '', 'line-height')).toBe('var(--lh-head)');
+  });
+
+  it('no line-height between 1.2 and 1.5 outside the workout screens and controls', () => {
+    const mid = all
+      .filter((r) => {
+        const v = decl(r.body, 'line-height');
+        if (!v || !/^\d+(\.\d+)?$/.test(v)) return false;
+        return Number(v) > 1.2 && Number(v) < 1.5;
+      })
+      .map((r) => ruleId(r.file, r.selector));
+    expect(mid.filter((id) => !(id in MID_LINE_HEIGHT_OK))).toEqual([]);
+    expect(Object.keys(MID_LINE_HEIGHT_OK).filter((id) => !mid.includes(id))).toEqual([]);
+  });
+
+  it('no uppercase or tracked labels outside the workout screens (sentence case)', () => {
+    const caps = all
+      .filter((r) => {
+        const tt = decl(r.body, 'text-transform');
+        const ls = decl(r.body, 'letter-spacing');
+        return tt === 'uppercase' || (ls !== undefined && parseFloat(ls) > 0);
+      })
+      .map((r) => ruleId(r.file, r.selector));
+    expect(caps.filter((id) => !(id in CAPS_OK))).toEqual([]);
+    expect(Object.keys(CAPS_OK).filter((id) => !caps.includes(id))).toEqual([]);
+  });
+});

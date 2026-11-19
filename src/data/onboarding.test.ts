@@ -11,6 +11,7 @@ import {
   ONBOARDING_KEY,
   PERMISSION_CATCH_UP_KEY,
   PERMISSION_PAGES,
+  UNITS_PAGE,
   WELCOME_PAGES,
   getOnboarding,
   loadOnboardingFacts,
@@ -19,11 +20,19 @@ import {
   markPermissionCatchUp,
 } from './onboarding';
 import { saveIntake } from './trainerKit/store';
+import infoPlist from '../../ios/App/App/Info.plist?raw';
 
 // Made-up data only (public repo).
 const T0 = new Date(2026, 10, 17, 9).getTime();
 
 const sentences = (s: string) => s.split(/(?<=[.!?])\s+/).filter((x) => x.trim() !== '');
+const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
+
+/** The iPhone app's Health permission text (task 6 wrote it; M13d task 18 owns its copy). */
+const healthUsage = (): string => {
+  const m = /<key>NSHealthShareUsageDescription<\/key>\s*<string>([^<]*)<\/string>/.exec(infoPlist);
+  return m?.[1] ?? '';
+};
 
 /** Every shown string on the pages and buttons. */
 const allCopy = (): string[] => [
@@ -34,6 +43,12 @@ const allCopy = (): string[] => [
     ...(p.action.kind === 'none' ? [p.action.note] : [p.action.label]),
   ]),
   ...Object.values(ONBOARDING_BUTTONS),
+  UNITS_PAGE.title,
+  UNITS_PAGE.body,
+  UNITS_PAGE.weight.label,
+  UNITS_PAGE.length.label,
+  ...Object.values(UNITS_PAGE.weight.options),
+  ...Object.values(UNITS_PAGE.length.options),
 ];
 
 describe('onboarding copy (data)', () => {
@@ -47,15 +62,38 @@ describe('onboarding copy (data)', () => {
     expect(WELCOME_PAGES.hello.tagline).toBe(APP_TAGLINE);
   });
 
-  it('each page is at most 2 short sentences', () => {
+  // M13d task 18 (SPEC M13d goal 4, "some screens have too much text"): first-run pages are
+  // measured at ≤ 30 words on screen (readability spec), so the data keeps each page short.
+  it('M13d budget: each welcome page is a title + one sentence of ≤ 15 words', () => {
     for (const p of Object.values(WELCOME_PAGES)) {
-      expect(sentences(p.body).length, p.body).toBeLessThanOrEqual(2);
-      for (const s of sentences(p.body)) expect(s.split(/\s+/).length, s).toBeLessThanOrEqual(14);
+      expect(sentences(p.body), p.body).toHaveLength(1);
+      expect(words(p.body), p.body).toBeLessThanOrEqual(15);
+      expect(words(p.title), p.title).toBeLessThanOrEqual(5);
     }
+  });
+
+  it('M13d budget: each permission "why" is one sentence of ≤ 20 words', () => {
     for (const p of Object.values(PERMISSION_PAGES)) {
-      expect(sentences(p.why).length, p.why).toBeLessThanOrEqual(2);
-      for (const s of sentences(p.why)) expect(s.split(/\s+/).length, s).toBeLessThanOrEqual(14);
+      expect(sentences(p.why), p.why).toHaveLength(1);
+      expect(words(p.why), p.why).toBeLessThanOrEqual(20);
     }
+  });
+
+  it('the hello page keeps its privacy line (first-launch e2e looks for it)', () => {
+    expect(WELCOME_PAGES.hello.body).toContain('Everything stays on this phone.');
+  });
+
+  it('Units page: a title, one line of ≤ 15 words, weight kg / lb and height-and-body cm / ft·in', () => {
+    expect(UNITS_PAGE.title).toBe('Units');
+    expect(sentences(UNITS_PAGE.body)).toHaveLength(1);
+    expect(words(UNITS_PAGE.body)).toBeLessThanOrEqual(15);
+    // Goal 3: the units can be changed later right where you type a number.
+    expect(UNITS_PAGE.body).toMatch(/later/i);
+    expect(UNITS_PAGE.weight).toEqual({ label: 'Weight', options: { kg: 'kg', lb: 'lb' } });
+    expect(UNITS_PAGE.length).toEqual({
+      label: 'Height and body',
+      options: { cm: 'cm', in: 'ft·in' },
+    });
   });
 
   it('every string passes checkCopy', () => {
@@ -81,6 +119,11 @@ describe('onboarding copy (data)', () => {
     expect(PERMISSION_PAGES.camera.why).toMatch(/no video is saved or sent/i);
     expect(PERMISSION_PAGES.health.why).toMatch(/read-only/i);
     expect(PERMISSION_PAGES.health.why).toMatch(/stays on this phone/i);
+    // M13d-q2: Health also pre-fills Set up Fuel with height, birth year and sex.
+    expect(PERMISSION_PAGES.health.why).toMatch(/\bheight\b/i);
+    expect(PERMISSION_PAGES.health.why).toMatch(/\bbirthday\b/i);
+    expect(PERMISSION_PAGES.health.why).toMatch(/\bsex\b/i);
+    expect(PERMISSION_PAGES.health.why).toMatch(/\bFuel\b/);
     expect(PERMISSION_PAGES.mic.why).toMatch(/hold/i);
     expect(PERMISSION_PAGES.mic.why).toMatch(/never stored/i);
     expect(PERMISSION_PAGES.notifications.why).toMatch(/off/i);
@@ -94,13 +137,29 @@ describe('onboarding copy (data)', () => {
     for (const p of Object.values(PERMISSION_PAGES)) expect(p.action.kind).not.toBe('none');
   });
 
-  it('the mic page says Allow also sets up on-phone speech, how long it takes, and that audio stays put', () => {
+  it('the mic page says who you talk to, that speech is set up on this phone over Wi-Fi, and that audio stays put', () => {
     const why = PERMISSION_PAGES.mic.why;
-    expect(why).toMatch(/allow/i);
+    expect(why).toMatch(/\bhold to ask the coach\b/i);
+    expect(why).toMatch(/setup|set up/i);
     expect(why).toMatch(/speech/i);
     expect(why).toMatch(/on this phone/i);
-    expect(why).toMatch(/about a minute on wi-fi/i);
+    expect(why).toMatch(/wi-fi/i);
     expect(why).toMatch(/never stored or sent/i);
+    // M13d follow-up (q): the promise names the audio itself.
+    expect(why).toMatch(/your voice is never stored or sent/i);
+    expect(words(why)).toBeLessThanOrEqual(20);
+  });
+
+  it('the iPhone Health permission text (Info.plist): what is read and why, private, short, to "you"', () => {
+    const text = healthUsage();
+    expect(text).not.toBe('');
+    for (const w of [/\bsleep\b/i, /\bworkouts\b/i, /\bweight\b/i, /\bheight\b/i, /\bbirthday\b/i, /\bsex\b/i])
+      expect(text, String(w)).toMatch(w);
+    expect(text).toMatch(/\bFuel\b/);
+    expect(text).toMatch(/stays on this phone/i);
+    expect(words(text)).toBeLessThanOrEqual(25);
+    expect(checkCopy(text)).toEqual({ ok: true, hits: [] });
+    expect(text).not.toMatch(/\b(he|him|his|she|her|hers)\b/i);
   });
 
   it('every permission page has "Not now"; buttons have Skip, Back, Next', () => {

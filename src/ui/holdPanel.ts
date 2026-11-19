@@ -12,8 +12,11 @@
 // aria-live="off" so a bare number isn't announced every second. Each button fires once; after a
 // tap both are disabled until the camera view disposes the panel.
 // Reduced motion: no animation is used.
+// M13d task 40g (styling only): both buttons are full-width secondary round-button pills, ≥ 80px
+// as before (Set done below stays the one main action).
 
 import { h } from './dom';
+import { midPill } from './midsetButtons';
 import './handsfree.css';
 
 /** Why autoSet held the set (B1's `hold` action reason). */
@@ -75,41 +78,6 @@ export function holdStatusText(reps: number, partials: number, lastSet: boolean)
   return `Set on hold, ${plural(reps, 'rep')}${p}. Tap Continue set or ${holdNextLabel(lastSet)}.`;
 }
 
-// ---------- icons (original, decorative) ----------
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-function icon(paths: string[], fill: boolean): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  for (const [k, v] of Object.entries({
-    viewBox: '0 0 24 24',
-    width: '32',
-    height: '32',
-    'aria-hidden': 'true',
-    focusable: 'false',
-    class: 'hold-icon',
-  }))
-    svg.setAttribute(k, v);
-  for (const d of paths) {
-    const p = document.createElementNS(SVG_NS, 'path');
-    p.setAttribute('d', d);
-    p.setAttribute('fill', fill ? 'currentColor' : 'none');
-    p.setAttribute('stroke', 'currentColor');
-    p.setAttribute('stroke-width', fill ? '1.5' : '2.5');
-    p.setAttribute('stroke-linecap', 'round');
-    p.setAttribute('stroke-linejoin', 'round');
-    svg.append(p);
-  }
-  return svg;
-}
-
-/** Rounded play triangle: carry on. */
-const continueIcon = () => icon(['M8 5.5v13l10.5-6.5z'], true);
-/** Skip-forward: play triangle against a bar. */
-const nextIcon = () => icon(['M6 5.5v13l9.5-6.5z', 'M18.5 5.5v13'], false);
-/** Check mark: save. */
-const saveIcon = () => icon(['M5 12.5 10 17.5 19.5 7'], false);
-
 // ---------- component ----------
 
 export function createHoldPanel(opts: HoldPanelOptions): HoldPanelHandle {
@@ -135,28 +103,22 @@ export function createHoldPanel(opts: HoldPanelOptions): HoldPanelHandle {
     cb();
   };
 
-  const continueBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'hold-btn hold-continue',
-      'data-hold-action': 'continue',
-      onclick: choose(opts.onContinue),
-    },
-    continueIcon(),
-    h('span', {}, 'Continue set'),
-  );
-  const nextBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'hold-btn hold-next',
-      'data-hold-action': opts.lastSet ? 'save' : 'next',
-      onclick: choose(opts.onNext),
-    },
-    opts.lastSet ? saveIcon() : nextIcon(),
-    h('span', {}, holdNextLabel(opts.lastSet)),
-  );
+  const continueBtn = midPill({
+    icon: 'play',
+    label: 'Continue set',
+    wide: true,
+    class: 'hold-pill',
+    hooks: { 'data-hold-action': 'continue' },
+    onClick: choose(opts.onContinue),
+  });
+  const nextBtn = midPill({
+    icon: opts.lastSet ? 'check' : 'skip',
+    label: holdNextLabel(opts.lastSet),
+    wide: true,
+    class: 'hold-pill',
+    hooks: { 'data-hold-action': opts.lastSet ? 'save' : 'next' },
+    onClick: choose(opts.onNext),
+  });
 
   const partialText = holdPartialsLine(opts.partials);
   const status = h(

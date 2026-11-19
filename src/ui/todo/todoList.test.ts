@@ -79,9 +79,13 @@ describe('todoListScreen', () => {
     expect(btn?.getAttribute('aria-label')).toBe('Food photos, Checkpoint D: Done');
     btn?.click();
     expect(calls.open).toEqual(['food']);
-    el.find((e) => e.hasAttribute('data-copy-report'))[0]?.click();
+    const copy = el.find((e) => e.hasAttribute('data-copy-report'))[0];
+    // M13d task 40d: Copy report is a round icon button on a pill row.
+    expect(copy?.hasAttribute('data-icon-btn')).toBe(true);
+    copy?.click();
     expect(calls.copy).toBe(1);
-    el.byClass('ghost-btn')[0]?.click();
+    // The top-bar Back (task 40a restyles it; `data-back` stays).
+    el.find((e) => e.hasAttribute('data-back'))[0]?.click();
     expect(calls.back).toBe(1);
   });
 

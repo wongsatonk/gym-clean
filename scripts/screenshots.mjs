@@ -59,6 +59,12 @@
 //                                            #   rules route (fake GymBrain, model not asked),
 //                                            #   Apply/Undo; the 1.15.2 What's New page:
 //                                            #   m1152-verify-*.png
+//   node scripts/screenshots.mjs m13d [native|reduced]
+//                                            # M13d verify: iPhone-app first run (Units, Health,
+//                                            #   intake, Set up Fuel in flow + unit switch), Today,
+//                                            #   Settings Units/Display, Fuel, weigh-in, Exercise,
+//                                            #   Rest, Text size Larger, pressed / reduced motion:
+//                                            #   m13d-verify-*.png
 //
 // For each screen it records document.documentElement.scrollWidth, console errors/warnings and
 // page errors, and prints a JSON summary. The fake camera plays the synthetic curl clip
@@ -5454,6 +5460,368 @@ async function m13c(browser, only) {
   if (!only || only === 'reduced') await m13cReduced(browser);
 }
 
+// ---------------------------------------------------------------------------------------------
+// M13d verify (task 32): node scripts/screenshots.mjs m13d [native|reduced]
+//   native  — the iPhone-app look (fake Capacitor + GymHealth, made-up 63.4 kg weigh-in, profile
+//             170 cm / 1990 / female), fresh install, en-TH: welcome → Units → Apple Health →
+//             intake (summary, plan + Fuel applied) → Set up Fuel in the flow (unit switch to lb +
+//             ft·in and back: no drift; then lb kept) → camera / mic / reminders → Today; Settings
+//             → Units + Display; Fuel; weigh-in; a workout Exercise + Rest; Text size Larger on
+//             Today; a pressed main button. Writes docs/screenshots/m13d-verify-*.png.
+//   reduced — the web first run with Reduce Motion: page order welcome → Units → intake → camera,
+//             a pressed main button (no scale): m13d-verify-pressed-reduced-motion.png.
+const M13D_AT = new Date(2026, 10, 13, 18, 0).getTime();
+
+async function m13dPhone(browser, { native = false, reducedMotion = 'no-preference' } = {}) {
+  const ctx = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    ignoreHTTPSErrors: true,
+    permissions: ['camera'],
+    locale: 'en-TH',
+    reducedMotion,
+  });
+  const offsite = [];
+  const fetched = [];
+  await ctx.route('**/*', (route) => {
+    const url = new URL(route.request().url());
+    if (/\.(woff2?|ttf|otf|svg)(\?|$)/.test(url.pathname)) fetched.push(url.pathname);
+    if (url.hostname === 'localhost' || url.protocol === 'data:' || url.protocol === 'blob:')
+      return route.continue();
+    offsite.push(url.href);
+    return route.abort();
+  });
+  await ctx.addInitScript(() => {
+    window.__spoken = [];
+    class FakeUtterance extends EventTarget {
+      constructor(text) { super(); this.text = text; this.lang = ''; this.rate = 1; this.volume = 1; this.voice = null; this.pitch = 1; }
+    }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: FakeUtterance, configurable: true });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        speak: (u) => { if (u.text && u.volume !== 0) window.__spoken.push(u.text); },
+        cancel: () => {}, pause: () => {}, resume: () => {}, getVoices: () => [],
+        addEventListener: () => {}, speaking: false, pending: false, paused: false,
+      },
+    });
+    Object.defineProperty(navigator, 'wakeLock', {
+      configurable: true,
+      value: { request: async () => ({ addEventListener: () => {}, release: async () => {} }) },
+    });
+  });
+  if (native)
+    await ctx.addInitScript(() => {
+      const log = { requestRead: [], read: [] };
+      window.__fakeHealth = log;
+      window.__haptics = [];
+      const weighIn = { start: new Date(2026, 10, 13, 7, 0).getTime(), kg: 63.4, source: 'Scale' };
+      const GymHealth = {
+        isAvailable: async () => ({ available: true }),
+        requestRead: async (o) => { log.requestRead.push(o); return { requested: true }; },
+        read: async ({ types, since }) => {
+          log.read.push([...types]);
+          const out = {};
+          for (const t of types) out[t] = t === 'bodyMass' && weighIn.start >= since ? [{ ...weighIn }] : [];
+          return out;
+        },
+        readProfile: async () => ({ heightCm: 170, birthYear: 1990, sex: 'female' }),
+      };
+      const Haptics = { impact: async (o) => { window.__haptics.push(o); } };
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        getPlatform: () => 'ios',
+        Plugins: { GymHealth, Haptics },
+      };
+    });
+  const page = await ctx.newPage();
+  const log = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning') log.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => log.push(`pageerror: ${e.message}`));
+  m13cPage = page;
+  await page.clock.install({ time: M13D_AT });
+  return { ctx, page, log, offsite, fetched };
+}
+
+async function m13dSetting(page, key) {
+  return page.evaluate((key) => new Promise((res, rej) => {
+    const o = indexedDB.open('gym-clean');
+    o.onerror = () => rej(o.error);
+    o.onsuccess = () => {
+      const r = o.result.transaction('settings').objectStore('settings').get(key);
+      r.onsuccess = () => { o.result.close(); res(r.result?.value); };
+      r.onerror = () => rej(r.error);
+    };
+  }), key);
+}
+
+async function m13dRows(page, store) {
+  return page.evaluate((store) => new Promise((res, rej) => {
+    const o = indexedDB.open('gym-clean');
+    o.onerror = () => rej(o.error);
+    o.onsuccess = () => {
+      const r = o.result.transaction(store).objectStore(store).getAll();
+      r.onsuccess = () => { o.result.close(); res(r.result); };
+      r.onerror = () => rej(r.error);
+    };
+  }), store);
+}
+
+/** Body-text words in the first viewport, smallest font, paragraphs' size + line-height. */
+async function m13dRead(page, scope = 'body') {
+  return page.evaluate((scope) => {
+    const root = document.querySelector(scope) ?? document.body;
+    const vis = (e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';
+    const inView = (e) => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
+    const paras = [...root.querySelectorAll('p')].filter((p) => vis(p) && inView(p) && p.textContent.trim());
+    const words = paras.reduce((n, p) => n + p.textContent.trim().split(/\s+/).length, 0);
+    const pMin = Math.min(...paras.map((p) => parseFloat(getComputedStyle(p).fontSize)), Infinity);
+    const lhMin = Math.min(...paras.map((p) => {
+      const cs = getComputedStyle(p);
+      return cs.lineHeight === 'normal' ? 1.2 : parseFloat(cs.lineHeight) / parseFloat(cs.fontSize);
+    }), Infinity);
+    return { paraWords: words, paraMinPx: pMin, paraMinLineHeight: Math.round(lhMin * 100) / 100 };
+  }, scope);
+}
+
+async function m13dShot(p, name, extra = {}, opts = {}) {
+  await p.page.waitForTimeout(opts.wait ?? 450);
+  const sizes = await m13cSizes(p.page, opts.scope);
+  const read = await m13dRead(p.page, opts.scope);
+  await shot(p.page, p.log, `m13d-verify-${name}`, { sizes, read, ...extra });
+}
+
+/** Holds a press on `loc` (mouse down), screenshots, returns the circle's transform + timing. */
+async function m13dPress(p, loc, name) {
+  await loc.scrollIntoViewIfNeeded();
+  const box = await loc.boundingBox();
+  await p.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await p.page.mouse.down();
+  await p.page.waitForTimeout(300);
+  const style = await loc.evaluate((el) => {
+    const c = el.querySelector('.icon-btn-circle') ?? el;
+    const cs = getComputedStyle(c);
+    return {
+      transform: cs.transform,
+      transitionProperty: cs.transitionProperty,
+      transitionDuration: cs.transitionDuration,
+      circle: (() => { const r = c.getBoundingClientRect(); return `${Math.round(r.width)}x${Math.round(r.height)}`; })(),
+    };
+  });
+  await shot(p.page, p.log, `m13d-verify-${name}`, { press: style });
+  await p.page.mouse.up();
+  return style;
+}
+
+async function m13dNative(browser) {
+  const p = await m13dPhone(browser, { native: true });
+  const { page } = p;
+  const flow = { flow: 'm13d-native', steps: [] };
+  const welcome = page.locator('[data-screen="welcome"]');
+  const obPage = welcome.locator('[data-ob="page"]');
+  const primary = welcome.locator('[data-ob="primary"]');
+  const intake = page.locator('main[data-screen="intake"]');
+  const setup = page.locator('main[data-screen="fuel-setup"]');
+  await page.goto(BASE + '/');
+  await welcome.waitFor();
+
+  // Welcome pages → Units → Health (record the step order).
+  for (let i = 0; i < 8; i++) {
+    const key = await obPage.getAttribute('data-step');
+    flow.steps.push(key);
+    if (key === 'permission:health') break;
+    if (key === 'units') {
+      flow.unitsChosen = await welcome.locator('[aria-pressed="true"], [aria-checked="true"]')
+        .evaluateAll((els) => els.map((e) => e.textContent.trim()));
+      await m13dShot(p, 'first-run-units', { step: key }, { scope: '[data-screen="welcome"]' });
+    } else {
+      await m13dShot(p, `first-run-${(key ?? String(i)).replace(/[^a-z0-9-]/gi, '-')}`, { step: key }, { scope: '[data-screen="welcome"]' });
+      if (i === 0) flow.pressMain = await m13dPress(p, primary, 'pressed-main');
+    }
+    await primary.tap();
+    await page.waitForFunction((k) => document.querySelector('[data-ob="page"]')?.getAttribute('data-step') !== k, key);
+  }
+  await m13dShot(p, 'first-run-health', { step: 'permission:health',
+    intakeOpenYet: await intake.count() }, { scope: '[data-screen="welcome"]' });
+  await primary.tap();
+  await welcome.locator('[data-ob="granted"]').waitFor();
+  flow.healthRequested = await page.evaluate(() => window.__fakeHealth.requestRead);
+  flow.haptics = await page.evaluate(() => window.__haptics.length);
+  await m13dShot(p, 'first-run-health-connected', {}, { scope: '[data-screen="welcome"]' });
+  await primary.tap();
+
+  // Intake.
+  await intake.waitFor();
+  for (const [id, pick] of [['goal', 'fat'], ['days', '3'], ['length', '45'], ['experience', 'new'], ['easyOn', null], ['wantsCore', null]]) {
+    await page.waitForFunction((id) => document.querySelector('main[data-screen="intake"]')?.getAttribute('data-step') === id, id);
+    if (id === 'goal') await m13dShot(p, 'intake-goal', {}, { scope: 'main[data-screen="intake"]' });
+    if (pick) await intake.locator(`[data-option="${pick}"]`).tap();
+    await intake.locator('[data-intake-next]').tap();
+  }
+  await page.waitForFunction(() => document.querySelector('main[data-screen="intake"]')?.getAttribute('data-step') === 'summary');
+  await m13dShot(p, 'intake-summary', {}, { scope: 'main[data-screen="intake"]' });
+  for (const id of ['plan', 'fuel']) {
+    const b = intake.locator(`[data-apply="${id}"]`);
+    if (await b.count()) { await b.tap(); await page.waitForFunction((id) => document.querySelector(`[data-apply="${id}"]`)?.getAttribute('data-applied') === 'true', id); }
+  }
+  await m13dShot(p, 'intake-summary-applied', {}, { scope: 'main[data-screen="intake"]' });
+  await intake.locator('[data-intake-done]').tap();
+
+  // Set up Fuel inside the flow.
+  await setup.waitFor();
+  const v = (f) => setup.locator(`[data-field="${f}"] .nf-value`);
+  const heightText = () => setup.locator('[data-field="height"]').evaluate((el) =>
+    [...el.querySelectorAll('input')].map((i) => `${i.getAttribute('data-part') ?? 'v'}=${i.value}`).join(' '));
+  flow.fuelStep = {
+    inFlow: await page.locator('[data-onboarding-step="fuelSetup"]').count(),
+    tabbar: await page.locator('[data-tabbar]').count(),
+    fromHealth: await setup.locator('[data-from-health]').evaluateAll((els) => els.map((e) => e.getAttribute('data-from-health'))),
+    weight: await v('weight').inputValue(), height: await heightText(),
+  };
+  await m13dShot(p, 'fuel-setup-in-flow', flow.fuelStep, { scope: 'main[data-screen="fuel-setup"]' });
+  await setup.locator('[data-unit-for="weight"]').getByRole('button', { name: 'lb', exact: true }).tap();
+  await setup.locator('[data-unit-for="height"]').getByRole('button', { name: 'ft·in', exact: true }).tap();
+  flow.switched = { weight: await v('weight').inputValue(), height: await heightText(),
+    unitRow: await m13dSetting(page, 'unit'), lengthUnitRow: await m13dSetting(page, 'lengthUnit'),
+    nutritionBeforeSave: await m13dSetting(page, 'nutrition') ?? null };
+  await m13dShot(p, 'fuel-setup-switch-lb-ftin', flow.switched, { scope: 'main[data-screen="fuel-setup"]' });
+  for (let i = 0; i < 10; i++) {
+    await setup.locator('[data-unit-for="weight"]').getByRole('button', { name: 'kg', exact: true }).tap();
+    await setup.locator('[data-unit-for="weight"]').getByRole('button', { name: 'lb', exact: true }).tap();
+    await setup.locator('[data-unit-for="height"]').getByRole('button', { name: 'cm', exact: true }).tap();
+    await setup.locator('[data-unit-for="height"]').getByRole('button', { name: 'ft·in', exact: true }).tap();
+  }
+  await setup.locator('[data-unit-for="weight"]').getByRole('button', { name: 'kg', exact: true }).tap();
+  await setup.locator('[data-unit-for="height"]').getByRole('button', { name: 'cm', exact: true }).tap();
+  flow.switchedBack = { weight: await v('weight').inputValue(), height: await heightText() };
+  // Leave lb + ft·in chosen for the rest of the run (app-wide).
+  await setup.locator('[data-unit-for="weight"]').getByRole('button', { name: 'lb', exact: true }).tap();
+  await setup.locator('[data-unit-for="height"]').getByRole('button', { name: 'ft·in', exact: true }).tap();
+  await setup.locator('[data-field="activity"] [data-choice="moderate"]').tap();
+  await setup.locator('[data-setup-save]').tap();
+  for (const perm of ['camera', 'mic', 'notifications']) {
+    await page.waitForFunction((s) => document.querySelector('[data-ob="page"]')?.getAttribute('data-step') === s, `permission:${perm}`);
+    flow.steps.push(`permission:${perm}`);
+    if (perm === 'camera') await m13dShot(p, 'first-run-camera', {}, { scope: '[data-screen="welcome"]' });
+    await welcome.locator('[data-ob="not-now"]').tap();
+  }
+  await page.locator('[data-cal]').first().waitFor();
+  flow.saved = { nutrition: await m13dSetting(page, 'nutrition'), onboarding: await m13dSetting(page, 'onboarding'),
+    unit: await m13dSetting(page, 'unit'), lengthUnit: await m13dSetting(page, 'lengthUnit'),
+    weighIns: await m13dRows(page, 'weighIns') };
+  await m13dShot(p, 'today', { tabbar: await page.locator('[data-tabbar]').count() });
+  await page.reload();
+  await page.locator('[data-cal]').first().waitFor();
+  flow.reloadWelcome = await welcome.count();
+
+  // Settings → Units + Display.
+  await page.locator('[data-tab="settings"]').tap();
+  await page.locator('main[data-screen="settings"]').waitFor();
+  await m13dShot(p, 'settings-top');
+  await page.locator('[data-section="unit"]').scrollIntoViewIfNeeded();
+  flow.settingsUnits = await page.locator('[data-section="unit"] [aria-pressed="true"], [data-section="unit"] [aria-checked="true"], [data-section="unit"] .on')
+    .evaluateAll((els) => els.map((e) => e.textContent.trim()));
+  await m13dShot(p, 'settings-units', { chosen: flow.settingsUnits });
+  await page.locator('[data-section="display"]').scrollIntoViewIfNeeded();
+  await m13dShot(p, 'settings-display');
+
+  // Fuel + weigh-in.
+  await page.locator('[data-tab="fuel"]').tap();
+  await page.locator('main[data-screen="fuel"]').waitFor();
+  await m13dShot(p, 'fuel');
+  await page.locator('[data-weigh-in]').first().tap();
+  await page.locator('main[data-screen="weigh-in"]').waitFor();
+  await m13dShot(p, 'weigh-in', { value: await page.locator('main[data-screen="weigh-in"] .nf-value').first().inputValue().catch(() => null) });
+  // The weigh-in is a sub-screen (no tab bar): its Back returns to Fuel.
+  await page.locator('main[data-screen="weigh-in"] [data-swipe-back], main[data-screen="weigh-in"] [data-back]').first().tap();
+  await page.locator('main[data-screen="fuel"]').waitFor();
+  await page.locator('[data-tab="today"]').tap();
+  await page.locator('[data-cal]').first().waitFor();
+
+  // A workout: Exercise + Rest.
+  const start = page.locator('main[data-screen="today"] [data-start]').first();
+  flow.todayStart = await start.count();
+  if (flow.todayStart) {
+    await start.click();
+    await page.getByRole('button', { name: 'Start workout' }).click();
+    await page.locator('[data-screen="exercise"]').waitFor();
+    flow.exerciseWeightUnit = await page.locator('[data-screen="exercise"]').evaluate((el) =>
+      /\blb\b/.test(el.textContent) ? 'lb' : /\bkg\b/.test(el.textContent) ? 'kg' : '?');
+    await m13dShot(p, 'exercise', { unitSwitches: await page.locator('[data-unit-switch]').count() });
+    await page.clock.runFor(30_000);
+    await page.getByRole('button', { name: 'Set done' }).click();
+    await page.locator('[data-rest-clock]').waitFor();
+    await page.clock.runFor(2_000);
+    await m13dShot(p, 'rest', { unitSwitches: await page.locator('[data-unit-switch]').count() });
+    flow.spokenInWorkout = await page.evaluate(() => window.__spoken.length);
+    // Leave the workout without saving (back to Today).
+    await page.reload();
+    await page.locator('main').first().waitFor();
+    await page.waitForTimeout(800);
+    const tab = page.locator('[data-tab="today"]');
+    if (await tab.count()) await tab.tap().catch(() => {});
+  }
+
+  // Text size Larger → Today.
+  await page.locator('[data-tab="settings"]').tap().catch(() => {});
+  await page.locator('[data-section="display"]').scrollIntoViewIfNeeded();
+  await page.locator('[data-section="display"]').getByRole('button', { name: 'Larger', exact: true }).tap();
+  flow.textSize = { row: await m13dSetting(page, 'textSize'), html: await page.locator('html').getAttribute('data-text-size') };
+  await m13dShot(p, 'settings-display-larger', flow.textSize);
+  await page.locator('[data-tab="today"]').tap();
+  await page.locator('[data-cal]').first().waitFor();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  flow.largerToday = await page.evaluate(() => {
+    const s = document.querySelector('main[data-screen="today"] [data-start]');
+    const r = s?.getBoundingClientRect();
+    return { start: !!s, startBottom: r ? Math.round(r.bottom) : null, inFirstViewport: r ? r.top >= 0 && r.bottom <= innerHeight : false,
+      bodyPx: parseFloat(getComputedStyle(document.querySelector('main[data-screen="today"] p') ?? document.body).fontSize) };
+  });
+  await m13dShot(p, 'today-text-larger', flow.largerToday);
+  flow.offsite = p.offsite;
+  flow.fontOrIconFetches = p.fetched;
+  flow.spoken = await page.evaluate(() => window.__spoken);
+  results.push(flow);
+  await p.ctx.close();
+}
+
+async function m13dReduced(browser) {
+  const p = await m13dPhone(browser, { reducedMotion: 'reduce' });
+  const { page } = p;
+  const flow = { flow: 'm13d-web-reduced', steps: [] };
+  const welcome = page.locator('[data-screen="welcome"]');
+  const obPage = welcome.locator('[data-ob="page"]');
+  const primary = welcome.locator('[data-ob="primary"]');
+  const intake = page.locator('main[data-screen="intake"]');
+  await page.goto(BASE + '/');
+  await welcome.waitFor();
+  flow.pressReduced = await m13dPress(p, primary, 'pressed-reduced-motion');
+  for (let i = 0; i < 8; i++) {
+    if (await intake.count()) break;
+    const key = await obPage.getAttribute('data-step');
+    flow.steps.push(key);
+    await primary.tap();
+    await page.waitForFunction((k) => document.querySelector('main[data-screen="intake"]') ||
+      document.querySelector('[data-ob="page"]')?.getAttribute('data-step') !== k, key);
+  }
+  flow.steps.push('intake');
+  await intake.locator('[data-intake-skip]').tap();
+  await obPage.waitFor();
+  flow.steps.push(await obPage.getAttribute('data-step'));
+  flow.offsite = p.offsite;
+  results.push(flow);
+  await p.ctx.close();
+}
+
+async function m13d(browser, only) {
+  if (!only || only === 'native') await m13dNative(browser);
+  if (!only || only === 'reduced') await m13dReduced(browser);
+}
+
 const milestone = (process.argv[2] ?? 'm4').replace(/^--/, '');
 ensureFakeCamera();
 mkdirSync(OUT, { recursive: true });
@@ -5497,6 +5865,7 @@ try {
   else if (milestone === 'm13b') await m13b(browser, process.argv[3]);
   else if (milestone === 'm13c') await m13c(browser, process.argv[3]);
   else if (milestone === 'm1152') await m1152(browser, process.argv[3]);
+  else if (milestone === 'm13d') await m13d(browser, process.argv[3]);
   else throw new Error(`unknown milestone ${milestone}`);
   await browser.close();
   console.log(JSON.stringify(results, null, 2));

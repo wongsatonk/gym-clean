@@ -19,10 +19,10 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
 }
 
 .readiness-title .ic {
@@ -37,7 +37,7 @@
   flex-direction: column;
   gap: 4px;
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -57,10 +57,15 @@
   border: var(--line-w) solid var(--line);
 }
 
-.readiness-cta {
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
+/* M13d task 40c: Lighter today / Not today / Train as planned are round iconButtons with the word
+   beside the circle, one full-width row each (the whole row is the tap area). */
+.readiness-act.icon-btn {
+  justify-content: flex-start;
+  min-height: var(--tap-min);
+}
+
+.readiness-act.icon-btn .icon-btn-label {
+  font-size: var(--fs-cue);
 }
 
 /* M12 1b: "Go easy on shoulders today?" (one per sore area), between the main choice and the

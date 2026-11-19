@@ -29,8 +29,9 @@ function strings(t: TodoTopic): string[] {
 }
 
 describe('TODO_TOPICS', () => {
-  it('has the 12 topics of the SPEC table plus the 1.13.0 to 1.16.0 ones, in order, with their checkpoints', () => {
+  it('has the 12 topics of the SPEC table plus the 1.13.0 to 1.16.3 ones, in order, with their checkpoints', () => {
     expect(TODO_TOPICS.map((t) => [t.id, t.checkpoint])).toEqual([
+      ['easier-first-run', 'Checkpoint K4'],
       ['library-abs', 'Checkpoint K3'],
       ['one-arm-sets', 'Checkpoint K2'],
       ['coach-calendar', 'Checkpoint I'],
@@ -58,6 +59,7 @@ describe('TODO_TOPICS', () => {
       'published-look': '1.15.0',
       'one-arm-sets': '1.15.1',
       'library-abs': '1.16.0',
+      'easier-first-run': '1.16.3',
     };
     for (const t of TODO_TOPICS) expect(t.since, t.id).toBe(since[t.id] ?? '1.12.0');
   });
@@ -67,23 +69,36 @@ describe('TODO_TOPICS', () => {
     expect(ids('1.12.0')).toHaveLength(12);
     expect(ids('1.12.0')).not.toContain('trainer-kit-gym');
     expect(ids('1.12.3')).toEqual(ids('1.12.0'));
-    const after114 = ['coach-iphone', 'published-look', 'one-arm-sets', 'library-abs'];
+    const after114 = [
+      'coach-iphone',
+      'published-look',
+      'one-arm-sets',
+      'library-abs',
+      'easier-first-run',
+    ];
     expect(ids('1.13.0')).toEqual(
       TODO_TOPICS.map((t) => t.id).filter((id) => !after114.includes(id)),
     );
     expect(ids('1.13.4')).toEqual(ids('1.13.0'));
-    const after115 = ['published-look', 'one-arm-sets', 'library-abs'];
+    const after115 = ['published-look', 'one-arm-sets', 'library-abs', 'easier-first-run'];
     expect(ids('1.14.0')).toEqual(
       TODO_TOPICS.map((t) => t.id).filter((id) => !after115.includes(id)),
     );
     expect(ids('1.15.0')).toEqual(
-      TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'one-arm-sets' && id !== 'library-abs'),
+      TODO_TOPICS.map((t) => t.id).filter(
+        (id) => !['one-arm-sets', 'library-abs', 'easier-first-run'].includes(id),
+      ),
     );
     expect(ids('1.15.1')).toEqual(
-      TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'library-abs'),
+      TODO_TOPICS.map((t) => t.id).filter(
+        (id) => id !== 'library-abs' && id !== 'easier-first-run',
+      ),
     );
-    expect(ids('1.16.0')).toEqual(TODO_TOPICS.map((t) => t.id));
-    expect(ids('1.16.2')).toEqual(TODO_TOPICS.map((t) => t.id));
+    const upTo1162 = TODO_TOPICS.map((t) => t.id).filter((id) => id !== 'easier-first-run');
+    expect(ids('1.16.0')).toEqual(upTo1162);
+    // Checkpoint K4 waits for 1.16.3 (main bumps APP_RELEASE in M13d task 30).
+    expect(ids('1.16.2')).toEqual(upTo1162);
+    expect(ids('1.16.3')).toEqual(TODO_TOPICS.map((t) => t.id));
     expect(ids('1.11.0')).toEqual([]);
     // Data order is kept, and another list can be passed in.
     expect(topicsForRelease('1.12.0', [byId('trainer-kit-gym'), byId('resign')])).toEqual([
@@ -163,6 +178,7 @@ describe('TODO_TOPICS', () => {
     expect(
       Object.fromEntries(TODO_TOPICS.map((t) => [t.id, autos(t).map((s) => s.detector)])),
     ).toEqual({
+      'easier-first-run': [],
       'library-abs': [],
       'one-arm-sets': ['oneSidedSet'],
       'coach-calendar': ['chatAsked', 'proposalOutcome', 'calendarAfterSession'],
@@ -202,6 +218,97 @@ describe('TODO_TOPICS', () => {
       'hrv',
     ]);
     expect(asks(byId('camera')).map((s) => s.id)).toContain('commit-landmarks');
+  });
+
+  describe('easier first run (1.16.3, Checkpoint K4)', () => {
+    const topic = byId('easier-first-run');
+    const step = (id: string) => asks(topic).find((x) => x.id === id);
+    const text = (id: string) => `${step(id)?.title} ${step(id)?.why ?? ''}`;
+
+    it('is for both apps, titled as in the plan, ask steps only (no new detector), no decisions', () => {
+      expect(topic.title).toBe('Easier first run');
+      expect(topic.checkpoint).toBe('Checkpoint K4');
+      expect(topic.since).toBe('1.16.3');
+      expect(topic.platform).toBe('any');
+      expect(topic.recurring).toBeUndefined();
+      expect(topic.owner).toBeUndefined();
+      expect(autos(topic)).toEqual([]);
+      for (const s of asks(topic)) {
+        expect(s.setting, s.id).toBeUndefined();
+        expect(s.note, s.id).toBe('optional');
+      }
+    });
+
+    it('asks every SPEC K4 question in order, with the region default and the Thai year folded in', () => {
+      expect(asks(topic).map((s) => [s.id, s.options.map((o) => o.id), s.multi, s.tryIt])).toEqual([
+        ['fresh-install', ['fresh', 'spare', 'notYet'], undefined, 'settings'],
+        ['units-first', ['yes', 'lb', 'notFirst'], undefined, undefined],
+        ['health-fill', ['all', 'some', 'none', 'noHealth'], undefined, undefined],
+        ['ends-today', ['yes', 'no'], undefined, undefined],
+        ['easier-read', ['yes', 'mostly', 'no'], undefined, 'settings'],
+        [
+          'too-much-text',
+          ['firstRun', 'fuel', 'settings', 'coach', 'learn', 'other', 'none'],
+          true,
+          undefined,
+        ],
+        ['swipes-ios', ['yes', 'mostly', 'no'], undefined, undefined],
+        ['swipe-off', ['back', 'pages', 'sheet', 'meal', 'none'], true, undefined],
+        ['unit-switch', ['yes', 'mostly', 'no', 'untried'], undefined, 'fuel'],
+        ['buttons-look', ['yes', 'mostly', 'no'], undefined, 'today'],
+        ['buttons-hit', ['yes', 'mostly', 'no'], undefined, undefined],
+        ['thai-year', ['no', 'yes'], undefined, 'calendar'],
+      ]);
+    });
+
+    it('says how to start fresh: back up first, then reinstall or a spare install', () => {
+      expect(text('fresh-install')).toMatch(/Back up/);
+      expect(text('fresh-install')).toMatch(/reinstall/i);
+      expect(text('fresh-install')).toMatch(/spare install/i);
+    });
+
+    it('checks the first run: Units first with kg + cm on a Thai-region phone, Health, Not now, Today', () => {
+      expect(text('units-first')).toMatch(/Units/);
+      expect(text('units-first')).toMatch(/\bkg\b/);
+      expect(text('units-first')).toMatch(/\bcm\b/);
+      expect(text('units-first')).toMatch(/Thai-region/);
+      expect(step('health-fill')?.title).toMatch(/^In the iPhone app, /);
+      for (const w of [
+        /height/i,
+        /birth year/i,
+        /sex/i,
+        /weight/i,
+        /From Apple Health/,
+        /asks once/i,
+      ])
+        expect(text('health-fill')).toMatch(w);
+      expect(text('ends-today')).toMatch(/Set up Fuel/);
+      expect(text('ends-today')).toMatch(/Not now/);
+      expect(text('ends-today')).toMatch(/Today/);
+    });
+
+    it('asks about reading, every swipe (incl. a sheet that bounces back), the switch and the buttons', () => {
+      expect(text('easier-read')).toMatch(/Text size/);
+      expect(step('too-much-text')?.title).toMatch(/too much text/i);
+      for (const w of [/left edge/i, /between pages/i, /close a sheet/i, /meal/i])
+        expect(text('swipes-ios')).toMatch(w);
+      expect(step('swipe-off')?.options.find((o) => o.id === 'sheet')?.label).toMatch(/bounced/i);
+      for (const w of [/Set up Fuel/, /weigh-in/i, /Measurements/])
+        expect(text('unit-switch')).toMatch(w);
+      expect(text('buttons-look')).toMatch(/round buttons/i);
+      expect(text('buttons-hit')).toMatch(/gym/i);
+    });
+
+    it('checks dates for a Buddhist-era year like 2569', () => {
+      expect(text('thai-year')).toMatch(/2569/);
+      expect(text('thai-year')).toMatch(/Calendar/);
+    });
+
+    it('says "you", never he or she, and names no one', () => {
+      const all = strings(topic).join(' ');
+      expect(all).not.toMatch(/\b(he|his|him|she|her|hers|wife|husband|man|woman)\b/i);
+      expect(all).toMatch(/\byou\b/i);
+    });
   });
 
   describe('library, abs and background (1.16.0, Checkpoint K3)', () => {

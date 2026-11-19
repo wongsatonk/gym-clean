@@ -33,7 +33,7 @@ describe('M13c: "Add abs to your plan?" (data)', () => {
       id: 'wantsCore',
       after: 'easyOn',
       question: 'Add abs to your plan?',
-      hint: 'A few abs sets on 3 days a week. You can add them later with a focus block too.',
+      hint: 'A few abs sets on 3 days a week.',
       options: [
         { id: 'no', value: false, label: 'No' },
         { id: 'yes', value: true, label: 'Yes, add abs' },
@@ -51,6 +51,16 @@ describe('M13c: "Add abs to your plan?" (data)', () => {
       // Anyone-scan: the app talks to "you", never about he/she.
       expect(t, t).not.toMatch(/\b(he|she|him|her|his|hers)\b/i);
     }
+  });
+
+  it('M13d copy budget: the hint is one sentence of ≤ 12 words, and question + hint fit the 20-word screen', () => {
+    const words = (s: string) => s.trim().split(/\s+/).length;
+    const { question, hint } = INTAKE_OPTIONS.wantsCore;
+    expect(hint.split(/(?<=[.!?])\s+/).filter(Boolean)).toHaveLength(1);
+    expect(words(hint)).toBeLessThanOrEqual(12);
+    // The screen also shows "Question 6 of 6" (4 words); the readability budget is 20 besides the
+    // options, so the data side keeps question + hint ≤ 16.
+    expect(words(question) + words(hint)).toBeLessThanOrEqual(16);
   });
 
   it('normalizeIntake keeps a Yes / No answer and leaves it out when absent (= No)', () => {

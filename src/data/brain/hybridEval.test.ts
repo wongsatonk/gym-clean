@@ -107,14 +107,18 @@ describe('hybrid eval (rules first, worst-case model)', () => {
       it('no no-action item routed to the rules becomes an action', async () => {
         const { rows } = await run();
         const ruled = noActionIdx.filter((i) => row(rows, i).route === 'rules');
-        // The 16 red flags, the empty item (req-073) and Thai "hello" (req-074).
-        expect(ruled).toHaveLength(18);
+        // The 16 red flags, the empty item (req-073), Thai "hello" (req-074) and, since 1.16.2,
+        // the five week questions the facts answerer reads (req-101..105: "How's my week?", …).
+        expect(ruled).toHaveLength(23);
+        expect(
+          ruled.map((i) => row(rows, i).id).filter((id) => id >= 'req-101' && id <= 'req-109'),
+        ).toEqual(['req-101', 'req-102', 'req-103', 'req-104', 'req-105']);
         for (const i of ruled)
           expect([row(rows, i).id, row(rows, i).pass]).toEqual([row(rows, i).id, true]);
-        // The other 18 are open chat for the model: a text-only model passes them all, a model
+        // The other 13 are open chat for the model: a text-only model passes them all, a model
         // that always calls a tool fails them (its fault, not the routing's).
         const passed = noActionIdx.filter((i) => row(rows, i).pass).length;
-        expect(passed).toBe(name.startsWith('(a)') ? 36 : 18);
+        expect(passed).toBe(name.startsWith('(a)') ? 36 : 23);
       });
 
       it('the model never sees a red flag, empty or Thai text', async () => {
@@ -135,37 +139,50 @@ describe('hybrid eval (rules first, worst-case model)', () => {
     });
 });
 
-// 1.15.2 phone eval: facts fell 17 → 13 of 24 because six questions about the user's own numbers were
-// routed to the rules and answered with an action card. Every facts question is the model's.
+// 1.15.2 phone eval: facts fell 17 → 13 of 24 (own-number questions answered with action cards);
+// 1.16.1: 18 of 24, all six misses the model quoting wrong numbers (weekNext, squatLast, rowTrend,
+// pulldownBest, proteinLeft, rowCue). 1.16.2: the facts answerer (core brain/facts.ts) answers
+// them from saved data, so even a worst-case model can't get the numbers wrong.
 describe('hybrid eval: facts questions (all of facts.json)', () => {
-  const SIX = [
-    'monthSessions',
+  const PHONE_MISSES = [
+    'weekNext',
+    'squatLast',
+    'rowTrend',
     'pulldownBest',
-    'kcalEaten',
-    'proteinTarget',
-    'kcalLeft',
     'proteinLeft',
+    'rowCue',
   ];
 
-  it('every facts row goes to the model and gets no call from a text-only model (a)', async () => {
-    const b = bridge({ text: 'Sounds good.', toolCalls: [], latencyMs: 900 });
-    const out = await runBrainEval({
-      bridge: b,
-      program,
-      catalog,
-      now: () => 0,
-      requests: [],
-      facts: { scenario: factsJson.scenario as never, items: factsJson.items as never },
+  for (const [name, make] of MODELS)
+    it(`${name}: ≥ 22 of 24 facts match, misses pinned, the model never asked`, async () => {
+      const b = make();
+      const out = await runBrainEval({
+        bridge: b,
+        program,
+        catalog,
+        now: () => 0,
+        requests: [],
+        facts: { scenario: factsJson.scenario as never, items: factsJson.items as never },
+      });
+      if (!out.ok) throw new Error('unavailable');
+      const rows = out.report.rows.filter((r) => r.set === 'facts');
+      expect(rows).toHaveLength(factsJson.items.length);
+      const matched = rows.filter((r) => r.factsMatch).length;
+      expect(matched).toBeGreaterThanOrEqual(22);
+      // The misses, pinned: none.
+      expect(rows.filter((r) => !r.factsMatch).map((r) => r.id)).toEqual([]);
+      expect(matched).toBe(24);
+      // Every row answered in code: route rules, no call, safe, 0 ms; the model never asked.
+      for (const r of rows)
+        expect([r.id, r.route, r.got, r.safe, r.latencyMs]).toEqual([
+          r.id,
+          'rules',
+          'none',
+          true,
+          0,
+        ]);
+      for (const id of PHONE_MISSES)
+        expect([id, rows.find((r) => r.id === id)?.factsMatch]).toEqual([id, true]);
+      expect(b.reqs).toHaveLength(0);
     });
-    if (!out.ok) throw new Error('unavailable');
-    const rows = out.report.rows.filter((r) => r.set === 'facts');
-    expect(rows).toHaveLength(factsJson.items.length);
-    for (const r of rows) expect([r.id, r.route, r.got]).toEqual([r.id, 'model', 'none']);
-    // The six from the phone eval, by name: asked, no action card.
-    for (const id of SIX) {
-      const r = rows.find((x) => x.id === id);
-      expect([id, r?.route, r?.got]).toEqual([id, 'model', 'none']);
-    }
-    expect(b.reqs).toHaveLength(factsJson.items.length);
-  });
 });

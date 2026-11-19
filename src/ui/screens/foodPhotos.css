@@ -1,7 +1,8 @@
-/* M7b Settings → Food photos (src/ui/screens/foodPhotos.ts, Pro). Neutral actions (surface-2,
-   .set-action), the two-tap Delete reuses .plan-reset (danger outline, filled once armed: icon +
-   words, never colour alone). The "Turn on" in the explainer is the selected white fill. Errors use
-   the warn colour plus plain words. Tokens only. */
+/* M7b Settings → Food photos (src/ui/screens/foodPhotos.ts, Pro). M13d task 40e: the actions
+   are round buttons (fuel/fuelButtons.ts pills and circles); the two-tap Delete is the danger
+   pill, its circle filled once armed (icon + words, never colour alone). The "Turn on" in the
+   explainer is the selected white circle. Errors use the warn colour plus plain words. Tokens
+   only. */
 
 .food-photos,
 .food-model,
@@ -71,10 +72,11 @@
   margin-top: 2px;
 }
 
-.settings .food-save-on {
-  background: var(--selected);
-  color: var(--on-selected);
-  border-color: var(--selected);
+/* "Turn on" in the explainer: the confirmed choice, a white circle (round buttons, task 40e). */
+.food-save-on.icon-btn:not(:disabled) {
+  --ib-fill: var(--selected);
+  --ib-ink: var(--on-selected);
+  --ib-ring: var(--selected);
 }
 
 .food-photo-count {
@@ -92,12 +94,10 @@
   font-weight: 700;
 }
 
-.settings .food-photos .set-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  min-height: var(--tap-bar);
+/* The two-tap Delete, armed: the circle fills red (icon + words, never colour alone). */
+.food-delete.icon-btn[data-armed]:not(:disabled) {
+  --ib-fill: var(--danger);
+  --ib-ink: var(--on-danger);
 }
 
 .food-photos-dl {

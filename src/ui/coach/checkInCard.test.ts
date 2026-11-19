@@ -7,6 +7,7 @@ import {
   CHECKIN_INTRO,
   CHECKIN_NEED_ONE,
   CHECKIN_SKIP,
+  CHECKIN_SKIP_SHORT,
   CHECKIN_SKIPPED,
   buildCheckInCard,
   checkInSummary,
@@ -212,5 +213,47 @@ describe('checkInCard: answered', () => {
     for (const t of [CHECKIN_INTRO, CHECKIN_NEED_ONE, CHECKIN_SKIP, CHECKIN_SKIPPED]) {
       expect(checkCopy(t).ok).toBe(true);
     }
+  });
+});
+
+describe('checkInCard: round icon buttons (M13d task 40f)', () => {
+  const word = (b: FakeEl) => b.oneByClass('icon-btn-label').textContent;
+  const glyph = (b: FakeEl) =>
+    b.oneByClass('icon-btn-circle').byTag('svg')[0]?.getAttribute('data-icon');
+
+  it('Answer is the main pill (circle + word); Skip a secondary circle, word under', () => {
+    const { el } = mount();
+    const answer = by(el, 'data-checkin-answer');
+    expect(answer.hasAttribute('data-icon-btn')).toBe(true);
+    expect(answer.getAttribute('data-variant')).toBe('main');
+    expect(answer.hasAttribute('data-wide-hit')).toBe(true);
+    expect(word(answer)).toBe(CHECKIN_ANSWER);
+    expect(glyph(answer)).toBe('arrow-right');
+    const skip = by(el, 'data-checkin-skip');
+    expect(skip.hasAttribute('data-icon-btn')).toBe(true);
+    expect(skip.getAttribute('data-variant')).toBe('secondary');
+    expect(skip.getAttribute('data-label-at')).toBe('below');
+    expect(glyph(skip)).toBe('skip');
+  });
+
+  it('Skip shows "Skip" while collapsed and "Skip this week" opened; its name never changes', () => {
+    const { el } = mount();
+    const skip = by(el, 'data-checkin-skip');
+    expect(word(skip)).toBe(CHECKIN_SKIP_SHORT);
+    expect(skip.getAttribute('aria-label')).toBe(CHECKIN_SKIP);
+    by(el, 'data-checkin-answer').click();
+    expect(word(skip)).toBe(CHECKIN_SKIP);
+    expect(skip.getAttribute('aria-label')).toBe(CHECKIN_SKIP);
+  });
+
+  it('Done is the main pill, disabled until a pick (the round button keeps its disabled look)', () => {
+    const { el } = mount();
+    by(el, 'data-checkin-answer').click();
+    const done = by(el, 'data-checkin-done');
+    expect(done.getAttribute('data-variant')).toBe('main');
+    expect(glyph(done)).toBe('check');
+    expect(done.hasAttribute('disabled')).toBe(true);
+    pick(el, 'sleep:2').click();
+    expect(done.hasAttribute('disabled')).toBe(false);
   });
 });

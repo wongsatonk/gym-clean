@@ -4,10 +4,25 @@
 //
 // - numberField: label, [−] value [+]. The value is a text box with a decimal keypad, so a
 //   number far from the start can be typed instead of tapped. The value is ≥ 64px (main number),
-//   the − / + buttons are ≥ 72px. Typed values are clamped and snapped to the step on change.
+//   the − / + buttons are ≥ 56px. Typed values are clamped and snapped to the step on change.
+//   M13d task 40b (Goal 7): − / + are round buttons (iconButton.ts) with the word "Less" / "More"
+//   under the circle; their accessible names stay "Less <label>" / "More <label>".
 // - choiceGroup: a row (or list) of buttons where one is chosen: white fill + check, aria-pressed.
+import {
+  editField,
+  switchUnit,
+  type FieldKind,
+  type UnitField,
+  type UnitOf,
+} from '../../core/unitField';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
+import {
+  setUnitSwitch as setUnitSwitchValue,
+  unitSwitch,
+  type UnitSwitchSpec,
+} from '../unitSwitch';
 import './fuelForms.css';
 
 /** Clamp to [min, max] and round to the step's decimals (0.1 → 1 decimal). Pure. */
@@ -47,6 +62,27 @@ export type NumberFieldOpts = {
 
 export type NumberField = { el: HTMLElement; get: () => number; controls: HTMLElement[] };
 
+/**
+ * The − / + pair: round buttons with "Less" / "More" under the circle (M13d task 40b). The
+ * names stay "Less <label>" / "More <label>"; `data-step` = down / up. `onStep` is optional
+ * because numberField adds its own listeners.
+ */
+function stepButtons(
+  label: string,
+  onStep?: (dir: -1 | 1) => void,
+): [HTMLButtonElement, HTMLButtonElement] {
+  const make = (dir: -1 | 1) =>
+    iconButton({
+      icon: dir < 0 ? 'minus' : 'plus',
+      label: dir < 0 ? 'Less' : 'More',
+      ariaLabel: `${dir < 0 ? 'Less' : 'More'} ${label}`,
+      class: 'nf-step',
+      hooks: { 'data-step': dir < 0 ? 'down' : 'up' },
+      onClick: () => onStep?.(dir),
+    });
+  return [make(-1), make(1)];
+}
+
 export function numberField(o: NumberFieldOpts): NumberField {
   const decimals = decimalsOf(o.step);
   let value = clampStep(o.value, o.min, o.max, o.step);
@@ -62,16 +98,7 @@ export function numberField(o: NumberFieldOpts): NumberField {
   });
   input.value = show(value);
 
-  const minus = h(
-    'button',
-    { type: 'button', class: 'nf-step', 'data-step': 'down', 'aria-label': `Less ${o.label}` },
-    icon('minus', 'lg'),
-  );
-  const plus = h(
-    'button',
-    { type: 'button', class: 'nf-step', 'data-step': 'up', 'aria-label': `More ${o.label}` },
-    icon('plus', 'lg'),
-  );
+  const [minus, plus] = stepButtons(o.label);
 
   const set = (next: number) => {
     value = clampStep(next, o.min, o.max, o.step);
@@ -112,6 +139,272 @@ export function numberField(o: NumberFieldOpts): NumberField {
     ),
   );
   return { el, get: () => value, controls: [minus, input, plus] };
+}
+
+// ---------- M13d: fields backed by a core unit field (no drift) ----------
+//
+// The field keeps the metric value it will save (core `unitField`); what is shown is re-derived
+// from it (`display` / `parts`), and every edit goes through core `editField` (snapped, clamped,
+// stored at the data layer's precision). An untouched field saves its metric value as given.
+
+export type UnitNumberFieldOpts<K extends FieldKind> = {
+  id: string;
+  label: string;
+  field: UnitField<K>;
+  /** Called with the new field after every − / + tap or typed change that moved it. */
+  onChange: (field: UnitField<K>) => void;
+  /** M13d task 13c: shown at the end of the label row (the unit switch). */
+  head?: HTMLElement | undefined;
+};
+
+export type UnitNumberField<K extends FieldKind> = {
+  el: HTMLElement;
+  get: () => UnitField<K>;
+  /** Every input (one, or two for height in ft·in), for aria-describedby hooks. */
+  inputs: HTMLElement[];
+};
+
+/** One − / + row: the buttons and the value box. Labels / handlers come from the caller. */
+function stepRow(o: {
+  inputId: string;
+  label: string;
+  unitText: string;
+  numeric: boolean;
+  part?: string;
+  onStep: (dir: -1 | 1) => void;
+  onTyped: (raw: string) => void;
+}) {
+  const input = h('input', {
+    type: 'text',
+    id: o.inputId,
+    class: 'nf-value',
+    inputmode: o.numeric ? 'numeric' : 'decimal',
+    autocomplete: 'off',
+    'aria-describedby': `${o.inputId}-unit`,
+  });
+  const [minus, plus] = stepButtons(o.label, o.onStep);
+  input.addEventListener('change', () => o.onTyped(String(input.value ?? '')));
+  const row = h(
+    'div',
+    { class: 'nf-row', 'data-part': o.part },
+    minus,
+    h(
+      'span',
+      { class: 'nf-mid' },
+      input,
+      h('span', { class: 'nf-unit', id: `${o.inputId}-unit` }, o.unitText),
+    ),
+    plus,
+  );
+  const ends = (atMin: boolean, atMax: boolean) => {
+    if (atMin) minus.setAttribute('disabled', '');
+    else minus.removeAttribute('disabled');
+    if (atMax) plus.setAttribute('disabled', '');
+    else plus.removeAttribute('disabled');
+  };
+  return { row, input, ends };
+}
+
+const EPS = 1e-9;
+
+/** The label alone, or the label with the unit switch at the end of its row. */
+function labelRow(label: HTMLElement, head: HTMLElement | undefined): HTMLElement {
+  return head ? h('div', { class: 'unit-field-head' }, label, head) : label;
+}
+
+/**
+ * label, [−] value [+] for a body weight, a height in cm or a tape length: shows
+ * `field.display`, steps by `field.step`, edits through core `editField`.
+ */
+export function unitNumberField<K extends FieldKind>(
+  o: UnitNumberFieldOpts<K>,
+): UnitNumberField<K> {
+  if (o.field.kind === 'height' && o.field.unit === 'in') {
+    return heightFtInField(
+      o as unknown as UnitNumberFieldOpts<'height'>,
+    ) as unknown as UnitNumberField<K>;
+  }
+  let field = o.field;
+  const inputId = `nf-${o.id}`;
+  const apply = (next: UnitField<K>) => {
+    const moved = next.metric !== field.metric;
+    field = next;
+    show();
+    if (moved) o.onChange(field);
+  };
+  const r = stepRow({
+    inputId,
+    label: o.label,
+    unitText: field.unit,
+    numeric: field.decimals === 0,
+    onStep: (dir) => apply(editField(field, field.value + dir * field.step)),
+    onTyped: (raw) => apply(editField(field, raw)),
+  });
+  const show = () => {
+    r.input.value = field.display;
+    r.ends(field.value <= field.min + EPS, field.value >= field.max - EPS);
+  };
+  show();
+  const el = h(
+    'div',
+    { class: 'nf', 'data-field': o.id },
+    labelRow(h('label', { class: 'nf-label', for: inputId }, o.label), o.head),
+    r.row,
+  );
+  return { el, get: () => field, inputs: [r.input] };
+}
+
+/** A typed height that names its own feet / inches (`5'7"`, `5 ft 7`, `5 7`, `67 in`). */
+const WHOLE_HEIGHT = /['"′″’”]|ft|feet|foot|in|\s/i;
+
+/**
+ * Height in ft·in: two − / + rows (feet, inches) over one height field. Inches carry at 12
+ * (11 in + 1 → next foot); a whole height typed in either box (`5'7"`) sets both.
+ */
+export function heightFtInField(o: UnitNumberFieldOpts<'height'>): UnitNumberField<'height'> {
+  let field = o.field;
+  const parts = () => field.parts ?? { ft: Math.floor(field.value / 12), inch: field.value % 12 };
+  const apply = (next: UnitField<'height'>) => {
+    const moved = next.metric !== field.metric;
+    field = next;
+    show();
+    if (moved) o.onChange(field);
+  };
+  const typed = (raw: string, part: 'ft' | 'inch') => {
+    const t = raw.trim();
+    if (WHOLE_HEIGHT.test(t)) return apply(editField(field, t));
+    const n = Number(t.replace(',', '.'));
+    if (t === '' || !Number.isFinite(n)) return apply(field); // junk: show the value again
+    const p = parts();
+    apply(
+      editField(
+        field,
+        part === 'ft' ? { ft: Math.round(n), inch: p.inch } : { ft: p.ft, inch: Math.round(n) },
+      ),
+    );
+  };
+  const step = (part: 'ft' | 'inch', dir: -1 | 1) => {
+    const p = parts();
+    apply(
+      editField(
+        field,
+        part === 'ft' ? { ft: p.ft + dir, inch: p.inch } : { ft: p.ft, inch: p.inch + dir },
+      ),
+    );
+  };
+  const ft = stepRow({
+    inputId: `nf-${o.id}-ft`,
+    label: `${o.label}, feet`,
+    unitText: 'ft',
+    numeric: true,
+    part: 'ft',
+    onStep: (dir) => step('ft', dir),
+    onTyped: (raw) => typed(raw, 'ft'),
+  });
+  const inch = stepRow({
+    inputId: `nf-${o.id}-in`,
+    label: `${o.label}, inches`,
+    unitText: 'in',
+    numeric: true,
+    part: 'in',
+    onStep: (dir) => step('inch', dir),
+    onTyped: (raw) => typed(raw, 'inch'),
+  });
+  ft.input.setAttribute('aria-label', `${o.label}, feet`);
+  inch.input.setAttribute('aria-label', `${o.label}, inches`);
+  const show = () => {
+    const p = parts();
+    ft.input.value = String(p.ft);
+    inch.input.value = String(p.inch);
+    const atMin = field.value <= field.min + EPS;
+    const atMax = field.value >= field.max - EPS;
+    ft.ends(atMin, atMax);
+    inch.ends(atMin, atMax);
+  };
+  show();
+  const labelId = `nf-${o.id}-label`;
+  const el = h(
+    'div',
+    {
+      class: 'nf nf-ftin',
+      'data-field': o.id,
+      'data-unit': 'ftin',
+      role: 'group',
+      'aria-labelledby': labelId,
+    },
+    labelRow(h('span', { class: 'nf-label', id: labelId }, o.label), o.head),
+    ft.row,
+    inch.row,
+  );
+  return { el, get: () => field, inputs: [ft.input, inch.input] };
+}
+
+// ---------- M13d task 13c: a unit field with its switch (kg | lb, cm | ft·in, cm | in) ----------
+//
+// The switch sits at the end of the field's label row. A tap re-shows the field in the other
+// unit from the metric value it holds (core `switchUnit`: identical metric, nothing written, no
+// Save) and then calls `onUnit` (the page passes the app-wide preference up). Height between cm
+// and ft·in changes the field's shape (one row ↔ two), so the field is rebuilt inside a stable
+// `display: contents` slot; `decorate` runs on every build (e.g. "From Apple Health" under it).
+
+export type SwitchedUnitFieldOpts<K extends FieldKind> = UnitNumberFieldOpts<K> & {
+  /** WEIGHT_UNIT_SWITCH / HEIGHT_UNIT_SWITCH / TAPE_UNIT_SWITCH. */
+  spec: UnitSwitchSpec<UnitOf<K>>;
+  /** After a tap on the other unit re-showed the field (once per tap; nothing saved). */
+  onUnit: (unit: UnitOf<K>) => void;
+  /** Runs after every build of the field (the first and after each switch). */
+  decorate?: ((f: UnitNumberField<K>) => void) | undefined;
+};
+
+export type SwitchedUnitField<K extends FieldKind> = {
+  /** Stable slot holding the current field (`.unit-slot`, display: contents). */
+  el: HTMLElement;
+  get: () => UnitField<K>;
+  /** The current field's inputs (rebuilt on a switch). */
+  inputs: () => HTMLElement[];
+  /** The switch (the group with the two options). */
+  switchEl: HTMLElement;
+  /** Re-shows the same metric value in `unit` (a choice made elsewhere); no `onUnit` call. */
+  setUnit: (unit: UnitOf<K>) => void;
+};
+
+export function switchedUnitField<K extends FieldKind>(
+  o: SwitchedUnitFieldOpts<K>,
+): SwitchedUnitField<K> {
+  const slot = h('div', { class: 'unit-slot', 'data-unit-slot': o.id });
+  const sw = unitSwitch<UnitOf<K>>({
+    ...o.spec,
+    value: o.field.unit,
+    hooks: { 'data-unit-for': o.id },
+    onChange: (unit) => {
+      show(switchUnit(current.get(), unit));
+      o.onUnit(unit);
+    },
+  });
+  let current: UnitNumberField<K>;
+  const show = (field: UnitField<K>) => {
+    const doc = globalThis.document as Document | undefined;
+    const focused = doc?.activeElement as HTMLElement | null | undefined;
+    current = unitNumberField({ ...o, field, head: sw });
+    o.decorate?.(current);
+    slot.replaceChildren(current.el);
+    // Moving the switch into the rebuilt field drops its keyboard focus: give it back.
+    if (focused && doc?.activeElement !== focused && typeof focused.focus === 'function') {
+      focused.focus({ preventScroll: true });
+    }
+  };
+  show(o.field);
+  return {
+    el: slot,
+    get: () => current.get(),
+    inputs: () => current.inputs,
+    switchEl: sw,
+    setUnit: (unit) => {
+      if (unit === current.get().unit) return;
+      setUnitSwitchValue(sw, unit);
+      show(switchUnit(current.get(), unit));
+    },
+  };
 }
 
 export type Choice<T extends string> = { value: T; label: string; note?: string | undefined };

@@ -65,7 +65,7 @@
   margin: 0;
   color: var(--text-2);
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .brand-lg .brand-tagline {

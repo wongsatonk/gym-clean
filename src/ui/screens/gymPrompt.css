@@ -21,7 +21,7 @@
   margin: 0;
   font-size: var(--fs-body);
   font-weight: 600;
-  line-height: 1.3;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -31,24 +31,5 @@
   color: var(--warn);
 }
 
-.gym-prompt-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.gym-prompt-btn {
-  flex: 1 1 0;
-  min-width: 0;
-  min-height: var(--tap-min);
-  padding: 0 14px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface);
-  border: var(--line-w) solid var(--line);
-}
-
-.gym-prompt-cta {
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
-}
+/* M13d task 40d: See a swap / Keep it are round icon buttons (iconButton.css), laid out by
+   .set-ib-actions (../settingsButtons.css). */

@@ -33,6 +33,7 @@ import { describeLoadError } from '../pose/loadError';
 import { createAutoStopBanner, type AutoStopBannerHandle } from './autoStopBanner';
 import { createFrameStrip, createSetupControl } from './cameraSetup';
 import { createHoldPanel, type HoldPanelHandle } from './holdPanel';
+import { midPill } from './midsetButtons';
 import {
   createCameraRestPanel,
   type CameraRestPanelHandle,
@@ -1136,13 +1137,16 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
   if (hud) hudObserver?.observe(hud);
 
   // M13c: no Set done without a set to end (Practice passes no onSetDone).
-  const setDoneBtn = counter && opts.onSetDone
-    ? h(
-        'button',
-        {
-          type: 'button',
-          class: 'primary-btn cta-btn',
-          onclick: () => {
+  // M13d task 40g (styling only): the main round-button pill in the bar's place, ≥ 80px tall.
+  const setDoneBtn =
+    counter && opts.onSetDone
+      ? midPill({
+          icon: 'check',
+          label: 'Set done',
+          variant: 'main',
+          wide: true,
+          class: 'cam-set-done',
+          onClick: () => {
             // A double tap on Next arm (same spot) must not end the set on the second side.
             if (performance.now() - switchedAt < SWITCH_GUARD_MS) return;
             // Silence first so a late count word can't cut off the rest cue that follows.
@@ -1154,11 +1158,8 @@ export function createCameraView(opts: CameraViewOptions): CameraView {
             }
             opts.onSetDone?.();
           },
-        },
-        icon('check', 'lg'),
-        'Set done',
-      )
-    : null;
+        })
+      : null;
 
   // M13b: Next arm in the Set done slot on the first side of a one-sided set.
   const nextBtn =

@@ -1,0 +1,34 @@
+/* M13d task 21: Settings → Display → Text size (textSizePicker.ts). The Settings segmented look
+   (one outlined track, the chosen one a white fill + check), stacked one option per row so each
+   word fits at 360 wide at every size; rows ≥ 60px. Each word's size is its own preview (set
+   inline from the core scale). Tokens only. */
+.text-size-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.text-size-label {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  line-height: var(--lh-head);
+}
+
+.settings .segmented.text-size-options {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.settings .text-size-options .seg-btn {
+  min-width: 0;
+  min-height: var(--tap-bar);
+  padding: 8px 16px;
+  font-size: var(--fs-body);
+}
+
+.text-size-word {
+  line-height: var(--lh-head);
+  white-space: nowrap;
+}

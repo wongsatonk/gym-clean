@@ -18,6 +18,10 @@
   overflow-wrap: anywhere;
 }
 
+.exercise-detail .cue-text {
+  line-height: var(--lh-text);
+}
+
 .detail-card {
   display: flex;
   flex-direction: column;
@@ -33,7 +37,7 @@
   margin: 0;
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
 }
 
 /* ---------- muscles ---------- */
@@ -76,15 +80,7 @@
   color: var(--text-2);
 }
 
-.detail-howto {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  min-height: var(--tap-cta);
-  font-size: var(--fs-head);
-}
+/* M13d task 40c: How to is the round main button in its wide pill (screens/mainPill.css). */
 
 /* ---------- how to ---------- */
 
@@ -145,15 +141,13 @@
   color: var(--warn);
 }
 
-.detail-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+/* M13d task 40c: My gym / Phone set-up / See history are round iconButtons, word beside. */
+.detail-btn.icon-btn {
   align-self: flex-start;
-  min-height: var(--tap-min);
-  font-size: var(--fs-body);
-  font-weight: 700;
+}
+
+.detail-btn.icon-btn .icon-btn-label {
+  font-size: var(--fs-cue);
 }
 
 /* ---------- plan + history ---------- */

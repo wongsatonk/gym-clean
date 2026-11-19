@@ -298,7 +298,125 @@ describe('WHATS_NEW_PAGES', () => {
     expect(addedTopics(TODO_TOPICS, tourReleases(r1161), true)).toEqual([]);
   });
 
-  it('holds only releases 1.12.0 to 1.16.1, every page in one of them', () => {
+  const r1162 = WHATS_NEW_PAGES.filter((p) => p.release === '1.16.2');
+
+  // 1.16.2 "Coach facts": own-number questions answered from saved data in code (brain/facts.ts).
+  it('has one page for 1.16.2: the coach gets your numbers right, for everyone, Try it in Coach', () => {
+    expect(r1162.map((p) => [p.id, p.tryIt, p.owner, p.title])).toEqual([
+      ['coach-facts', 'coach', undefined, 'Coach gets your numbers right'],
+    ]);
+    const text = `${r1162[0]?.what} ${r1162[0]?.why}`;
+    expect(text).toMatch(/your own logs/);
+    expect(text).toMatch(/on this phone/);
+    expect(text).not.toMatch(/\b(he|she|his|her)\b/i);
+  });
+
+  it('1.16.2 is shown after 1.16.1; from 1.16.0 both show, newest first; no new to-do topic', () => {
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.1' }, '1.16.2', true)).toEqual(r1162);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.0' }, '1.16.2', true, false)).toEqual([
+      ...r1162,
+      ...r1161,
+    ]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.16.2')).toEqual(r1162);
+    expect(addedTopics(TODO_TOPICS, tourReleases(r1162), true)).toEqual([]);
+  });
+
+  const r1163 = WHATS_NEW_PAGES.filter((p) => p.release === '1.16.3');
+
+  // 1.16.3 M13d "Easier first run": units, easier reading, swipes, round buttons (SPEC M13d Goal 6).
+  it('has four pages for 1.16.3 (M13d), for everyone, each with its Try it and icon', () => {
+    expect(r1163.map((p) => [p.id, p.title, p.tryIt, p.icon, p.owner])).toEqual([
+      ['units', 'Pick your units', 'settings', 'ruler', undefined],
+      ['text-size', 'Bigger, clearer text', 'settings', 'text', undefined],
+      ['swipe-back', 'Swipe back', 'settings/about', 'back', undefined],
+      ['round-buttons', 'Rounder buttons', 'today', 'spark', undefined],
+    ]);
+  });
+
+  it('1.16.3 describes what ships: units + the switch by the field, Text size, swipes, buttons', () => {
+    const text = (id: string) => {
+      const p = r1163.find((x) => x.id === id);
+      return `${p?.title} ${p?.what} ${p?.why}`;
+    };
+    // Units: both choices as the Units page names them, Settings → Units, the switch by the field,
+    // and history is never converted.
+    for (const w of [/\bkg\b/, /\blb\b/, /\bcm\b/, /ft·in/, /Settings/, /\bUnits\b/])
+      expect(text('units')).toMatch(w);
+    expect(text('units')).toMatch(/switch them right where you type a number/);
+    expect(text('units')).toMatch(/history stays/i);
+    // Reading: the phone's own font, more space, Settings → Display → Text size (Large / Larger).
+    expect(text('text-size')).toMatch(/own font/i);
+    expect(text('text-size')).toMatch(/space/i);
+    for (const w of [/Settings/, /Display/, /Text size/, /\bLarge\b/, /\bLarger\b/])
+      expect(text('text-size')).toMatch(w);
+    // Swipes: the edge swipe is iPhone-app wording; pages, sheets and the meal Delete too.
+    expect(r1163.find((p) => p.id === 'swipe-back')?.what).toMatch(/^In the iPhone app, /);
+    expect(text('swipe-back')).toMatch(/left edge/i);
+    expect(text('swipe-back')).toMatch(/go back/i);
+    expect(text('swipe-back')).toMatch(/sideways between these pages/i);
+    expect(text('swipe-back')).toMatch(/down to close a sheet/i);
+    expect(text('swipe-back')).toMatch(/left on a meal/i);
+    expect(text('swipe-back')).toMatch(/Delete/);
+    // Buttons: round, the word under the circle (beside it on the main one), a light tap in the
+    // iPhone app on the main ones. The press dip is off in a workout and with Reduce Motion, so the
+    // page never promises a dip; and most words sit under the circle, not "next to" every one.
+    expect(text('round-buttons')).toMatch(/round/i);
+    expect(text('round-buttons')).toMatch(/word under the circle/i);
+    expect(text('round-buttons')).toMatch(/beside the main one/i);
+    expect(text('round-buttons')).toMatch(/press/i);
+    expect(text('round-buttons')).toMatch(/iPhone app/);
+    expect(text('round-buttons')).toMatch(/main ones give a light tap/i);
+    expect(text('round-buttons')).not.toMatch(/\bdips?\b|same word|next to each/i);
+  });
+
+  it('1.16.3 pages fit the M13d budget: one short sentence each for what and why, one idea', () => {
+    const words = (s: string) => s.split(/\s+/).filter((w) => w !== '').length;
+    for (const p of r1163) {
+      for (const s of [p.what, p.why]) {
+        expect(sentences(s), s).toHaveLength(1);
+        expect(words(s), s).toBeLessThanOrEqual(18);
+        expect(s.length, s).toBeLessThanOrEqual(100);
+      }
+      expect(p.title.length, p.id).toBeLessThanOrEqual(24);
+      // Readability budget (SPEC M13d Accept: ≤ 70 words on a What's New page); kept far under.
+      expect(words(`${p.title} ${p.what} ${p.why}`), p.id).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it('1.16.3 pages say "you", never he or she, and promise nothing medical', () => {
+    const GENDERED =
+      /\b(he|him|his|himself|she|her|hers|herself|man|men|guy|guys|wife|husband|boys?|girls?)\b/i;
+    for (const p of r1163) {
+      const all = `${p.title} ${p.what} ${p.why}`;
+      expect(all, p.id).not.toMatch(GENDERED);
+      expect(all, p.id).toMatch(/\byou(r)?\b/i);
+      expect(all, p.id).not.toMatch(/\b(cure|heal|prevent|guarantee|clinically|injur\w*)\b/i);
+      for (const s of [p.title, p.what, p.why])
+        expect(checkCopy(s), s).toEqual({ ok: true, hits: [] });
+    }
+  });
+
+  it('1.16.3 is shown after 1.16.2 and kept back before; from 1.16.1 both show, newest first', () => {
+    // Still 1.16.2 (before main bumps APP_RELEASE): nothing new to show.
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.2' }, '1.16.2', true)).toEqual([]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.16.2')).toEqual(r1162);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.2' }, '1.16.3', true)).toEqual(r1163);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.1' }, '1.16.3', true, false)).toEqual([
+      ...r1163,
+      ...r1162,
+    ]);
+    expect(replayPages(WHATS_NEW_PAGES, '1.16.3')).toEqual(r1163);
+    expect(tourToShow(WHATS_NEW_PAGES, { seenRelease: '1.16.3' }, '1.16.3', true)).toEqual([]);
+    // A fresh install (the K4 reinstall) sees the first run, not this tour.
+    expect(tourToShow(WHATS_NEW_PAGES, {}, '1.16.3', false)).toEqual({ markSeen: true });
+    // Owner mode on: the tour adds the Checkpoint K4 to-do; off: no to-do.
+    expect(addedTopics(TODO_TOPICS, tourReleases(r1163), true).map((t) => t.id)).toEqual([
+      'easier-first-run',
+    ]);
+    expect(addedTopics(TODO_TOPICS, tourReleases(r1163), false)).toEqual([]);
+  });
+
+  it('holds only releases 1.12.0 to 1.16.3, every page in one of them', () => {
     expect(
       r112.length +
         r113.length +
@@ -306,7 +424,9 @@ describe('WHATS_NEW_PAGES', () => {
         r115.length +
         r1151.length +
         r116.length +
-        r1161.length,
+        r1161.length +
+        r1162.length +
+        r1163.length,
     ).toBe(WHATS_NEW_PAGES.length);
   });
 
@@ -382,9 +502,10 @@ describe('WHATS_NEW_PAGES', () => {
     for (const p of WHATS_NEW_PAGES) {
       expect(p.release).toMatch(/^\d+\.\d+\.\d+$/);
       // A release with pages is a new MINOR (patch 0); the exceptions are 1.15.1 (M13b, Decision
-      // "One-arm sets": Next arm ships as a patch so M12 slice 3 keeps 1.16.0) and 1.16.1
-      // ("Coach acts", a fix on top of 1.16.0).
-      if (p.release !== '1.15.1' && p.release !== '1.16.1')
+      // "One-arm sets": Next arm ships as a patch so M12 slice 3 keeps 1.16.0), 1.16.1 and 1.16.2
+      // ("Coach acts", a fix on top of 1.16.0), and 1.16.3 (M13d, Decision "M13d answers" q1: a
+      // patch before M14 1.17.0).
+      if (!['1.15.1', '1.16.1', '1.16.2', '1.16.3'].includes(p.release))
         expect(p.release.endsWith('.0'), p.release).toBe(true);
       expect(compareReleases(p.release, '1.12.0')).toBeGreaterThanOrEqual(0);
     }

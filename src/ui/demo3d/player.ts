@@ -11,11 +11,12 @@
 // button still plays the loop when the user asks for it.
 import { exerciseById } from '../../data/catalog';
 import { cssVar, stageBackground } from '../body3d/palette';
+import { demoControls, type DemoView } from './controls';
 import { hasDemo } from './ids';
 import type { DemoMove, Phase } from './moves';
 import type { DemoScene } from './scene';
 
-export type DemoView = 'front' | 'side';
+export type { DemoView } from './controls';
 
 export type DemoPlayerOptions = {
   /** Start paused on the start pose, snap view turns. Default: the user's media query. */
@@ -62,9 +63,6 @@ const MAX_STEP_S = 0.1;
 function canUseWebGL(): boolean {
   return typeof window !== 'undefined' && 'WebGLRenderingContext' in window;
 }
-
-const BTN_STYLE =
-  'min-height:56px;min-width:56px;flex:1;font-size:var(--fs-body);font-weight:600;border-radius:var(--r-btn);';
 
 /**
  * Builds a player for `exerciseId` and appends its element to `container` (if given).
@@ -127,26 +125,13 @@ export async function createDemoPlayer(
   if (opts.phaseOverlay !== false) stage.append(phaseEl);
   el.append(stage);
 
-  const btn = (label: string, cls: string) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = `demo3d-btn ${cls}`;
-    b.textContent = label;
-    b.style.cssText = BTN_STYLE;
-    return b;
-  };
-  const frontBtn = btn('Front', 'demo3d-front');
-  const sideBtn = btn('Side', 'demo3d-side');
-  const playBtn = btn('Play', 'demo3d-play');
-  if (opts.controls !== false) {
-    const bar = document.createElement('div');
-    bar.className = 'demo3d-controls';
-    bar.setAttribute('role', 'group');
-    bar.setAttribute('aria-label', 'Demo controls');
-    bar.style.cssText = 'display:flex;gap:8px;';
-    bar.append(frontBtn, sideBtn, playBtn);
-    el.append(bar);
-  }
+  // Front / Side (segmented pills) + Play / Pause (round icon button). Handlers are hoisted
+  // function declarations below; the events go with the element in dispose().
+  const controls = demoControls({
+    onView: (v) => setView(v),
+    onTogglePlay: () => setPlaying(!playing),
+  });
+  if (opts.controls !== false) el.append(controls.bar);
   container?.append(el);
 
   // --- state ----------------------------------------------------------------------------------
@@ -212,7 +197,7 @@ export async function createDemoPlayer(
     if (disposed) return;
     playing = on;
     el.dataset.demoPlaying = String(on);
-    playBtn.textContent = on ? 'Pause' : 'Play';
+    controls.showPlaying(on);
     lastTs = 0;
     updatePhase();
     kick();
@@ -222,8 +207,7 @@ export async function createDemoPlayer(
     if (disposed) return;
     view = v;
     el.dataset.view = v;
-    frontBtn.setAttribute('aria-pressed', String(v === 'front'));
-    sideBtn.setAttribute('aria-pressed', String(v === 'side'));
+    controls.showView(v);
     // Turn the shortest way round to the preset.
     const raw = YAW[v];
     targetYaw = raw + Math.round((yaw - raw) / (2 * Math.PI)) * 2 * Math.PI;
@@ -234,10 +218,6 @@ export async function createDemoPlayer(
   // --- events (all removed by one abort in dispose) -------------------------------------------
   const ac = new AbortController();
   const on = { signal: ac.signal };
-  frontBtn.addEventListener('click', () => setView('front'), on);
-  sideBtn.addEventListener('click', () => setView('side'), on);
-  playBtn.addEventListener('click', () => setPlaying(!playing), on);
-
   let dragX: number | null = null;
   const canvas = scene.canvas;
   canvas.style.touchAction = 'none';
@@ -289,8 +269,7 @@ export async function createDemoPlayer(
   const opening = openingView(move);
   if (opening.yaw !== null) {
     targetYaw = opening.yaw;
-    frontBtn.setAttribute('aria-pressed', 'false');
-    sideBtn.setAttribute('aria-pressed', 'false');
+    controls.showView(null);
     delete el.dataset.view;
   }
   yaw = targetYaw;

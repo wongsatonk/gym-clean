@@ -67,24 +67,8 @@
   margin-top: 6px;
 }
 
-.gym-share-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  min-height: var(--tap-bar);
-  padding: 0 18px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
-}
-
-.gym-share-btn.primary {
-  background: var(--cta);
-  color: var(--on-cta);
-  border-color: var(--cta);
-}
+/* M13d task 40d: Share / Import / Apply / Cancel are round icon buttons (iconButton.css,
+   placed by ../settingsButtons.css). */
 
 .gym-file {
   display: none;
@@ -114,16 +98,6 @@
   gap: 4px;
   font-size: var(--fs-body);
   overflow-wrap: anywhere;
-}
-
-.gym-import-actions {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 10px;
-}
-
-.gym-import-actions > :only-child {
-  grid-column: 1 / -1;
 }
 
 .gym-import-error {

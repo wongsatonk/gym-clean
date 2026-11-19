@@ -52,7 +52,7 @@
 .audio-test-hint,
 .audio-test-privacy {
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
@@ -85,17 +85,17 @@
   border-color: var(--selected);
 }
 
-.audio-test-btn {
-  width: 100%;
+/* M13d task 40d: the three test buttons are round icon buttons on pill rows (iconButton.css,
+   ./settingsButtons.css). The pill keeps the old bar height (64px). Camera on: warn ring + word. */
+.audio-test-btn.icon-btn {
   min-height: 64px;
-  font-size: var(--fs-cue);
-  font-weight: 700;
-  background: var(--surface-2);
 }
 
-.audio-test-btn[aria-pressed='true'] {
+.set-ib-pill.audio-test-btn[aria-pressed='true'] {
+  --ib-ink: var(--warn);
+  --ib-word: var(--warn);
+  --ib-ring: var(--warn);
   border-color: var(--warn);
-  color: var(--warn);
 }
 
 .audio-test-cam {

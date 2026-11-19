@@ -141,7 +141,9 @@ describe('restScreen', () => {
     const texts = el.byTag('button').map((b) => b.textContent);
     expect(texts.some((t) => /skip|end/i.test(t))).toBe(false);
     const start = buttonByText(el, 'Start set');
-    expect(start.classes).toEqual(expect.arrayContaining(['primary-btn', 'cta-btn']));
+    // M13d task 40g: the main round-button pill, the whole row its tap area.
+    expect(start.getAttribute('data-variant')).toBe('main');
+    expect(start.hasAttribute('data-wide-hit')).toBe(true);
     start.click();
     expect(calls.start).toBe(1);
   });

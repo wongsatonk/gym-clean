@@ -68,6 +68,9 @@
         // M13c: Plain background before first paint (Moving glow is the CSS default).
         if (localStorage.getItem('gc-background') === 'plain')
           document.documentElement.dataset.background = 'plain';
+        // M13d task 21: Text size before first paint (Standard is the CSS default).
+        var t = localStorage.getItem('gc-text-size');
+        if (t === 'large' || t === 'larger') document.documentElement.dataset.textSize = t;
       } catch (e) {}
     </script>
     <script type="module" src="/src/main.ts"></script>

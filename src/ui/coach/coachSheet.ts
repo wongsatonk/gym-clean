@@ -15,10 +15,14 @@
 // labelled "Ask the coach" with button "Send", button "Close".
 import type { BodyArea, FoodSuggestion, Proposal } from '../../core/types';
 import { h } from '../dom';
+import { motionOffInWorkout } from '../gestures/edgeBack';
+import { iconButton } from '../iconButton';
 import { icon, type IconName } from '../icons';
+import { installSheetSwipe } from '../gestures/sheetSwipe';
 import { moodClass } from '../tokens';
 import { buildFoodCard } from './foodCard';
 import { buildProposalCard, buildRedFlagCard } from './proposalCard';
+import '../chromeButtons.css';
 import './coach.css';
 
 export type CoachChipId = 'notToday' | 'easyOn' | 'lighter' | 'swap' | 'adjustPlan' | 'food';
@@ -129,12 +133,15 @@ function bubble(item: { kind: 'coach' | 'user'; text: string }): HTMLElement {
 export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElement {
   const cycle: HTMLElement[] = [];
 
-  const close = h(
-    'button',
-    { type: 'button', class: 'cs-btn cs-close', onclick: a.onClose },
-    icon('close', 'md'),
-    h('span', {}, 'Close'),
-  );
+  // M13d task 40a: Close = a quiet round button with the word beside it (the title row).
+  const close = iconButton({
+    icon: 'close',
+    label: 'Close',
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'cs-close chrome-close',
+    onClick: () => a.onClose(),
+  });
   cycle.push(close);
 
   const red = hasRedFlag(p.items);
@@ -236,11 +243,14 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
         send();
       }
     });
-    const sendBtn = h(
-      'button',
-      { type: 'button', class: 'cs-btn cs-send', onclick: send },
-      h('span', {}, 'Send'),
-    );
+    // M13d task 40a: Send = a round button beside the text box (word beside the circle).
+    const sendBtn = iconButton({
+      icon: 'arrow-right',
+      label: 'Send',
+      labelAt: 'beside',
+      class: 'cs-send',
+      onClick: () => send(),
+    });
     typing = h(
       'div',
       { class: 'cs-typing' },
@@ -258,6 +268,32 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
     });
   }
 
+  const panel = h(
+    'div',
+    { class: 'cs-panel' },
+    h('div', { class: 'cs-head' }, h('h2', { class: 'cs-title' }, 'Coach'), close),
+    scroll,
+    followUps.length
+      ? h(
+          'div',
+          { class: 'cs-chips cs-followups', role: 'group', 'aria-label': 'Options' },
+          ...followUps,
+        )
+      : null,
+    chips.length
+      ? h('div', { class: 'cs-chips', role: 'group', 'aria-label': 'Quick actions' }, ...chips)
+      : null,
+    areas.length
+      ? h(
+          'div',
+          { class: 'cs-chips cs-areas', role: 'group', 'aria-label': 'Go easy on' },
+          ...areas,
+        )
+      : null,
+    typing,
+    h('p', { class: 'cs-privacy' }, icon('lock', 'sm'), h('span', {}, PRIVACY_LINE)),
+  );
+
   const sheet = h(
     'div',
     {
@@ -268,32 +304,12 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
       tabindex: '-1',
       'data-coach-sheet': true,
     },
-    h(
-      'div',
-      { class: 'cs-panel' },
-      h('div', { class: 'cs-head' }, h('h2', { class: 'cs-title' }, 'Coach'), close),
-      scroll,
-      followUps.length
-        ? h(
-            'div',
-            { class: 'cs-chips cs-followups', role: 'group', 'aria-label': 'Options' },
-            ...followUps,
-          )
-        : null,
-      chips.length
-        ? h('div', { class: 'cs-chips', role: 'group', 'aria-label': 'Quick actions' }, ...chips)
-        : null,
-      areas.length
-        ? h(
-            'div',
-            { class: 'cs-chips cs-areas', role: 'group', 'aria-label': 'Go easy on' },
-            ...areas,
-          )
-        : null,
-      typing,
-      h('p', { class: 'cs-privacy' }, icon('lock', 'sm'), h('span', {}, PRIVACY_LINE)),
-    ),
+    panel,
   );
+  // Opened from the Pause sheet mid-workout: no press scale / glow.
+  motionOffInWorkout(sheet);
+  // M13d task 25: swipe down = Close (the panel follows; a scrolled message list scrolls first).
+  installSheetSwipe(sheet, { close: () => close.click(), mover: panel });
 
   sheet.addEventListener('keydown', (ev) => {
     const kev = ev as KeyboardEvent;

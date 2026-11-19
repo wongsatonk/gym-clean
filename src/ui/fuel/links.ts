@@ -7,8 +7,10 @@
 // e2e hooks: `[data-fuel-protein]` with `.fp-value`, `[data-fuel-hint]`, `[data-fuel-nudge]`,
 // `[data-nudge-dismiss]`, `[data-nudge-open]`.
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { estimateTag } from './common';
+import { actionRow } from './fuelButtons';
 import './fuelLinks.css';
 
 export type SummaryFuel = {
@@ -76,33 +78,25 @@ export function nudgeBanner(
     'section',
     { class: 'fuel-nudge', 'data-fuel-nudge': true, role: 'status', 'aria-live': 'polite' },
     h('p', { class: 'fuel-nudge-text' }, icon('flame', 'sm'), h('span', {}, text)),
-    h(
-      'div',
-      { class: 'fuel-nudge-actions' },
+    // M13d task 40e: round buttons with the word under them.
+    actionRow(
+      'fuel-nudge-actions',
       onOpen
-        ? h(
-            'button',
-            {
-              type: 'button',
-              class: 'fuel-nudge-btn',
-              'data-nudge-open': true,
-              onclick: () => onOpen(),
-            },
-            h('span', {}, 'Log food'),
-          )
+        ? iconButton({
+            icon: 'plus',
+            label: 'Log food',
+            class: 'fuel-nudge-btn',
+            hooks: { 'data-nudge-open': true },
+            onClick: () => onOpen(),
+          })
         : null,
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'fuel-nudge-btn',
-          'data-nudge-dismiss': true,
-          'aria-label': 'Dismiss',
-          onclick: () => onDismiss(),
-        },
-        icon('close', 'sm'),
-        h('span', {}, 'Dismiss'),
-      ),
+      iconButton({
+        icon: 'close',
+        label: 'Dismiss',
+        class: 'fuel-nudge-btn',
+        hooks: { 'data-nudge-dismiss': true },
+        onClick: () => onDismiss(),
+      }),
     ),
   );
 }

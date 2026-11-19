@@ -1,0 +1,54 @@
+/* M13d task 40a: the workout top bar's round icon buttons (topBar.ts). Mid-set = styling only:
+   same places, same words, the bar stays 60px tall (--tap-bar) so nothing on Exercise or Rest
+   moves, and each hit box is at least the 1.16.2 one (Camera and Pause 88×60, the list the rest
+   of the row). To fit the word under the circle in 60px, the circles here are 36px (the hit box,
+   not the circle, is the tap target; documented exception to Goal 7's 56px circle). The colours
+   and focus ring come from iconButton.css; the Exercise screen is a motion-off screen there, so
+   a press is a colour change only. The older .wtb-* rules in styles.css still style the text
+   spans (.wtb-txt / .wtb-day / .wtb-pos). */
+
+.wtb {
+  align-items: stretch;
+}
+
+.wtb .icon-btn {
+  min-height: var(--tap-bar);
+  padding: 0 6px;
+}
+
+.wtb .icon-btn-circle {
+  width: 36px;
+  height: 36px;
+}
+
+.wtb .icon-btn-circle .ic {
+  width: 22px;
+  height: 22px;
+}
+
+/* The exercise list: the circle with the day name over "3 of 5" beside it; takes the rest of
+   the row and cuts a long day name with an ellipsis instead of pushing Pause off screen. */
+.wtb .wtb-list {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.wtb .wtb-list .icon-btn-label {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Camera and Pause: circle over the word, as in 1.16.2 (icon over word), 88px wide. */
+.wtb .wtb-side {
+  flex: none;
+  min-width: 88px;
+  gap: 2px;
+}
+
+.wtb .wtb-side .icon-btn-label {
+  font-size: var(--fs-label);
+  line-height: var(--lh-head);
+}

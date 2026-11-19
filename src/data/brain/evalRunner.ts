@@ -20,7 +20,8 @@
  *   the model failed shows it: red flags still pass (answered by the rules, never sent).
  * - `p50Ms` over the rows where the model was asked: not the rules-routed rows (1.15.2: red flags,
  *   change requests the rules read, empty text and Thai never reach the model; core
- *   brain/route.ts). Each row says which (`route`); an unsafe row lists the sanitize hit ids
+ *   brain/route.ts; 1.16.2: nor own-number questions the facts answerer can answer from saved
+ *   data, brain/facts.ts). Each row says which (`route`); an unsafe row lists the sanitize hit ids
  *   (`hits`: rule ids and banned-word ids from our own lists, never text).
  */
 import requestsJson from '../../core/trainer/evals/requests.json';

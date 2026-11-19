@@ -33,20 +33,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* M13d task 40b: Skip is a quiet round button (iconButton.ts) with its word beside it. */
 .ob-skip {
   margin-left: auto;
-  min-width: 96px;
-  min-height: var(--tap-min);
-  padding: 0 20px;
-  font-size: var(--fs-body);
-  font-weight: 700;
-  background: var(--surface-2);
 }
 
 .ob-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* M13d: the page follows a sideways swipe; vertical scroll stays native, nothing scrolls sideways. */
+  overflow-x: hidden;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
 }
@@ -81,17 +79,17 @@
 
 .ob-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-display);
   font-weight: 700;
-  line-height: 1.05;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
 .ob-text {
   margin: 0;
   font-size: var(--fs-cue);
-  line-height: 1.4;
+  line-height: var(--lh-text);
 }
 
 .ob-note {
@@ -102,7 +100,7 @@
   background: var(--surface);
   color: var(--text-2);
   font-size: var(--fs-body);
-  line-height: 1.4;
+  line-height: var(--lh-text);
 }
 
 .ob-granted {
@@ -140,44 +138,50 @@
   gap: 12px;
 }
 
+/* M13d task 40b (Goal 7): [Back circle][main pill]; on an ask page the pill gets its own row and
+   Back / Not now sit under it, one at each end. Both rows keep ≥ 12px between targets. */
 .ob-nav-row {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
   gap: 12px;
 }
 
 .ob-nav-ask .ob-nav-row {
-  grid-template-columns: 1fr 1fr;
-}
-
-.ob-back,
-.ob-not-now,
-.ob-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: var(--tap-cta);
-  padding: 0 16px;
-  font-size: var(--fs-lead);
-  font-weight: 700;
-  line-height: 1.15;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 .ob-back,
 .ob-not-now {
-  background: var(--surface-2);
+  min-width: var(--tap-cta);
 }
 
-.ob-back:disabled {
-  opacity: 0.4;
-  cursor: default;
+/* M13d task 12: the Units page (unitsPage.ts). Each choice is a word ("Weight") over the shared
+   unit switch (unitSwitch.css), stretched to the page width here so each option is a big target
+   (≥ 56px tall from the switch; the two halves share the row). No motion of its own. */
+.ob-units-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
-.ob-primary {
-  background: var(--cta);
-  color: var(--on-cta);
-  border: none;
+.ob-units-label {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: var(--lh-head);
+}
+
+.ob-units .ob-units-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+}
+
+.ob-units .ob-units-switch .unit-switch-opt {
+  min-height: var(--tap-bar);
+  font-size: var(--fs-lead);
 }

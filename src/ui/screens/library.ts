@@ -50,6 +50,7 @@ import { backButton } from '../backButton';
 import { h } from '../dom';
 import { emptyState } from '../emptyState';
 import { icon, type IconName } from '../icons';
+import { iconButton } from '../iconButton';
 import { moodClass } from '../tokens';
 import '../library.css';
 
@@ -488,19 +489,19 @@ function loadingLine(): HTMLElement {
   );
 }
 
+/** M13d task 40c: "Show more" is a quiet round iconButton, its word beside it on a full row. */
 function moreButton(kind: PersonalKind, onMore: (kind: PersonalKind) => void): HTMLElement {
-  return h(
-    'button',
-    {
-      type: 'button',
-      class: 'lib-more',
-      'aria-label': SHOW_MORE_LABEL[kind],
-      'data-search-more': kind,
-      onclick: () => onMore(kind),
-    },
-    h('span', {}, SHOW_MORE),
-    icon('back', 'sm', { class: 'lib-more-chev' }),
-  );
+  return iconButton({
+    icon: 'plus',
+    label: SHOW_MORE,
+    variant: 'quiet',
+    labelAt: 'beside',
+    wideHit: true,
+    ariaLabel: SHOW_MORE_LABEL[kind],
+    class: 'lib-more',
+    hooks: { 'data-search-more': kind },
+    onClick: () => onMore(kind),
+  });
 }
 
 function groupByControl(

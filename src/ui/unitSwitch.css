@@ -1,0 +1,52 @@
+/* M13d task 13b (SPEC M13d Goal 3): the unit switch next to a measured field (unitSwitch.ts).
+   One outlined track with two options, compact width; each option is a native button ≥ 56px
+   tall and wide. The active option is filled (--selected, dark word), the other a plain word on
+   the track (--text-2); unitSwitch.test.ts checks both reach 4.5:1 in every theme.
+   No motion of its own: the state change is instant, the global press shrink (styles.css) is the
+   only movement, and the one reduced-motion block in styles.css turns that off. */
+
+.unit-switch {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(var(--tap-min), 1fr);
+  align-items: stretch;
+  gap: 2px;
+  flex: none;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
+  background: var(--surface);
+}
+
+.unit-switch-opt {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  border: none;
+  border-radius: calc(var(--r-btn) - 4px);
+  background: transparent;
+  color: var(--text-2);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.unit-switch-opt.active {
+  background: var(--selected);
+  color: var(--on-selected);
+}
+
+/* The field's label row with the switch at its end ("Height ……… cm | ft·in"). The label may
+   wrap; the switch never shrinks. */
+.unit-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.unit-field-head > :first-child {
+  min-width: 0;
+}

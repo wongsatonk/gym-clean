@@ -26,9 +26,11 @@ import { backButton } from '../backButton';
 import { bodyMapSvg, pickView } from '../bodyMap';
 import { h } from '../dom';
 import type { HowToContent } from '../howToSheet';
-import { icon } from '../icons';
+import { icon, type IconName } from '../icons';
+import { iconButton } from '../iconButton';
 import { moodClass } from '../tokens';
 import { setsLine, type ShownSet } from './history';
+import { mainPill } from './mainPill';
 import { dateLabel } from './today';
 import '../exerciseDetail.css';
 
@@ -184,23 +186,30 @@ function legendLine(kind: 'primary' | 'secondary', label: string, muscles: reado
   );
 }
 
+/** M13d task 40c: a section's own action, a round iconButton with its word beside it. */
+function detailAct(
+  ic: IconName,
+  label: string,
+  hooks: Record<string, boolean>,
+  onClick: (btn: HTMLButtonElement) => void,
+): HTMLButtonElement {
+  return iconButton({ icon: ic, label, labelAt: 'beside', class: 'detail-btn', hooks, onClick });
+}
+
 export function exerciseDetailScreen(
   p: ExerciseDetailProps,
   a: ExerciseDetailActions,
 ): HTMLElement {
   const c = p.content;
 
-  const howTo: HTMLButtonElement = h(
-    'button',
-    {
-      type: 'button',
-      class: 'primary-btn detail-howto',
-      'data-detail-howto': true,
-      onclick: () => a.onHowTo(howTo),
-    },
-    icon(c.hasDemo ? 'play' : 'help', 'lg'),
-    h('span', {}, howToLabel(c.hasDemo)),
-  );
+  // M13d task 40c: the page's one main action, the round main button in a wide pill.
+  const howTo: HTMLButtonElement = mainPill({
+    icon: c.hasDemo ? 'play' : 'help',
+    label: howToLabel(c.hasDemo),
+    class: 'detail-howto',
+    hooks: { 'data-detail-howto': true },
+    onClick: (btn) => a.onHowTo(btn),
+  });
 
   const map = h('div', { class: 'detail-map', 'data-detail-map': true });
   map.innerHTML = bodyMapSvg({
@@ -269,31 +278,13 @@ export function exerciseDetailScreen(
       icon(lacks ? 'lock' : 'check', 'sm'),
       h('span', {}, lacks ? `Needs: ${p.needs.join(', ')}` : GYM_HAS_IT),
     ),
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'ghost-btn detail-btn',
-        'data-detail-mygym': true,
-        onclick: () => a.onMyGym(),
-      },
-      icon('sliders', 'sm'),
-      h('span', {}, 'My gym'),
-    ),
+    detailAct('sliders', 'My gym', { 'data-detail-mygym': true }, () => a.onMyGym()),
   );
 
   let camera: HTMLElement | null = null;
   if (p.camera) {
-    const setUp: HTMLButtonElement = h(
-      'button',
-      {
-        type: 'button',
-        class: 'ghost-btn detail-btn',
-        'data-detail-camera': true,
-        onclick: () => a.onCameraInfo(setUp),
-      },
-      icon('camera', 'sm'),
-      h('span', {}, 'Phone set-up'),
+    const setUp = detailAct('camera', 'Phone set-up', { 'data-detail-camera': true }, (btn) =>
+      a.onCameraInfo(btn),
     );
     camera = section(
       'camera',
@@ -344,16 +335,8 @@ export function exerciseDetailScreen(
             h('span', { class: 'detail-best-num' }, best.num),
             h('span', { class: 'detail-best-unit muted' }, best.unit),
           ),
-          h(
-            'button',
-            {
-              type: 'button',
-              class: 'ghost-btn detail-btn',
-              'data-detail-see-history': true,
-              onclick: () => a.onHistory(),
-            },
-            icon('trend', 'sm'),
-            h('span', {}, 'See history'),
+          detailAct('trend', 'See history', { 'data-detail-see-history': true }, () =>
+            a.onHistory(),
           ),
         ]
       : [h('p', { class: 'detail-none muted', 'data-detail-new': true }, NOT_DONE_YET)]),

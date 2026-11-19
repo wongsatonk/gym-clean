@@ -29,12 +29,14 @@ export const INTAKE_OPTIONS = {
    * M13c (Decision "M13c answers", q3): "Add abs to your plan?", after the go-easy step (the
    * intake has no gym-kit step), No selected by default. Yes → `Intake.wantsCore: true` → the
    * starter plan gets a core slot on ≥ 3 days. `learnId`: the Why? card.
+   * M13d task 18: the hint is one short sentence (≤ 12 words; the screen budget is 20 besides the
+   * options); "you can add them later" lives in the Why? card's body.
    */
   wantsCore: {
     id: 'wantsCore',
     after: 'easyOn',
     question: 'Add abs to your plan?',
-    hint: 'A few abs sets on 3 days a week. You can add them later with a focus block too.',
+    hint: 'A few abs sets on 3 days a week.',
     options: [
       { id: 'no', value: false, label: 'No' },
       { id: 'yes', value: true, label: 'Yes, add abs' },

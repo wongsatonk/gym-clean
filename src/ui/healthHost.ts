@@ -18,6 +18,11 @@
 //   settings like any card, with no native call.
 // - Turning a type off deletes what the app kept of it (setHealthTypeEnabled) and drops today's
 //   saved card when it leaned on that type, so the next sync decides again without it.
+// - M13d task 8: `profile()` reads height, birth year and sex once per Set up Fuel open (the Fuel
+//   controller calls it), only in the iPhone app and only while Health is connected; the answer
+//   is handed straight to the form and never stored here. Connect also asks iOS for those three
+//   (read only), so a first run can pre-fill; `profile()` asks again before each read (a no-op
+//   once iOS has answered), so phones connected before 1.16.3 get the sheet once too.
 // Privacy: nothing here touches the network or the developer log, and nothing from Health goes
 // into the coach context.
 import { answerCard, syncHealth, type HealthSyncSource } from '../core/health/sync';
@@ -31,6 +36,7 @@ import {
   HEALTH_CONNECT_TYPES,
   HEALTH_TYPES,
   type HealthDay,
+  type HealthProfile,
   type HealthSettings,
   type HealthType,
   type NutritionSettings,
@@ -55,7 +61,10 @@ import type { WeekLoad } from './screens/weekLoad';
 
 /** The Health API this host needs (`Health` in src/native/health.ts has this shape). */
 export type HealthApi = HealthSyncSource & {
-  requestRead(types: readonly HealthType[]): Promise<boolean>;
+  /** M13d: `profile` also asks for height, date of birth and sex (read only). */
+  requestRead(types: readonly HealthType[], options?: { profile?: boolean }): Promise<boolean>;
+  /** M13d: height / birth year / sex for Set up Fuel (null: nothing there or allowed). */
+  readProfile?(): Promise<HealthProfile | null>;
 };
 
 /** The coach chip a card button opens (existing M10 proposals). */
@@ -241,7 +250,10 @@ export function createHealthHost(deps: HealthHostDeps) {
         await saveHealthSettings(db, s);
       }
       settings = s;
-      await health.requestRead(HEALTH_TYPES.filter((t) => s.enabled[t]));
+      await health.requestRead(
+        HEALTH_TYPES.filter((t) => s.enabled[t]),
+        { profile: true },
+      );
       await sync();
     });
   }
@@ -313,6 +325,25 @@ export function createHealthHost(deps: HealthHostDeps) {
     sync,
     /** M13 first launch: the same Connect as Settings → Health (asks iOS; a no-op on the PWA). */
     connect,
+    /**
+     * M13d task 8: Apple Health's height / birth year / sex for Set up Fuel, read now (one read
+     * per call; the caller asks once per open). Null on the PWA, while Health isn't connected
+     * (every type off), when Health has nothing or the read fails. Never stored here.
+     */
+    async profile(): Promise<HealthProfile | null> {
+      try {
+        const health = await load();
+        if (!health?.readProfile) return null;
+        if (!anyOn(await getHealthSettings(db))) return null;
+        // Phones connected before 1.16.3 never asked iOS for these three: ask now. iOS shows its
+        // sheet only the first time for new types; later asks return at once.
+        await health.requestRead([], { profile: true });
+        return await health.readProfile();
+      } catch (err) {
+        deps.logError(err);
+        return null;
+      }
+    },
     /** App open: the first sync, then one each time the app comes back to the foreground. */
     start(): void {
       document.addEventListener('visibilitychange', () => {

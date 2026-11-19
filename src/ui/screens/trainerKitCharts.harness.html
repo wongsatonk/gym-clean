@@ -93,18 +93,22 @@
           measurementsScreen(
             {
               sites: SITES,
-              unit,
+              units: { weight: unit, length: unit === 'lb' ? 'in' : 'cm' },
               today: state === 'ok' ? '2026-10-20' : TODAY,
               measurements: state === 'first' ? [] : MEASURED,
             },
-            { onBack: () => log('back'), onSave: (rows) => log('save', JSON.stringify(rows)) },
+            {
+              onBack: () => log('back'),
+              onSave: (rows) => log('save', JSON.stringify(rows)),
+              onUnits: (u) => log('units', JSON.stringify(u)),
+            },
           ),
         );
       } else if (view === 'weighin') {
         app.replaceChildren(
           weighInScreen(
             {
-              unit,
+              units: { weight: unit, length: unit === 'lb' ? 'in' : 'cm' },
               todayKg: 70.6,
               lastKg: 70.4,
               trend: TREND,
@@ -119,6 +123,7 @@
               onSave: (kg) => log('save', kg),
               onAccept: () => log('accept'),
               onDismiss: () => log('dismiss'),
+              onUnits: (u) => log('units', JSON.stringify(u)),
             },
           ),
         );

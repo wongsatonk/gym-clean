@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Accent, BodyArea, Intake } from '../../core/types';
+import type { Accent, BodyArea, Intake, LengthUnit, TextSize } from '../../core/types';
+import { TEXT_SIZES, textScale } from '../../core/textSize';
+import { TEXT_SIZE_GROUP, TEXT_SIZE_NOTE } from '../textSizePicker';
 import { checkCopy } from '../../core/trainer/replies';
 import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import type { Unit } from '../../core/units';
@@ -14,6 +16,10 @@ import {
   GOAL_NOT_SET,
   GOAL_RERUN_LABEL,
   GOAL_SET_LABEL,
+  LENGTH_UNIT_GROUP,
+  WEIGHT_UNIT_GROUP,
+  isShortNote,
+  lengthNote,
   settingsScreen,
   settingsSectionId,
   unitNote,
@@ -231,9 +237,165 @@ describe('settings screen', () => {
     expect(calls.tab).toEqual(['today']);
   });
 
+  it('M13d Units: the section is titled Units; Weight keeps its group name and buttons', () => {
+    const { el } = render({ unit: 'kg' });
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'unit', 'unit section');
+    expect(sec.byTag('h2')[0]?.textContent).toBe('Units');
+    const groups = sec.find((e) => e.getAttribute('role') === 'group');
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual([WEIGHT_UNIT_GROUP]);
+    expect(WEIGHT_UNIT_GROUP).toBe('Weight unit');
+  });
+
+  it('M13d Units: Height and body (cm / ft·in) shows with onLengthUnit, pressed + check, taps report', () => {
+    const lengths: LengthUnit[] = [];
+    const el = asFake(
+      settingsScreen(props({ unit: 'kg', lengthUnit: 'in' }), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onLengthUnit: (u) => lengths.push(u),
+        onCameraTest: () => {},
+        onTab: () => {},
+      }),
+    );
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'unit', 'unit section');
+    const groups = sec.find((e) => e.getAttribute('role') === 'group');
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual([
+      WEIGHT_UNIT_GROUP,
+      LENGTH_UNIT_GROUP,
+    ]);
+    const cm = byAttr(el, 'data-length-unit', 'cm');
+    const ftIn = byAttr(el, 'data-length-unit', 'in');
+    expect([cm.textContent, ftIn.textContent]).toEqual(['cm', 'ft·in']);
+    expect([cm.getAttribute('aria-pressed'), ftIn.getAttribute('aria-pressed')]).toEqual([
+      'false',
+      'true',
+    ]);
+    expect(ftIn.find((e) => e.getAttribute('data-icon') === 'check')).toHaveLength(1);
+    ftIn.click();
+    cm.click();
+    expect(lengths).toEqual(['cm']);
+    expect(sec.textContent).toContain(lengthNote('in'));
+    // The visible words over each choice; the group names carry them for screen readers.
+    const labels = sec.byClass('set-units-label');
+    expect(labels.map((l) => l.textContent)).toEqual(['Weight', 'Height and body']);
+    for (const l of labels) expect(l.getAttribute('aria-hidden')).toBe('true');
+    // The weight buttons stay the only [data-unit] hooks (e2e looks them up by that).
+    expect(
+      el.find((e) => e.hasAttribute('data-unit')).map((e) => e.getAttribute('data-unit')),
+    ).toEqual(['kg', 'lb']);
+  });
+
+  it('M13d Units: no lengthUnit row → follows the weight unit (lb → ft·in, kg → cm)', () => {
+    for (const [unit, want] of [
+      ['lb', 'in'],
+      ['kg', 'cm'],
+    ] as const) {
+      const el = asFake(
+        settingsScreen(props({ unit }), {
+          onAccent: () => {},
+          onSpokenCount: () => {},
+          onCoachTips: () => {},
+          onHandsFree: () => {},
+          onUnit: () => {},
+          onLengthUnit: () => {},
+          onCameraTest: () => {},
+          onTab: () => {},
+        }),
+      );
+      expect(byAttr(el, 'data-length-unit', want).getAttribute('aria-pressed')).toBe('true');
+    }
+  });
+
+  it('M13d Units: without onLengthUnit only the Weight choice shows', () => {
+    const { el } = render({ unit: 'lb', lengthUnit: 'in' });
+    expect(el.find((e) => e.hasAttribute('data-length-unit'))).toHaveLength(0);
+  });
+
+  it('lengthNote', () => {
+    expect(lengthNote('cm')).toBe('Height and tape in cm.');
+    expect(lengthNote('in')).toBe('Height in feet and inches, tape in inches.');
+    for (const t of [lengthNote('cm'), lengthNote('in'), LENGTH_UNIT_GROUP, WEIGHT_UNIT_GROUP])
+      expect(checkCopy(t), t).toEqual({ ok: true, hits: [] });
+  });
+
   it('unitNote', () => {
     expect(unitNote('kg')).toBe('Weights step by 2.5 kg.');
     expect(unitNote('lb')).toMatch(/^Weights step by 5 lb\./);
+  });
+});
+
+describe('settingsScreen M13d task 21 Display → Text size', () => {
+  const withText = (textSize: TextSize | undefined, sizes: TextSize[]) =>
+    asFake(
+      settingsScreen(props(textSize ? { textSize } : {}), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onTextSize: (s) => sizes.push(s),
+        onCameraTest: () => {},
+        onTab: () => {},
+      }),
+    );
+
+  it('without onTextSize there is no Display section', () => {
+    const { el } = render();
+    expect(el.find((e) => e.getAttribute('data-section') === 'display')).toHaveLength(0);
+  });
+
+  it('a "Display" section right after Your goal (before Accent colour), a jump target', () => {
+    const el = withText(undefined, []);
+    const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+    expect(keys.indexOf('display')).toBe(keys.indexOf('accent') - 1);
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'display', 'display');
+    expect(sec.byTag('h2')[0]?.textContent).toBe('Display');
+    expect(sec.getAttribute('id')).toBe(settingsSectionId('display'));
+    expect(sec.byTag('h2')[0]?.find((e) => e.getAttribute('data-icon') === 'text')).toHaveLength(1);
+  });
+
+  it('Text size: Standard / Large / Larger in one named group; missing → Standard pressed + check', () => {
+    const el = withText(undefined, []);
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'display', 'display');
+    const group = one(sec, (e) => e.getAttribute('role') === 'group', 'group');
+    const label = one(sec, (e) => e.getAttribute('id') === 'set-text-size-label', 'label');
+    expect(label.textContent).toBe(TEXT_SIZE_GROUP);
+    expect(group.getAttribute('aria-labelledby')).toBe('set-text-size-label');
+    const btns = group.byTag('button');
+    expect(btns.map((b) => b.textContent)).toEqual(['Standard', 'Large', 'Larger']);
+    expect(btns.map((b) => b.getAttribute('data-text-size-option'))).toEqual([...TEXT_SIZES]);
+    expect(btns.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
+    expect(btns.map((b) => b.find((e) => e.getAttribute('data-icon') === 'check').length)).toEqual([
+      1, 0, 0,
+    ]);
+    expect(btns[0]?.classes).toContain('active');
+    // The short note stays shown (≤ 10 words, one sentence), no More.
+    expect(isShortNote(TEXT_SIZE_NOTE)).toBe(true);
+    expect(sec.textContent).toContain(TEXT_SIZE_NOTE);
+    expect(sec.find((e) => e.getAttribute('data-more') === 'set-display')).toHaveLength(0);
+  });
+
+  it('each word previews its size (the core cue px); the stored size is pressed; taps report', () => {
+    const sizes: TextSize[] = [];
+    const el = withText('larger', sizes);
+    const btn = (s: TextSize) => byAttr(el, 'data-text-size-option', s);
+    for (const s of TEXT_SIZES) {
+      const word = btn(s).byClass('text-size-word')[0];
+      expect(word?.style['fontSize'], s).toBe(`${textScale(s).cue}px`);
+      expect(btn(s).getAttribute('aria-pressed')).toBe(s === 'larger' ? 'true' : 'false');
+    }
+    btn('larger').click(); // already chosen: nothing
+    btn('large').click();
+    btn('standard').click();
+    expect(sizes).toEqual(['large', 'standard']);
+  });
+
+  it('copy passes checkCopy', () => {
+    for (const t of [TEXT_SIZE_GROUP, TEXT_SIZE_NOTE, 'Display', 'Standard', 'Large', 'Larger'])
+      expect(checkCopy(t), t).toEqual({ ok: true, hits: [] });
   });
 });
 
@@ -243,7 +405,7 @@ describe('settingsScreen M7 Nutrition slot', () => {
     expect(el.find((e) => e.getAttribute('data-section') === 'nutrition')).toHaveLength(0);
   });
 
-  it('places the nutrition block in a "Nutrition" section after Weight unit', () => {
+  it('places the nutrition block in a "Nutrition" section after Units', () => {
     const { el } = render({ nutrition: slot('data-nutrition') });
     const sections = el.find((e) => e.tag === 'section').map((s) => s.getAttribute('data-section'));
     expect(sections.indexOf('nutrition')).toBe(sections.indexOf('unit') + 1);
@@ -295,7 +457,8 @@ describe('settingsScreen M10e Gym and M9 Backup sections', () => {
     ]);
     const btn = one(el, (e) => e.hasAttribute('data-my-gym-open'), 'my gym');
     expect(btn.textContent).toBe('My gym');
-    expect(btn.classes).toContain('set-action');
+    expect(btn.classes).toContain('set-row');
+    expect(btn.hasAttribute('data-icon-btn')).toBe(true);
     btn.click();
     expect(opened).toBe(1);
     const sec = byAttr(el, 'data-section', 'backup');
@@ -670,7 +833,8 @@ describe('settingsScreen M13 owner mode', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.hasAttribute('data-about-open')).toBe(true);
     expect(rows[0]?.textContent).toBe('About Gym Clean');
-    expect(rows[0]?.classes).toContain('set-action');
+    expect(rows[0]?.classes).toContain('set-row');
+    expect(rows[0]?.hasAttribute('data-icon-btn')).toBe(true);
     // No build hash, version or credit on Settings itself.
     expect(el.textContent).not.toContain('build');
     expect(el.textContent).not.toContain(CREDIT);
@@ -705,7 +869,8 @@ describe('settingsScreen M13 owner mode', () => {
       const rows = about.byTag('button');
       expect(rows.map((b) => b.textContent)).toEqual(['About Gym Clean', 'Show the welcome again']);
       expect(rows[1]?.hasAttribute('data-welcome-rerun')).toBe(true);
-      expect(rows[1]?.classes).toContain('set-action');
+      expect(rows[1]?.classes).toContain('set-row');
+      expect(rows[1]?.hasAttribute('data-icon-btn')).toBe(true);
       rows[1]?.click();
       expect(log).toEqual(['welcome']);
     }
@@ -718,7 +883,8 @@ describe('settingsScreen M13 owner mode', () => {
       const sec = byAttr(el, 'data-section', 'selfcheck');
       const btn = one(sec, (e) => e.hasAttribute('data-selfcheck-open'), 'self-check row');
       expect(btn.textContent).toBe('Self-check');
-      expect(btn.classes).toContain('set-action');
+      expect(btn.classes).toContain('set-row');
+      expect(btn.hasAttribute('data-icon-btn')).toBe(true);
       btn.click();
       expect(log).toEqual(['check']);
     }
@@ -781,5 +947,106 @@ describe('Settings: Search and jump targets (M13c)', () => {
       expect(s.getAttribute('tabindex')).toBe('-1');
       expect(s.getAttribute('aria-labelledby')).toBe(`set-${key}`);
     }
+  });
+});
+
+describe('settingsScreen M13d task 19: notes behind "More"', () => {
+  function renderAll(over: Partial<SettingsProps> = {}) {
+    return asFake(
+      settingsScreen(props({ easyOn: ['legs'], ...over }), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onLengthUnit: () => {},
+        onCameraTest: () => {},
+        onTab: () => {},
+        onIntake: () => {},
+        onEasyOnRemove: () => {},
+        onProgressPhotos: () => {},
+        onMyGym: () => {},
+        onHealth: () => {},
+        onCoachSettings: () => {},
+        onSelfCheck: () => {},
+        onReminders: () => {},
+        onTodos: () => {},
+        onWhatsNew: () => {},
+      }),
+    );
+  }
+  it('only long notes fold: each such section has one closed More (a real button) holding them', () => {
+    const el = renderAll();
+    const mores = el.find((e) => e.hasAttribute('data-more'));
+    // Multi-sentence (go-easy, Gym) or over 10 words (To-dos); the one-liners stay shown.
+    expect(mores.map((m) => m.getAttribute('data-more'))).toEqual([
+      'set-goal',
+      'set-gym',
+      'set-todos',
+    ]);
+    for (const m of mores) {
+      const btn = m.find((e) => e.hasAttribute('data-more-btn'))[0];
+      expect(btn?.tag).toBe('button');
+      expect(btn?.getAttribute('aria-expanded')).toBe('false');
+      const panel = m.find((e) => e.hasAttribute('data-more-panel'))[0];
+      expect(panel?.hasAttribute('hidden')).toBe(true);
+      expect(panel?.byClass('set-note').length).toBeGreaterThan(0);
+    }
+    expect(byAttr(el, 'data-more', 'set-goal').textContent).toContain(EASY_ON_NOTE);
+  });
+
+  it('one-line notes stay shown (not behind More)', () => {
+    const el = renderAll();
+    const inMore = (e: FakeEl) =>
+      el.find((m) => m.hasAttribute('data-more-panel') && m.find((x) => x === e).length > 0)
+        .length > 0;
+    const shown = el.find((e) => e.hasAttribute('data-set-note'));
+    expect(shown.map((e) => e.getAttribute('data-set-note'))).toEqual([
+      'unit',
+      'unit',
+      'health',
+      'coach',
+      'selfcheck',
+      'reminders',
+    ]);
+    for (const e of shown) {
+      expect(inMore(e)).toBe(false);
+      expect(e.classes).toContain('set-note');
+      expect(isShortNote(e.textContent)).toBe(true);
+    }
+    expect(shown[0]?.textContent).toBe(unitNote('kg'));
+    expect(shown[1]?.textContent).toBe(lengthNote('cm'));
+  });
+
+  it('a long Units note (lb: two sentences) folds while the short one stays shown', () => {
+    const el = renderAll({ unit: 'lb', lengthUnit: 'cm' });
+    const unit = byAttr(el, 'data-more', 'set-unit');
+    expect(unit.textContent).toContain(unitNote('lb'));
+    expect(unit.textContent).not.toContain(lengthNote('cm'));
+    expect(
+      el.find((e) => e.getAttribute('data-set-note') === 'unit').map((e) => e.textContent),
+    ).toEqual([lengthNote('cm')]);
+  });
+
+  it('isShortNote: one sentence of at most 10 words', () => {
+    expect(isShortNote('Weights step by 2.5 kg.')).toBe(true);
+    expect(isShortNote('Off until you turn them on.')).toBe(true);
+    expect(isShortNote('The kit your gym has. Swaps use only that.')).toBe(false);
+    expect(isShortNote('Things to try and answer, and what changed in this version.')).toBe(false);
+  });
+
+  it('the privacy line and state lines stay shown (not behind More)', () => {
+    const el = renderAll({ easyOn: [] });
+    const notInMore = (e: FakeEl) =>
+      el.find((m) => m.hasAttribute('data-more-panel') && m.find((x) => x === e).length > 0)
+        .length === 0;
+    const privacy = byAttr(el, 'data-progress-photos-privacy', '');
+    expect(privacy.textContent).toContain(PHOTOS_PRIVACY);
+    expect(notInMore(privacy)).toBe(true);
+    const empty = byAttr(el, 'data-easy-empty', '');
+    expect(notInMore(empty)).toBe(true);
+    expect(notInMore(byAttr(el, 'data-goal-summary', ''))).toBe(true);
+    // No go-easy areas → no go-easy note → no More in Your goal.
+    expect(el.find((e) => e.getAttribute('data-more') === 'set-goal')).toHaveLength(0);
   });
 });

@@ -19,6 +19,12 @@
  *   exercise). Naming none ("Swap an exercise") stays with the rules, which ask which one.
  * Red flags, empty text and Thai are decided first, as before.
  *
+ * 1.16.2 "Coach facts" (his 1.16.1 phone eval: facts 18 of 24, all six misses the model quoting
+ * wrong numbers): a message bound for the model by the rules above, with no discomfort word, that
+ * brain/facts.ts reads as a question about the user's own saved numbers takes `why: 'facts'` with
+ * the query; the Apple adapter answers it in code and asks the model only when the answer is null
+ * (no data). Change requests keep their rules action; open chat stays with the model.
+ *
  * `call` records the tool call a correct model would make for the match (tools.contract.json
  * names and args), for the trace and the eval; the proposal itself comes from `handle()`.
  */
@@ -26,6 +32,7 @@ import type { ToolCall } from '../../types';
 import { matchContext, matchText, resolveDay, type CoachContext } from '../coach';
 import { weekdaysFor, validDaysPerWeek } from '../focusBlock';
 import { shortOptionFor } from '../actions/shortOnTime';
+import { classifyFact, type FactQuery } from './facts';
 import {
   asksOwnNumbers,
   namesExercise,
@@ -34,9 +41,11 @@ import {
   type IntentSlots,
 } from '../intents';
 
-export type RouteWhy = 'redFlag' | 'action' | 'empty' | 'thai';
+export type RouteWhy = 'redFlag' | 'action' | 'empty' | 'thai' | 'facts';
 export type BrainRoute =
-  | { to: 'rules'; why: RouteWhy; match: IntentMatch; call?: ToolCall }
+  | { to: 'rules'; why: Exclude<RouteWhy, 'facts'>; match: IntentMatch; call?: ToolCall }
+  /** 1.16.2: answered in code from saved data (brain/facts.ts); never a tool call. */
+  | { to: 'rules'; why: 'facts'; match: IntentMatch; fact: FactQuery }
   | { to: 'model'; match: IntentMatch };
 
 /** Answers (not changes) stay with the model: help, week and progress. */
@@ -115,9 +124,16 @@ export function toolCallFor(match: IntentMatch, today: string): ToolCall | null 
   }
 }
 
-function toRules(why: RouteWhy, match: IntentMatch, today: string): BrainRoute {
+function toRules(why: Exclude<RouteWhy, 'facts'>, match: IntentMatch, today: string): BrainRoute {
   const call = RULES_ACTION_INTENTS.has(match.intent) ? toolCallFor(match, today) : null;
   return call ? { to: 'rules', why, match, call } : { to: 'rules', why, match };
+}
+
+/** A question the model would get: the facts route when it is one about saved numbers. */
+function toModel(text: string, match: IntentMatch, coach: CoachContext): BrainRoute {
+  if (match.safety !== 'none') return { to: 'model', match };
+  const fact = classifyFact(text, matchContext(coach));
+  return fact ? { to: 'rules', why: 'facts', match, fact } : { to: 'model', match };
 }
 
 export function routeMessage(text: string, coach: CoachContext): BrainRoute {
@@ -125,11 +141,11 @@ export function routeMessage(text: string, coach: CoachContext): BrainRoute {
   if (match.safety === 'redFlag') return { to: 'rules', why: 'redFlag', match };
   if (text.trim() === '') return { to: 'rules', why: 'empty', match };
   if (THAI.test(text)) return toRules('thai', match, coach.today);
-  if (!RULES_ACTION_INTENTS.has(match.intent)) return { to: 'model', match };
+  if (!RULES_ACTION_INTENTS.has(match.intent)) return toModel(text, match, coach);
   if (match.safety === 'none') {
     // A session length typed ("how much time left? 15 minutes") is a shortOnTime request.
     const sessionLength = match.intent === 'shortOnTime' && match.slots.minutes !== undefined;
-    if (!sessionLength && asksOwnNumbers(text)) return { to: 'model', match };
+    if (!sessionLength && asksOwnNumbers(text)) return toModel(text, match, coach);
     if (
       NEEDS_EXERCISE.has(match.intent) &&
       match.slots.exerciseId === undefined &&

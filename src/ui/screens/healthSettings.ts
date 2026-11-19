@@ -20,14 +20,20 @@
 // e2e hooks: `main[data-screen="health-settings"]`, `[data-health-pwa]`, `[data-health-connect]`,
 // `[data-health-type="<type>"]` (role="switch", aria-checked), `[data-health-delete="<type>"]`,
 // `[data-health-keep="<type>"]`, `[data-health-read-now]`, `[data-health-last-read]`.
+//
+// M13d task 40d (Goal 7): Connect is the page's main round button (a pill row, the whole row the
+// tap area), Read now a round button with its word beside it, and the in-row choice is a danger
+// circle "Turn off and delete" + a quiet "Keep it" (words below). Words, hooks and names kept.
 import { APP_NAME } from '../../core/brand';
 import { HEALTH_TYPES, type HealthSettings, type HealthType } from '../../core/types';
 import { backButton } from '../backButton';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { dateLabel } from './today';
 import './healthSettings.css';
+import '../settingsButtons.css';
 
 export type HealthSettingsProps = {
   /** True inside the iPhone app (Capacitor bridge + GymHealth plugin present). */
@@ -180,36 +186,29 @@ function typeRow(
     open = true;
     confirm.removeAttribute('hidden');
     sw.setAttribute('aria-expanded', 'true');
-    const del = h(
-      'button',
-      {
-        type: 'button',
-        class: 'health-btn health-delete',
-        'data-health-delete': type,
-        onclick: () => actions.onTurnOffAndDelete(type),
-      },
-      icon('close', 'sm'),
-      h('span', {}, 'Turn off and delete'),
-    );
+    const del = iconButton({
+      icon: 'trash',
+      label: 'Turn off and delete',
+      variant: 'danger',
+      hooks: { 'data-health-delete': type },
+      onClick: () => actions.onTurnOffAndDelete(type),
+    });
     confirm.replaceChildren(
       h('p', { class: 'health-confirm-note' }, HEALTH_DELETE_NOTE),
       h(
         'div',
-        { class: 'health-confirm-actions' },
+        { class: 'health-confirm-actions set-ib-actions' },
         del,
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'health-btn',
-            'data-health-keep': type,
-            onclick: () => {
-              close();
-              sw.focus();
-            },
+        iconButton({
+          icon: 'check',
+          label: 'Keep it',
+          variant: 'quiet',
+          hooks: { 'data-health-keep': type },
+          onClick: () => {
+            close();
+            sw.focus();
           },
-          'Keep it',
-        ),
+        }),
       ),
     );
     del.focus();
@@ -260,34 +259,30 @@ export function healthSettingsScreen(
           { class: 'health-last-read', 'data-health-last-read': true, role: 'status' },
           reading ? 'Reading…' : lastReadText(props.settings.lastReadAt, props.now),
         ),
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'health-btn health-read-now',
-            'data-health-read-now': true,
-            disabled: reading || undefined,
-            onclick: () => actions.onReadNow(),
-          },
-          icon('trend', 'sm'),
-          h('span', {}, reading ? 'Reading…' : 'Read now'),
-        ),
+        iconButton({
+          icon: 'refresh',
+          label: reading ? 'Reading…' : 'Read now',
+          labelAt: 'beside',
+          wideHit: true,
+          class: 'set-ib-pill',
+          disabled: reading,
+          hooks: { 'data-health-read-now': true },
+          onClick: () => actions.onReadNow(),
+        }),
       )
     : h(
         'section',
         { class: 'health-connect-box' },
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'primary-btn cta-btn health-connect',
-            'data-health-connect': true,
-            disabled: reading || undefined,
-            onclick: () => actions.onConnect(),
-          },
-          icon('plus', 'lg'),
-          h('span', {}, reading ? 'Connecting…' : 'Connect to Apple Health'),
-        ),
+        iconButton({
+          icon: 'plus',
+          label: reading ? 'Connecting…' : 'Connect to Apple Health',
+          variant: 'main',
+          wideHit: true,
+          class: 'set-ib-pill health-connect',
+          disabled: reading,
+          hooks: { 'data-health-connect': true },
+          onClick: () => actions.onConnect(),
+        }),
         h('p', { class: 'set-note muted' }, HEALTH_CONNECT_NOTE),
       );
 

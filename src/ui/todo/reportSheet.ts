@@ -15,10 +15,17 @@
 // `[data-report-copy]`, `[data-report-copied]`, `[data-report-empty]`, `[data-report-copy-all]`,
 // `[data-report-fallback]` (the textarea), `[data-report-select]`, `[data-report-manual]`,
 // `[data-report-close]`.
+//
+// M13d task 40a (SPEC M13d Goal 7): the buttons are the shared round icon buttons: Copy, Select
+// all and copy, and Copy all again are the main one on a full-width pill; "I copied it" a
+// secondary row; Close a quiet circle with the word beside it in the title row.
 import { h } from '../dom';
+import { installSheetSwipe } from '../gestures/sheetSwipe';
+import { iconButton } from '../iconButton';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { copyText as defaultCopy, selectAllAndCopy } from './clipboard';
+import '../chromeButtons.css';
 import './todos.css';
 
 export const COPIED_TEXT = 'Copied. Paste it where you want.';
@@ -72,28 +79,26 @@ export function reportSheet(props: ReportSheetProps, actions: ReportSheetActions
       'aria-label': 'Report text',
     });
     box.value = props.text;
-    const manual = h(
-      'button',
-      {
-        type: 'button',
-        class: 'todo-copy-btn ghost',
-        'data-report-manual': true,
-        onclick: () => showCopied(),
+    const manual = iconButton({
+      icon: 'check',
+      label: 'I copied it',
+      labelAt: 'beside',
+      wideHit: true,
+      class: 'chrome-pill',
+      hooks: { 'data-report-manual': true },
+      onClick: () => showCopied(),
+    });
+    const select = iconButton({
+      icon: 'list',
+      label: 'Select all and copy',
+      variant: 'main',
+      wideHit: true,
+      class: 'chrome-pill',
+      hooks: { 'data-report-select': true },
+      onClick: () => {
+        if (selectCopy(box)) showCopied();
       },
-      h('span', {}, 'I copied it'),
-    );
-    const select = h(
-      'button',
-      {
-        type: 'button',
-        class: 'todo-copy-btn',
-        'data-report-select': true,
-        onclick: () => {
-          if (selectCopy(box)) showCopied();
-        },
-      },
-      h('span', {}, 'Select all and copy'),
-    );
+    });
     body.replaceChildren(h('p', { class: 'set-note' }, FALLBACK_TEXT), box, select, manual);
     box.select?.();
   };
@@ -101,38 +106,35 @@ export function reportSheet(props: ReportSheetProps, actions: ReportSheetActions
   if (props.nothingNew) {
     body.replaceChildren(
       h('p', { class: 'todo-report-empty', 'data-report-empty': true }, EMPTY_TEXT),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'todo-copy-btn',
-          'data-report-copy-all': true,
-          onclick: () => actions.onCopyAll(),
-        },
-        h('span', {}, 'Copy all again'),
-      ),
+      iconButton({
+        icon: 'refresh',
+        label: 'Copy all again',
+        variant: 'main',
+        wideHit: true,
+        class: 'chrome-pill',
+        hooks: { 'data-report-copy-all': true },
+        onClick: () => actions.onCopyAll(),
+      }),
     );
   } else {
     let busy = false;
-    const copyBtn = h(
-      'button',
-      {
-        type: 'button',
-        class: 'todo-copy-btn',
-        'data-report-copy': true,
-        onclick: () => {
-          if (busy) return;
-          busy = true;
-          void copy(props.text).then((ok) => {
-            busy = false;
-            if (ok) showCopied();
-            else showFallback();
-          });
-        },
+    const copyBtn = iconButton({
+      icon: 'list',
+      label: 'Copy',
+      variant: 'main',
+      wideHit: true,
+      class: 'chrome-pill',
+      hooks: { 'data-report-copy': true },
+      onClick: () => {
+        if (busy) return;
+        busy = true;
+        void copy(props.text).then((ok) => {
+          busy = false;
+          if (ok) showCopied();
+          else showFallback();
+        });
       },
-      icon('list', 'md'),
-      h('span', {}, 'Copy'),
-    );
+    });
     body.replaceChildren(
       h('p', { class: 'muted set-note' }, 'This is the exact text that will be copied.'),
       h('pre', { class: 'todo-report-text', 'data-report-text': true, tabindex: 0 }, props.text),
@@ -140,7 +142,16 @@ export function reportSheet(props: ReportSheetProps, actions: ReportSheetActions
     );
   }
 
-  return h(
+  const closeBtn = iconButton({
+    icon: 'close',
+    label: 'Close',
+    variant: 'quiet',
+    labelAt: 'beside',
+    class: 'chrome-close',
+    hooks: { 'data-report-close': true },
+    onClick: () => actions.onClose(),
+  });
+  const sheet = h(
     'section',
     {
       class: `screen sheet todo-report ${moodClass('pro')}`,
@@ -153,18 +164,12 @@ export function reportSheet(props: ReportSheetProps, actions: ReportSheetActions
       'header',
       { class: 'top-bar' },
       h('h1', { class: 'page-title small-title', id: 'todo-report-title-h' }, 'Your report'),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'ghost-btn',
-          'data-report-close': true,
-          onclick: () => actions.onClose(),
-        },
-        'Close',
-      ),
+      closeBtn,
     ),
     body,
     status,
   );
+  // M13d task 25: swipe down = Close (a scrolled report scrolls first; the text box is left alone).
+  installSheetSwipe(sheet, { close: () => closeBtn.click() });
+  return sheet;
 }

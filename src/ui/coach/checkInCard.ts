@@ -22,9 +22,12 @@
 // `[data-checkin-summary]`.
 import type { CheckIn } from '../../core/types';
 import { h } from '../dom';
+import { iconButton } from '../iconButton';
+import { setIconButtonLabel } from '../iconButtonLabel';
 import { icon } from '../icons';
 import type { Built } from './proposalCard';
 import './chat.css';
+import './coachButtons.css';
 
 export type CheckInKey = 'energy' | 'sleep' | 'soreness';
 export type CheckInScore = 1 | 2 | 3 | 4 | 5;
@@ -202,24 +205,24 @@ export function buildCheckInCard(p: CheckInCardProps, a: CheckInCardActions): Bu
   const picks = memory.get(p.weekStart) ?? {};
   memory.set(p.weekStart, picks);
   const need = h('p', { class: 'checkin-need muted', 'data-checkin-need': true }, CHECKIN_NEED_ONE);
-  const done = h(
-    'button',
-    {
-      type: 'button',
-      class: 'primary-btn cta-btn checkin-done',
-      'data-checkin-done': true,
-      onclick: () => {
-        const answers: CheckInAnswers = {};
-        for (const q of p.questions) {
-          const v = picks[q.id];
-          if (v !== undefined) answers[q.id] = v;
-        }
-        if (Object.keys(answers).length) a.onDone(answers);
-      },
+  // M13d task 40f: Done is the card's main round button (circle + word in a wide pill); Skip a
+  // secondary circle with its word under it; Answer the main pill while collapsed.
+  const done = iconButton({
+    icon: 'check',
+    label: CHECKIN_DONE,
+    variant: 'main',
+    wideHit: true,
+    class: 'cb-bar checkin-done',
+    hooks: { 'data-checkin-done': true },
+    onClick: () => {
+      const answers: CheckInAnswers = {};
+      for (const q of p.questions) {
+        const v = picks[q.id];
+        if (v !== undefined) answers[q.id] = v;
+      }
+      if (Object.keys(answers).length) a.onDone(answers);
     },
-    icon('check', 'lg'),
-    CHECKIN_DONE,
-  );
+  });
   const sync = () => {
     const any = p.questions.some((q) => picks[q.id] !== undefined);
     if (any) {
@@ -231,19 +234,15 @@ export function buildCheckInCard(p: CheckInCardProps, a: CheckInCardActions): Bu
     }
   };
   const rows = p.questions.map((q) => questionRow(q, picks, sync));
-  const skip = h(
-    'button',
-    {
-      type: 'button',
-      class: 'cs-btn checkin-skip',
-      'data-checkin-skip': true,
-      'aria-label': CHECKIN_SKIP,
-      onclick: a.onSkip,
-    },
-    icon('skip', 'md'),
-  );
-  const skipWords = h('span', {}, CHECKIN_SKIP);
-  skip.append(skipWords);
+  const skip = iconButton({
+    icon: 'skip',
+    label: CHECKIN_SKIP,
+    ariaLabel: CHECKIN_SKIP,
+    class: 'checkin-skip',
+    hooks: { 'data-checkin-skip': true },
+    onClick: () => a.onSkip(),
+  });
+
   sync();
   const bodyId = `checkin-body-${p.weekStart}`;
   const body = h(
@@ -254,20 +253,20 @@ export function buildCheckInCard(p: CheckInCardProps, a: CheckInCardActions): Bu
     need,
     done,
   );
-  const answer = h(
-    'button',
-    {
-      type: 'button',
-      class: 'primary-btn checkin-answer',
-      'data-checkin-answer': true,
-      'aria-controls': bodyId,
-    },
-    CHECKIN_ANSWER,
-  );
+  const answer = iconButton({
+    icon: 'arrow-right',
+    label: CHECKIN_ANSWER,
+    variant: 'main',
+    wideHit: true,
+    class: 'cb-bar checkin-answer',
+    hooks: { 'data-checkin-answer': true, 'aria-controls': bodyId },
+    onClick: () => {},
+  });
   const el = shell(body, h('div', { class: 'checkin-actions' }, answer, skip));
   const show = (open: boolean) => {
     el.setAttribute('data-expanded', open ? 'true' : 'false');
-    skipWords.textContent = open ? CHECKIN_SKIP : CHECKIN_SKIP_SHORT;
+    // The visible word under the circle ("Skip" while collapsed); the name stays "Skip this week".
+    setIconButtonLabel(skip, open ? CHECKIN_SKIP : CHECKIN_SKIP_SHORT);
     answer.setAttribute('aria-expanded', open ? 'true' : 'false');
     if (open) {
       body.removeAttribute('hidden');

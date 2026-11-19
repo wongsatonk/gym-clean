@@ -10,7 +10,7 @@
 // e2e hooks: `[data-photo-open]` / `[data-photo-input]` (Take photo: button / camera input),
 // `[data-photo-library]` / `[data-photo-library-input]` (Choose from library: button / input).
 import { h } from '../dom';
-import { icon } from '../icons';
+import { iconButton } from '../iconButton';
 import './photo.css';
 
 /** The classifier's input size: the long edge of the resized photo. */
@@ -170,17 +170,14 @@ function picker(o: {
     (input as { value: string }).value = '';
     if (file) o.onFile(file);
   });
-  const btn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'fuel-secondary photo-open',
-      [o.buttonHook]: true,
-      onclick: () => input.click(),
-    },
-    icon(o.iconName, 'md'),
-    h('span', {}, o.label),
-  );
+  // M13d task 40e: a round button with the word under it (both side by side, photo.css).
+  const btn = iconButton({
+    icon: o.iconName,
+    label: o.label,
+    class: 'photo-open',
+    hooks: { [o.buttonHook]: true },
+    onClick: () => input.click(),
+  });
   return { btn, input };
 }
 
