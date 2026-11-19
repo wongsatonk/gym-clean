@@ -86,7 +86,9 @@ export const PERMISSION_PAGES: Record<OnboardingPermission, PermissionPage> = {
   },
   mic: {
     title: 'Microphone',
-    why: "Hold to talk to the coach; speech runs on this phone after a minute's Wi-Fi setup, never stored or sent.",
+    // M13d follow-up (q) + review: who you talk to, and the audio itself ("your voice"); 20 words,
+    // the page cap ("Hold to talk to the coach" would make it 21).
+    why: 'Hold to ask the coach; speech runs on this phone after Wi-Fi setup; your voice is never stored or sent.',
     action: { kind: 'ask', label: 'Allow microphone' },
     notNow: 'Not now',
   },

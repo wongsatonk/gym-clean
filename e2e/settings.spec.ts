@@ -254,3 +254,40 @@ test('Switches, unit, Camera test and the Today tab report through their callbac
   ]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
+
+test('M13d task 19 + review: a one-line note stays shown; a longer one sits behind More (a ≥ 56px button, 20px words, aria-expanded)', async ({
+  page,
+}) => {
+  await mount(page, 'orange');
+  // kg: "Weights step by 2.5 kg." is one short line, shown with no More.
+  const short = page.locator('[data-section="unit"] [data-set-note="unit"]');
+  await expect(short).toHaveText('Weights step by 2.5 kg.');
+  await expect(short).toBeVisible();
+  expect(
+    await short.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+  ).toBeGreaterThanOrEqual(20);
+  await expect(page.locator('[data-more="set-unit"]')).toHaveCount(0);
+
+  // lb: the note is two sentences, so it folds behind More.
+  await page.locator('[data-section="unit"] button[data-unit="lb"]').click();
+  const more = page.locator('[data-more="set-unit"]');
+  const btn = more.locator('[data-more-btn]');
+  const note = more.getByText(/Weights step by 5 lb\./);
+  await expect(note).toBeHidden();
+  await expect(btn).toHaveAttribute('aria-expanded', 'false');
+  await expect(btn).toHaveAccessibleName('More about Units');
+  const box = await btn.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(56);
+  expect(
+    await btn.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+  ).toBeGreaterThanOrEqual(20);
+  await btn.click();
+  await expect(btn).toHaveAttribute('aria-expanded', 'true');
+  await expect(note).toBeVisible();
+  expect(
+    await note.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)),
+  ).toBeGreaterThanOrEqual(20);
+  await btn.click();
+  await expect(note).toBeHidden();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});

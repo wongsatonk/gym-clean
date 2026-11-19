@@ -3543,6 +3543,11 @@ textarea:focus-visible {
   font-size: var(--fs-body);
 }
 
+/* M13d: a section's shown note(s) + its More, laid out as the section's own children. */
+.set-notes {
+  display: contents;
+}
+
 /* M12 slice 1c Settings → About (last section): the app name, version line, credit. */
 .settings .about-name {
   font-size: var(--fs-cue);

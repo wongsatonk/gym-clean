@@ -10,6 +10,8 @@ import {
   weightStep,
   type SetupProps,
   type SetupValues,
+  SETUP_LEAD,
+  SETUP_NOTE,
 } from './setup';
 
 useFakeDom();
@@ -94,6 +96,23 @@ describe('fuelSetupScreen', () => {
     );
     expect(el.textContent).toContain('Saved as your first weigh-in.');
     expect(el.textContent).toContain('Stays on this phone.');
+  });
+
+  it('M13d task 19: a one-line lead and one note (first weigh-in + the privacy promise, lock icon)', () => {
+    const { el } = render();
+    const lead = el.byClass('fuel-lead');
+    expect(lead.map((p) => p.textContent)).toEqual([SETUP_LEAD]);
+    expect(SETUP_LEAD.split(/\s+/).length).toBeLessThanOrEqual(10);
+    expect(SETUP_LEAD.replace(/\.$/, '')).not.toMatch(/[.;!?]/);
+    const note = oneAttr(el, 'data-setup-note');
+    expect(note.textContent).toBe(SETUP_NOTE);
+    expect(note.find((e) => e.getAttribute('data-icon') === 'lock')).toHaveLength(1);
+    // The old separate weigh-in note is gone; the privacy promise is never behind More.
+    expect(el.byClass('fuel-note').filter((p) => !p.hasAttribute('data-setup-missing'))).toEqual(
+      [],
+    );
+    expect(byAttr(el, 'data-more')).toHaveLength(0);
+    expect(copyHits(el)).toEqual([]);
   });
 
   it('keeps Save disabled until sex and activity are picked (no guessing)', () => {

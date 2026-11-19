@@ -254,6 +254,14 @@
   overflow-wrap: anywhere;
 }
 
+/* M13d task 19: the row's one visible line (the rest is behind More). */
+.intake-change-lead {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-text);
+  overflow-wrap: anywhere;
+}
+
 .intake-change-lines {
   margin: 0;
   padding: 0 0 0 22px;

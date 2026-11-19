@@ -192,6 +192,13 @@ test('How to: the 3D demo loops with phase text, Close returns focus', async ({ 
   await expect(sheet.locator('[data-howto=tempo]')).toHaveText('Lift 1 s · Lower 2 s');
   const lines = sheet.locator('[data-howto=lines] li');
   expect(await lines.count()).toBeGreaterThanOrEqual(2);
+  // In a workout the How-to opens with More already expanded: the focus line is on screen with
+  // nothing new to tap mid-set (M13d review decision).
+  await expect(sheet.locator('[data-more="howto"] [data-more-btn]')).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
+  await expect(sheet.locator('[data-howto=focus]')).toBeVisible();
   await expect(sheet.locator('[data-howto=focus]')).toContainText('Focus:');
   await expect(sheet.locator('[data-howto=cue]')).not.toBeEmpty();
   // M4e A19 roles: the spoken cue is the lavender cue panel with a speaker icon; the focus line

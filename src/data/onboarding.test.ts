@@ -137,15 +137,17 @@ describe('onboarding copy (data)', () => {
     for (const p of Object.values(PERMISSION_PAGES)) expect(p.action.kind).not.toBe('none');
   });
 
-  it('the mic page says speech is set up on this phone, how long it takes, and that audio stays put', () => {
+  it('the mic page says who you talk to, that speech is set up on this phone over Wi-Fi, and that audio stays put', () => {
     const why = PERMISSION_PAGES.mic.why;
-    expect(why).toMatch(/\bhold\b/i);
+    expect(why).toMatch(/\bhold to ask the coach\b/i);
     expect(why).toMatch(/setup|set up/i);
     expect(why).toMatch(/speech/i);
     expect(why).toMatch(/on this phone/i);
-    expect(why).toMatch(/minute/i);
     expect(why).toMatch(/wi-fi/i);
     expect(why).toMatch(/never stored or sent/i);
+    // M13d follow-up (q): the promise names the audio itself.
+    expect(why).toMatch(/your voice is never stored or sent/i);
+    expect(words(why)).toBeLessThanOrEqual(20);
   });
 
   it('the iPhone Health permission text (Info.plist): what is read and why, private, short, to "you"', () => {

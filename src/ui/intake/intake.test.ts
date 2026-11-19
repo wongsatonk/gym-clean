@@ -16,6 +16,7 @@ import {
   PLAN_TITLE_STARTER,
   areaList,
   intakeScreen,
+  leadLine,
   intakeSummary,
   questionCountText,
   type IntakeActions,
@@ -279,6 +280,8 @@ describe('intake: questions', () => {
     why.click();
     expect(opened.map(([id]) => id)).toEqual(['coreTraining']);
     expect(opened[0]?.[1]).toBe(why);
+    // M13d follow-up (q): the card opens without its focus-block `why` here.
+    expect(why.hasAttribute('data-learn-hide-why')).toBe(true);
     // Only on the abs question.
     const { el: el3 } = render(
       { initial: FULL, startStep: 'easyOn' },
@@ -398,11 +401,22 @@ describe('intake: what will change', () => {
       'fuel',
     ]);
     expect(one(el, 'data-change', 'plan').byTag('h2')[0]?.textContent).toBe(PLAN_TITLE_STARTER);
-    expect(
-      one(el, 'data-change', 'plan')
-        .byTag('li')
-        .map((l) => l.textContent),
-    ).toEqual(CHANGES[0]?.lines);
+    // M13d task 19: the first line shows; the rest sits behind More (closed).
+    const plan = one(el, 'data-change', 'plan');
+    expect(one(plan, 'data-change-lead', 'plan').textContent).toBe(CHANGES[0]?.lines?.[0]);
+    expect(plan.byTag('li').map((l) => l.textContent)).toEqual(CHANGES[0]?.lines?.slice(1));
+    const more = one(plan, 'data-more', 'change-plan');
+    const moreBtn = one(more, 'data-more-btn');
+    expect(moreBtn.tag).toBe('button');
+    expect(moreBtn.getAttribute('aria-expanded')).toBe('false');
+    expect(one(more, 'data-more-panel').hasAttribute('hidden')).toBe(true);
+    moreBtn.click();
+    expect(moreBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(one(more, 'data-more-panel').hasAttribute('hidden')).toBe(false);
+    // A one-line row has no More.
+    const easy = one(el, 'data-change', 'easyOn');
+    expect(one(easy, 'data-change-lead', 'easyOn').textContent).toBe('Shoulders');
+    expect(by(easy, 'data-more')).toHaveLength(0);
     // Fuel: before → after in words.
     const fuel = one(el, 'data-change', 'fuel');
     expect(one(fuel, 'data-diff', 'before').textContent).toBe('Now2,100 kcal · 110 g protein');
@@ -556,6 +570,26 @@ describe('intake: copy', () => {
       expect(s).not.toMatch(/\b(he|his|him|she|her|man|men|guys?|bro|wife|husband)\b/i);
       expect(s).not.toMatch(/wongsaton/i);
     }
+  });
+});
+
+describe('intake: M13d task 19 copy cuts', () => {
+  const words = (t: string) => t.split(/\s+/).filter(Boolean).length;
+
+  it('every why line is one short sentence (≤ 10 words) or none', () => {
+    for (const step of ['goal', 'days', 'length', 'experience', 'easyOn', 'wantsCore'] as const) {
+      const why = INTAKE_COPY[step].why;
+      expect(words(why), why).toBeLessThanOrEqual(10);
+      expect(why.replace(/\.$/, ''), why).not.toMatch(/[.;!?]/);
+    }
+  });
+
+  it('leadLine cuts the row title from the start of its first line, nothing else', () => {
+    expect(leadLine('Starter plan', 'Starter plan: 3 days a week')).toBe('3 days a week');
+    expect(leadLine('Starter plan', 'starter plan · Full body')).toBe('Full body');
+    expect(leadLine('Starter plan', 'Starter plans for later')).toBe('Starter plans for later');
+    expect(leadLine('Starter plan', 'Starter plan')).toBe('Starter plan');
+    expect(leadLine('Fuel targets', 'Set up Fuel for this goal')).toBe('Set up Fuel for this goal');
   });
 });
 

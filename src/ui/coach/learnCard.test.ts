@@ -3,8 +3,10 @@ import type { ChatMessage, LearnCard } from '../../core/types';
 import { byAttr, copyHits, oneAttr, texts } from '../fuel/fuelTestUtil';
 import { FakeEl, asFake, useFakeDom } from '../screens/testDom';
 import { chat, type ChatActions } from './chat';
+import { LEARN_CARDS } from '../../data/learnCards';
 import {
   GOT_IT,
+  HIDE_WHY_ATTR,
   WHY_HEADING,
   bodyParagraphs,
   closeLearnCard,
@@ -111,6 +113,91 @@ describe('learnCardSheet', () => {
     expect(tab.prevented()).toBe(true);
     expect(active()).toBe(oneAttr(el, 'data-learn-close'));
     expect(closes).toBe(3);
+  });
+});
+
+// M13d task 19: a card with a `short` lead opens on it; body + why are behind More.
+const SHORT: LearnCard = { ...EFFORT, short: 'Easy, good or hard: how many reps you had left.' };
+
+describe('learnCardSheet: short lead first (M13d task 19)', () => {
+  it('shows the short lead; the body and the why block sit in a closed More panel', () => {
+    const el = asFake(learnCardSheet(SHORT, { onClose: () => {} }));
+    const lead = oneAttr(el, 'data-learn-short');
+    expect(lead.textContent).toBe(SHORT.short);
+    expect(el.getAttribute('aria-describedby')).toBe(lead.getAttribute('id'));
+    const more = oneAttr(el, 'data-more', 'learn');
+    const btn = oneAttr(more, 'data-more-btn');
+    expect(btn.tag).toBe('button');
+    expect(btn.getAttribute('aria-expanded')).toBe('false');
+    const panel = oneAttr(more, 'data-more-panel');
+    expect(panel.hasAttribute('hidden')).toBe(true);
+    expect(oneAttr(panel, 'data-learn-body').byTag('p')).toHaveLength(2);
+    expect(oneAttr(panel, 'data-learn-why').textContent).toContain(SHORT.why);
+    btn.click();
+    expect(panel.hasAttribute('hidden')).toBe(false);
+    expect(copyHits(el)).toEqual([]);
+  });
+
+  it('Tab and Shift+Tab move between More and Got it', () => {
+    const el = asFake(learnCardSheet(SHORT, { onClose: () => {} }));
+    const more = oneAttr(el, 'data-more-btn');
+    const close = oneAttr(el, 'data-learn-close');
+    close.focus();
+    el.dispatch('keydown', key('Tab').ev);
+    expect(active()).toBe(more);
+    el.dispatch('keydown', key('Tab').ev);
+    expect(active()).toBe(close);
+    el.dispatch('keydown', key('Tab', true).ev);
+    expect(active()).toBe(more);
+  });
+
+  it('opened while a workout is on screen (the Rest screen): More starts open', () => {
+    const doc = globalThis.document as unknown as { querySelector?: (s: string) => unknown };
+    doc.querySelector = (sel: string) => (sel.includes('[data-screen="rest"]') ? {} : null);
+    const parent = new FakeEl('body');
+    const handle = openLearnCard(SHORT, null, { parent: parent as unknown as HTMLElement });
+    const more = oneAttr(asFake(handle.el), 'data-more', 'learn');
+    expect(oneAttr(more, 'data-more-btn').getAttribute('aria-expanded')).toBe('true');
+    expect(oneAttr(more, 'data-more-panel').hasAttribute('hidden')).toBe(false);
+    handle.close();
+  });
+
+  it('closing removes its swipe-down', () => {
+    const parent = new FakeEl('body');
+    const handle = openLearnCard(SHORT, null, { parent: parent as unknown as HTMLElement });
+    const el = asFake(handle.el);
+    expect(el.hasAttribute('data-sheet-swipe')).toBe(true);
+    handle.close();
+    expect(el.hasAttribute('data-sheet-swipe')).toBe(false);
+  });
+
+  it('hideWhy leaves the why block out (the intake context)', () => {
+    const el = asFake(learnCardSheet(SHORT, { onClose: () => {} }, { hideWhy: true }));
+    expect(byAttr(el, 'data-learn-why')).toHaveLength(0);
+    expect(byAttr(el, 'data-learn-body')).toHaveLength(1);
+  });
+
+  it('an opener with data-learn-hide-why opens the card without its why', () => {
+    const parent = new FakeEl('body');
+    const opener = new FakeEl('button');
+    opener.setAttribute(HIDE_WHY_ATTR, '');
+    const handle = openLearnCard(SHORT, opener as unknown as HTMLElement, {
+      parent: parent as unknown as HTMLElement,
+    });
+    expect(byAttr(asFake(handle.el), 'data-learn-why')).toHaveLength(0);
+    handle.close();
+    const plain = openLearnCard(SHORT, new FakeEl('button') as unknown as HTMLElement, {
+      parent: parent as unknown as HTMLElement,
+    });
+    expect(byAttr(asFake(plain.el), 'data-learn-why')).toHaveLength(1);
+    plain.close();
+  });
+
+  it('every real card has a short lead of one sentence, ≤ 20 words', () => {
+    for (const c of LEARN_CARDS) {
+      expect(c.short, c.id).toBeTruthy();
+      expect((c.short ?? '').split(/\s+/).length, c.id).toBeLessThanOrEqual(20);
+    }
   });
 });
 

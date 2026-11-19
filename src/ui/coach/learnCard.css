@@ -68,6 +68,14 @@
   gap: 10px;
 }
 
+/* M13d task 19: the one-sentence lead shown first (body + why sit behind More). */
+.learn-short {
+  margin: 0;
+  font-size: var(--fs-cue);
+  line-height: var(--lh-text);
+  overflow-wrap: anywhere;
+}
+
 .learn-body p,
 .learn-whyblock p {
   margin: 0;

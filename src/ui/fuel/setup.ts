@@ -12,6 +12,8 @@
 // (two − / + rows) when the length unit is 'in'; it is held as a core unit field, so an untouched
 // height saves exactly what it was (stored cm, 2 decimals for whole inches). Task 3b: a quiet
 // "Not now" when the caller passes `onNotNow` (the first run's Set up Fuel step only).
+// Task 19 ("some screens have too much text"): the lead is one line, and the weigh-in note and
+// the privacy line are one note (`[data-setup-note]`, lock icon; the privacy promise stays shown).
 //
 // e2e hooks: `main[data-screen="fuel-setup"]`, `[data-field=height|birth-year|weight|sex|
 // activity]`, `[data-choice=<value>]`, `.nf-value` inputs (height in ft·in: `[data-part=ft|in]`
@@ -59,6 +61,11 @@ export type SetupActions = {
   /** M13d: the first edit, tap or focus on the form (the caller then stops re-filling it). */
   onTouch?: (() => void) | undefined;
 };
+
+/** The one line under the title (M13d task 19). */
+export const SETUP_LEAD = 'Your daily calories and protein, estimated from these.';
+/** The one note under the form: the first weigh-in + the privacy promise (M13d task 19). */
+export const SETUP_NOTE = 'Saved as your first weigh-in. Stays on this phone.';
 
 /** The words under a field Apple Health pre-filled. */
 export const FROM_HEALTH = 'From Apple Health';
@@ -231,11 +238,7 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
         : null,
       h('h1', { class: 'page-title' }, 'Set up Fuel'),
     ),
-    h(
-      'p',
-      { class: 'fuel-lead' },
-      'Your daily calories and protein are worked out from these. They are estimates you can change any time.',
-    ),
+    h('p', { class: 'fuel-lead' }, SETUP_LEAD),
     healthNote('height', height.el, height.inputs),
     healthNote('birthYear', birthYear.el, [birthYear.controls[1]]),
     healthNote('sex', sex, [groupOf(sex)]),
@@ -252,8 +255,12 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
       },
     }),
     healthNote('weight', weight.el, [weight.controls[1]]),
-    h('p', { class: 'fuel-note' }, 'Saved as your first weigh-in.'),
-    h('p', { class: 'fuel-privacy' }, icon('lock', 'sm'), h('span', {}, 'Stays on this phone.')),
+    h(
+      'p',
+      { class: 'fuel-privacy', 'data-setup-note': true },
+      icon('lock', 'sm'),
+      h('span', {}, SETUP_NOTE),
+    ),
     // Quiet: at the end of the form, not in the sticky bar (Save stays the one main action).
     a.onNotNow
       ? h(

@@ -19,13 +19,21 @@
 // `[data-goal-text]`, `[data-intake-back]`, `[data-intake-next]` (disabled until answered),
 // `[data-intake-skip]`, `[data-intake-close]`, `[data-change=<id>]`, `[data-apply=<id>]`
 // (`data-applied` once applied), `[data-change-error=<id>]`, `[data-intake-done]`,
-// `[data-learn-open="coreTraining"]` (the abs question's Why?).
+// `[data-learn-open="coreTraining"]` (the abs question's Why?, with `data-learn-hide-why`: the
+// card opens without its focus-block `why`), `[data-change-lead=<id>]`, `[data-more="change-<id>"]`.
+//
+// M13d task 19 ("some screens have too much text"): each question's why line is one short
+// sentence (the question budget is 20 words besides the options). On the last screen each row
+// shows its title, its first line (the title's own words cut from its start, e.g. "Starter plan:
+// 3 days a week" → "3 days a week") and Now / After; the other lines (the full plan, day by
+// day) sit behind the shared "More" disclosure.
 import { INTAKE_OPTIONS } from '../../core/trainerKit/intake';
 import type { BodyArea, GoalKind, Intake } from '../../core/types';
 import { backButton, forwardContent } from '../backButton';
-import { whyButton } from '../coach/learnCard';
+import { HIDE_WHY_ATTR, whyButton } from '../coach/learnCard';
 import { h } from '../dom';
 import { icon } from '../icons';
+import { moreDisclosure } from '../moreDisclosure';
 import { checkMorph, enterScreen } from '../motion';
 import { moodClass } from '../tokens';
 import './intake.css';
@@ -99,7 +107,7 @@ export const FUEL_TITLE = 'Fuel targets';
 export const INTAKE_COPY = {
   goal: {
     title: "What's your main goal?",
-    why: 'The coach builds the plan around it. You can change it later in Settings.',
+    why: 'Your plan is built around it.',
   },
   days: {
     title: 'How many days a week can you train?',
@@ -111,11 +119,11 @@ export const INTAKE_COPY = {
   },
   experience: {
     title: 'How much lifting have you done?',
-    why: 'This sets how many sets and how fast the plan moves.',
+    why: 'This sets how fast your plan moves.',
   },
   easyOn: {
     title: 'Any areas to go easy on?',
-    why: 'Pick any, or none. The coach keeps the load light there until you take it off the list.',
+    why: 'The coach keeps any you pick light.',
   },
   wantsCore: {
     title: INTAKE_OPTIONS.wantsCore.question,
@@ -191,6 +199,18 @@ export function questionCountText(index: number): string {
 /** "Build muscle · 3 days a week · 45 min". Used by the last screen and the Settings row. */
 export function intakeSummary(intake: Pick<Intake, 'goalKind' | 'days' | 'sessionMin'>): string {
   return `${GOAL_LABEL[intake.goalKind]} · ${intake.days} days a week · ${intake.sessionMin} min`;
+}
+
+/**
+ * A row's first line without the row title repeated at its start ("Starter plan: 3 days a week"
+ * under "Starter plan" → "3 days a week"). Anything else is kept as is. Pure.
+ */
+export function leadLine(title: string, line: string): string {
+  const t = title.trim().toLowerCase();
+  const l = line.trim();
+  if (!t || !l.toLowerCase().startsWith(t)) return l;
+  const rest = l.slice(t.length).replace(/^\s*[:·–-]\s*/, '');
+  return rest && rest !== l.slice(t.length) ? rest : l;
 }
 
 /** "Shoulders, Back", in the fixed body order. Empty list → "". */
@@ -494,7 +514,7 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
         onLearn
           ? whyButton((opener) => onLearn(learnId, opener), {
               label: 'Why? About abs training',
-              attrs: { 'data-learn-open': learnId },
+              attrs: { 'data-learn-open': learnId, [HIDE_WHY_ATTR]: true },
             })
           : null,
       ];
@@ -583,12 +603,17 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
       else markDone();
     });
     const headId = `intake-change-${c.id}`;
+    const [first, ...rest] = c.lines ?? [];
     return h(
       'section',
       { class: 'intake-change', 'data-change': c.id, 'aria-labelledby': headId },
       h('h2', { class: 'intake-change-title', id: headId }, c.title),
-      c.lines?.length
-        ? h('ul', { class: 'intake-change-lines' }, ...c.lines.map((l) => h('li', {}, l)))
+      first !== undefined
+        ? h(
+            'p',
+            { class: 'intake-change-lead', 'data-change-lead': c.id },
+            leadLine(c.title, first),
+          )
         : null,
       c.before !== undefined || c.after !== undefined
         ? h(
@@ -601,6 +626,12 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
               ? h('div', { 'data-diff': 'after' }, h('dt', {}, 'After'), h('dd', {}, c.after))
               : null,
           )
+        : null,
+      rest.length
+        ? moreDisclosure(
+            [h('ul', { class: 'intake-change-lines' }, ...rest.map((l) => h('li', {}, l)))],
+            { about: c.title, hook: `change-${c.id}` },
+          ).el
         : null,
       btn,
       error,

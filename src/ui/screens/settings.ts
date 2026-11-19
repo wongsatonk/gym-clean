@@ -37,6 +37,12 @@
 // M13d task 12: "Weight unit" became **Units** (section key still `unit`): Weight (kg / lb, the
 // same `data-unit` buttons in the group "Weight unit") and, when `onLengthUnit` is set, Height and
 // body (cm / ft·in, `data-length-unit`, group "Height and body unit"). Stored values never change.
+//
+// M13d task 19 ("some screens have too much text"): a section's one-line note (one sentence,
+// ≤ 10 words) stays shown; multi-sentence or long notes sit behind one shared "More" disclosure
+// per section (`[data-more="set-<key>"]`, ../moreDisclosure.ts).
+// Shown as before: the privacy line (Progress photos), state lines (goal summary / own words,
+// "Nothing on the list", "Not set yet") and About's name / version / credit.
 import type { Accent, BackgroundStyle, BodyArea, Intake, LengthUnit } from '../../core/types';
 import { lengthUnitFor, type Unit } from '../../core/units';
 import { APP_NAME } from '../../core/brand';
@@ -46,6 +52,7 @@ import { accentPicker } from '../accentPicker';
 import { backgroundPicker } from '../backgroundPicker';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
+import { moreDisclosure } from '../moreDisclosure';
 import { AREA_LABEL, BODY_AREAS, intakeSummary } from '../intake/intake';
 import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import { pageHead, type OnSearch } from '../searchButton';
@@ -184,6 +191,38 @@ export function lengthNote(unit: LengthUnit): string {
 export const WEIGHT_UNIT_GROUP = 'Weight unit';
 export const LENGTH_UNIT_GROUP = 'Height and body unit';
 
+/** A one-line note stays shown; longer ones fold behind More (M13d review). */
+export const SHORT_NOTE_WORDS = 10;
+
+/** True for a one-sentence note of at most SHORT_NOTE_WORDS words ("2.5 kg." is one). Pure. */
+export function isShortNote(note: string): boolean {
+  const t = note.trim();
+  const sentences = t.split(/[.!?](?:\s+|$)/).filter((x) => x.trim() !== '');
+  return sentences.length <= 1 && t.split(/\s+/).filter(Boolean).length <= SHORT_NOTE_WORDS;
+}
+
+/**
+ * A section's explanatory note(s) (M13d task 19 + review): one-line notes stay shown
+ * (`.set-note[data-set-note=<key>]`); multi-sentence or long ones sit behind one "More"
+ * (`[data-more="set-<key>"]`). Both kinds: a `display: contents` wrapper, so the section's gap holds.
+ */
+function notesMore(key: string, about: string, ...notes: (string | null)[]): HTMLElement | null {
+  const all = notes.filter((n): n is string => Boolean(n));
+  const note = (n: string, attrs: Record<string, string | boolean> = {}) =>
+    h('p', { class: 'muted set-note', ...attrs }, n);
+  const shown = all.filter(isShortNote).map((n) => note(n, { 'data-set-note': key }));
+  const folded = all.filter((n) => !isShortNote(n));
+  const more = folded.length
+    ? moreDisclosure(
+        folded.map((n) => note(n)),
+        { about, hook: `set-${key}` },
+      ).el
+    : null;
+  const parts = [...shown, more].filter((p): p is HTMLElement => p !== null);
+  if (parts.length <= 1) return parts[0] ?? null;
+  return h('div', { class: 'set-notes' }, ...parts);
+}
+
 /** A section heading: icon + words (the icon is decorative). */
 function sectionTitle(name: IconName, text: string, id: string): HTMLElement {
   return h('h2', { class: 'set-head', id }, icon(name, 'md'), h('span', {}, text));
@@ -245,7 +284,7 @@ function todosSection(
       'list',
       "What's new",
       row('data-whats-new-open', "What's new", actions.onWhatsNew),
-      h('p', { class: 'muted set-note' }, 'What changed in this version.'),
+      notesMore('whats-new', "What's new", 'What changed in this version.'),
     );
   return section(
     'todos',
@@ -253,11 +292,7 @@ function todosSection(
     'To-dos',
     row('data-todos-open', 'To-dos', onTodos),
     row('data-whats-new-open', "What's new", actions.onWhatsNew),
-    h(
-      'p',
-      { class: 'muted set-note' },
-      'Things to try and answer, and what changed in this version.',
-    ),
+    notesMore('todos', 'To-dos', 'Things to try and answer, and what changed in this version.'),
   );
 }
 
@@ -326,7 +361,7 @@ function goalSection(
           ),
         )
       : h('p', { class: 'muted set-note', 'data-easy-empty': true }, EASY_ON_EMPTY),
-    areas.length ? h('p', { class: 'muted set-note' }, EASY_ON_NOTE) : null,
+    areas.length ? notesMore('goal', EASY_ON_HEAD, EASY_ON_NOTE) : null,
   );
 }
 
@@ -530,7 +565,6 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
           unitBtn('kg'),
           unitBtn('lb'),
         ),
-        h('p', { class: 'muted set-note' }, unitNote(props.unit)),
       ),
       actions.onLengthUnit
         ? h(
@@ -543,9 +577,14 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
               lengthBtn('cm'),
               lengthBtn('in'),
             ),
-            h('p', { class: 'muted set-note' }, lengthNote(lengthUnit)),
           )
         : null,
+      notesMore(
+        'unit',
+        'Units',
+        unitNote(props.unit),
+        actions.onLengthUnit ? lengthNote(lengthUnit) : null,
+      ),
     ),
     props.nutrition ? section('nutrition', 'flame', 'Nutrition', props.nutrition) : null,
     props.foodPhotos ? section('food-photos', 'bowl', 'Food photos', props.foodPhotos) : null,
@@ -564,7 +603,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
             },
             'My gym',
           ),
-          h('p', { class: 'muted set-note' }, 'The kit your gym has. Swaps use only that.'),
+          notesMore('gym', 'Gym', 'The kit your gym has. Swaps use only that.'),
         )
       : null,
     actions.onHealth
@@ -582,7 +621,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
             },
             'Health',
           ),
-          h('p', { class: 'muted set-note' }, 'What the coach reads from Apple Health.'),
+          notesMore('health', 'Health', 'What the coach reads from Apple Health.'),
         )
       : null,
     actions.onCoachSettings
@@ -600,7 +639,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
             },
             'Coach',
           ),
-          h('p', { class: 'muted set-note' }, 'Who answers, and when replies are spoken.'),
+          notesMore('coach', 'Coach', 'Who answers, and when replies are spoken.'),
         )
       : null,
     actions.onSelfCheck
@@ -618,7 +657,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
             },
             'Self-check',
           ),
-          h('p', { class: 'muted set-note' }, 'Is the app ready for the gym?'),
+          notesMore('selfcheck', 'Self-check', 'Is the app ready for the gym?'),
         )
       : null,
     actions.onReminders
@@ -636,7 +675,7 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
             },
             'Reminders',
           ),
-          h('p', { class: 'muted set-note' }, 'Off until you turn them on.'),
+          notesMore('reminders', 'Reminders', 'Off until you turn them on.'),
         )
       : null,
     actions.onPlanChanges

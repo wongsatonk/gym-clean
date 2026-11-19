@@ -10,7 +10,7 @@
 // The sheet is a bottom sheet over a veil (role="dialog", aria-modal): title (sheet title size),
 // the body (paragraphs split on blank lines, ≥ 20px), the optional `why` as a "Why it helps"
 // block, and one "Got it" button (≥ 56px). Close by Got it, the veil, or Escape; Tab stays on
-// the sheet's one control. On close the sheet is removed and focus goes back to the opener (when
+// the sheet's controls. On close the sheet is removed and focus goes back to the opener (when
 // it is still on the page). Motion: the panel rises with `enterScreen(…, 'up')` (motion.ts:
 // nothing under reduced motion), the veil fade is CSS (zeroed by the global reduced-motion rule).
 //
@@ -18,12 +18,26 @@
 // `closeLearnCard()` closes it from outside (main calls it when a set starts, so a card left
 // open on the rest screen never covers the Exercise screen).
 //
-// e2e hooks: `[data-learn-sheet=<id>]` (the dialog), `[data-learn-title]`, `[data-learn-body]`,
-// `[data-learn-why]`, `[data-learn-close]`, `[data-learn-veil]`; "Why?" buttons from
-// `whyButton(...)` carry `data-learn-open=<id>` (or the caller's own hook).
+// M13d task 19 ("some screens have too much text"): a card with a `short` lead opens on it; the
+// body and the `why` block sit behind the shared "More" disclosure (../moreDisclosure.ts), and
+// Tab moves between More and Got it. A card without `short` shows as before. An opener carrying
+// `data-learn-hide-why` (the intake's abs Why?, whose card's `why` talks about a focus block)
+// opens the card without its `why` block. Opened while a workout is on screen (the Rest screen)
+// More starts open, so nothing new has to be tapped between sets (M13d review decision).
+//
+// M13d task 25: swipe down closes it (Got it's own path; the panel follows the finger). Never
+// while a workout is on screen (sheetSwipe.ts). Closing removes the swipe with the sheet.
+//
+// e2e hooks: `[data-learn-sheet=<id>]` (the dialog), `[data-learn-title]`, `[data-learn-short]`,
+// `[data-learn-body]`, `[data-learn-why]`, `[data-learn-close]`, `[data-learn-veil]`,
+// `[data-more="learn"]` (its `[data-more-btn]`); "Why?" buttons from `whyButton(...)` carry
+// `data-learn-open=<id>` (or the caller's own hook).
 import type { LearnCard } from '../../core/types';
 import { h } from '../dom';
+import { workoutOnScreen } from '../gestures/edgeBack';
+import { installSheetSwipe } from '../gestures/sheetSwipe';
 import { icon } from '../icons';
+import { moreDisclosure } from '../moreDisclosure';
 import { enterScreen, type Stop } from '../motion';
 import { moodClass } from '../tokens';
 import './learnCard.css';
@@ -31,6 +45,8 @@ import './learnCard.css';
 export const GOT_IT = 'Got it';
 export const WHY_LABEL = 'Why?';
 export const WHY_HEADING = 'Why it helps';
+/** On an opener: open the card without its `why` block. */
+export const HIDE_WHY_ATTR = 'data-learn-hide-why';
 
 /** The body split into paragraphs on blank lines; single newlines become spaces. Pure. */
 export function bodyParagraphs(body: string): string[] {
@@ -86,18 +102,34 @@ export type LearnSheetActions = {
   onClose: () => void;
 };
 
+export type LearnSheetOptions = {
+  /** Leave out the `why` block (the intake context). Default false. */
+  hideWhy?: boolean | undefined;
+};
+
 let sheets = 0;
 
-type Built = { root: HTMLElement; panel: HTMLElement; gotIt: HTMLElement };
+type Built = {
+  root: HTMLElement;
+  panel: HTMLElement;
+  gotIt: HTMLElement;
+  /** Removes the swipe-down. */
+  unswipe: () => void;
+};
 
 /** The sheet element (pure render; `openLearnCard` mounts it and handles focus). */
-export function learnCardSheet(card: LearnCard, a: LearnSheetActions): HTMLElement {
-  return buildSheet(card, a).root;
+export function learnCardSheet(
+  card: LearnCard,
+  a: LearnSheetActions,
+  opts: LearnSheetOptions = {},
+): HTMLElement {
+  return buildSheet(card, a, opts).root;
 }
 
-function buildSheet(card: LearnCard, a: LearnSheetActions): Built {
+function buildSheet(card: LearnCard, a: LearnSheetActions, opts: LearnSheetOptions = {}): Built {
   const titleId = `learn-title-${++sheets}`;
   const bodyId = `learn-body-${sheets}`;
+  const shortId = `learn-short-${sheets}`;
   const close = h(
     'button',
     {
@@ -110,26 +142,36 @@ function buildSheet(card: LearnCard, a: LearnSheetActions): Built {
     h('span', {}, GOT_IT),
   );
   const paras = bodyParagraphs(card.body);
-  const panel = h(
+  const body = h(
     'div',
-    { class: 'learn-panel' },
-    h('p', { class: 'learn-eyebrow caps' }, icon('help', 'sm'), h('span', {}, 'Coach tip')),
-    h('h2', { class: 'learn-title', id: titleId, 'data-learn-title': true }, card.title),
-    h(
-      'div',
-      { class: 'learn-body', id: bodyId, 'data-learn-body': true },
-      ...paras.map((p) => h('p', {}, p)),
-    ),
-    card.why
+    { class: 'learn-body', id: bodyId, 'data-learn-body': true },
+    ...paras.map((p) => h('p', {}, p)),
+  );
+  const why =
+    card.why && opts.hideWhy !== true
       ? h(
           'section',
           { class: 'learn-whyblock', 'data-learn-why': true, 'aria-label': WHY_HEADING },
           h('h3', { class: 'learn-why-h' }, WHY_HEADING),
           h('p', {}, card.why),
         )
-      : null,
+      : null;
+  const lead = card.short?.trim();
+  // With a short lead: the lead, then the body and the why behind More.
+  const more = lead
+    ? moreDisclosure([body, why], { about: card.title, hook: 'learn', open: workoutOnScreen() })
+    : null;
+  const panel = h(
+    'div',
+    { class: 'learn-panel' },
+    h('p', { class: 'learn-eyebrow caps' }, icon('help', 'sm'), h('span', {}, 'Coach tip')),
+    h('h2', { class: 'learn-title', id: titleId, 'data-learn-title': true }, card.title),
+    ...(more && lead
+      ? [h('p', { class: 'learn-short', id: shortId, 'data-learn-short': true }, lead), more.el]
+      : [body, why]),
     close,
   );
+  const controls: HTMLElement[] = more ? [more.button, close] : [close];
   const veil = h('div', {
     class: 'learn-veil',
     'data-learn-veil': true,
@@ -143,13 +185,13 @@ function buildSheet(card: LearnCard, a: LearnSheetActions): Built {
       role: 'dialog',
       'aria-modal': 'true',
       'aria-labelledby': titleId,
-      'aria-describedby': bodyId,
+      'aria-describedby': more ? shortId : bodyId,
       'data-learn-sheet': card.id,
     },
     veil,
     panel,
   );
-  // Escape closes; Tab / Shift+Tab stay on Got it (the sheet's only control).
+  // Escape closes; Tab / Shift+Tab cycle through the sheet's controls (More, Got it).
   root.addEventListener('keydown', (ev) => {
     const kev = ev as KeyboardEvent;
     if (kev.key === 'Escape') {
@@ -157,10 +199,15 @@ function buildSheet(card: LearnCard, a: LearnSheetActions): Built {
       a.onClose();
     } else if (kev.key === 'Tab') {
       kev.preventDefault();
-      close.focus();
+      const at = controls.indexOf(document.activeElement as HTMLElement);
+      const step = kev.shiftKey ? -1 : 1;
+      const next = at < 0 ? close : controls[(at + step + controls.length) % controls.length];
+      (next ?? close).focus();
     }
   });
-  return { root, panel, gotIt: close };
+  // Swipe down = Got it (the panel follows the finger).
+  const unswipe = installSheetSwipe(root, { close: () => close.click(), mover: panel });
+  return { root, panel, gotIt: close, unswipe };
 }
 
 export type LearnCardHandle = {
@@ -190,12 +237,14 @@ export function openLearnCard(
   current?.close();
   let closed = false;
   let stopMotion: Stop = () => {};
+  let unswipe: () => void = () => {};
   const handle: LearnCardHandle = {
     el: null as unknown as HTMLElement,
     close: () => {
       if (closed) return;
       closed = true;
       stopMotion();
+      unswipe();
       const el = handle.el as Partial<HTMLElement>;
       if (typeof el.remove === 'function') el.remove();
       if (current === handle) current = null;
@@ -205,8 +254,10 @@ export function openLearnCard(
       opts.onClosed?.();
     },
   };
-  const built = buildSheet(card, { onClose: handle.close });
+  const hideWhy = typeof opener?.hasAttribute === 'function' && opener.hasAttribute(HIDE_WHY_ATTR);
+  const built = buildSheet(card, { onClose: handle.close }, { hideWhy });
   handle.el = built.root;
+  unswipe = built.unswipe;
   const parent = opts.parent ?? document.body;
   parent.append(built.root);
   current = handle;

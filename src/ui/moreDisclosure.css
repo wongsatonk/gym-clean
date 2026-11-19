@@ -1,0 +1,60 @@
+/* M13d task 19: the shared "More" disclosure (src/ui/moreDisclosure.ts). Tokens only.
+   A quiet link-style button like "Why?" (learnCard.css .learn-why): ≥ 56px tall, 20px bold,
+   underlined, a chevron that points down while closed and up while open. The panel fades in;
+   the global reduced-motion rule zeroes the animation and the chevron turn. */
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.more-btn {
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 96px;
+  min-height: var(--tap-min);
+  padding: 0 12px;
+  margin-left: -12px; /* the word lines up with the text above; the hit box stays whole */
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  background: transparent;
+  border-color: transparent;
+}
+
+.more-chev {
+  flex: none;
+  color: var(--text-2);
+  transform: rotate(-90deg);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.more-btn[aria-expanded='true'] .more-chev {
+  transform: rotate(90deg);
+}
+
+.more-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  animation: motion-fade var(--dur-base) var(--ease-standard);
+}
+
+.more-panel[hidden] {
+  display: none;
+}
+
+:where(.more-panel) p {
+  margin: 0;
+  font-size: var(--fs-body);
+  line-height: var(--lh-text);
+  overflow-wrap: anywhere;
+}

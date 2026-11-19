@@ -16,6 +16,7 @@ import {
   GOAL_SET_LABEL,
   LENGTH_UNIT_GROUP,
   WEIGHT_UNIT_GROUP,
+  isShortNote,
   lengthNote,
   settingsScreen,
   settingsSectionId,
@@ -868,5 +869,106 @@ describe('Settings: Search and jump targets (M13c)', () => {
       expect(s.getAttribute('tabindex')).toBe('-1');
       expect(s.getAttribute('aria-labelledby')).toBe(`set-${key}`);
     }
+  });
+});
+
+describe('settingsScreen M13d task 19: notes behind "More"', () => {
+  function renderAll(over: Partial<SettingsProps> = {}) {
+    return asFake(
+      settingsScreen(props({ easyOn: ['legs'], ...over }), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onLengthUnit: () => {},
+        onCameraTest: () => {},
+        onTab: () => {},
+        onIntake: () => {},
+        onEasyOnRemove: () => {},
+        onProgressPhotos: () => {},
+        onMyGym: () => {},
+        onHealth: () => {},
+        onCoachSettings: () => {},
+        onSelfCheck: () => {},
+        onReminders: () => {},
+        onTodos: () => {},
+        onWhatsNew: () => {},
+      }),
+    );
+  }
+  it('only long notes fold: each such section has one closed More (a real button) holding them', () => {
+    const el = renderAll();
+    const mores = el.find((e) => e.hasAttribute('data-more'));
+    // Multi-sentence (go-easy, Gym) or over 10 words (To-dos); the one-liners stay shown.
+    expect(mores.map((m) => m.getAttribute('data-more'))).toEqual([
+      'set-goal',
+      'set-gym',
+      'set-todos',
+    ]);
+    for (const m of mores) {
+      const btn = m.find((e) => e.hasAttribute('data-more-btn'))[0];
+      expect(btn?.tag).toBe('button');
+      expect(btn?.getAttribute('aria-expanded')).toBe('false');
+      const panel = m.find((e) => e.hasAttribute('data-more-panel'))[0];
+      expect(panel?.hasAttribute('hidden')).toBe(true);
+      expect(panel?.byClass('set-note').length).toBeGreaterThan(0);
+    }
+    expect(byAttr(el, 'data-more', 'set-goal').textContent).toContain(EASY_ON_NOTE);
+  });
+
+  it('one-line notes stay shown (not behind More)', () => {
+    const el = renderAll();
+    const inMore = (e: FakeEl) =>
+      el.find((m) => m.hasAttribute('data-more-panel') && m.find((x) => x === e).length > 0)
+        .length > 0;
+    const shown = el.find((e) => e.hasAttribute('data-set-note'));
+    expect(shown.map((e) => e.getAttribute('data-set-note'))).toEqual([
+      'unit',
+      'unit',
+      'health',
+      'coach',
+      'selfcheck',
+      'reminders',
+    ]);
+    for (const e of shown) {
+      expect(inMore(e)).toBe(false);
+      expect(e.classes).toContain('set-note');
+      expect(isShortNote(e.textContent)).toBe(true);
+    }
+    expect(shown[0]?.textContent).toBe(unitNote('kg'));
+    expect(shown[1]?.textContent).toBe(lengthNote('cm'));
+  });
+
+  it('a long Units note (lb: two sentences) folds while the short one stays shown', () => {
+    const el = renderAll({ unit: 'lb', lengthUnit: 'cm' });
+    const unit = byAttr(el, 'data-more', 'set-unit');
+    expect(unit.textContent).toContain(unitNote('lb'));
+    expect(unit.textContent).not.toContain(lengthNote('cm'));
+    expect(
+      el.find((e) => e.getAttribute('data-set-note') === 'unit').map((e) => e.textContent),
+    ).toEqual([lengthNote('cm')]);
+  });
+
+  it('isShortNote: one sentence of at most 10 words', () => {
+    expect(isShortNote('Weights step by 2.5 kg.')).toBe(true);
+    expect(isShortNote('Off until you turn them on.')).toBe(true);
+    expect(isShortNote('The kit your gym has. Swaps use only that.')).toBe(false);
+    expect(isShortNote('Things to try and answer, and what changed in this version.')).toBe(false);
+  });
+
+  it('the privacy line and state lines stay shown (not behind More)', () => {
+    const el = renderAll({ easyOn: [] });
+    const notInMore = (e: FakeEl) =>
+      el.find((m) => m.hasAttribute('data-more-panel') && m.find((x) => x === e).length > 0)
+        .length === 0;
+    const privacy = byAttr(el, 'data-progress-photos-privacy', '');
+    expect(privacy.textContent).toContain(PHOTOS_PRIVACY);
+    expect(notInMore(privacy)).toBe(true);
+    const empty = byAttr(el, 'data-easy-empty', '');
+    expect(notInMore(empty)).toBe(true);
+    expect(notInMore(byAttr(el, 'data-goal-summary', ''))).toBe(true);
+    // No go-easy areas → no go-easy note → no More in Your goal.
+    expect(el.find((e) => e.getAttribute('data-more') === 'set-goal')).toHaveLength(0);
   });
 });
