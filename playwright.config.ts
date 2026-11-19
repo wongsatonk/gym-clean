@@ -35,6 +35,9 @@ export default defineConfig({
     baseURL: `https://localhost:${PORT}`,
     ignoreHTTPSErrors: true, // dev server uses a self-signed cert (plugin-basic-ssl)
     trace: 'retain-on-failure',
+    // M13d: fresh installs preselect units from the region; specs run as a metric phone (Thailand,
+    // like his and his wife's). e2e/units.spec.ts sets en-US / th-TH itself.
+    locale: 'en-TH',
   },
   projects: [
     {

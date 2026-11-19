@@ -40,6 +40,8 @@ import type {
   TrainerKitSettings,
   TrainerState,
   OnboardingStep,
+  LengthUnit,
+  UnitPrefs,
   OwnerMode,
   ShareLead,
 } from '../core/types';
@@ -123,7 +125,8 @@ import {
 import type { GoalCardItem, GoalCardProps } from './screens/goalCard';
 import { createProgressPhotos, type ProgressPhotosView } from './photos/progressPhotos';
 import { GYM_IMPORT_NOTHING, GYM_SHARED_NOTE, type GymImportPreview } from './screens/myGym';
-import { formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
+import { defaultUnits, formatWeight, snapToStep, stepFor, type Unit } from '../core/units';
+import { deviceLocale } from './deviceLocale';
 import { shouldSpeakFocusCue } from '../core/focusCue';
 import {
   adviceSpeakDue,
@@ -251,7 +254,8 @@ import {
   setCoachVoice,
   type CoachVoice,
   getSpokenCount,
-  getUnit,
+  getUnitPrefs,
+  getLengthUnit,
   lastSessionSets,
   lastWeights,
   saveExerciseNote,
@@ -261,6 +265,8 @@ import {
   setHandsFree,
   setSpokenCount,
   setUnit,
+  setUnitPrefs,
+  setLengthUnit,
   startSessionRow,
   type ExerciseNoteRow,
   type SetRow,
@@ -395,6 +401,7 @@ import type {
 import { noteSignal } from '../data/todos/store';
 import { createTodoHost, nativeShell } from './todo/todoHost';
 import { setPressFeel } from './iconButton';
+import { installEdgeBack } from './gestures/edgeBack';
 import type { WhatsNewTour } from './todo/whatsNewTour';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
@@ -503,6 +510,8 @@ export function mountApp(root: HTMLElement): void {
   let libSeq = 0;
   let pendingReveal: { id: string; until: number } | null = null;
   let unit: Unit = 'kg';
+  /** M13d: height and tape (settings 'lengthUnit'; no row → follows the weight unit). */
+  let lengthUnit: LengthUnit = 'cm';
   let spokenCount = true;
   let coachTips = true;
   let handsFree = true;
@@ -621,6 +630,9 @@ export function mountApp(root: HTMLElement): void {
     root,
     now: () => now(),
     unit: () => unit,
+    lengthUnit: () => lengthUnit,
+    // M13d: Set up Fuel pre-fills height / birth year / sex from Apple Health (iPhone app, connected).
+    healthProfile: () => health.profile(),
     render: () => render(),
     showFuel: () => {
       view = { screen: 'fuel' };
@@ -1447,6 +1459,8 @@ export function mountApp(root: HTMLElement): void {
   }
 
   function render(): void {
+    // M13d: the left-edge swipe Back never works in a workout.
+    root.toggleAttribute('data-in-workout', view.screen === 'session');
     // Left Settings by any route (a tab, Nutrition setup, Plan changes): stop the audio test's
     // camera and beep context. A no-op when there is no live panel.
     if (view.screen !== 'settings') disposeAudioTest();
@@ -3022,6 +3036,22 @@ export function mountApp(root: HTMLElement): void {
   const native = nativeShell();
   // M13d: a light tap on main-button presses in the iPhone app; lazy so the PWA never loads it.
   if (native) setPressFeel(() => import('../native/haptics').then((m) => m.tapLight()));
+  // M13d: swipe from the left edge = the screen's Back (a light tap on commit in the iPhone app).
+  // Only in the iPhone app and the home-screen web app: in a Safari tab the browser's own edge
+  // swipe means "leave the page".
+  const standalone = (() => {
+    try {
+      return window.matchMedia('(display-mode: standalone)').matches;
+    } catch {
+      return false;
+    }
+  })();
+  if (native || standalone)
+    installEdgeBack(root, {
+      feel: () => {
+        if (native) void import('../native/haptics').then((m) => m.tapLight());
+      },
+    });
   let gymBrain: GymBrain | null = null;
   let speech: Speech | null = null;
   let reminders: Reminders | null = null;
@@ -3553,6 +3583,8 @@ export function mountApp(root: HTMLElement): void {
     granted: Partial<Record<OnboardingPermission, boolean>>;
     /** The first open of a release asking only what's still missing (not the welcome). */
     catchUp?: boolean;
+    /** M13d: the Units page's choice (saved when you leave that page forward). */
+    units?: UnitPrefs;
   };
   let onboarding: OnboardingRun | null = null;
   let onboardingEl: OnboardingScreen | null = null;
@@ -3572,7 +3604,9 @@ export function mountApp(root: HTMLElement): void {
         intakeDone: f.intakeDone,
         has: { health: native, mic: native, notifications: native },
       });
-      onboarding = { steps, index: 0, granted: {} };
+      // M13d: a fresh install preselects units from the phone's region; a re-run shows the saved ones.
+      const units = rerun || f.sessions > 0 ? await getUnitPrefs(db) : defaultUnits(deviceLocale());
+      onboarding = { steps, index: 0, granted: {}, units };
       showOnboardingStep();
       return true;
     } catch (err) {
@@ -3654,6 +3688,15 @@ export function mountApp(root: HTMLElement): void {
       fuel.setupForGoal(goal, {
         inFlow: true,
         onLeave: (how) => {
+          if (how === 'skip') {
+            // "Not now": no Fuel targets; the step is dropped and the flow moves on.
+            flowFuelGoal = null;
+            run.steps = run.steps.filter((s) => s.kind !== 'fuelSetup');
+            run.dir = 'next';
+            if (run.index >= run.steps.length) finishOnboarding('done');
+            else showOnboardingStep();
+            return;
+          }
           if (how === 'back') intakeAtSummary = true;
           onboardingGo(how === 'saved' ? 1 : -1);
         },
@@ -3668,6 +3711,7 @@ export function mountApp(root: HTMLElement): void {
   function onboardingGo(delta: 1 | -1): void {
     const run = onboarding;
     if (!run) return;
+    if (delta > 0 && run.steps[run.index]?.kind === 'units' && run.units) saveUnits(run.units);
     const next = run.index + delta;
     if (next >= run.steps.length) {
       finishOnboarding('done');
@@ -3678,7 +3722,18 @@ export function mountApp(root: HTMLElement): void {
     showOnboardingStep();
   }
 
+  /** M13d: the Units page's choice applies now (Set up Fuel and Measurements read it next). */
+  function saveUnits(u: UnitPrefs): void {
+    unit = u.weight;
+    lengthUnit = u.length;
+    void setUnitPrefs(db, u).catch(logDbError);
+  }
+
   function finishOnboarding(how: 'done' | 'skipped'): void {
+    const run0 = onboarding;
+    // Skip-all from the Units page still keeps the units shown there.
+    if (how === 'skipped' && run0?.units && run0.steps[run0.index]?.kind === 'units')
+      saveUnits(run0.units);
     const catchUp = onboarding?.catchUp === true;
     flowFuelGoal = null;
     intakeAtSummary = false;
@@ -3736,8 +3791,11 @@ export function mountApp(root: HTMLElement): void {
     }
     onboardingEl?.dispose();
     const ob = onboardingScreen(
-      { steps: run.steps, index: run.index, granted: run.granted, dir: run.dir },
+      { steps: run.steps, index: run.index, granted: run.granted, dir: run.dir, units: run.units },
       {
+        onUnits: (u) => {
+          run.units = u;
+        },
         onNext: () => onboardingGo(1),
         onBack: () => onboardingGo(-1),
         onSkipAll: () => finishOnboarding('skipped'),
@@ -4755,7 +4813,10 @@ export function mountApp(root: HTMLElement): void {
   }
   let intakeFinishing = false;
 
-  async function finishIntake(answers: Intake, from: 'first' | 'today' | 'settings'): Promise<void> {
+  async function finishIntake(
+    answers: Intake,
+    from: 'first' | 'today' | 'settings',
+  ): Promise<void> {
     const a = normalizeIntake(answers);
     try {
       const history = await goalHistory();
@@ -4851,6 +4912,7 @@ export function mountApp(root: HTMLElement): void {
       weighIns: fuel.weighInList(),
       exerciseNames: names,
       unit,
+      lengthUnit,
       sites: kit.measurementSites,
       formula: kit.e1rmFormula,
       preferLifts: Object.keys(names),
@@ -5147,6 +5209,7 @@ export function mountApp(root: HTMLElement): void {
         coachTips,
         handsFree,
         unit,
+        lengthUnit,
         coachVoice: createCoachVoiceSettings({
           value: coachVoice,
           voices: voice.englishVoices(),
@@ -5222,7 +5285,18 @@ export function mountApp(root: HTMLElement): void {
         },
         onUnit: (u) => {
           unit = u;
-          void setUnit(db, u).catch(logDbError);
+          void setUnit(db, u)
+            .then(() => getLengthUnit(db))
+            .then((l) => {
+              lengthUnit = l;
+              render();
+            })
+            .catch(logDbError);
+          render();
+        },
+        onLengthUnit: (l) => {
+          lengthUnit = l;
+          void setLengthUnit(db, l).catch(logDbError);
           render();
         },
         onCameraTest: () => openCameraView('Camera test'),
@@ -5358,7 +5432,7 @@ export function mountApp(root: HTMLElement): void {
     try {
       // M13: a restored 'ownerMode' row wins; a pre-1.15 file has none → decided from its data.
       ownerMode = await resolveOwnerMode(db, now());
-      unit = await getUnit(db);
+      ({ weight: unit, length: lengthUnit } = await getUnitPrefs(db));
       spokenCount = await getSpokenCount(db);
       coachTips = await getCoachTips(db);
       handsFree = await getHandsFree(db);
@@ -6348,9 +6422,10 @@ export function mountApp(root: HTMLElement): void {
   // M12 slice 1c, first DB reads: the fresh-install rule (no session, no 'whatsNew' row → the
   // tour is marked seen without showing) runs before anything else can add a session.
   const firstTour = ownerReady.then(() => todos.pendingTour());
-  void getUnit(db)
+  void getUnitPrefs(db)
     .then((u) => {
-      unit = u;
+      unit = u.weight;
+      lengthUnit = u.length;
       if (view.screen !== 'session') render();
     })
     .catch(logDbError);

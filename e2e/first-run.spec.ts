@@ -274,6 +274,7 @@ test(
 // while the intake's Fuel row is applied for the goal Done saved with: Skip for now or a changed
 // goal drops it (nothing stored for Fuel, and it never opens again on its own); Back from the
 // page after it reopens it with what was saved; a double tap on Done moves the flow on once.
+// Task 3b: its quiet "Not now" drops the step and stores nothing (Back never brings it back).
 
 /** Taps Next on each question (answers already kept) until the summary shows. */
 async function nextToSummary(page: Page): Promise<void> {
@@ -499,6 +500,59 @@ test(
       .poll(async () => ((await getSetting(page, 'nutrition')) as { goalKind?: string })?.goalKind)
       .toBe('fat');
     await cameraToToday(page);
+    await expectNotAgain(page);
+
+    expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+    expect(offsite).toEqual([]);
+    expect(errors).toEqual([]);
+  },
+);
+
+test(
+  'Set up Fuel → Not now: the camera page, nothing stored for Fuel; Back never shows it again',
+  { tag: '@m13d-flow' },
+  async ({ page }) => {
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await open(page);
+    await throughWelcome(page);
+    await answerAll(page);
+    await apply(page, 'plan');
+    await apply(page, 'fuel');
+    await intake(page).locator('[data-intake-done]').tap();
+    await expectFuelStepInFlow(page);
+
+    // The quiet "Not now" (task 3b): only in the flow, a word button ≥ 56px.
+    const notNow = fuelSetup(page).getByRole('button', { name: 'Not now', exact: true });
+    await expect(notNow).toBeVisible();
+    expect((await notNow.boundingBox())?.height).toBeGreaterThanOrEqual(56);
+    await notNow.tap();
+
+    await expect(cameraPage(page)).toBeVisible();
+    await expect(fuelSetup(page)).toHaveCount(0);
+    expect(await getSetting(page, 'nutrition')).toBeUndefined();
+    expect(await getRows(page, 'weighIns')).toEqual([]);
+
+    // Back from the camera page: the step was dropped, so the intake (never Set up Fuel), from
+    // its first question with the answers kept.
+    await welcome(page).locator('[data-ob="back"]').tap();
+    await expect(intake(page)).toBeVisible();
+    await expect(fuelSetup(page)).toHaveCount(0);
+    await expect(page.locator('[data-tabbar]')).toHaveCount(0);
+    await step(page, 'goal');
+    await expect(intake(page).locator('[data-option="fat"]')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await nextToSummary(page);
+    // Not now un-applied the Fuel row (nothing pending for Fuel).
+    await fuelNotApplied(page);
+    await intake(page).locator('[data-intake-done]').tap();
+    // Done again: still no Set up Fuel (Not now dropped it for this run).
+    await expect(cameraPage(page)).toBeVisible();
+    await expect(fuelSetup(page)).toHaveCount(0);
+    await cameraToToday(page);
+    expect(await getSetting(page, 'nutrition')).toBeUndefined();
     await expectNotAgain(page);
 
     expect(await page.evaluate(() => window.__spoken)).toEqual([]);
