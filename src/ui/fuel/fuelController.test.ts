@@ -9,6 +9,7 @@ import type {
   FoodModelRecord,
   FoodSuggestion,
   NutritionSettings,
+  UnitPrefs,
   WeeklyCheck,
 } from '../../core/types';
 import type { ScoredLabel } from '../../food-vision/decide';
@@ -119,7 +120,7 @@ function makeApp(
   now = EVENING,
   photo?: FuelPhotoHost,
   health?: FuelHealthHost,
-  more: Pick<FuelHost, 'healthProfile' | 'lengthUnit' | 'trainerKit'> = {},
+  more: Pick<FuelHost, 'healthProfile' | 'lengthUnit' | 'trainerKit' | 'onUnits'> = {},
 ) {
   const root = new FakeEl('main');
   (root as unknown as { querySelector: (s: string) => FakeEl | null }).querySelector = (s) =>
@@ -1223,5 +1224,59 @@ describe('M13d task 13: length unit', () => {
     expect(
       app.onScreen('data-field', 'height').find((e) => e.hasAttribute('data-part')),
     ).toHaveLength(0);
+  });
+});
+
+describe('M13d task 13c: unit switches pass up through host.onUnits', () => {
+  beforeEach(() => {
+    vi.stubGlobal('scrollTo', () => undefined);
+  });
+
+  const tapUnit = (root: FakeEl, forId: string, unit: string) => {
+    const g = root.find((e) => e.getAttribute('data-unit-for') === forId)[0];
+    const b = g?.find((e) => e.getAttribute('data-unit') === unit)[0];
+    if (!b) throw new Error(`no ${unit} on the ${forId} switch`);
+    b.click();
+  };
+
+  it('Set up Fuel, the weigh-in and Measurements each report the whole preference; nothing is written', async () => {
+    await setUp();
+    const got: UnitPrefs[] = [];
+    const app = makeApp(EVENING, undefined, undefined, {
+      lengthUnit: () => 'cm',
+      onUnits: (u) => got.push(u),
+      trainerKit: () =>
+        ({ measurementSites: ['waist'] }) as unknown as ReturnType<
+          NonNullable<FuelHost['trainerKit']>
+        >,
+    });
+    const weighInsBefore = await db.weighIns.toArray();
+
+    app.ctrl.setupForGoal('fat');
+    await flush();
+    tapUnit(app.root, 'weight', 'lb');
+    tapUnit(app.root, 'height', 'in');
+    expect(got).toEqual([
+      { weight: 'lb', length: 'cm' },
+      { weight: 'lb', length: 'in' },
+    ]);
+
+    await app.openFuel();
+    app.onScreen('data-weigh-in').click();
+    tapUnit(app.root, 'weigh-in', 'lb');
+    expect(got.at(-1)).toEqual({ weight: 'lb', length: 'cm' }); // the host still says kg + cm
+
+    await app.ctrl.openMeasurements();
+    const ms = asFake(app.ctrl.screen());
+    tapUnit(ms, 'tape', 'in');
+    expect(got.at(-1)).toEqual({ weight: 'kg', length: 'in' });
+    expect(got).toHaveLength(4);
+
+    await flush();
+    // The pages never save: no weigh-in, no measurement, no unit row (the app writes those).
+    expect(await db.weighIns.toArray()).toEqual(weighInsBefore);
+    expect(await db.measurements.count()).toBe(0);
+    expect(await db.settings.get('unit')).toBeUndefined();
+    expect(await db.settings.get('lengthUnit')).toBeUndefined();
   });
 });

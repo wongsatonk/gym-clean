@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { Unit } from '../../core/units';
+import type { LengthUnit, UnitPrefs } from '../../core/types';
+import { lengthUnitFor, type Unit } from '../../core/units';
 import { asFake, useFakeDom } from '../screens/testDom';
 import { clampStep, decimalsOf, numberField, parseTyped } from './fields';
 import { byAttr, copyHits, oneAttr, typeInto, valueOf } from './fuelTestUtil';
@@ -16,21 +17,28 @@ import {
 
 useFakeDom();
 
+/** Test shorthand: `unit` / `lengthUnit` build `units` (length follows the weight unit, as the
+ *  app's fallback does when there is no 'lengthUnit' row). */
+type RenderOver = Partial<Omit<SetupProps, 'units'>> & { unit?: Unit; lengthUnit?: LengthUnit };
+
 function render(
-  over: Partial<SetupProps> = {},
+  over: RenderOver = {},
   cancel = false,
   more: { notNow?: () => void; touch?: () => void } = {},
 ) {
   const saved: SetupValues[] = [];
+  const units: UnitPrefs[] = [];
   let cancelled = 0;
+  const { unit = 'kg', lengthUnit, ...rest } = over;
   const el = asFake(
     fuelSetupScreen(
-      { year: 2026, unit: 'kg', ...over },
+      { year: 2026, units: { weight: unit, length: lengthUnit ?? lengthUnitFor(unit) }, ...rest },
       {
         onSave: (v) => saved.push(v),
         onCancel: cancel ? () => cancelled++ : undefined,
         onNotNow: more.notNow,
         onTouch: more.touch,
+        onUnits: (u) => units.push(u),
       },
     ),
   );
@@ -40,7 +48,7 @@ function render(
   const pick = (group: string, value: string) =>
     oneAttr(field(group), 'data-choice', value).click();
   const save = oneAttr(el, 'data-setup-save');
-  return { el, saved, cancelled: () => cancelled, field, input, step, pick, save };
+  return { el, saved, units, cancelled: () => cancelled, field, input, step, pick, save };
 }
 
 describe('number field helpers', () => {
@@ -156,7 +164,7 @@ describe('fuelSetupScreen', () => {
 
   it.each<[Unit, string, number]>([
     ['kg', '70.0', 0.1],
-    ['lb', '154.4', 0.2],
+    ['lb', '154.3', 0.2], // M13d (n): core unitField's display (70 kg = 154.32 lb), not a snap
   ])('shows the weight in %s and converts back to kg', (unit, start, stepSize) => {
     const r = render({ unit });
     expect(valueOf(r.input('weight'))).toBe(start);
@@ -389,5 +397,148 @@ describe('M13d task 3b: Not now and the first touch', () => {
     const r2 = render({}, false, { touch: () => touches++ });
     r2.el.dispatch('focusin', {});
     expect(touches).toBe(2);
+  });
+});
+
+describe("M13d task 13c: a unit switch next to Height and Today's weight", () => {
+  /** The switch in a field's label row (the group with `data-unit-for`). */
+  const unitGroup = (r: ReturnType<typeof render>, id: string) =>
+    oneAttr(r.field(id), 'data-unit-for', id);
+  const tap = (r: ReturnType<typeof render>, id: string, unit: string) =>
+    oneAttr(unitGroup(r, id), 'data-unit', unit).click();
+  const pressed = (r: ReturnType<typeof render>, id: string) =>
+    byAttr(unitGroup(r, id), 'data-unit')
+      .filter((b) => b.getAttribute('aria-pressed') === 'true')
+      .map((b) => b.getAttribute('data-unit'));
+  const ftIn = (r: ReturnType<typeof render>) =>
+    ['ft', 'in'].map((part) =>
+      valueOf(oneAttr(r.field('height'), 'data-part', part).oneByClass('nf-value')),
+    );
+
+  it("each switch is a named group in its field's label row, showing the units passed in", () => {
+    const r = render({ unit: 'lb', lengthUnit: 'cm' });
+    const w = unitGroup(r, 'weight');
+    expect(w.getAttribute('role')).toBe('group');
+    expect(w.getAttribute('aria-label')).toBe('Weight unit');
+    expect(unitGroup(r, 'height').getAttribute('aria-label')).toBe('Height unit');
+    expect(pressed(r, 'weight')).toEqual(['lb']);
+    expect(pressed(r, 'height')).toEqual(['cm']);
+    // In the label row, right after the label.
+    const head = r.field('weight').oneByClass('unit-field-head');
+    expect(head.children[0]?.classes).toContain('nf-label');
+    expect(head.children[1]).toBe(w);
+    // Exactly two switches on the page (birth year, sex and activity have none).
+    expect(byAttr(r.el, 'data-unit-switch')).toHaveLength(2);
+  });
+
+  it('70.0 kg → lb 154.3 → kg 70.0 with no drift, nothing saved, onUnits once per tap', () => {
+    const r = render({ initial: { weightKg: 70 } });
+    expect(valueOf(r.input('weight'))).toBe('70.0');
+    tap(r, 'weight', 'lb');
+    expect(valueOf(r.input('weight'))).toBe('154.3');
+    expect(r.field('weight').oneByClass('nf-unit').textContent).toBe('lb');
+    tap(r, 'weight', 'kg');
+    expect(valueOf(r.input('weight'))).toBe('70.0');
+    for (let i = 0; i < 20; i++) {
+      tap(r, 'weight', 'lb');
+      tap(r, 'weight', 'kg');
+    }
+    expect(valueOf(r.input('weight'))).toBe('70.0');
+    expect(r.saved).toEqual([]);
+    expect(r.units).toHaveLength(42);
+    expect(r.units[0]).toEqual({ weight: 'lb', length: 'cm' });
+    expect(r.units.at(-1)).toEqual({ weight: 'kg', length: 'cm' });
+    // Tapping the unit already shown does nothing.
+    tap(r, 'weight', 'kg');
+    expect(r.units).toHaveLength(42);
+    // Save after all that: exactly the kg it started from.
+    r.pick('sex', 'female');
+    r.pick('activity', 'light');
+    tap(r, 'weight', 'lb');
+    r.save.click();
+    expect(r.saved[0]?.weightKg).toBe(70);
+  });
+
+  it('170 cm → 5 ft 7 in → 170 cm, saves exactly 170; the other unit is kept in onUnits', () => {
+    const r = render({ unit: 'lb', lengthUnit: 'cm', initial: { heightCm: 170 } });
+    expect(valueOf(r.input('height'))).toBe('170');
+    tap(r, 'height', 'in');
+    expect(ftIn(r)).toEqual(['5', '7']);
+    expect(r.field('height').getAttribute('data-unit')).toBe('ftin');
+    tap(r, 'height', 'cm');
+    expect(byAttr(r.field('height'), 'data-part')).toHaveLength(0);
+    expect(valueOf(r.input('height'))).toBe('170');
+    for (let i = 0; i < 20; i++) {
+      tap(r, 'height', 'in');
+      tap(r, 'height', 'cm');
+    }
+    expect(r.units[0]).toEqual({ weight: 'lb', length: 'in' });
+    expect(r.units[1]).toEqual({ weight: 'lb', length: 'cm' });
+    expect(r.units).toHaveLength(42);
+    r.pick('sex', 'male');
+    r.pick('activity', 'light');
+    tap(r, 'height', 'in');
+    r.save.click();
+    expect(r.saved[0]?.heightCm).toBe(170);
+  });
+
+  it('switching one field keeps the other unit; both switches reported as the whole preference', () => {
+    const r = render();
+    tap(r, 'weight', 'lb');
+    tap(r, 'height', 'in');
+    tap(r, 'weight', 'kg');
+    expect(r.units).toEqual([
+      { weight: 'lb', length: 'cm' },
+      { weight: 'lb', length: 'in' },
+      { weight: 'kg', length: 'in' },
+    ]);
+  });
+
+  it('only an edit changes the value: 154.4 lb typed → shown again after kg and back', () => {
+    const r = render({ initial: { weightKg: 70 } });
+    tap(r, 'weight', 'lb');
+    typeInto(r.input('weight'), '154.4');
+    tap(r, 'weight', 'kg');
+    expect(valueOf(r.input('weight'))).toBe('70.0');
+    tap(r, 'weight', 'lb');
+    expect(valueOf(r.input('weight'))).toBe('154.4');
+    r.pick('sex', 'female');
+    r.pick('activity', 'light');
+    r.save.click();
+    expect(r.saved[0]?.weightKg).toBeCloseTo(154.4 * 0.45359237, 9);
+    // The rebuilt field still steps and types (one − / + row, edits through core).
+    r.step('weight', 'up').click();
+    expect(valueOf(r.input('weight'))).toBe('154.6');
+  });
+
+  it('a switch counts as starting the form (onTouch) and keeps "From Apple Health" linked', () => {
+    let touches = 0;
+    const r = render(
+      {
+        initial: { heightCm: 165, weightKg: 61.2 },
+        fromHealth: new Set(['height', 'weight'] as const),
+      },
+      false,
+      { touch: () => touches++ },
+    );
+    tap(r, 'height', 'in');
+    expect(touches).toBe(1);
+    tap(r, 'weight', 'lb');
+    for (const id of ['height', 'weight']) {
+      expect(byAttr(r.field(id), 'data-from-health')).toHaveLength(1);
+    }
+    for (const part of ['ft', 'in'])
+      expect(
+        oneAttr(r.field('height'), 'data-part', part)
+          .oneByClass('nf-value')
+          .getAttribute('aria-describedby'),
+      ).toContain('from-health-height');
+    expect(r.input('weight').getAttribute('aria-describedby')).toContain('from-health-weight');
+    expect(copyHits(r.el)).toEqual([]);
+  });
+
+  it('every switch button has a visible word', () => {
+    const r = render();
+    for (const b of byAttr(r.el, 'data-unit')) expect(b.textContent.trim()).toBeTruthy();
   });
 });

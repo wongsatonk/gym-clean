@@ -12,25 +12,31 @@
 // (two − / + rows) when the length unit is 'in'; it is held as a core unit field, so an untouched
 // height saves exactly what it was (stored cm, 2 decimals for whole inches). Task 3b: a quiet
 // "Not now" when the caller passes `onNotNow` (the first run's Set up Fuel step only).
+// Task 13c (Decision "M13d answers" q3): a unit switch next to Today's weight (kg | lb) and
+// Height (cm | ft·in), the same in the first run and on re-run. A tap re-shows that field from
+// the metric value it holds (no drift, nothing saved, no Save needed) and calls `onUnits` with
+// the whole new preference (the app makes it app-wide).
 // Task 19 ("some screens have too much text"): the lead is one line, and the weigh-in note and
 // the privacy line are one note (`[data-setup-note]`, lock icon; the privacy promise stays shown).
 //
 // e2e hooks: `main[data-screen="fuel-setup"]`, `[data-field=height|birth-year|weight|sex|
 // activity]`, `[data-choice=<value>]`, `.nf-value` inputs (height in ft·in: `[data-part=ft|in]`
 // rows), `[data-from-health=<field>]` notes, buttons "Save targets", "Back" and
-// `[data-setup-not-now]`.
-import type { LengthUnit, NutritionSettings } from '../../core/types';
+// `[data-setup-not-now]`; the switches are groups "Weight unit" / "Height unit"
+// (`[data-unit-for=weight|height]`).
+import type { NutritionSettings, UnitPrefs } from '../../core/types';
 import {
   SETUP_RANGE,
   type PrefillField,
   type SetupValues,
 } from '../../core/nutrition/setupPrefill';
 import { unitField } from '../../core/unitField';
-import { fromUnit, lengthUnitFor, toUnit, type Unit } from '../../core/units';
+import type { Unit } from '../../core/units';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
-import { choiceGroup, numberField, unitNumberField, type Choice } from './fields';
+import { HEIGHT_UNIT_SWITCH, WEIGHT_UNIT_SWITCH } from '../unitSwitch';
+import { choiceGroup, numberField, switchedUnitField, type Choice } from './fields';
 import './fuelForms.css';
 
 export type Sex = NutritionSettings['sex'];
@@ -43,9 +49,8 @@ export type { SetupValues };
 export type SetupProps = {
   /** Current year, for the birth-year range (the app passes `new Date().getFullYear()`). */
   year: number;
-  unit: Unit;
-  /** M13d: height in cm or ft + in. Default: follows the weight unit (no 'lengthUnit' row). */
-  lengthUnit?: LengthUnit | undefined;
+  /** M13d: today's weight in kg or lb, height in cm or ft + in (the app's 'unit' / 'lengthUnit'). */
+  units: UnitPrefs;
   /** Starting values (core `prefillSetup`): saved, Apple Health, the latest weigh-in. */
   initial?: Partial<SetupValues> | undefined;
   /** M13d: fields whose starting value came from Apple Health ("From Apple Health" under them). */
@@ -60,6 +65,8 @@ export type SetupActions = {
   onNotNow?: (() => void) | undefined;
   /** M13d: the first edit, tap or focus on the form (the caller then stops re-filling it). */
   onTouch?: (() => void) | undefined;
+  /** M13d task 13c: a unit switch was tapped; the whole new preference, once per tap. */
+  onUnits: (next: UnitPrefs) => void;
 };
 
 /** The one line under the title (M13d task 19). */
@@ -97,13 +104,36 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
     birthYear: init.birthYear ?? p.year - SETUP_RANGE.age.start,
     sex: init.sex ?? null,
     activity: init.activity ?? null,
-    weightKg: init.weightKg ?? SETUP_RANGE.weightKg.start,
   } as {
     birthYear: number;
     sex: Sex | null;
     activity: Activity | null;
-    weightKg: number;
   };
+  let units: UnitPrefs = { ...p.units };
+
+  /** "From Apple Health" under a pre-filled field, read with it by screen readers. */
+  function healthNote(
+    tag: PrefillField,
+    wrap: HTMLElement,
+    described: readonly (Element | null | undefined)[],
+  ): HTMLElement {
+    if (!fromHealth.has(tag)) return wrap;
+    const id = `from-health-${tag}`;
+    for (const el of described) {
+      if (!el) continue;
+      const had = el.getAttribute('aria-describedby');
+      el.setAttribute('aria-describedby', had ? `${had} ${id}` : id);
+    }
+    wrap.append(
+      h(
+        'p',
+        { class: 'fuel-from-health', id, 'data-from-health': tag },
+        icon('spark', 'sm'),
+        h('span', {}, FROM_HEALTH),
+      ),
+    );
+    return wrap;
+  }
 
   let touched = false;
   const touch = () => {
@@ -130,16 +160,41 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
     }
   };
 
-  // Height: a core unit field (cm, or ft + in), saved as its metric value.
-  const height = unitNumberField({
+  // Height and today's weight: core unit fields (no drift), each with its unit switch; saved as
+  // their metric values (cm, kg). "From Apple Health" is re-added under a rebuilt field.
+  const height = switchedUnitField({
     id: 'height',
     label: 'Height',
     field: unitField({
       kind: 'height',
       metric: init.heightCm ?? SETUP_RANGE.heightCm.start,
-      unit: p.lengthUnit ?? lengthUnitFor(p.unit),
+      unit: units.length,
     }),
+    spec: HEIGHT_UNIT_SWITCH,
     onChange: touch,
+    onUnit: (length) => {
+      touch();
+      units = { ...units, length };
+      a.onUnits(units);
+    },
+    decorate: (f) => healthNote('height', f.el, f.inputs),
+  });
+  const weight = switchedUnitField({
+    id: 'weight',
+    label: "Today's weight",
+    field: unitField({
+      kind: 'bodyWeight',
+      metric: init.weightKg ?? SETUP_RANGE.weightKg.start,
+      unit: units.weight,
+    }),
+    spec: WEIGHT_UNIT_SWITCH,
+    onChange: touch,
+    onUnit: (weight) => {
+      touch();
+      units = { ...units, weight };
+      a.onUnits(units);
+    },
+    decorate: (f) => healthNote('weight', f.el, f.inputs),
   });
 
   save.addEventListener('click', () => {
@@ -149,24 +204,10 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
       birthYear: v.birthYear,
       sex: v.sex,
       activity: v.activity,
-      weightKg: v.weightKg,
+      weightKg: weight.get().metric,
     });
   });
 
-  const step = weightStep(p.unit);
-  const weight = numberField({
-    id: 'weight',
-    label: "Today's weight",
-    unit: p.unit,
-    value: toUnit(v.weightKg, p.unit),
-    step,
-    min: toUnit(SETUP_RANGE.weightKg.min, p.unit),
-    max: toUnit(SETUP_RANGE.weightKg.max, p.unit),
-    onChange: (x) => {
-      v.weightKg = fromUnit(x, p.unit);
-      touch();
-    },
-  });
   const birthYear = numberField({
     id: 'birth-year',
     label: 'Birth year',
@@ -192,30 +233,6 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
     },
   });
 
-  /** "From Apple Health" under a pre-filled field, read with it by screen readers. */
-  const healthNote = (
-    tag: PrefillField,
-    wrap: HTMLElement,
-    described: readonly (Element | null | undefined)[],
-  ): HTMLElement => {
-    if (!fromHealth.has(tag)) return wrap;
-    const id = `from-health-${tag}`;
-    for (const el of described) {
-      if (!el) continue;
-      const had = el.getAttribute('aria-describedby');
-      el.setAttribute('aria-describedby', had ? `${had} ${id}` : id);
-    }
-    wrap.append(
-      h(
-        'p',
-        { class: 'fuel-from-health', id, 'data-from-health': tag },
-        icon('spark', 'sm'),
-        h('span', {}, FROM_HEALTH),
-      ),
-    );
-    return wrap;
-  };
-
   refresh();
   const el = h(
     'main',
@@ -239,7 +256,7 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
       h('h1', { class: 'page-title' }, 'Set up Fuel'),
     ),
     h('p', { class: 'fuel-lead' }, SETUP_LEAD),
-    healthNote('height', height.el, height.inputs),
+    height.el,
     healthNote('birthYear', birthYear.el, [birthYear.controls[1]]),
     healthNote('sex', sex, [groupOf(sex)]),
     choiceGroup({
@@ -254,7 +271,7 @@ export function fuelSetupScreen(p: SetupProps, a: SetupActions): HTMLElement {
         touch();
       },
     }),
-    healthNote('weight', weight.el, [weight.controls[1]]),
+    weight.el,
     h(
       'p',
       { class: 'fuel-privacy', 'data-setup-note': true },

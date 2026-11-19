@@ -115,7 +115,7 @@ test('harness: height in ft + in, typed 5\'7" and carry at 12', async ({ page })
   const inch = part(page, 'in').locator('.nf-value');
   await expect(ft).toHaveValue('5');
   await expect(inch).toHaveValue('7');
-  await expect(page.getByRole('group', { name: 'Height' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Height', exact: true })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Height, feet' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Height, inches' })).toBeVisible();
   for (const p of ['ft', 'in'] as const) {

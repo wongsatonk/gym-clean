@@ -4,7 +4,8 @@
      ?v=prefill  first run, Apple Health filled height / birth year / sex and the weigh-in (cm, kg),
                  with the first run's quiet "Not now".
      ?v=ftin     height in ft + in (lb), nothing from Health.
-     window.harnessEvents: what the form called back ('save' with its values, 'notNow', 'touch').
+     window.harnessEvents: what the form called back ('save' with its values, 'notNow', 'touch',
+     'units' with the new preference after a unit switch, task 13c).
      e2e/fuel-setup-prefill.spec.ts tests it. -->
 <html lang="en">
   <head>
@@ -24,11 +25,10 @@
       const push = (e) => window.harnessEvents.push(e);
       const props =
         v === 'ftin'
-          ? { year: 2026, unit: 'lb', lengthUnit: 'in', initial: { heightCm: 170 } }
+          ? { year: 2026, units: { weight: 'lb', length: 'in' }, initial: { heightCm: 170 } }
           : {
               year: 2026,
-              unit: 'kg',
-              lengthUnit: 'cm',
+              units: { weight: 'kg', length: 'cm' },
               initial: { heightCm: 165, birthYear: 1991, sex: 'female', weightKg: 61.2 },
               fromHealth: new Set(['height', 'birthYear', 'sex', 'weight']),
             };
@@ -37,6 +37,7 @@
           onSave: (values) => push(['save', values]),
           onCancel: () => push(['back']),
           onTouch: () => push(['touch']),
+          onUnits: (u) => push(['units', u]),
           ...(v === 'prefill' ? { onNotNow: () => push(['notNow']) } : {}),
         }),
       );

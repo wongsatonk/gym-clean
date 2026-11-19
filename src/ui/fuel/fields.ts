@@ -6,9 +6,20 @@
 //   number far from the start can be typed instead of tapped. The value is ≥ 64px (main number),
 //   the − / + buttons are ≥ 72px. Typed values are clamped and snapped to the step on change.
 // - choiceGroup: a row (or list) of buttons where one is chosen: white fill + check, aria-pressed.
-import { editField, type FieldKind, type UnitField } from '../../core/unitField';
+import {
+  editField,
+  switchUnit,
+  type FieldKind,
+  type UnitField,
+  type UnitOf,
+} from '../../core/unitField';
 import { h } from '../dom';
 import { icon } from '../icons';
+import {
+  setUnitSwitch as setUnitSwitchValue,
+  unitSwitch,
+  type UnitSwitchSpec,
+} from '../unitSwitch';
 import './fuelForms.css';
 
 /** Clamp to [min, max] and round to the step's decimals (0.1 → 1 decimal). Pure. */
@@ -127,6 +138,8 @@ export type UnitNumberFieldOpts<K extends FieldKind> = {
   field: UnitField<K>;
   /** Called with the new field after every − / + tap or typed change that moved it. */
   onChange: (field: UnitField<K>) => void;
+  /** M13d task 13c: shown at the end of the label row (the unit switch). */
+  head?: HTMLElement | undefined;
 };
 
 export type UnitNumberField<K extends FieldKind> = {
@@ -190,6 +203,11 @@ function stepRow(o: {
 
 const EPS = 1e-9;
 
+/** The label alone, or the label with the unit switch at the end of its row. */
+function labelRow(label: HTMLElement, head: HTMLElement | undefined): HTMLElement {
+  return head ? h('div', { class: 'unit-field-head' }, label, head) : label;
+}
+
 /**
  * label, [−] value [+] for a body weight, a height in cm or a tape length: shows
  * `field.display`, steps by `field.step`, edits through core `editField`.
@@ -226,7 +244,7 @@ export function unitNumberField<K extends FieldKind>(
   const el = h(
     'div',
     { class: 'nf', 'data-field': o.id },
-    h('label', { class: 'nf-label', for: inputId }, o.label),
+    labelRow(h('label', { class: 'nf-label', for: inputId }, o.label), o.head),
     r.row,
   );
   return { el, get: () => field, inputs: [r.input] };
@@ -310,11 +328,79 @@ export function heightFtInField(o: UnitNumberFieldOpts<'height'>): UnitNumberFie
       role: 'group',
       'aria-labelledby': labelId,
     },
-    h('span', { class: 'nf-label', id: labelId }, o.label),
+    labelRow(h('span', { class: 'nf-label', id: labelId }, o.label), o.head),
     ft.row,
     inch.row,
   );
   return { el, get: () => field, inputs: [ft.input, inch.input] };
+}
+
+// ---------- M13d task 13c: a unit field with its switch (kg | lb, cm | ft·in, cm | in) ----------
+//
+// The switch sits at the end of the field's label row. A tap re-shows the field in the other
+// unit from the metric value it holds (core `switchUnit`: identical metric, nothing written, no
+// Save) and then calls `onUnit` (the page passes the app-wide preference up). Height between cm
+// and ft·in changes the field's shape (one row ↔ two), so the field is rebuilt inside a stable
+// `display: contents` slot; `decorate` runs on every build (e.g. "From Apple Health" under it).
+
+export type SwitchedUnitFieldOpts<K extends FieldKind> = UnitNumberFieldOpts<K> & {
+  /** WEIGHT_UNIT_SWITCH / HEIGHT_UNIT_SWITCH / TAPE_UNIT_SWITCH. */
+  spec: UnitSwitchSpec<UnitOf<K>>;
+  /** After a tap on the other unit re-showed the field (once per tap; nothing saved). */
+  onUnit: (unit: UnitOf<K>) => void;
+  /** Runs after every build of the field (the first and after each switch). */
+  decorate?: ((f: UnitNumberField<K>) => void) | undefined;
+};
+
+export type SwitchedUnitField<K extends FieldKind> = {
+  /** Stable slot holding the current field (`.unit-slot`, display: contents). */
+  el: HTMLElement;
+  get: () => UnitField<K>;
+  /** The current field's inputs (rebuilt on a switch). */
+  inputs: () => HTMLElement[];
+  /** The switch (the group with the two options). */
+  switchEl: HTMLElement;
+  /** Re-shows the same metric value in `unit` (a choice made elsewhere); no `onUnit` call. */
+  setUnit: (unit: UnitOf<K>) => void;
+};
+
+export function switchedUnitField<K extends FieldKind>(
+  o: SwitchedUnitFieldOpts<K>,
+): SwitchedUnitField<K> {
+  const slot = h('div', { class: 'unit-slot', 'data-unit-slot': o.id });
+  const sw = unitSwitch<UnitOf<K>>({
+    ...o.spec,
+    value: o.field.unit,
+    hooks: { 'data-unit-for': o.id },
+    onChange: (unit) => {
+      show(switchUnit(current.get(), unit));
+      o.onUnit(unit);
+    },
+  });
+  let current: UnitNumberField<K>;
+  const show = (field: UnitField<K>) => {
+    const doc = globalThis.document as Document | undefined;
+    const focused = doc?.activeElement as HTMLElement | null | undefined;
+    current = unitNumberField({ ...o, field, head: sw });
+    o.decorate?.(current);
+    slot.replaceChildren(current.el);
+    // Moving the switch into the rebuilt field drops its keyboard focus: give it back.
+    if (focused && doc?.activeElement !== focused && typeof focused.focus === 'function') {
+      focused.focus({ preventScroll: true });
+    }
+  };
+  show(o.field);
+  return {
+    el: slot,
+    get: () => current.get(),
+    inputs: () => current.inputs,
+    switchEl: sw,
+    setUnit: (unit) => {
+      if (unit === current.get().unit) return;
+      setUnitSwitchValue(sw, unit);
+      show(switchUnit(current.get(), unit));
+    },
+  };
 }
 
 export type Choice<T extends string> = { value: T; label: string; note?: string | undefined };

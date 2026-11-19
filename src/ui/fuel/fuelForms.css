@@ -90,6 +90,12 @@
 
 /* ---------- Number field: label, [−] value [+] ---------- */
 
+/* M13d task 13c: the slot a switched unit field is rebuilt in; its field lays out as if it were
+   the page's own child. */
+.unit-slot {
+  display: contents;
+}
+
 .nf {
   display: flex;
   flex-direction: column;

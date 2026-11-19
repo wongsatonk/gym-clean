@@ -46,6 +46,18 @@
   transform: scaleX(-1);
 }
 
+/* ---------- M13d task 13c: "Spots to measure" with the cm | in switch ---------- */
+
+/* With words in the system font (M13d q4) "Measurements" no longer fits beside Back at 390 and
+   was cut mid-word: the title moves under Back instead (it breaks only if wider than the row). */
+.measurements > .fuel-head {
+  flex-wrap: wrap;
+}
+
+.ms-unit-label {
+  margin: 0;
+}
+
 /* ---------- Status card ---------- */
 
 .ms-status {

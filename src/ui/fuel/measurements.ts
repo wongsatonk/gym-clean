@@ -10,8 +10,10 @@
 //   it out. One Save button stores every opened site for today (saving again replaces today's).
 // - `measurementsEntryRow`: the row on the Fuel tab that opens the screen.
 //
-// Values are stored in cm; the `lengthUnit` prop (M13d: settings 'lengthUnit') picks cm or
-// inches. Unit maths and labels come from core (`src/core/progress/measurements.ts`); each opened
+// Values are stored in cm; `units.length` (M13d: settings 'lengthUnit') picks cm or inches.
+// M13d task 13c: a cm | in switch ("Measurement unit", `[data-unit-for="tape"]`) heads the list.
+// A tap re-shows every opened field from the cm it holds (no drift, nothing saved), re-words the
+// last-value lines and the note, and calls `onUnits` with the whole new preference. Unit maths and labels come from core (`src/core/progress/measurements.ts`); each opened
 // site is a core tape unit field (no drift; range 5–300 cm). Copy is plain numbers: no score, no
 // good/bad colour, no health wording.
 //
@@ -26,11 +28,12 @@ import {
   toLength,
   type LengthUnit,
 } from '../../core/progress/measurements';
-import type { Measurement } from '../../core/types';
-import { unitField, type UnitField } from '../../core/unitField';
+import type { Measurement, UnitPrefs } from '../../core/types';
+import { switchUnit, unitField, type UnitField } from '../../core/unitField';
 import { h } from '../dom';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
+import { TAPE_UNIT_SWITCH, unitSwitch } from '../unitSwitch';
 import { unitNumberField } from './fields';
 import { dayNumber, shortDate } from './weighIn';
 import './measurements.css';
@@ -40,8 +43,9 @@ export { MEASURE_AGAIN_DAYS, siteLabel };
 export type MeasurementsProps = {
   /** Site ids from settings 'trainerKit'.measurementSites, in his order. */
   sites: readonly string[];
-  /** M13d: cm or inches (settings 'lengthUnit'; the app's fallback follows the weight unit). */
-  lengthUnit: LengthUnit;
+  /** M13d: the app's units; tape in `units.length` (settings 'lengthUnit'; the app's fallback
+   *  follows the weight unit). */
+  units: UnitPrefs;
   /** Local date YYYY-MM-DD. */
   today: string;
   /** Every saved measurement, any order. */
@@ -56,6 +60,8 @@ export type MeasurementsActions = {
   onBack: () => void;
   /** One row per opened site, dated today, in cm (1 decimal). Replaces today's for that site. */
   onSave: (rows: Measurement[]) => void;
+  /** M13d task 13c: the cm | in switch was tapped; the whole new preference, once per tap. */
+  onUnits: (next: UnitPrefs) => void;
 };
 
 // ---------- pure helpers ----------
@@ -193,7 +199,7 @@ export function measurementsEntryRow(e: MeasurementsEntry, onOpen: () => void): 
 // ---------- the screen ----------
 
 export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions): HTMLElement {
-  const lu = p.lengthUnit;
+  let units: UnitPrefs = { ...p.units };
   const label = p.siteLabel ?? siteLabel;
   const afterDays = p.againAfterDays ?? MEASURE_AGAIN_DAYS;
   const status = measureStatus(p.measurements, p.today, afterDays);
@@ -203,6 +209,8 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
 
   /** Opened sites → their field (these are what Save stores). */
   const open = new Map<string, { get: () => UnitField<'tape'> }>();
+  /** Per site: re-shows its line and (when opened) its field in the unit now chosen. */
+  const reshow: (() => void)[] = [];
   const saveText = h('span', { 'data-measure-save-label': true }, saveLabel(0));
   const save = h(
     'button',
@@ -238,6 +246,11 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
     const history = siteHistory(p.measurements, site);
     const editor = h('div', { class: 'ms-edit', 'data-site-edit': site, hidden: true });
     const state = h('span', { class: 'ms-site-state' }, icon('plus', 'sm'), h('span', {}, 'Add'));
+    const last = h(
+      'span',
+      { class: 'ms-site-last', 'data-site-last': site },
+      siteLine(history, units.length, p.today),
+    );
     const toggle = h(
       'button',
       {
@@ -246,18 +259,24 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
         'data-site-toggle': site,
         'aria-expanded': 'false',
       },
-      h(
-        'span',
-        { class: 'ms-site-txt' },
-        h('span', { class: 'ms-site-name' }, name),
-        h(
-          'span',
-          { class: 'ms-site-last', 'data-site-last': site },
-          siteLine(history, lu, p.today),
-        ),
-      ),
+      h('span', { class: 'ms-site-txt' }, h('span', { class: 'ms-site-name' }, name), last),
       state,
     );
+    const openField = (field: UnitField<'tape'>) => {
+      const f = unitNumberField({
+        id: `site-${site}`,
+        label: `${name} now`,
+        field,
+        onChange: () => undefined,
+      });
+      open.set(site, f);
+      editor.replaceChildren(f.el);
+    };
+    reshow.push(() => {
+      last.textContent = siteLine(history, units.length, p.today);
+      const f = open.get(site);
+      if (f) openField(switchUnit(f.get(), units.length));
+    });
     toggle.addEventListener('click', () => {
       if (open.has(site)) {
         open.delete(site);
@@ -266,15 +285,10 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
         toggle.setAttribute('aria-expanded', 'false');
         state.replaceChildren(icon('plus', 'sm'), h('span', {}, 'Add'));
       } else {
-        const field = unitNumberField({
-          id: `site-${site}`,
-          label: `${name} now`,
-          field: unitField({ kind: 'tape', metric: history[0]?.cm ?? startCm(site), unit: lu }),
-          onChange: () => undefined,
-        });
-        open.set(site, field);
+        openField(
+          unitField({ kind: 'tape', metric: history[0]?.cm ?? startCm(site), unit: units.length }),
+        );
         editor.removeAttribute('hidden');
-        editor.replaceChildren(field.el);
         toggle.setAttribute('aria-expanded', 'true');
         state.replaceChildren(icon('check', 'sm'), h('span', {}, 'In this save'));
       }
@@ -282,6 +296,26 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
     });
     return h('li', { class: 'ms-site', 'data-site': site }, toggle, editor);
   };
+
+  const note = h('p', { class: 'fuel-note', 'data-measure-note': true }, noteText(units.length));
+  const unitRow = p.sites.length
+    ? h(
+        'div',
+        { class: 'unit-field-head ms-unit-row' },
+        h('h2', { class: 'nf-label ms-unit-label', id: 'ms-spots' }, 'Spots to measure'),
+        unitSwitch({
+          ...TAPE_UNIT_SWITCH,
+          value: units.length,
+          hooks: { 'data-unit-for': 'tape' },
+          onChange: (length) => {
+            units = { ...units, length };
+            for (const f of reshow) f();
+            note.textContent = noteText(length);
+            a.onUnits(units);
+          },
+        }),
+      )
+    : null;
 
   return h(
     'main',
@@ -318,14 +352,16 @@ export function measurementsScreen(p: MeasurementsProps, a: MeasurementsActions)
       ),
       h('p', { class: 'ms-status-body' }, copy.body),
     ),
+    unitRow,
     p.sites.length
-      ? h('ul', { class: 'ms-sites', 'aria-label': 'Spots to measure' }, ...p.sites.map(row))
+      ? h('ul', { class: 'ms-sites', 'aria-labelledby': 'ms-spots' }, ...p.sites.map(row))
       : h('p', { class: 'fuel-note', 'data-measure-sites': 'none' }, 'No spots are set up yet.'),
-    h(
-      'p',
-      { class: 'fuel-note' },
-      `Saved for today in ${lu === 'in' ? 'inches' : 'cm'}. Saving again replaces today's.`,
-    ),
+    note,
     h('div', { class: 'sticky-bottom ms-bottom' }, save),
   );
+}
+
+/** The note under the list, in the unit shown. */
+function noteText(lu: LengthUnit): string {
+  return `Saved for today in ${lu === 'in' ? 'inches' : 'cm'}. Saving again replaces today's.`;
 }

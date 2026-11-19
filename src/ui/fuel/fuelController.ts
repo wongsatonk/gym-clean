@@ -89,6 +89,7 @@ import type {
   WeighIn,
   HealthProfile,
   LengthUnit,
+  UnitPrefs,
 } from '../../core/types';
 import { lengthUnitFor, type Unit } from '../../core/units';
 import { prefillSetup } from '../../core/nutrition/setupPrefill';
@@ -187,6 +188,13 @@ export type FuelHost = {
    * Measurements. Omitted → follows the weight unit (cm with kg, inches with lb).
    */
   lengthUnit?: (() => LengthUnit) | undefined;
+  /**
+   * M13d task 13c: a unit switch on Set up Fuel, the weigh-in or Measurements was tapped (the
+   * whole new preference, once per tap). The page already re-shows its fields from their metric
+   * values; the app saves the preference (`setUnitPrefs`) and makes it app-wide. Omitted → the
+   * switch changes only the open page.
+   */
+  onUnits?: ((next: UnitPrefs) => void) | undefined;
   /**
    * M13d task 8: Apple Health's height / birth year / sex (`healthHost.profile()`), read once per
    * Set up Fuel open to pre-fill only; never stored here. Omitted / null → no pre-fill.
@@ -1441,13 +1449,14 @@ export function createFuel(host: FuelHost) {
   function measurementsView(): HTMLElement {
     const sites = host.trainerKit?.().measurementSites ?? [];
     return measurementsScreen(
-      { sites, lengthUnit: lengthUnit(), today: today(), measurements },
+      { sites, units: units(), today: today(), measurements },
       {
         onBack: () => {
           sub = { kind: 'main' };
           host.render();
         },
         onSave: (rows) => void saveMeasurements(rows),
+        onUnits,
       },
     );
   }
@@ -1484,7 +1493,7 @@ export function createFuel(host: FuelHost) {
     const r = targetsResult();
     return weighInScreen(
       {
-        unit: host.unit(),
+        units: units(),
         todayKg: weighIns.find((w) => w.date === d)?.kg ?? null,
         todaySource: weighIns.find((w) => w.date === d)?.source,
         activity: activityNow(),
@@ -1513,6 +1522,7 @@ export function createFuel(host: FuelHost) {
         },
         onAccept: () => decide('accepted'),
         onDismiss: () => decide('dismissed'),
+        onUnits,
         onSwitchActivity: (level) => answerActivity('switch', level),
         onKeepActivity: () => {
           const s = activityNow();
@@ -1545,6 +1555,16 @@ export function createFuel(host: FuelHost) {
   /** M13d: the length unit for height and tape (no row → follows the weight unit). */
   function lengthUnit(): LengthUnit {
     return host.lengthUnit?.() ?? lengthUnitFor(host.unit());
+  }
+
+  /** M13d: both units, for the pages with a unit switch. */
+  function units(): UnitPrefs {
+    return { weight: host.unit(), length: lengthUnit() };
+  }
+
+  /** M13d task 13c: a page's unit switch; the app makes the preference app-wide. */
+  function onUnits(next: UnitPrefs): void {
+    host.onUnits?.(next);
   }
 
   /**
@@ -1617,8 +1637,7 @@ export function createFuel(host: FuelHost) {
     const el = fuelSetupScreen(
       {
         year,
-        unit: host.unit(),
-        lengthUnit: lengthUnit(),
+        units: units(),
         initial: prefill.initial,
         fromHealth: prefill.fromHealth,
       },
@@ -1626,6 +1645,7 @@ export function createFuel(host: FuelHost) {
         onTouch: () => {
           open.touched = true;
         },
+        onUnits,
         ...(hook?.inFlow
           ? {
               onNotNow: () => {
