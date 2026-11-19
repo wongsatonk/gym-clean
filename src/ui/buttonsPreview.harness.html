@@ -1,0 +1,665 @@
+<!doctype html>
+<!-- Dev-only design preview for M13d task 38 (SPEC M13d Goal 7: round icon buttons), made-up
+     data, dark theme, 390×844. Not part of the build or the app, and no screen uses this markup:
+     each frame only shows how today's screens would look with iconButton.ts (task 36) and the
+     unit switch (task 13b). Open on the dev server:
+       /src/ui/buttonsPreview.harness.html?frame=first-run | fuel-setup | today | sheet | exercise
+     The press and Reduce Motion frames are the Today frame with Start held down
+     (e2e/buttons-preview.spec.ts). The Exercise frame keeps today's positions, today's words and
+     today's hit boxes; it is a motion-off screen, so a press there is a colour change only.
+     The component harness with every variant is src/ui/iconButton.harness.html.
+     window.harnessTaps: words of tapped buttons. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Button design preview</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <style>
+      /* Preview-only layout. Tokens only. */
+      .pv {
+        gap: 14px;
+      }
+      .pv-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        min-height: var(--tap-min);
+      }
+      .pv-top .page-title {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .pv-count {
+        color: var(--text-2);
+        font-size: var(--fs-body);
+      }
+      .pv-lead {
+        color: var(--text-2);
+        font-size: var(--fs-body);
+        line-height: 1.5;
+        max-width: 32em;
+      }
+      .pv-body {
+        font-size: var(--fs-body);
+        line-height: 1.5;
+        max-width: 32em;
+      }
+      .pv-spacer {
+        flex: 1 1 auto;
+      }
+      /* The wide main action: a soft pill track with the main circle and its word; the whole
+         pill is the tap area (as wide as the bar it replaces). */
+      .pv-pill.icon-btn {
+        justify-content: flex-start;
+        padding: 6px 18px 6px 6px;
+        border-radius: 999px;
+        background: var(--surface);
+        border: var(--line-w) solid var(--line);
+      }
+      .pv-pill.icon-btn .icon-btn-label {
+        font-family: var(--font-display);
+        font-size: var(--fs-title);
+      }
+      .pv-bottom {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+      }
+      .pv-dots {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+      }
+      .pv-dots span {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid var(--text-2);
+      }
+      .pv-dots span.on {
+        width: 28px;
+        border-radius: 6px;
+        background: var(--text);
+        border-color: var(--text);
+      }
+      .pv-logo {
+        display: grid;
+        place-items: center;
+        width: 120px;
+        height: 120px;
+        border-radius: var(--r-card);
+        border: 1px solid var(--line);
+        color: var(--cta);
+      }
+      .pv-logo .ic {
+        width: 64px;
+        height: 64px;
+      }
+      .pv-big {
+        font-family: var(--font-display);
+        font-size: var(--fs-num);
+        font-weight: 700;
+        line-height: 1;
+      }
+      /* A number field with round − / + (the stepper keeps today's 72px-wide hit box). */
+      .pv-field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .pv-label {
+        font-size: var(--fs-cue);
+        font-weight: 700;
+      }
+      .pv-num-row {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+      }
+      .pv-step.icon-btn {
+        min-width: var(--tap-cta);
+      }
+      .pv-value {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 6px;
+        min-height: var(--tap-hero);
+        padding: 0 8px;
+        border: var(--line-w) solid var(--line);
+        border-radius: var(--r-btn);
+        background: var(--surface);
+      }
+      .pv-value b {
+        font-family: var(--font-display);
+        font-size: var(--fs-num-sm);
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+      }
+      .pv-value span {
+        color: var(--text-2);
+        font-size: var(--fs-body);
+        font-weight: 700;
+      }
+      .pv-choices {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+      .pv-choice {
+        min-height: var(--tap-min);
+        font-size: var(--fs-body);
+        font-weight: 700;
+        background: var(--surface-2);
+      }
+      .pv-choice[aria-pressed='true'] {
+        background: var(--selected);
+        color: var(--on-selected);
+        border-color: var(--selected);
+      }
+      .pv-row {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-start;
+        gap: 4px;
+      }
+      .pv-row > .icon-btn {
+        flex: 1 1 0;
+      }
+      .pv-card {
+        border-radius: var(--r-card);
+        background: var(--surface);
+        border: var(--line-w) solid var(--line);
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .pv-card h2 {
+        margin: 0;
+        font-size: var(--fs-lead);
+      }
+      .pv-hero-start.icon-btn {
+        background: color-mix(in srgb, var(--bg) 45%, transparent);
+        border-color: transparent;
+      }
+      .pv-tabs {
+        margin: auto -16px 0;
+      }
+      /* Sheet frame: a dimmed page behind, the sheet from the bottom. */
+      .pv-sheet-page {
+        min-height: 100dvh;
+        position: relative;
+        overflow: hidden;
+      }
+      .pv-behind {
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        filter: saturate(0.6);
+      }
+      .pv-scrim {
+        position: absolute;
+        inset: 0;
+        background: var(--scrim-soft);
+      }
+      .pv-sheet {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 10px 16px max(16px, env(safe-area-inset-bottom));
+        border-radius: var(--r-card) var(--r-card) 0 0;
+        background: var(--surface);
+        border-top: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .pv-grab {
+        align-self: center;
+        width: 44px;
+        height: 5px;
+        border-radius: 3px;
+        background: var(--line);
+      }
+      .pv-facts {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+      }
+      .pv-fact {
+        background: var(--surface-2);
+        border-radius: var(--r-btn);
+        padding: 10px 8px;
+        text-align: center;
+      }
+      .pv-fact b {
+        display: block;
+        font-family: var(--font-display);
+        font-size: var(--fs-head);
+      }
+      .pv-fact span {
+        color: var(--text-2);
+        font-size: var(--fs-body);
+      }
+      .pv-sheet-actions {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+      }
+      /* Exercise frame (today's positions; see m13c-verify-exercise-flat.png). */
+      .pv-ex-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .pv-pos {
+        font-family: var(--font-display);
+        font-size: var(--fs-lead);
+        font-weight: 700;
+        color: var(--text-2);
+      }
+      .pv-progress {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 6px;
+      }
+      .pv-progress span {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--line);
+      }
+      .pv-progress span.on {
+        background: var(--cta);
+      }
+      .pv-set {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .pv-set b {
+        font-family: var(--font-display);
+        font-size: var(--fs-hero);
+        line-height: 1;
+      }
+      .pv-set span {
+        font-family: var(--font-display);
+        font-size: var(--fs-head);
+        color: var(--text-2);
+      }
+      .pv-cue {
+        border-left: 6px solid var(--cue);
+        font-size: var(--fs-cue);
+        font-weight: 700;
+      }
+      .pv-ex-label {
+        font-size: var(--fs-body);
+        font-weight: 700;
+        color: var(--text-2);
+      }
+      .pv-ex-row {
+        display: grid;
+        grid-template-columns: 80px minmax(0, 1fr) 80px;
+        align-items: center;
+        gap: 8px;
+      }
+      /* − / + mid-set: today's 80×68 hit box, a 72px circle inside, no new word (the names stay
+         "Less reps" / "More reps"). */
+      .pv-ex-step.icon-btn {
+        min-height: 68px;
+        padding: 0;
+      }
+      .pv-ex-step .icon-btn-circle {
+        width: var(--tap-cta);
+        height: var(--tap-cta);
+      }
+      .pv-ex-num {
+        text-align: center;
+        font-family: var(--font-display);
+        font-size: var(--fs-hero);
+        font-weight: 700;
+        line-height: 1;
+      }
+      .pv-ex-pause.icon-btn .icon-btn-label {
+        font-size: var(--fs-lead);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import { iconButton } from './iconButton.ts';
+      import { icon } from './icons.ts';
+      import { h } from './dom.ts';
+      import { tabBar } from './tabBar.ts';
+      import { unitSwitch, WEIGHT_UNIT_SWITCH, HEIGHT_UNIT_SWITCH } from './unitSwitch.ts';
+
+      window.harnessTaps = [];
+      const btn = (ic, label, opts = {}) =>
+        iconButton({ icon: ic, label, ...opts, onClick: () => window.harnessTaps.push(label) });
+
+      /** A circle with no new word, for the mid-set − / + (they have none today either). */
+      const bareCircle = (ic, name, cls) => {
+        const b = h(
+          'button',
+          {
+            type: 'button',
+            class: `icon-btn ${cls}`,
+            'data-icon-btn': true,
+            'data-variant': 'secondary',
+            'data-label-at': 'below',
+            'aria-label': name,
+            onclick: () => window.harnessTaps.push(name),
+          },
+          h('span', { class: 'icon-btn-circle', 'aria-hidden': 'true' }, icon(ic, 'lg')),
+        );
+        return b;
+      };
+
+      const numField = (id, label, value, unit, sw) =>
+        h(
+          'div',
+          { class: 'pv-field', 'data-field': id },
+          sw
+            ? h('div', { class: 'unit-field-head' }, h('span', { class: 'pv-label' }, label), sw)
+            : h('span', { class: 'pv-label' }, label),
+          h(
+            'div',
+            { class: 'pv-num-row' },
+            btn('minus', 'Less', { class: 'pv-step', ariaLabel: `Less ${label}` }),
+            h('div', { class: 'pv-value' }, h('b', {}, value), h('span', {}, unit)),
+            btn('plus', 'More', { class: 'pv-step', ariaLabel: `More ${label}` }),
+          ),
+        );
+
+      const frames = {
+        'first-run': () =>
+          h(
+            'main',
+            { class: 'screen mood-pro pv', 'data-frame': 'first-run' },
+            h(
+              'div',
+              { class: 'pv-top' },
+              h('span', { class: 'pv-count' }, '1 of 2'),
+              btn('skip', 'Skip', { variant: 'quiet', labelAt: 'beside' }),
+            ),
+            h('div', { class: 'pv-spacer' }),
+            h('div', { class: 'pv-logo', 'aria-hidden': 'true' }, icon('logo', 'lg')),
+            h('h1', { class: 'pv-big' }, 'Gym Clean'),
+            h('p', { class: 'pv-lead' }, 'Your pocket strength coach.'),
+            h(
+              'p',
+              { class: 'pv-body' },
+              'Guided workouts and a food log. Everything stays on this phone.',
+            ),
+            h('div', { class: 'pv-spacer' }),
+            h(
+              'div',
+              { class: 'pv-dots', 'aria-hidden': 'true' },
+              h('span', { class: 'on' }),
+              h('span'),
+            ),
+            h(
+              'div',
+              { class: 'pv-bottom' },
+              btn('back', 'Back', { disabled: true }),
+              btn('arrow-right', 'Next', { variant: 'main', wideHit: true, class: 'pv-pill' }),
+            ),
+          ),
+
+        'fuel-setup': () =>
+          h(
+            'main',
+            { class: 'screen mood-pro pv', 'data-frame': 'fuel-setup' },
+            h(
+              'div',
+              { class: 'pv-top' },
+              btn('back', 'Back', { labelAt: 'beside' }),
+              h('h1', { class: 'page-title' }, 'Set up Fuel'),
+            ),
+            h('p', { class: 'pv-lead' }, 'Your calories and protein come from these.'),
+            numField(
+              'height',
+              'Height',
+              '170',
+              'cm',
+              unitSwitch({ ...HEIGHT_UNIT_SWITCH, value: 'cm', onChange: () => {} }),
+            ),
+            numField(
+              'weight',
+              "Today's weight",
+              '70.0',
+              'kg',
+              unitSwitch({ ...WEIGHT_UNIT_SWITCH, value: 'kg', onChange: () => {} }),
+            ),
+            h(
+              'div',
+              { class: 'pv-field' },
+              h('span', { class: 'pv-label' }, 'Sex (for the calorie estimate)'),
+              h(
+                'div',
+                { class: 'pv-choices' },
+                h(
+                  'button',
+                  { type: 'button', class: 'pv-choice', 'aria-pressed': 'true' },
+                  'Female',
+                ),
+                h(
+                  'button',
+                  { type: 'button', class: 'pv-choice', 'aria-pressed': 'false' },
+                  'Male',
+                ),
+              ),
+            ),
+            h('div', { class: 'pv-spacer' }),
+            btn('check', 'Save', { variant: 'main', wideHit: true, class: 'pv-pill' }),
+          ),
+
+        today: () =>
+          h(
+            'main',
+            { class: 'screen mood-energy has-tabbar pv', 'data-frame': 'today' },
+            h(
+              'header',
+              { class: 'appbar' },
+              h(
+                'div',
+                {},
+                h('span', { class: 'brand' }, icon('logo', 'lg'), 'Gym Clean'),
+                h('span', { class: 'date' }, 'Thu 19 Nov'),
+              ),
+              btn('search', 'Search', { labelAt: 'beside' }),
+            ),
+            h(
+              'section',
+              { class: 'hero', 'aria-labelledby': 'pv-hero-title' },
+              h('span', { class: 'hero-rings', 'aria-hidden': 'true' }),
+              h(
+                'div',
+                { class: 'hero-txt' },
+                h('p', { class: 'eyebrow' }, 'Next up · Day 1 of 6'),
+                h('h1', { class: 'hero-title', id: 'pv-hero-title' }, 'Push A'),
+                h(
+                  'p',
+                  { class: 'hero-meta' },
+                  h('span', {}, icon('dumbbell', 'sm'), '6 exercises'),
+                  h('span', {}, icon('clock', 'sm'), '~50 min'),
+                ),
+                h(
+                  'ul',
+                  { class: 'chips', 'aria-label': 'Muscles worked' },
+                  h('li', { class: 'chip' }, 'Chest'),
+                  h('li', { class: 'chip' }, 'Shoulders'),
+                  h('li', { class: 'chip' }, 'Triceps'),
+                ),
+              ),
+              btn('play', 'Start workout', {
+                variant: 'main',
+                wideHit: true,
+                class: 'pv-pill pv-hero-start',
+                hooks: { 'data-demo': 'start' },
+              }),
+            ),
+            h(
+              'div',
+              { class: 'pv-row' },
+              btn('scale', 'Weigh-in'),
+              btn('bowl', 'Log food'),
+              btn('flag', 'Your goal'),
+            ),
+            h(
+              'div',
+              { class: 'pv-card' },
+              h('h2', {}, 'Last time'),
+              h('p', { class: 'pv-lead' }, 'Pull A · Tue 17 Nov · 48 min'),
+            ),
+            h(
+              'div',
+              { class: 'pv-tabs' },
+              tabBar('today', () => {}),
+            ),
+          ),
+
+        sheet: () =>
+          h(
+            'div',
+            { class: 'mood-pro pv-sheet-page', 'data-frame': 'sheet' },
+            h(
+              'div',
+              { class: 'pv-behind', 'aria-hidden': 'true' },
+              h('h1', { class: 'page-title' }, 'Fuel'),
+              h(
+                'div',
+                { class: 'pv-card' },
+                h('h2', {}, 'Breakfast'),
+                h('p', { class: 'pv-lead' }, 'Eggs and toast · 420 kcal'),
+              ),
+              h(
+                'div',
+                { class: 'pv-card' },
+                h('h2', {}, 'Lunch'),
+                h('p', { class: 'pv-lead' }, 'Chicken rice · 600 kcal'),
+              ),
+            ),
+            h('div', { class: 'pv-scrim' }),
+            h(
+              'section',
+              {
+                class: 'pv-sheet',
+                role: 'dialog',
+                'aria-modal': 'true',
+                'aria-labelledby': 'pv-sheet-title',
+              },
+              h('span', { class: 'pv-grab', 'aria-hidden': 'true' }),
+              h(
+                'div',
+                { class: 'pv-top' },
+                h('h2', { class: 'page-title', id: 'pv-sheet-title' }, 'Chicken rice'),
+                btn('close', 'Close', { variant: 'quiet', labelAt: 'beside' }),
+              ),
+              h('p', { class: 'pv-lead' }, 'Lunch · 1 plate'),
+              h(
+                'div',
+                { class: 'pv-facts' },
+                h('div', { class: 'pv-fact' }, h('b', {}, '600'), h('span', {}, 'kcal')),
+                h('div', { class: 'pv-fact' }, h('b', {}, '25 g'), h('span', {}, 'protein')),
+                h('div', { class: 'pv-fact' }, h('b', {}, '1'), h('span', {}, 'plate')),
+              ),
+              h(
+                'div',
+                { class: 'pv-row' },
+                btn('minus', 'Less', { ariaLabel: 'Less food' }),
+                btn('pencil', 'Edit'),
+                btn('share', 'Share'),
+                btn('plus', 'More', { ariaLabel: 'More food' }),
+              ),
+              h(
+                'div',
+                { class: 'pv-sheet-actions' },
+                btn('trash', 'Delete', { variant: 'danger' }),
+                btn('check', 'Save', { variant: 'main', wideHit: true, class: 'pv-pill' }),
+              ),
+            ),
+          ),
+
+        exercise: () =>
+          h(
+            'main',
+            {
+              class: 'screen mood-track pv',
+              'data-frame': 'exercise',
+              'data-screen': 'exercise',
+              'data-motion': 'off',
+            },
+            h(
+              'div',
+              { class: 'pv-ex-top' },
+              h('span', { class: 'pv-pos' }, '1 of 6'),
+              btn('pause', 'Pause', { labelAt: 'beside', class: 'pv-ex-pause' }),
+            ),
+            h(
+              'div',
+              { class: 'pv-progress', 'aria-hidden': 'true' },
+              h('span', { class: 'on' }),
+              h('span'),
+              h('span'),
+              h('span'),
+              h('span'),
+              h('span'),
+            ),
+            h('h1', { class: 'page-title exercise-name' }, 'Dumbbell Bench Press'),
+            h('p', { class: 'pv-lead' }, 'Target 8 reps'),
+            h(
+              'div',
+              { class: 'pv-card' },
+              h('span', { class: 'pv-ex-label' }, 'Set'),
+              h('p', { class: 'pv-set' }, h('b', {}, '1'), h('span', {}, 'of 4')),
+            ),
+            h('p', { class: 'pv-card pv-cue' }, 'Squeeze your chest, slow on the way down.'),
+            h('span', { class: 'pv-ex-label' }, 'Reps'),
+            h(
+              'div',
+              { class: 'pv-ex-row' },
+              bareCircle('minus', 'Less reps', 'pv-ex-step'),
+              h('span', { class: 'pv-ex-num' }, '8'),
+              bareCircle('plus', 'More reps', 'pv-ex-step'),
+            ),
+            h('span', { class: 'pv-ex-label' }, 'Weight kg'),
+            h(
+              'div',
+              { class: 'pv-ex-row' },
+              bareCircle('minus', 'Less weight', 'pv-ex-step'),
+              h('span', { class: 'pv-ex-num' }, '15'),
+              bareCircle('plus', 'More weight', 'pv-ex-step'),
+            ),
+            h(
+              'div',
+              { class: 'sticky-bottom' },
+              btn('check', 'Set done', {
+                variant: 'main',
+                wideHit: true,
+                class: 'pv-pill',
+                hooks: { 'data-demo': 'set-done' },
+              }),
+            ),
+          ),
+      };
+
+      const frame = new URLSearchParams(location.search).get('frame') ?? 'today';
+      const make = frames[frame] ?? frames.today;
+      document.getElementById('app').replaceChildren(make());
+    </script>
+  </body>
+</html>
