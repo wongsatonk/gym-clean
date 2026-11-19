@@ -1,0 +1,138 @@
+<!doctype html>
+<!-- Dev-only visual check for M13d task 13b (the unit switch), made-up values, dark theme.
+     Not part of the build or the app. Open on the dev server: /src/ui/unitSwitch.harness.html
+     Three fields as they will sit on their pages (task 13c): Today's weight (kg | lb), Height
+     (cm | ft·in) and a tape measurement (cm | in). Each field keeps its metric value and only
+     re-shows it on a switch (the no-drift rule; the real fields come from task 10b), so the
+     harness shows the idea without saving anything.
+     window.harnessChanges: [label, unit] per onChange call. e2e/unit-switch.spec.ts tests it. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Unit switch harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <style>
+      .us-field {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .us-label {
+        font-size: var(--fs-cue);
+        font-weight: 700;
+      }
+      .us-readout {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 6px;
+        min-height: var(--tap-hero);
+        padding: 0 10px;
+        border: var(--line-w) solid var(--line);
+        border-radius: var(--r-btn);
+        background: var(--surface);
+      }
+      .us-num {
+        font-family: var(--font-display);
+        font-size: var(--fs-num-sm);
+        font-weight: 700;
+        line-height: 1.2;
+        font-variant-numeric: tabular-nums;
+      }
+      .us-unit {
+        color: var(--text-2);
+        font-size: var(--fs-body);
+        font-weight: 700;
+      }
+      .us-note {
+        font-size: var(--fs-body);
+        color: var(--text-2);
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import '@fontsource/barlow/latin-400.css';
+      import '@fontsource/barlow/latin-600.css';
+      import '@fontsource/barlow/latin-700.css';
+      import {
+        unitSwitch,
+        WEIGHT_UNIT_SWITCH,
+        HEIGHT_UNIT_SWITCH,
+        TAPE_UNIT_SWITCH,
+      } from './unitSwitch.ts';
+      import { h } from './dom.ts';
+      import { toUnit, cmToFtIn, CM_PER_IN } from '../core/units.ts';
+
+      window.harnessChanges = [];
+      const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
+
+      // Made-up metric values; never changed by a switch.
+      const WEIGHT_KG = 70;
+      const HEIGHT_CM = 170;
+      const WAIST_CM = 82;
+
+      const parts = {
+        weight: (u) => [[fmt(toUnit(WEIGHT_KG, u)), u]],
+        height: (u) => {
+          if (u === 'cm') return [[String(HEIGHT_CM), 'cm']];
+          const { ft, inch } = cmToFtIn(HEIGHT_CM);
+          return [
+            [String(ft), 'ft'],
+            [String(inch), 'in'],
+          ];
+        },
+        waist: (u) => [[u === 'cm' ? fmt(WAIST_CM) : fmt(WAIST_CM / CM_PER_IN), u]],
+      };
+
+      function field(id, label, spec, start) {
+        const readout = h('div', { class: 'us-readout', 'data-readout': id });
+        const show = (u) =>
+          readout.replaceChildren(
+            ...parts[id](u).flatMap(([n, unit]) => [
+              h('span', { class: 'us-num' }, n),
+              h('span', { class: 'us-unit' }, unit),
+            ]),
+          );
+        show(start);
+        return h(
+          'div',
+          { class: 'us-field', 'data-field': id },
+          h(
+            'div',
+            { class: 'unit-field-head' },
+            h('span', { class: 'us-label' }, label),
+            unitSwitch({
+              ...spec,
+              value: start,
+              hooks: { 'data-switch': id },
+              onChange: (u) => {
+                window.harnessChanges.push([spec.label, u]);
+                show(u);
+              },
+            }),
+          ),
+          readout,
+        );
+      }
+
+      document
+        .getElementById('app')
+        .replaceChildren(
+          h(
+            'main',
+            { class: 'screen mood-pro', 'data-harness': 'unit-switch' },
+            h('h1', { class: 'page-title' }, 'Unit switch'),
+            field('weight', "Today's weight", WEIGHT_UNIT_SWITCH, 'kg'),
+            field('height', 'Height', HEIGHT_UNIT_SWITCH, 'cm'),
+            field('waist', 'Waist', TAPE_UNIT_SWITCH, 'in'),
+            h('p', { class: 'us-note' }, 'A switch changes the unit everywhere. Nothing is saved.'),
+          ),
+        );
+    </script>
+  </body>
+</html>
