@@ -81,17 +81,17 @@
 
 .ob-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-display);
   font-weight: 700;
-  line-height: 1.05;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
 .ob-text {
   margin: 0;
   font-size: var(--fs-cue);
-  line-height: 1.4;
+  line-height: var(--lh-text);
 }
 
 .ob-note {
@@ -102,7 +102,7 @@
   background: var(--surface);
   color: var(--text-2);
   font-size: var(--fs-body);
-  line-height: 1.4;
+  line-height: var(--lh-text);
 }
 
 .ob-granted {
@@ -180,4 +180,32 @@
   background: var(--cta);
   color: var(--on-cta);
   border: none;
+}
+
+/* M13d task 12: the Units page (unitsPage.ts). Each choice is a word ("Weight") over the shared
+   unit switch (unitSwitch.css), stretched to the page width here so each option is a big target
+   (≥ 56px tall from the switch; the two halves share the row). No motion of its own. */
+.ob-units-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ob-units-label {
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: var(--lh-head);
+}
+
+.ob-units .ob-units-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+}
+
+.ob-units .ob-units-switch .unit-switch-opt {
+  min-height: var(--tap-bar);
+  font-size: var(--fs-lead);
 }

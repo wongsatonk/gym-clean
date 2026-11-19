@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Accent, BodyArea, Intake } from '../../core/types';
+import type { Accent, BodyArea, Intake, LengthUnit } from '../../core/types';
 import { checkCopy } from '../../core/trainer/replies';
 import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import type { Unit } from '../../core/units';
@@ -14,6 +14,9 @@ import {
   GOAL_NOT_SET,
   GOAL_RERUN_LABEL,
   GOAL_SET_LABEL,
+  LENGTH_UNIT_GROUP,
+  WEIGHT_UNIT_GROUP,
+  lengthNote,
   settingsScreen,
   settingsSectionId,
   unitNote,
@@ -231,6 +234,90 @@ describe('settings screen', () => {
     expect(calls.tab).toEqual(['today']);
   });
 
+  it('M13d Units: the section is titled Units; Weight keeps its group name and buttons', () => {
+    const { el } = render({ unit: 'kg' });
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'unit', 'unit section');
+    expect(sec.byTag('h2')[0]?.textContent).toBe('Units');
+    const groups = sec.find((e) => e.getAttribute('role') === 'group');
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual([WEIGHT_UNIT_GROUP]);
+    expect(WEIGHT_UNIT_GROUP).toBe('Weight unit');
+  });
+
+  it('M13d Units: Height and body (cm / ft·in) shows with onLengthUnit, pressed + check, taps report', () => {
+    const lengths: LengthUnit[] = [];
+    const el = asFake(
+      settingsScreen(props({ unit: 'kg', lengthUnit: 'in' }), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onLengthUnit: (u) => lengths.push(u),
+        onCameraTest: () => {},
+        onTab: () => {},
+      }),
+    );
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'unit', 'unit section');
+    const groups = sec.find((e) => e.getAttribute('role') === 'group');
+    expect(groups.map((g) => g.getAttribute('aria-label'))).toEqual([
+      WEIGHT_UNIT_GROUP,
+      LENGTH_UNIT_GROUP,
+    ]);
+    const cm = byAttr(el, 'data-length-unit', 'cm');
+    const ftIn = byAttr(el, 'data-length-unit', 'in');
+    expect([cm.textContent, ftIn.textContent]).toEqual(['cm', 'ft·in']);
+    expect([cm.getAttribute('aria-pressed'), ftIn.getAttribute('aria-pressed')]).toEqual([
+      'false',
+      'true',
+    ]);
+    expect(ftIn.find((e) => e.getAttribute('data-icon') === 'check')).toHaveLength(1);
+    ftIn.click();
+    cm.click();
+    expect(lengths).toEqual(['cm']);
+    expect(sec.textContent).toContain(lengthNote('in'));
+    // The visible words over each choice; the group names carry them for screen readers.
+    const labels = sec.byClass('set-units-label');
+    expect(labels.map((l) => l.textContent)).toEqual(['Weight', 'Height and body']);
+    for (const l of labels) expect(l.getAttribute('aria-hidden')).toBe('true');
+    // The weight buttons stay the only [data-unit] hooks (e2e looks them up by that).
+    expect(
+      el.find((e) => e.hasAttribute('data-unit')).map((e) => e.getAttribute('data-unit')),
+    ).toEqual(['kg', 'lb']);
+  });
+
+  it('M13d Units: no lengthUnit row → follows the weight unit (lb → ft·in, kg → cm)', () => {
+    for (const [unit, want] of [
+      ['lb', 'in'],
+      ['kg', 'cm'],
+    ] as const) {
+      const el = asFake(
+        settingsScreen(props({ unit }), {
+          onAccent: () => {},
+          onSpokenCount: () => {},
+          onCoachTips: () => {},
+          onHandsFree: () => {},
+          onUnit: () => {},
+          onLengthUnit: () => {},
+          onCameraTest: () => {},
+          onTab: () => {},
+        }),
+      );
+      expect(byAttr(el, 'data-length-unit', want).getAttribute('aria-pressed')).toBe('true');
+    }
+  });
+
+  it('M13d Units: without onLengthUnit only the Weight choice shows', () => {
+    const { el } = render({ unit: 'lb', lengthUnit: 'in' });
+    expect(el.find((e) => e.hasAttribute('data-length-unit'))).toHaveLength(0);
+  });
+
+  it('lengthNote', () => {
+    expect(lengthNote('cm')).toBe('Height and tape in cm.');
+    expect(lengthNote('in')).toBe('Height in feet and inches, tape in inches.');
+    for (const t of [lengthNote('cm'), lengthNote('in'), LENGTH_UNIT_GROUP, WEIGHT_UNIT_GROUP])
+      expect(checkCopy(t), t).toEqual({ ok: true, hits: [] });
+  });
+
   it('unitNote', () => {
     expect(unitNote('kg')).toBe('Weights step by 2.5 kg.');
     expect(unitNote('lb')).toMatch(/^Weights step by 5 lb\./);
@@ -243,7 +330,7 @@ describe('settingsScreen M7 Nutrition slot', () => {
     expect(el.find((e) => e.getAttribute('data-section') === 'nutrition')).toHaveLength(0);
   });
 
-  it('places the nutrition block in a "Nutrition" section after Weight unit', () => {
+  it('places the nutrition block in a "Nutrition" section after Units', () => {
     const { el } = render({ nutrition: slot('data-nutrition') });
     const sections = el.find((e) => e.tag === 'section').map((s) => s.getAttribute('data-section'));
     expect(sections.indexOf('nutrition')).toBe(sections.indexOf('unit') + 1);

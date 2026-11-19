@@ -7,6 +7,7 @@
 //   top:    "2 of 7" and Skip (always visible, every page)
 //   page:   welcome — page 1 is the brand lockup (mark, name, tagline) + one line; others are an
 //           icon, title and body. permission — permissionPage.ts (icon, title, why, note).
+//           units (M13d) — unitsPage.ts (kg | lb, cm | ft·in; taps go to onUnits).
 //   dots:   current page is a wide filled pill (shape + size, not colour alone); the "2 of 7"
 //           text and a polite live line say it in words.
 //   bottom: welcome / mic / allowed pages → [Back][Next] (Go to Today on the last page);
@@ -19,14 +20,20 @@ import {
   type OnboardingPermission,
   type WelcomePageId,
 } from '../../core/onboarding';
-import type { OnboardingStep } from '../../core/types';
-import { ONBOARDING_BUTTONS, PERMISSION_PAGES, WELCOME_PAGES } from '../../data/onboarding';
+import type { OnboardingStep, UnitPrefs } from '../../core/types';
+import {
+  ONBOARDING_BUTTONS,
+  PERMISSION_PAGES,
+  UNITS_PAGE,
+  WELCOME_PAGES,
+} from '../../data/onboarding';
 import { forwardContent } from '../backButton';
 import { brandLockup } from '../brand';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
 import { enterScreen, type Stop } from '../motion';
 import { permissionPage } from './permissionPage';
+import { unitsPage } from './unitsPage';
 import './onboarding.css';
 
 export type OnboardingProps = {
@@ -38,6 +45,11 @@ export type OnboardingProps = {
   granted?: Partial<Record<OnboardingPermission, boolean>> | undefined;
   /** Direction of travel: slides the page in. Omit on first show (no motion). */
   dir?: 'next' | 'prev' | undefined;
+  /**
+   * M13d: the units the Units page shows as chosen (the saved rows, or
+   * defaultUnits(deviceLocale()) on a fresh install). Missing → kg + cm.
+   */
+  units?: UnitPrefs | undefined;
 };
 
 export type OnboardingActions = {
@@ -52,6 +64,11 @@ export type OnboardingActions = {
   onAllow: (permission: OnboardingPermission) => void;
   /** "Not now" on a permission page; the caller moves on (or finishes on the last page). */
   onNotNow: (permission: OnboardingPermission) => void;
+  /**
+   * M13d: a tap on the Units page (both units as they are now). The caller keeps them and saves
+   * both rows when the page is left with Next; Next itself is the usual onNext.
+   */
+  onUnits?: ((units: UnitPrefs) => void) | undefined;
 };
 
 export type OnboardingScreen = {
@@ -67,6 +84,9 @@ const WELCOME_ICON: Record<Exclude<WelcomePageId, 'hello'>, IconName> = {
 
 const TITLE_ID = 'ob-title';
 
+/** The Units page's choice when the caller passes none. */
+const METRIC: UnitPrefs = { weight: 'kg', length: 'cm' };
+
 /** "2 of 7". */
 export function stepCount(index: number, total: number): string {
   return `${index + 1} of ${total}`;
@@ -79,12 +99,13 @@ function stepKey(step: OnboardingStep | undefined): string {
   if (!step) return 'none';
   if (step.kind === 'welcome') return `welcome:${step.id}`;
   if (step.kind === 'permission') return `permission:${step.permission}`;
-  return step.kind; // 'intake' | 'units' | 'fuelSetup' (M13d: the caller shows those screens)
+  return step.kind; // 'units' (below) | 'intake' | 'fuelSetup' (the caller shows those screens)
 }
 
 function stepTitle(step: OnboardingStep | undefined): string {
   if (step?.kind === 'welcome' && isWelcomeId(step.id)) return WELCOME_PAGES[step.id].title;
   if (step?.kind === 'permission') return PERMISSION_PAGES[step.permission].title;
+  if (step?.kind === 'units') return UNITS_PAGE.title;
   return '';
 }
 
@@ -133,6 +154,11 @@ export function onboardingScreen(
     notNow = parts.notNow;
   } else if (step?.kind === 'welcome' && isWelcomeId(step.id)) {
     content = welcomeBody(step.id);
+  } else if (step?.kind === 'units') {
+    content = unitsPage(
+      { units: props.units ?? METRIC, titleId: TITLE_ID },
+      { onChange: (u) => actions.onUnits?.(u) },
+    );
   } else {
     // The intake step is the slice 1b intake screen (the caller shows it); an empty page here.
     content = h('section', { class: 'ob-welcome' }, h('h2', { class: 'sr-only', id: TITLE_ID }));
@@ -155,6 +181,7 @@ export function onboardingScreen(
       type: 'button',
       class: 'ob-back',
       'data-ob': 'back',
+      'data-swipe-back': true, // M13d task 24: the edge swipe's Back (disabled on page 1 = none)
       disabled: index === 0,
       onclick: () => actions.onBack(),
     },

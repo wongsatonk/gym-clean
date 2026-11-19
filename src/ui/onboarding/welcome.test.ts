@@ -137,6 +137,18 @@ describe('onboardingScreen: welcome pages', () => {
     expect(second.calls.back).toBe(1);
   });
 
+  it('M13d task 24: the first-run Back is the edge swipe’s one Back, on every page', () => {
+    const marked = (el: FakeEl) => el.find((e) => e.hasAttribute('data-swipe-back'));
+    for (let index = 0; index < NATIVE.length; index++) {
+      const { el } = render({ index });
+      const hits = marked(el);
+      expect(hits, `page ${index}`).toHaveLength(1);
+      expect(hits[0]?.getAttribute('data-ob')).toBe('back');
+    }
+    // Page 1: marked but disabled, so a swipe there does nothing (edgeBack skips disabled).
+    expect(marked(render().el)[0]?.hasAttribute('disabled')).toBe(true);
+  });
+
   it('the last page says "Go to Today" and calls onDone', () => {
     const steps: OnboardingStep[] = [
       { kind: 'welcome', id: 'hello' },

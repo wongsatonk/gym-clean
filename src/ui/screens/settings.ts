@@ -33,11 +33,15 @@
 // M13c task 14: Search next to the title (`[data-search-open]`, ../searchButton.ts) when
 // `onSearch` is set, and every section is a jump target: `id="settings-<key>"` (settingsSectionId)
 // + tabindex=-1. The search items for these sections are in ./settingsIndex.ts.
-import type { Accent, BackgroundStyle, BodyArea, Intake } from '../../core/types';
-import type { Unit } from '../../core/units';
+//
+// M13d task 12: "Weight unit" became **Units** (section key still `unit`): Weight (kg / lb, the
+// same `data-unit` buttons in the group "Weight unit") and, when `onLengthUnit` is set, Height and
+// body (cm / ft·in, `data-length-unit`, group "Height and body unit"). Stored values never change.
+import type { Accent, BackgroundStyle, BodyArea, Intake, LengthUnit } from '../../core/types';
+import { lengthUnitFor, type Unit } from '../../core/units';
 import { APP_NAME } from '../../core/brand';
 import { CREDIT, versionLabel } from '../../core/version';
-import { ONBOARDING_BUTTONS } from '../../data/onboarding';
+import { ONBOARDING_BUTTONS, UNITS_PAGE } from '../../data/onboarding';
 import { accentPicker } from '../accentPicker';
 import { backgroundPicker } from '../backgroundPicker';
 import { h } from '../dom';
@@ -47,6 +51,7 @@ import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import { pageHead, type OnSearch } from '../searchButton';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
+import './settingsUnits.css';
 
 export type SettingsProps = {
   accent: Accent;
@@ -56,6 +61,11 @@ export type SettingsProps = {
   coachTips: boolean;
   handsFree: boolean;
   unit: Unit;
+  /**
+   * M13d: the 'lengthUnit' row (height in ft·in, tape in inches when 'in'). Missing → follows the
+   * weight unit (the no-row behaviour of 1.16).
+   */
+  lengthUnit?: LengthUnit | undefined;
   /** `createCoachVoiceSettings(...).el`. */
   coachVoice: HTMLElement;
   /** The speaker check (`voiceTest()` in app.ts, the `.voice-test` block). */
@@ -98,6 +108,11 @@ export type SettingsActions = {
   onHandsFree: (on: boolean) => void;
   /** A different unit was picked. */
   onUnit: (unit: Unit) => void;
+  /**
+   * M13d: a different height-and-body unit was picked (save 'lengthUnit'). Omitted → Units shows
+   * only the Weight choice.
+   */
+  onLengthUnit?: ((unit: LengthUnit) => void) | undefined;
   onCameraTest: () => void;
   onTab: (tab: TabId) => void;
   /** M10: opens Settings → Plan changes. Omitted → no Plan section. */
@@ -159,6 +174,15 @@ export function unitNote(unit: Unit): string {
     ? 'Weights step by 2.5 kg.'
     : 'Weights step by 5 lb. Saved weights are converted, nothing is lost if you switch back.';
 }
+
+/** M13d: the help line under the cm / ft·in choice. */
+export function lengthNote(unit: LengthUnit): string {
+  return unit === 'in' ? 'Height in feet and inches, tape in inches.' : 'Height and tape in cm.';
+}
+
+/** M13d: the group names of the two Units choices (as on the first-run Units page). */
+export const WEIGHT_UNIT_GROUP = 'Weight unit';
+export const LENGTH_UNIT_GROUP = 'Height and body unit';
 
 /** A section heading: icon + words (the icon is decorative). */
 function sectionTitle(name: IconName, text: string, id: string): HTMLElement {
@@ -399,6 +423,27 @@ function aboutSection(
 
 export function settingsScreen(props: SettingsProps, actions: SettingsActions): HTMLElement {
   const owner = props.owner ?? true;
+  const lengthUnit = props.lengthUnit ?? lengthUnitFor(props.unit);
+  const lengthBtn = (u: LengthUnit) => {
+    const on = lengthUnit === u;
+    return h(
+      'button',
+      {
+        type: 'button',
+        class: on ? 'seg-btn active' : 'seg-btn',
+        'aria-pressed': on ? 'true' : 'false',
+        'data-length-unit': u,
+        onclick: () => {
+          if (!on) actions.onLengthUnit?.(u);
+        },
+      },
+      on ? icon('check', 'sm') : null,
+      h('span', {}, UNITS_PAGE.length.options[u]),
+    );
+  };
+  // The visible words above each choice are hidden from screen readers: the group name says it.
+  const unitsLabel = (text: string) =>
+    h('p', { class: 'set-units-label', 'aria-hidden': 'true' }, text);
   const unitBtn = (u: Unit) => {
     const on = props.unit === u;
     return h(
@@ -474,14 +519,33 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
     section(
       'unit',
       'ruler',
-      'Weight unit',
+      'Units',
       h(
         'div',
-        { class: 'segmented', role: 'group', 'aria-label': 'Weight unit' },
-        unitBtn('kg'),
-        unitBtn('lb'),
+        { class: 'set-units', 'data-units-choice': 'weight' },
+        unitsLabel(UNITS_PAGE.weight.label),
+        h(
+          'div',
+          { class: 'segmented', role: 'group', 'aria-label': WEIGHT_UNIT_GROUP },
+          unitBtn('kg'),
+          unitBtn('lb'),
+        ),
+        h('p', { class: 'muted set-note' }, unitNote(props.unit)),
       ),
-      h('p', { class: 'muted set-note' }, unitNote(props.unit)),
+      actions.onLengthUnit
+        ? h(
+            'div',
+            { class: 'set-units', 'data-units-choice': 'length' },
+            unitsLabel(UNITS_PAGE.length.label),
+            h(
+              'div',
+              { class: 'segmented', role: 'group', 'aria-label': LENGTH_UNIT_GROUP },
+              lengthBtn('cm'),
+              lengthBtn('in'),
+            ),
+            h('p', { class: 'muted set-note' }, lengthNote(lengthUnit)),
+          )
+        : null,
     ),
     props.nutrition ? section('nutrition', 'flame', 'Nutrition', props.nutrition) : null,
     props.foodPhotos ? section('food-photos', 'bowl', 'Food photos', props.foodPhotos) : null,

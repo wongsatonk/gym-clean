@@ -28,6 +28,7 @@ function renderAll(owner: boolean): FakeEl {
     onCoachTips: noop,
     onHandsFree: noop,
     onUnit: noop,
+    onLengthUnit: noop,
     onCameraTest: noop,
     onTab: noop,
     onPlanChanges: noop,
@@ -96,6 +97,9 @@ describe('SETTINGS_SEARCH_ITEMS', () => {
     expect(first('hands-free')).toBe('camera');
     expect(first('kg')).toBe('unit');
     expect(first('lb')).toBe('unit');
+    // M13d task 12: Settings → Units also holds height and body (cm / ft·in).
+    for (const q of ['feet', 'ft', 'inches', 'height', 'cm', 'units'])
+      expect(first(q), q).toBe('unit');
     expect(first('accent')).toBe('accent');
     expect(first('colour')).toBe('accent');
     expect(first('background')).toBe('background');
@@ -113,7 +117,9 @@ describe('SETTINGS_SEARCH_ITEMS', () => {
       const keys = sectionKeys(el);
       for (const it of settingsSearchItems({ owner })) {
         expect(keys, `${it.id} (owner ${owner})`).toContain(it.section);
-        const sec = el.byClass('set-section').find((s) => s.getAttribute('data-section') === it.section);
+        const sec = el
+          .byClass('set-section')
+          .find((s) => s.getAttribute('data-section') === it.section);
         expect(sec?.getAttribute('id')).toBe(settingsSectionId(it.section));
         expect(sec?.getAttribute('tabindex')).toBe('-1');
       }
@@ -143,9 +149,9 @@ describe('SETTINGS_SEARCH_ITEMS', () => {
     expect(sectionFor(wn, false)).toBe('whats-new');
     expect(settingsSectionFor('whats-new', true)).toBe('todos');
     expect(settingsSectionFor('whats-new', false)).toBe('whats-new');
-    expect(settingsSearchItems({ owner: true }).find((i) => i.id === 'whats-new')).not.toHaveProperty(
-      'ownerSection',
-    );
+    expect(
+      settingsSearchItems({ owner: true }).find((i) => i.id === 'whats-new'),
+    ).not.toHaveProperty('ownerSection');
   });
 
   it('every Settings section is reachable from search (no section left out)', () => {
@@ -156,7 +162,10 @@ describe('SETTINGS_SEARCH_ITEMS', () => {
   });
 
   it('has(key) drops items whose section Settings will not render', () => {
-    const items = settingsSearchItems({ owner: true, has: (k) => k !== 'health' && k !== 'accent' });
+    const items = settingsSearchItems({
+      owner: true,
+      has: (k) => k !== 'health' && k !== 'accent',
+    });
     const ids = items.map((i) => i.id);
     expect(ids).not.toContain('health');
     expect(ids).not.toContain('accent');

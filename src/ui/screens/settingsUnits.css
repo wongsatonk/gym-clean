@@ -1,0 +1,19 @@
+/* M13d task 12: Settings → Units (settings.ts): a word over each choice (Weight, Height and
+   body), the Settings segmented look from styles.css, a one-line note under each. Tokens only. */
+.set-units {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.set-units + .set-units {
+  margin-top: 12px;
+}
+
+.set-units-label {
+  margin: 0;
+  font-size: var(--fs-cue);
+  font-weight: 700;
+  line-height: var(--lh-head);
+}
