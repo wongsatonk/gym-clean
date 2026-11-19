@@ -29,6 +29,7 @@ function renderAll(owner: boolean): FakeEl {
     onHandsFree: noop,
     onUnit: noop,
     onLengthUnit: noop,
+    onTextSize: noop,
     onCameraTest: noop,
     onTab: noop,
     onPlanChanges: noop,
@@ -109,6 +110,16 @@ describe('SETTINGS_SEARCH_ITEMS', () => {
     expect(first('privacy')).toBe('about');
     expect(first('licenses')).toBe('about');
     expect(first('backup')).toBe('backup');
+  });
+
+  it('M13d task 21: text, font, size, bigger, larger find Display (Text size)', () => {
+    const index = buildSearchIndex(settingsSearchItems({ owner: false }));
+    const first = (q: string) => search(index, q)[0]?.id;
+    for (const q of ['text', 'font', 'size', 'bigger', 'larger', 'text size', 'display'])
+      expect(first(q), q).toBe('display');
+    const item = SETTINGS_SEARCH_ITEMS.find((i) => i.id === 'display');
+    expect(item?.title).toBe('Display');
+    expect(checkCopy(`${item?.title}. ${item?.subtitle}`).ok).toBe(true);
   });
 
   it('every item, owner on and off, points at a section Settings renders, with its jump id', () => {

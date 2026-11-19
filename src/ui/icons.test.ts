@@ -46,12 +46,14 @@ describe('icon set', () => {
       'info',
       'scale',
       'refresh',
+      'text',
     ] as const) {
       expect(ICON_NAMES).toContain(n);
     }
     // M13 task 20: + arrow-right; task 22: + plate, spark; M13c: + search;
-    // M13d task 36: + trash, share, undo, gear, more, info, scale, refresh (round buttons).
-    expect(ICON_NAMES.length).toBe(44);
+    // M13d task 36: + trash, share, undo, gear, more, info, scale, refresh (round buttons);
+    // task 21: + text (Settings → Display).
+    expect(ICON_NAMES.length).toBe(45);
     for (const n of ICON_NAMES) expect(ICON_PATHS[n]).toMatch(/^<(path|rect|circle) /);
   });
 

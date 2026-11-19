@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Accent, BodyArea, Intake, LengthUnit } from '../../core/types';
+import type { Accent, BodyArea, Intake, LengthUnit, TextSize } from '../../core/types';
+import { TEXT_SIZES, textScale } from '../../core/textSize';
+import { TEXT_SIZE_GROUP, TEXT_SIZE_NOTE } from '../textSizePicker';
 import { checkCopy } from '../../core/trainer/replies';
 import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import type { Unit } from '../../core/units';
@@ -322,6 +324,78 @@ describe('settings screen', () => {
   it('unitNote', () => {
     expect(unitNote('kg')).toBe('Weights step by 2.5 kg.');
     expect(unitNote('lb')).toMatch(/^Weights step by 5 lb\./);
+  });
+});
+
+describe('settingsScreen M13d task 21 Display → Text size', () => {
+  const withText = (textSize: TextSize | undefined, sizes: TextSize[]) =>
+    asFake(
+      settingsScreen(props(textSize ? { textSize } : {}), {
+        onAccent: () => {},
+        onSpokenCount: () => {},
+        onCoachTips: () => {},
+        onHandsFree: () => {},
+        onUnit: () => {},
+        onTextSize: (s) => sizes.push(s),
+        onCameraTest: () => {},
+        onTab: () => {},
+      }),
+    );
+
+  it('without onTextSize there is no Display section', () => {
+    const { el } = render();
+    expect(el.find((e) => e.getAttribute('data-section') === 'display')).toHaveLength(0);
+  });
+
+  it('a "Display" section right after Your goal (before Accent colour), a jump target', () => {
+    const el = withText(undefined, []);
+    const keys = el.byClass('set-section').map((s) => s.getAttribute('data-section'));
+    expect(keys.indexOf('display')).toBe(keys.indexOf('accent') - 1);
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'display', 'display');
+    expect(sec.byTag('h2')[0]?.textContent).toBe('Display');
+    expect(sec.getAttribute('id')).toBe(settingsSectionId('display'));
+    expect(sec.byTag('h2')[0]?.find((e) => e.getAttribute('data-icon') === 'text')).toHaveLength(1);
+  });
+
+  it('Text size: Standard / Large / Larger in one named group; missing → Standard pressed + check', () => {
+    const el = withText(undefined, []);
+    const sec = one(el, (e) => e.getAttribute('data-section') === 'display', 'display');
+    const group = one(sec, (e) => e.getAttribute('role') === 'group', 'group');
+    const label = one(sec, (e) => e.getAttribute('id') === 'set-text-size-label', 'label');
+    expect(label.textContent).toBe(TEXT_SIZE_GROUP);
+    expect(group.getAttribute('aria-labelledby')).toBe('set-text-size-label');
+    const btns = group.byTag('button');
+    expect(btns.map((b) => b.textContent)).toEqual(['Standard', 'Large', 'Larger']);
+    expect(btns.map((b) => b.getAttribute('data-text-size-option'))).toEqual([...TEXT_SIZES]);
+    expect(btns.map((b) => b.getAttribute('aria-pressed'))).toEqual(['true', 'false', 'false']);
+    expect(btns.map((b) => b.find((e) => e.getAttribute('data-icon') === 'check').length)).toEqual([
+      1, 0, 0,
+    ]);
+    expect(btns[0]?.classes).toContain('active');
+    // The short note stays shown (≤ 10 words, one sentence), no More.
+    expect(isShortNote(TEXT_SIZE_NOTE)).toBe(true);
+    expect(sec.textContent).toContain(TEXT_SIZE_NOTE);
+    expect(sec.find((e) => e.getAttribute('data-more') === 'set-display')).toHaveLength(0);
+  });
+
+  it('each word previews its size (the core cue px); the stored size is pressed; taps report', () => {
+    const sizes: TextSize[] = [];
+    const el = withText('larger', sizes);
+    const btn = (s: TextSize) => byAttr(el, 'data-text-size-option', s);
+    for (const s of TEXT_SIZES) {
+      const word = btn(s).byClass('text-size-word')[0];
+      expect(word?.style['fontSize'], s).toBe(`${textScale(s).cue}px`);
+      expect(btn(s).getAttribute('aria-pressed')).toBe(s === 'larger' ? 'true' : 'false');
+    }
+    btn('larger').click(); // already chosen: nothing
+    btn('large').click();
+    btn('standard').click();
+    expect(sizes).toEqual(['large', 'standard']);
+  });
+
+  it('copy passes checkCopy', () => {
+    for (const t of [TEXT_SIZE_GROUP, TEXT_SIZE_NOTE, 'Display', 'Standard', 'Large', 'Larger'])
+      expect(checkCopy(t), t).toEqual({ ok: true, hits: [] });
   });
 });
 

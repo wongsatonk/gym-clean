@@ -76,6 +76,8 @@ export const ICON_PATHS = {
     '<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 9.5a5.5 5.5 0 0 1 8 0M12 10.5l1.8-2.6"/>',
   /** Refresh / try again: a circular arrow, clockwise. */
   refresh: '<path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 3.5v5h-5"/>',
+  /** M13d task 21 Settings → Display: a big A and a small a (text size). */
+  text: '<path d="M2.5 19.5L8 5.5l5.5 14M4.6 14.5h6.8"/><path d="M14.5 19.5l3.5-8.5 3.5 8.5M15.8 16.5h4.4"/>',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICON_PATHS;

@@ -43,7 +43,18 @@
 // per section (`[data-more="set-<key>"]`, ../moreDisclosure.ts).
 // Shown as before: the privacy line (Progress photos), state lines (goal summary / own words,
 // "Nothing on the list", "Not set yet") and About's name / version / credit.
-import type { Accent, BackgroundStyle, BodyArea, Intake, LengthUnit } from '../../core/types';
+//
+// M13d task 21: **Display** (section key `display`, right under Your goal, shown when
+// `onTextSize` is set): Text size Standard / Large / Larger (../textSizePicker.ts, group
+// "Text size", `data-text-size-option`), one short note.
+import type {
+  Accent,
+  BackgroundStyle,
+  BodyArea,
+  Intake,
+  LengthUnit,
+  TextSize,
+} from '../../core/types';
 import { lengthUnitFor, type Unit } from '../../core/units';
 import { APP_NAME } from '../../core/brand';
 import { CREDIT, versionLabel } from '../../core/version';
@@ -58,6 +69,7 @@ import { PHOTOS_PRIVACY } from '../photos/progressPhotos';
 import { pageHead, type OnSearch } from '../searchButton';
 import { tabBar, type TabId } from '../tabBar';
 import { moodClass } from '../tokens';
+import { textSizePicker } from '../textSizePicker';
 import './settingsUnits.css';
 
 export type SettingsProps = {
@@ -73,6 +85,8 @@ export type SettingsProps = {
    * weight unit (the no-row behaviour of 1.16).
    */
   lengthUnit?: LengthUnit | undefined;
+  /** M13d task 21: settings 'textSize' (Display → Text size). Missing → Standard. */
+  textSize?: TextSize | undefined;
   /** `createCoachVoiceSettings(...).el`. */
   coachVoice: HTMLElement;
   /** The speaker check (`voiceTest()` in app.ts, the `.voice-test` block). */
@@ -120,6 +134,11 @@ export type SettingsActions = {
    * only the Weight choice.
    */
   onLengthUnit?: ((unit: LengthUnit) => void) | undefined;
+  /**
+   * M13d task 21: a different text size was picked: save it (setTextSize) and apply it
+   * (applyTextSize, ../textSizePicker). Omitted → no Display section.
+   */
+  onTextSize?: ((size: TextSize) => void) | undefined;
   onCameraTest: () => void;
   onTab: (tab: TabId) => void;
   /** M10: opens Settings → Plan changes. Omitted → no Plan section. */
@@ -521,6 +540,14 @@ export function settingsScreen(props: SettingsProps, actions: SettingsActions): 
     { class: `screen settings has-tabbar ${moodClass('pro')}`, 'data-screen': 'settings' },
     pageHead('Settings', actions.onSearch),
     goalSection(props, actions, section),
+    actions.onTextSize
+      ? section(
+          'display',
+          'text',
+          'Display',
+          textSizePicker(props.textSize ?? 'standard', actions.onTextSize),
+        )
+      : null,
     section(
       'accent',
       'palette',

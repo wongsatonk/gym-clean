@@ -103,6 +103,30 @@
   color-scheme: dark;
 }
 
+/* M13d task 21 (SPEC M13d Goal 4): Settings → Display → Text size. html[data-text-size] (set by
+   applyTextSize, src/ui/textSizePicker.ts; index.html sets it before first paint) raises the four
+   word steps to core textScale() (src/core/textSize.ts; textSizePicker.test.ts checks they match).
+   Numbers (--fs-num*, --fs-rep, --fs-timer, --fs-stepper), headings and titles keep their size;
+   the tab bar keeps its 18px labels so five still fit at 360 wide. */
+html[data-text-size='large'] {
+  --fs-label: 20px;
+  --fs-body: 22px;
+  --fs-cue: 24px;
+  --fs-lead: 28px;
+}
+
+html[data-text-size='larger'] {
+  --fs-label: 22px;
+  --fs-body: 24px;
+  --fs-cue: 26px;
+  --fs-lead: 30px;
+}
+
+html[data-text-size='large'] .tabbar,
+html[data-text-size='larger'] .tabbar {
+  --fs-label: 18px;
+}
+
 /* Accent themes swap only the action colour. Orange is the default (same as :root). */
 [data-accent='orange'] {
   --cta: #ff7a1a;
@@ -3625,10 +3649,12 @@ textarea:focus-visible {
   color: var(--on-selected);
 }
 
-/* Accent picker (src/ui/accentPicker.ts). */
+/* Accent picker (src/ui/accentPicker.ts). The column floor follows the word size (104px at
+   Standard): with Text size Large / Larger the three drop to two per row instead of cutting
+   "Orange" and "Yellow" (M13d task 21). */
 .accent-picker {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(calc(var(--fs-body) * 5.2), 1fr));
   gap: 8px;
 }
 
@@ -3716,6 +3742,13 @@ textarea:focus-visible {
   min-width: 0;
   font-size: var(--fs-cue);
   white-space: nowrap;
+}
+
+/* M13d task 21: with Text size Large / Larger "Moving glow" + its check no longer fit half a row
+   (the check would be squeezed away), so the two options stack. Standard is unchanged. */
+html[data-text-size='large'] .bg-picker .segmented,
+html[data-text-size='larger'] .bg-picker .segmented {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* ---------- Overlays (M4e Pro): exercise list, notes and body sheets (app.ts) ----------
