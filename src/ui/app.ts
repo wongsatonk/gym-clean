@@ -335,7 +335,6 @@ import { exerciseHistory } from '../core/history';
 import { settingsScreen as renderSettings, settingsRowButton } from './screens/settings';
 import { summaryScreen as renderSummary } from './screens/summary';
 import { createTodayMotion, todayScreen as renderToday, type TodayLast } from './screens/today';
-import { icon } from './icons';
 import { TABS, tabBar, type TabId } from './tabBar';
 import { applyAccent } from './tokens';
 import {
@@ -403,7 +402,9 @@ import type {
 } from '../core/types';
 import { noteSignal } from '../data/todos/store';
 import { createTodoHost, nativeShell } from './todo/todoHost';
-import { setPressFeel } from './iconButton';
+import { iconButton, setPressFeel } from './iconButton';
+import { midPill } from './midsetButtons';
+import './chromeButtons.css';
 import { installEdgeBack } from './gestures/edgeBack';
 import { applyTextSize } from './textSizePicker';
 import type { WhatsNewTour } from './todo/whatsNewTour';
@@ -6139,16 +6140,37 @@ export function mountApp(root: HTMLElement): void {
     return v.el;
   }
 
+  /**
+   * M13d task 39: the workout sheets' quiet round Close / Cancel with its word beside (as
+   * sheetShell's Close, task 40a). These sheets open mid-workout, so they are marked
+   * `data-motion="off"`: the round look without press motion (task 40g rule).
+   */
+  function workoutSheetClose(label: 'Close' | 'Cancel'): HTMLButtonElement {
+    return iconButton({
+      icon: 'close',
+      label,
+      variant: 'quiet',
+      labelAt: 'beside',
+      class: 'chrome-close',
+      onClick: () => setSheet(null),
+    });
+  }
+
   function bodySheet(exerciseId: string): HTMLElement {
     const { primary, secondary } = musclesOf(exerciseId);
     return h(
       'div',
-      { class: 'overlay sheet body-sheet', role: 'dialog', 'aria-label': 'Target muscles' },
+      {
+        class: 'overlay sheet body-sheet',
+        role: 'dialog',
+        'aria-label': 'Target muscles',
+        'data-motion': 'off',
+      },
       h(
         'header',
         { class: 'top-bar' },
         h('p', { class: 'page-title small-title' }, exerciseName(exerciseId)),
-        h('button', { class: 'ghost-btn', onclick: () => setSheet(null) }, 'Close'),
+        workoutSheetClose('Close'),
       ),
       muscleSlot(exerciseId, 'full'),
       h(
@@ -6166,12 +6188,17 @@ export function mountApp(root: HTMLElement): void {
   function listSheet(s: SessionState): HTMLElement {
     return h(
       'div',
-      { class: 'overlay sheet', role: 'dialog', 'aria-label': 'Exercise list' },
+      {
+        class: 'overlay sheet',
+        role: 'dialog',
+        'aria-label': 'Exercise list',
+        'data-motion': 'off',
+      },
       h(
         'header',
         { class: 'top-bar' },
         h('p', { class: 'page-title' }, s.day.name),
-        h('button', { class: 'ghost-btn', onclick: () => setSheet(null) }, 'Close'),
+        workoutSheetClose('Close'),
       ),
       h(
         'ol',
@@ -6248,12 +6275,12 @@ export function mountApp(root: HTMLElement): void {
 
     return h(
       'div',
-      { class: 'overlay sheet', role: 'dialog', 'aria-label': 'Notes' },
+      { class: 'overlay sheet', role: 'dialog', 'aria-label': 'Notes', 'data-motion': 'off' },
       h(
         'header',
         { class: 'top-bar' },
         h('p', { class: 'page-title small-title' }, exerciseName(exerciseId)),
-        h('button', { class: 'ghost-btn', onclick: () => setSheet(null) }, 'Cancel'),
+        workoutSheetClose('Cancel'),
       ),
       h('label', { class: 'field-label', for: 'machine-input' }, 'Machine setting'),
       machine,
@@ -6261,7 +6288,7 @@ export function mountApp(root: HTMLElement): void {
       lasting,
       h('label', { class: 'field-label', for: 'today-input' }, 'Today’s note'),
       today,
-      h('button', { class: 'primary-btn cta-btn', onclick: save }, icon('check', 'lg'), 'Save'),
+      midPill({ icon: 'check', label: 'Save', variant: 'main', wide: true, onClick: save }),
     );
   }
 
