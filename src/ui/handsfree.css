@@ -260,8 +260,7 @@
 .camera-sheet.rest-mode .cam-hud,
 .camera-sheet.rest-mode .cam-gauge-slot,
 .camera-sheet.rest-mode .cam-setup,
-.camera-sheet.rest-mode .cam-stage-bottom,
-.camera-sheet.rest-mode .cam-bottom .primary-btn {
+.camera-sheet.rest-mode .cam-stage-bottom {
   display: none;
 }
 

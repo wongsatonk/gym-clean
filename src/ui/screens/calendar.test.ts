@@ -174,7 +174,7 @@ describe('calendarScreen', () => {
     expect(a.onNextMonth).toHaveBeenCalledOnce();
     expect(a.onShare).toHaveBeenCalledOnce();
     expect(root.find((e) => e.hasAttribute('data-cal-prev'))[0]?.getAttribute('aria-label')).toBe(
-      'Previous month, October 2026',
+      'Earlier: previous month, October 2026',
     );
   });
 
@@ -190,8 +190,8 @@ describe('calendarScreen', () => {
       'Later',
       'Share month',
     ]);
-    // The accessible name still says which month it goes to.
-    expect(next.getAttribute('aria-label')).toBe('Next month, December 2026');
+    // The accessible name starts with the visible word and still says which month it goes to.
+    expect(next.getAttribute('aria-label')).toBe('Later: next month, December 2026');
     expect(share.getAttribute('data-variant')).toBe('secondary');
   });
 

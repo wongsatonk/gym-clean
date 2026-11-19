@@ -413,11 +413,11 @@ export function calendarScreen(props: CalendarProps, actions: CalendarActions): 
     'div',
     { class: 'cal-nav' },
     // M13d task 40c: round buttons with a short word (Earlier / Later); the accessible name
-    // still names the month it goes to.
+    // starts with that word (label-in-name, WCAG 2.5.3) and still names the month it goes to.
     iconButton({
       icon: 'back',
       label: 'Earlier',
-      ariaLabel: `Previous month, ${monthTitle(shiftMonth(props.month, -1))}`,
+      ariaLabel: `Earlier: previous month, ${monthTitle(shiftMonth(props.month, -1))}`,
       class: 'cal-nav-act',
       hooks: { 'data-cal-prev': true },
       onClick: () => actions.onPrevMonth(),
@@ -431,7 +431,7 @@ export function calendarScreen(props: CalendarProps, actions: CalendarActions): 
     iconButton({
       icon: 'arrow-right',
       label: 'Later',
-      ariaLabel: `Next month, ${monthTitle(shiftMonth(props.month, 1))}`,
+      ariaLabel: `Later: next month, ${monthTitle(shiftMonth(props.month, 1))}`,
       class: 'cal-nav-act',
       hooks: { 'data-cal-next': true },
       onClick: () => actions.onNextMonth(),

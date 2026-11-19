@@ -1215,29 +1215,6 @@ h4 {
   gap: 8px;
 }
 
-.wtb-btn {
-  min-height: var(--tap-bar);
-  min-width: 88px;
-  padding: 0 8px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  background: var(--surface);
-  border: var(--line-w) solid var(--line);
-}
-
-.wtb-btn .ic {
-  color: var(--text);
-}
-
-.wtb-lbl {
-  font-size: var(--fs-label);
-  font-weight: 600;
-  color: var(--text-2);
-}
-
 .wtb-list {
   flex: 1;
   min-width: 0;
@@ -1554,10 +1531,6 @@ h4 {
 
 .rest.mood-track {
   gap: 12px;
-}
-
-.rest.mood-track .wtb-btn {
-  background: var(--bg);
 }
 
 /* Scoreboard: ruled lanes behind a dashed ring that drains in the action colour. */
@@ -3200,16 +3173,6 @@ textarea:focus-visible {
   flex-direction: column;
   gap: 6px;
   padding: 8px 12px max(8px, env(safe-area-inset-bottom));
-}
-
-.cam-bottom .primary-btn {
-  width: 100%;
-  margin-top: 0;
-}
-
-/* Set done keeps the mix CTA's 72px, a little taller here for the sweaty-thumb case. */
-.cam-bottom .cta-btn {
-  min-height: var(--tap-hero);
 }
 
 .cam-status,

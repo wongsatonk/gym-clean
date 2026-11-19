@@ -127,6 +127,10 @@ async function check(page: Page, screen: string, root: Locator, table: Table) {
     390,
   );
   const before = BASE?.[screen];
+  // The 1.16.2 table must load (a missing or broken file is a failure, not a silent pass), except
+  // while recording a new table with MIDSET_HITBOX_OUT.
+  if (process.env.MIDSET_HITBOX_OUT && !BASE) return;
+  expect(BASE, `the 1.16.2 baseline ${BASE_FILE} loads`).not.toBeNull();
   if (!BASE) return;
   const barShift =
     (now.find((n) => n.key === TOP_BAR)?.y ?? 0) - (before?.find((b) => b.key === TOP_BAR)?.y ?? 0);
