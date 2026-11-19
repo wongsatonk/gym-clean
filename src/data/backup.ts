@@ -32,6 +32,10 @@
  *
  * Permission catch-up (M13): the settings row 'permissionCatchUp' is phone-only (never backed up,
  * a restore keeps this phone's row); the 'onboarding' row rides along.
+ *
+ * Units and text size (M13d): the settings rows 'lengthUnit' and 'textSize' are plain rows (backed
+ * up and restored like 'unit'). A file from before 1.16.3 has neither: after its restore the
+ * length unit follows the restored weight unit and the text size is 'standard'.
  */
 import Dexie from 'dexie';
 import type { GymDb } from './db';

@@ -11,6 +11,7 @@ import type {
   FoodPhoto,
   Goal,
   HealthDay,
+  LengthUnit,
   Measurement,
   PlanChange,
   ProgressPhoto,
@@ -18,15 +19,18 @@ import type {
   RepEvent,
   Recipe,
   SetLog,
+  TextSize,
   TodoAnswer,
   TrainerState,
+  UnitPrefs,
   WeeklyCheck,
   WeighIn,
   WorkSide,
 } from '../core/types';
 import type { RuleStatus } from '../core/exercises/types';
 import type { Rudeness } from '../core/personas';
-import type { Unit } from '../core/units';
+import { isTextSize } from '../core/textSize';
+import { lengthUnitFor, type Unit } from '../core/units';
 import { workingSets } from '../core/warmup';
 
 export type SessionRow = {
@@ -316,6 +320,55 @@ export async function getUnit(db: GymDb): Promise<Unit> {
 
 export async function setUnit(db: GymDb, unit: Unit): Promise<void> {
   await db.settings.put({ key: 'unit', value: unit });
+}
+
+const isWeightUnit = (v: unknown): v is Unit => v === 'kg' || v === 'lb';
+const isLengthUnit = (v: unknown): v is LengthUnit => v === 'cm' || v === 'in';
+
+/**
+ * M13d: the height-and-body unit (height shown as ft + in, tape as in). No row (an install from
+ * before 1.16.3) or an unknown value → follows the weight unit (kg → cm, lb → in), the 1.16
+ * behaviour. Stored heights and tape stay cm; this only changes what is shown and typed.
+ */
+export async function getLengthUnit(db: GymDb): Promise<LengthUnit> {
+  const v = (await db.settings.get('lengthUnit'))?.value;
+  return isLengthUnit(v) ? v : lengthUnitFor(await getUnit(db));
+}
+
+export async function setLengthUnit(db: GymDb, unit: LengthUnit): Promise<void> {
+  if (!isLengthUnit(unit)) throw new RangeError(`Bad length unit ${String(unit)}`);
+  await db.settings.put({ key: 'lengthUnit', value: unit });
+}
+
+/** M13d: both unit rows ('unit' + 'lengthUnit'), as the Units page and every unit switch use them. */
+export async function getUnitPrefs(db: GymDb): Promise<UnitPrefs> {
+  return db.transaction('r', db.settings, async () => ({
+    weight: await getUnit(db),
+    length: await getLengthUnit(db),
+  }));
+}
+
+/** Writes both rows in one transaction (a bad value writes neither). Never converts stored values. */
+export async function setUnitPrefs(db: GymDb, prefs: UnitPrefs): Promise<void> {
+  if (!isWeightUnit(prefs.weight)) throw new RangeError(`Bad weight unit ${String(prefs.weight)}`);
+  if (!isLengthUnit(prefs.length)) throw new RangeError(`Bad length unit ${String(prefs.length)}`);
+  await db.transaction('rw', db.settings, async () => {
+    await db.settings.bulkPut([
+      { key: 'unit', value: prefs.weight },
+      { key: 'lengthUnit', value: prefs.length },
+    ]);
+  });
+}
+
+/** M13d Settings → Display → Text size. No row or an unknown value → 'standard'. */
+export async function getTextSize(db: GymDb): Promise<TextSize> {
+  const v = (await db.settings.get('textSize'))?.value;
+  return isTextSize(v) ? v : 'standard';
+}
+
+export async function setTextSize(db: GymDb, size: TextSize): Promise<void> {
+  if (!isTextSize(size)) throw new RangeError(`Bad text size ${String(size)}`);
+  await db.settings.put({ key: 'textSize', value: size });
 }
 
 /** M4: speak each counted rep ("One", "Two"…). Default on; only an explicit false turns it off. */

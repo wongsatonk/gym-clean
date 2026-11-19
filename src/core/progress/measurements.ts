@@ -1,7 +1,8 @@
 /**
  * M12 slice 1b (trainer kit item 4): tape measurements next to weigh-ins. Pure; `today` is
- * passed in. Values are stored in cm; the unit only changes what is shown and typed (cm with kg,
- * inches with lb). The sites come from settings 'trainerKit' (`measurementSites`, passed in), so
+ * passed in. Values are stored in cm; the unit only changes what is shown and typed. M13d: every
+ * formatter takes a `LengthUnit` (settings 'lengthUnit', read with `getLengthUnit`); only with no
+ * row does it follow the weight unit (`lengthUnitFor`: cm with kg, inches with lb). The sites come from settings 'trainerKit' (`measurementSites`, passed in), so
  * a changed setting changes the list; rows of other sites stay stored but are not shown.
  */
 import { addDate } from '../trainer/plan';

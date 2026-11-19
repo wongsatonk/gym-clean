@@ -10,6 +10,7 @@
 // e2e hooks: `main[data-screen="fuel-setup"]`, `[data-field=height|birth-year|weight|sex|
 // activity]`, `[data-choice=<value>]`, `.nf-value` inputs, buttons "Save targets" and "Back".
 import type { NutritionSettings } from '../../core/types';
+import { SETUP_RANGE, type SetupValues } from '../../core/nutrition/setupPrefill';
 import { fromUnit, toUnit, type Unit } from '../../core/units';
 import { h } from '../dom';
 import { icon } from '../icons';
@@ -20,15 +21,9 @@ import './fuelForms.css';
 export type Sex = NutritionSettings['sex'];
 export type Activity = NutritionSettings['activity'];
 
-/** What Setup collects. The app merges it into NutritionSettings and saves the weigh-in. */
-export type SetupValues = {
-  heightCm: number;
-  birthYear: number;
-  sex: Sex;
-  activity: Activity;
-  /** Today's weight, always kg (converted from the display unit). */
-  weightKg: number;
-};
+/** What Setup collects (core's one copy; weight always kg, height always cm). The app merges
+ *  it into NutritionSettings and saves the weigh-in. */
+export type { SetupValues };
 
 export type SetupProps = {
   /** Current year, for the birth-year range (the app passes `new Date().getFullYear()`). */
@@ -56,12 +51,8 @@ export const ACTIVITY_CHOICES: readonly Choice<Activity>[] = [
   { value: 'very', label: 'Very active', note: 'Train 6–7 days or a physical job' },
 ];
 
-/** Field ranges. Made-up starting values only (the repo is public). */
-export const SETUP_RANGE = {
-  heightCm: { min: 120, max: 230, step: 1, start: 170 },
-  age: { min: 14, max: 90, start: 30 },
-  weightKg: { min: 30, max: 250, start: 70 },
-} as const;
+/** Field ranges: core's one copy (made-up starting values only; the repo is public). */
+export { SETUP_RANGE };
 
 /** The weight field's step in the display unit. */
 export function weightStep(unit: Unit): number {

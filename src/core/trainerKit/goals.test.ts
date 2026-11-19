@@ -142,6 +142,16 @@ describe('suggestGoals', () => {
     expect(arm?.text).toBe(`Left arm +0.4 in by ${DUE}`);
   });
 
+  it("M13d: the measurement text follows the length unit when given, not the weight unit", () => {
+    const lbCm = suggestGoals(intake('muscle'), { ...history, unit: 'lb', lengthUnit: 'cm' }).goals;
+    expect(lbCm[0]?.text).toBe(`Bench Press 140 lb × 8 by ${DUE}`);
+    expect(lbCm[1]?.text).toBe(`Left arm +1 cm by ${DUE}`);
+    const kgIn = suggestGoals(intake('muscle'), { ...history, unit: 'kg', lengthUnit: 'in' }).goals[1];
+    expect(kgIn?.text).toBe(`Left arm +0.4 in by ${DUE}`);
+    // The stored target stays cm either way.
+    expect(kgIn?.target).toEqual(suggestGoals(intake('muscle'), history).goals[1]?.target);
+  });
+
   it('without preferred lifts, the lift done in the most sessions is used', () => {
     const { goals } = suggestGoals(intake('general'), { ...history, preferLifts: [] });
     expect(goals[0]?.target.ref).toBe('bench');
