@@ -8,13 +8,23 @@
 //   Capacitor plugin code.
 // - Read-only: there are no write methods. Nothing here stores anything; the caller turns the
 //   result into per-day summaries (src/core/health/days.ts) and drops the samples.
-import { HEALTH_TYPES, type HealthType, type HealthWorkout } from '../core/types';
+// - M13d task 6/7: `readProfile()` reads height, birth year and sex once to pre-fill Set up Fuel
+//   (iPhone app only). The Swift side already cut the date of birth to the year; this keeps only
+//   the three fields, in range, and returns null when Health has none of them. Nothing is stored.
+import {
+  HEALTH_TYPES,
+  type HealthProfile,
+  type HealthType,
+  type HealthWorkout,
+} from '../core/types';
 
 /** Raw shape of the Swift plugin, as registered with `registerPlugin('GymHealth')`. */
 export interface HealthBridge {
   isAvailable(): Promise<{ available: boolean }>;
-  requestRead(options: { types: HealthType[] }): Promise<{ requested: boolean }>;
+  requestRead(options: { types: HealthType[]; profile?: true }): Promise<{ requested: boolean }>;
   read(options: { types: HealthType[]; since: number; until?: number }): Promise<unknown>;
+  /** M13d. Missing on an app built before 1.16.3 (then there is no profile). */
+  readProfile?(): Promise<unknown>;
 }
 
 /** One body-mass sample in kg. Times are epoch ms. */
@@ -67,11 +77,22 @@ export type HealthReadOptions = {
   until?: number;
 };
 
+export type HealthRequestOptions = {
+  /** M13d: also ask for height, date of birth and sex (read only to pre-fill Set up Fuel). */
+  profile?: boolean;
+};
+
 export interface Health {
   isAvailable(): Promise<boolean>;
   /** Shows the iOS Health sheet for types not asked about yet. True if the request ran. */
-  requestRead(types: readonly HealthType[]): Promise<boolean>;
+  requestRead(types: readonly HealthType[], options?: HealthRequestOptions): Promise<boolean>;
   read(options: HealthReadOptions): Promise<HealthReadResult>;
+  /**
+   * M13d: height (cm), birth year and sex from Health, each only when Health has it and it is in
+   * range. Null on the web, when Health is unavailable, nothing is there or allowed, the phone is
+   * locked, or the call fails. Never throws. Read on demand; the caller must not store it as is.
+   */
+  readProfile(): Promise<HealthProfile | null>;
 }
 
 export const GYM_HEALTH_PLUGIN = 'GymHealth';
@@ -87,6 +108,9 @@ const RANGE = {
   kcalDay: [0, 20_000],
   workoutMin: [0, 24 * 60],
   sleepMin: [0, 24 * 60],
+  heightCm: [50, 272],
+  /** Birth year: up to this many years before the current year. */
+  maxAgeYears: 120,
 } as const;
 
 export function emptyHealthResult(status: HealthReadStatus): HealthReadResult {
@@ -216,6 +240,31 @@ export function mapHealthReply(reply: unknown, types: readonly HealthType[]): He
   return r;
 }
 
+/**
+ * Pure mapping of the plugin's `readProfile` reply. Keeps only `heightCm` (rounded to 0.1),
+ * a whole `birthYear` within the last 120 years and `sex` 'female' | 'male'. Null when none is left.
+ */
+export function mapHealthProfile(
+  reply: unknown,
+  currentYear: number = new Date().getFullYear(),
+): HealthProfile | null {
+  if (!isObj(reply)) return null;
+  const out: HealthProfile = {};
+  const height = num(reply.heightCm);
+  if (inRange(height, RANGE.heightCm)) out.heightCm = Math.round((height as number) * 10) / 10;
+  const year = num(reply.birthYear);
+  if (
+    year !== undefined &&
+    Number.isInteger(year) &&
+    year <= currentYear &&
+    year >= currentYear - RANGE.maxAgeYears
+  ) {
+    out.birthYear = year;
+  }
+  if (reply.sex === 'female' || reply.sex === 'male') out.sex = reply.sex;
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function errorCode(e: unknown): string | undefined {
   return isObj(e) || e instanceof Error ? str((e as Obj).code) : undefined;
 }
@@ -235,11 +284,14 @@ export function createHealth(bridge: HealthBridge | null): Health {
   return {
     isAvailable,
 
-    async requestRead(types) {
+    async requestRead(types, options = {}) {
       const list = knownTypes(types);
-      if (!bridge || list.length === 0 || !(await isAvailable())) return false;
+      const profile = options.profile === true;
+      if (!bridge || (list.length === 0 && !profile) || !(await isAvailable())) return false;
       try {
-        const res: unknown = await bridge.requestRead({ types: list });
+        const res: unknown = await bridge.requestRead(
+          profile ? { types: list, profile: true } : { types: list },
+        );
         return isObj(res) && res.requested === true;
       } catch {
         return false;
@@ -263,6 +315,16 @@ export function createHealth(bridge: HealthBridge | null): Health {
         return mapHealthReply(reply, list);
       } catch (e) {
         return emptyHealthResult(errorCode(e) === 'LOCKED' ? 'locked' : 'failed');
+      }
+    },
+
+    async readProfile() {
+      if (!bridge || typeof bridge.readProfile !== 'function' || !(await isAvailable()))
+        return null;
+      try {
+        return mapHealthProfile(await bridge.readProfile());
+      } catch {
+        return null;
       }
     },
   };
@@ -355,6 +417,7 @@ export async function loadHealth(env: LoadHealthEnv = {}): Promise<Health> {
       requestRead: (o) =>
         call.call(cap, GYM_HEALTH_PLUGIN, 'requestRead', o) as Promise<{ requested: boolean }>,
       read: (o) => call.call(cap, GYM_HEALTH_PLUGIN, 'read', o),
+      readProfile: () => call.call(cap, GYM_HEALTH_PLUGIN, 'readProfile', {}),
     };
     return createHealth(direct);
   }

@@ -9,6 +9,10 @@ import HealthKit
 ///   and (M12 slice 1b) body fat percentage and lean body mass. The last two are off by default
 ///   and reach `requestRead` only when their own switch is turned on, so the Health sheet lists
 ///   them only then. No write methods, no share types, no background delivery, no observer queries.
+/// - (M13d task 6) `requestRead({ profile: true })` also asks for height, date of birth and
+///   biological sex, and `readProfile` reads them once to pre-fill Set up Fuel: the latest height in
+///   cm, the birth **year** only (month and day never leave Swift) and female / male (other and
+///   not set are left out). Nothing is stored.
 /// - Swift stays thin: it queries HealthKit, converts to app units (GymHealthCore) and hands the
 ///   values to the web view. It stores nothing and makes no network request. Per-day summaries,
 ///   baselines and coaching live in TypeScript (src/core/health/**).
@@ -23,6 +27,7 @@ public class GymHealthPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "isAvailable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestRead", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "read", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "readProfile", returnType: CAPPluginReturnPromise),
     ]
 
     private let store = HKHealthStore()
@@ -39,7 +44,8 @@ public class GymHealthPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func requestRead(_ call: CAPPluginCall) {
         let kinds = GymHealthKind.parse(call.getArray("types", String.self) ?? [])
-        let types = Set(kinds.flatMap(Self.readTypes(for:)))
+        var types = Set(kinds.flatMap(Self.readTypes(for:)))
+        if call.getBool("profile") == true { types.formUnion(GymHealthMapping.profileReadTypes) }
         guard HKHealthStore.isHealthDataAvailable(), !types.isEmpty else {
             call.resolve(["requested": false])
             return
@@ -93,6 +99,35 @@ public class GymHealthPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// M13d task 6: `{ heightCm?, birthYear?, sex? }`, each left out when Health has nothing (or
+    /// the type isn't allowed: HealthKit hides that, so it looks the same). A locked phone rejects
+    /// with "LOCKED"; the TS side turns every rejection into "no profile".
+    @objc func readProfile(_ call: CAPPluginCall) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            call.reject("Health data is not available on this device", "UNAVAILABLE")
+            return
+        }
+        Task {
+            var profile = GymHealthProfile()
+            do {
+                profile.heightCm = try await self.latestHeightCm()
+            } catch let error as HKError where error.code == .errorDatabaseInaccessible {
+                call.reject("Health data is locked until the phone is unlocked", "LOCKED")
+                return
+            } catch {
+                // Not determined / other errors: no height.
+            }
+            // Characteristics throw when not allowed or not determined: left out.
+            if let dob = try? self.store.dateOfBirthComponents() {
+                profile.birthYear = GymHealthMapping.birthYear(dob)
+            }
+            if let sex = try? self.store.biologicalSex() {
+                profile.sex = GymHealthMapping.sexName(sex.biologicalSex)
+            }
+            call.resolve(profile.bridgeDictionary)
+        }
+    }
+
     // MARK: Types
 
     static func readTypes(for kind: GymHealthKind) -> [HKObjectType] {
@@ -130,6 +165,16 @@ public class GymHealthPlugin: CAPPlugin, CAPBridgedPlugin {
         case .workouts:
             return try await workouts(since: since, until: until, appBundleId: appBundleId)
         }
+    }
+
+    /// The newest few height samples (newest first); the first one that converts wins.
+    private func latestHeightCm() async throws -> Double? {
+        let descriptor = HKSampleQueryDescriptor(
+            predicates: [.quantitySample(type: HKQuantityType(.height))],
+            sortDescriptors: [SortDescriptor(\.startDate, order: .reverse)],
+            limit: 5)
+        let samples = try await descriptor.result(for: store)
+        return GymHealthMapping.latestHeightCm(samples.map { (start: $0.startDate, quantity: $0.quantity) })
     }
 
     private func range(_ since: Date, _ until: Date) -> NSPredicate {

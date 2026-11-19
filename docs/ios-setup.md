@@ -136,10 +136,13 @@ Health → Gym Clean), so the WHOOP app must already be sharing into Health.
 1. In the **WHOOP** app: Settings → Integrations → Apple Health → connected, with sleep, heart rate,
    HRV and workouts turned on for writing to Health.
 2. In Gym Clean: Settings → Health → **Connect**. iOS shows its Health sheet with the sentence "Reads
-   sleep, heart rate, workouts and weight so the coach can suggest a lighter day. Stays on this phone."
-3. The sheet should list **only** these six under "Allow Gym Clean to read": Active Energy, Heart Rate
-   Variability, Resting Heart Rate, Sleep, Weight, Workouts. There is **no** "Allow Gym Clean to write"
-   list. Turn on the ones you want (Turn On All is fine) and tap **Allow**.
+   sleep, heart rate, workouts and weight so the coach can suggest a lighter day, and your height,
+   birthday and sex to fill in your Fuel setup. Stays on this phone." (1.16.3; before that the sentence
+   ended at "lighter day.")
+3. The sheet should list **only** these under "Allow Gym Clean to read": Active Energy, Heart Rate
+   Variability, Resting Heart Rate, Sleep, Weight, Workouts, and (1.16.3, M13d) Height, Date of Birth
+   and Biological Sex. There is **no** "Allow Gym Clean to write" list. Turn on the ones you want (Turn
+   On All is fine) and tap **Allow**.
 4. Change it later in the Health app → your picture → Apps → Gym Clean (or iPhone Settings → Health →
    Data Access & Devices → Gym Clean). Turning a type off there just makes it look empty to the app:
    iOS never tells an app that you said no.
@@ -231,6 +234,19 @@ Report each line as pass / fail plus anything odd (types and yes/no only, never 
    error.
 7. Safari → Develop → your iPhone → Gym Clean → Network: no request goes out during Connect or Read
    now.
+
+## On-device checklist: Health pre-fill and taps (M13d tasks 6 and 37, 1.16.3)
+
+Report each line as pass / fail plus anything odd (yes/no only, never your height, birthday or sex):
+
+1. Settings → Health → Connect (or the first-run Apple Health page) shows the new sentence from step 7
+   and lists Height, Date of Birth and Biological Sex under "read", nothing under "write".
+2. With those allowed and set in the Health app (your picture → Health Details), Set up Fuel opens
+   with height, birth year and sex filled in, each marked "From Apple Health".
+3. Turn Height off in the Health app (Apps → Gym Clean), open Set up Fuel again: height is at its usual
+   starting value, no error. Same with Biological Sex set to "Not Set" or "Other": sex stays unchosen.
+4. A main action (Set done, Apply, Save) gives one light tap. Nothing taps in the web app in Safari.
+5. Safari → Develop → your iPhone → Gym Clean → Network: no request goes out while Set up Fuel opens.
 
 ## On-device checklist: coach microphone (M12 slice 2 task 10)
 
@@ -390,6 +406,17 @@ Notes:
   `GymBrainCore` (which also holds the generated `TrainerTools.generated.swift`).
 - GymHealth also reads body fat percentage and lean body mass (M12 slice 1b), each only after its
   own switch is turned on; the Health sheet lists them only then.
+- (M13d task 6) `requestRead({ types, profile: true })` adds height, date of birth and biological sex
+  to the same Health sheet, and `readProfile()` returns `{ heightCm?, birthYear?, sex? }` to pre-fill
+  Set up Fuel: the newest height sample in cm (0.1), the birth **year** only (month and day are dropped
+  in Swift, `GymHealthMapping.birthYear`), `female` / `male` only (other and not set are left out).
+  Each field is missing when Health has nothing or the type isn't allowed (HealthKit hides which). A
+  locked phone rejects with `LOCKED`; `src/native/health.ts` turns every failure into `null`. Mapping
+  and tests: `GymHealthCore/Sources/GymHealthCore/GymHealthProfile.swift`,
+  `Tests/GymHealthCoreTests/GymHealthProfileTests.swift`. E2E fake: `src/native/fakeHealthProfile.ts`.
+- (M13d task 37) Haptics use the npm plugin `@capacitor/haptics` (no local Swift code, no permission):
+  `src/native/haptics.ts` `tapLight()` / `tapMedium()` import it lazily on the first tap in the iPhone
+  app and do nothing on the web.
 - Deployment target is **iOS 26.0** (M9-q3), iPhone only, portrait only.
 - Swift Package Manager (Capacitor 8 default), no CocoaPods. `cap sync` rewrites
   `ios/App/CapApp-SPM/Package.swift`; `capacitor.config.ts` sets its tools version to 6.2 because
