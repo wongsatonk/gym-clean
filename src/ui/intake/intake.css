@@ -57,10 +57,10 @@
 
 .intake-q {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -250,7 +250,7 @@
   margin: 0;
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -346,10 +346,10 @@
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
 }
 
 .goal-card-title .ic {

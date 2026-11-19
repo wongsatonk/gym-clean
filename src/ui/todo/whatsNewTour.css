@@ -1,6 +1,6 @@
 /* M12 slice 1c task 8: the What's New tour (src/ui/todo/whatsNewTour.ts). Full screen over the
-   app, dark, tokens only. Text ≥ 20px (the "What's new" label uses --fs-label next to the
-   counter), every button ≥ 56px. The page change is motion.ts enterScreen (JS); the only CSS
+   app, dark, tokens only. Text ≥ 20px (M13d task 17: the "What's new" label too, sentence
+   case), every button ≥ 56px. The page change is motion.ts enterScreen (JS); the only CSS
    motion is the shared press feedback, and the one global reduced-motion rule in styles.css
    covers both. Page dots differ by size and shape, and the "2 of 6" text says it in words. */
 
@@ -29,10 +29,8 @@
 .wn-label {
   margin: 0;
   color: var(--text-2);
-  font-size: var(--fs-label);
+  font-size: var(--fs-body);
   font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .wn-count {
@@ -82,10 +80,10 @@
 
 .wn-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-display);
   font-weight: 700;
-  line-height: 1.05;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -99,14 +97,14 @@
 .wn-what {
   margin: 0;
   font-size: var(--fs-cue);
-  line-height: 1.4;
+  line-height: var(--lh-text);
 }
 
 .wn-why {
   margin: 0;
   color: var(--text-2);
   font-size: var(--fs-body);
-  line-height: 1.4;
+  line-height: var(--lh-text);
 }
 
 .wn-try,

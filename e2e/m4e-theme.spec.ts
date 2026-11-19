@@ -287,9 +287,13 @@ test('fonts are self-hosted: every .woff2 comes from the app origin', async ({ p
   const origin = new URL(baseURL ?? 'https://localhost').origin;
   const fonts = requests.filter((u) => /\.woff2(\?|$)/.test(u));
   for (const u of fonts) expect(new URL(u).origin, u).toBe(origin);
-  // Both families are in use on Today.
+  // Barlow Condensed (numbers, Start, tabs) is in use on Today. M13d tasks 16–17: words use the
+  // phone's own font, so the Barlow body family is never fetched.
   expect(fonts.some((u) => u.includes('barlow-condensed'))).toBe(true);
-  expect(fonts.some((u) => /\/barlow\//.test(u) || u.includes('barlow-latin'))).toBe(true);
+  expect(fonts.some((u) => /\/barlow\//.test(u) || u.includes('barlow-latin'))).toBe(false);
+  expect(
+    await page.evaluate(() => getComputedStyle(document.body).fontFamily.split(',')[0]?.trim()),
+  ).toBe('-apple-system');
   expect(thirdParty(requests, baseURL)).toEqual([]);
   expect(errors).toEqual([]);
 });

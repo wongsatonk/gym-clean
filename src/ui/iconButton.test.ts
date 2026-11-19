@@ -302,12 +302,15 @@ describe('iconButton.css', () => {
   });
 
   it('reduced motion: no scale and no glow, a colour change only', () => {
-    const rm = reducedBlock(css);
+    // M13d follow-up (d): the rules live in the ONE reduced-motion block in styles.css, lifted by
+    // :root over iconButton.css (which loads after styles.css); iconButton.css has none of its own.
+    expect(reducedBlock(css)).toBe('');
+    const rm = reducedBlock(stylesCss);
     expect(rm).not.toBe('');
     expect(rm).toMatch(
-      /\.icon-btn:active:not\(:disabled\) \.icon-btn-circle\s*\{[^}]*transform:\s*none/,
+      /:root \.icon-btn:active:not\(:disabled\) \.icon-btn-circle\s*\{[^}]*transform:\s*none/,
     );
-    expect(rm).toMatch(/\.icon-btn-circle::after\s*\{[^}]*display:\s*none/);
+    expect(rm).toMatch(/:root \.icon-btn-circle::after\s*\{[^}]*display:\s*none/);
     // The colour change that stays: the pressed circle brightens (no motion involved).
     expect(block(css, '.icon-btn:active:not(:disabled) .icon-btn-circle')).toMatch(
       /filter:\s*brightness/,

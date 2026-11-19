@@ -52,7 +52,7 @@
 .audio-test-hint,
 .audio-test-privacy {
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 

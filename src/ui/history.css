@@ -113,10 +113,10 @@
 
 .hist-day-name,
 .hist-session-date {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -312,7 +312,7 @@
 }
 
 .hist-empty-title {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
 }

@@ -180,7 +180,7 @@
   margin: 0;
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -440,7 +440,7 @@
   padding: 14px;
   font-family: var(--font-body);
   font-size: var(--fs-body);
-  line-height: 1.4;
+  line-height: var(--lh-text);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   border-radius: var(--r-card);

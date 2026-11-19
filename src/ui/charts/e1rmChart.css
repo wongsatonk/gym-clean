@@ -37,7 +37,7 @@
 .e1-latest,
 .e1-empty {
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .e1-latest {
@@ -137,6 +137,6 @@
 
 .e1-note {
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
   color: var(--text-2);
 }

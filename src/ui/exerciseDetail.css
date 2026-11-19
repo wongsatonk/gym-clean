@@ -18,6 +18,10 @@
   overflow-wrap: anywhere;
 }
 
+.exercise-detail .cue-text {
+  line-height: var(--lh-text);
+}
+
 .detail-card {
   display: flex;
   flex-direction: column;
@@ -33,7 +37,7 @@
   margin: 0;
   font-size: var(--fs-lead);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-head);
 }
 
 /* ---------- muscles ---------- */

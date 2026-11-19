@@ -178,7 +178,7 @@
   color: var(--text-2);
   font-size: var(--fs-label);
   font-weight: 700;
-  line-height: 1.4;
+  line-height: var(--lh-head);
   white-space: nowrap;
 }
 
@@ -193,10 +193,10 @@
 
 .fuel-setup-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
 }
 
 .primary-btn.fuel-log-btn {
@@ -364,7 +364,7 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
   flex: 1;
   min-width: 0;
   font-size: var(--fs-title);
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -422,10 +422,10 @@ body:has(> .undo-toast) .fuel-sheet .cta-btn {
 
 .log-detail-name {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 

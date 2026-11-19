@@ -177,10 +177,10 @@
 
 .howto-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -236,9 +236,14 @@
   font-family: var(--font-display);
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
-  min-height: 1.1em;
+  line-height: var(--lh-text);
+  min-height: 1.5em;
   color: var(--text); /* shown, not spoken */
+}
+
+/* The cue panel's line is running text off the workout screens (here and the exercise detail). */
+.howto-sheet .cue-text {
+  line-height: var(--lh-text);
 }
 
 .howto-phase[hidden],
@@ -261,7 +266,7 @@
   display: grid;
   gap: 6px;
   font-size: var(--fs-cue);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 /* Plain text; the cyan dot beside it is the muscle colour (cyan is for muscles only). */

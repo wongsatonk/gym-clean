@@ -13,7 +13,7 @@
   margin: 0;
   font-size: var(--fs-head);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: var(--lh-text);
   color: var(--text);
 }
 
@@ -96,7 +96,7 @@
 .selfcheck-fix {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 

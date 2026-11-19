@@ -37,16 +37,16 @@
 
 .wi-card-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
 }
 
 .wi-card-body,
 .wi-card-change {
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .wi-card-change {
@@ -103,7 +103,7 @@
   margin: 0;
   font-size: var(--fs-body);
   font-weight: 600;
-  line-height: 1.35;
+  line-height: var(--lh-text);
 }
 
 .wi-activity-btn {

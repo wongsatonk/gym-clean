@@ -55,10 +55,10 @@
 
 .learn-title {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-title);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
   overflow-wrap: anywhere;
 }
 
@@ -72,7 +72,7 @@
 .learn-whyblock p {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.45;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 

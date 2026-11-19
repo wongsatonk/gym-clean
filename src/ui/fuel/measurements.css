@@ -67,16 +67,16 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
-  line-height: 1.1;
+  line-height: var(--lh-head);
 }
 
 .ms-status-body {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.35;
+  line-height: var(--lh-text);
   color: var(--text-2);
 }
 

@@ -191,14 +191,5 @@
   outline-offset: 3px;
 }
 
-/* Reduce Motion: the global rule in styles.css already zeroes transitions; this drops the scale
-   and the glow so only the colour change (brightness / quiet fill) shows the press. */
-@media (prefers-reduced-motion: reduce) {
-  .icon-btn:active:not(:disabled) .icon-btn-circle {
-    transform: none;
-  }
-
-  .icon-btn-circle::after {
-    display: none;
-  }
-}
+/* Reduce Motion: in the one reduced-motion block in styles.css (it zeroes the transitions and
+   drops this scale and glow ring, leaving the colour change). */

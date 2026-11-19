@@ -26,7 +26,7 @@
 
 .cal-month {
   margin: 0;
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-size: var(--fs-head);
   font-weight: 700;
   text-align: center;
@@ -234,7 +234,7 @@
 .cal-score-sub {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: 1.3;
+  line-height: var(--lh-text);
   overflow-wrap: anywhere;
 }
 
