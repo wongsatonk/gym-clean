@@ -5,6 +5,7 @@ import { APP_NAME, APP_TAGLINE } from '../../core/brand';
 import { onboardingSteps, type OnboardingPermission } from '../../core/onboarding';
 import type { OnboardingStep } from '../../core/types';
 import { ONBOARDING_BUTTONS, WELCOME_PAGES } from '../../data/onboarding';
+import { fakeSwipe } from '../gestures/testTouch';
 import { asFake, FakeEl, useFakeDom } from '../screens/testDom';
 import { onboardingScreen, stepCount, type OnboardingProps } from './welcome';
 
@@ -253,5 +254,83 @@ describe('onboardingScreen: motion', () => {
     setReduced(true);
     render({ index: 1, dir: 'next' });
     expect(animate).not.toHaveBeenCalled();
+  });
+});
+
+describe('onboardingScreen: M13d task 25 page swipes', () => {
+  const at = (p: OnboardingPermission) =>
+    NATIVE.findIndex((s) => s.kind === 'permission' && s.permission === p);
+  const swipe = (el: FakeEl, dx: number, dy = 0) =>
+    fakeSwipe(el.oneByClass('ob-body'), {
+      from: { x: 200, y: 400 },
+      to: { x: 200 + dx, y: 400 + dy },
+    });
+
+  it('left = Next, right = Back, once each (the buttons stay)', () => {
+    const { el, calls } = render({ index: 1 });
+    expect(el.oneByClass('ob-body').hasAttribute('data-page-swipe')).toBe(true);
+    swipe(el, -150);
+    expect(calls.next).toBe(1);
+    swipe(el, 150);
+    expect(calls.back).toBe(1);
+    expect(one(el, 'primary')).toBeTruthy();
+    expect(one(el, 'back')).toBeTruthy();
+  });
+
+  it('page 1: no Back by swipe; short, slow or vertical moves do nothing', () => {
+    const { el, calls } = render({ index: 0 });
+    swipe(el, 150);
+    swipe(el, -40);
+    swipe(el, -60, 240);
+    expect(calls).toMatchObject({ next: 0, back: 0, done: 0, skip: 0 });
+  });
+
+  it('an ask page or the last page: a swipe left neither asks nor finishes', () => {
+    const ask = render({ index: at('camera') });
+    swipe(ask.el, -150);
+    expect(ask.calls.allow).toEqual([]);
+    expect(ask.calls.notNow).toEqual([]);
+    expect(ask.calls.next).toBe(0);
+    swipe(ask.el, 150);
+    expect(ask.calls.back).toBe(1);
+
+    const steps = NATIVE.slice(0, 2);
+    const last = render({ steps, index: 1 });
+    swipe(last.el, -150);
+    expect(last.calls.done + last.calls.next).toBe(0);
+  });
+
+  it('the page follows the finger; Reduce Motion keeps the swipe without the follow', () => {
+    const { el, calls } = render({ index: 1 });
+    const page = one(el, 'page');
+    const s = fakeSwipe(el.oneByClass('ob-body'), {
+      from: { x: 300, y: 400 },
+      to: { x: 220, y: 400 },
+      release: false,
+    });
+    expect(page.style.transform).toBe('translate3d(-80px, 0, 0)');
+    s.lift();
+    expect(page.style.transform).toBe('');
+
+    setReduced(true);
+    const r = render({ index: 1 });
+    const rPage = one(r.el, 'page');
+    const s2 = fakeSwipe(r.el.oneByClass('ob-body'), {
+      from: { x: 300, y: 400 },
+      to: { x: 100, y: 400 },
+      release: false,
+    });
+    expect(rPage.style.transform ?? '').toBe('');
+    s2.lift();
+    expect(r.calls.next).toBe(1);
+    expect(calls.next).toBe(0);
+  });
+
+  it('dispose removes the swipe', () => {
+    const { el, screen, calls } = render({ index: 1 });
+    screen.dispose();
+    expect(el.oneByClass('ob-body').hasAttribute('data-page-swipe')).toBe(false);
+    swipe(el, -150);
+    expect(calls.next).toBe(0);
   });
 });

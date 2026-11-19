@@ -10,12 +10,14 @@
 // topics this release added, with Open to-dos. A release with no new topics ends on its last
 // feature page (Done there).
 //
-// Input: buttons (≥ 56px) are the way through; swipe left/right is a shortcut only. Keyboard:
+// Input: buttons (≥ 56px) are the way through; swipe left/right is a shortcut only (M13d:
+// gestures/pageSwipe.ts, the core `pageSwipe` classifier, the page follows the finger). Keyboard:
 // ArrowRight / ArrowLeft = Next / Back, Escape = Skip, Tab is trapped in the dialog.
 // Motion: a page change is motion.ts enterScreen (fade + 8px slide in the direction of travel),
 // a no-op under prefers-reduced-motion. No other animation here.
 import type { AppRoute, WhatsNewPage } from '../../core/types';
 import { h } from '../dom';
+import { installPageSwipe } from '../gestures/pageSwipe';
 import { icon, ICON_NAMES, type IconName } from '../icons';
 import { enterScreen, type Stop } from '../motion';
 import './whatsNewTour.css';
@@ -60,9 +62,6 @@ export type WhatsNewTour = {
   /** Stops a running page animation. */
   dispose: () => void;
 };
-
-/** A horizontal move longer than this (and mostly sideways) is a swipe. */
-export const SWIPE_MIN_PX = 50;
 
 const TITLE_ID = 'wn-title';
 
@@ -257,37 +256,16 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
     }
   }
 
-  // Swipe: a shortcut on the page area only, never the only way through.
-  let startX: number | null = null;
-  let startY = 0;
-  const onDown = (ev: PointerEvent) => {
-    startX = ev.clientX;
-    startY = ev.clientY;
-  };
-  const onUp = (ev: PointerEvent) => {
-    if (startX === null) return;
-    const dx = ev.clientX - startX;
-    const dy = ev.clientY - startY;
-    startX = null;
-    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return;
-    if (dx < 0) next();
-    else back();
-  };
-  const onCancel = () => {
-    startX = null;
-  };
-
-  const body = h(
-    'div',
-    {
-      class: 'wn-body',
-      'data-wn': 'body',
-      onpointerdown: onDown as (ev: Event) => void,
-      onpointerup: onUp as (ev: Event) => void,
-      onpointercancel: onCancel,
-    },
-    page,
-  );
+  // Swipe (M13d task 25): left = Next, right = Back on the page area; a shortcut only, never the
+  // only way through (Done stays a tap). The page follows the finger.
+  const body = h('div', { class: 'wn-body', 'data-wn': 'body' }, page);
+  const unswipe = installPageSwipe(body, {
+    mover: page,
+    onNext: () => next(),
+    onBack: () => back(),
+    canNext: () => !isLast(),
+    canBack: () => index > 0,
+  });
 
   const el = h(
     'div',
@@ -322,6 +300,7 @@ export function whatsNewTour(props: WhatsNewTourProps, actions: WhatsNewTourActi
     dispose: () => {
       stopAnim();
       stopAnim = () => {};
+      unswipe();
     },
   };
 }

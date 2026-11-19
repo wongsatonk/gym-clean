@@ -2,6 +2,7 @@
 // stepper, the sheet shell with its focus trap). Pure render helpers: no DB, no speech.
 import type { FoodAmount, MacroSet, MealSlot, NutritionMode } from '../../core/types';
 import { h } from '../dom';
+import { installSheetSwipe } from '../gestures/sheetSwipe';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import './fuel.css';
@@ -205,7 +206,8 @@ export type SheetShell = {
 /**
  * A full-screen sheet (Pro mood): a title row with a neutral Close/Back button, a scrolling body.
  * Escape calls `onEscape`; Tab / Shift+Tab stay inside the sheet (focus trap, as in the Pause
- * sheet). The app makes the page behind inert.
+ * sheet). The app makes the page behind inert. Swipe down (at the top) = the Close button (M13d),
+ * until the sheet has unsaved changes (any input / change event inside it).
  */
 export function sheetShell(o: {
   title: string;
@@ -235,6 +237,17 @@ export function sheetShell(o: {
     h('div', { class: 'fuel-sheet-top' }, title, close),
     body,
   );
+  // M13d task 25: swipe down = this Close / Cancel (the whole sheet follows; scrolled: scrolls).
+  // Once anything is typed or changed in the sheet it is "dirty" and the swipe is removed for
+  // good (like iOS isModalInPresentation): a stray swipe never drops an edit. Close still works.
+  const unswipe = installSheetSwipe(el, { close: () => close.click() });
+  const dirty = () => {
+    unswipe();
+    el.removeEventListener('input', dirty);
+    el.removeEventListener('change', dirty);
+  };
+  el.addEventListener('input', dirty);
+  el.addEventListener('change', dirty);
   el.addEventListener('keydown', (ev) => {
     const e = ev as KeyboardEvent;
     if (e.key === 'Escape') {

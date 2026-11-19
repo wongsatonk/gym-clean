@@ -16,6 +16,7 @@
 import type { BodyArea, FoodSuggestion, Proposal } from '../../core/types';
 import { h } from '../dom';
 import { icon, type IconName } from '../icons';
+import { installSheetSwipe } from '../gestures/sheetSwipe';
 import { moodClass } from '../tokens';
 import { buildFoodCard } from './foodCard';
 import { buildProposalCard, buildRedFlagCard } from './proposalCard';
@@ -258,6 +259,32 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
     });
   }
 
+  const panel = h(
+    'div',
+    { class: 'cs-panel' },
+    h('div', { class: 'cs-head' }, h('h2', { class: 'cs-title' }, 'Coach'), close),
+    scroll,
+    followUps.length
+      ? h(
+          'div',
+          { class: 'cs-chips cs-followups', role: 'group', 'aria-label': 'Options' },
+          ...followUps,
+        )
+      : null,
+    chips.length
+      ? h('div', { class: 'cs-chips', role: 'group', 'aria-label': 'Quick actions' }, ...chips)
+      : null,
+    areas.length
+      ? h(
+          'div',
+          { class: 'cs-chips cs-areas', role: 'group', 'aria-label': 'Go easy on' },
+          ...areas,
+        )
+      : null,
+    typing,
+    h('p', { class: 'cs-privacy' }, icon('lock', 'sm'), h('span', {}, PRIVACY_LINE)),
+  );
+
   const sheet = h(
     'div',
     {
@@ -268,32 +295,10 @@ export function coachSheet(p: CoachSheetProps, a: CoachSheetActions): HTMLElemen
       tabindex: '-1',
       'data-coach-sheet': true,
     },
-    h(
-      'div',
-      { class: 'cs-panel' },
-      h('div', { class: 'cs-head' }, h('h2', { class: 'cs-title' }, 'Coach'), close),
-      scroll,
-      followUps.length
-        ? h(
-            'div',
-            { class: 'cs-chips cs-followups', role: 'group', 'aria-label': 'Options' },
-            ...followUps,
-          )
-        : null,
-      chips.length
-        ? h('div', { class: 'cs-chips', role: 'group', 'aria-label': 'Quick actions' }, ...chips)
-        : null,
-      areas.length
-        ? h(
-            'div',
-            { class: 'cs-chips cs-areas', role: 'group', 'aria-label': 'Go easy on' },
-            ...areas,
-          )
-        : null,
-      typing,
-      h('p', { class: 'cs-privacy' }, icon('lock', 'sm'), h('span', {}, PRIVACY_LINE)),
-    ),
+    panel,
   );
+  // M13d task 25: swipe down = Close (the panel follows; a scrolled message list scrolls first).
+  installSheetSwipe(sheet, { close: () => close.click(), mover: panel });
 
   sheet.addEventListener('keydown', (ev) => {
     const kev = ev as KeyboardEvent;

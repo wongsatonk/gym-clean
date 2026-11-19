@@ -16,6 +16,7 @@
 // `[data-report-fallback]` (the textarea), `[data-report-select]`, `[data-report-manual]`,
 // `[data-report-close]`.
 import { h } from '../dom';
+import { installSheetSwipe } from '../gestures/sheetSwipe';
 import { icon } from '../icons';
 import { moodClass } from '../tokens';
 import { copyText as defaultCopy, selectAllAndCopy } from './clipboard';
@@ -140,7 +141,17 @@ export function reportSheet(props: ReportSheetProps, actions: ReportSheetActions
     );
   }
 
-  return h(
+  const closeBtn = h(
+    'button',
+    {
+      type: 'button',
+      class: 'ghost-btn',
+      'data-report-close': true,
+      onclick: () => actions.onClose(),
+    },
+    'Close',
+  );
+  const sheet = h(
     'section',
     {
       class: `screen sheet todo-report ${moodClass('pro')}`,
@@ -153,18 +164,12 @@ export function reportSheet(props: ReportSheetProps, actions: ReportSheetActions
       'header',
       { class: 'top-bar' },
       h('h1', { class: 'page-title small-title', id: 'todo-report-title-h' }, 'Your report'),
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'ghost-btn',
-          'data-report-close': true,
-          onclick: () => actions.onClose(),
-        },
-        'Close',
-      ),
+      closeBtn,
     ),
     body,
     status,
   );
+  // M13d task 25: swipe down = Close (a scrolled report scrolls first; the text box is left alone).
+  installSheetSwipe(sheet, { close: () => closeBtn.click() });
+  return sheet;
 }

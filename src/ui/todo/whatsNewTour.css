@@ -53,6 +53,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden; /* M13d: the page follows the swipe without a sideways scroll */
   display: flex;
   flex-direction: column;
   /* Vertical scroll stays native; the sideways swipe is ours. */

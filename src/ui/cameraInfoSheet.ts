@@ -16,6 +16,7 @@
 import { ONE_SIDED_COPY, type CameraInfo } from '../core/exercises';
 import type { OneSidedLimb } from '../core/types';
 import { h } from './dom';
+import { installSheetSwipe } from './gestures/sheetSwipe';
 import { icon } from './icons';
 import { enterScreen, type Stop } from './motion';
 import { placementPictogram } from './placementPictogram';
@@ -197,6 +198,8 @@ function buildSheet(info: CameraInfo, a: CameraInfoActions, on: Handlers): Built
     veil,
     panel,
   );
+  // M13d task 25: swipe down = Close (the panel follows; a scrolled body scrolls first).
+  installSheetSwipe(root, { close: () => close.click(), mover: panel });
   const controls = [practice, close].filter((c): c is HTMLButtonElement => c !== null);
   // Escape closes; Tab / Shift+Tab cycle between the sheet's buttons.
   root.addEventListener('keydown', (ev) => {

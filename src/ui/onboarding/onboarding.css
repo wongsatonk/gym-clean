@@ -47,6 +47,9 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* M13d: the page follows a sideways swipe; vertical scroll stays native, nothing scrolls sideways. */
+  overflow-x: hidden;
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
 }

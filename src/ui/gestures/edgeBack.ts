@@ -28,6 +28,18 @@ export const SWIPE_BACK = '[data-swipe-back]';
 export const NO_SWIPE_BACK =
   '[data-in-workout], [data-screen="exercise"], [data-screen="rest"], [data-screen="summary"], .camera-sheet';
 
+/**
+ * True while a workout is on screen (anything in NO_SWIPE_BACK). Sheets opened then show their
+ * "More" already open, so nothing new has to be tapped mid-set (M13d review decision).
+ */
+export function workoutOnScreen(
+  doc: Pick<Document, 'querySelector'> | null | undefined = globalThis.document,
+): boolean {
+  return (
+    !!doc && typeof doc.querySelector === 'function' && doc.querySelector(NO_SWIPE_BACK) !== null
+  );
+}
+
 const MODAL = '[aria-modal="true"]';
 /** On the screen while it follows the finger (its leading edge; edgeBack.css). */
 export const MOVING_CLASS = 'edge-back-moving';

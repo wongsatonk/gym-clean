@@ -13,6 +13,7 @@
 //   bottom: welcome / mic / allowed pages → [Back][Next] (Go to Today on the last page);
 //           ask pages → the action full width, then [Back][Not now].
 // Keys are a shortcut only: Escape = Skip, ArrowLeft = Back, ArrowRight = Next where Next exists.
+// Swipes (M13d) are the same shortcut by touch: left = Next, right = Back (gestures/pageSwipe.ts).
 // Motion: a page change is motion.ts enterScreen in the direction of travel, a no-op under
 // prefers-reduced-motion (the global rule in styles.css zeroes the press feedback too).
 import {
@@ -30,6 +31,7 @@ import {
 import { forwardContent } from '../backButton';
 import { brandLockup } from '../brand';
 import { h } from '../dom';
+import { installPageSwipe } from '../gestures/pageSwipe';
 import { icon, type IconName } from '../icons';
 import { enterScreen, type Stop } from '../motion';
 import { permissionPage } from './permissionPage';
@@ -232,6 +234,17 @@ export function onboardingScreen(
     }
   }
 
+  // M13d task 25: swipe left = Next, right = Back (a shortcut for the buttons, as the arrow keys:
+  // no Next on the last page or on an ask page, whose way forward is a choice).
+  const body = h('div', { class: 'ob-body' }, page);
+  const unswipe = installPageSwipe(body, {
+    mover: page,
+    onNext: () => actions.onNext(),
+    onBack: () => actions.onBack(),
+    canNext: () => !allow && !isLast,
+    canBack: () => index > 0,
+  });
+
   const el = h(
     'div',
     {
@@ -253,7 +266,7 @@ export function onboardingScreen(
       { class: 'sr-only', 'aria-live': 'polite', 'data-ob': 'live' },
       `Page ${stepCount(index, total)}: ${stepTitle(step)}`,
     ),
-    h('div', { class: 'ob-body' }, page),
+    body,
     dots,
     nav,
   );
@@ -271,6 +284,7 @@ export function onboardingScreen(
     dispose: () => {
       stop();
       stop = () => {};
+      unswipe();
     },
   };
 }
