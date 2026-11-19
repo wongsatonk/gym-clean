@@ -329,4 +329,45 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     tryIt: 'coach',
     icon: 'coach',
   },
+  // 1.16.3 M13d "Easier first run" (a patch before M14 1.17.0, Decision "M13d answers" q1). The
+  // M13d budget: what and why are one short sentence each, one idea per page. Wording to keep true:
+  // the Units section and its "ft·in" option (src/data/onboarding.ts UNITS_PAGE), Settings →
+  // Display → Text size: Standard / Large / Larger (task 21), the edge swipe in the iPhone app and
+  // the home-screen app only (said as "In the iPhone app"), the meal row's "Delete".
+  {
+    release: '1.16.3',
+    id: 'units',
+    title: 'Pick your units',
+    what: 'Choose kg or lb, and cm or ft·in, under Units in Settings.',
+    why: 'You can also switch them right where you type a number, and your history stays the same.',
+    tryIt: 'settings',
+    icon: 'ruler',
+  },
+  {
+    release: '1.16.3',
+    id: 'text-size',
+    title: 'Bigger, clearer text',
+    what: "Text now uses your phone's own font, with more space between lines.",
+    why: 'For bigger text, go to Settings, then Display, and pick Large or Larger under Text size.',
+    tryIt: 'settings',
+    icon: 'sliders',
+  },
+  {
+    release: '1.16.3',
+    id: 'swipe-back',
+    title: 'Swipe back',
+    what: 'In the iPhone app, swipe from the left edge to go back, as you do in other apps.',
+    why: 'Swipe sideways between these pages, down to close a sheet, and left on a meal to show Delete.',
+    tryIt: 'settings/about',
+    icon: 'back',
+  },
+  {
+    release: '1.16.3',
+    id: 'round-buttons',
+    title: 'Rounder buttons',
+    what: 'Buttons are now round with an icon, and you still see the same word next to each one.',
+    why: 'They dip when you press them, and in the iPhone app the main ones give a light tap.',
+    tryIt: 'today',
+    icon: 'spark',
+  },
 ];
