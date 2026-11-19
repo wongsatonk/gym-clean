@@ -394,6 +394,7 @@ import type {
 } from '../core/types';
 import { noteSignal } from '../data/todos/store';
 import { createTodoHost, nativeShell } from './todo/todoHost';
+import { setPressFeel } from './iconButton';
 import type { WhatsNewTour } from './todo/whatsNewTour';
 import { voice } from './voice';
 import { wakeLock } from './wakeLock';
@@ -3019,6 +3020,8 @@ export function mountApp(root: HTMLElement): void {
   // Nothing here makes a network request: Apple's model, speech and notifications run on the
   // phone. The PWA keeps the rules brain, shows no mic and no source badge, and has no reminders.
   const native = nativeShell();
+  // M13d: a light tap on main-button presses in the iPhone app; lazy so the PWA never loads it.
+  if (native) setPressFeel(() => import('../native/haptics').then((m) => m.tapLight()));
   let gymBrain: GymBrain | null = null;
   let speech: Speech | null = null;
   let reminders: Reminders | null = null;
