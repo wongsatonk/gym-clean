@@ -179,6 +179,10 @@ describe('calendarDayScreen', () => {
     expect(a.onHistory).toHaveBeenCalledWith('row');
     root.find((e) => e.hasAttribute('data-cal-back'))[0]?.click();
     expect(a.onBack).toHaveBeenCalledOnce();
+    // M13d task 24: that Back is the edge swipe's one Back.
+    const marked = root.find((e) => e.hasAttribute('data-swipe-back'));
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.hasAttribute('data-cal-back')).toBe(true);
     for (const b of root.byTag('button')) {
       expect(b.getAttribute('type')).toBe('button');
       expect(

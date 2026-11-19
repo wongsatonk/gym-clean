@@ -17,6 +17,7 @@ describe('backButton', () => {
     expect(el.getAttribute('type')).toBe('button');
     expect(el.classes).toEqual(expect.arrayContaining(['ghost-btn', 'back-btn']));
     expect(el.hasAttribute('data-back')).toBe(true);
+    expect(el.hasAttribute('data-swipe-back')).toBe(true);
     expect(el.textContent).toBe('Back');
     expect(el.getAttribute('aria-label')).toBeNull();
     const ic = icons(el);
@@ -31,6 +32,13 @@ describe('backButton', () => {
     const el = asFake(backButton(() => {}, 'To-dos', { 'data-intake-close': true }));
     expect(el.textContent).toBe('To-dos');
     expect(el.hasAttribute('data-intake-close')).toBe(true);
+    expect(el.hasAttribute('data-swipe-back')).toBe(true);
+  });
+
+  it('M13d task 24: a screen can hand the edge swipe to another control', () => {
+    const el = asFake(backButton(() => {}, 'Back', { 'data-swipe-back': false }));
+    expect(el.hasAttribute('data-swipe-back')).toBe(false);
+    expect(el.hasAttribute('data-back')).toBe(true);
   });
 
   it('is at least 56px tall and wide (its own css, on top of the button rule)', () => {

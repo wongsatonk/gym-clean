@@ -330,6 +330,14 @@ describe('history screen: exercise detail', () => {
     expect(one(el, 'data-history-back').textContent).toBe('Calendar');
   });
 
+  it('M13d task 24: the detail Back is the edge swipe’s one Back; the list has none', () => {
+    const marked = (el: FakeEl) => el.find((e) => e.hasAttribute('data-swipe-back'));
+    const detail = marked(render({ detail: ROW }).el);
+    expect(detail).toHaveLength(1);
+    expect(detail[0]?.hasAttribute('data-history-back')).toBe(true);
+    expect(marked(render().el)).toHaveLength(0);
+  });
+
   it('bodyweight: reps trend, reps best, no volume, focus explained', () => {
     const { el } = render({ detail: PU });
     expect(one(el, 'data-trend').getAttribute('data-metric')).toBe('reps');

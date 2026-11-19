@@ -355,6 +355,17 @@ describe('intake: questions', () => {
     expect(calls.close).toBe(2);
   });
 
+  it('M13d task 24: the edge swipe takes the question Back, never the close', () => {
+    const swipe = (el: FakeEl) => el.find((e) => e.hasAttribute('data-swipe-back'));
+    const { el, calls } = render({ initial: FULL }, { onClose: () => calls.close++ });
+    expect(swipe(el)).toHaveLength(1);
+    expect(swipe(el)[0]?.hasAttribute('data-intake-back')).toBe(true);
+    expect(one(el, 'data-intake-close').hasAttribute('data-swipe-back')).toBe(false);
+    next(el).click(); // question 2: still the one question Back
+    expect(swipe(el)).toHaveLength(1);
+    expect(swipe(el)[0]?.hasAttribute('data-intake-back')).toBe(true);
+  });
+
   it('ignores stored answers that are out of range', () => {
     const { el } = render({
       initial: { days: 9, sessionMin: 50 as Intake['sessionMin'], goalKind: 'fat' },

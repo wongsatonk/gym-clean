@@ -216,7 +216,13 @@ export function calendarDayScreen(
     },
     h(
       'button',
-      { type: 'button', class: 'cal-back', 'data-cal-back': true, onclick: actions.onBack },
+      {
+        type: 'button',
+        class: 'cal-back',
+        'data-cal-back': true,
+        'data-swipe-back': true, // M13d task 24: the edge swipe's Back
+        onclick: actions.onBack,
+      },
       icon('back', 'md'),
       h('span', {}, 'Calendar'),
     ),

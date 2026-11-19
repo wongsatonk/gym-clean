@@ -408,10 +408,15 @@ export function todoGuideScreen(props: TodoGuideProps, actions: TodoGuideActions
     h(
       'header',
       { class: 'top-bar' },
-      backButton(() => {
-        flush();
-        actions.onClose();
-      }, 'To-dos'),
+      backButton(
+        () => {
+          flush();
+          actions.onClose();
+        },
+        'To-dos',
+        // M13d task 24: the edge swipe takes the step Back (previous step; the list on step 1).
+        { 'data-swipe-back': false },
+      ),
     ),
     h(
       'div',
@@ -462,6 +467,7 @@ export function todoGuideScreen(props: TodoGuideProps, actions: TodoGuideActions
           type: 'button',
           class: 'todo-nav-btn',
           'data-guide-back': true,
+          'data-swipe-back': true,
           onclick: () => {
             flush();
             if (index === 0) actions.onClose();

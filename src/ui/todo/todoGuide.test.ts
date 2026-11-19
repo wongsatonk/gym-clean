@@ -79,6 +79,15 @@ describe('todoGuideScreen: header and navigation', () => {
     expect(el.byClass('now')).toHaveLength(1);
   });
 
+  it('M13d task 24: the edge swipe takes the step Back, not the top-bar To-dos', () => {
+    for (const stepIndex of [0, 2]) {
+      const { el } = render({ stepIndex });
+      const marked = el.find((e) => e.hasAttribute('data-swipe-back'));
+      expect(marked).toHaveLength(1);
+      expect(marked[0]?.hasAttribute('data-guide-back')).toBe(true);
+    }
+  });
+
   it('Back on step 1 closes; on later steps it goes back; Next / Done on the last step', () => {
     let r = render();
     one(r.el, 'data-guide-back').click();

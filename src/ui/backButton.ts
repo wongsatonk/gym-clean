@@ -11,6 +11,8 @@ type Hooks = Record<string, string | boolean>;
 /**
  * The top-bar back control: chevron + word ("Back", or where it goes, e.g. "To-dos").
  * Keeps the `ghost-btn` look the screens already had; `hooks` adds data attributes.
+ * M13d task 24: it is the screen's edge-swipe Back (`data-swipe-back`, gestures/edgeBack.ts)
+ * unless `hooks` says `'data-swipe-back': false` (a screen whose step Back takes the swipe).
  */
 export function backButton(onBack: () => void, label = 'Back', hooks: Hooks = {}): HTMLElement {
   return h(
@@ -19,6 +21,7 @@ export function backButton(onBack: () => void, label = 'Back', hooks: Hooks = {}
       type: 'button',
       class: 'ghost-btn back-btn',
       'data-back': true,
+      'data-swipe-back': true,
       ...hooks,
       onclick: () => onBack(),
     },

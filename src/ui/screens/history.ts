@@ -449,7 +449,13 @@ function detailView(
 ): (HTMLElement | null)[] {
   const back = h(
     'button',
-    { type: 'button', class: 'hist-back', 'data-history-back': true, onclick: actions.onBack },
+    {
+      type: 'button',
+      class: 'hist-back',
+      'data-history-back': true,
+      'data-swipe-back': true, // M13d task 24: the edge swipe's Back
+      onclick: actions.onBack,
+    },
     icon('back', 'md'),
     h('span', {}, backLabel),
   );

@@ -666,7 +666,11 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
       'header',
       { class: 'top-bar intake-top' },
       actions.onClose
-        ? backButton(() => actions.onClose?.(), 'Back', { 'data-intake-close': true })
+        ? backButton(() => actions.onClose?.(), 'Back', {
+            'data-intake-close': true,
+            // M13d task 24: the edge swipe takes the question Back below (previous question).
+            'data-swipe-back': false,
+          })
         : null,
       isSummary
         ? h('span', { class: 'intake-count', 'data-intake-count': true }, 'Your answers')
@@ -706,7 +710,13 @@ export function intakeScreen(props: IntakeProps, actions: IntakeActions): HTMLEl
       showBack
         ? h(
             'button',
-            { type: 'button', class: 'intake-nav-btn', 'data-intake-back': true, onclick: back },
+            {
+              type: 'button',
+              class: 'intake-nav-btn',
+              'data-intake-back': true,
+              'data-swipe-back': true,
+              onclick: back,
+            },
             icon('back', 'sm'),
             h('span', {}, 'Back'),
           )

@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Dev-only check for M13d task 24 (swipe back from the left edge) on the real About screen with
+     made-up data. Not part of the build or the app. Open on the dev server with touch emulation:
+     /src/ui/gestures/edgeBack.harness.html  (?view=workout marks the root data-in-workout)
+     window.harnessLog: 'back' per Back press, 'feel' per feel() call. e2e/swipe.spec.ts drives it
+     and writes docs/screenshots/m13d-swipe-back.png mid-swipe (SWIPE_SHOT=1). -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Swipe back harness</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      import '@fontsource/barlow-condensed/latin-700.css';
+      import { aboutScreen } from '../screens/about.ts';
+      import { installEdgeBack } from './edgeBack.ts';
+
+      const q = new URLSearchParams(location.search);
+      const app = document.getElementById('app');
+      const log = (s) => (window.harnessLog = [...(window.harnessLog ?? []), s]);
+      window.harnessLog = [];
+      if (q.get('view') === 'workout') app.setAttribute('data-in-workout', '');
+      app.replaceChildren(
+        aboutScreen(
+          { version: 'Version 1.16', owner: false },
+          {
+            onBack: () => log('back'),
+            onLicenses: () => log('licenses'),
+            onOwnerChange: () => {},
+          },
+        ),
+      );
+      installEdgeBack(app, { feel: () => log('feel') });
+    </script>
+  </body>
+</html>
