@@ -57,6 +57,25 @@ export const ICON_PATHS = {
   spark: '<path d="M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z"/><path d="M19 3.5v3M17.5 5h3"/>',
   /** M13c search: a lens with a short handle (the Search button, the Library search field). */
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.3 15.3l5.2 5.2"/>',
+  // M13d task 36 (round icon buttons): the few actions the set had no icon for. Same grid and
+  // stroke, drawn for this project.
+  /** Delete: a bin with a lid and two ribs. */
+  trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5.5M14 11v5.5"/>',
+  /** Share: an arrow leaving an open box (the share sheet). */
+  share: '<path d="M12 14.5V3.5M8 7.5l4-4 4 4M8 10.5H5.5v10h13v-10H16"/>',
+  /** Undo: a hooked arrow back to the left. */
+  undo: '<path d="M9 5L4.5 9.5 9 14M4.5 9.5H15a5 5 0 0 1 0 10h-4"/>',
+  /** Settings: a ring with eight teeth and a hub. */
+  gear: '<circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 5.5V2.7M12 18.5v2.8M5.5 12H2.7M18.5 12h2.8M7.4 7.4L5.4 5.4M16.6 16.6l2 2M16.6 7.4l2-2M7.4 16.6l-2 2"/>',
+  /** More: three dots in a row. */
+  more: '<circle cx="5.5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18.5" cy="12" r="1.6" fill="currentColor"/>',
+  /** Info: an "i" in a circle (the `help` icon's sibling). */
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.2"/>',
+  /** Weigh-in: a bathroom scale with a dial and needle. */
+  scale:
+    '<rect x="3.5" y="3.5" width="17" height="17" rx="4"/><path d="M8 9.5a5.5 5.5 0 0 1 8 0M12 10.5l1.8-2.6"/>',
+  /** Refresh / try again: a circular arrow, clockwise. */
+  refresh: '<path d="M20 12a8 8 0 1 1-2.34-5.66L20 8.5M20 3.5v5h-5"/>',
 } as const satisfies Record<string, string>;
 
 export type IconName = keyof typeof ICON_PATHS;

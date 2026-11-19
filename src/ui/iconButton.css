@@ -1,0 +1,204 @@
+/* M13d task 36 (SPEC M13d Goal 7): the round icon button (iconButton.ts).
+   The <button> is the tap area (circle + word, ≥ 56px both ways; `data-wide-hit` = the whole
+   row). The circle carries the fill and the icon; the word sits below it, or beside it for the
+   one main action. Colours per variant are the --ib-* custom properties; iconButton.test.ts
+   checks they match ICON_BTN_COLOURS and reach 4.5:1.
+   Press: the circle scales to 0.92 and a soft glow ring fades in, then springs back on release.
+   Transform/opacity only, on the motion tokens (--dur-fast 120ms). Reduce Motion and the
+   motion-off screens (Exercise, camera) keep only the colour change. */
+
+.icon-btn {
+  --ib-fill: var(--surface-2);
+  --ib-ink: var(--text);
+  --ib-word: var(--text);
+  --ib-ring: var(--line);
+  --ib-glow: var(--text);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  padding: 4px;
+  border: 0;
+  border-radius: var(--r-btn);
+  background: transparent;
+  color: var(--ib-word);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.icon-btn[data-label-at='beside'] {
+  flex-direction: row;
+  gap: 14px;
+}
+
+.icon-btn[data-wide-hit] {
+  display: flex;
+  width: 100%;
+}
+
+/* ---------- Variants ---------- */
+
+.icon-btn[data-variant='main'] {
+  --ib-fill: var(--cta);
+  --ib-ink: var(--on-cta);
+  --ib-word: var(--text);
+  --ib-ring: var(--cta);
+  --ib-glow: var(--cta);
+}
+
+.icon-btn[data-variant='secondary'] {
+  --ib-fill: var(--surface-2);
+  --ib-ink: var(--text);
+  --ib-word: var(--text);
+  --ib-ring: var(--line);
+  --ib-glow: var(--text);
+}
+
+.icon-btn[data-variant='quiet'] {
+  --ib-fill: transparent;
+  --ib-ink: var(--text-2);
+  --ib-word: var(--text-2);
+  --ib-ring: var(--line);
+  --ib-glow: var(--text-2);
+}
+
+.icon-btn[data-variant='danger'] {
+  --ib-fill: var(--surface-2);
+  --ib-ink: var(--danger);
+  --ib-word: var(--danger);
+  --ib-ring: var(--danger);
+  --ib-glow: var(--danger);
+}
+
+.icon-btn:disabled {
+  --ib-fill: var(--surface);
+  --ib-ink: var(--text-2);
+  --ib-word: var(--text-2);
+  --ib-ring: var(--line);
+  cursor: default;
+}
+
+/* ---------- Circle and word ---------- */
+
+.icon-btn-circle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  border-radius: 50%;
+  border: 2px solid var(--ib-ring);
+  background: var(--ib-fill);
+  color: var(--ib-ink);
+  /* Release: spring back with a small overshoot. */
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.icon-btn[data-variant='main'] .icon-btn-circle {
+  width: var(--tap-cta);
+  height: var(--tap-cta);
+}
+
+/* The glow: a soft ring just outside the circle, hidden until pressed. */
+.icon-btn-circle::after {
+  content: '';
+  position: absolute;
+  inset: -9px;
+  border-radius: 50%;
+  border: 6px solid color-mix(in srgb, var(--ib-glow) 30%, transparent);
+  opacity: 0;
+  transform: scale(0.85);
+  transition:
+    opacity var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-spring);
+  pointer-events: none;
+}
+
+.icon-btn .ic {
+  flex: none;
+}
+
+.icon-btn-label {
+  color: var(--ib-word);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  max-width: 8em;
+}
+
+.icon-btn[data-label-at='beside'] .icon-btn-label {
+  font-size: var(--fs-lead);
+  font-weight: 700;
+  text-align: start;
+  max-width: none;
+}
+
+/* ---------- Press ---------- */
+
+/* The global :active shrink (styles.css, 0.97 on every button) would scale the whole row too;
+   here only the circle moves. */
+.icon-btn:active:not(:disabled) {
+  transform: none;
+  filter: none;
+}
+
+.icon-btn:active:not(:disabled) .icon-btn-circle {
+  transform: scale(0.92);
+  filter: brightness(1.15);
+  /* Press: settle in without overshoot; release uses the spring above. */
+  transition-timing-function: var(--ease-standard);
+}
+
+.icon-btn[data-variant='quiet']:active:not(:disabled) .icon-btn-circle {
+  background: var(--surface-2);
+}
+
+.icon-btn:active:not(:disabled) .icon-btn-circle::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Mid-set screens keep the look, not the motion (same list as MOTION_OFF in motion.ts). */
+:where([data-motion='off'], [data-screen='exercise'], .camera-sheet) .icon-btn-circle {
+  transition: none;
+}
+
+:where([data-motion='off'], [data-screen='exercise'], .camera-sheet)
+  .icon-btn:active:not(:disabled)
+  .icon-btn-circle {
+  transform: none;
+}
+
+:where([data-motion='off'], [data-screen='exercise'], .camera-sheet) .icon-btn-circle::after {
+  display: none;
+}
+
+/* ---------- Focus ---------- */
+
+/* The ring goes round the circle (not the whole row), in the focus colour (≥ 3:1). */
+.icon-btn:focus-visible {
+  outline: none;
+}
+
+.icon-btn:focus-visible .icon-btn-circle {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+/* Reduce Motion: the global rule in styles.css already zeroes transitions; this drops the scale
+   and the glow so only the colour change (brightness / quiet fill) shows the press. */
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn:active:not(:disabled) .icon-btn-circle {
+    transform: none;
+  }
+
+  .icon-btn-circle::after {
+    display: none;
+  }
+}

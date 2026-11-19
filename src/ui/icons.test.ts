@@ -38,10 +38,20 @@ describe('icon set', () => {
       'plate',
       'spark',
       'search',
+      'trash',
+      'share',
+      'undo',
+      'gear',
+      'more',
+      'info',
+      'scale',
+      'refresh',
     ] as const) {
       expect(ICON_NAMES).toContain(n);
     }
-    expect(ICON_NAMES.length).toBe(36); // M13 task 20: + arrow-right; task 22: + plate, spark; M13c: + search
+    // M13 task 20: + arrow-right; task 22: + plate, spark; M13c: + search;
+    // M13d task 36: + trash, share, undo, gear, more, info, scale, refresh (round buttons).
+    expect(ICON_NAMES.length).toBe(44);
     for (const n of ICON_NAMES) expect(ICON_PATHS[n]).toMatch(/^<(path|rect|circle) /);
   });
 
