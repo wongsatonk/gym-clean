@@ -1873,7 +1873,7 @@ type ClaudeUnavailableReason = 'off' | 'notNative' | 'noKey' | 'offline' | 'capR
     preview, Settings → About.
   - Existing e2e stays green (helpers mark the tour seen by default).
   - No 🧍 checkpoint of its own: the to-dos are his open checkpoints; his first pasted report is handled with
-    `/feedback`.
+    `/gym-feedback`.
 - **Slice 1b (trainer kit items 1–5, 7–12):**
   - Unit tests, written first (made-up data):
     - (1) effort stored on the set; the M5b recommendation changes with Easy / Good / Hard and is unchanged
@@ -2407,7 +2407,131 @@ type BackgroundStyle = 'glow' | 'plain';                      // settings 'backg
   anything in the Library that's hard to find, and whether Choose from library opens his photos in the iPhone
   app and recognises a saved meal photo.
 
-### M14 — Wrist and ears: Apple Watch app + AirPods head motion (approved 2026-11-17; builds after M13c and M12 slice 3; release 1.18.0 — renumbered 2026-11-18, was 1.16.0)
+### M13d — Easier first run: setup fixes, units, easier reading, iOS swipes (added 2026-11-18, second-user feedback; proposed release **1.16.3**, a patch before M14 1.17.0, pending M13d-q1)
+Feedback from the second user (Oranich, her own iPhone 16 Pro Max, 1.16.1 fresh install on 2026-11-18, her own
+first-time setup: Checkpoint K), passed on by Wongsaton verbatim:
+> - font is hard to read and some screens have too much text
+> - app should has swipe to back like iOS and anything else
+> - bug screens such as go to settings screen after finish the last step apply to first time setup in the app, not get data from health
+> - need unit for measurement for the first time setup of the app such as cm/ft, kg/lb
+
+Planner calls and root causes are in PROGRESS Decision "M13d Easier first run" (2026-11-18); the open
+choices are M13d-q1…q4 (defaults get built). Hard rules in CLAUDE.md win everywhere (body ≥ 20px, main
+numbers ≥ 64px, high contrast, dark theme, targets ≥ 56px, voice over screen, no medical claims, privacy).
+Every new string is written to "you", passes `checkCopy` and the M13 anyone-scan. **Nothing new is reachable
+during a set** (no swipe on Exercise, Rest, the camera view or Summary). **No network request.**
+
+#### Goals (bugs first)
+1. **The first run always ends on Today (bug).** On a fresh install, tapping Apply on the intake's "Fuel
+   targets" row ("Set up Fuel for this goal") and then Done opens the **Set up Fuel** form *outside* the
+   first-launch flow: the remaining pages (Apple Health, camera, mic, reminders) never show, the flow is never
+   stored as done, and saving lands on the Fuel tab. Fix: on the first run, Set up Fuel is **a step of the
+   flow** (its Back returns to the intake's last screen, its Save continues), and the flow always ends with
+   "Go to Today" → Today, with the `'onboarding'` row stored. Outside the first run (Today's Goal card,
+   Settings → Your goal) the intake behaves as before.
+2. **Apple Health fills what it can (bug).** In the iPhone app the Apple Health page moves **before** the
+   intake (right after Units), so what Health knows is there when the forms open. Set up Fuel pre-fills:
+   today's weight from the latest weigh-in (including one imported from Health; today it ignores weigh-ins
+   on a first setup and starts at a placeholder) and, if M13d-q2 stays yes, **height, birth year and sex**
+   read once from Health. Each pre-filled field says "From Apple Health"; you still confirm with Save, and
+   anything Health doesn't have stays empty or at its usual starting value (sex is never guessed). Without
+   Health (PWA, Not now, nothing recorded) the form works exactly as before.
+3. **Units up front.** A new first-run page **Units**, right after the welcome: **Weight: kg / lb** and
+   **Height and body: cm / ft·in**, preselected from the phone's region (M13d-q3 default: US, Liberia,
+   Myanmar → lb + ft·in; everywhere else kg + cm), ≥ 56px targets, one short line of copy. The choice is used
+   at once by the forms that follow (Set up Fuel height in ft + in, weight in lb, tape measurements in inches).
+   Settings' "Weight unit" section becomes **Units** with both choices. Stored values stay metric (kg, cm);
+   units change only what is shown and typed. An existing install with no height-unit row keeps today's
+   behaviour (tape measurements follow the weight unit) until you pick one.
+4. **Easier to read.**
+   - **Font:** (M13d-q4 default) the iPhone's own font (San Francisco, via the system font stack) for all words;
+     Barlow Condensed stays only for big numbers, timers, the Start button and tab labels (M13 fit). Sentence-
+     length headings (intake questions, first-run titles, sheet titles, What's New titles) use the body font
+     bold, not the condensed face.
+   - **Spacing:** paragraphs get line-height 1.5 (headings 1.2) and a max line length of about 32em; no
+     all-caps letter-spaced labels (sentence case instead).
+   - **Text size:** Settings → Display → **Text size: Standard / Large / Larger** (body 20 / 22 / 24px, the
+     other text steps scale with it; numbers, timers and tab labels don't change). Standard by default.
+   - **Less text per screen:** a measured budget (Accept) for the first-run pages, the intake, Set up Fuel,
+     What's New pages, Settings' first screen, the How-to sheet and learn cards. Copy is cut to one short
+     line where it can be; the rest moves behind a "More" disclosure (progressive disclosure), never removed
+     where it carries a privacy promise or a safety cue. The welcome goes from 3 pages to 2.
+5. **iOS swipes.** (a) **Swipe back from the left edge** on every screen that has a Back control: the screen
+   follows your finger and, past about a third of the width or with a quick flick, does exactly what its Back
+   does (intake: previous question; first run: previous page). No swipe on the tab screens (nothing to go back
+   to) or anywhere in a workout. In the iPhone app and the home-screen web app; not in a Safari tab (Safari's
+   own edge swipe means "leave the page" there). (b) **Swipe sideways** between pages of the first run and the
+   What's New tour. (c) **Swipe down to close** sheets that have a Close button (How-to, learn cards, Fuel
+   sheets, coach sheet, report and camera-info sheets); the Pause sheet is excluded. (d) **Swipe left on a
+   logged meal** in Fuel to show Delete (icon + word), with the usual Undo toast. Every swipe has a button
+   that does the same thing; Reduce Motion keeps the gestures but drops the follow-the-finger animation.
+6. **What's New 1.16.3:** short pages for Units, Text size and the swipes; the owner-only To-dos gain the
+   Checkpoint K4 guide.
+
+#### Changes to earlier contracts
+- **M13 goal 1 (first launch order):** welcome → **Units** → **Apple Health** (iPhone app) → intake →
+  (**Set up Fuel**, only when its intake row was applied) → camera → mic → notifications → Today. The other
+  permission pages keep their rules. The permission catch-up is unchanged.
+- **M11 (read-only Health, M11-q4 "nothing else"):** if M13d-q2 is yes, three more read-only types
+  (height, date of birth, biological sex) are asked in the same Health sheet and read **only to pre-fill Set up
+  Fuel**; only the birth **year** is kept, and only once you tap Save (as today's Fuel settings, backed up like
+  them). No Health day stores them; they never reach any coach, the dev log or a backup by themselves.
+- **M1b (units):** the weight unit is joined by a height-and-body unit; M12 1b measurements follow the new
+  row instead of the weight unit (no change for installs without the row).
+- **M13 goal 1 (welcome pages):** 2 pages instead of 2–3.
+
+#### Non-goals
+A translation of the app (English copy stays; ask separately if Thai would help); separate units for body
+weight and gym weights; matching iOS Dynamic Type automatically (the in-app Text size covers it for now);
+pull to refresh (nothing is fetched); long-press menus; any change to the Exercise / Rest / camera / Summary
+screens beyond the shared font tokens; a browser-history router.
+
+#### Privacy
+Unchanged: nothing leaves the phone. The Health profile read happens on the phone, on the Set up Fuel screen
+only, and keeps nothing until you Save. New settings rows `'lengthUnit'` and `'textSize'` are plain rows
+(backed up).
+
+#### Data model (adds to §4; final shape in `src/core/types.ts`)
+```ts
+type OnboardingStep = … | { kind: 'units' } | { kind: 'fuelSetup' };
+type LengthUnit = 'cm' | 'in';           // settings 'lengthUnit' (height shown as ft + in, tape as in);
+                                         // no row → follows 'unit' (kg → cm, lb → in), the 1.16 behaviour
+type TextSize = 'standard' | 'large' | 'larger';   // settings 'textSize'; no row → 'standard'
+type HealthProfile = { heightCm?: number; birthYear?: number; sex?: 'female' | 'male' };  // read on demand, never stored as is
+// No Dexie change.
+```
+
+#### Accept
+- Unit tests, written first: the onboarding order per platform (PWA: welcome, Units, intake, camera; iPhone
+  app: welcome, Units, Health, intake, camera, mic, notifications) and the Set up Fuel step inserted after the
+  intake only when applied; cm ↔ ft + in (whole inches, 12 in carries, round trips within 1 cm), height
+  formatting, the region default (en-US → lb + in; th-TH, en-GB, de-DE → kg + cm; no region → kg + cm); the
+  `'lengthUnit'` fallback (no row → follows the weight unit) and backup round trip; the Set up Fuel pre-fill
+  (latest weigh-in used on a first setup; Health values outside the field ranges are dropped; "not set" sex
+  stays empty; only the birth year is kept); the swipe classifier (edge start ≤ 24px, horizontal dominance,
+  distance ≥ ⅓ width or flick ≥ 0.5 px/ms, cancel on vertical scroll); `'textSize'` row default and scale.
+- Swift (GymHealthCore XCTests, if q2 yes): height in cm from the latest sample, birth year from the date-of-
+  birth components, sex mapping (female / male / other / not set); the simulator build passes.
+- E2E (390×844, touch on): **the repro first** — a fresh profile → welcome → Units → intake with every row
+  applied → Done → Set up Fuel inside the flow → Save → camera page … → Go to Today → Today, the `'onboarding'`
+  row stored, a reload doesn't repeat it (fails on 1.16.1, passes after); Units lb + ft·in carry into Set up
+  Fuel and Fuel → Measurements; edge swipe on Settings → About returns to Settings, on the intake goes to
+  the previous question, does nothing on Today and in a workout; swipe down closes the How-to sheet; swipe
+  left on a meal → Delete → Undo restores it; Text size Larger: no horizontal overflow and Start still in the
+  first viewport on Today.
+- A readability spec measures each listed screen at 390×844: words of body text in the first viewport within
+  budget (first-run pages ≤ 30, an intake question ≤ 20 besides its options, any other listed screen ≤ 70),
+  no text under 18px, paragraphs ≥ 20px, line-height ≥ 1.45 on paragraphs. Before/after screenshots
+  `docs/screenshots/m13d-*`.
+- The iPhone app: a left-edge swipe reaches the page (WKWebView back/forward gestures stay off); version 1.16.3;
+  `npm run ios:install` + Settings → Self-check all ✓ on **both phones**.
+- `npm run check`, the full `npm run e2e` (verifier), `npm run build` shows 1.16.3.
+- 🧍 **Checkpoint K4** (her phone, then his): she backs up, deletes and reinstalls (or uses a spare install)
+  and runs the first run again: units asked first, Health fills what it can, the flow ends on Today; then a
+  few days of normal use. She reports whether the text is easier to read, which screens still have too much
+  text, and whether the swipes feel like iOS.
+
+### M14 — Wrist and ears: Apple Watch app + AirPods head motion (approved 2026-11-17; started 2026-11-18; builds after M13c, before M12 slice 3; release 1.17.0 — renumbered 2026-11-18 by his order "Go with 1 + 3 then 2 then 3", was 1.16.0, then 1.18.0)
 Wongsaton (2026-11-17), after being told AirPods head motion and an Apple Watch app were parked / out of
 scope: **"Add it and I need apple watch app too."** Both are in. Planner calls are in Decision "M14 Wrist and
 ears" (2026-11-17) and can be corrected. Branch `m14-wrist-ears`, cut from the M13 result. **iPhone app only**
@@ -2658,7 +2782,7 @@ Recovery rule (data, `src/core/watch/hrRules.ts`, tuned at Checkpoint L): after 
   double-counts it); taps made with the watch out of reach arrive once the phone is back (queued
   `transferUserInfo` path, device only); head hints fire
   when he looks around and stay quiet when still; calf raise / shrug counts; head-motion clips recorded per the
-  guide. He reports through the "Wrist and ears" to-do or `/feedback`.
+  guide. He reports through the "Wrist and ears" to-do or `/gym-feedback`.
 
 ### M15 — Best-rep clips (approved 2026-11-17; builds after M14; release 1.19.0 — renumbered 2026-11-18, was 1.17.0)
 Wongsaton (2026-11-17): **"Don't forget about social engineer job, it can record in the app while i'm working out,
@@ -2773,7 +2897,7 @@ type ClipRules = { bufferMs: number; leadInMs: number; tailMs: number; minMs: nu
   1.19.0 with What's New pages.
 - 🧍 **Checkpoint M** (gym): he records a workout with clips on, checks the blur on the people behind him, and
   shares one clip to a private Story or Close Friends. He reports how many clips were kept and whether they
-  were the right reps, through the "Best-rep clips" to-do or `/feedback`.
+  were the right reps, through the "Best-rep clips" to-do or `/gym-feedback`.
 
 > **2026-11-13 drafts (merged 2026-11-17 at his request).** The M8 section below and the older M9 draft after it were written before the M9 section above; where they differ, the M9 section above, M11, M14 and M15 win. M8 is not planned yet.
 

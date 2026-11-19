@@ -36,7 +36,7 @@ the things only a human can do (filming test videos, testing at the gym).
 ## Agent team
 
 Run `/build` to work the current milestone with the team below (`.claude/agents/`), and
-`/feedback <notes>` after a gym checkpoint. The main session is the orchestrator: it plans with
+`/gym-feedback <notes>` after a gym checkpoint. The main session is the orchestrator: it plans with
 `planner`, dispatches owners (independent tasks in parallel), integrates shared files, gets a
 `reviewer` PASS, commits, and has `verifier` sign off each milestone. **Subagents never commit,
 push or switch branches.**
