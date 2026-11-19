@@ -824,7 +824,17 @@ export type ProgressPhoto = {
 
 export type DayFeel = { date: string; energy?: 1 | 2 | 3 | 4 | 5; sore?: BodyArea[] };
 
-export type LearnCard = { id: string; title: string; body: string; why?: string };
+export type LearnCard = {
+  id: string;
+  title: string;
+  /**
+   * M13d: the one-line lead the card opens on (≤ 20 words); `body` and `why` sit behind "More".
+   * Every card in src/data/learnCards.ts has one (tested); optional so older callers still build.
+   */
+  short?: string;
+  body: string;
+  why?: string;
+};
 
 /** "Share my gym": equipment ids only, no personal data. */
 export type GymFile = { format: 'gym-clean-gym'; version: 1; equipment: string[] };
