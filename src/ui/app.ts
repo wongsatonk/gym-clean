@@ -4622,7 +4622,17 @@ export function mountApp(root: HTMLElement): void {
     await trainerReady;
     await fuel.ensureLoaded();
     intakeOffers.clear();
-    const a = normalizeIntake(answers);
+    const { rows, proposals } = buildIntakeOffers(normalizeIntake(answers));
+    for (const [id, p] of proposals) intakeOffers.set(id, p);
+    return rows;
+  }
+
+  /** The rows and their proposals, built from the plan as it is now. */
+  function buildIntakeOffers(a: Intake): {
+    rows: IntakeChange[];
+    proposals: Map<IntakeChangeId, Proposal>;
+  } {
+    const proposals = new Map<IntakeChangeId, Proposal>();
     const state = trainer ?? seedPlan(program);
     const offers = intakeToChanges(a, {
       hasHistory: trainerSessions.some((x) => x.endedAt !== undefined),
@@ -4635,7 +4645,7 @@ export function mountApp(root: HTMLElement): void {
       if (o.kind === 'starterPlan') {
         const r = proposeStarterPlan({ state, today: todayDate(), catalog: trainerCatalog }, a);
         if (!r.ok) continue;
-        intakeOffers.set('plan', r.proposal);
+        proposals.set('plan', r.proposal);
         rows.push({
           id: 'plan',
           title: o.primary ? PLAN_TITLE_STARTER : PLAN_TITLE_REBUILD,
@@ -4644,7 +4654,7 @@ export function mountApp(root: HTMLElement): void {
       } else if (o.kind === 'easyOn') {
         const r = proposeEasyOn(actionCtx(), { add: o.add, remove: o.remove }, trainerCatalog);
         if (!r.ok) continue;
-        intakeOffers.set('easyOn', r.proposal);
+        proposals.set('easyOn', r.proposal);
         rows.push({ id: 'easyOn', title: EASY_ON_TITLE, lines: [areaList(o.areas) || 'None'] });
       } else if (o.needsSetup) {
         rows.push({ id: 'fuel', title: FUEL_TITLE, lines: [o.label] });
@@ -4659,7 +4669,7 @@ export function mountApp(root: HTMLElement): void {
         });
       }
     }
-    return rows;
+    return { rows, proposals };
   }
 
   async function applyIntakeChange(id: IntakeChangeId, answers: Intake): Promise<boolean> {
@@ -4672,7 +4682,16 @@ export function mountApp(root: HTMLElement): void {
       }
       return fuel.applyGoal(a.goalKind);
     }
-    const p = intakeOffers.get(id);
+    let p = intakeOffers.get(id);
+    // M13d: applying one summary row moves the plan on; the other row's proposal was built from
+    // the older plan and would be refused as stale, so it is rebuilt from the plan as it is now.
+    // The rebuilt lines can differ a little from the row shown (e.g. the starter plan now keeps
+    // the go-easy list just applied); the row is not re-rendered.
+    const now = trainer ?? seedPlan(program);
+    if (p && p.baseVersion !== now.version) {
+      p = buildIntakeOffers(normalizeIntake(answers)).proposals.get(id);
+      if (p) intakeOffers.set(id, p);
+    }
     if (!p) return false;
     return applyNow(p, id === 'plan' ? 'starterPlan' : 'easyOn');
   }
