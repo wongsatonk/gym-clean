@@ -209,10 +209,26 @@ export type FuelPhotoHost = {
 /** A photo still in memory while its dish is being picked (search after a photo). */
 type PendingPhoto = { photo: CapturedPhoto; takenAt: number };
 
+/** M13d: how Set up Fuel was left when the caller took over leaving (`setupForGoal` opts). */
+export type SetupLeave = 'saved' | 'back';
+
+/**
+ * M13d task 3: `setupForGoal` options. `onLeave`: Save (after its writes) and Back call it
+ * instead of going to the Fuel tab / Settings, once per open. `inFlow`: Set up Fuel is a step of
+ * the first-launch flow (marked `data-onboarding-step="fuelSetup"`, no tab bar, opens at the top).
+ */
+export type SetupForGoalOpts = {
+  onLeave: (how: SetupLeave) => void;
+  inFlow?: true | undefined;
+};
+
+/** A setup open handed to the caller: `left` is set by the first Save / Back (a second is ignored). */
+type SetupHook = { onLeave: (how: SetupLeave) => void; inFlow: boolean; left: boolean };
+
 type Sub =
   | { kind: 'main' }
   | { kind: 'weighIn' }
-  | { kind: 'setup'; back: 'fuel' | 'settings' }
+  | { kind: 'setup'; back: 'fuel' | 'settings'; hook?: SetupHook | undefined }
   | { kind: 'measurements' };
 
 /** M12 1b: settings key of the protein-nudge meals already dismissed (once per meal). */
@@ -1490,9 +1506,15 @@ export function createFuel(host: FuelHost) {
     afterChange();
   }
 
-  function openSetup(back: 'fuel' | 'settings'): void {
-    sub = { kind: 'setup', back };
+  function openSetup(back: 'fuel' | 'settings', hook?: SetupHook): void {
+    sub = hook ? { kind: 'setup', back, hook } : { kind: 'setup', back };
     host.showFuel();
+  }
+
+  /** M13d: leave a setup the caller took over (Save after its writes, or Back). */
+  function leaveToCaller(hook: SetupHook, how: SetupLeave): void {
+    if (sub.kind === 'setup' && sub.hook === hook) sub = { kind: 'main' };
+    hook.onLeave(how);
   }
 
   function leaveSetup(back: 'fuel' | 'settings'): void {
@@ -1501,10 +1523,10 @@ export function createFuel(host: FuelHost) {
     else host.render();
   }
 
-  function setupView(back: 'fuel' | 'settings'): HTMLElement {
+  function setupView(back: 'fuel' | 'settings', hook?: SetupHook): HTMLElement {
     const s = settings;
     const kg = latestKg();
-    return fuelSetupScreen(
+    const el = fuelSetupScreen(
       {
         year: new Date(host.now()).getFullYear(),
         unit: host.unit(),
@@ -1519,13 +1541,39 @@ export function createFuel(host: FuelHost) {
           : undefined,
       },
       {
-        onSave: (v) => void saveSetup(v, back).catch(host.logError),
-        onCancel: () => leaveSetup(back),
+        onSave: (v) => {
+          if (!hook) {
+            void saveSetup(v, back).catch(host.logError);
+            return;
+          }
+          if (hook.left) return;
+          hook.left = true;
+          void saveSetup(v, back, hook).catch((err: unknown) => {
+            hook.left = false; // not saved: Save (or Back) can be tapped again
+            host.logError(err);
+          });
+        },
+        onCancel: () => {
+          if (!hook) {
+            leaveSetup(back);
+            return;
+          }
+          if (hook.left) return;
+          hook.left = true;
+          pendingGoal = null;
+          leaveToCaller(hook, 'back');
+        },
       },
     );
+    if (hook?.inFlow) el.setAttribute('data-onboarding-step', 'fuelSetup');
+    return el;
   }
 
-  async function saveSetup(v: SetupValues, back: 'fuel' | 'settings'): Promise<void> {
+  async function saveSetup(
+    v: SetupValues,
+    back: 'fuel' | 'settings',
+    hook?: SetupHook,
+  ): Promise<void> {
     // Build on what is stored, not the in-memory copy: mode and the barcode switch may have been
     // set (before setup, or while it was open), and the in-memory copy may be older.
     const [stored, storedMode, storedBarcode] = await Promise.all([
@@ -1562,7 +1610,8 @@ export function createFuel(host: FuelHost) {
       a.date < b.date ? -1 : 1,
     );
     evaluateNudge();
-    leaveSetup(back);
+    if (hook) leaveToCaller(hook, 'saved');
+    else leaveSetup(back);
   }
 
   // ---------- Settings → Nutrition ----------
@@ -1657,7 +1706,7 @@ export function createFuel(host: FuelHost) {
         case 'weighIn':
           return weighInView();
         case 'setup':
-          return setupView(sub.back);
+          return setupView(sub.back, sub.hook);
         case 'measurements':
           return measurementsView();
       }
@@ -1691,10 +1740,22 @@ export function createFuel(host: FuelHost) {
       });
       return true;
     },
-    /** M12 1b: "Set up Fuel for this goal": setup, saved with the goal's targets. */
-    setupForGoal(goalKind: GoalKind): void {
+    /**
+     * M12 1b: "Set up Fuel for this goal": setup, saved with the goal's targets. Without `opts`
+     * Save / Back go to the Fuel tab. M13d task 3: with `opts.onLeave` they call it instead
+     * ('saved' after the writes, 'back' with nothing saved), and with `opts.inFlow` the screen is
+     * the first-launch flow's `fuelSetup` step and opens at the top.
+     */
+    setupForGoal(goalKind: GoalKind, opts?: SetupForGoalOpts): void {
       pendingGoal = goalKind;
-      openSetup('fuel');
+      if (!opts) {
+        openSetup('fuel');
+        return;
+      }
+      const inFlow = opts.inFlow === true;
+      openSetup('fuel', { onLeave: opts.onLeave, inFlow, left: false });
+      // The intake summary's scroll would otherwise carry over (it opened at Sex / Activity).
+      if (inFlow) window.scrollTo(0, 0);
     },
     settingsBlock,
     /** Summary's protein line, or null without targets. */

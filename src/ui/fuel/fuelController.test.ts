@@ -119,9 +119,12 @@ function makeApp(now = EVENING, photo?: FuelPhotoHost, health?: FuelHealthHost) 
   const toasts: Toast[] = [];
   const tabs: TabId[] = [];
   const clock = { now };
+  /** Host calls: which view the controller asked the app for. */
+  const calls = { render: 0, showFuel: 0, showSettings: 0 };
   // eslint-disable-next-line prefer-const
   let ctrl: FuelController;
   const render = () => {
+    calls.render++;
     if (view === 'fuel') root.replaceChildren(asFake(ctrl.screen()));
     else if (view === 'settings') root.replaceChildren(asFake(ctrl.settingsBlock()));
   };
@@ -132,10 +135,12 @@ function makeApp(now = EVENING, photo?: FuelPhotoHost, health?: FuelHealthHost) 
     unit: () => 'kg',
     render,
     showFuel: () => {
+      calls.showFuel++;
       view = 'fuel';
       render();
     },
     showSettings: () => {
+      calls.showSettings++;
       view = 'settings';
       render();
     },
@@ -186,6 +191,7 @@ function makeApp(now = EVENING, photo?: FuelPhotoHost, health?: FuelHealthHost) 
   return {
     ctrl,
     root,
+    calls,
     toasts,
     tabs,
     clock,
@@ -235,6 +241,142 @@ describe('setup', () => {
 
     const s = await getNutritionSettings(db);
     expect(s).toMatchObject({ surplusKcal: 450, mode: 'full', barcodeLookup: true, heightCm: 175 });
+  });
+});
+
+describe('setupForGoal (M12 1b; M13d task 3: onLeave / inFlow)', () => {
+  let scrolls: [number, number][];
+  beforeEach(() => {
+    scrolls = [];
+    vi.stubGlobal('scrollTo', (x: number, y: number) => scrolls.push([x, y]));
+  });
+
+  /** Picks sex + activity on the setup screen (Save waits for both). */
+  const pickBoth = (app: ReturnType<typeof makeApp>) => {
+    app.onScreen('data-choice', 'female').click();
+    app.onScreen('data-choice', 'moderate').click();
+  };
+  const back = (app: ReturnType<typeof makeApp>) => app.root.oneByClass('fuel-back');
+
+  it('without opts (unchanged): Save stores the goal and lands on the Fuel tab', async () => {
+    const app = makeApp();
+    app.ctrl.setupForGoal('fat');
+    expect(app.calls.showFuel).toBe(1);
+    expect(app.onScreen('data-screen').getAttribute('data-screen')).toBe('fuel-setup');
+    expect(app.root.find((e) => e.hasAttribute('data-onboarding-step'))).toHaveLength(0);
+    expect(scrolls).toEqual([]);
+    pickBoth(app);
+    app.onScreen('data-setup-save').click();
+    await flush();
+    expect(await getNutritionSettings(db)).toMatchObject({ goalKind: 'fat', sex: 'female' });
+    expect(app.onScreen('data-screen').getAttribute('data-screen')).toBe('fuel');
+  });
+
+  it('without opts (unchanged): Back lands on the Fuel tab, nothing saved', async () => {
+    const app = makeApp();
+    app.ctrl.setupForGoal('fat');
+    back(app).click();
+    await flush();
+    expect(app.onScreen('data-screen').getAttribute('data-screen')).toBe('fuel');
+    expect(await getNutritionSettings(db)).toBeNull();
+  });
+
+  it('onLeave: Save writes the targets and weigh-in first, then calls onLeave("saved") once', async () => {
+    const app = makeApp();
+    const left: { how: string; stored: unknown; weighIns: number }[] = [];
+    app.ctrl.setupForGoal('fat', {
+      onLeave: (how) => {
+        // Read synchronously what the writes left behind (they finished before this call).
+        void Promise.all([getNutritionSettings(db), db.weighIns.count()]).then(([s, w]) =>
+          left.push({ how, stored: s, weighIns: w }),
+        );
+      },
+    });
+    pickBoth(app);
+    const after = { ...app.calls };
+    app.onScreen('data-setup-save').click();
+    await flush();
+    expect(left).toEqual([
+      { how: 'saved', stored: expect.objectContaining({ goalKind: 'fat' }), weighIns: 1 },
+    ]);
+    // Not the Fuel tab, not Settings: the caller decides where to go.
+    expect(app.calls).toEqual(after);
+    // The controller is back on its main view for the next time Fuel opens.
+    expect(asFake(app.ctrl.screen()).getAttribute('data-screen')).toBe('fuel');
+  });
+
+  it('onLeave: a second Save tap while saving leaves once and saves once', async () => {
+    const app = makeApp();
+    const how: string[] = [];
+    app.ctrl.setupForGoal('muscle', { onLeave: (h) => how.push(h) });
+    pickBoth(app);
+    const save = app.onScreen('data-setup-save');
+    save.click();
+    save.click();
+    await flush();
+    expect(how).toEqual(['saved']);
+    expect(await db.weighIns.count()).toBe(1);
+  });
+
+  it('onLeave: Back calls onLeave("back"), saves nothing and forgets the goal', async () => {
+    const app = makeApp();
+    const how: string[] = [];
+    app.ctrl.setupForGoal('fat', { onLeave: (h) => how.push(h) });
+    const after = { ...app.calls };
+    back(app).click();
+    back(app).click(); // a double tap leaves once
+    await flush();
+    expect(how).toEqual(['back']);
+    expect(app.calls).toEqual(after);
+    expect(await getNutritionSettings(db)).toBeNull();
+    expect(asFake(app.ctrl.screen()).getAttribute('data-screen')).toBe('fuel');
+
+    // A later setup from Settings saves without the dropped goal.
+    await app.ctrl.open();
+    app.showSettings();
+    app.onScreen('data-setup-rerun').click();
+    pickBoth(app);
+    app.onScreen('data-setup-save').click();
+    await flush();
+    expect((await getNutritionSettings(db))?.goalKind).toBeUndefined();
+  });
+
+  it('inFlow: marked as the flow step, no tab bar, opened at the top', () => {
+    const app = makeApp();
+    app.ctrl.setupForGoal('fat', { onLeave: () => undefined, inFlow: true });
+    const main = app.onScreen('data-screen', 'fuel-setup');
+    expect(main.getAttribute('data-onboarding-step')).toBe('fuelSetup');
+    expect(app.root.find((e) => e.hasAttribute('data-tabbar'))).toHaveLength(0);
+    expect(scrolls).toEqual([[0, 0]]);
+    // Its own Back (accessible name "Back") and Save stay.
+    expect(back(app).textContent).toBe('Back');
+    expect(app.onScreen('data-setup-save')).toBeTruthy();
+    // A re-render (data arriving) keeps the marker.
+    expect(asFake(app.ctrl.screen()).getAttribute('data-onboarding-step')).toBe('fuelSetup');
+  });
+
+  it('onLeave without inFlow: not marked as a flow step, scroll left alone', () => {
+    const app = makeApp();
+    app.ctrl.setupForGoal('fat', { onLeave: () => undefined });
+    expect(app.onScreen('data-screen', 'fuel-setup').hasAttribute('data-onboarding-step')).toBe(
+      false,
+    );
+    expect(scrolls).toEqual([]);
+  });
+
+  it('after leaving the flow step, Settings → Re-run setup is the normal screen again', async () => {
+    await setUp();
+    const app = makeApp();
+    app.ctrl.setupForGoal('fat', { onLeave: () => undefined, inFlow: true });
+    back(app).click();
+    await app.ctrl.open();
+    app.showSettings();
+    app.onScreen('data-setup-rerun').click();
+    expect(app.onScreen('data-screen', 'fuel-setup').hasAttribute('data-onboarding-step')).toBe(
+      false,
+    );
+    back(app).click();
+    expect(app.calls.showSettings).toBe(1); // the normal Back: to Settings
   });
 });
 
