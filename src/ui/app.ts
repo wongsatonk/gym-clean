@@ -52,6 +52,7 @@ import { resolveOwnerMode, setOwnerMode } from '../data/ownerMode';
 import { aboutScreen } from './screens/about';
 import { licensesView } from './screens/licenses';
 import {
+  insertAfterIntake,
   onboardingSteps,
   permissionCatchUpSteps,
   shouldOnboard,
@@ -3640,6 +3641,22 @@ export function mountApp(root: HTMLElement): void {
       openIntake('first');
       return;
     }
+    if (run.steps[run.index]?.kind === 'fuelSetup') {
+      // M13d: Set up Fuel is a step of the first run (never a jump to the Fuel tab).
+      const goal = flowFuelGoal;
+      if (!goal) {
+        onboardingGo(run.dir === 'prev' ? -1 : 1);
+        return;
+      }
+      fuel.setupForGoal(goal, {
+        inFlow: true,
+        onLeave: (how) => {
+          if (how === 'back') intakeAtSummary = true;
+          onboardingGo(how === 'saved' ? 1 : -1);
+        },
+      });
+      return;
+    }
     view = { screen: 'welcome' };
     render();
     window.scrollTo(0, 0);
@@ -3660,6 +3677,8 @@ export function mountApp(root: HTMLElement): void {
 
   function finishOnboarding(how: 'done' | 'skipped'): void {
     const catchUp = onboarding?.catchUp === true;
+    flowFuelGoal = null;
+    intakeAtSummary = false;
     onboarding = null;
     onboardingEl?.dispose();
     onboardingEl = null;
@@ -4591,6 +4610,8 @@ export function mountApp(root: HTMLElement): void {
 
   function openIntake(from: 'first' | 'today' | 'settings'): void {
     intakeEl = null;
+    // Each visit starts clean; Back from the first run's Set up Fuel restores it in intakeChanges.
+    pendingFuelSetup = null;
     if (from !== 'first') setEnter(from === 'settings' ? 'settings' : 'today');
     view = { screen: 'intake', from };
     render();
@@ -4600,6 +4621,12 @@ export function mountApp(root: HTMLElement): void {
   function leaveIntake(from: 'first' | 'today' | 'settings'): void {
     intakeEl = null;
     intakeOffers.clear();
+    // Skip / Close: nothing about Fuel carries on (M13d: and no Set up Fuel step in the flow).
+    pendingFuelSetup = null;
+    if (from === 'first' && onboarding) {
+      flowFuelGoal = null;
+      onboarding.steps = onboarding.steps.filter((s) => s.kind !== 'fuelSetup');
+    }
     // M13: the intake is one step of the first-launch flow.
     if (from === 'first' && onboarding) {
       onboardingGo(1);
@@ -4622,8 +4649,17 @@ export function mountApp(root: HTMLElement): void {
     await trainerReady;
     await fuel.ensureLoaded();
     intakeOffers.clear();
-    const { rows, proposals } = buildIntakeOffers(normalizeIntake(answers));
+    const a = normalizeIntake(answers);
+    const { rows, proposals } = buildIntakeOffers(a);
     for (const [id, p] of proposals) intakeOffers.set(id, p);
+    // M13d: back from the first run's Set up Fuel with the same goal: its row stays applied.
+    // An applied Fuel row for another goal no longer counts once the answers change.
+    if (pendingFuelSetup !== null && pendingFuelSetup !== a.goalKind) pendingFuelSetup = null;
+    const fuelRow = rows.find((r) => r.id === 'fuel');
+    if (fuelRow && flowFuelGoal && flowFuelGoal === a.goalKind && fuel.fuelGoal() === null) {
+      fuelRow.applied = true;
+      pendingFuelSetup = flowFuelGoal;
+    }
     return rows;
   }
 
@@ -4698,9 +4734,25 @@ export function mountApp(root: HTMLElement): void {
 
   /** Set by the intake's "Set up Fuel for this goal": Fuel's setup opens after Done. */
   let pendingFuelSetup: Intake['goalKind'] | null = null;
+  /** M13d: the goal the first run's Set up Fuel step saves with (kept so Back from the next page reopens it). */
+  let flowFuelGoal: Intake['goalKind'] | null = null;
+  /** M13d: Back from the first run's Set up Fuel reopens the intake on its last screen. */
+  let intakeAtSummary = false;
 
   /** Done: goals suggested from the answers (replacing the open ones), then Today / Settings. */
   async function intakeDone(answers: Intake, from: 'first' | 'today' | 'settings'): Promise<void> {
+    // A second Done tap while the first is saving would move the flow on twice.
+    if (intakeFinishing) return;
+    intakeFinishing = true;
+    try {
+      await finishIntake(answers, from);
+    } finally {
+      intakeFinishing = false;
+    }
+  }
+  let intakeFinishing = false;
+
+  async function finishIntake(answers: Intake, from: 'first' | 'today' | 'settings'): Promise<void> {
     const a = normalizeIntake(answers);
     try {
       const history = await goalHistory();
@@ -4717,6 +4769,18 @@ export function mountApp(root: HTMLElement): void {
     }
     const goal = pendingFuelSetup;
     pendingFuelSetup = null;
+    const run = onboarding;
+    if (from === 'first' && run) {
+      // M13d: Set up Fuel is the next step of the flow when its row was applied, else it is dropped.
+      intakeEl = null;
+      intakeOffers.clear();
+      flowFuelGoal = goal;
+      run.steps = goal
+        ? insertAfterIntake(run.steps, run.index, { kind: 'fuelSetup' })
+        : run.steps.filter((s) => s.kind !== 'fuelSetup');
+      onboardingGo(1);
+      return;
+    }
     if (goal) {
       intakeEl = null;
       intakeOffers.clear();
@@ -4729,8 +4793,15 @@ export function mountApp(root: HTMLElement): void {
   function intakeView(v: Extract<View, { screen: 'intake' }>): HTMLElement {
     if (intakeEl?.from === v.from) return intakeEl.el;
     intakeKindAtOpen = intake?.goalKind;
+    const atSummary = intakeAtSummary;
+    intakeAtSummary = false;
     const el = intakeScreen(
-      { initial: intake, changes: (a) => intakeChanges(a), now: () => now() },
+      {
+        initial: intake,
+        changes: (a) => intakeChanges(a),
+        now: () => now(),
+        ...(atSummary ? { startStep: 'summary' as const } : {}),
+      },
       {
         onSave: (a) => {
           intake = normalizeIntake(a);

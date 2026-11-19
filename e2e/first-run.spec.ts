@@ -27,6 +27,7 @@ import { expect, test, type Page } from './fixtures';
 import {
   at,
   expectTapTargets,
+  getRows,
   getSetting,
   guardNetwork,
   installMocks,
@@ -260,6 +261,244 @@ test(
     await saveFuel(page);
     await cameraToToday(page);
     expect(await getSetting(page, 'intake')).toMatchObject({ goalKind: 'fat', easyOn: ['legs'] });
+    await expectNotAgain(page);
+
+    expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+    expect(offsite).toEqual([]);
+    expect(errors).toEqual([]);
+  },
+);
+
+// ---------------------------------------------------------------------------------------------
+// M13d task 4: the Set up Fuel step's edges (tagged @m13d-flow). The step is in the flow only
+// while the intake's Fuel row is applied for the goal Done saved with: Skip for now or a changed
+// goal drops it (nothing stored for Fuel, and it never opens again on its own); Back from the
+// page after it reopens it with what was saved; a double tap on Done moves the flow on once.
+
+/** Taps Next on each question (answers already kept) until the summary shows. */
+async function nextToSummary(page: Page): Promise<void> {
+  for (let i = 0; i < 8 && (await intake(page).getAttribute('data-step')) !== 'summary'; i++) {
+    const next = intake(page).locator('[data-intake-next]');
+    await expect(next).toBeEnabled();
+    const from = await intake(page).getAttribute('data-step');
+    await next.tap();
+    await expect(intake(page)).not.toHaveAttribute('data-step', from ?? '');
+  }
+  await step(page, 'summary');
+}
+
+/** Back on the intake until it shows question `id` (answers kept). */
+async function backTo(page: Page, id: string): Promise<void> {
+  for (let i = 0; i < 8 && (await intake(page).getAttribute('data-step')) !== id; i++) {
+    const from = await intake(page).getAttribute('data-step');
+    await intake(page).locator('[data-intake-back]').tap();
+    await expect(intake(page)).not.toHaveAttribute('data-step', from ?? '');
+  }
+  await step(page, id);
+}
+
+/** Set up Fuel's own Back: the intake's summary, still in the flow, Fuel row shown applied. */
+async function fuelBackToSummary(page: Page): Promise<void> {
+  await fuelSetup(page).getByRole('button', { name: 'Back', exact: true }).tap();
+  await expect(intake(page)).toBeVisible();
+  await step(page, 'summary');
+  await expect(fuelSetup(page)).toHaveCount(0);
+  await expect(page.locator('[data-tabbar]')).toHaveCount(0);
+  await expect(intake(page).locator('[data-apply="fuel"]')).toHaveAttribute('data-applied', 'true');
+}
+
+const fuelNotApplied = (page: Page) =>
+  expect(intake(page).locator('[data-apply="fuel"]')).not.toHaveAttribute('data-applied', 'true');
+
+test(
+  'Set up Fuel → Back → a question → Skip for now: the step is dropped and never opens on its own',
+  { tag: '@m13d-flow' },
+  async ({ page }) => {
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await open(page);
+    await throughWelcome(page);
+    await answerAll(page);
+    await apply(page, 'plan');
+    await apply(page, 'fuel');
+    await intake(page).locator('[data-intake-done]').tap();
+    await expectFuelStepInFlow(page);
+
+    await fuelBackToSummary(page);
+    await backTo(page, 'wantsCore');
+    await intake(page).locator('[data-intake-skip]').tap();
+
+    // Skip for now: straight to the camera page, Set up Fuel gone from the flow.
+    await expect(cameraPage(page)).toBeVisible();
+    await expect(fuelSetup(page)).toHaveCount(0);
+    expect(await getSetting(page, 'nutrition')).toBeUndefined();
+    await welcome(page).locator('[data-ob="back"]').tap();
+    // Back from the camera page never reaches a Set up Fuel step (it was dropped).
+    await expect(fuelSetup(page)).toHaveCount(0);
+    await expect(intake(page)).toBeVisible();
+    await intake(page).locator('[data-intake-skip]').tap();
+    await cameraToToday(page);
+    expect(await getSetting(page, 'nutrition')).toBeUndefined();
+
+    // Later, from Settings: Done with the same goal opens no Set up Fuel by itself.
+    await page.locator('[data-tab="settings"]').tap();
+    await page.locator('[data-intake-open]').tap();
+    await expect(intake(page)).toBeVisible();
+    await step(page, 'goal');
+    await expect(intake(page).locator('[data-option="fat"]')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await nextToSummary(page);
+    await expect(intake(page).locator('[data-change="fuel"]')).toBeVisible();
+    await fuelNotApplied(page);
+    await intake(page).locator('[data-intake-done]').tap();
+    await expect(intake(page)).toHaveCount(0);
+    await expect(fuelSetup(page)).toHaveCount(0);
+    await expect(page.locator('main[data-screen="fuel"]')).toHaveCount(0);
+    expect(await getSetting(page, 'nutrition')).toBeUndefined();
+
+    expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+    expect(offsite).toEqual([]);
+    expect(errors).toEqual([]);
+  },
+);
+
+test(
+  'Set up Fuel → Back → another goal → Done: the camera page, no Set up Fuel, nothing for Fuel',
+  { tag: '@m13d-flow' },
+  async ({ page }) => {
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await open(page);
+    await throughWelcome(page);
+    await answerAll(page);
+    await apply(page, 'plan');
+    await apply(page, 'fuel');
+    await intake(page).locator('[data-intake-done]').tap();
+    await expectFuelStepInFlow(page);
+
+    await fuelBackToSummary(page);
+    await backTo(page, 'goal');
+    const muscle = intake(page).locator('[data-option="muscle"]');
+    await muscle.tap();
+    await expect(muscle).toHaveAttribute('aria-checked', 'true');
+    await expect(intake(page).locator('[data-option="fat"]')).not.toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await nextToSummary(page);
+    // The applied Fuel row was for "Lose fat": it no longer counts.
+    await fuelNotApplied(page);
+    await intake(page).locator('[data-intake-done]').tap();
+
+    await expect(cameraPage(page)).toBeVisible();
+    await expect(fuelSetup(page)).toHaveCount(0);
+    expect(await getSetting(page, 'nutrition')).toBeUndefined();
+    await cameraToToday(page);
+    expect(await getSetting(page, 'nutrition')).toBeUndefined();
+    expect(await getSetting(page, 'intake')).toMatchObject({ goalKind: 'muscle' });
+    await expectNotAgain(page);
+
+    expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+    expect(offsite).toEqual([]);
+    expect(errors).toEqual([]);
+  },
+);
+
+test(
+  'Set up Fuel → Save → camera → Back: Set up Fuel reopens with the saved values → Today',
+  { tag: '@m13d-flow' },
+  async ({ page }) => {
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await open(page);
+    await throughWelcome(page);
+    await answerAll(page);
+    await apply(page, 'plan');
+    await apply(page, 'fuel');
+    await intake(page).locator('[data-intake-done]').tap();
+    await expectFuelStepInFlow(page);
+
+    // A height off the starting value, so the reopened screen shows what was saved.
+    const height = fuelSetup(page).locator('[data-field="height"] .nf-value');
+    const before = await height.inputValue();
+    await fuelSetup(page).locator('[data-field="height"] [data-step="up"]').tap();
+    await expect(height).not.toHaveValue(before);
+    const savedHeight = await height.inputValue();
+    await saveFuel(page);
+    await expect(cameraPage(page)).toBeVisible();
+    const saved = (await getSetting(page, 'nutrition')) as {
+      goalKind?: string;
+      sex?: string;
+      activity?: string;
+      heightCm?: number;
+    };
+    expect(saved).toMatchObject({ goalKind: 'fat', sex: 'female', activity: 'moderate' });
+
+    // Back from the camera page: Set up Fuel again, in the flow, with the saved values.
+    await welcome(page).locator('[data-ob="back"]').tap();
+    await expectFuelStepInFlow(page);
+    const setup = fuelSetup(page);
+    await expect(setup.locator('[data-field="sex"] [data-choice="female"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(setup.locator('[data-field="activity"] [data-choice="moderate"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(height).toHaveValue(savedHeight);
+
+    const save = setup.locator('[data-setup-save]');
+    await expect(save).toBeEnabled();
+    await save.tap();
+    await cameraToToday(page);
+
+    // One set of targets (the one settings row) and one weigh-in for today, for the intake's goal.
+    expect(await getSetting(page, 'nutrition')).toMatchObject({
+      goalKind: 'fat',
+      sex: 'female',
+      activity: 'moderate',
+      heightCm: saved.heightCm,
+    });
+    expect(await getRows(page, 'weighIns')).toHaveLength(1);
+    await expectNotAgain(page);
+
+    expect(await page.evaluate(() => window.__spoken)).toEqual([]);
+    expect(offsite).toEqual([]);
+    expect(errors).toEqual([]);
+  },
+);
+
+test(
+  'a double tap on Done with Fuel applied lands on Set up Fuel once, then the flow goes on',
+  { tag: '@m13d-flow' },
+  async ({ page }) => {
+    const offsite = await guardNetwork(page);
+    const { errors } = record(page);
+    await open(page);
+    await throughWelcome(page);
+    await answerAll(page);
+    await apply(page, 'plan');
+    await apply(page, 'fuel');
+
+    // Two taps back-to-back, the second before the first has finished saving (an unguarded second
+    // Done would read no pending Fuel goal, drop the step and move the flow past it).
+    await intake(page)
+      .locator('[data-intake-done]')
+      .evaluate((b: HTMLElement) => {
+        b.click();
+        b.click();
+      });
+
+    await expectFuelStepInFlow(page);
+    await expect(cameraPage(page)).toHaveCount(0);
+    await saveFuel(page);
+    await expect
+      .poll(async () => ((await getSetting(page, 'nutrition')) as { goalKind?: string })?.goalKind)
+      .toBe('fat');
+    await cameraToToday(page);
     await expectNotAgain(page);
 
     expect(await page.evaluate(() => window.__spoken)).toEqual([]);
