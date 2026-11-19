@@ -333,7 +333,9 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
   // M13d budget: what and why are one short sentence each, one idea per page. Wording to keep true:
   // the Units section and its "ft·in" option (src/data/onboarding.ts UNITS_PAGE), Settings →
   // Display → Text size: Standard / Large / Larger (task 21), the edge swipe in the iPhone app and
-  // the home-screen app only (said as "In the iPhone app"), the meal row's "Delete".
+  // the home-screen app only (said as "In the iPhone app"), the meal row's "Delete", round buttons
+  // with the word under the circle (beside it on the main action), the light tap on the main ones
+  // in the iPhone app (no dip promised: it is off in a workout and with Reduce Motion).
   {
     release: '1.16.3',
     id: 'units',
@@ -350,7 +352,7 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     what: "Text now uses your phone's own font, with more space between lines.",
     why: 'For bigger text, go to Settings, then Display, and pick Large or Larger under Text size.',
     tryIt: 'settings',
-    icon: 'sliders',
+    icon: 'text',
   },
   {
     release: '1.16.3',
@@ -365,8 +367,8 @@ export const WHATS_NEW_PAGES: readonly WhatsNewPage[] = [
     release: '1.16.3',
     id: 'round-buttons',
     title: 'Rounder buttons',
-    what: 'Buttons are now round with an icon, and you still see the same word next to each one.',
-    why: 'They dip when you press them, and in the iPhone app the main ones give a light tap.',
+    what: 'Buttons are now round, and you see each word under the circle, or beside the main one.',
+    why: 'In the iPhone app, the main ones give a light tap when you press them.',
     tryIt: 'today',
     icon: 'spark',
   },

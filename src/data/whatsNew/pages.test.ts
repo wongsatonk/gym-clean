@@ -327,7 +327,7 @@ describe('WHATS_NEW_PAGES', () => {
   it('has four pages for 1.16.3 (M13d), for everyone, each with its Try it and icon', () => {
     expect(r1163.map((p) => [p.id, p.title, p.tryIt, p.icon, p.owner])).toEqual([
       ['units', 'Pick your units', 'settings', 'ruler', undefined],
-      ['text-size', 'Bigger, clearer text', 'settings', 'sliders', undefined],
+      ['text-size', 'Bigger, clearer text', 'settings', 'text', undefined],
       ['swipe-back', 'Swipe back', 'settings/about', 'back', undefined],
       ['round-buttons', 'Rounder buttons', 'today', 'spark', undefined],
     ]);
@@ -357,12 +357,16 @@ describe('WHATS_NEW_PAGES', () => {
     expect(text('swipe-back')).toMatch(/down to close a sheet/i);
     expect(text('swipe-back')).toMatch(/left on a meal/i);
     expect(text('swipe-back')).toMatch(/Delete/);
-    // Buttons: round, the word kept, a press you can see, a light tap in the iPhone app.
+    // Buttons: round, the word under the circle (beside it on the main one), a light tap in the
+    // iPhone app on the main ones. The press dip is off in a workout and with Reduce Motion, so the
+    // page never promises a dip; and most words sit under the circle, not "next to" every one.
     expect(text('round-buttons')).toMatch(/round/i);
-    expect(text('round-buttons')).toMatch(/same word/i);
+    expect(text('round-buttons')).toMatch(/word under the circle/i);
+    expect(text('round-buttons')).toMatch(/beside the main one/i);
     expect(text('round-buttons')).toMatch(/press/i);
     expect(text('round-buttons')).toMatch(/iPhone app/);
-    expect(text('round-buttons')).toMatch(/light tap/i);
+    expect(text('round-buttons')).toMatch(/main ones give a light tap/i);
+    expect(text('round-buttons')).not.toMatch(/\bdips?\b|same word|next to each/i);
   });
 
   it('1.16.3 pages fit the M13d budget: one short sentence each for what and why, one idea', () => {
