@@ -80,7 +80,7 @@ function stepKey(step: OnboardingStep | undefined): string {
   if (!step) return 'none';
   if (step.kind === 'welcome') return `welcome:${step.id}`;
   if (step.kind === 'permission') return `permission:${step.permission}`;
-  return 'intake';
+  return step.kind; // 'intake' | 'units' | 'fuelSetup' (M13d: the caller shows those screens)
 }
 
 function stepTitle(step: OnboardingStep | undefined): string {

@@ -6,7 +6,7 @@
  */
 import { addDate } from '../trainer/plan';
 import type { Unit } from '../units';
-import type { Measurement } from '../types';
+import type { LengthUnit, Measurement } from '../types';
 
 /** "Measure again" is due this many days after the last measuring day. */
 export const MEASURE_AGAIN_DAYS = 28;
@@ -14,7 +14,7 @@ export const CM_PER_IN = 2.54;
 /** Typed values outside this range are refused (typos, wrong unit). */
 export const CM_RANGE = [5, 300] as const;
 
-export type LengthUnit = 'cm' | 'in';
+export type { LengthUnit };
 
 /** Tape unit that goes with his weight unit. */
 export function lengthUnitFor(unit: Unit): LengthUnit {

@@ -843,8 +843,22 @@ export type Onboarding = { doneAt?: number; skippedAt?: number };
 
 export type OnboardingStep =
   | { kind: 'welcome'; id: string }
+  | { kind: 'units' }
   | { kind: 'intake' }
+  | { kind: 'fuelSetup' }
   | { kind: 'permission'; permission: 'camera' | 'health' | 'mic' | 'notifications' };
+
+/** M13d: body lengths (height, tape). Stored values stay cm; this is display only. */
+export type LengthUnit = 'cm' | 'in';
+
+/** M13d: the unit choices ('unit' + 'lengthUnit' settings rows). Weights are stored in kg. */
+export type UnitPrefs = { weight: 'kg' | 'lb'; length: LengthUnit };
+
+/** M13d: Settings → Display → Text size. */
+export type TextSize = 'standard' | 'large' | 'larger';
+
+/** M13d: what Apple Health gives Set up Fuel to pre-fill (iPhone app only, never stored as-is). */
+export type HealthProfile = { heightCm?: number; birthYear?: number; sex?: 'female' | 'male' };
 
 export type LicenseEntry = {
   name: string;
